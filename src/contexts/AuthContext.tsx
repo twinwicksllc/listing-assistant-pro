@@ -6,11 +6,19 @@ export const PLANS = {
   starter: { name: "Starter", price: 0, analysisLimit: 5, publishLimit: 3 },
   pro: {
     name: "Pro",
-    price: 19,
-    analysisLimit: Infinity,
-    publishLimit: Infinity,
+    price: 19.99,
+    analysisLimit: 50,
+    publishLimit: 25,
     priceId: "price_1T8lVU4bX0d1SiThMDayhDj5",
     productId: "prod_U6zUiC1SYuPrGU",
+  },
+  unlimited: {
+    name: "Unlimited",
+    price: 49.99,
+    analysisLimit: Infinity,
+    publishLimit: Infinity,
+    priceId: "price_1T8mZ84bX0d1SiThFgvRubiN",
+    productId: "prod_U70aT1KvuI2uDx",
   },
 } as const;
 
@@ -45,6 +53,8 @@ interface AuthContextType {
   refreshSubscription: () => Promise<void>;
   refreshUsage: () => Promise<void>;
   isPro: boolean;
+  isUnlimited: boolean;
+  isPaid: boolean;
   canAnalyze: boolean;
   canPublish: boolean;
   recordUsage: (actionType: "ai_analysis" | "ebay_publish" | "optimize" | "export") => Promise<void>;
@@ -52,6 +62,7 @@ interface AuthContextType {
   isOwner: boolean;
   isLister: boolean;
   refreshOrg: () => Promise<void>;
+  currentPlanLimits: { analysisLimit: number; publishLimit: number };
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -64,6 +75,8 @@ const AuthContext = createContext<AuthContextType>({
   refreshSubscription: async () => {},
   refreshUsage: async () => {},
   isPro: false,
+  isUnlimited: false,
+  isPaid: false,
   canAnalyze: true,
   canPublish: true,
   recordUsage: async () => {},
@@ -71,6 +84,7 @@ const AuthContext = createContext<AuthContextType>({
   isOwner: false,
   isLister: false,
   refreshOrg: async () => {},
+  currentPlanLimits: { analysisLimit: 5, publishLimit: 3 },
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -194,8 +208,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session, refreshSubscription]);
 
   const isPro = subscription.subscribed && subscription.productId === PLANS.pro.productId;
-  const canAnalyze = isPro || usage.aiAnalysis < PLANS.starter.analysisLimit;
-  const canPublish = isPro || usage.ebayPublish < PLANS.starter.publishLimit;
+  const isUnlimited = subscription.subscribed && subscription.productId === PLANS.unlimited.productId;
+  const isPaid = isPro || isUnlimited;
+  const currentPlanLimits = isUnlimited
+    ? { analysisLimit: Infinity, publishLimit: Infinity }
+    : isPro
+      ? { analysisLimit: PLANS.pro.analysisLimit, publishLimit: PLANS.pro.publishLimit }
+      : { analysisLimit: PLANS.starter.analysisLimit, publishLimit: PLANS.starter.publishLimit };
+  const canAnalyze = isUnlimited || isPro ? usage.aiAnalysis < PLANS.pro.analysisLimit : usage.aiAnalysis < PLANS.starter.analysisLimit;
+  const canPublish = isUnlimited || isPro ? usage.ebayPublish < PLANS.pro.publishLimit : usage.ebayPublish < PLANS.starter.publishLimit;
+  // For unlimited, override canAnalyze/canPublish to always true
+  const finalCanAnalyze = isUnlimited ? true : canAnalyze;
+  const finalCanPublish = isUnlimited ? true : canPublish;
   const isOwner = org.role === "owner";
   const isLister = org.role === "lister";
 
@@ -215,13 +239,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshSubscription,
         refreshUsage,
         isPro,
-        canAnalyze,
-        canPublish,
+        isUnlimited,
+        isPaid,
+        canAnalyze: finalCanAnalyze,
+        canPublish: finalCanPublish,
         recordUsage,
         org,
         isOwner,
         isLister,
         refreshOrg,
+        currentPlanLimits,
       }}
     >
       {children}

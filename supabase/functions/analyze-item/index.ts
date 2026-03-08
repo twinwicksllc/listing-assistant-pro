@@ -47,8 +47,8 @@ serve(async (req) => {
       });
     }
 
-    // Check subscription status via Stripe
-    let isPro = false;
+    // Check subscription status via Stripe to determine tier
+    let tier: "starter" | "pro" | "unlimited" = "starter";
     const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
     if (STRIPE_SECRET_KEY && userEmail) {
       try {
@@ -57,7 +57,14 @@ serve(async (req) => {
         const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
         if (customers.data.length > 0) {
           const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: "active", limit: 1 });
-          isPro = subs.data.length > 0;
+          if (subs.data.length > 0) {
+            const productId = subs.data[0].items.data[0].price.product;
+            if (productId === "prod_U70aT1KvuI2uDx") {
+              tier = "unlimited";
+            } else if (productId === "prod_U6zUiC1SYuPrGU") {
+              tier = "pro";
+            }
+          }
         }
       } catch (stripeErr) {
         console.error("Stripe check failed, defaulting to free tier:", stripeErr);
@@ -65,7 +72,7 @@ serve(async (req) => {
     }
 
     // Count this month's AI analyses from usage_tracking
-    if (!isPro) {
+    if (tier !== "unlimited") {
       const startOfMonth = new Date();
       startOfMonth.setDate(1);
       startOfMonth.setHours(0, 0, 0, 0);
@@ -77,14 +84,17 @@ serve(async (req) => {
         .eq("action_type", "ai_analysis")
         .gte("created_at", startOfMonth.toISOString());
 
-      const ANALYSIS_LIMIT = 5;
+      const ANALYSIS_LIMIT = tier === "pro" ? 50 : 5;
       const currentCount = count ?? 0;
 
       if (countErr) {
         console.error("Usage count query failed:", countErr);
       } else if (currentCount >= ANALYSIS_LIMIT) {
+        const upgradeMsg = tier === "pro"
+          ? `Monthly analysis limit reached (${ANALYSIS_LIMIT}). Upgrade to Unlimited for no limits.`
+          : `Monthly analysis limit reached (${ANALYSIS_LIMIT}). Upgrade to Pro or Unlimited for more.`;
         return new Response(
-          JSON.stringify({ error: `Monthly analysis limit reached (${ANALYSIS_LIMIT}). Upgrade to Pro for unlimited.` }),
+          JSON.stringify({ error: upgradeMsg }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
