@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
 import { toast } from "sonner";
 import teckstartLogo from "@/assets/teckstart-logo.png";
 import { Loader2, Mail, Lock } from "lucide-react";
@@ -92,10 +91,13 @@ export default function LoginPage() {
         <button
           type="button"
           onClick={async () => {
-            const { error } = await lovable.auth.signInWithOAuth("google", {
-              redirect_uri: window.location.origin,
+            const { error } = await supabase.auth.signInWithOAuth({
+              provider: "google",
+              options: {
+                redirectTo: "https://lister.teckstart.com/auth/callback",
+              },
             });
-            if (error) toast.error(String(error));
+            if (error) toast.error(error.message);
           }}
           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-input bg-background text-foreground font-medium text-sm transition-all hover:bg-secondary"
         >
