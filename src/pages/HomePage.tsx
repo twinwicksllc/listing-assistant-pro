@@ -260,6 +260,7 @@ export default function HomePage() {
             >
               <button
                 onClick={handleCapture}
+                data-tour="capture-button"
                 className="mx-auto w-40 h-40 md:w-48 md:h-48 rounded-full bg-primary/10 border-2 border-dashed border-primary/30 flex flex-col items-center justify-center gap-3 transition-all hover:bg-primary/15 hover:border-primary/50 active:scale-95"
               >
                 {isMobile ? (
