@@ -1,4 +1,5 @@
 import { Camera, Upload, Sparkles, X, ArrowRight, ImagePlus, Mic, MicOff, Loader2 } from "lucide-react";
+import teckstartLogo from "@/assets/teckstart-logo.png";
 import { useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import BottomNav from "@/components/BottomNav";
@@ -162,11 +163,9 @@ export default function HomePage() {
       {/* Header */}
       <header className="px-5 pt-12 pb-4 md:px-8 lg:px-12">
         <div className="max-w-3xl mx-auto flex items-center gap-2">
-          <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
-            <Sparkles className="w-5 h-5 text-primary-foreground" />
-          </div>
+          <img src={teckstartLogo} alt="Teckstart" className="h-9 w-auto" />
           <div>
-            <h1 className="text-lg font-bold text-foreground">Listing Assistant</h1>
+            <h1 className="text-lg font-bold text-foreground">Teckstart Listing Assistant</h1>
             <p className="text-xs text-muted-foreground">AI-powered eBay listings</p>
           </div>
         </div>
