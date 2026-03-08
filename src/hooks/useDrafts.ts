@@ -1,23 +1,87 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ListingDraft } from "@/types/listing";
-
-const STORAGE_KEY = "ebay-listing-drafts";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 export function useDrafts() {
-  const [drafts, setDrafts] = useState<ListingDraft[]>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      return JSON.parse(stored).map((d: any) => ({ ...d, createdAt: new Date(d.createdAt) }));
+  const { user } = useAuth();
+  const [drafts, setDrafts] = useState<ListingDraft[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchDrafts = useCallback(async () => {
+    if (!user) {
+      setDrafts([]);
+      setLoading(false);
+      return;
     }
-    return [];
-  });
+
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("drafts")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching drafts:", error);
+      toast.error("Failed to load drafts");
+    } else {
+      setDrafts(
+        (data || []).map((d: any) => ({
+          id: d.id,
+          imageUrl: d.image_url,
+          title: d.title,
+          description: d.description,
+          priceMin: Number(d.price_min),
+          priceMax: Number(d.price_max),
+          createdAt: new Date(d.created_at),
+          ebayCategoryId: d.ebay_category_id || undefined,
+          itemSpecifics: d.item_specifics || undefined,
+          condition: d.condition || undefined,
+        }))
+      );
+    }
+    setLoading(false);
+  }, [user]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(drafts));
-  }, [drafts]);
+    fetchDrafts();
+  }, [fetchDrafts]);
 
-  const addDraft = (draft: ListingDraft) => setDrafts((prev) => [draft, ...prev]);
-  const removeDraft = (id: string) => setDrafts((prev) => prev.filter((d) => d.id !== id));
+  const addDraft = async (draft: ListingDraft) => {
+    if (!user) return;
 
-  return { drafts, addDraft, removeDraft };
+    const { error } = await supabase.from("drafts").insert({
+      id: draft.id,
+      user_id: user.id,
+      image_url: draft.imageUrl,
+      title: draft.title,
+      description: draft.description,
+      price_min: draft.priceMin,
+      price_max: draft.priceMax,
+      ebay_category_id: draft.ebayCategoryId || null,
+      item_specifics: draft.itemSpecifics || {},
+      condition: draft.condition || null,
+    });
+
+    if (error) {
+      console.error("Error adding draft:", error);
+      toast.error("Failed to save draft");
+    } else {
+      setDrafts((prev) => [draft, ...prev]);
+    }
+  };
+
+  const removeDraft = async (id: string) => {
+    const { error } = await supabase.from("drafts").delete().eq("id", id);
+
+    if (error) {
+      console.error("Error deleting draft:", error);
+      toast.error("Failed to delete draft");
+    } else {
+      setDrafts((prev) => prev.filter((d) => d.id !== id));
+    }
+  };
+
+  return { drafts, addDraft, removeDraft, loading, refetchDrafts: fetchDrafts };
 }
