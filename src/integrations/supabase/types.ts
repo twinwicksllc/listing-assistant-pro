@@ -14,7 +14,102 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      drafts: {
+        Row: {
+          condition: string | null
+          created_at: string
+          description: string
+          ebay_category_id: string | null
+          id: string
+          image_url: string
+          item_specifics: Json | null
+          price_max: number
+          price_min: number
+          title: string
+          user_id: string
+        }
+        Insert: {
+          condition?: string | null
+          created_at?: string
+          description?: string
+          ebay_category_id?: string | null
+          id?: string
+          image_url: string
+          item_specifics?: Json | null
+          price_max?: number
+          price_min?: number
+          title: string
+          user_id: string
+        }
+        Update: {
+          condition?: string | null
+          created_at?: string
+          description?: string
+          ebay_category_id?: string | null
+          id?: string
+          image_url?: string
+          item_specifics?: Json | null
+          price_max?: number
+          price_min?: number
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ebay_tokens: {
+        Row: {
+          access_token: string
+          created_at: string
+          expires_at: string | null
+          id: string
+          refresh_token: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          refresh_token?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          refresh_token?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
