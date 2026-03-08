@@ -15,6 +15,7 @@ interface EbayListing {
   status: string;
   views: number;
   listingId: string | null;
+  ebayUrl: string | null;
 }
 
 const EBAY_TOKEN_KEY = "ebay-user-token";
@@ -208,9 +209,9 @@ export default function DashboardPage() {
                         <Eye className="w-3 h-3" />
                         {listing.views} views
                       </span>
-                      {listing.listingId && (
+                      {listing.ebayUrl && (
                         <a
-                          href={`https://www.ebay.com/itm/${listing.listingId}`}
+                          href={listing.ebayUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-0.5 text-primary hover:underline"
