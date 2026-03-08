@@ -23,6 +23,7 @@ serve(async (req) => {
 
     // Support both single image (legacy) and multiple images
     const imageList: string[] = body.images ?? (body.imageBase64 ? [body.imageBase64] : []);
+    const voiceNote: string = body.voiceNote || "";
 
     if (imageList.length === 0) {
       return new Response(JSON.stringify({ error: "No images provided" }), {
