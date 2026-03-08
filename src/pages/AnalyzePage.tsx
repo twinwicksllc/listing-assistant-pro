@@ -68,6 +68,10 @@ export default function AnalyzePage() {
       setEbayCategoryId(data.ebayCategoryId || "");
       setItemSpecifics(data.itemSpecifics || {});
       setCondition(data.condition || "USED_EXCELLENT");
+      setSuggestedGrade(data.suggestedGrade || "");
+      setGradingRationale(data.gradingRationale || "");
+      setIsSlabbed(data.isSlabbed ?? false);
+      setGradeConfirmed(false);
       setGenerated(true);
       await recordUsage("ai_analysis");
     } catch (err: any) {
