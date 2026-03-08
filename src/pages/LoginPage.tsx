@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable";
 import { toast } from "sonner";
 import teckstartLogo from "@/assets/teckstart-logo.png";
 import { Loader2, Mail, Lock } from "lucide-react";
