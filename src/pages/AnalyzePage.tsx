@@ -89,6 +89,11 @@ export default function AnalyzePage() {
   };
 
   const handlePublish = async () => {
+    if (!canPublish) {
+      toast.error(`Monthly publish limit reached (${PLANS.starter.publishLimit}). Upgrade to Pro for unlimited.`);
+      navigate("/billing");
+      return;
+    }
     setPublishing(true);
     try {
       let ebayToken = localStorage.getItem("ebay_user_token");
