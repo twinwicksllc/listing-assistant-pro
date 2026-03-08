@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Shield, CheckCircle2, XCircle, AlertTriangle, RefreshCw,
-  Users, CreditCard, Cpu, Zap, ArrowLeft, Activity
+  Users, CreditCard, Cpu, Zap, ArrowLeft, Activity, DollarSign
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
