@@ -22,6 +22,9 @@ export default function HomePage() {
   const isMobile = useIsMobile();
   const [stagedImages, setStagedImages] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
+  const [optimizeProgress, setOptimizeProgress] = useState({ done: 0, total: 0 });
+  const [imagesOptimized, setImagesOptimized] = useState(false);
 
   // Voice note state
   const [recording, setRecording] = useState(false);
