@@ -237,9 +237,9 @@ export default function AnalyzePage() {
                 </>
               )}
             </button>
-            {!isPro && (
+            {!isUnlimited && (
               <p className="text-center text-xs text-muted-foreground">
-                {usage.aiAnalysis}/{PLANS.starter.analysisLimit} free analyses used this month
+                {usage.aiAnalysis}/{currentPlanLimits.analysisLimit === Infinity ? "∞" : currentPlanLimits.analysisLimit} analyses used this month
                 {!canAnalyze && (
                   <button onClick={() => navigate("/billing")} className="ml-1 text-primary hover:underline inline-flex items-center gap-0.5">
                     <Crown className="w-3 h-3" /> Upgrade
