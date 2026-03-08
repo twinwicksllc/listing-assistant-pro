@@ -102,6 +102,16 @@ serve(async (req) => {
       const { userToken, title, description, priceMin, imageUrl, condition, ebayCategoryId, itemSpecifics } = payload;
       if (!userToken) throw new Error("No eBay user token provided");
 
+      // eBay Partner Network campaign ID for affiliate revenue tracking
+      const epnCampaignId = Deno.env.get("EPN_CAMPAIGN_ID") || "";
+
+      // Helper: build EPN rover affiliate link from a listing ID
+      const buildAffiliateUrl = (listingId: string): string => {
+        const baseUrl = `https://www.ebay.com/itm/${listingId}`;
+        if (!epnCampaignId) return baseUrl;
+        return `https://rover.ebay.com/rover/1/711-53200-19255-0/1?campid=${encodeURIComponent(epnCampaignId)}&toolid=10001&customid=teckstart&mpre=${encodeURIComponent(baseUrl)}`;
+      };
+
       const sku = `LISTING-${Date.now()}`;
 
       // Build eBay-formatted item specifics (nameValueList)
@@ -192,11 +202,18 @@ serve(async (req) => {
 
       const offerData = await offerResp.json();
 
+      // Build affiliate link if the offer already has a listingId (published immediately)
+      // or store the offerId so the frontend can construct it once the listing goes live
+      const listingId = offerData.listing?.listingId || null;
+      const affiliateUrl = listingId ? buildAffiliateUrl(listingId) : null;
+
       return new Response(
         JSON.stringify({
           success: true,
           offerId: offerData.offerId,
           sku,
+          listingId,
+          affiliateUrl,
           message: "Draft listing created on eBay",
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
