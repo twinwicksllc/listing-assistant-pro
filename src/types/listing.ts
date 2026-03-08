@@ -25,4 +25,5 @@ export interface ListingDraft {
   ebayCategoryId?: string;
   itemSpecifics?: ItemSpecifics;
   condition?: string;
+  consignor?: string;
 }

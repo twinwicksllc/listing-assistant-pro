@@ -17,12 +17,14 @@ export type Database = {
       drafts: {
         Row: {
           condition: string | null
+          consignor: string | null
           created_at: string
           description: string
           ebay_category_id: string | null
           id: string
           image_url: string
           item_specifics: Json | null
+          org_id: string | null
           price_max: number
           price_min: number
           title: string
@@ -30,12 +32,14 @@ export type Database = {
         }
         Insert: {
           condition?: string | null
+          consignor?: string | null
           created_at?: string
           description?: string
           ebay_category_id?: string | null
           id?: string
           image_url: string
           item_specifics?: Json | null
+          org_id?: string | null
           price_max?: number
           price_min?: number
           title: string
@@ -43,18 +47,28 @@ export type Database = {
         }
         Update: {
           condition?: string | null
+          consignor?: string | null
           created_at?: string
           description?: string
           ebay_category_id?: string | null
           id?: string
           image_url?: string
           item_specifics?: Json | null
+          org_id?: string | null
           price_max?: number
           price_min?: number
           title?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "drafts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ebay_tokens: {
         Row: {
@@ -83,6 +97,94 @@ export type Database = {
           refresh_token?: string | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      org_invitations: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          invited_by: string
+          org_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          invited_by: string
+          org_id: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          invited_by?: string
+          org_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_invitations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_members: {
+        Row: {
+          created_at: string
+          id: string
+          org_id: string
+          role: Database["public"]["Enums"]["org_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          org_id: string
+          role?: Database["public"]["Enums"]["org_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          org_id?: string
+          role?: Database["public"]["Enums"]["org_role"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_members_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organizations: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          owner_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          owner_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          owner_id?: string
         }
         Relationships: []
       }
@@ -136,10 +238,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      accept_invitation: {
+        Args: { _invitation_id: string }
+        Returns: undefined
+      }
+      get_user_org_id: { Args: { _user_id: string }; Returns: string }
+      is_org_member: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_org_owner: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      org_role: "owner" | "lister"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -266,6 +380,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      org_role: ["owner", "lister"],
+    },
   },
 } as const

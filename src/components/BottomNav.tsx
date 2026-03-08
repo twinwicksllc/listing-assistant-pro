@@ -1,16 +1,19 @@
-import { Camera, FileText, LayoutDashboard, CreditCard } from "lucide-react";
+import { Camera, FileText, LayoutDashboard, CreditCard, Users } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function BottomNav() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { isOwner } = useAuth();
 
   const tabs = [
-    { path: "/", icon: Camera, label: "Capture" },
-    { path: "/drafts", icon: FileText, label: "Drafts" },
-    { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { path: "/billing", icon: CreditCard, label: "Billing" },
-  ];
+    { path: "/", icon: Camera, label: "Capture", show: true },
+    { path: "/drafts", icon: FileText, label: "Drafts", show: true },
+    { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard", show: isOwner },
+    { path: "/team", icon: Users, label: "Team", show: true },
+    { path: "/billing", icon: CreditCard, label: "Billing", show: isOwner },
+  ].filter((t) => t.show);
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">

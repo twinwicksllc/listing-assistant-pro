@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 export function useDrafts() {
-  const { user } = useAuth();
+  const { user, org } = useAuth();
   const [drafts, setDrafts] = useState<ListingDraft[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -38,6 +38,7 @@ export function useDrafts() {
           ebayCategoryId: d.ebay_category_id || undefined,
           itemSpecifics: d.item_specifics || undefined,
           condition: d.condition || undefined,
+          consignor: d.consignor || "",
         }))
       );
     }
@@ -54,6 +55,7 @@ export function useDrafts() {
     const { error } = await supabase.from("drafts").insert({
       id: draft.id,
       user_id: user.id,
+      org_id: org.orgId || null,
       image_url: draft.imageUrl,
       title: draft.title,
       description: draft.description,
@@ -62,6 +64,7 @@ export function useDrafts() {
       ebay_category_id: draft.ebayCategoryId || null,
       item_specifics: draft.itemSpecifics || {},
       condition: draft.condition || null,
+      consignor: draft.consignor || "",
     });
 
     if (error) {

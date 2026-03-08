@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, Send, Tag, Crown, Download, FileSpreadsheet, Sheet, ShieldCheck, AlertTriangle, Check, X as XIcon } from "lucide-react";
+import { ArrowLeft, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, Send, Tag, Crown, Download, FileSpreadsheet, Sheet, ShieldCheck, AlertTriangle, Check, X as XIcon, Lock, UserCircle } from "lucide-react";
 import PricingCard from "@/components/PricingCard";
 import { useDrafts } from "@/hooks/useDrafts";
 import { toast } from "sonner";
@@ -10,7 +10,7 @@ import { useAuth, PLANS } from "@/contexts/AuthContext";
 import { exportListing, type ExportPlatform, type ExportFormat } from "@/lib/exportCSV";
 
 export default function AnalyzePage() {
-  const { canAnalyze, canPublish, isPro, usage, recordUsage } = useAuth();
+  const { canAnalyze, canPublish, isPro, usage, recordUsage, isOwner, isLister } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const { addDraft } = useDrafts();
@@ -38,6 +38,7 @@ export default function AnalyzePage() {
   const [gradingRationale, setGradingRationale] = useState<string>("");
   const [isSlabbed, setIsSlabbed] = useState(false);
   const [gradeConfirmed, setGradeConfirmed] = useState(false);
+  const [consignor, setConsignor] = useState("");
 
   if (imageUrls.length === 0) {
     navigate("/");
@@ -94,6 +95,7 @@ export default function AnalyzePage() {
       ebayCategoryId,
       itemSpecifics,
       condition,
+      consignor,
     });
     toast.success("Draft saved!");
     navigate("/drafts");
@@ -386,6 +388,21 @@ export default function AnalyzePage() {
               </div>
             )}
 
+            {/* Consignor */}
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <UserCircle className="w-3.5 h-3.5 text-primary" />
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Consignor</label>
+                <span className="text-[10px] text-muted-foreground/60 ml-auto">Optional</span>
+              </div>
+              <input
+                value={consignor}
+                onChange={(e) => setConsignor(e.target.value)}
+                placeholder="Who does this item belong to?"
+                className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+
             {/* Pricing */}
             <PricingCard priceMin={priceMin} priceMax={priceMax} searchQuery={title} metalType={metalType} metalWeightOz={metalWeightOz} />
 
@@ -459,23 +476,30 @@ export default function AnalyzePage() {
                 Save Draft
               </button>
 
-              <button
-                onClick={handlePublish}
-                disabled={publishing}
-                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
-              >
-                {publishing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Publishing...
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    Publish to eBay
-                  </>
-                )}
-              </button>
+              {isOwner ? (
+                <button
+                  onClick={handlePublish}
+                  disabled={publishing}
+                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
+                >
+                  {publishing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Publishing...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      Publish to eBay
+                    </>
+                  )}
+                </button>
+              ) : (
+                <div className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-muted text-muted-foreground font-semibold text-sm">
+                  <Lock className="w-4 h-4" />
+                  Publishing restricted to account owner
+                </div>
+              )}
             </div>
           </div>
         )}
