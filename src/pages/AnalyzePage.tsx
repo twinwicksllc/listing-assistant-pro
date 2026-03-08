@@ -388,6 +388,21 @@ export default function AnalyzePage() {
               </div>
             )}
 
+            {/* Consignor */}
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <UserCircle className="w-3.5 h-3.5 text-primary" />
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Consignor</label>
+                <span className="text-[10px] text-muted-foreground/60 ml-auto">Optional</span>
+              </div>
+              <input
+                value={consignor}
+                onChange={(e) => setConsignor(e.target.value)}
+                placeholder="Who does this item belong to?"
+                className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+
             {/* Pricing */}
             <PricingCard priceMin={priceMin} priceMax={priceMax} searchQuery={title} metalType={metalType} metalWeightOz={metalWeightOz} />
 
