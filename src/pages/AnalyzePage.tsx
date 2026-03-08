@@ -33,6 +33,7 @@ export default function AnalyzePage() {
   const [itemSpecifics, setItemSpecifics] = useState<ItemSpecifics>({});
   const [condition, setCondition] = useState<string>("USED_EXCELLENT");
   const [exportPlatform, setExportPlatform] = useState<ExportPlatform>("ebay_file_exchange");
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
 
   if (imageUrls.length === 0) {
     navigate("/");
