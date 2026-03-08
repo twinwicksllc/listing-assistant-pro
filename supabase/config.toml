@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.spot-prices]
 verify_jwt = false
+
+[functions.transcribe-voice]
+verify_jwt = false

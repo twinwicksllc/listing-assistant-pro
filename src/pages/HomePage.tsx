@@ -1,14 +1,16 @@
-import { Camera, Upload, Sparkles, X, ArrowRight, ImagePlus, Monitor } from "lucide-react";
+import { Camera, Upload, Sparkles, X, ArrowRight, ImagePlus, Mic, MicOff, Loader2 } from "lucide-react";
 import { useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import BottomNav from "@/components/BottomNav";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { supabase } from "@/integrations/supabase/client";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/gif", "video/mp4", "video/quicktime", "video/webm"];
 const ACCEPT_STRING = "image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif,video/mp4,video/quicktime,video/webm";
 const MAX_FILE_SIZE_MB = 20;
 const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
+const MAX_RECORDING_SEC = 10;
 
 export default function HomePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -17,19 +19,25 @@ export default function HomePage() {
   const [stagedImages, setStagedImages] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
 
+  // Voice note state
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [voiceNote, setVoiceNote] = useState("");
+  const [recordingTime, setRecordingTime] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const validateAndStageFiles = useCallback((files: FileList | File[] | null) => {
     if (!files) return;
     const fileArr = Array.from(files);
-    let skipped = 0;
 
     fileArr.forEach((file) => {
       if (!ACCEPTED_TYPES.includes(file.type)) {
-        skipped++;
         toast.error(`"${file.name}" is not a supported format (JPG, PNG, WebP, GIF, MP4, MOV, WebM)`);
         return;
       }
       if (file.size > MAX_FILE_SIZE) {
-        skipped++;
         toast.error(`"${file.name}" exceeds ${MAX_FILE_SIZE_MB}MB limit (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
         return;
       }
@@ -49,12 +57,88 @@ export default function HomePage() {
 
   const handleProcess = () => {
     if (stagedImages.length === 0) return;
-    navigate("/analyze", { state: { imageUrls: stagedImages } });
+    navigate("/analyze", { state: { imageUrls: stagedImages, voiceNote } });
   };
 
   const handleCapture = () => {
     fileInputRef.current?.click();
   };
+
+  // --- Voice recording ---
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    setRecording(false);
+    setRecordingTime(0);
+  }, []);
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+
+        // Convert to base64 and transcribe
+        setTranscribing(true);
+        try {
+          const reader = new FileReader();
+          const base64 = await new Promise<string>((resolve) => {
+            reader.onload = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+          });
+
+          const { data, error } = await supabase.functions.invoke("transcribe-voice", {
+            body: { audioBase64: base64 },
+          });
+
+          if (error || data?.error) throw new Error(data?.error || error?.message || "Transcription failed");
+
+          const transcript = data.transcript || "";
+          if (transcript) {
+            setVoiceNote((prev) => (prev ? `${prev} ${transcript}` : transcript));
+            toast.success("Voice note transcribed!");
+          } else {
+            toast.error("Couldn't detect any speech. Try again.");
+          }
+        } catch (err: any) {
+          console.error("Transcription error:", err);
+          toast.error(err.message || "Failed to transcribe voice note.");
+        } finally {
+          setTranscribing(false);
+        }
+      };
+
+      mediaRecorder.start();
+      setRecording(true);
+      setRecordingTime(0);
+
+      // Timer + auto-stop at max duration
+      let elapsed = 0;
+      timerRef.current = setInterval(() => {
+        elapsed++;
+        setRecordingTime(elapsed);
+        if (elapsed >= MAX_RECORDING_SEC) {
+          stopRecording();
+        }
+      }, 1000);
+    } catch {
+      toast.error("Microphone access denied. Please enable it in your browser settings.");
+    }
+  }, [stopRecording]);
 
   // Drag-and-drop handlers
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -159,7 +243,7 @@ export default function HomePage() {
                 </div>
               )}
 
-              {/* Photo grid — responsive columns */}
+              {/* Photo grid */}
               <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 md:gap-3">
                 {stagedImages.map((url, i) => (
                   <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-border bg-secondary group">
@@ -186,6 +270,65 @@ export default function HomePage() {
                   {isMobile ? <Camera className="w-5 h-5" /> : <Upload className="w-5 h-5" />}
                   <span className="text-[10px] font-medium">Add</span>
                 </button>
+              </div>
+
+              {/* Voice Note Section */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <Mic className="w-3.5 h-3.5 text-primary" />
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Voice Note</label>
+                  <span className="text-[10px] text-muted-foreground/60 ml-auto">Optional · {MAX_RECORDING_SEC}s max</span>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={recording ? stopRecording : startRecording}
+                    disabled={transcribing}
+                    className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                      recording
+                        ? "bg-destructive text-destructive-foreground animate-pulse"
+                        : "bg-secondary text-foreground hover:bg-secondary/80"
+                    } disabled:opacity-60`}
+                  >
+                    {transcribing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Transcribing...
+                      </>
+                    ) : recording ? (
+                      <>
+                        <MicOff className="w-4 h-4" />
+                        Stop ({MAX_RECORDING_SEC - recordingTime}s)
+                      </>
+                    ) : (
+                      <>
+                        <Mic className="w-4 h-4" />
+                        Record Note
+                      </>
+                    )}
+                  </button>
+
+                  {voiceNote && !recording && !transcribing && (
+                    <button
+                      onClick={() => setVoiceNote("")}
+                      className="px-3 py-2.5 rounded-lg text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                {voiceNote && (
+                  <div className="bg-card border border-border rounded-lg px-3 py-2.5">
+                    <p className="text-xs text-muted-foreground mb-1 font-medium">Transcription:</p>
+                    <textarea
+                      value={voiceNote}
+                      onChange={(e) => setVoiceNote(e.target.value)}
+                      rows={2}
+                      className="w-full text-sm text-foreground bg-transparent border-none focus:outline-none resize-none"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Process button */}
