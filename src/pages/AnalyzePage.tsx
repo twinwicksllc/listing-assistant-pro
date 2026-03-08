@@ -39,7 +39,7 @@ export default function AnalyzePage() {
     setGenerating(true);
     try {
       const { data, error } = await supabase.functions.invoke("analyze-item", {
-        body: { images: imageUrls },
+        body: { images: imageUrls, voiceNote },
       });
 
       if (error) throw new Error(error.message || "Analysis failed");
