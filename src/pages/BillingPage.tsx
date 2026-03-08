@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Check, Crown, Zap, Loader2, ExternalLink, ArrowLeft } from "lucide-react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth, PLANS } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
