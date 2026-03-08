@@ -125,6 +125,20 @@ serve(async (req) => {
       // skip
     }
 
+    // --- Last Cost Alert ---
+    let lastCostAlert: { sent_at: string; total_cost: number; total_requests: number } | null = null;
+    try {
+      const { data: alertData } = await supabaseClient
+        .from("cost_alerts")
+        .select("sent_at, total_cost, total_requests")
+        .order("sent_at", { ascending: false })
+        .limit(1)
+        .single();
+      if (alertData) lastCostAlert = alertData;
+    } catch {
+      // skip
+    }
+
     return new Response(
       JSON.stringify({
         stripe: stripeStatus,
@@ -132,6 +146,7 @@ serve(async (req) => {
         totalUsers,
         gemini: geminiUsage,
         featureUsage,
+        lastCostAlert,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

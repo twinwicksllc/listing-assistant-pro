@@ -21,6 +21,7 @@ interface SystemData {
     last30Days: { date: string; calls: number; tokens: number }[];
   };
   featureUsage: { ai_analysis: number; ebay_publish: number; optimize: number; export: number };
+  lastCostAlert: { sent_at: string; total_cost: number; total_requests: number } | null;
 }
 
 export default function AdminPage() {
