@@ -1,4 +1,4 @@
-import { Camera, Upload, Sparkles, X, ArrowRight, ImagePlus, Mic, MicOff, Loader2, LogOut } from "lucide-react";
+import { Camera, Upload, Sparkles, X, ArrowRight, ImagePlus, Mic, MicOff, Loader2, LogOut, Wand2 } from "lucide-react";
 import teckstartLogo from "@/assets/teckstart-logo.png";
 import { useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
