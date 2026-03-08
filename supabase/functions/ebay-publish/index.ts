@@ -1,0 +1,196 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const { action, ...payload } = await req.json();
+
+    const clientId = Deno.env.get("EBAY_CLIENT_ID");
+    const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
+    const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
+
+    if (!clientId || !clientSecret) {
+      throw new Error("eBay API credentials not configured");
+    }
+
+    const apiBase =
+      ebayEnv === "production"
+        ? "https://api.ebay.com"
+        : "https://api.sandbox.ebay.com";
+    const authBase =
+      ebayEnv === "production"
+        ? "https://auth.ebay.com"
+        : "https://auth.sandbox.ebay.com";
+    const tokenUrl =
+      ebayEnv === "production"
+        ? "https://api.ebay.com/identity/v1/oauth2/token"
+        : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
+
+    // --- ACTION: Get OAuth consent URL ---
+    if (action === "get_auth_url") {
+      const redirectUri = Deno.env.get("EBAY_REDIRECT_URI");
+      if (!redirectUri) throw new Error("EBAY_REDIRECT_URI not configured");
+
+      const scopes = [
+        "https://api.ebay.com/oauth/api_scope",
+        "https://api.ebay.com/oauth/api_scope/sell.inventory",
+        "https://api.ebay.com/oauth/api_scope/sell.account",
+      ].join(" ");
+
+      const authUrl =
+        `${authBase}/oauth2/authorize?` +
+        `client_id=${encodeURIComponent(clientId)}` +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        `&response_type=code` +
+        `&scope=${encodeURIComponent(scopes)}`;
+
+      return new Response(JSON.stringify({ authUrl }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // --- ACTION: Exchange auth code for user token ---
+    if (action === "exchange_code") {
+      const { code } = payload;
+      if (!code) throw new Error("No authorization code provided");
+
+      const redirectUri = Deno.env.get("EBAY_REDIRECT_URI");
+      if (!redirectUri) throw new Error("EBAY_REDIRECT_URI not configured");
+
+      const credentials = btoa(`${clientId}:${clientSecret}`);
+      const resp = await fetch(tokenUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${credentials}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: redirectUri,
+        }).toString(),
+      });
+
+      if (!resp.ok) {
+        const txt = await resp.text();
+        console.error("eBay token exchange error:", resp.status, txt);
+        throw new Error(`Token exchange failed: ${resp.status}`);
+      }
+
+      const tokenData = await resp.json();
+      return new Response(
+        JSON.stringify({
+          access_token: tokenData.access_token,
+          refresh_token: tokenData.refresh_token,
+          expires_in: tokenData.expires_in,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // --- ACTION: Create draft listing via Inventory API ---
+    if (action === "create_draft") {
+      const { userToken, title, description, priceMin, imageUrl, condition } = payload;
+      if (!userToken) throw new Error("No eBay user token provided");
+
+      const sku = `LISTING-${Date.now()}`;
+
+      // Step 1: Create/update inventory item
+      const inventoryResp = await fetch(
+        `${apiBase}/sell/inventory/v1/inventory_item/${sku}`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${userToken}`,
+            "Content-Type": "application/json",
+            "Content-Language": "en-US",
+          },
+          body: JSON.stringify({
+            product: {
+              title,
+              description,
+              imageUrls: imageUrl ? [imageUrl] : [],
+            },
+            condition: condition || "USED_EXCELLENT",
+            availability: {
+              shipToLocationAvailability: {
+                quantity: 1,
+              },
+            },
+          }),
+        }
+      );
+
+      if (!inventoryResp.ok) {
+        const errText = await inventoryResp.text();
+        console.error("eBay inventory error:", inventoryResp.status, errText);
+        throw new Error(`Failed to create inventory item: ${inventoryResp.status} - ${errText}`);
+      }
+
+      // Step 2: Create offer (draft listing)
+      const offerResp = await fetch(`${apiBase}/sell/inventory/v1/offer`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+          "Content-Type": "application/json",
+          "Content-Language": "en-US",
+        },
+        body: JSON.stringify({
+          sku,
+          marketplaceId: "EBAY_US",
+          format: "FIXED_PRICE",
+          listingDescription: description,
+          availableQuantity: 1,
+          pricingSummary: {
+            price: {
+              value: String(priceMin),
+              currency: "USD",
+            },
+          },
+          listingPolicies: {
+            // These policy IDs need to be set up in the user's eBay seller account
+            // For now we'll send without them — eBay will use defaults
+          },
+        }),
+      });
+
+      if (!offerResp.ok) {
+        const errText = await offerResp.text();
+        console.error("eBay offer error:", offerResp.status, errText);
+        throw new Error(`Failed to create offer: ${offerResp.status} - ${errText}`);
+      }
+
+      const offerData = await offerResp.json();
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          offerId: offerData.offerId,
+          sku,
+          message: "Draft listing created on eBay",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    return new Response(JSON.stringify({ error: "Unknown action" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (e) {
+    console.error("ebay-publish error:", e);
+    return new Response(
+      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});
