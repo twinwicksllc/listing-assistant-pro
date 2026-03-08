@@ -332,20 +332,8 @@ Return your analysis using the provided tool.`;
     const usage = data.usage;
     const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
 
-    // Log Gemini token usage
+    // Log Gemini token usage (reuse svc and userId from above)
     try {
-      const svc = createClient(
-        Deno.env.get("SUPABASE_URL") ?? "",
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-        { auth: { persistSession: false } }
-      );
-      // Try to get user_id from auth header
-      let userId: string | null = null;
-      const authHeader = req.headers.get("Authorization");
-      if (authHeader) {
-        const { data: ud } = await svc.auth.getUser(authHeader.replace("Bearer ", ""));
-        userId = ud?.user?.id || null;
-      }
       await svc.from("gemini_usage").insert({
         user_id: userId,
         function_name: "analyze-item",
