@@ -202,23 +202,35 @@ export default function AnalyzePage() {
         )}
 
         {!generated ? (
-          <button
-            onClick={handleGenerate}
-            disabled={generating}
-            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
-          >
-            {generating ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Analyzing {imageUrls.length} photo{imageUrls.length !== 1 && "s"} with AI...
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4" />
-                Generate Listing
-              </>
+          <div className="space-y-2">
+            <button
+              onClick={handleGenerate}
+              disabled={generating}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
+            >
+              {generating ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Analyzing {imageUrls.length} photo{imageUrls.length !== 1 && "s"} with AI...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  Generate Listing
+                </>
+              )}
+            </button>
+            {!isPro && (
+              <p className="text-center text-xs text-muted-foreground">
+                {usage.aiAnalysis}/{PLANS.starter.analysisLimit} free analyses used this month
+                {!canAnalyze && (
+                  <button onClick={() => navigate("/billing")} className="ml-1 text-primary hover:underline inline-flex items-center gap-0.5">
+                    <Crown className="w-3 h-3" /> Upgrade
+                  </button>
+                )}
+              </p>
             )}
-          </button>
+          </div>
         ) : (
           <div className="space-y-4">
             <div className="space-y-1.5">
