@@ -1,4 +1,4 @@
-import { Camera, Upload, Sparkles, X, ArrowRight, ImagePlus, Mic, MicOff, Loader2 } from "lucide-react";
+import { Camera, Upload, Sparkles, X, ArrowRight, ImagePlus, Mic, MicOff, Loader2, LogOut } from "lucide-react";
 import teckstartLogo from "@/assets/teckstart-logo.png";
 import { useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
@@ -6,6 +6,7 @@ import BottomNav from "@/components/BottomNav";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/gif", "video/mp4", "video/quicktime", "video/webm"];
 const ACCEPT_STRING = "image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif,video/mp4,video/quicktime,video/webm";
@@ -14,6 +15,7 @@ const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
 const MAX_RECORDING_SEC = 10;
 
 export default function HomePage() {
+  const { signOut } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
@@ -164,10 +166,17 @@ export default function HomePage() {
       <header className="px-5 pt-12 pb-4 md:px-8 lg:px-12">
         <div className="max-w-3xl mx-auto flex items-center gap-2">
           <img src={teckstartLogo} alt="Teckstart" className="h-9 w-auto" />
-          <div>
+          <div className="flex-1">
             <h1 className="text-lg font-bold text-foreground">Teckstart Listing Assistant</h1>
             <p className="text-xs text-muted-foreground">AI-powered eBay listings</p>
           </div>
+          <button
+            onClick={signOut}
+            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            title="Sign out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </header>
 
