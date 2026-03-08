@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, Send } from "lucide-react";
+import { ArrowLeft, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, Send, Tag } from "lucide-react";
 import PricingCard from "@/components/PricingCard";
 import { useDrafts } from "@/hooks/useDrafts";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import type { ItemSpecifics } from "@/types/listing";
 
 export default function AnalyzePage() {
   const location = useLocation();
@@ -24,6 +25,9 @@ export default function AnalyzePage() {
   const [publishing, setPublishing] = useState(false);
   const [metalType, setMetalType] = useState<string>("none");
   const [metalWeightOz, setMetalWeightOz] = useState<number>(0);
+  const [ebayCategoryId, setEbayCategoryId] = useState<string>("");
+  const [itemSpecifics, setItemSpecifics] = useState<ItemSpecifics>({});
+  const [condition, setCondition] = useState<string>("USED_EXCELLENT");
 
   if (imageUrls.length === 0) {
     navigate("/");
@@ -46,6 +50,9 @@ export default function AnalyzePage() {
       setPriceMax(data.priceMax || 0);
       setMetalType(data.metalType || "none");
       setMetalWeightOz(data.metalWeightOz || 0);
+      setEbayCategoryId(data.ebayCategoryId || "");
+      setItemSpecifics(data.itemSpecifics || {});
+      setCondition(data.condition || "USED_EXCELLENT");
       setGenerated(true);
     } catch (err: any) {
       console.error("Analysis error:", err);
@@ -64,6 +71,9 @@ export default function AnalyzePage() {
       priceMin,
       priceMax,
       createdAt: new Date(),
+      ebayCategoryId,
+      itemSpecifics,
+      condition,
     });
     toast.success("Draft saved!");
     navigate("/drafts");
@@ -72,23 +82,19 @@ export default function AnalyzePage() {
   const handlePublish = async () => {
     setPublishing(true);
     try {
-      // Step 1: Check if user has an eBay token stored (localStorage for now)
       let ebayToken = localStorage.getItem("ebay_user_token");
 
       if (!ebayToken) {
-        // Get OAuth consent URL and redirect
         const { data, error } = await supabase.functions.invoke("ebay-publish", {
           body: { action: "get_auth_url" },
         });
         if (error || data?.error) throw new Error(data?.error || error?.message || "Failed to get auth URL");
 
-        // Store current listing state before redirect
-        localStorage.setItem("pending_listing", JSON.stringify({ title, description, priceMin, imageUrl: imageUrls[0] }));
+        localStorage.setItem("pending_listing", JSON.stringify({ title, description, priceMin, imageUrl: imageUrls[0], ebayCategoryId, itemSpecifics, condition }));
         window.location.href = data.authUrl;
         return;
       }
 
-      // Step 2: Create draft on eBay
       const { data, error } = await supabase.functions.invoke("ebay-publish", {
         body: {
           action: "create_draft",
@@ -97,12 +103,13 @@ export default function AnalyzePage() {
           description,
           priceMin,
           imageUrl: imageUrls[0],
-          condition: "USED_EXCELLENT",
+          condition,
+          ebayCategoryId,
+          itemSpecifics,
         },
       });
 
       if (error || data?.error) {
-        // If token expired, clear it and retry
         if (data?.error?.includes("401") || data?.error?.includes("expired")) {
           localStorage.removeItem("ebay_user_token");
           toast.error("eBay session expired. Please connect again.");
@@ -119,6 +126,9 @@ export default function AnalyzePage() {
       setPublishing(false);
     }
   };
+
+  // Filter out empty item specifics for display
+  const displaySpecifics = Object.entries(itemSpecifics).filter(([, v]) => v && v.trim() !== "");
 
   return (
     <div className="min-h-screen bg-background pb-8">
@@ -218,7 +228,50 @@ export default function AnalyzePage() {
               />
             </div>
 
-            {/* Pricing — now with eBay sold data */}
+            {/* Item Specifics */}
+            {displaySpecifics.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <Tag className="w-3.5 h-3.5 text-primary" />
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">eBay Item Specifics</label>
+                  {ebayCategoryId && (
+                    <span className="ml-auto text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                      Cat: {ebayCategoryId}
+                    </span>
+                  )}
+                </div>
+                <div className="bg-card border border-border rounded-lg divide-y divide-border">
+                  {displaySpecifics.map(([key, value]) => (
+                    <div key={key} className="flex items-center justify-between px-3 py-2">
+                      <span className="text-xs font-medium text-muted-foreground">{key}</span>
+                      <input
+                        value={value || ""}
+                        onChange={(e) => setItemSpecifics(prev => ({ ...prev, [key]: e.target.value }))}
+                        className="text-xs text-foreground text-right bg-transparent border-none focus:outline-none focus:ring-0 max-w-[55%]"
+                      />
+                    </div>
+                  ))}
+                </div>
+                {/* Condition */}
+                <div className="flex items-center justify-between bg-card border border-border rounded-lg px-3 py-2">
+                  <span className="text-xs font-medium text-muted-foreground">Condition</span>
+                  <select
+                    value={condition}
+                    onChange={(e) => setCondition(e.target.value)}
+                    className="text-xs text-foreground bg-transparent border-none focus:outline-none cursor-pointer text-right"
+                  >
+                    <option value="NEW">New</option>
+                    <option value="LIKE_NEW">Like New</option>
+                    <option value="USED_EXCELLENT">Used - Excellent</option>
+                    <option value="USED_VERY_GOOD">Used - Very Good</option>
+                    <option value="USED_GOOD">Used - Good</option>
+                    <option value="USED_ACCEPTABLE">Used - Acceptable</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {/* Pricing */}
             <PricingCard priceMin={priceMin} priceMax={priceMax} searchQuery={title} metalType={metalType} metalWeightOz={metalWeightOz} />
 
             {/* Action buttons */}

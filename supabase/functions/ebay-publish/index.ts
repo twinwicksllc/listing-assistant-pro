@@ -99,12 +99,41 @@ serve(async (req) => {
 
     // --- ACTION: Create draft listing via Inventory API ---
     if (action === "create_draft") {
-      const { userToken, title, description, priceMin, imageUrl, condition } = payload;
+      const { userToken, title, description, priceMin, imageUrl, condition, ebayCategoryId, itemSpecifics } = payload;
       if (!userToken) throw new Error("No eBay user token provided");
 
       const sku = `LISTING-${Date.now()}`;
 
+      // Build eBay-formatted item specifics (nameValueList)
+      const aspects: Record<string, string[]> = {};
+      if (itemSpecifics && typeof itemSpecifics === "object") {
+        for (const [key, value] of Object.entries(itemSpecifics)) {
+          if (value && typeof value === "string" && value.trim()) {
+            aspects[key] = [value.trim()];
+          }
+        }
+      }
+
       // Step 1: Create/update inventory item
+      const inventoryBody: any = {
+        product: {
+          title,
+          description,
+          imageUrls: imageUrl ? [imageUrl] : [],
+        },
+        condition: condition || "USED_EXCELLENT",
+        availability: {
+          shipToLocationAvailability: {
+            quantity: 1,
+          },
+        },
+      };
+
+      // Add aspects (item specifics) to the product
+      if (Object.keys(aspects).length > 0) {
+        inventoryBody.product.aspects = aspects;
+      }
+
       const inventoryResp = await fetch(
         `${apiBase}/sell/inventory/v1/inventory_item/${sku}`,
         {
@@ -114,19 +143,7 @@ serve(async (req) => {
             "Content-Type": "application/json",
             "Content-Language": "en-US",
           },
-          body: JSON.stringify({
-            product: {
-              title,
-              description,
-              imageUrls: imageUrl ? [imageUrl] : [],
-            },
-            condition: condition || "USED_EXCELLENT",
-            availability: {
-              shipToLocationAvailability: {
-                quantity: 1,
-              },
-            },
-          }),
+          body: JSON.stringify(inventoryBody),
         }
       );
 
@@ -137,6 +154,26 @@ serve(async (req) => {
       }
 
       // Step 2: Create offer (draft listing)
+      const offerBody: any = {
+        sku,
+        marketplaceId: "EBAY_US",
+        format: "FIXED_PRICE",
+        listingDescription: description,
+        availableQuantity: 1,
+        pricingSummary: {
+          price: {
+            value: String(priceMin),
+            currency: "USD",
+          },
+        },
+        listingPolicies: {},
+      };
+
+      // Set eBay category ID
+      if (ebayCategoryId) {
+        offerBody.categoryId = ebayCategoryId;
+      }
+
       const offerResp = await fetch(`${apiBase}/sell/inventory/v1/offer`, {
         method: "POST",
         headers: {
@@ -144,23 +181,7 @@ serve(async (req) => {
           "Content-Type": "application/json",
           "Content-Language": "en-US",
         },
-        body: JSON.stringify({
-          sku,
-          marketplaceId: "EBAY_US",
-          format: "FIXED_PRICE",
-          listingDescription: description,
-          availableQuantity: 1,
-          pricingSummary: {
-            price: {
-              value: String(priceMin),
-              currency: "USD",
-            },
-          },
-          listingPolicies: {
-            // These policy IDs need to be set up in the user's eBay seller account
-            // For now we'll send without them — eBay will use defaults
-          },
-        }),
+        body: JSON.stringify(offerBody),
       });
 
       if (!offerResp.ok) {
