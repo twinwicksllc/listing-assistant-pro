@@ -118,6 +118,7 @@ export default function HomePage() {
       setStagedImages(optimized);
       setImagesOptimized(true);
       toast.success(`${optimized.length} photo${optimized.length !== 1 ? "s" : ""} optimized!`);
+      await recordUsage("optimize");
     } catch (err) {
       console.error("Optimize error:", err);
       toast.error("Failed to optimize images.");
