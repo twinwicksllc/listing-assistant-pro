@@ -1,6 +1,6 @@
-import { Camera, Upload, Sparkles, X, ArrowRight, ImagePlus, Mic, MicOff, Loader2, LogOut, Wand2 } from "lucide-react";
+import { Camera, Upload, Sparkles, X, ArrowRight, ImagePlus, Mic, MicOff, Loader2, LogOut, Wand2, HelpCircle } from "lucide-react";
 import teckstartLogo from "@/assets/teckstart-logo.png";
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import BottomNav from "@/components/BottomNav";
 import { toast } from "sonner";
@@ -8,6 +8,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { optimizeImages } from "@/lib/imageOptimizer";
+import WelcomeTour, { type TourStep } from "@/components/WelcomeTour";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/gif", "video/mp4", "video/quicktime", "video/webm"];
 const ACCEPT_STRING = "image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif,video/mp4,video/quicktime,video/webm";
