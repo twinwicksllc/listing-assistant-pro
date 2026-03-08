@@ -4,12 +4,7 @@ import { ArrowLeft, Sparkles, Save, Loader2 } from "lucide-react";
 import PricingCard from "@/components/PricingCard";
 import { useDrafts } from "@/hooks/useDrafts";
 import { toast } from "sonner";
-
-const MOCK_ITEMS = [
-  { title: "Vintage Sony Walkman WM-F2015 Portable Cassette Player AM/FM Radio - Tested Working", desc: "Pre-owned Sony Walkman WM-F2015 in good cosmetic condition with minor wear. Fully tested and confirmed working — plays cassettes and receives AM/FM radio. Belt clip intact. Battery compartment clean, no corrosion. A great find for collectors and retro audio enthusiasts.", min: 34.99, max: 79.99 },
-  { title: "Apple AirPods Pro 2nd Gen MagSafe Charging Case ONLY - White - Excellent Condition", desc: "Genuine Apple AirPods Pro 2nd Generation MagSafe charging case only (no earbuds). Lightning connector. In excellent condition with minimal signs of use. Hinge is firm, lid closes securely. Pairs and charges perfectly.", min: 29.99, max: 54.99 },
-  { title: "Nike Air Max 90 Men's Running Shoes Size 10.5 - Triple Black - Lightly Worn", desc: "Men's Nike Air Max 90 'Triple Black' in size 10.5. Lightly worn with plenty of life left. Uppers are clean, soles show minor tread wear. Air unit intact with no visible deflation. No box included.", min: 45.00, max: 89.99 },
-];
+import { supabase } from "@/integrations/supabase/client";
 
 export default function AnalyzePage() {
   const location = useLocation();
@@ -31,15 +26,30 @@ export default function AnalyzePage() {
 
   const handleGenerate = async () => {
     setGenerating(true);
-    // Simulate AI analysis
-    await new Promise((r) => setTimeout(r, 1800));
-    const mock = MOCK_ITEMS[Math.floor(Math.random() * MOCK_ITEMS.length)];
-    setTitle(mock.title);
-    setDescription(mock.desc);
-    setPriceMin(mock.min);
-    setPriceMax(mock.max);
-    setGenerated(true);
-    setGenerating(false);
+    try {
+      const { data, error } = await supabase.functions.invoke("analyze-item", {
+        body: { imageBase64: imageUrl },
+      });
+
+      if (error) {
+        throw new Error(error.message || "Analysis failed");
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      setTitle((data.title || "").slice(0, 80));
+      setDescription(data.description || "");
+      setPriceMin(data.priceMin || 0);
+      setPriceMax(data.priceMax || 0);
+      setGenerated(true);
+    } catch (err: any) {
+      console.error("Analysis error:", err);
+      toast.error(err.message || "Failed to analyze item. Please try again.");
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const handleSave = () => {
@@ -81,7 +91,7 @@ export default function AnalyzePage() {
             {generating ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Analyzing...
+                Analyzing with AI...
               </>
             ) : (
               <>
