@@ -149,7 +149,15 @@ export default function AnalyzePage() {
         throw new Error(data?.error || error?.message || "Publish failed");
       }
 
-      toast.success(`Draft listing created on eBay! (Offer ID: ${data.offerId})`);
+      const successMsg = `Draft listing created on eBay! (Offer ID: ${data.offerId})`;
+      toast.success(successMsg, {
+        description: data.affiliateUrl
+          ? `Affiliate link ready — share it to earn EPN commissions.`
+          : undefined,
+        action: data.affiliateUrl
+          ? { label: "Copy Link", onClick: () => navigator.clipboard.writeText(data.affiliateUrl) }
+          : undefined,
+      });
       await recordUsage("ebay_publish");
     } catch (err: any) {
       console.error("Publish error:", err);
