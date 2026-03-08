@@ -131,7 +131,7 @@ export default function AnalyzePage() {
           action: "create_draft",
           userToken: ebayToken,
           title,
-          description,
+          description: getDescriptionWithFooter(),
           priceMin,
           imageUrl: imageUrls[0],
           condition,
