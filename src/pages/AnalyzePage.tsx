@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Save, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, Send } from "lucide-react";
 import PricingCard from "@/components/PricingCard";
 import { useDrafts } from "@/hooks/useDrafts";
 import { toast } from "sonner";
@@ -11,7 +11,6 @@ export default function AnalyzePage() {
   const navigate = useNavigate();
   const { addDraft } = useDrafts();
 
-  // Support both legacy single image and new multi-image
   const state = location.state as any;
   const imageUrls: string[] = state?.imageUrls ?? (state?.imageUrl ? [state.imageUrl] : []);
 
@@ -22,6 +21,7 @@ export default function AnalyzePage() {
   const [priceMin, setPriceMin] = useState(0);
   const [priceMax, setPriceMax] = useState(0);
   const [activePhoto, setActivePhoto] = useState(0);
+  const [publishing, setPublishing] = useState(false);
 
   if (imageUrls.length === 0) {
     navigate("/");
@@ -63,6 +63,57 @@ export default function AnalyzePage() {
     });
     toast.success("Draft saved!");
     navigate("/drafts");
+  };
+
+  const handlePublish = async () => {
+    setPublishing(true);
+    try {
+      // Step 1: Check if user has an eBay token stored (localStorage for now)
+      let ebayToken = localStorage.getItem("ebay_user_token");
+
+      if (!ebayToken) {
+        // Get OAuth consent URL and redirect
+        const { data, error } = await supabase.functions.invoke("ebay-publish", {
+          body: { action: "get_auth_url" },
+        });
+        if (error || data?.error) throw new Error(data?.error || error?.message || "Failed to get auth URL");
+
+        // Store current listing state before redirect
+        localStorage.setItem("pending_listing", JSON.stringify({ title, description, priceMin, imageUrl: imageUrls[0] }));
+        window.location.href = data.authUrl;
+        return;
+      }
+
+      // Step 2: Create draft on eBay
+      const { data, error } = await supabase.functions.invoke("ebay-publish", {
+        body: {
+          action: "create_draft",
+          userToken: ebayToken,
+          title,
+          description,
+          priceMin,
+          imageUrl: imageUrls[0],
+          condition: "USED_EXCELLENT",
+        },
+      });
+
+      if (error || data?.error) {
+        // If token expired, clear it and retry
+        if (data?.error?.includes("401") || data?.error?.includes("expired")) {
+          localStorage.removeItem("ebay_user_token");
+          toast.error("eBay session expired. Please connect again.");
+          return;
+        }
+        throw new Error(data?.error || error?.message || "Publish failed");
+      }
+
+      toast.success(`Draft listing created on eBay! (Offer ID: ${data.offerId})`);
+    } catch (err: any) {
+      console.error("Publish error:", err);
+      toast.error(err.message || "Failed to publish to eBay.");
+    } finally {
+      setPublishing(false);
+    }
   };
 
   return (
@@ -163,15 +214,37 @@ export default function AnalyzePage() {
               />
             </div>
 
-            <PricingCard priceMin={priceMin} priceMax={priceMax} />
+            {/* Pricing — now with eBay sold data */}
+            <PricingCard priceMin={priceMin} priceMax={priceMax} searchQuery={title} />
 
-            <button
-              onClick={handleSave}
-              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-success text-success-foreground font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98]"
-            >
-              <Save className="w-4 h-4" />
-              Save Draft
-            </button>
+            {/* Action buttons */}
+            <div className="space-y-2">
+              <button
+                onClick={handleSave}
+                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-success text-success-foreground font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98]"
+              >
+                <Save className="w-4 h-4" />
+                Save Draft
+              </button>
+
+              <button
+                onClick={handlePublish}
+                disabled={publishing}
+                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
+              >
+                {publishing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Publishing...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    Publish to eBay
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         )}
       </div>
