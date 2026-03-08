@@ -20,6 +20,9 @@ serve(async (req) => {
   }
 
   try {
+    // Parse body first (can only call req.json() once)
+    const body = await req.json();
+
     // --- Server-side usage limit enforcement ---
     const svc = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -74,7 +77,7 @@ serve(async (req) => {
         .eq("action_type", "ai_analysis")
         .gte("created_at", startOfMonth.toISOString());
 
-      const ANALYSIS_LIMIT = 5; // matches PLANS.starter.analysisLimit
+      const ANALYSIS_LIMIT = 5;
       const currentCount = count ?? 0;
 
       if (countErr) {
@@ -88,8 +91,6 @@ serve(async (req) => {
     }
 
     // --- End usage limit enforcement ---
-
-    const body = await req.json();
 
     // Support both single image (legacy) and multiple images
     const imageList: string[] = body.images ?? (body.imageBase64 ? [body.imageBase64] : []);
