@@ -215,11 +215,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     : isPro
       ? { analysisLimit: PLANS.pro.analysisLimit, publishLimit: PLANS.pro.publishLimit }
       : { analysisLimit: PLANS.starter.analysisLimit, publishLimit: PLANS.starter.publishLimit };
-  const canAnalyze = isUnlimited || isPro ? usage.aiAnalysis < PLANS.pro.analysisLimit : usage.aiAnalysis < PLANS.starter.analysisLimit;
-  const canPublish = isUnlimited || isPro ? usage.ebayPublish < PLANS.pro.publishLimit : usage.ebayPublish < PLANS.starter.publishLimit;
-  // For unlimited, override canAnalyze/canPublish to always true
-  const finalCanAnalyze = isUnlimited ? true : canAnalyze;
-  const finalCanPublish = isUnlimited ? true : canPublish;
+  // Unlimited users always have access; Pro users checked against Pro limits; Starter against Starter limits
+  const finalCanAnalyze = isUnlimited
+    ? true
+    : isPro
+      ? usage.aiAnalysis < PLANS.pro.analysisLimit
+      : usage.aiAnalysis < PLANS.starter.analysisLimit;
+  const finalCanPublish = isUnlimited
+    ? true
+    : isPro
+      ? usage.ebayPublish < PLANS.pro.publishLimit
+      : usage.ebayPublish < PLANS.starter.publishLimit;
   const isOwner = org.role === "owner";
   const isLister = org.role === "lister";
 
