@@ -106,12 +106,32 @@ serve(async (req) => {
       // skip
     }
 
+    // --- Feature Usage Analytics ---
+    let featureUsage = { ai_analysis: 0, ebay_publish: 0, optimize: 0, export: 0 };
+    try {
+      const thirtyDaysAgo2 = new Date();
+      thirtyDaysAgo2.setDate(thirtyDaysAgo2.getDate() - 30);
+      const { data: usageRows } = await supabaseClient
+        .from("usage_tracking")
+        .select("action_type")
+        .gte("created_at", thirtyDaysAgo2.toISOString());
+      if (usageRows) {
+        for (const row of usageRows) {
+          const key = row.action_type as keyof typeof featureUsage;
+          if (key in featureUsage) featureUsage[key]++;
+        }
+      }
+    } catch {
+      // skip
+    }
+
     return new Response(
       JSON.stringify({
         stripe: stripeStatus,
         ebay: ebayStatus,
         totalUsers,
         gemini: geminiUsage,
+        featureUsage,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
