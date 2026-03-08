@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, Send, Tag, Crown, Download, FileSpreadsheet, Sheet } from "lucide-react";
+import { ArrowLeft, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, Send, Tag, Crown, Download, FileSpreadsheet, Sheet, ShieldCheck, AlertTriangle, Check, X as XIcon } from "lucide-react";
 import PricingCard from "@/components/PricingCard";
 import { useDrafts } from "@/hooks/useDrafts";
 import { toast } from "sonner";
@@ -34,6 +34,10 @@ export default function AnalyzePage() {
   const [condition, setCondition] = useState<string>("USED_EXCELLENT");
   const [exportPlatform, setExportPlatform] = useState<ExportPlatform>("ebay_file_exchange");
   const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
+  const [suggestedGrade, setSuggestedGrade] = useState<string>("");
+  const [gradingRationale, setGradingRationale] = useState<string>("");
+  const [isSlabbed, setIsSlabbed] = useState(false);
+  const [gradeConfirmed, setGradeConfirmed] = useState(false);
 
   if (imageUrls.length === 0) {
     navigate("/");
@@ -64,6 +68,10 @@ export default function AnalyzePage() {
       setEbayCategoryId(data.ebayCategoryId || "");
       setItemSpecifics(data.itemSpecifics || {});
       setCondition(data.condition || "USED_EXCELLENT");
+      setSuggestedGrade(data.suggestedGrade || "");
+      setGradingRationale(data.gradingRationale || "");
+      setIsSlabbed(data.isSlabbed ?? false);
+      setGradeConfirmed(false);
       setGenerated(true);
       await recordUsage("ai_analysis");
     } catch (err: any) {
@@ -297,6 +305,83 @@ export default function AnalyzePage() {
                     <option value="USED_GOOD">Used - Good</option>
                     <option value="USED_ACCEPTABLE">Used - Acceptable</option>
                   </select>
+                </div>
+              </div>
+            )}
+
+            {/* AI Suggested Grade */}
+            {suggestedGrade && !isSlabbed && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-primary" />
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">AI-Estimated Grade</label>
+                </div>
+
+                <div className={`bg-card border rounded-xl p-4 space-y-3 ${gradeConfirmed ? "border-primary" : "border-accent"}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-2xl font-bold text-foreground">{suggestedGrade}</span>
+                    {gradeConfirmed ? (
+                      <span className="flex items-center gap-1 text-xs font-medium text-primary bg-primary/10 px-2 py-1 rounded-full">
+                        <Check className="w-3 h-3" /> Confirmed
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-xs font-medium text-accent-foreground bg-accent px-2 py-1 rounded-full">
+                        <AlertTriangle className="w-3 h-3" /> Pending
+                      </span>
+                    )}
+                  </div>
+
+                  {gradingRationale && (
+                    <div className="bg-muted/50 rounded-lg p-3">
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Grading Rationale</p>
+                      <p className="text-xs text-foreground leading-relaxed">{gradingRationale}</p>
+                    </div>
+                  )}
+
+                  <div className="flex items-start gap-2 bg-accent/30 rounded-lg p-2.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-accent-foreground flex-shrink-0 mt-0.5" />
+                    <p className="text-[10px] text-accent-foreground leading-relaxed">
+                      <strong>Disclaimer:</strong> This is an AI-estimated grade based on photo analysis only. It is NOT a substitute for professional grading by PCGS, NGC, or other certification services. Actual grade may differ.
+                    </p>
+                  </div>
+
+                  {!gradeConfirmed ? (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setGradeConfirmed(true);
+                          setItemSpecifics(prev => ({ ...prev, Grade: suggestedGrade }));
+                          toast.success(`Grade ${suggestedGrade} applied to item specifics`);
+                        }}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold transition-all hover:opacity-90 active:scale-[0.98]"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        Accept Grade
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSuggestedGrade("");
+                          setGradingRationale("");
+                          setItemSpecifics(prev => ({ ...prev, Grade: "Ungraded" }));
+                          toast("Grade dismissed — set to Ungraded");
+                        }}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-secondary text-foreground text-xs font-semibold transition-all hover:bg-secondary/80 active:scale-[0.98]"
+                      >
+                        <XIcon className="w-3.5 h-3.5" />
+                        Dismiss
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setGradeConfirmed(false);
+                        setItemSpecifics(prev => ({ ...prev, Grade: "Ungraded" }));
+                      }}
+                      className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+                    >
+                      Undo confirmation
+                    </button>
+                  )}
                 </div>
               </div>
             )}
