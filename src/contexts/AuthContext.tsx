@@ -14,6 +14,8 @@ export const PLANS = {
   },
 } as const;
 
+export type OrgRole = "owner" | "lister";
+
 interface SubscriptionState {
   subscribed: boolean;
   productId: string | null;
@@ -24,6 +26,13 @@ interface SubscriptionState {
 interface UsageState {
   aiAnalysis: number;
   ebayPublish: number;
+}
+
+interface OrgState {
+  orgId: string | null;
+  orgName: string | null;
+  role: OrgRole | null;
+  loading: boolean;
 }
 
 interface AuthContextType {
@@ -39,6 +48,10 @@ interface AuthContextType {
   canAnalyze: boolean;
   canPublish: boolean;
   recordUsage: (actionType: "ai_analysis" | "ebay_publish") => Promise<void>;
+  org: OrgState;
+  isOwner: boolean;
+  isLister: boolean;
+  refreshOrg: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -54,6 +67,10 @@ const AuthContext = createContext<AuthContextType>({
   canAnalyze: true,
   canPublish: true,
   recordUsage: async () => {},
+  org: { orgId: null, orgName: null, role: null, loading: true },
+  isOwner: false,
+  isLister: false,
+  refreshOrg: async () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -66,6 +83,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading: true,
   });
   const [usage, setUsage] = useState<UsageState>({ aiAnalysis: 0, ebayPublish: 0 });
+  const [org, setOrg] = useState<OrgState>({ orgId: null, orgName: null, role: null, loading: true });
+
+  const refreshOrg = useCallback(async () => {
+    try {
+      const { data: memberData, error: memberError } = await supabase
+        .from("org_members")
+        .select("org_id, role")
+        .limit(1)
+        .single();
+
+      if (memberError || !memberData) {
+        setOrg({ orgId: null, orgName: null, role: null, loading: false });
+        return;
+      }
+
+      const { data: orgData } = await supabase
+        .from("organizations")
+        .select("name")
+        .eq("id", memberData.org_id)
+        .single();
+
+      setOrg({
+        orgId: memberData.org_id,
+        orgName: orgData?.name || null,
+        role: memberData.role as OrgRole,
+        loading: false,
+      });
+    } catch {
+      setOrg((s) => ({ ...s, loading: false }));
+    }
+  }, []);
 
   const refreshSubscription = useCallback(async () => {
     try {
@@ -113,10 +161,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setLoading(false);
         if (session) {
-          setTimeout(() => { refreshSubscription(); refreshUsage(); }, 0);
+          setTimeout(() => { refreshSubscription(); refreshUsage(); refreshOrg(); }, 0);
         } else {
           setSubscription({ subscribed: false, productId: null, subscriptionEnd: null, loading: false });
           setUsage({ aiAnalysis: 0, ebayPublish: 0 });
+          setOrg({ orgId: null, orgName: null, role: null, loading: false });
         }
       }
     );
@@ -127,13 +176,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (session) {
         refreshSubscription();
         refreshUsage();
+        refreshOrg();
       } else {
         setSubscription((s) => ({ ...s, loading: false }));
+        setOrg((s) => ({ ...s, loading: false }));
       }
     });
 
     return () => authSub.unsubscribe();
-  }, [refreshSubscription, refreshUsage]);
+  }, [refreshSubscription, refreshUsage, refreshOrg]);
 
   // Refresh subscription every 60s
   useEffect(() => {
@@ -145,6 +196,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isPro = subscription.subscribed && subscription.productId === PLANS.pro.productId;
   const canAnalyze = isPro || usage.aiAnalysis < PLANS.starter.analysisLimit;
   const canPublish = isPro || usage.ebayPublish < PLANS.starter.publishLimit;
+  const isOwner = org.role === "owner";
+  const isLister = org.role === "lister";
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -165,6 +218,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         canAnalyze,
         canPublish,
         recordUsage,
+        org,
+        isOwner,
+        isLister,
+        refreshOrg,
       }}
     >
       {children}
