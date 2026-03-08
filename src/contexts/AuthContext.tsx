@@ -1,12 +1,44 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+
+export const PLANS = {
+  starter: { name: "Starter", price: 0, analysisLimit: 5, publishLimit: 3 },
+  pro: {
+    name: "Pro",
+    price: 19,
+    analysisLimit: Infinity,
+    publishLimit: Infinity,
+    priceId: "price_1T8lVU4bX0d1SiThMDayhDj5",
+    productId: "prod_U6zUiC1SYuPrGU",
+  },
+} as const;
+
+interface SubscriptionState {
+  subscribed: boolean;
+  productId: string | null;
+  subscriptionEnd: string | null;
+  loading: boolean;
+}
+
+interface UsageState {
+  aiAnalysis: number;
+  ebayPublish: number;
+}
 
 interface AuthContextType {
   session: Session | null;
   user: User | null;
   loading: boolean;
   signOut: () => Promise<void>;
+  subscription: SubscriptionState;
+  usage: UsageState;
+  refreshSubscription: () => Promise<void>;
+  refreshUsage: () => Promise<void>;
+  isPro: boolean;
+  canAnalyze: boolean;
+  canPublish: boolean;
+  recordUsage: (actionType: "ai_analysis" | "ebay_publish") => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -14,34 +46,127 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   signOut: async () => {},
+  subscription: { subscribed: false, productId: null, subscriptionEnd: null, loading: true },
+  usage: { aiAnalysis: 0, ebayPublish: 0 },
+  refreshSubscription: async () => {},
+  refreshUsage: async () => {},
+  isPro: false,
+  canAnalyze: true,
+  canPublish: true,
+  recordUsage: async () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [subscription, setSubscription] = useState<SubscriptionState>({
+    subscribed: false,
+    productId: null,
+    subscriptionEnd: null,
+    loading: true,
+  });
+  const [usage, setUsage] = useState<UsageState>({ aiAnalysis: 0, ebayPublish: 0 });
+
+  const refreshSubscription = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke("check-subscription");
+      if (error) throw error;
+      setSubscription({
+        subscribed: data.subscribed ?? false,
+        productId: data.product_id ?? null,
+        subscriptionEnd: data.subscription_end ?? null,
+        loading: false,
+      });
+    } catch {
+      setSubscription((s) => ({ ...s, loading: false }));
+    }
+  }, []);
+
+  const refreshUsage = useCallback(async () => {
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const { data, error } = await supabase
+      .from("usage_tracking")
+      .select("action_type")
+      .gte("created_at", startOfMonth.toISOString());
+
+    if (!error && data) {
+      setUsage({
+        aiAnalysis: data.filter((r: any) => r.action_type === "ai_analysis").length,
+        ebayPublish: data.filter((r: any) => r.action_type === "ebay_publish").length,
+      });
+    }
+  }, []);
+
+  const recordUsage = useCallback(async (actionType: "ai_analysis" | "ebay_publish") => {
+    const user = (await supabase.auth.getUser()).data.user;
+    if (!user) return;
+    await supabase.from("usage_tracking").insert({ user_id: user.id, action_type: actionType });
+    await refreshUsage();
+  }, [refreshUsage]);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setSession(session);
         setLoading(false);
+        if (session) {
+          setTimeout(() => { refreshSubscription(); refreshUsage(); }, 0);
+        } else {
+          setSubscription({ subscribed: false, productId: null, subscriptionEnd: null, loading: false });
+          setUsage({ aiAnalysis: 0, ebayPublish: 0 });
+        }
       }
     );
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
+      if (session) {
+        refreshSubscription();
+        refreshUsage();
+      } else {
+        setSubscription((s) => ({ ...s, loading: false }));
+      }
     });
 
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => authSub.unsubscribe();
+  }, [refreshSubscription, refreshUsage]);
+
+  // Refresh subscription every 60s
+  useEffect(() => {
+    if (!session) return;
+    const interval = setInterval(refreshSubscription, 60000);
+    return () => clearInterval(interval);
+  }, [session, refreshSubscription]);
+
+  const isPro = subscription.subscribed && subscription.productId === PLANS.pro.productId;
+  const canAnalyze = isPro || usage.aiAnalysis < PLANS.starter.analysisLimit;
+  const canPublish = isPro || usage.ebayPublish < PLANS.starter.publishLimit;
 
   const signOut = async () => {
     await supabase.auth.signOut();
   };
 
   return (
-    <AuthContext.Provider value={{ session, user: session?.user ?? null, loading, signOut }}>
+    <AuthContext.Provider
+      value={{
+        session,
+        user: session?.user ?? null,
+        loading,
+        signOut,
+        subscription,
+        usage,
+        refreshSubscription,
+        refreshUsage,
+        isPro,
+        canAnalyze,
+        canPublish,
+        recordUsage,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
