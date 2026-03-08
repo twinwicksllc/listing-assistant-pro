@@ -159,14 +159,27 @@ export default function BillingPage() {
                 </button>
               </div>
             ) : (
-              <button
-                onClick={handleCheckout}
-                disabled={checkoutLoading}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
-              >
-                {checkoutLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Crown className="w-4 h-4" />}
-                Upgrade to Pro
-              </button>
+              <div className="space-y-3 pt-2">
+                <button
+                  onClick={handleCheckout}
+                  disabled={checkoutLoading}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
+                >
+                  {checkoutLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Crown className="w-4 h-4" />}
+                  Upgrade to Pro
+                </button>
+                <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-semibold">Refund Policy:</span> Prorated refunds allowed within 30 days of purchase.
+                  </p>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>By proceeding, you agree to our</span>
+                    <Link to="/terms" className="text-primary hover:underline font-medium">Terms</Link>
+                    <span>and</span>
+                    <Link to="/privacy" className="text-primary hover:underline font-medium">Privacy Policy</Link>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </div>
