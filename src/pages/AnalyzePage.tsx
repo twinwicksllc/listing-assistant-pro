@@ -38,6 +38,7 @@ export default function AnalyzePage() {
   const [gradingRationale, setGradingRationale] = useState<string>("");
   const [isSlabbed, setIsSlabbed] = useState(false);
   const [gradeConfirmed, setGradeConfirmed] = useState(false);
+  const [consignor, setConsignor] = useState("");
 
   if (imageUrls.length === 0) {
     navigate("/");
