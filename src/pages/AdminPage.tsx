@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Shield, CheckCircle2, XCircle, AlertTriangle, RefreshCw,
-  Users, CreditCard, Cpu, Zap, ArrowLeft, Activity
+  Users, CreditCard, Cpu, Zap, ArrowLeft, Activity, DollarSign
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
@@ -101,6 +101,20 @@ export default function AdminPage() {
           </div>
         ) : data ? (
           <>
+            {/* Cost Alert Banner */}
+            {data.gemini.estimatedCost >= 50 && (
+              <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-4 flex items-start gap-3">
+                <DollarSign className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-destructive">
+                    ⚠️ Monthly AI Cost Alert: ${data.gemini.estimatedCost.toFixed(2)}
+                  </p>
+                  <p className="text-xs text-destructive/80 mt-0.5">
+                    Gemini API costs have exceeded the $50.00 monthly threshold. Review usage patterns or consider rate limiting.
+                  </p>
+                </div>
+              </div>
+            )}
             {/* System Checklist */}
             <div className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="px-4 py-3 border-b border-border">

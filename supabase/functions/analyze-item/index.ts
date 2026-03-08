@@ -20,7 +20,77 @@ serve(async (req) => {
   }
 
   try {
+    // Parse body first (can only call req.json() once)
     const body = await req.json();
+
+    // --- Server-side usage limit enforcement ---
+    const svc = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      { auth: { persistSession: false } }
+    );
+
+    const authHeader = req.headers.get("Authorization");
+    let userId: string | null = null;
+    let userEmail: string | null = null;
+
+    if (authHeader) {
+      const { data: ud } = await svc.auth.getUser(authHeader.replace("Bearer ", ""));
+      userId = ud?.user?.id || null;
+      userEmail = ud?.user?.email || null;
+    }
+
+    if (!userId) {
+      return new Response(JSON.stringify({ error: "Authentication required" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Check subscription status via Stripe
+    let isPro = false;
+    const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
+    if (STRIPE_SECRET_KEY && userEmail) {
+      try {
+        const { default: Stripe } = await import("https://esm.sh/stripe@18.5.0");
+        const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2025-08-27.basil" });
+        const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
+        if (customers.data.length > 0) {
+          const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: "active", limit: 1 });
+          isPro = subs.data.length > 0;
+        }
+      } catch (stripeErr) {
+        console.error("Stripe check failed, defaulting to free tier:", stripeErr);
+      }
+    }
+
+    // Count this month's AI analyses from usage_tracking
+    if (!isPro) {
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+
+      const { count, error: countErr } = await svc
+        .from("usage_tracking")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("action_type", "ai_analysis")
+        .gte("created_at", startOfMonth.toISOString());
+
+      const ANALYSIS_LIMIT = 5;
+      const currentCount = count ?? 0;
+
+      if (countErr) {
+        console.error("Usage count query failed:", countErr);
+      } else if (currentCount >= ANALYSIS_LIMIT) {
+        return new Response(
+          JSON.stringify({ error: `Monthly analysis limit reached (${ANALYSIS_LIMIT}). Upgrade to Pro for unlimited.` }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // --- End usage limit enforcement ---
 
     // Support both single image (legacy) and multiple images
     const imageList: string[] = body.images ?? (body.imageBase64 ? [body.imageBase64] : []);
@@ -262,20 +332,8 @@ Return your analysis using the provided tool.`;
     const usage = data.usage;
     const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
 
-    // Log Gemini token usage
+    // Log Gemini token usage (reuse svc and userId from above)
     try {
-      const svc = createClient(
-        Deno.env.get("SUPABASE_URL") ?? "",
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-        { auth: { persistSession: false } }
-      );
-      // Try to get user_id from auth header
-      let userId: string | null = null;
-      const authHeader = req.headers.get("Authorization");
-      if (authHeader) {
-        const { data: ud } = await svc.auth.getUser(authHeader.replace("Bearer ", ""));
-        userId = ud?.user?.id || null;
-      }
       await svc.from("gemini_usage").insert({
         user_id: userId,
         function_name: "analyze-item",
