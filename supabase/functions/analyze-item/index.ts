@@ -121,8 +121,19 @@ Return your analysis using the provided tool.`;
                       description:
                         "Maximum suggested price in USD based on recent sold comps",
                     },
+                    metalType: {
+                      type: "string",
+                      enum: ["gold", "silver", "platinum", "none"],
+                      description:
+                        "Primary precious metal type if the item contains precious metals (gold, silver, platinum), or 'none' if not applicable",
+                    },
+                    metalWeightOz: {
+                      type: "number",
+                      description:
+                        "Total precious metal weight in troy ounces. For example, a 1 oz Silver Eagle = 1.0, a 1/10 oz Gold Eagle = 0.1. Set to 0 if not a precious metal item.",
+                    },
                   },
-                  required: ["title", "description", "priceMin", "priceMax"],
+                  required: ["title", "description", "priceMin", "priceMax", "metalType", "metalWeightOz"],
                   additionalProperties: false,
                 },
               },
