@@ -60,45 +60,51 @@ serve(async (req) => {
         ? "https://api.ebay.com"
         : "https://api.sandbox.ebay.com";
 
-    // Search sold/completed items using Browse API
-    // filter=buyingOptions:{FIXED_PRICE|AUCTION}&filter=conditions:{USED}
-    const searchParams = new URLSearchParams({
-      q: query,
-      limit: "20",
-      sort: "-price",
-      // The Browse API item_summary endpoint with SOLD filter
-      filter: "buyingOptions:{FIXED_PRICE|AUCTION}",
-    });
+    // Helper function to perform search with date filter
+    const performSearch = async (daysAgo: number): Promise<any[]> => {
+      const now = new Date();
+      const startDate = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
+      const endDate = now;
 
-    const searchResp = await fetch(
-      `${apiBase}/buy/browse/v1/item_summary/search?${searchParams.toString()}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
-          "Content-Type": "application/json",
-        },
-      }
-    );
+      // Format dates for eBay API (ISO 8601)
+      const startDateStr = startDate.toISOString();
+      const endDateStr = endDate.toISOString();
 
-    if (!searchResp.ok) {
-      const errText = await searchResp.text();
-      console.error("eBay search error:", searchResp.status, errText);
-      // Return empty results rather than failing — allows AI pricing to still work
-      return new Response(
-        JSON.stringify({
-          soldItems: [],
-          averagePrice: 0,
-          totalFound: 0,
-          query,
-          note: "eBay API returned an error. AI-estimated pricing is shown instead.",
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      const searchParams = new URLSearchParams({
+        q: query,
+        limit: "20",
+        sort: "-price",
+        filter: `buyingOptions:{FIXED_PRICE|AUCTION},soldDate:[${startDateStr}..${endDateStr}]`,
+      });
+
+      const searchResp = await fetch(
+        `${apiBase}/buy/browse/v1/item_summary/search?${searchParams.toString()}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+            "Content-Type": "application/json",
+          },
+        }
       );
-    }
 
-    const searchData = await searchResp.json();
-    const items = searchData.itemSummaries || [];
+      if (!searchResp.ok) {
+        console.error(`eBay search error (${daysAgo}d): ${searchResp.status}`);
+        return [];
+      }
+
+      const searchData = await searchResp.json();
+      return searchData.itemSummaries || [];
+    };
+
+    // Search last 30 days first
+    let items = await performSearch(30);
+
+    // If fewer than 3 results, expand to 90 days
+    if (items.length < 3) {
+      console.log(`Only ${items.length} results in 30 days, expanding to 90 days`);
+      items = await performSearch(90);
+    }
 
     // Extract prices from results
     const soldItems = items
