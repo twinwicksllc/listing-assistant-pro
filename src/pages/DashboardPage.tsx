@@ -15,6 +15,7 @@ interface EbayListing {
   status: string;
   views: number;
   listingId: string | null;
+  ebayUrl: string | null;
 }
 
 const EBAY_TOKEN_KEY = "ebay-user-token";
