@@ -219,7 +219,7 @@ export default function AnalyzePage() {
             </div>
 
             {/* Pricing — now with eBay sold data */}
-            <PricingCard priceMin={priceMin} priceMax={priceMax} searchQuery={title} />
+            <PricingCard priceMin={priceMin} priceMax={priceMax} searchQuery={title} metalType={metalType} metalWeightOz={metalWeightOz} />
 
             {/* Action buttons */}
             <div className="space-y-2">
