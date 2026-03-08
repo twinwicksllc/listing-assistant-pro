@@ -304,47 +304,63 @@ export default function AnalyzePage() {
             {/* Pricing */}
             <PricingCard priceMin={priceMin} priceMax={priceMax} searchQuery={title} metalType={metalType} metalWeightOz={metalWeightOz} />
 
-            {/* Export CSV */}
+            {/* Export */}
             <div className="space-y-2">
               <div className="flex items-center gap-1.5">
                 <Download className="w-3.5 h-3.5 text-primary" />
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Export Listing CSV</label>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Export Listing</label>
               </div>
+
+              {/* Platform toggle */}
               <div className="flex gap-2">
-                <button
-                  onClick={() => setExportPlatform("ebay_file_exchange")}
-                  className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors border ${
-                    exportPlatform === "ebay_file_exchange"
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border bg-card text-muted-foreground hover:border-primary/40"
-                  }`}
-                >
-                  eBay File Exchange
-                </button>
-                <button
-                  onClick={() => setExportPlatform("facebook_marketplace")}
-                  className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors border ${
-                    exportPlatform === "facebook_marketplace"
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border bg-card text-muted-foreground hover:border-primary/40"
-                  }`}
-                >
-                  Facebook Marketplace
-                </button>
+                {([["ebay_file_exchange", "eBay File Exchange"], ["facebook_marketplace", "Facebook Marketplace"]] as const).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setExportPlatform(key)}
+                    className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors border ${
+                      exportPlatform === key
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border bg-card text-muted-foreground hover:border-primary/40"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
+
+              {/* Format toggle */}
+              <div className="flex gap-2">
+                {([["csv", "CSV", Download], ["excel", "Excel (.xlsx)", FileSpreadsheet], ["google_sheets", "Google Sheets", Sheet]] as const).map(([key, label, Icon]) => (
+                  <button
+                    key={key}
+                    onClick={() => setExportFormat(key)}
+                    className={`flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-xs font-medium transition-colors border ${
+                      exportFormat === key
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border bg-card text-muted-foreground hover:border-primary/40"
+                    }`}
+                  >
+                    <Icon className="w-3 h-3" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+
               <button
                 onClick={() => {
-                  exportListing(exportPlatform, {
+                  exportListing(exportPlatform, exportFormat, {
                     title, description, priceMin, priceMax,
                     imageUrl: imageUrls[0],
                     ebayCategoryId, itemSpecifics, condition,
                   });
-                  toast.success(`CSV exported for ${exportPlatform === "ebay_file_exchange" ? "eBay File Exchange" : "Facebook Marketplace"}`);
+                  const platformLabel = exportPlatform === "ebay_file_exchange" ? "eBay" : "Facebook";
+                  const formatLabel = exportFormat === "csv" ? "CSV" : exportFormat === "excel" ? "Excel" : "Google Sheets";
+                  toast.success(`${platformLabel} listing exported as ${formatLabel}`);
                 }}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-secondary text-foreground font-semibold text-sm transition-all hover:bg-secondary/80 active:scale-[0.98]"
               >
                 <Download className="w-4 h-4" />
-                Download {exportPlatform === "ebay_file_exchange" ? "eBay" : "Facebook"} CSV
+                Download {exportFormat === "csv" ? "CSV" : exportFormat === "excel" ? "Excel" : "Sheets"}
               </button>
             </div>
 
