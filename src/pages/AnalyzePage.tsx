@@ -34,6 +34,10 @@ export default function AnalyzePage() {
   const [condition, setCondition] = useState<string>("USED_EXCELLENT");
   const [exportPlatform, setExportPlatform] = useState<ExportPlatform>("ebay_file_exchange");
   const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
+  const [suggestedGrade, setSuggestedGrade] = useState<string>("");
+  const [gradingRationale, setGradingRationale] = useState<string>("");
+  const [isSlabbed, setIsSlabbed] = useState(false);
+  const [gradeConfirmed, setGradeConfirmed] = useState(false);
 
   if (imageUrls.length === 0) {
     navigate("/");
