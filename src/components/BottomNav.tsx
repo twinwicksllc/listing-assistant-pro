@@ -27,6 +27,7 @@ export default function BottomNav() {
             <button
               key={tab.path}
               onClick={() => navigate(tab.path)}
+              data-tour={tab.tourId}
               className={`flex-1 flex flex-col items-center gap-1 py-3 transition-colors ${
                 active ? "text-primary" : "text-muted-foreground"
               }`}
