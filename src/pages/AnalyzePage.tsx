@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, Send, Tag, Crown } from "lucide-react";
+import { ArrowLeft, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, Send, Tag, Crown, Download } from "lucide-react";
 import PricingCard from "@/components/PricingCard";
 import { useDrafts } from "@/hooks/useDrafts";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { ItemSpecifics } from "@/types/listing";
 import { useAuth, PLANS } from "@/contexts/AuthContext";
+import { exportListing, type ExportPlatform } from "@/lib/exportCSV";
 
 export default function AnalyzePage() {
   const { canAnalyze, canPublish, isPro, usage, recordUsage } = useAuth();
@@ -31,6 +32,7 @@ export default function AnalyzePage() {
   const [ebayCategoryId, setEbayCategoryId] = useState<string>("");
   const [itemSpecifics, setItemSpecifics] = useState<ItemSpecifics>({});
   const [condition, setCondition] = useState<string>("USED_EXCELLENT");
+  const [exportPlatform, setExportPlatform] = useState<ExportPlatform>("ebay_file_exchange");
 
   if (imageUrls.length === 0) {
     navigate("/");
@@ -300,6 +302,50 @@ export default function AnalyzePage() {
 
             {/* Pricing */}
             <PricingCard priceMin={priceMin} priceMax={priceMax} searchQuery={title} metalType={metalType} metalWeightOz={metalWeightOz} />
+
+            {/* Export CSV */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5">
+                <Download className="w-3.5 h-3.5 text-primary" />
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Export Listing CSV</label>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setExportPlatform("ebay_file_exchange")}
+                  className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors border ${
+                    exportPlatform === "ebay_file_exchange"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-card text-muted-foreground hover:border-primary/40"
+                  }`}
+                >
+                  eBay File Exchange
+                </button>
+                <button
+                  onClick={() => setExportPlatform("facebook_marketplace")}
+                  className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors border ${
+                    exportPlatform === "facebook_marketplace"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-card text-muted-foreground hover:border-primary/40"
+                  }`}
+                >
+                  Facebook Marketplace
+                </button>
+              </div>
+              <button
+                onClick={() => {
+                  exportListing(exportPlatform, {
+                    title, description, priceMin, priceMax,
+                    imageUrl: imageUrls[0],
+                    ebayCategoryId, itemSpecifics, condition,
+                  });
+                  toast.success(`CSV exported for ${exportPlatform === "ebay_file_exchange" ? "eBay File Exchange" : "Facebook Marketplace"}`);
+                }}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-secondary text-foreground font-semibold text-sm transition-all hover:bg-secondary/80 active:scale-[0.98]"
+              >
+                <Download className="w-4 h-4" />
+                Download {exportPlatform === "ebay_file_exchange" ? "eBay" : "Facebook"} CSV
+              </button>
+            </div>
 
             {/* Action buttons */}
             <div className="space-y-2">
