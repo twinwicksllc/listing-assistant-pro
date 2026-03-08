@@ -53,6 +53,7 @@ export default function HomePage() {
       reader.onload = (e) => {
         const url = e.target?.result as string;
         setStagedImages((prev) => [...prev, url]);
+        setImagesOptimized(false);
       };
       reader.readAsDataURL(file);
     });
@@ -60,6 +61,26 @@ export default function HomePage() {
 
   const removeImage = (index: number) => {
     setStagedImages((prev) => prev.filter((_, i) => i !== index));
+    setImagesOptimized(false);
+  };
+
+  const handleOptimize = async () => {
+    if (stagedImages.length === 0) return;
+    setOptimizing(true);
+    setOptimizeProgress({ done: 0, total: stagedImages.length });
+    try {
+      const optimized = await optimizeImages(stagedImages, (done, total) => {
+        setOptimizeProgress({ done, total });
+      });
+      setStagedImages(optimized);
+      setImagesOptimized(true);
+      toast.success(`${optimized.length} photo${optimized.length !== 1 ? "s" : ""} optimized!`);
+    } catch (err) {
+      console.error("Optimize error:", err);
+      toast.error("Failed to optimize images.");
+    } finally {
+      setOptimizing(false);
+    }
   };
 
   const handleProcess = () => {
