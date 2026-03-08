@@ -40,6 +40,11 @@ export default function DraftsPage() {
               <p className="text-xs text-muted-foreground mt-1">
                 ${draft.priceMin.toFixed(2)} – ${draft.priceMax.toFixed(2)}
               </p>
+              {draft.consignor && (
+                <p className="text-xs text-primary mt-0.5">
+                  Consignor: {draft.consignor}
+                </p>
+              )}
               <p className="text-xs text-muted-foreground">
                 {draft.createdAt.toLocaleDateString()}
               </p>
