@@ -116,6 +116,25 @@ export default function AdminPage() {
                 </div>
               </div>
             )}
+
+            {/* Last Cost Alert Sent */}
+            <div className="bg-card border border-border rounded-xl p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Bell className="w-4 h-4 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">Last Cost Alert Sent</p>
+                  {data.lastCostAlert ? (
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(data.lastCostAlert.sent_at).toLocaleString()} — ${Number(data.lastCostAlert.total_cost).toFixed(2)} across {data.lastCostAlert.total_requests} requests
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No alerts sent yet</p>
+                  )}
+                </div>
+              </div>
+              {data.lastCostAlert && <CheckCircle2 className="w-4 h-4 text-accent flex-shrink-0" />}
+            </div>
+
             {/* System Checklist */}
             <div className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="px-4 py-3 border-b border-border">
