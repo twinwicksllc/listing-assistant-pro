@@ -239,13 +239,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshSubscription,
         refreshUsage,
         isPro,
-        canAnalyze,
-        canPublish,
+        isUnlimited,
+        isPaid,
+        canAnalyze: finalCanAnalyze,
+        canPublish: finalCanPublish,
         recordUsage,
         org,
         isOwner,
         isLister,
         refreshOrg,
+        currentPlanLimits,
       }}
     >
       {children}
