@@ -200,6 +200,29 @@ export default function AdminPage() {
               </div>
             </div>
 
+            {/* Feature Usage */}
+            <div className="bg-card border border-border rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-border">
+                <h2 className="text-sm font-semibold text-foreground">Feature Usage (30 Days)</h2>
+              </div>
+              <div className="divide-y divide-border">
+                {[
+                  { label: "Analyze (AI)", count: data.featureUsage.ai_analysis, icon: "🔍" },
+                  { label: "Optimize", count: data.featureUsage.optimize, icon: "✨" },
+                  { label: "Publish", count: data.featureUsage.ebay_publish, icon: "📤" },
+                  { label: "Export", count: data.featureUsage.export, icon: "💾" },
+                ].map((item) => (
+                  <div key={item.label} className="px-4 py-3 flex items-center justify-between">
+                    <span className="text-sm text-foreground flex items-center gap-2">
+                      <span>{item.icon}</span>
+                      {item.label}
+                    </span>
+                    <span className="text-sm font-bold text-foreground">{item.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* Gemini Usage Chart */}
             {data.gemini.last30Days.length > 0 && (
               <div className="bg-card border border-border rounded-xl p-4 space-y-3">
