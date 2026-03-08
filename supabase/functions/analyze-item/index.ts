@@ -55,7 +55,36 @@ When analyzing, you MUST:
    - Authentication notes if relevant
    - Reference details visible in different photos (obverse, reverse, edge, etc.)
 
-4. **Pricing**: Provide a realistic price range based on:
+4. **eBay Item Specifics**: You MUST extract structured item specifics that map directly to eBay's required fields. For coins and currency, these include:
+   - Year of manufacture
+   - Denomination (e.g., "1 Dollar", "25 Cents", "1 oz")
+   - Grade (e.g., "MS-65", "VF-30", "Ungraded" — use Sheldon scale if identifiable)
+   - Circulated/Uncirculated status
+   - Coin type (e.g., "American Silver Eagle", "Morgan Dollar")
+   - Mint location (e.g., "Philadelphia", "Denver", "San Francisco")
+   - Country/Region of manufacture
+   - Composition (e.g., ".999 Silver", "90% Silver", "Copper-Nickel Clad")
+   - Certification (e.g., "PCGS", "NGC", "Uncertified")
+   - Strike type (e.g., "Business", "Proof")
+   For non-coin items, extract any relevant eBay item specifics (Brand, Model, Material, Color, Size, etc.)
+
+5. **eBay Category**: Determine the most specific eBay category ID for the item. Common coin categories:
+   - 39482: US Coins > Dollars > Morgan (1878-1921)
+   - 39483: US Coins > Dollars > Peace (1921-1935)
+   - 41111: US Coins > Dollars > American Silver Eagle
+   - 39484: US Coins > Dollars > Eisenhower (1971-1978)
+   - 164743: US Coins > Quarters > 50 States & Territories
+   - 11116: US Coins > Pennies > Lincoln Memorial (1959-2008)
+   - 39481: US Coins > Dollars > Walking Liberty (1916-1947)
+   - 261069: Bullion > Silver Bullion > Bars & Rounds
+   - 261064: Bullion > Gold Bullion > Coins
+   - 261071: Bullion > Gold Bullion > Bars & Rounds
+   - 11118: US Coins > Half Dollars
+   - 253: US Coins (general)
+   - 45243: World Coins
+   If uncertain, use the most reasonable parent category.
+
+6. **Pricing**: Provide a realistic price range based on:
    - Recent eBay sold listings for comparable items in similar condition
    - For precious metals: ensure the minimum price is NEVER below the current melt value
    - Current approximate spot prices to reference: Gold ~$2,650/oz, Silver ~$31/oz, Platinum ~$1,000/oz
@@ -74,7 +103,7 @@ Return your analysis using the provided tool.`;
 
     contentParts.push({
       type: "text",
-      text: `I've provided ${imageList.length} photo${imageList.length > 1 ? "s" : ""} of the same item from different angles. Analyze all photos together to identify the item precisely, generate a title and description, and provide pricing based on recent sold comps and melt value (if precious metal).`,
+      text: `I've provided ${imageList.length} photo${imageList.length > 1 ? "s" : ""} of the same item from different angles. Analyze all photos together to identify the item precisely, generate a title and description, extract eBay item specifics, determine the correct eBay category ID, and provide pricing based on recent sold comps and melt value (if precious metal).`,
     });
 
     const response = await fetch(
@@ -97,7 +126,7 @@ Return your analysis using the provided tool.`;
               function: {
                 name: "create_listing",
                 description:
-                  "Create an eBay listing with title, description, and price range",
+                  "Create an eBay listing with title, description, item specifics, category, and price range",
                 parameters: {
                   type: "object",
                   properties: {
@@ -125,15 +154,44 @@ Return your analysis using the provided tool.`;
                       type: "string",
                       enum: ["gold", "silver", "platinum", "none"],
                       description:
-                        "Primary precious metal type if the item contains precious metals (gold, silver, platinum), or 'none' if not applicable",
+                        "Primary precious metal type if the item contains precious metals, or 'none'",
                     },
                     metalWeightOz: {
                       type: "number",
                       description:
-                        "Total precious metal weight in troy ounces. For example, a 1 oz Silver Eagle = 1.0, a 1/10 oz Gold Eagle = 0.1. Set to 0 if not a precious metal item.",
+                        "Total precious metal weight in troy ounces. Set to 0 if not a precious metal item.",
+                    },
+                    ebayCategoryId: {
+                      type: "string",
+                      description:
+                        "The most specific eBay category ID for this item (e.g., '41111' for American Silver Eagles)",
+                    },
+                    itemSpecifics: {
+                      type: "object",
+                      description: "Key-value pairs of eBay item specifics",
+                      properties: {
+                        Year: { type: "string", description: "Year of manufacture/minting" },
+                        Denomination: { type: "string", description: "Coin denomination (e.g., '1 Dollar', '25 Cents', '1 oz')" },
+                        Grade: { type: "string", description: "Coin grade using Sheldon scale or 'Ungraded' (e.g., 'MS-65', 'VF-30')" },
+                        "Circulated/Uncirculated": { type: "string", enum: ["Circulated", "Uncirculated"], description: "Whether the coin has been circulated" },
+                        "Coin/Bullion Type": { type: "string", description: "Specific coin type (e.g., 'American Silver Eagle', 'Morgan Dollar')" },
+                        "Mint Location": { type: "string", description: "Where the coin was minted" },
+                        "Country/Region of Manufacture": { type: "string", description: "Country of origin" },
+                        Composition: { type: "string", description: "Metal composition (e.g., '.999 Silver', '90% Silver')" },
+                        Certification: { type: "string", enum: ["PCGS", "NGC", "ANACS", "ICG", "Uncertified"], description: "Grading service certification" },
+                        "Strike Type": { type: "string", enum: ["Business", "Proof", "Satin Finish"], description: "Type of strike" },
+                        Brand: { type: "string", description: "Brand name for non-coin items" },
+                        Material: { type: "string", description: "Material for non-coin items" },
+                      },
+                      additionalProperties: true,
+                    },
+                    condition: {
+                      type: "string",
+                      enum: ["NEW", "LIKE_NEW", "USED_EXCELLENT", "USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE"],
+                      description: "eBay item condition enum value",
                     },
                   },
-                  required: ["title", "description", "priceMin", "priceMax", "metalType", "metalWeightOz"],
+                  required: ["title", "description", "priceMin", "priceMax", "metalType", "metalWeightOz", "ebayCategoryId", "itemSpecifics", "condition"],
                   additionalProperties: false,
                 },
               },
