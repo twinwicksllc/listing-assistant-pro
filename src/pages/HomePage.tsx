@@ -1,6 +1,6 @@
-import { Camera, Upload, Sparkles, X, ArrowRight, ImagePlus, Mic, MicOff, Loader2, LogOut, Wand2 } from "lucide-react";
+import { Camera, Upload, Sparkles, X, ArrowRight, ImagePlus, Mic, MicOff, Loader2, LogOut, Wand2, HelpCircle } from "lucide-react";
 import teckstartLogo from "@/assets/teckstart-logo.png";
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import BottomNav from "@/components/BottomNav";
 import { toast } from "sonner";
@@ -8,12 +8,42 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { optimizeImages } from "@/lib/imageOptimizer";
+import WelcomeTour, { type TourStep } from "@/components/WelcomeTour";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/gif", "video/mp4", "video/quicktime", "video/webm"];
 const ACCEPT_STRING = "image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif,video/mp4,video/quicktime,video/webm";
 const MAX_FILE_SIZE_MB = 20;
 const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
 const MAX_RECORDING_SEC = 10;
+
+const TOUR_KEY = "teckstart_tour_seen";
+
+const TOUR_STEPS: TourStep[] = [
+  {
+    target: "capture-button",
+    title: "📸 Capture Items",
+    description: "Tap here to take photos or upload images of items you want to list on eBay. You can add multiple photos at once.",
+    placement: "bottom",
+  },
+  {
+    target: "image-optimizer",
+    title: "✨ Image Optimizer",
+    description: "Once you've added photos, use the optimizer to auto-crop backgrounds, center items, and normalize brightness for professional-looking listings.",
+    placement: "top",
+  },
+  {
+    target: "analyze-tab",
+    title: "🔍 Drafts & Analysis",
+    description: "After processing, your AI-generated listings appear in Drafts. Review titles, descriptions, and pricing before publishing to eBay.",
+    placement: "top",
+  },
+  {
+    target: "help-button",
+    title: "💡 Need Help?",
+    description: "You can replay this tour anytime by tapping the help icon in the header. Happy listing!",
+    placement: "bottom",
+  },
+];
 
 export default function HomePage() {
   const { signOut } = useAuth();
@@ -25,6 +55,7 @@ export default function HomePage() {
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeProgress, setOptimizeProgress] = useState({ done: 0, total: 0 });
   const [imagesOptimized, setImagesOptimized] = useState(false);
+  const [showTour, setShowTour] = useState(false);
 
   // Voice note state
   const [recording, setRecording] = useState(false);
@@ -34,6 +65,18 @@ export default function HomePage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (!localStorage.getItem(TOUR_KEY)) {
+      const timer = setTimeout(() => setShowTour(true), 600);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  const handleTourFinish = () => {
+    setShowTour(false);
+    localStorage.setItem(TOUR_KEY, "true");
+  };
 
   const validateAndStageFiles = useCallback((files: FileList | File[] | null) => {
     if (!files) return;
@@ -196,6 +239,14 @@ export default function HomePage() {
             <p className="text-xs text-muted-foreground">AI-powered eBay listings</p>
           </div>
           <button
+            onClick={() => setShowTour(true)}
+            data-tour="help-button"
+            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            title="Show tour"
+          >
+            <HelpCircle className="w-4 h-4" />
+          </button>
+          <button
             onClick={signOut}
             className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
             title="Sign out"
@@ -218,6 +269,7 @@ export default function HomePage() {
             >
               <button
                 onClick={handleCapture}
+                data-tour="capture-button"
                 className="mx-auto w-40 h-40 md:w-48 md:h-48 rounded-full bg-primary/10 border-2 border-dashed border-primary/30 flex flex-col items-center justify-center gap-3 transition-all hover:bg-primary/15 hover:border-primary/50 active:scale-95"
               >
                 {isMobile ? (
@@ -306,7 +358,7 @@ export default function HomePage() {
               </div>
 
               {/* Image Optimizer */}
-              <div className="bg-card border border-border rounded-xl p-3 space-y-2">
+              <div data-tour="image-optimizer" className="bg-card border border-border rounded-xl p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <Wand2 className="w-3.5 h-3.5 text-primary" />
@@ -436,6 +488,7 @@ export default function HomePage() {
       />
 
       <BottomNav />
+      <WelcomeTour steps={TOUR_STEPS} active={showTour} onFinish={handleTourFinish} />
     </div>
   );
 }
