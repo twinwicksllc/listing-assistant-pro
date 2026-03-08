@@ -6,15 +6,26 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function parseImageDataUrl(dataUrl: string) {
+  const base64Data = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
+  const mimeMatch = dataUrl.match(/^data:(image\/\w+);/);
+  const mimeType = mimeMatch ? mimeMatch[1] : "image/jpeg";
+  return { base64Data, mimeType };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { imageBase64 } = await req.json();
-    if (!imageBase64) {
-      return new Response(JSON.stringify({ error: "No image provided" }), {
+    const body = await req.json();
+
+    // Support both single image (legacy) and multiple images
+    const imageList: string[] = body.images ?? (body.imageBase64 ? [body.imageBase64] : []);
+
+    if (imageList.length === 0) {
+      return new Response(JSON.stringify({ error: "No images provided" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -25,28 +36,24 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    // Strip data URL prefix if present
-    const base64Data = imageBase64.includes(",")
-      ? imageBase64.split(",")[1]
-      : imageBase64;
-    const mimeMatch = imageBase64.match(/^data:(image\/\w+);/);
-    const mimeType = mimeMatch ? mimeMatch[1] : "image/jpeg";
-
     const systemPrompt = `You are an expert eBay listing creator specializing in coins, bullion, precious metals, and general collectibles.
 
-When analyzing an item image, you MUST:
+You will receive one or more photos of the SAME item taken from different angles. Analyze ALL photos together to build a comprehensive understanding.
 
-1. **Identify the item** precisely — brand, model, year, material, condition details visible in the photo.
+When analyzing, you MUST:
+
+1. **Identify the item** precisely — brand, model, year, material, condition details visible across all photos.
 
 2. **eBay Title** (EXACTLY 80 characters or fewer): Create a professional, SEO-optimized eBay title. Include key identifiers: brand/mint, year, denomination/weight, metal content (if applicable), condition grade, and important keywords buyers search for. Use standard eBay abbreviations where appropriate.
 
 3. **Item Description**: Write a professional, detailed description covering:
    - Exact identification of the item
-   - Physical condition based on visible details
+   - Physical condition based on visible details from ALL provided photos
    - Metal content and purity (for coins/bullion)
    - Weight and dimensions if determinable
    - Any mint marks, varieties, or notable features
    - Authentication notes if relevant
+   - Reference details visible in different photos (obverse, reverse, edge, etc.)
 
 4. **Pricing**: Provide a realistic price range based on:
    - Recent eBay sold listings for comparable items in similar condition
@@ -55,6 +62,20 @@ When analyzing an item image, you MUST:
    - Factor in numismatic/collectible premium above melt value where applicable
 
 Return your analysis using the provided tool.`;
+
+    // Build content array with all images + text prompt
+    const contentParts: any[] = imageList.map((img) => {
+      const { base64Data, mimeType } = parseImageDataUrl(img);
+      return {
+        type: "image_url",
+        image_url: { url: `data:${mimeType};base64,${base64Data}` },
+      };
+    });
+
+    contentParts.push({
+      type: "text",
+      text: `I've provided ${imageList.length} photo${imageList.length > 1 ? "s" : ""} of the same item from different angles. Analyze all photos together to identify the item precisely, generate a title and description, and provide pricing based on recent sold comps and melt value (if precious metal).`,
+    });
 
     const response = await fetch(
       "https://ai.gateway.lovable.dev/v1/chat/completions",
@@ -68,19 +89,7 @@ Return your analysis using the provided tool.`;
           model: "google/gemini-3.1-pro-preview",
           messages: [
             { role: "system", content: systemPrompt },
-            {
-              role: "user",
-              content: [
-                {
-                  type: "image_url",
-                  image_url: { url: `data:${mimeType};base64,${base64Data}` },
-                },
-                {
-                  type: "text",
-                  text: "Analyze this item for an eBay listing. Identify it precisely, generate a title and description, and provide pricing based on recent sold comps and melt value (if precious metal).",
-                },
-              ],
-            },
+            { role: "user", content: contentParts },
           ],
           tools: [
             {
@@ -154,7 +163,6 @@ Return your analysis using the provided tool.`;
 
     const listing = JSON.parse(toolCall.function.arguments);
 
-    // Enforce 80-char title limit
     if (listing.title && listing.title.length > 80) {
       listing.title = listing.title.substring(0, 80);
     }
