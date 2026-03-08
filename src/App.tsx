@@ -21,6 +21,7 @@ import NotFound from "./pages/NotFound";
 import AdminPage from "./pages/AdminPage";
 import TermsPage from "./pages/TermsPage";
 import PrivacyPage from "./pages/PrivacyPage";
+import AuthCallbackPage from "./pages/AuthCallbackPage";
 import CookieConsent from "./components/CookieConsent";
 
 const queryClient = new QueryClient();
@@ -40,6 +41,7 @@ const App = () => (
               <Route path="/reset-password" element={<ResetPasswordPage />} />
               <Route path="/terms" element={<TermsPage />} />
               <Route path="/privacy" element={<PrivacyPage />} />
+              <Route path="/auth/callback" element={<AuthCallbackPage />} />
               <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
               <Route path="/analyze" element={<ProtectedRoute><AnalyzePage /></ProtectedRoute>} />
               <Route path="/drafts" element={<ProtectedRoute><DraftsPage /></ProtectedRoute>} />
