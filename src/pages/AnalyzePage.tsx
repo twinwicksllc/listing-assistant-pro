@@ -10,7 +10,7 @@ import { useAuth, PLANS } from "@/contexts/AuthContext";
 import { exportListing, type ExportPlatform, type ExportFormat } from "@/lib/exportCSV";
 
 export default function AnalyzePage() {
-  const { canAnalyze, canPublish, isPro, usage, recordUsage } = useAuth();
+  const { canAnalyze, canPublish, isPro, usage, recordUsage, isOwner, isLister } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const { addDraft } = useDrafts();
