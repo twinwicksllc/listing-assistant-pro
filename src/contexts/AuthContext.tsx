@@ -6,11 +6,19 @@ export const PLANS = {
   starter: { name: "Starter", price: 0, analysisLimit: 5, publishLimit: 3 },
   pro: {
     name: "Pro",
-    price: 19,
-    analysisLimit: Infinity,
-    publishLimit: Infinity,
+    price: 19.99,
+    analysisLimit: 50,
+    publishLimit: 25,
     priceId: "price_1T8lVU4bX0d1SiThMDayhDj5",
     productId: "prod_U6zUiC1SYuPrGU",
+  },
+  unlimited: {
+    name: "Unlimited",
+    price: 49.99,
+    analysisLimit: Infinity,
+    publishLimit: Infinity,
+    priceId: "price_1T8mZ84bX0d1SiThFgvRubiN",
+    productId: "prod_U70aT1KvuI2uDx",
   },
 } as const;
 
