@@ -13,9 +13,6 @@ export default function BottomNav() {
     { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard", show: isOwner, tourId: undefined },
     { path: "/team", icon: Users, label: "Team", show: true, tourId: undefined },
     { path: "/billing", icon: CreditCard, label: "Billing", show: isOwner, tourId: undefined },
-    { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard", show: isOwner },
-    { path: "/team", icon: Users, label: "Team", show: true },
-    { path: "/billing", icon: CreditCard, label: "Billing", show: isOwner },
   ].filter((t) => t.show);
 
   return (
