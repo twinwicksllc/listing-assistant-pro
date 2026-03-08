@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.ebay-publish]
 verify_jwt = false
+
+[functions.spot-prices]
+verify_jwt = false

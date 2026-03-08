@@ -22,6 +22,8 @@ export default function AnalyzePage() {
   const [priceMax, setPriceMax] = useState(0);
   const [activePhoto, setActivePhoto] = useState(0);
   const [publishing, setPublishing] = useState(false);
+  const [metalType, setMetalType] = useState<string>("none");
+  const [metalWeightOz, setMetalWeightOz] = useState<number>(0);
 
   if (imageUrls.length === 0) {
     navigate("/");
@@ -42,6 +44,8 @@ export default function AnalyzePage() {
       setDescription(data.description || "");
       setPriceMin(data.priceMin || 0);
       setPriceMax(data.priceMax || 0);
+      setMetalType(data.metalType || "none");
+      setMetalWeightOz(data.metalWeightOz || 0);
       setGenerated(true);
     } catch (err: any) {
       console.error("Analysis error:", err);
@@ -215,7 +219,7 @@ export default function AnalyzePage() {
             </div>
 
             {/* Pricing — now with eBay sold data */}
-            <PricingCard priceMin={priceMin} priceMax={priceMax} searchQuery={title} />
+            <PricingCard priceMin={priceMin} priceMax={priceMax} searchQuery={title} metalType={metalType} metalWeightOz={metalWeightOz} />
 
             {/* Action buttons */}
             <div className="space-y-2">

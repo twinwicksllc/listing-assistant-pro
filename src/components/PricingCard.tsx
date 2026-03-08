@@ -1,4 +1,4 @@
-import { TrendingUp, DollarSign, Loader2, ExternalLink } from "lucide-react";
+import { TrendingUp, DollarSign, Loader2, ExternalLink, Shield } from "lucide-react";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -10,13 +10,21 @@ interface SoldItem {
   itemUrl: string | null;
 }
 
+interface SpotPrices {
+  gold: number;
+  silver: number;
+  platinum: number;
+}
+
 interface PricingCardProps {
   priceMin: number;
   priceMax: number;
   searchQuery: string;
+  metalType?: string;
+  metalWeightOz?: number;
 }
 
-export default function PricingCard({ priceMin, priceMax, searchQuery }: PricingCardProps) {
+export default function PricingCard({ priceMin, priceMax, searchQuery, metalType = "none", metalWeightOz = 0 }: PricingCardProps) {
   const [loading, setLoading] = useState(false);
   const [soldItems, setSoldItems] = useState<SoldItem[]>([]);
   const [ebayAvg, setEbayAvg] = useState<number | null>(null);
@@ -25,6 +33,11 @@ export default function PricingCard({ priceMin, priceMax, searchQuery }: Pricing
   const [totalFound, setTotalFound] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
+  const [spotPrices, setSpotPrices] = useState<SpotPrices | null>(null);
+  const [meltValue, setMeltValue] = useState<number | null>(null);
+  const [spotLoading, setSpotLoading] = useState(false);
+
+  // Fetch eBay pricing
   useEffect(() => {
     if (!searchQuery) return;
 
@@ -55,11 +68,48 @@ export default function PricingCard({ priceMin, priceMax, searchQuery }: Pricing
     fetchPricing();
   }, [searchQuery]);
 
-  // Use eBay data if available, otherwise fall back to AI estimates
+  // Fetch spot prices when metal info is present
+  useEffect(() => {
+    if (metalType === "none" || !metalWeightOz || metalWeightOz <= 0) {
+      setMeltValue(null);
+      setSpotPrices(null);
+      return;
+    }
+
+    const fetchSpot = async () => {
+      setSpotLoading(true);
+      try {
+        const { data, error: fnError } = await supabase.functions.invoke("spot-prices", {
+          body: { metalType, weightOz: metalWeightOz },
+        });
+
+        if (fnError) throw new Error(fnError.message);
+        if (data?.error) throw new Error(data.error);
+
+        setSpotPrices(data.spotPrices || null);
+        setMeltValue(data.meltValue || null);
+      } catch (err: any) {
+        console.error("Spot price fetch error:", err);
+      } finally {
+        setSpotLoading(false);
+      }
+    };
+
+    fetchSpot();
+  }, [metalType, metalWeightOz]);
+
   const displayLow = ebayLow ?? priceMin;
   const displayHigh = ebayHigh ?? priceMax;
   const displayAvg = ebayAvg ?? parseFloat(((priceMin + priceMax) / 2).toFixed(2));
   const hasEbayData = soldItems.length > 0;
+  const hasMetal = metalType !== "none" && meltValue !== null && meltValue > 0;
+
+  const currentSpotPrice =
+    spotPrices && metalType === "gold" ? spotPrices.gold :
+    spotPrices && metalType === "silver" ? spotPrices.silver :
+    spotPrices && metalType === "platinum" ? spotPrices.platinum : null;
+
+  const isBelowMelt = hasMetal && meltValue !== null && displayAvg < meltValue;
 
   return (
     <div className="bg-card rounded-xl border border-border p-4 space-y-3">
@@ -77,7 +127,7 @@ export default function PricingCard({ priceMin, priceMax, searchQuery }: Pricing
               : "AI-estimated pricing"}
           </p>
         </div>
-        {loading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+        {(loading || spotLoading) && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
       </div>
 
       {error && (
@@ -86,6 +136,40 @@ export default function PricingCard({ priceMin, priceMax, searchQuery }: Pricing
         </p>
       )}
 
+      {/* Melt Value Banner */}
+      {hasMetal && (
+        <div className={`rounded-lg p-3 space-y-1 ${isBelowMelt ? "bg-destructive/10 border border-destructive/30" : "bg-primary/10 border border-primary/20"}`}>
+          <div className="flex items-center gap-2">
+            <Shield className={`w-4 h-4 ${isBelowMelt ? "text-destructive" : "text-primary"}`} />
+            <span className="text-xs font-semibold uppercase tracking-wide text-foreground">
+              Melt Value Protection
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground">
+                {metalType?.charAt(0).toUpperCase()}{metalType?.slice(1)} spot: ${currentSpotPrice?.toFixed(2)}/oz
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {metalWeightOz} oz × ${currentSpotPrice?.toFixed(2)}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Melt Value</p>
+              <p className={`text-lg font-bold ${isBelowMelt ? "text-destructive" : "text-primary"}`}>
+                ${meltValue?.toFixed(2)}
+              </p>
+            </div>
+          </div>
+          {isBelowMelt && (
+            <p className="text-xs font-medium text-destructive">
+              ⚠ Market avg (${displayAvg.toFixed(2)}) is below melt value — do not list below ${meltValue?.toFixed(2)}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Price Range */}
       <div className="flex items-center justify-between bg-secondary rounded-lg p-3">
         <div className="text-center flex-1">
           <p className="text-xs text-muted-foreground">Low</p>
@@ -103,6 +187,7 @@ export default function PricingCard({ priceMin, priceMax, searchQuery }: Pricing
         </div>
       </div>
 
+      {/* Sold Listings */}
       <div className="space-y-2">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
           {hasEbayData ? "eBay Sold Listings" : "Estimated Comps"}
@@ -132,7 +217,6 @@ export default function PricingCard({ priceMin, priceMax, searchQuery }: Pricing
             </div>
           ))
         ) : (
-          // Fallback mock display when no eBay data
           [priceMin, (priceMin + priceMax) / 2, priceMax].map((price, i) => (
             <div key={i} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
               <div className="flex items-center gap-2">
