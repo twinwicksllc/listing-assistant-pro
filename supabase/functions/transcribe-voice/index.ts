@@ -83,7 +83,33 @@ serve(async (req) => {
     }
 
     const data = await response.json();
+    const usage = data.usage;
     const transcript = data.choices?.[0]?.message?.content?.trim() || "";
+
+    // Log Gemini token usage
+    try {
+      const svc = createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+        { auth: { persistSession: false } }
+      );
+      let userId: string | null = null;
+      const authHeader = req.headers.get("Authorization");
+      if (authHeader) {
+        const { data: ud } = await svc.auth.getUser(authHeader.replace("Bearer ", ""));
+        userId = ud?.user?.id || null;
+      }
+      await svc.from("gemini_usage").insert({
+        user_id: userId,
+        function_name: "transcribe-voice",
+        model: "google/gemini-2.5-flash",
+        prompt_tokens: usage?.prompt_tokens || 0,
+        completion_tokens: usage?.completion_tokens || 0,
+        total_tokens: usage?.total_tokens || 0,
+      });
+    } catch (logErr) {
+      console.error("Failed to log gemini usage:", logErr);
+    }
 
     return new Response(
       JSON.stringify({ transcript }),
