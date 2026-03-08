@@ -57,6 +57,15 @@ export default function HomePage() {
   const [imagesOptimized, setImagesOptimized] = useState(false);
   const [showTour, setShowTour] = useState(false);
 
+  // Voice note state
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [voiceNote, setVoiceNote] = useState("");
+  const [recordingTime, setRecordingTime] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
     if (!localStorage.getItem(TOUR_KEY)) {
       const timer = setTimeout(() => setShowTour(true), 600);
