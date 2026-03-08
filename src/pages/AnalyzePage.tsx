@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { ItemSpecifics } from "@/types/listing";
 import { useAuth, PLANS } from "@/contexts/AuthContext";
+import { exportListing, type ExportPlatform } from "@/lib/exportCSV";
 
 export default function AnalyzePage() {
   const { canAnalyze, canPublish, isPro, usage, recordUsage } = useAuth();
