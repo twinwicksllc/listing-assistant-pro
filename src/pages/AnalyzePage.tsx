@@ -476,23 +476,30 @@ export default function AnalyzePage() {
                 Save Draft
               </button>
 
-              <button
-                onClick={handlePublish}
-                disabled={publishing}
-                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
-              >
-                {publishing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Publishing...
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    Publish to eBay
-                  </>
-                )}
-              </button>
+              {isOwner ? (
+                <button
+                  onClick={handlePublish}
+                  disabled={publishing}
+                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
+                >
+                  {publishing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Publishing...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      Publish to eBay
+                    </>
+                  )}
+                </button>
+              ) : (
+                <div className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-muted text-muted-foreground font-semibold text-sm">
+                  <Lock className="w-4 h-4" />
+                  Publishing restricted to account owner
+                </div>
+              )}
             </div>
           </div>
         )}
