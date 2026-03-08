@@ -46,7 +46,7 @@ const TOUR_STEPS: TourStep[] = [
 ];
 
 export default function HomePage() {
-  const { signOut } = useAuth();
+  const { signOut, recordUsage } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
@@ -118,6 +118,7 @@ export default function HomePage() {
       setStagedImages(optimized);
       setImagesOptimized(true);
       toast.success(`${optimized.length} photo${optimized.length !== 1 ? "s" : ""} optimized!`);
+      await recordUsage("optimize");
     } catch (err) {
       console.error("Optimize error:", err);
       toast.error("Failed to optimize images.");

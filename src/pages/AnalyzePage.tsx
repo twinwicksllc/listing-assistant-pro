@@ -455,6 +455,7 @@ export default function AnalyzePage() {
                     imageUrl: imageUrls[0],
                     ebayCategoryId, itemSpecifics, condition,
                   });
+                  recordUsage("export");
                   const platformLabel = exportPlatform === "ebay_file_exchange" ? "eBay" : "Facebook";
                   const formatLabel = exportFormat === "csv" ? "CSV" : exportFormat === "excel" ? "Excel" : "Google Sheets";
                   toast.success(`${platformLabel} listing exported as ${formatLabel}`);
