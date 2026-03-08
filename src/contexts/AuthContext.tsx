@@ -75,6 +75,8 @@ const AuthContext = createContext<AuthContextType>({
   refreshSubscription: async () => {},
   refreshUsage: async () => {},
   isPro: false,
+  isUnlimited: false,
+  isPaid: false,
   canAnalyze: true,
   canPublish: true,
   recordUsage: async () => {},
@@ -82,6 +84,7 @@ const AuthContext = createContext<AuthContextType>({
   isOwner: false,
   isLister: false,
   refreshOrg: async () => {},
+  currentPlanLimits: { analysisLimit: 5, publishLimit: 3 },
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
