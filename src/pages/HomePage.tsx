@@ -15,6 +15,7 @@ const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
 const MAX_RECORDING_SEC = 10;
 
 export default function HomePage() {
+  const { signOut } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
