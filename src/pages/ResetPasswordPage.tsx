@@ -10,14 +10,37 @@ export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [isRecovery, setIsRecovery] = useState(false);
+  const [exchanging, setExchanging] = useState(false);
 
   useEffect(() => {
-    // Check if this is a recovery flow
+    // --- PKCE flow: Supabase sends ?code=XXXX when redirectTo is a custom domain ---
+    // This is the case when using redirectTo: 'https://lister.teckstart.com/reset-password'
+    const { searchParams } = new URL(window.location.href);
+    const code = searchParams.get("code");
+
+    if (code) {
+      setExchanging(true);
+      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+        setExchanging(false);
+        if (error) {
+          console.error("Reset code exchange error:", error.message);
+          toast.error("Reset link is invalid or has expired. Please request a new one.");
+          navigate("/forgot-password");
+        } else {
+          // Session is now set — the PASSWORD_RECOVERY event will fire below
+          setIsRecovery(true);
+        }
+      });
+      return;
+    }
+
+    // --- Legacy implicit flow: hash contains #type=recovery&access_token=... ---
     const hash = window.location.hash;
     if (hash.includes("type=recovery")) {
       setIsRecovery(true);
     }
 
+    // Also listen for the Supabase PASSWORD_RECOVERY auth event (covers both flows)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") {
         setIsRecovery(true);
@@ -25,7 +48,7 @@ export default function ResetPasswordPage() {
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [navigate]);
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,14 +69,27 @@ export default function ResetPasswordPage() {
     }
   };
 
+  // Show spinner while exchanging the PKCE code
+  if (exchanging) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
+        <div className="flex flex-col items-center gap-4">
+          <img src={teckstartLogo} alt="Teckstart" className="h-12 w-auto" />
+          <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Verifying reset link...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!isRecovery) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
         <div className="w-full max-w-sm text-center space-y-4">
           <img src={teckstartLogo} alt="Teckstart" className="h-12 w-auto mx-auto" />
           <p className="text-sm text-muted-foreground">Invalid or expired reset link.</p>
-          <button onClick={() => navigate("/login")} className="text-sm text-primary font-medium hover:underline">
-            Back to Sign In
+          <button onClick={() => navigate("/forgot-password")} className="text-sm text-primary font-medium hover:underline">
+            Request a new reset link
           </button>
         </div>
       </div>
@@ -66,6 +102,7 @@ export default function ResetPasswordPage() {
         <div className="flex flex-col items-center gap-2">
           <img src={teckstartLogo} alt="Teckstart" className="h-12 w-auto" />
           <h1 className="text-xl font-bold text-foreground">Set new password</h1>
+          <p className="text-sm text-muted-foreground">Choose a strong password for your account</p>
         </div>
 
         <form onSubmit={handleUpdate} className="space-y-4">
