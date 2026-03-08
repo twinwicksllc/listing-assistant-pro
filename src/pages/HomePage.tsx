@@ -230,6 +230,14 @@ export default function HomePage() {
             <p className="text-xs text-muted-foreground">AI-powered eBay listings</p>
           </div>
           <button
+            onClick={() => setShowTour(true)}
+            data-tour="help-button"
+            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            title="Show tour"
+          >
+            <HelpCircle className="w-4 h-4" />
+          </button>
+          <button
             onClick={signOut}
             className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
             title="Sign out"
