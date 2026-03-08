@@ -212,8 +212,20 @@ Return your analysis using the provided tool.`;
                       enum: ["NEW", "LIKE_NEW", "USED_EXCELLENT", "USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE"],
                       description: "eBay item condition enum value",
                     },
+                    suggestedGrade: {
+                      type: "string",
+                      description: "Sheldon scale grade for unslabbed coins (e.g., 'MS-63', 'AU-55', 'VF-30'). Set to null or empty string for non-coin items or already-slabbed coins.",
+                    },
+                    gradingRationale: {
+                      type: "string",
+                      description: "Detailed explanation of why this grade was assigned, referencing specific visual evidence (wear, luster, strikes, marks). Empty for non-coin items.",
+                    },
+                    isSlabbed: {
+                      type: "boolean",
+                      description: "True if the coin is already in a certified grading slab (PCGS, NGC, etc.)",
+                    },
                   },
-                  required: ["title", "description", "priceMin", "priceMax", "metalType", "metalWeightOz", "ebayCategoryId", "itemSpecifics", "condition"],
+                  required: ["title", "description", "priceMin", "priceMax", "metalType", "metalWeightOz", "ebayCategoryId", "itemSpecifics", "condition", "suggestedGrade", "gradingRationale", "isSlabbed"],
                   additionalProperties: false,
                 },
               },
