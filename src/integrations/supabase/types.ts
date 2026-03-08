@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      cost_alerts: {
+        Row: {
+          id: string
+          sent_at: string
+          threshold: number
+          total_cost: number
+          total_requests: number
+        }
+        Insert: {
+          id?: string
+          sent_at?: string
+          threshold?: number
+          total_cost: number
+          total_requests: number
+        }
+        Update: {
+          id?: string
+          sent_at?: string
+          threshold?: number
+          total_cost?: number
+          total_requests?: number
+        }
+        Relationships: []
+      }
       drafts: {
         Row: {
           condition: string | null
