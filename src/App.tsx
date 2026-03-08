@@ -10,6 +10,7 @@ import AnalyzePage from "./pages/AnalyzePage";
 import DraftsPage from "./pages/DraftsPage";
 import DashboardPage from "./pages/DashboardPage";
 import BillingPage from "./pages/BillingPage";
+import TeamPage from "./pages/TeamPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
