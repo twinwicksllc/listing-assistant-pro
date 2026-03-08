@@ -121,10 +121,21 @@ serve(async (req) => {
       console.error("Traffic API error (non-fatal):", e);
     }
 
-    // Merge traffic data
+    // Build EPN affiliate link helper
+    const epnCampaignId = Deno.env.get("EPN_CAMPAIGN_ID") || "";
+    const buildEbayUrl = (listingId: string | null) => {
+      if (!listingId) return null;
+      const baseUrl = `https://www.ebay.com/itm/${listingId}`;
+      if (!epnCampaignId) return baseUrl;
+      // eBay Partner Network rover link format
+      return `https://rover.ebay.com/rover/1/711-53200-19255-0/1?campid=${epnCampaignId}&toolid=10001&customid=teckstart&mpre=${encodeURIComponent(baseUrl)}`;
+    };
+
+    // Merge traffic data and EPN links
     const enrichedListings = listings.map((l: any) => ({
       ...l,
       views: trafficMap[l.listingId] || trafficMap[l.sku] || 0,
+      ebayUrl: buildEbayUrl(l.listingId),
     }));
 
     return new Response(
