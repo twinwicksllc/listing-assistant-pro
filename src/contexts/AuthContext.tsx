@@ -208,8 +208,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session, refreshSubscription]);
 
   const isPro = subscription.subscribed && subscription.productId === PLANS.pro.productId;
-  const canAnalyze = isPro || usage.aiAnalysis < PLANS.starter.analysisLimit;
-  const canPublish = isPro || usage.ebayPublish < PLANS.starter.publishLimit;
+  const isUnlimited = subscription.subscribed && subscription.productId === PLANS.unlimited.productId;
+  const isPaid = isPro || isUnlimited;
+  const currentPlanLimits = isUnlimited
+    ? { analysisLimit: Infinity, publishLimit: Infinity }
+    : isPro
+      ? { analysisLimit: PLANS.pro.analysisLimit, publishLimit: PLANS.pro.publishLimit }
+      : { analysisLimit: PLANS.starter.analysisLimit, publishLimit: PLANS.starter.publishLimit };
+  const canAnalyze = isUnlimited || isPro ? usage.aiAnalysis < PLANS.pro.analysisLimit : usage.aiAnalysis < PLANS.starter.analysisLimit;
+  const canPublish = isUnlimited || isPro ? usage.ebayPublish < PLANS.pro.publishLimit : usage.ebayPublish < PLANS.starter.publishLimit;
+  // For unlimited, override canAnalyze/canPublish to always true
+  const finalCanAnalyze = isUnlimited ? true : canAnalyze;
+  const finalCanPublish = isUnlimited ? true : canPublish;
   const isOwner = org.role === "owner";
   const isLister = org.role === "lister";
 
