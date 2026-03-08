@@ -95,6 +95,7 @@ export default function AnalyzePage() {
       ebayCategoryId,
       itemSpecifics,
       condition,
+      consignor,
     });
     toast.success("Draft saved!");
     navigate("/drafts");
