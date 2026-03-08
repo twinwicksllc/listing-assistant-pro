@@ -92,7 +92,7 @@ export default function AnalyzePage() {
       id: crypto.randomUUID(),
       imageUrl: imageUrls[0],
       title,
-      description,
+      description: getDescriptionWithFooter(),
       priceMin,
       priceMax,
       createdAt: new Date(),
