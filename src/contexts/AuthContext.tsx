@@ -53,6 +53,8 @@ interface AuthContextType {
   refreshSubscription: () => Promise<void>;
   refreshUsage: () => Promise<void>;
   isPro: boolean;
+  isUnlimited: boolean;
+  isPaid: boolean;
   canAnalyze: boolean;
   canPublish: boolean;
   recordUsage: (actionType: "ai_analysis" | "ebay_publish" | "optimize" | "export") => Promise<void>;
@@ -60,6 +62,7 @@ interface AuthContextType {
   isOwner: boolean;
   isLister: boolean;
   refreshOrg: () => Promise<void>;
+  currentPlanLimits: { analysisLimit: number; publishLimit: number };
 }
 
 const AuthContext = createContext<AuthContextType>({
