@@ -133,6 +133,7 @@ export default function AnalyzePage() {
       }
 
       toast.success(`Draft listing created on eBay! (Offer ID: ${data.offerId})`);
+      await recordUsage("ebay_publish");
     } catch (err: any) {
       console.error("Publish error:", err);
       toast.error(err.message || "Failed to publish to eBay.");
