@@ -121,7 +121,7 @@ export default function AnalyzePage() {
         });
         if (error || data?.error) throw new Error(data?.error || error?.message || "Failed to get auth URL");
 
-        localStorage.setItem("pending_listing", JSON.stringify({ title, description, priceMin, imageUrl: imageUrls[0], ebayCategoryId, itemSpecifics, condition }));
+        localStorage.setItem("pending_listing", JSON.stringify({ title, description: getDescriptionWithFooter(), priceMin, imageUrl: imageUrls[0], ebayCategoryId, itemSpecifics, condition }));
         window.location.href = data.authUrl;
         return;
       }
