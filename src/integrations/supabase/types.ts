@@ -100,6 +100,39 @@ export type Database = {
         }
         Relationships: []
       }
+      gemini_usage: {
+        Row: {
+          completion_tokens: number
+          created_at: string
+          function_name: string
+          id: string
+          model: string
+          prompt_tokens: number
+          total_tokens: number
+          user_id: string | null
+        }
+        Insert: {
+          completion_tokens?: number
+          created_at?: string
+          function_name: string
+          id?: string
+          model: string
+          prompt_tokens?: number
+          total_tokens?: number
+          user_id?: string | null
+        }
+        Update: {
+          completion_tokens?: number
+          created_at?: string
+          function_name?: string
+          id?: string
+          model?: string
+          prompt_tokens?: number
+          total_tokens?: number
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       org_invitations: {
         Row: {
           created_at: string
