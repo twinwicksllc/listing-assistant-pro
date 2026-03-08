@@ -1,0 +1,235 @@
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  Shield, CheckCircle2, XCircle, AlertTriangle, RefreshCw,
+  Users, CreditCard, Cpu, Zap, ArrowLeft, Activity
+} from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+
+const ADMIN_EMAIL = "twinwicksllc@gmail.com";
+
+interface SystemData {
+  stripe: { mode: string; activeSubscriptions: number; error: string };
+  ebay: { ok: boolean; error: string };
+  totalUsers: number;
+  gemini: {
+    totalTokens: number;
+    totalCalls: number;
+    estimatedCost: number;
+    last30Days: { date: string; calls: number; tokens: number }[];
+  };
+}
+
+export default function AdminPage() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [data, setData] = useState<SystemData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (user?.email !== ADMIN_EMAIL) {
+      navigate("/", { replace: true });
+    }
+  }, [user, navigate]);
+
+  const fetchStatus = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const { data: result, error: fnErr } = await supabase.functions.invoke("system-status");
+      if (fnErr) throw new Error(fnErr.message);
+      if (result?.error) throw new Error(result.error);
+      setData(result);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.email === ADMIN_EMAIL) fetchStatus();
+  }, [user]);
+
+  if (user?.email !== ADMIN_EMAIL) return null;
+
+  const StatusIcon = ({ ok }: { ok: boolean }) =>
+    ok ? <CheckCircle2 className="w-5 h-5 text-accent" /> : <XCircle className="w-5 h-5 text-destructive" />;
+
+  return (
+    <div className="min-h-screen bg-background pb-12">
+      <header className="px-5 pt-12 pb-4 md:px-8 lg:px-12">
+        <div className="max-w-3xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button onClick={() => navigate("/")} className="p-2 rounded-lg hover:bg-secondary text-muted-foreground">
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <div className="flex items-center gap-2">
+              <Shield className="w-5 h-5 text-primary" />
+              <div>
+                <h1 className="text-lg font-bold text-foreground">Admin Control Center</h1>
+                <p className="text-xs text-muted-foreground">System status & metrics</p>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={fetchStatus}
+            disabled={loading}
+            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+          </button>
+        </div>
+      </header>
+
+      <div className="px-5 md:px-8 lg:px-12 max-w-3xl mx-auto space-y-5">
+        {error && (
+          <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-4 flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0" />
+            <p className="text-sm text-destructive">{error}</p>
+          </div>
+        )}
+
+        {loading && !data ? (
+          <div className="text-center py-20">
+            <RefreshCw className="w-6 h-6 text-muted-foreground animate-spin mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">Loading system status...</p>
+          </div>
+        ) : data ? (
+          <>
+            {/* System Checklist */}
+            <div className="bg-card border border-border rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-border">
+                <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-primary" />
+                  System Status Checklist
+                </h2>
+              </div>
+
+              <div className="divide-y divide-border">
+                {/* Stripe */}
+                <div className="px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <CreditCard className="w-4 h-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Stripe</p>
+                      <p className="text-xs text-muted-foreground">
+                        {data.stripe.error || `Mode: ${data.stripe.mode.toUpperCase()}`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                      data.stripe.mode === "live"
+                        ? "bg-accent/15 text-accent"
+                        : "bg-yellow-500/15 text-yellow-600"
+                    }`}>
+                      {data.stripe.mode === "live" ? "LIVE" : data.stripe.mode === "test" ? "TEST" : "?"}
+                    </span>
+                    <StatusIcon ok={!data.stripe.error && data.stripe.mode !== "unknown"} />
+                  </div>
+                </div>
+
+                {/* eBay */}
+                <div className="px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Zap className="w-4 h-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium text-foreground">eBay API</p>
+                      <p className="text-xs text-muted-foreground">
+                        {data.ebay.ok ? "Reachable" : data.ebay.error || "Unreachable"}
+                      </p>
+                    </div>
+                  </div>
+                  <StatusIcon ok={data.ebay.ok} />
+                </div>
+
+                {/* Gemini / AI */}
+                <div className="px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Cpu className="w-4 h-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Gemini AI</p>
+                      <p className="text-xs text-muted-foreground">
+                        {data.gemini.totalCalls} calls · {data.gemini.totalTokens.toLocaleString()} tokens (30d)
+                      </p>
+                    </div>
+                  </div>
+                  <StatusIcon ok={true} />
+                </div>
+              </div>
+            </div>
+
+            {/* Stats Cards */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-card border border-border rounded-xl p-4 space-y-1">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Users className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-medium uppercase tracking-wide">Total Users</span>
+                </div>
+                <p className="text-2xl font-bold text-foreground">{data.totalUsers}</p>
+              </div>
+
+              <div className="bg-card border border-border rounded-xl p-4 space-y-1">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-medium uppercase tracking-wide">Active Subs</span>
+                </div>
+                <p className="text-2xl font-bold text-foreground">{data.stripe.activeSubscriptions}</p>
+              </div>
+
+              <div className="bg-card border border-border rounded-xl p-4 space-y-1">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Cpu className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-medium uppercase tracking-wide">AI Calls (30d)</span>
+                </div>
+                <p className="text-2xl font-bold text-foreground">{data.gemini.totalCalls}</p>
+              </div>
+
+              <div className="bg-card border border-border rounded-xl p-4 space-y-1">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Zap className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-medium uppercase tracking-wide">Est. AI Cost</span>
+                </div>
+                <p className="text-2xl font-bold text-foreground">${data.gemini.estimatedCost.toFixed(4)}</p>
+                <p className="text-[10px] text-muted-foreground">{data.gemini.totalTokens.toLocaleString()} tokens</p>
+              </div>
+            </div>
+
+            {/* Gemini Usage Chart */}
+            {data.gemini.last30Days.length > 0 && (
+              <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+                <h2 className="text-sm font-semibold text-foreground">AI Usage (Last 30 Days)</h2>
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={data.gemini.last30Days}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                        tickFormatter={(v) => v.slice(5)}
+                      />
+                      <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                      <Tooltip
+                        contentStyle={{
+                          background: "hsl(var(--card))",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: "8px",
+                          fontSize: "12px",
+                        }}
+                      />
+                      <Bar dataKey="calls" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="API Calls" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}

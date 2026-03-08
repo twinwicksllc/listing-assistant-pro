@@ -1,0 +1,124 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import Stripe from "https://esm.sh/stripe@18.5.0";
+import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+const ADMIN_EMAIL = "twinwicksllc@gmail.com";
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  const supabaseClient = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    { auth: { persistSession: false } }
+  );
+
+  try {
+    // Verify admin
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) throw new Error("Unauthorized");
+    const token = authHeader.replace("Bearer ", "");
+    const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
+    if (userError || !userData.user) throw new Error("Unauthorized");
+    if (userData.user.email !== ADMIN_EMAIL) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // --- Stripe Status ---
+    let stripeStatus = { mode: "unknown", activeSubscriptions: 0, error: "" };
+    try {
+      const stripeKey = Deno.env.get("STRIPE_SECRET_KEY") || "";
+      stripeStatus.mode = stripeKey.startsWith("sk_live_") ? "live" : stripeKey.startsWith("sk_test_") ? "test" : "unknown";
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+      const subs = await stripe.subscriptions.list({ status: "active", limit: 100 });
+      stripeStatus.activeSubscriptions = subs.data.length;
+    } catch (e) {
+      stripeStatus.error = e instanceof Error ? e.message : "Stripe error";
+    }
+
+    // --- eBay API Ping ---
+    let ebayStatus = { ok: false, error: "" };
+    try {
+      const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
+      const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
+      const resp = await fetch(`${apiBase}/buy/browse/v1/item_summary/search?q=test&limit=1`, {
+        headers: { "Content-Type": "application/json" },
+      });
+      // 200 or 401 both mean the API is reachable
+      ebayStatus.ok = resp.status === 200 || resp.status === 401 || resp.status === 403;
+      if (!ebayStatus.ok) ebayStatus.error = `Status ${resp.status}`;
+    } catch (e) {
+      ebayStatus.error = e instanceof Error ? e.message : "eBay unreachable";
+    }
+
+    // --- Total Users ---
+    let totalUsers = 0;
+    try {
+      const { count } = await supabaseClient.from("profiles").select("*", { count: "exact", head: true });
+      totalUsers = count || 0;
+    } catch {
+      // skip
+    }
+
+    // --- Gemini Usage ---
+    let geminiUsage = { totalTokens: 0, totalCalls: 0, last30Days: [] as any[], estimatedCost: 0 };
+    try {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const { data: usageData, count } = await supabaseClient
+        .from("gemini_usage")
+        .select("*", { count: "exact" })
+        .gte("created_at", thirtyDaysAgo.toISOString())
+        .order("created_at", { ascending: false })
+        .limit(100);
+
+      geminiUsage.totalCalls = count || 0;
+      if (usageData) {
+        geminiUsage.totalTokens = usageData.reduce((sum: number, r: any) => sum + (r.total_tokens || 0), 0);
+        // Rough cost estimate: ~$0.15 per 1M input tokens, ~$0.60 per 1M output tokens (Gemini Flash pricing)
+        const inputTokens = usageData.reduce((sum: number, r: any) => sum + (r.prompt_tokens || 0), 0);
+        const outputTokens = usageData.reduce((sum: number, r: any) => sum + (r.completion_tokens || 0), 0);
+        geminiUsage.estimatedCost = (inputTokens * 0.00000015) + (outputTokens * 0.0000006);
+
+        // Group by day for chart
+        const byDay: Record<string, { calls: number; tokens: number }> = {};
+        for (const row of usageData) {
+          const day = row.created_at.split("T")[0];
+          if (!byDay[day]) byDay[day] = { calls: 0, tokens: 0 };
+          byDay[day].calls++;
+          byDay[day].tokens += row.total_tokens || 0;
+        }
+        geminiUsage.last30Days = Object.entries(byDay).map(([date, v]) => ({ date, ...v })).sort((a, b) => a.date.localeCompare(b.date));
+      }
+    } catch {
+      // skip
+    }
+
+    return new Response(
+      JSON.stringify({
+        stripe: stripeStatus,
+        ebay: ebayStatus,
+        totalUsers,
+        gemini: geminiUsage,
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (e) {
+    return new Response(
+      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});

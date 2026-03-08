@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -258,7 +259,34 @@ Return your analysis using the provided tool.`;
     }
 
     const data = await response.json();
+    const usage = data.usage;
     const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+
+    // Log Gemini token usage
+    try {
+      const svc = createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+        { auth: { persistSession: false } }
+      );
+      // Try to get user_id from auth header
+      let userId: string | null = null;
+      const authHeader = req.headers.get("Authorization");
+      if (authHeader) {
+        const { data: ud } = await svc.auth.getUser(authHeader.replace("Bearer ", ""));
+        userId = ud?.user?.id || null;
+      }
+      await svc.from("gemini_usage").insert({
+        user_id: userId,
+        function_name: "analyze-item",
+        model: "google/gemini-3.1-pro-preview",
+        prompt_tokens: usage?.prompt_tokens || 0,
+        completion_tokens: usage?.completion_tokens || 0,
+        total_tokens: usage?.total_tokens || 0,
+      });
+    } catch (logErr) {
+      console.error("Failed to log gemini usage:", logErr);
+    }
 
     if (!toolCall?.function?.arguments) {
       throw new Error("AI did not return structured listing data");
