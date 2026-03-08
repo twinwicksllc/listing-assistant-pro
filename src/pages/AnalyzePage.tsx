@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, Send, Tag } from "lucide-react";
+import { ArrowLeft, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, Send, Tag, Crown } from "lucide-react";
 import PricingCard from "@/components/PricingCard";
 import { useDrafts } from "@/hooks/useDrafts";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { ItemSpecifics } from "@/types/listing";
+import { useAuth, PLANS } from "@/contexts/AuthContext";
 
 export default function AnalyzePage() {
+  const { canAnalyze, canPublish, isPro, usage, recordUsage } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const { addDraft } = useDrafts();

@@ -1,4 +1,4 @@
-import { Camera, FileText, LayoutDashboard } from "lucide-react";
+import { Camera, FileText, LayoutDashboard, CreditCard } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 export default function BottomNav() {
@@ -9,6 +9,7 @@ export default function BottomNav() {
     { path: "/", icon: Camera, label: "Capture" },
     { path: "/drafts", icon: FileText, label: "Drafts" },
     { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+    { path: "/billing", icon: CreditCard, label: "Billing" },
   ];
 
   return (
