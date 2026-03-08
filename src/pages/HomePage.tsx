@@ -16,6 +16,35 @@ const MAX_FILE_SIZE_MB = 20;
 const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
 const MAX_RECORDING_SEC = 10;
 
+const TOUR_KEY = "teckstart_tour_seen";
+
+const TOUR_STEPS: TourStep[] = [
+  {
+    target: "capture-button",
+    title: "📸 Capture Items",
+    description: "Tap here to take photos or upload images of items you want to list on eBay. You can add multiple photos at once.",
+    placement: "bottom",
+  },
+  {
+    target: "image-optimizer",
+    title: "✨ Image Optimizer",
+    description: "Once you've added photos, use the optimizer to auto-crop backgrounds, center items, and normalize brightness for professional-looking listings.",
+    placement: "top",
+  },
+  {
+    target: "analyze-tab",
+    title: "🔍 Drafts & Analysis",
+    description: "After processing, your AI-generated listings appear in Drafts. Review titles, descriptions, and pricing before publishing to eBay.",
+    placement: "top",
+  },
+  {
+    target: "help-button",
+    title: "💡 Need Help?",
+    description: "You can replay this tour anytime by tapping the help icon in the header. Happy listing!",
+    placement: "bottom",
+  },
+];
+
 export default function HomePage() {
   const { signOut } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -26,15 +55,19 @@ export default function HomePage() {
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeProgress, setOptimizeProgress] = useState({ done: 0, total: 0 });
   const [imagesOptimized, setImagesOptimized] = useState(false);
+  const [showTour, setShowTour] = useState(false);
 
-  // Voice note state
-  const [recording, setRecording] = useState(false);
-  const [transcribing, setTranscribing] = useState(false);
-  const [voiceNote, setVoiceNote] = useState("");
-  const [recordingTime, setRecordingTime] = useState(0);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (!localStorage.getItem(TOUR_KEY)) {
+      const timer = setTimeout(() => setShowTour(true), 600);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  const handleTourFinish = () => {
+    setShowTour(false);
+    localStorage.setItem(TOUR_KEY, "true");
+  };
 
   const validateAndStageFiles = useCallback((files: FileList | File[] | null) => {
     if (!files) return;
