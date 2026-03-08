@@ -349,7 +349,7 @@ export default function HomePage() {
               </div>
 
               {/* Image Optimizer */}
-              <div className="bg-card border border-border rounded-xl p-3 space-y-2">
+              <div data-tour="image-optimizer" className="bg-card border border-border rounded-xl p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <Wand2 className="w-3.5 h-3.5 text-primary" />
