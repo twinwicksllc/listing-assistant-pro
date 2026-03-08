@@ -135,7 +135,7 @@ serve(async (req) => {
         averagePrice,
         lowPrice,
         highPrice,
-        totalFound: searchData.total || items.length,
+        totalFound: items.length,
         query,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
