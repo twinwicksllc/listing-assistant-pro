@@ -20,6 +20,7 @@ interface SystemData {
     estimatedCost: number;
     last30Days: { date: string; calls: number; tokens: number }[];
   };
+  featureUsage: { ai_analysis: number; ebay_publish: number; optimize: number; export: number };
 }
 
 export default function AdminPage() {
