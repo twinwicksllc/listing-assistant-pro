@@ -47,7 +47,7 @@ interface AuthContextType {
   isPro: boolean;
   canAnalyze: boolean;
   canPublish: boolean;
-  recordUsage: (actionType: "ai_analysis" | "ebay_publish") => Promise<void>;
+  recordUsage: (actionType: "ai_analysis" | "ebay_publish" | "optimize" | "export") => Promise<void>;
   org: OrgState;
   isOwner: boolean;
   isLister: boolean;
