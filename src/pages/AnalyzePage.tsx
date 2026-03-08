@@ -44,6 +44,8 @@ export default function AnalyzePage() {
       setDescription(data.description || "");
       setPriceMin(data.priceMin || 0);
       setPriceMax(data.priceMax || 0);
+      setMetalType(data.metalType || "none");
+      setMetalWeightOz(data.metalWeightOz || 0);
       setGenerated(true);
     } catch (err: any) {
       console.error("Analysis error:", err);
