@@ -166,10 +166,17 @@ export default function HomePage() {
       <header className="px-5 pt-12 pb-4 md:px-8 lg:px-12">
         <div className="max-w-3xl mx-auto flex items-center gap-2">
           <img src={teckstartLogo} alt="Teckstart" className="h-9 w-auto" />
-          <div>
+          <div className="flex-1">
             <h1 className="text-lg font-bold text-foreground">Teckstart Listing Assistant</h1>
             <p className="text-xs text-muted-foreground">AI-powered eBay listings</p>
           </div>
+          <button
+            onClick={signOut}
+            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            title="Sign out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </header>
 
