@@ -305,6 +305,50 @@ export default function HomePage() {
                 </button>
               </div>
 
+              {/* Image Optimizer */}
+              <div className="bg-card border border-border rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Wand2 className="w-3.5 h-3.5 text-primary" />
+                    <span className="text-xs font-medium text-foreground">Image Optimizer</span>
+                  </div>
+                  {imagesOptimized && (
+                    <span className="text-[10px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                      ✓ Optimized
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Auto-crops excess background, centers the item, and normalizes brightness & contrast for uniform listing photos.
+                </p>
+                <button
+                  onClick={handleOptimize}
+                  disabled={optimizing || imagesOptimized}
+                  className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-semibold transition-all active:scale-[0.98] disabled:opacity-60 ${
+                    imagesOptimized
+                      ? "bg-primary/10 text-primary"
+                      : "bg-secondary text-foreground hover:bg-secondary/80"
+                  }`}
+                >
+                  {optimizing ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Optimizing {optimizeProgress.done}/{optimizeProgress.total}...
+                    </>
+                  ) : imagesOptimized ? (
+                    <>
+                      <Wand2 className="w-3.5 h-3.5" />
+                      Photos Optimized
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="w-3.5 h-3.5" />
+                      Optimize All Photos
+                    </>
+                  )}
+                </button>
+              </div>
+
               {/* Voice Note Section */}
               <div className="space-y-2">
                 <div className="flex items-center gap-1.5">
