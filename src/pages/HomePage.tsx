@@ -1,4 +1,4 @@
-import { Camera, Upload, Sparkles, X, ArrowRight, ImagePlus, Mic, MicOff, Loader2, LogOut } from "lucide-react";
+import { Camera, Upload, Sparkles, X, ArrowRight, ImagePlus, Mic, MicOff, Loader2, LogOut, Wand2 } from "lucide-react";
 import teckstartLogo from "@/assets/teckstart-logo.png";
 import { useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { optimizeImages } from "@/lib/imageOptimizer";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/gif", "video/mp4", "video/quicktime", "video/webm"];
 const ACCEPT_STRING = "image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif,video/mp4,video/quicktime,video/webm";
@@ -21,6 +22,9 @@ export default function HomePage() {
   const isMobile = useIsMobile();
   const [stagedImages, setStagedImages] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
+  const [optimizeProgress, setOptimizeProgress] = useState({ done: 0, total: 0 });
+  const [imagesOptimized, setImagesOptimized] = useState(false);
 
   // Voice note state
   const [recording, setRecording] = useState(false);
@@ -49,6 +53,7 @@ export default function HomePage() {
       reader.onload = (e) => {
         const url = e.target?.result as string;
         setStagedImages((prev) => [...prev, url]);
+        setImagesOptimized(false);
       };
       reader.readAsDataURL(file);
     });
@@ -56,6 +61,26 @@ export default function HomePage() {
 
   const removeImage = (index: number) => {
     setStagedImages((prev) => prev.filter((_, i) => i !== index));
+    setImagesOptimized(false);
+  };
+
+  const handleOptimize = async () => {
+    if (stagedImages.length === 0) return;
+    setOptimizing(true);
+    setOptimizeProgress({ done: 0, total: stagedImages.length });
+    try {
+      const optimized = await optimizeImages(stagedImages, (done, total) => {
+        setOptimizeProgress({ done, total });
+      });
+      setStagedImages(optimized);
+      setImagesOptimized(true);
+      toast.success(`${optimized.length} photo${optimized.length !== 1 ? "s" : ""} optimized!`);
+    } catch (err) {
+      console.error("Optimize error:", err);
+      toast.error("Failed to optimize images.");
+    } finally {
+      setOptimizing(false);
+    }
   };
 
   const handleProcess = () => {
@@ -277,6 +302,50 @@ export default function HomePage() {
                 >
                   {isMobile ? <Camera className="w-5 h-5" /> : <Upload className="w-5 h-5" />}
                   <span className="text-[10px] font-medium">Add</span>
+                </button>
+              </div>
+
+              {/* Image Optimizer */}
+              <div className="bg-card border border-border rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Wand2 className="w-3.5 h-3.5 text-primary" />
+                    <span className="text-xs font-medium text-foreground">Image Optimizer</span>
+                  </div>
+                  {imagesOptimized && (
+                    <span className="text-[10px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                      ✓ Optimized
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Auto-crops excess background, centers the item, and normalizes brightness & contrast for uniform listing photos.
+                </p>
+                <button
+                  onClick={handleOptimize}
+                  disabled={optimizing || imagesOptimized}
+                  className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-semibold transition-all active:scale-[0.98] disabled:opacity-60 ${
+                    imagesOptimized
+                      ? "bg-primary/10 text-primary"
+                      : "bg-secondary text-foreground hover:bg-secondary/80"
+                  }`}
+                >
+                  {optimizing ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Optimizing {optimizeProgress.done}/{optimizeProgress.total}...
+                    </>
+                  ) : imagesOptimized ? (
+                    <>
+                      <Wand2 className="w-3.5 h-3.5" />
+                      Photos Optimized
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="w-3.5 h-3.5" />
+                      Optimize All Photos
+                    </>
+                  )}
                 </button>
               </div>
 
