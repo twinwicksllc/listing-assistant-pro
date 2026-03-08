@@ -22,6 +22,8 @@ export default function AnalyzePage() {
   const [priceMax, setPriceMax] = useState(0);
   const [activePhoto, setActivePhoto] = useState(0);
   const [publishing, setPublishing] = useState(false);
+  const [metalType, setMetalType] = useState<string>("none");
+  const [metalWeightOz, setMetalWeightOz] = useState<number>(0);
 
   if (imageUrls.length === 0) {
     navigate("/");
