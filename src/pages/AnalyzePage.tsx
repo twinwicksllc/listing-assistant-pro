@@ -38,6 +38,11 @@ export default function AnalyzePage() {
   }
 
   const handleGenerate = async () => {
+    if (!canAnalyze) {
+      toast.error(`Monthly AI analysis limit reached (${PLANS.starter.analysisLimit}). Upgrade to Pro for unlimited.`);
+      navigate("/billing");
+      return;
+    }
     setGenerating(true);
     try {
       const { data, error } = await supabase.functions.invoke("analyze-item", {
@@ -57,6 +62,7 @@ export default function AnalyzePage() {
       setItemSpecifics(data.itemSpecifics || {});
       setCondition(data.condition || "USED_EXCELLENT");
       setGenerated(true);
+      await recordUsage("ai_analysis");
     } catch (err: any) {
       console.error("Analysis error:", err);
       toast.error(err.message || "Failed to analyze item. Please try again.");
