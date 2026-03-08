@@ -479,6 +479,7 @@ export default function HomePage() {
       />
 
       <BottomNav />
+      <WelcomeTour steps={TOUR_STEPS} active={showTour} onFinish={handleTourFinish} />
     </div>
   );
 }
