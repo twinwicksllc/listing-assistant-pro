@@ -23,6 +23,7 @@ serve(async (req) => {
 
     // Support both single image (legacy) and multiple images
     const imageList: string[] = body.images ?? (body.imageBase64 ? [body.imageBase64] : []);
+    const voiceNote: string = body.voiceNote || "";
 
     if (imageList.length === 0) {
       return new Response(JSON.stringify({ error: "No images provided" }), {
@@ -101,9 +102,15 @@ Return your analysis using the provided tool.`;
       };
     });
 
+    let userText = `I've provided ${imageList.length} photo${imageList.length > 1 ? "s" : ""} of the same item from different angles. Analyze all photos together to identify the item precisely, generate a title and description, extract eBay item specifics, determine the correct eBay category ID, and provide pricing based on recent sold comps and melt value (if precious metal).`;
+
+    if (voiceNote) {
+      userText += `\n\nIMPORTANT — The seller recorded the following voice note about the item's condition, flaws, or special features. You MUST incorporate this information into the item description and condition assessment:\n\n"${voiceNote}"`;
+    }
+
     contentParts.push({
       type: "text",
-      text: `I've provided ${imageList.length} photo${imageList.length > 1 ? "s" : ""} of the same item from different angles. Analyze all photos together to identify the item precisely, generate a title and description, extract eBay item specifics, determine the correct eBay category ID, and provide pricing based on recent sold comps and melt value (if precious metal).`,
+      text: userText,
     });
 
     const response = await fetch(

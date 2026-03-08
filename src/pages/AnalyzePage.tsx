@@ -14,6 +14,7 @@ export default function AnalyzePage() {
 
   const state = location.state as any;
   const imageUrls: string[] = state?.imageUrls ?? (state?.imageUrl ? [state.imageUrl] : []);
+  const voiceNote: string = state?.voiceNote || "";
 
   const [generated, setGenerated] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -38,7 +39,7 @@ export default function AnalyzePage() {
     setGenerating(true);
     try {
       const { data, error } = await supabase.functions.invoke("analyze-item", {
-        body: { images: imageUrls },
+        body: { images: imageUrls, voiceNote },
       });
 
       if (error) throw new Error(error.message || "Analysis failed");
