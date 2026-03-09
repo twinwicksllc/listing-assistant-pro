@@ -37,21 +37,27 @@ serve(async (req) => {
 
     // --- ACTION: Get OAuth consent URL ---
     if (action === "get_auth_url") {
-      const redirectUri = Deno.env.get("EBAY_REDIRECT_URI");
-      if (!redirectUri) throw new Error("EBAY_REDIRECT_URI not configured");
+      // EBAY_RUNAME is the RuName from eBay Developer Portal (used in OAuth authorize URL)
+      // EBAY_REDIRECT_URI is the actual callback URL (https://lister.teckstart.com/ebay/callback)
+      // If EBAY_RUNAME is not set, fall back to EBAY_REDIRECT_URI for backwards compatibility
+      const ruName = Deno.env.get("EBAY_RUNAME") || Deno.env.get("EBAY_REDIRECT_URI");
+      if (!ruName) throw new Error("EBAY_RUNAME not configured");
 
       const scopes = [
         "https://api.ebay.com/oauth/api_scope",
         "https://api.ebay.com/oauth/api_scope/sell.inventory",
         "https://api.ebay.com/oauth/api_scope/sell.account",
+        "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
       ].join(" ");
 
       const authUrl =
         `${authBase}/oauth2/authorize?` +
         `client_id=${encodeURIComponent(clientId)}` +
-        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        `&redirect_uri=${encodeURIComponent(ruName)}` +
         `&response_type=code` +
         `&scope=${encodeURIComponent(scopes)}`;
+
+      console.log("get_auth_url: ruName =", ruName, "authUrl =", authUrl);
 
       return new Response(JSON.stringify({ authUrl }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -63,8 +69,11 @@ serve(async (req) => {
       const { code } = payload;
       if (!code) throw new Error("No authorization code provided");
 
-      const redirectUri = Deno.env.get("EBAY_REDIRECT_URI");
-      if (!redirectUri) throw new Error("EBAY_REDIRECT_URI not configured");
+      // For token exchange, eBay also expects the RuName (same value used in authorize URL)
+      const ruName = Deno.env.get("EBAY_RUNAME") || Deno.env.get("EBAY_REDIRECT_URI");
+      if (!ruName) throw new Error("EBAY_RUNAME not configured");
+
+      console.log("exchange_code: code =", code?.substring(0, 20) + "...", "ruName =", ruName);</old_str>
 
       const credentials = btoa(`${clientId}:${clientSecret}`);
       const resp = await fetch(tokenUrl, {
@@ -76,15 +85,15 @@ serve(async (req) => {
         body: new URLSearchParams({
           grant_type: "authorization_code",
           code,
-          redirect_uri: redirectUri,
+          redirect_uri: ruName,
         }).toString(),
       });
 
       if (!resp.ok) {
         const txt = await resp.text();
         console.error("eBay token exchange error:", resp.status, txt);
-        throw new Error(`Token exchange failed: ${resp.status}`);
-      }
+        throw new Error(`Token exchange failed: ${resp.status} - ${txt}`);
+      }</old_str>
 
       const tokenData = await resp.json();
       return new Response(

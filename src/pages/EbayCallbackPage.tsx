@@ -29,17 +29,19 @@ export default function EbayCallbackPage() {
     }
 
     // Exchange the code for a user token via our Edge Function
+    console.log("EbayCallbackPage: exchanging code", code?.substring(0, 20) + "...");
     supabase.functions
       .invoke("ebay-publish", {
         body: { action: "exchange_code", code },
       })
       .then(({ data, error: fnError }) => {
+        console.log("EbayCallbackPage: exchange response", { data, fnError });
         if (fnError || data?.error) {
           throw new Error(fnError?.message || data?.error || "Token exchange failed");
         }
 
         const token = data?.access_token;
-        if (!token) throw new Error("No access token returned");
+        if (!token) throw new Error("No access token returned from eBay");
 
         // Store token in localStorage (same key used by DashboardPage & AnalyzePage)
         localStorage.setItem(EBAY_TOKEN_KEY, token);
