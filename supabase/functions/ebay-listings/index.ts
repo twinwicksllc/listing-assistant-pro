@@ -2,8 +2,10 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-supabase-auth-token",
+  "Access-Control-Max-Age": "86400",
 };
 
 serve(async (req) => {
@@ -63,7 +65,7 @@ serve(async (req) => {
         JSON.stringify({ listings: [], error: `eBay API error ${offersResp.status}: ${errText}` }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
-    }</old_str>
+    }
 
     const offersData = await offersResp.json();
     const offers = offersData.offers || [];
@@ -157,9 +159,15 @@ serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
-    console.error("ebay-listings error:", e);
+    const errorMsg = e instanceof Error ? e.message : "Unknown error";
+    console.error("ebay-listings error:", errorMsg);
+    console.error("Full error:", e);
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
+      JSON.stringify({ 
+        listings: [], 
+        error: `Server error: ${errorMsg}`,
+        debug: process.env.NODE_ENV !== "production" ? String(e) : undefined
+      }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
