@@ -1,9 +1,10 @@
 import { supabase } from "@/integrations/supabase/client";
 
-// Max dimension for stored images - 1200px is plenty for listing thumbnails
-// and keeps file sizes well under 500KB
-const STORAGE_MAX_SIZE = 1200;
-const STORAGE_JPEG_QUALITY = 0.82;
+// eBay recommends 1600px on the longest side to enable their zoom feature.
+// Below 800px disables zoom entirely; 1600px is the sweet spot for quality + file size.
+// Target file size: ~300-600KB which is well within eBay's 12MB limit.
+const STORAGE_MAX_SIZE = 1600;
+const STORAGE_JPEG_QUALITY = 0.85;
 
 /**
  * Resizes and compresses a base64 data URL image using Canvas before upload.
