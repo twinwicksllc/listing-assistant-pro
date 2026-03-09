@@ -8,7 +8,7 @@ export default function BottomNav() {
   const { isOwner } = useAuth();
 
   const tabs = [
-    { path: "/", icon: Camera, label: "Capture", show: true, tourId: undefined },
+    { path: "/home", icon: Camera, label: "Capture", show: true, tourId: undefined },
     { path: "/drafts", icon: FileText, label: "Drafts", show: true, tourId: "analyze-tab" },
     { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard", show: isOwner, tourId: undefined },
     { path: "/team", icon: Users, label: "Team", show: true, tourId: undefined },
