@@ -1,73 +1,140 @@
-# Welcome to your Lovable project
+# Teckstart Listing Assistant
 
-## Project info
+An AI-powered Progressive Web App (PWA) for creating optimized eBay listings for coins, bullion, and collectibles.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Live Demo
 
-## How can I edit this code?
+**URL**: https://lister.teckstart.com
 
-There are several ways of editing your application.
+## Features
 
-**Use Lovable**
+- **AI-Powered Analysis**: Upload photos and get AI-generated titles, descriptions, eBay category IDs, and item specifics
+- **Smart Pricing**: Automatic price range estimation based on recent sold eBay listings
+- **Melt Value Protection**: For precious metals (gold, silver, platinum), enforces pricing below intrinsic melt value
+- **Live Spot Prices**: Real-time metal spot prices cached every 15 minutes across all users
+- **Draft Management**: Save and manage listing drafts
+- **PWA Support**: Install as a mobile app for offline capability
+- **Multi-Image Upload**: Analyze multiple photos of the same item from different angles
+- **Voice Notes**: Add voice context for AI to consider when generating listings
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## Tech Stack
 
-Changes made via Lovable will be committed automatically to this repo.
+- **Frontend**: React 18 with TypeScript
+- **Build Tool**: Vite
+- **Styling**: Tailwind CSS + shadcn/ui components
+- **Routing**: React Router v6
+- **Auth**: Supabase Auth (Google OAuth + Email)
+- **Backend**: Supabase Edge Functions (Deno)
+- **AI**: Google Gemini API
+- **Database**: Supabase PostgreSQL
+- **PWA**: vite-plugin-pwa with Workbox
 
-**Use your preferred IDE**
+## Getting Started Locally
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Prerequisites
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+- Node.js 18+ and npm
+- A Supabase project with Google OAuth configured
+- Google Gemini API key
 
-Follow these steps:
+### Installation
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+```bash
+# Clone the repository
+git clone https://github.com/twinwicksllc/listing-assistant-pro.git
+cd listing-assistant-pro
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# Install dependencies
+npm install
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Copy environment file and fill in your values
+cp .env.example .env.local
+```
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+### Environment Variables
+
+Create a `.env.local` file with the following:
+
+```env
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_PUBLISHABLE_KEY=your_supabase_anon_key
+```
+
+### Running the Development Server
+
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+The app will be available at `http://localhost:8080`
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Deployment
 
-**Use GitHub Codespaces**
+### Vercel
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+1. Connect your GitHub repository to Vercel
+2. Set the environment variables in Vercel dashboard
+3. Deploy — Vercel automatically builds on push to `main`
 
-## What technologies are used for this project?
+### Custom Domain
 
-This project is built with:
+The app is configured for `lister.teckstart.com`. To use a custom domain:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+1. Update the `start_url` in `vite.config.ts` PWA manifest
+2. Configure your domain in Vercel settings
+3. Update redirect URIs in Google Cloud Console if using OAuth
 
-## How can I deploy this project?
+## Edge Functions
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+The app uses several Supabase Edge Functions:
 
-## Can I connect a custom domain to my Lovable project?
+- `analyze-item`: Processes images with Gemini AI to generate listing data
+- `ebay-pricing`: Fetches recent sold listings for price comparison
+- `spot-prices`: Fetches and caches live metal spot prices
+- `ebay-publish`: Publishes listings directly to eBay
 
-Yes, you can!
+## Database Schema
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+Key tables:
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- `drafts`: Saved listing drafts
+- `usage_tracking`: Usage analytics and limits
+- `spot_price_cache`: Shared 15-minute cache for metal prices
+- `organizations`: Team/organization management
+- `organization_members`: Team members
+
+## Architecture
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   React PWA     │────▶│  Supabase Auth   │────▶│  Google OAuth   │
+│   (Frontend)    │     │                  │     │                 │
+└────────┬────────┘     └──────────────────┘     └─────────────────┘
+         │
+         ├───────────────┬──────────────┬───────────────┐
+         │               │              │               │
+         ▼               ▼              ▼               ▼
+┌────────────────┐ ┌─────────────┐ ┌────────────┐ ┌─────────────┐
+│  Auth Context  │ │  Drafts     │ │  AI API    │ │  eBay API   │
+└────────────────┘ └─────────────┘ └────────────┘ └─────────────┘
+         │               │              │               │
+         └───────────────┴──────────────┴───────────────┘
+                                 │
+                                 ▼
+                       ┌──────────────────┐
+                       │   Supabase DB    │
+                       │   (PostgreSQL)   │
+                       └──────────────────┘
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m 'feat: add amazing feature'`
+4. Push to the branch: `git push origin feature/amazing-feature`
+5. Open a pull request
+
+## License
+
+This project is proprietary software owned by Teckstart.
