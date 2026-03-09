@@ -4,7 +4,7 @@ import path from "path";
 
 import { VitePWA } from "vite-plugin-pwa";
 
-// https://vitejs.dev/config/
+// https://vitejs.dev/config
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
@@ -17,11 +17,30 @@ export default defineConfig(({ mode }) => ({
     react(),
     
     VitePWA({
-      registerType: "autoUpdate",
-      includeAssets: ["favicon.ico", "pwa-icon-192.png", "pwa-icon-512.png"],
+      registerType: 'autoUpdate',
+      includeAssets: ['favicon.ico', 'pwa-icon-192.png', 'pwa-icon-512.png'],
       workbox: {
+        // Immediately activate new service worker versions
+        skipWaiting: true,
+        // Don't cache auth-related routes
         navigateFallbackDenylist: [/^\/~oauth/, /^\/auth\//],
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // Force service worker to check for updates frequently
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/.*/,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'offline-cache',
+              expiration: {
+                maxEntries: 200,
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
+        ],
       },
       manifest: {
         name: "Teckstart Listing Assistant",

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, AlertTriangle } from "lucide-react";
+import { Loader2, AlertTriangle, RefreshCw } from "lucide-react";
 import teckstartLogo from "@/assets/teckstart-logo.png";
 
 /**
@@ -12,8 +12,7 @@ import teckstartLogo from "@/assets/teckstart-logo.png";
  *  - Email confirmation links (signUp emailRedirectTo)
  *
  * With flowType: 'pkce', the Supabase client automatically detects the
- * ?code= param in the URL and exchanges it for a session internally when
- * the client initializes.
+ * ?code= param in the URL and exchanges it for a session internally.
  */
 export default function AuthCallbackPage() {
   const navigate = useNavigate();
@@ -23,6 +22,11 @@ export default function AuthCallbackPage() {
   const [retried, setRetried] = useState(false);
 
   useEffect(() => {
+    // Force service worker update check on auth callback
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
+    }
+
     const code = searchParams.get("code");
     const errorParam = searchParams.get("error");
     const errorDescription = searchParams.get("error_description");
@@ -63,7 +67,7 @@ export default function AuthCallbackPage() {
         // PKCE exchange failed - the code verifier wasn't found
         if (code && !retried) {
           console.warn("PKCE exchange failed, code verifier may not be in storage");
-          setError("Authentication failed. The login session may have expired. Please try again.");
+          setError("Authentication failed. The cached app version may be outdated. Please clear your browser cache and try again.");
           setRetried(true);
         }
         return;
@@ -82,6 +86,11 @@ export default function AuthCallbackPage() {
     };
   }, [navigate, searchParams, retried]);
 
+  const handleForceReload = () => {
+    // Reload without cache
+    window.location.href = window.location.href + (window.location.href.includes('?') ? '&' : '?') + 't=' + Date.now();
+  };
+
   if (error) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
@@ -92,12 +101,21 @@ export default function AuthCallbackPage() {
             <span className="font-medium">Authentication Error</span>
           </div>
           <p className="text-sm text-muted-foreground">{error}</p>
-          <button
-            onClick={() => navigate("/login")}
-            className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90"
-          >
-            Back to Login
-          </button>
+          <div className="flex flex-col gap-2 mt-4">
+            <button
+              onClick={() => navigate("/login")}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90"
+            >
+              Back to Login
+            </button>
+            <button
+              onClick={handleForceReload}
+              className="flex items-center justify-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-secondary"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Force Reload Without Cache
+            </button>
+          </div>
         </div>
       </div>
     );
