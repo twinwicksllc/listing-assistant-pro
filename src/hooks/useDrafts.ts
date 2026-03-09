@@ -3,6 +3,7 @@ import { ListingDraft } from "@/types/listing";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { uploadListingImage } from "@/lib/imageUpload";
 
 export function useDrafts() {
   const { user, org } = useAuth();
@@ -61,11 +62,18 @@ export function useDrafts() {
     // Passing a null org_id when org is still loading can cause FK errors
     const orgId = (!org.loading && org.orgId) ? org.orgId : undefined;
 
+    // Upload image to Supabase Storage if it's a base64 data URL
+    // This avoids hitting Supabase's 1MB REST API request size limit
+    let imageUrl = draft.imageUrl;
+    if (draft.imageUrl?.startsWith("data:")) {
+      imageUrl = await uploadListingImage(draft.imageUrl, user.id);
+    }
+
     const { error } = await supabase.from("drafts").insert({
       id: draft.id,
       user_id: user.id,
       ...(orgId ? { org_id: orgId } : {}),
-      image_url: draft.imageUrl,
+      image_url: imageUrl,
       title: draft.title,
       description: draft.description,
       price_min: draft.priceMin,
@@ -80,7 +88,8 @@ export function useDrafts() {
       console.error("Error adding draft:", error);
       toast.error("Failed to save draft");
     } else {
-      setDrafts((prev) => [draft, ...prev]);
+      // Update local state with the uploaded image URL
+      setDrafts((prev) => [{ ...draft, imageUrl }, ...prev]);
     }
   };
 
