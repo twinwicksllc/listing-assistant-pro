@@ -43,13 +43,21 @@ export default function DashboardPage() {
         body: { userToken: token },
       });
 
-      if (fnError) throw new Error(fnError.message);
-      if (data?.needsAuth) {
+      // If the function errors or returns needsAuth, show the connect button
+      if (fnError || data?.needsAuth) {
+        // Clear the invalid token so we don't keep trying with it
+        localStorage.removeItem(EBAY_TOKEN_KEY);
         setNeedsAuth(true);
         setListings([]);
         return;
       }
-      if (data?.error) throw new Error(data.error);
+      if (data?.error) {
+        // Clear invalid token on API error too
+        localStorage.removeItem(EBAY_TOKEN_KEY);
+        setNeedsAuth(true);
+        setListings([]);
+        return;
+      }
 
       setListings(data.listings || []);
       setNeedsAuth(false);
