@@ -17,10 +17,15 @@ export function useDrafts() {
     }
 
     setLoading(true);
-    const { data, error } = await supabase
+    
+    // Filter by user_id - this ensures we only get the user's own drafts
+    const query = supabase
       .from("drafts")
       .select("*")
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false });
+
+    const { data, error } = await query;
 
     if (error) {
       console.error("Error fetching drafts:", error);
