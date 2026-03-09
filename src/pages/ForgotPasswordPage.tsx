@@ -14,7 +14,7 @@ export default function ForgotPasswordPage() {
     e.preventDefault();
     setLoading(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: "https://lister.teckstart.com/reset-password",
+      redirectTo: `${window.location.origin}/reset-password`,
     });
     setLoading(false);
 
