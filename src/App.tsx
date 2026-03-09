@@ -13,6 +13,7 @@ import LandingPage from "./pages/LandingPage";
 import AnalyzePage from "./pages/AnalyzePage";
 import DraftsPage from "./pages/DraftsPage";
 import DashboardPage from "./pages/DashboardPage";
+import SettingsPage from "./pages/SettingsPage";
 import BillingPage from "./pages/BillingPage";
 import TeamPage from "./pages/TeamPage";
 import LoginPage from "./pages/LoginPage";
@@ -71,6 +72,7 @@ const App = () => (
               <Route path="/analyze" element={<ProtectedRoute><AnalyzePage /></ProtectedRoute>} />
               <Route path="/drafts" element={<ProtectedRoute><DraftsPage /></ProtectedRoute>} />
               <Route path="/dashboard" element={<ProtectedRoute ownerOnly><DashboardPage /></ProtectedRoute>} />
+              <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
               <Route path="/billing" element={<ProtectedRoute ownerOnly><BillingPage /></ProtectedRoute>} />
               <Route path="/team" element={<ProtectedRoute><TeamPage /></ProtectedRoute>} />
               <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />

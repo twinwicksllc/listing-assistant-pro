@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { LayoutDashboard, Eye, DollarSign, Package, RefreshCw, ExternalLink, AlertCircle, Loader2 } from "lucide-react";
+import { LayoutDashboard, Eye, DollarSign, Package, RefreshCw, ExternalLink, AlertCircle, Loader2, Settings, X } from "lucide-react";
 import { useDrafts } from "@/hooks/useDrafts";
+import { useNavigate } from "react-router-dom";
 import BottomNav from "@/components/BottomNav";
 import { supabase } from "@/integrations/supabase/client";
 import teckstartLogo from "@/assets/teckstart-logo.png";
@@ -23,12 +24,13 @@ const EBAY_TOKEN_KEY = "ebay-user-token";
 
 export default function DashboardPage() {
   const { drafts } = useDrafts();
+  const navigate = useNavigate();
   const [listings, setListings] = useState<EbayListing[]>([]);
   const [loading, setLoading] = useState(false);
   const [needsAuth, setNeedsAuth] = useState(false);
   const [error, setError] = useState("");
-  const [connectingEbay, setConnectingEbay] = useState(false);
   const [ebayAccount, setEbayAccount] = useState<{ username: string; businessName: string } | null>(null);
+  const [setupDismissed, setSetupDismissed] = useState(false);
 
   const fetchListings = useCallback(async () => {
     const token = localStorage.getItem(EBAY_TOKEN_KEY);
@@ -91,29 +93,6 @@ export default function DashboardPage() {
     }
   }, []);
 
-  const handleConnectEbay = useCallback(async () => {
-    setConnectingEbay(true);
-    try {
-      const { data, error: fnError } = await supabase.functions.invoke("ebay-publish", {
-        body: { action: "get_auth_url" },
-      });
-
-      if (fnError || data?.error) {
-        throw new Error(fnError?.message || data?.error || "Failed to get eBay auth URL");
-      }
-
-      const authUrl = data?.authUrl;
-      if (!authUrl) throw new Error("No auth URL returned");
-
-      // Open eBay OAuth consent page in the same tab so the callback works
-      window.location.href = authUrl;
-    } catch (err: any) {
-      console.error("eBay connect error:", err);
-      toast.error(err.message || "Failed to start eBay connection");
-      setConnectingEbay(false);
-    }
-  }, []);
-
   useEffect(() => {
     fetchListings();
   }, [fetchListings]);
@@ -154,6 +133,32 @@ export default function DashboardPage() {
       </header>
 
       <div className="px-5 md:px-8 lg:px-12 max-w-3xl mx-auto space-y-6">
+        {/* Setup Progress Widget */}
+        {needsAuth && !setupDismissed && (
+          <div className="bg-accent/50 border border-accent rounded-xl p-4 flex items-start justify-between gap-4">
+            <div className="flex-1 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Setup: Connect eBay</p>
+                <p className="text-xs text-muted-foreground">
+                  Step 1 of 1 — <button
+                    onClick={() => navigate("/settings?tab=integrations")}
+                    className="text-primary font-medium hover:underline"
+                  >
+                    Go to Settings
+                  </button>
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setSetupDismissed(true)}
+              className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {/* Summary Cards */}
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-card border border-border rounded-xl p-4 space-y-1">
@@ -204,30 +209,20 @@ export default function DashboardPage() {
 
         {/* Auth warning / Connect eBay CTA */}
         {needsAuth && (
-          <div className="bg-accent/50 border border-accent rounded-xl p-4 space-y-3">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-foreground">Connect your eBay account</p>
-                <p className="text-xs text-muted-foreground">
-                  Authorize with eBay to see your active listings and traffic data.
-                </p>
-              </div>
+          <div className="bg-accent/50 border border-accent rounded-xl p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-foreground">eBay not connected</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Connect your eBay account in Settings to see your listings and traffic data.
+              </p>
+              <button
+                onClick={() => navigate("/settings?tab=integrations")}
+                className="mt-2 text-xs font-medium text-primary hover:underline"
+              >
+                Go to Integrations →
+              </button>
             </div>
-            <button
-              onClick={handleConnectEbay}
-              disabled={connectingEbay}
-              className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {connectingEbay ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Connecting…
-                </>
-              ) : (
-                "Connect eBay Account"
-              )}
-            </button>
           </div>
         )}
 
@@ -240,7 +235,18 @@ export default function DashboardPage() {
 
         {/* Active Listings Table */}
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-foreground">eBay Listings</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-foreground">eBay Listings</h2>
+            {needsAuth && (
+              <button
+                onClick={() => navigate("/settings?tab=integrations")}
+                className="px-2.5 py-0.5 rounded-full bg-destructive/20 text-destructive text-xs font-medium hover:bg-destructive/30 transition-colors flex items-center gap-1"
+              >
+                <span className="inline-block w-1.5 h-1.5 bg-destructive rounded-full" />
+                Disconnected
+              </button>
+            )}
+          </div>
 
           {loading && listings.length === 0 ? (
             <div className="text-center py-12">
