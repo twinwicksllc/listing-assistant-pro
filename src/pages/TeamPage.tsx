@@ -67,11 +67,22 @@ export default function TeamPage() {
 
       const profileMap = new Map(profileData?.map((p) => [p.id, p]) || []);
 
+      // For the current user, use their auth email as fallback display name
       setMembers(
-        memberData.map((m) => ({
-          ...m,
-          profile: profileMap.get(m.user_id) || null,
-        }))
+        memberData.map((m) => {
+          const profile = profileMap.get(m.user_id) || null;
+          // If this is the current user and display_name is null, use email prefix
+          const fallbackName = m.user_id === user?.id
+            ? (user.email ? user.email.split("@")[0] : null)
+            : null;
+          return {
+            ...m,
+            profile: profile
+              ? { ...profile, display_name: profile.display_name || fallbackName }
+              : { display_name: fallbackName, avatar_url: null },
+            email: m.user_id === user?.id ? user.email : undefined,
+          };
+        })
       );
     }
 
@@ -254,11 +265,11 @@ export default function TeamPage() {
               {members.map((member) => (
                 <div key={member.id} className="bg-card border border-border rounded-xl p-3 flex items-center gap-3">
                   <div className="w-9 h-9 rounded-full bg-secondary flex items-center justify-center text-xs font-bold text-muted-foreground">
-                    {(member.profile?.display_name || "?")[0].toUpperCase()}
+                    {(member.profile?.display_name || member.email || "?")[0].toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-foreground truncate">
-                      {member.profile?.display_name || "Unknown"}
+                      {member.profile?.display_name || member.email || "Unknown"}
                     </p>
                     <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
                       member.role === "owner" ? "bg-primary/10 text-primary" : "bg-secondary text-muted-foreground"
