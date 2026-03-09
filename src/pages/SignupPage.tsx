@@ -25,7 +25,7 @@ export default function SignupPage() {
       password,
       options: {
         data: { display_name: displayName },
-        emailRedirectTo: "https://lister.teckstart.com/auth/callback",
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
     setLoading(false);
@@ -138,7 +138,7 @@ export default function SignupPage() {
             const { error } = await supabase.auth.signInWithOAuth({
               provider: "google",
               options: {
-                redirectTo: "https://lister.teckstart.com/auth/callback",
+                redirectTo: `${window.location.origin}/auth/callback`,
               },
             });
             if (error) toast.error(error.message);
