@@ -22,6 +22,9 @@ export const PLANS = {
   },
 } as const;
 
+// Admin emails that always get unlimited access regardless of subscription
+const ADMIN_EMAILS = ["twinwicksllc@gmail.com"];
+
 export type OrgRole = "owner" | "lister";
 
 interface SubscriptionState {
@@ -207,8 +210,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [session, refreshSubscription]);
 
-  const isPro = subscription.subscribed && subscription.productId === PLANS.pro.productId;
-  const isUnlimited = subscription.subscribed && subscription.productId === PLANS.unlimited.productId;
+  const isAdmin = ADMIN_EMAILS.includes(session?.user?.email ?? "");
+  const isPro = !isAdmin && subscription.subscribed && subscription.productId === PLANS.pro.productId;
+  const isUnlimited = isAdmin || (subscription.subscribed && subscription.productId === PLANS.unlimited.productId);
   const isPaid = isPro || isUnlimited;
   const currentPlanLimits = isUnlimited
     ? { analysisLimit: Infinity, publishLimit: Infinity }

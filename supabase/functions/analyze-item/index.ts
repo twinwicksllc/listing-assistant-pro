@@ -47,10 +47,14 @@ serve(async (req) => {
       });
     }
 
-    // Check subscription status via Stripe to determine tier
-    let tier: "starter" | "pro" | "unlimited" = "starter";
+    // Admin emails always get unlimited access
+    const ADMIN_EMAILS = ["twinwicksllc@gmail.com"];
+    const isAdmin = userEmail ? ADMIN_EMAILS.includes(userEmail) : false;
+
+    // Check subscription status via Stripe to determine tier (skip for admins)
+    let tier: "starter" | "pro" | "unlimited" = isAdmin ? "unlimited" : "starter";
     const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
-    if (STRIPE_SECRET_KEY && userEmail) {
+    if (!isAdmin && STRIPE_SECRET_KEY && userEmail) {
       try {
         const { default: Stripe } = await import("https://esm.sh/stripe@18.5.0");
         const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2025-08-27.basil" });
