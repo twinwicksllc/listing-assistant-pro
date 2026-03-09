@@ -52,10 +52,14 @@ export function useDrafts() {
   const addDraft = async (draft: ListingDraft) => {
     if (!user) return;
 
+    // Only include org_id if org has fully loaded and has a valid ID
+    // Passing a null org_id when org is still loading can cause FK errors
+    const orgId = (!org.loading && org.orgId) ? org.orgId : undefined;
+
     const { error } = await supabase.from("drafts").insert({
       id: draft.id,
       user_id: user.id,
-      org_id: org.orgId || null,
+      ...(orgId ? { org_id: orgId } : {}),
       image_url: draft.imageUrl,
       title: draft.title,
       description: draft.description,
