@@ -28,16 +28,24 @@ export default function DashboardPage() {
   const [needsAuth, setNeedsAuth] = useState(false);
   const [error, setError] = useState("");
   const [connectingEbay, setConnectingEbay] = useState(false);
+  const [ebayAccount, setEbayAccount] = useState<{ username: string; businessName: string } | null>(null);
 
   const fetchListings = useCallback(async () => {
     const token = localStorage.getItem(EBAY_TOKEN_KEY);
     if (!token) {
       setNeedsAuth(true);
+      setEbayAccount(null);
       return;
     }
 
     setLoading(true);
     setError("");
+
+    // Fetch user info in parallel with listings
+    const userPromise = supabase.functions.invoke("ebay-user", {
+      body: { userToken: token },
+    });
+
     try {
       const { data, error: fnError } = await supabase.functions.invoke("ebay-listings", {
         body: { userToken: token },
@@ -49,6 +57,7 @@ export default function DashboardPage() {
         localStorage.removeItem(EBAY_TOKEN_KEY);
         setNeedsAuth(true);
         setListings([]);
+        setEbayAccount(null);
         return;
       }
       if (data?.error) {
@@ -58,12 +67,22 @@ export default function DashboardPage() {
         localStorage.removeItem(EBAY_TOKEN_KEY);
         setNeedsAuth(true);
         setListings([]);
+        setEbayAccount(null);
         toast.error(`eBay error: ${data.error}`);
         return;
       }
 
       setListings(data.listings || []);
       setNeedsAuth(false);
+
+      // Get user info
+      const { data: userData } = await userPromise;
+      if (userData?.username) {
+        setEbayAccount({ 
+          username: userData.username, 
+          businessName: userData.businessName || "" 
+        });
+      }
     } catch (err: any) {
       console.error("Dashboard fetch error:", err);
       setError(err.message || "Failed to load listings");
@@ -115,7 +134,13 @@ export default function DashboardPage() {
             <img src={teckstartLogo} alt="Teckstart" className="h-12 w-auto" />
             <div>
               <h1 className="text-lg font-bold text-foreground">Dashboard</h1>
-              <p className="text-xs text-muted-foreground">eBay performance overview</p>
+              {ebayAccount ? (
+                <p className="text-xs text-muted-foreground">
+                  Connected as <span className="font-medium text-foreground">{ebayAccount.businessName || ebayAccount.username}</span>
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">eBay performance overview</p>
+              )}
             </div>
           </div>
           <button
