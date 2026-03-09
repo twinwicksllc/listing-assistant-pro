@@ -24,6 +24,7 @@ import AdminPage from "./pages/AdminPage";
 import TermsPage from "./pages/TermsPage";
 import PrivacyPage from "./pages/PrivacyPage";
 import AuthCallbackPage from "./pages/AuthCallbackPage";
+import EbayCallbackPage from "./pages/EbayCallbackPage";
 import CookieConsent from "./components/CookieConsent";
 import { Loader2 } from "lucide-react";
 
@@ -63,6 +64,7 @@ const App = () => (
               <Route path="/terms" element={<TermsPage />} />
               <Route path="/privacy" element={<PrivacyPage />} />
               <Route path="/auth/callback" element={<AuthCallbackPage />} />
+              <Route path="/ebay/callback" element={<EbayCallbackPage />} />
 
               {/* Protected routes */}
               <Route path="/home" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
