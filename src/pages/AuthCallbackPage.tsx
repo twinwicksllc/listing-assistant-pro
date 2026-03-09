@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
@@ -11,40 +11,56 @@ import teckstartLogo from "@/assets/teckstart-logo.png";
  *  - Google OAuth (signInWithOAuth redirectTo)
  *  - Email confirmation links (signUp emailRedirectTo)
  *
- * Supabase automatically parses the #access_token / ?code fragment from
- * the URL and establishes the session via onAuthStateChange. We just need
- * to wait for that event and then push the user to the home page.
+ * With flowType: 'pkce', the Supabase client automatically detects the
+ * ?code= param in the URL and exchanges it for a session internally when
+ * the client initializes. We must NOT call exchangeCodeForSession() manually
+ * as that consumes the code and causes a "PKCE code verifier not found" error.
+ *
+ * Instead, we simply listen for onAuthStateChange and redirect accordingly.
  */
 export default function AuthCallbackPage() {
   const navigate = useNavigate();
+  const handled = useRef(false);
 
   useEffect(() => {
-    // exchangeCodeForSession handles the PKCE code flow (OAuth)
-    const { searchParams } = new URL(window.location.href);
-    const code = searchParams.get("code");
+    // Set a timeout fallback in case the auth state change never fires
+    const timeout = setTimeout(() => {
+      if (!handled.current) {
+        console.warn("Auth callback timeout — redirecting to login");
+        navigate("/login");
+      }
+    }, 10000);
 
-    if (code) {
-      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
-        if (error) {
-          console.error("Auth callback error:", error.message);
-          navigate("/login?error=auth_callback_failed");
-        } else {
-          navigate("/");
-        }
-      });
-      return;
-    }
-
-    // Fallback: listen for the session to be set from the URL hash (implicit flow)
+    // With flowType: 'pkce', Supabase client auto-exchanges the ?code= param.
+    // Just listen for the resulting auth state change.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (handled.current) return;
+
       if (event === "SIGNED_IN" && session) {
+        handled.current = true;
+        clearTimeout(timeout);
         navigate("/");
       } else if (event === "PASSWORD_RECOVERY") {
+        handled.current = true;
+        clearTimeout(timeout);
         navigate("/reset-password");
       }
     });
 
-    return () => subscription.unsubscribe();
+    // Also check if a session already exists (in case the event fired before
+    // the listener was registered)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session && !handled.current) {
+        handled.current = true;
+        clearTimeout(timeout);
+        navigate("/");
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, [navigate]);
 
   return (
