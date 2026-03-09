@@ -91,8 +91,8 @@ export default function AnalyzePage() {
     }
   };
 
-  const handleSave = () => {
-    addDraft({
+  const handleSave = async () => {
+    const success = await addDraft({
       id: crypto.randomUUID(),
       imageUrl: imageUrls[0],
       title,
@@ -105,8 +105,10 @@ export default function AnalyzePage() {
       condition,
       consignor,
     });
-    toast.success("Draft saved!");
-    navigate("/drafts");
+    if (success) {
+      toast.success("Draft saved!");
+      navigate("/drafts");
+    }
   };
 
   const handlePublish = async () => {
