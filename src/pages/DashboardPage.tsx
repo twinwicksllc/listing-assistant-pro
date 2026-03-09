@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
-import { LayoutDashboard, Eye, DollarSign, Package, RefreshCw, ExternalLink, AlertCircle } from "lucide-react";
+import { LayoutDashboard, Eye, DollarSign, Package, RefreshCw, ExternalLink, AlertCircle, Loader2 } from "lucide-react";
 import { useDrafts } from "@/hooks/useDrafts";
 import BottomNav from "@/components/BottomNav";
 import { supabase } from "@/integrations/supabase/client";
 import teckstartLogo from "@/assets/teckstart-logo.png";
+import { toast } from "sonner";
 
 interface EbayListing {
   offerId: string;
@@ -26,6 +27,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [needsAuth, setNeedsAuth] = useState(false);
   const [error, setError] = useState("");
+  const [connectingEbay, setConnectingEbay] = useState(false);
 
   const fetchListings = useCallback(async () => {
     const token = localStorage.getItem(EBAY_TOKEN_KEY);
@@ -56,6 +58,29 @@ export default function DashboardPage() {
       setError(err.message || "Failed to load listings");
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const handleConnectEbay = useCallback(async () => {
+    setConnectingEbay(true);
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke("ebay-publish", {
+        body: { action: "get_auth_url" },
+      });
+
+      if (fnError || data?.error) {
+        throw new Error(fnError?.message || data?.error || "Failed to get eBay auth URL");
+      }
+
+      const authUrl = data?.authUrl;
+      if (!authUrl) throw new Error("No auth URL returned");
+
+      // Open eBay OAuth consent page in the same tab so the callback works
+      window.location.href = authUrl;
+    } catch (err: any) {
+      console.error("eBay connect error:", err);
+      toast.error(err.message || "Failed to start eBay connection");
+      setConnectingEbay(false);
     }
   }, []);
 
@@ -141,16 +166,32 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Auth warning */}
+        {/* Auth warning / Connect eBay CTA */}
         {needsAuth && (
-          <div className="bg-accent/50 border border-accent rounded-xl p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-foreground">Connect your eBay account</p>
-              <p className="text-xs text-muted-foreground">
-                Authorize with eBay to see your active listings and traffic data. Use the Publish flow on any draft to connect.
-              </p>
+          <div className="bg-accent/50 border border-accent rounded-xl p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Connect your eBay account</p>
+                <p className="text-xs text-muted-foreground">
+                  Authorize with eBay to see your active listings and traffic data.
+                </p>
+              </div>
             </div>
+            <button
+              onClick={handleConnectEbay}
+              disabled={connectingEbay}
+              className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {connectingEbay ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Connecting…
+                </>
+              ) : (
+                "Connect eBay Account"
+              )}
+            </button>
           </div>
         )}
 
