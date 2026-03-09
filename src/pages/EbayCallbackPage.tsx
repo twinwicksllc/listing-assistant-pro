@@ -35,13 +35,46 @@ export default function EbayCallbackPage() {
         body: { action: "exchange_code", code },
       })
       .then(({ data, error: fnError }) => {
-        console.log("EbayCallbackPage: exchange response", { data, fnError });
-        if (fnError || data?.error) {
-          throw new Error(fnError?.message || data?.error || "Token exchange failed");
+        console.log("EbayCallbackPage: exchange response status", { 
+          hasData: !!data, 
+          hasError: !!fnError,
+          dataStatus: data?.status 
+        });
+        
+        if (fnError) {
+          console.error("EbayCallbackPage: function error:", fnError);
+          const msg = fnError.message || "Failed to connect eBay account";
+          setStatus("error");
+          setMessage(msg);
+          return;
+        }
+
+        // Check if the response contains an error (either at top level or in data)
+        if (data?.error) {
+          console.error("EbayCallbackPage: API error:", data.error);
+          
+          // Provide specific guidance based on error type
+          let userMessage = data.error;
+          if (data.error.includes("not configured")) {
+            userMessage = "eBay integration is not properly configured. Please contact support.";
+          } else if (data.error.includes("expired")) {
+            userMessage = "Your authorization code has expired. Please try connecting again.";
+          } else if (data.error.includes("invalid")) {
+            userMessage = "Invalid authorization code. Please try connecting again.";
+          }
+          
+          setStatus("error");
+          setMessage(userMessage);
+          return;
         }
 
         const token = data?.access_token;
-        if (!token) throw new Error("No access token returned from eBay");
+        if (!token) {
+          console.error("EbayCallbackPage: no access_token in response:", data);
+          setStatus("error");
+          setMessage("eBay did not return an access token. Please try connecting again.");
+          return;
+        }
 
         // Store token in localStorage (same key used by DashboardPage & AnalyzePage)
         localStorage.setItem(EBAY_TOKEN_KEY, token);
@@ -55,6 +88,7 @@ export default function EbayCallbackPage() {
           localStorage.setItem("ebay-token-expires-at", String(expiresAt));
         }
 
+        console.log("EbayCallbackPage: success - token saved");
         setStatus("success");
         setMessage("eBay account connected successfully!");
 
@@ -62,9 +96,10 @@ export default function EbayCallbackPage() {
         setTimeout(() => navigate("/dashboard", { replace: true }), 1800);
       })
       .catch((err: any) => {
-        console.error("eBay callback error:", err);
+        console.error("EbayCallbackPage: catch error:", err);
         setStatus("error");
-        setMessage(err.message || "Failed to connect eBay account.");
+        const msg = err?.message || "Failed to connect eBay account. Please try again.";
+        setMessage(msg);
       });
   }, [navigate]);
 
