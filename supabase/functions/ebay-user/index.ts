@@ -36,6 +36,7 @@ serve(async (req) => {
         headers: {
           Authorization: `Bearer ${userToken}`,
           "Content-Type": "application/json",
+          "Accept-Language": "en-US",
         },
       }
     );

@@ -33,14 +33,15 @@ serve(async (req) => {
     console.log("ebay-listings: calling", `${apiBase}/sell/inventory/v1/offer?limit=100`);
 
     // Fetch active listings via Sell > Inventory API (offers)
+    const ebayHeaders = {
+      Authorization: `Bearer ${userToken}`,
+      "Content-Type": "application/json",
+      "Accept-Language": "en-US",
+    };
+
     const offersResp = await fetch(
       `${apiBase}/sell/inventory/v1/offer?limit=100`,
-      {
-        headers: {
-          Authorization: `Bearer ${userToken}`,
-          "Content-Type": "application/json",
-        },
-      }
+      { headers: ebayHeaders }
     );
 
     if (offersResp.status === 401) {
@@ -77,12 +78,7 @@ serve(async (req) => {
         try {
           const itemResp = await fetch(
             `${apiBase}/sell/inventory/v1/inventory_item/${offer.sku}`,
-            {
-              headers: {
-                Authorization: `Bearer ${userToken}`,
-                "Content-Type": "application/json",
-              },
-            }
+            { headers: ebayHeaders }
           );
           if (itemResp.ok) {
             const itemData = await itemResp.json();
@@ -116,12 +112,7 @@ serve(async (req) => {
       const dateRange = `${thirtyDaysAgo.toISOString().split("T")[0]}..${today.toISOString().split("T")[0]}`;
       const trafficResp = await fetch(
         `${apiBase}/sell/analytics/v1/traffic_report?dimension=LISTING&filter=date_range:[${dateRange}]&metric=LISTING_VIEWS_TOTAL`,
-        {
-          headers: {
-            Authorization: `Bearer ${userToken}`,
-            "Content-Type": "application/json",
-          },
-        }
+        { headers: ebayHeaders }
       );
 
       if (trafficResp.ok) {
