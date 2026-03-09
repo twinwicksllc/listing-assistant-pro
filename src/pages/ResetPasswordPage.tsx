@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -10,44 +10,59 @@ export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [isRecovery, setIsRecovery] = useState(false);
-  const [exchanging, setExchanging] = useState(false);
+  const [waiting, setWaiting] = useState(true);
+  const handled = useRef(false);
 
   useEffect(() => {
-    // --- PKCE flow: Supabase sends ?code=XXXX when redirectTo is a custom domain ---
-    // This is the case when using redirectTo: 'https://lister.teckstart.com/reset-password'
-    const { searchParams } = new URL(window.location.href);
-    const code = searchParams.get("code");
+    // With flowType: 'pkce', the Supabase client automatically exchanges the
+    // ?code= param when it initializes. Do NOT call exchangeCodeForSession()
+    // manually — it will fail with "PKCE code verifier not found".
+    //
+    // Instead, listen for the PASSWORD_RECOVERY event which fires automatically
+    // after the client completes the PKCE exchange.
 
-    if (code) {
-      setExchanging(true);
-      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
-        setExchanging(false);
-        if (error) {
-          console.error("Reset code exchange error:", error.message);
-          toast.error("Reset link is invalid or has expired. Please request a new one.");
-          navigate("/forgot-password");
-        } else {
-          // Session is now set — the PASSWORD_RECOVERY event will fire below
-          setIsRecovery(true);
-        }
-      });
-      return;
-    }
+    const timeout = setTimeout(() => {
+      if (!handled.current) {
+        setWaiting(false); // Show "invalid link" UI after 10s with no event
+      }
+    }, 10000);
 
-    // --- Legacy implicit flow: hash contains #type=recovery&access_token=... ---
-    const hash = window.location.hash;
-    if (hash.includes("type=recovery")) {
-      setIsRecovery(true);
-    }
-
-    // Also listen for the Supabase PASSWORD_RECOVERY auth event (covers both flows)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (handled.current) return;
       if (event === "PASSWORD_RECOVERY") {
+        handled.current = true;
+        clearTimeout(timeout);
+        setWaiting(false);
+        setIsRecovery(true);
+      } else if (event === "SIGNED_IN") {
+        // PKCE flow fires SIGNED_IN before PASSWORD_RECOVERY — wait a tick
+        // to see if PASSWORD_RECOVERY follows
+        setTimeout(() => {
+          if (!handled.current) {
+            handled.current = true;
+            clearTimeout(timeout);
+            setWaiting(false);
+            setIsRecovery(true);
+          }
+        }, 500);
+      }
+    });
+
+    // Also check if we already have a recovery session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session && !handled.current) {
+        // If we have a session on this page, treat it as recovery
+        handled.current = true;
+        clearTimeout(timeout);
+        setWaiting(false);
         setIsRecovery(true);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, [navigate]);
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -69,8 +84,8 @@ export default function ResetPasswordPage() {
     }
   };
 
-  // Show spinner while exchanging the PKCE code
-  if (exchanging) {
+  // Show spinner while waiting for PKCE exchange to complete
+  if (waiting) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
         <div className="flex flex-col items-center gap-4">
