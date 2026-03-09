@@ -1,5 +1,51 @@
 import { supabase } from "@/integrations/supabase/client";
 
+// Max dimension for stored images - 1200px is plenty for listing thumbnails
+// and keeps file sizes well under 500KB
+const STORAGE_MAX_SIZE = 1200;
+const STORAGE_JPEG_QUALITY = 0.82;
+
+/**
+ * Resizes and compresses a base64 data URL image using Canvas before upload.
+ * - Resizes to fit within STORAGE_MAX_SIZE (maintains aspect ratio)
+ * - Outputs as JPEG at STORAGE_JPEG_QUALITY
+ * - Skips resize if image is already small enough
+ */
+async function compressForStorage(dataUrl: string): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const { naturalWidth: w, naturalHeight: h } = img;
+
+      // Skip compression if already small enough
+      if (Math.max(w, h) <= STORAGE_MAX_SIZE) {
+        // Still re-encode as JPEG to normalize format and reduce size
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL("image/jpeg", STORAGE_JPEG_QUALITY));
+        return;
+      }
+
+      // Scale down to fit within STORAGE_MAX_SIZE
+      const scale = STORAGE_MAX_SIZE / Math.max(w, h);
+      const outW = Math.round(w * scale);
+      const outH = Math.round(h * scale);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = outW;
+      canvas.height = outH;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0, outW, outH);
+      resolve(canvas.toDataURL("image/jpeg", STORAGE_JPEG_QUALITY));
+    };
+    img.onerror = () => resolve(dataUrl); // fallback: return original
+    img.src = dataUrl;
+  });
+}
+
 /**
  * Converts a base64 data URL to a Blob
  */
@@ -17,6 +63,7 @@ function dataUrlToBlob(dataUrl: string): Blob {
 
 /**
  * Uploads a base64 data URL image to Supabase Storage.
+ * Automatically compresses/resizes the image before uploading.
  * Returns the public URL of the uploaded image.
  * Falls back to returning the original data URL if upload fails.
  */
@@ -30,14 +77,17 @@ export async function uploadListingImage(
   }
 
   try {
-    const blob = dataUrlToBlob(dataUrl);
-    const ext = blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : "jpg";
-    const filename = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    // Compress and resize before uploading to keep storage usage low
+    const compressed = await compressForStorage(dataUrl);
+    const blob = dataUrlToBlob(compressed);
+
+    // Always store as JPEG after compression
+    const filename = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
 
     const { error } = await supabase.storage
       .from("listing-images")
       .upload(filename, blob, {
-        contentType: blob.type,
+        contentType: "image/jpeg",
         upsert: false,
       });
 
@@ -60,6 +110,7 @@ export async function uploadListingImage(
 
 /**
  * Uploads multiple images and returns their public URLs.
+ * Each image is automatically compressed before upload.
  * Falls back to data URLs for any that fail.
  */
 export async function uploadListingImages(
