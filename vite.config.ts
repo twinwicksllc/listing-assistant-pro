@@ -22,8 +22,8 @@ export default defineConfig(({ mode }) => ({
       workbox: {
         // Immediately activate new service worker versions
         skipWaiting: true,
-        // Don't cache auth-related routes
-        navigateFallbackDenylist: [/^\/~oauth/, /^\/auth\//],
+        // Don't cache auth-related routes or OAuth callback routes
+        navigateFallbackDenylist: [/^\/~oauth/, /^\/auth\//, /^\/ebay\//],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         // Force service worker to check for updates frequently
         runtimeCaching: [
