@@ -19,7 +19,7 @@ export default function ProtectedRoute({ children, ownerOnly }: ProtectedRoutePr
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/landing" replace />;
   }
 
   if (ownerOnly && !isOwner) {

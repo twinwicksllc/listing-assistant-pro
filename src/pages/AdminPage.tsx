@@ -66,7 +66,7 @@ export default function AdminPage() {
       <header className="px-5 pt-12 pb-4 md:px-8 lg:px-12">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate("/")} className="p-2 rounded-lg hover:bg-secondary text-muted-foreground">
+            <button onClick={() => navigate("/home")} className="p-2 rounded-lg hover:bg-secondary text-muted-foreground">
               <ArrowLeft className="w-4 h-4" />
             </button>
             <div className="flex items-center gap-2">

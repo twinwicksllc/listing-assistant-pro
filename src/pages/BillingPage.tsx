@@ -59,7 +59,7 @@ export default function BillingPage() {
     <div className="min-h-screen bg-background pb-24">
       <header className="px-5 pt-12 pb-4 md:px-8 lg:px-12">
         <div className="max-w-4xl mx-auto flex items-center gap-2">
-          <button onClick={() => navigate("/")} className="text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => navigate("/home")} className="text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <img src={teckstartLogo} alt="Teckstart" className="h-9 w-auto" />

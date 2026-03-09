@@ -39,7 +39,7 @@ export default function AuthCallbackPage() {
       if (event === "SIGNED_IN" && session) {
         handled.current = true;
         clearTimeout(timeout);
-        navigate("/");
+        navigate("/home");
       } else if (event === "PASSWORD_RECOVERY") {
         handled.current = true;
         clearTimeout(timeout);
@@ -53,7 +53,7 @@ export default function AuthCallbackPage() {
       if (session && !handled.current) {
         handled.current = true;
         clearTimeout(timeout);
-        navigate("/");
+        navigate("/home");
       }
     });
 

@@ -47,7 +47,7 @@ export default function AnalyzePage() {
   const getDescriptionWithFooter = () => includeAiFooter ? description + AI_FOOTER : description;
 
   if (imageUrls.length === 0) {
-    navigate("/");
+    navigate("/home");
     return null;
   }
 
@@ -177,7 +177,7 @@ export default function AnalyzePage() {
   return (
     <div className="min-h-screen bg-background pb-8">
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-3">
-        <button onClick={() => navigate("/")} className="text-muted-foreground hover:text-foreground transition-colors">
+        <button onClick={() => navigate("/home")} className="text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <h1 className="font-semibold text-foreground">Analyze Item</h1>
