@@ -71,11 +71,22 @@ serve(async (req) => {
 
       // For token exchange, eBay also expects the RuName (same value used in authorize URL)
       const ruName = Deno.env.get("EBAY_RUNAME") || Deno.env.get("EBAY_REDIRECT_URI");
-      if (!ruName) throw new Error("EBAY_RUNAME not configured");
+      if (!ruName) {
+        console.error("exchange_code: Missing required config: EBAY_RUNAME and EBAY_REDIRECT_URI");
+        throw new Error("eBay callback URI not configured. Contact admin to set EBAY_RUNAME or EBAY_REDIRECT_URI.");
+      }
 
-      console.log("exchange_code: code =", code?.substring(0, 20) + "...", "ruName =", ruName);</old_str>
+      console.log("exchange_code: code =", code?.substring(0, 20) + "...", "ruName =", ruName, "environment =", ebayEnv);
+
+      if (!clientId || !clientSecret) {
+        console.error("exchange_code: Missing eBay credentials in environment");
+        throw new Error("eBay API credentials not configured. Contact admin.");
+      }
 
       const credentials = btoa(`${clientId}:${clientSecret}`);
+      
+      console.log("exchange_code: POSTing to", tokenUrl, "with grant_type=authorization_code");
+
       const resp = await fetch(tokenUrl, {
         method: "POST",
         headers: {
@@ -89,13 +100,34 @@ serve(async (req) => {
         }).toString(),
       });
 
+      console.log("exchange_code: response status =", resp.status, resp.statusText);
+
       if (!resp.ok) {
         const txt = await resp.text();
-        console.error("eBay token exchange error:", resp.status, txt);
-        throw new Error(`Token exchange failed: ${resp.status} - ${txt}`);
-      }</old_str>
+        console.error("eBay token exchange error - status:", resp.status);
+        console.error("eBay error response:", txt);
+        
+        // Try to extract meaningful error from eBay response
+        let errorMsg = txt;
+        try {
+          const json = JSON.parse(txt);
+          errorMsg = json.error_description || json.error || txt;
+        } catch {
+          // Not JSON, use raw text
+        }
+
+        throw new Error(`eBay token exchange failed (${resp.status}): ${errorMsg}`);
+      }
 
       const tokenData = await resp.json();
+      
+      if (!tokenData.access_token) {
+        console.error("exchange_code: No access_token in response. Response:", tokenData);
+        throw new Error("eBay returned no access token. Authorization code may have expired or been reused.");
+      }
+
+      console.log("exchange_code: Successfully obtained access_token (expires in", tokenData.expires_in, "seconds)");
+
       return new Response(
         JSON.stringify({
           access_token: tokenData.access_token,
@@ -234,10 +266,26 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
-    console.error("ebay-publish error:", e);
+    const errorMsg = e instanceof Error ? e.message : "Unknown error";
+    console.error("ebay-publish error:", errorMsg);
+    console.error("Full error details:", e);
+    
+    // Return 400 for client errors (configuration issues, bad input, etc)
+    // Return 500 only for unexpected server errors
+    const isClientError = errorMsg.includes("not configured") || 
+                         errorMsg.includes("not provided") ||
+                         errorMsg.includes("No authorization") ||
+                         errorMsg.includes("Missing");
+    
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ 
+        error: errorMsg,
+        status: isClientError ? 400 : 500
+      }),
+      { 
+        status: isClientError ? 400 : 500, 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      }
     );
   }
 });
