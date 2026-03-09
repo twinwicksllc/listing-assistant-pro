@@ -4,6 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Loader2, AlertTriangle, RefreshCw } from "lucide-react";
 import teckstartLogo from "@/assets/teckstart-logo.png";
 
+// Storage key must match the storageKey set in supabase client.ts
+const STORAGE_KEY = 'sb-lister-auth-token';
+
 /**
  * AuthCallbackPage
  *
@@ -64,15 +67,25 @@ export default function AuthCallbackPage() {
     supabase.auth.getSession().then(({ data: { session }, error: sessionError }) => {
       if (sessionError) {
         console.error("Session error:", sessionError);
-        // PKCE exchange failed - the code verifier wasn't found
+
         if (code && !retried) {
-          console.warn("PKCE exchange failed, code verifier may not be in storage");
-          setError("Authentication failed. The cached app version may be outdated. Please clear your browser cache and try again.");
+          console.warn("PKCE exchange failed — clearing stale verifier from localStorage");
+          // Fix 5: Clear stale PKCE verifier so next attempt starts clean
+          localStorage.removeItem(`${STORAGE_KEY}-code-verifier`);
+          // Also clear any other stale auth state for this storage key
+          Object.keys(localStorage)
+            .filter(k => k.startsWith(STORAGE_KEY))
+            .forEach(k => {
+              console.log('[auth] clearing stale key:', k);
+              localStorage.removeItem(k);
+            });
+
+          setError("Authentication failed. Please try signing in again.");
           setRetried(true);
         }
         return;
       }
-      
+
       if (session && !handled.current) {
         handled.current = true;
         clearTimeout(timeout);
@@ -86,11 +99,6 @@ export default function AuthCallbackPage() {
     };
   }, [navigate, searchParams, retried]);
 
-  const handleForceReload = () => {
-    // Reload without cache
-    window.location.href = window.location.href + (window.location.href.includes('?') ? '&' : '?') + 't=' + Date.now();
-  };
-
   if (error) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
@@ -101,7 +109,7 @@ export default function AuthCallbackPage() {
             <span className="font-medium">Authentication Error</span>
           </div>
           <p className="text-sm text-muted-foreground">{error}</p>
-          <div className="flex flex-col gap-2 mt-4">
+          <div className="flex flex-col gap-2 mt-4 w-full">
             <button
               onClick={() => navigate("/login")}
               className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90"
@@ -109,11 +117,17 @@ export default function AuthCallbackPage() {
               Back to Login
             </button>
             <button
-              onClick={handleForceReload}
+              onClick={() => {
+                // Clear all lister auth state and go back to login fresh
+                Object.keys(localStorage)
+                  .filter(k => k.startsWith(STORAGE_KEY))
+                  .forEach(k => localStorage.removeItem(k));
+                navigate("/login");
+              }}
               className="flex items-center justify-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-secondary"
             >
               <RefreshCw className="w-4 h-4" />
-              Force Reload Without Cache
+              Clear Session & Try Again
             </button>
           </div>
         </div>
