@@ -15,6 +15,7 @@ serve(async (req) => {
     const { userToken } = await req.json();
 
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
+    console.log("ebay-listings: env =", ebayEnv, "token prefix =", userToken ? userToken.substring(0, 20) + "..." : "NONE");
     const apiBase =
       ebayEnv === "production"
         ? "https://api.ebay.com"
@@ -26,6 +27,8 @@ serve(async (req) => {
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    console.log("ebay-listings: calling", `${apiBase}/sell/inventory/v1/offer?limit=100`);
 
     // Fetch active listings via Sell > Inventory API (offers)
     const offersResp = await fetch(
@@ -48,8 +51,19 @@ serve(async (req) => {
     if (!offersResp.ok) {
       const errText = await offersResp.text();
       console.error("eBay offers error:", offersResp.status, errText);
-      throw new Error(`Failed to fetch offers: ${offersResp.status}`);
-    }
+      // Return needsAuth for any auth-related error so frontend clears the token
+      if (offersResp.status === 401 || offersResp.status === 403) {
+        return new Response(
+          JSON.stringify({ listings: [], needsAuth: true, debug: `eBay API ${offersResp.status}: ${errText}` }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      // For other errors, return error details instead of throwing (avoids 500)
+      return new Response(
+        JSON.stringify({ listings: [], error: `eBay API error ${offersResp.status}: ${errText}` }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }</old_str>
 
     const offersData = await offersResp.json();
     const offers = offersData.offers || [];

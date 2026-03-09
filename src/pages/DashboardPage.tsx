@@ -52,10 +52,13 @@ export default function DashboardPage() {
         return;
       }
       if (data?.error) {
+        // Show the actual error so we can diagnose it
+        console.error("ebay-listings error response:", data.error);
         // Clear invalid token on API error too
         localStorage.removeItem(EBAY_TOKEN_KEY);
         setNeedsAuth(true);
         setListings([]);
+        toast.error(`eBay error: ${data.error}`);
         return;
       }
 
