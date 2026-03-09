@@ -184,7 +184,7 @@ export default function TeamPage() {
           <button onClick={() => navigate("/home")} className="text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <img src={teckstartLogo} alt="Teckstart" className="h-9 w-auto" />
+          <img src={teckstartLogo} alt="Teckstart" className="h-12 w-auto" />
           <div>
             <h1 className="text-lg font-bold text-foreground">Team</h1>
             <p className="text-xs text-muted-foreground">{org.orgName || "Your Organization"}</p>
