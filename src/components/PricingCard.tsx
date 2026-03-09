@@ -22,9 +22,11 @@ interface PricingCardProps {
   searchQuery: string;
   metalType?: string;
   metalWeightOz?: number;
+  initialMeltValue?: number | null;
+  initialSpotPrices?: { gold: number; silver: number; platinum: number } | null;
 }
 
-export default function PricingCard({ priceMin, priceMax, searchQuery, metalType = "none", metalWeightOz = 0 }: PricingCardProps) {
+export default function PricingCard({ priceMin, priceMax, searchQuery, metalType = "none", metalWeightOz = 0, initialMeltValue = null, initialSpotPrices = null }: PricingCardProps) {
   const [loading, setLoading] = useState(false);
   const [soldItems, setSoldItems] = useState<SoldItem[]>([]);
   const [ebayAvg, setEbayAvg] = useState<number | null>(null);
@@ -33,8 +35,8 @@ export default function PricingCard({ priceMin, priceMax, searchQuery, metalType
   const [totalFound, setTotalFound] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const [spotPrices, setSpotPrices] = useState<SpotPrices | null>(null);
-  const [meltValue, setMeltValue] = useState<number | null>(null);
+  const [spotPrices, setSpotPrices] = useState<SpotPrices | null>(initialSpotPrices);
+  const [meltValue, setMeltValue] = useState<number | null>(initialMeltValue);
   const [spotLoading, setSpotLoading] = useState(false);
 
   // Fetch eBay pricing
@@ -69,10 +71,18 @@ export default function PricingCard({ priceMin, priceMax, searchQuery, metalType
   }, [searchQuery]);
 
   // Fetch spot prices when metal info is present
+  // Skip fetch if server already provided pre-computed values (initialMeltValue + initialSpotPrices)
   useEffect(() => {
     if (metalType === "none" || !metalWeightOz || metalWeightOz <= 0) {
       setMeltValue(null);
       setSpotPrices(null);
+      return;
+    }
+
+    // Use server-provided values if available — no need to re-fetch
+    if (initialMeltValue !== null && initialSpotPrices !== null) {
+      setMeltValue(initialMeltValue);
+      setSpotPrices(initialSpotPrices);
       return;
     }
 
@@ -96,7 +106,7 @@ export default function PricingCard({ priceMin, priceMax, searchQuery, metalType
     };
 
     fetchSpot();
-  }, [metalType, metalWeightOz]);
+  }, [metalType, metalWeightOz, initialMeltValue, initialSpotPrices]);
 
   const displayLow = ebayLow ?? priceMin;
   const displayHigh = ebayHigh ?? priceMax;

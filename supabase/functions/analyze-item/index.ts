@@ -102,6 +102,48 @@ serve(async (req) => {
 
     // --- End usage limit enforcement ---
 
+    // --- Fetch live spot prices from shared DB cache ---
+    let spotGold = 2650, spotSilver = 31, spotPlatinum = 1000;
+    try {
+      const { data: spotData, error: spotErr } = await svc
+        .from("spot_price_cache")
+        .select("gold, silver, platinum, fetched_at")
+        .eq("id", 1)
+        .single();
+
+      if (!spotErr && spotData) {
+        const ageMinutes = (Date.now() - new Date(spotData.fetched_at).getTime()) / 60000;
+        if (ageMinutes < 30) {
+          // Use DB cache if less than 30 min old (spot-prices function refreshes every 15 min)
+          spotGold = Number(spotData.gold) || spotGold;
+          spotSilver = Number(spotData.silver) || spotSilver;
+          spotPlatinum = Number(spotData.platinum) || spotPlatinum;
+        } else {
+          // Cache is stale — trigger a refresh via spot-prices function
+          const spotResp = await fetch(
+            `${Deno.env.get("SUPABASE_URL")}/functions/v1/spot-prices`,
+            {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({}),
+            }
+          );
+          if (spotResp.ok) {
+            const spotJson = await spotResp.json();
+            spotGold = spotJson.spotPrices?.gold || spotGold;
+            spotSilver = spotJson.spotPrices?.silver || spotSilver;
+            spotPlatinum = spotJson.spotPrices?.platinum || spotPlatinum;
+          }
+        }
+      }
+    } catch (spotFetchErr) {
+      console.warn("Spot price fetch failed, using fallback:", spotFetchErr);
+    }
+    // --- End spot prices ---
+
     // Support both single image (legacy) and multiple images
     const imageList: string[] = body.images ?? (body.imageBase64 ? [body.imageBase64] : []);
     const voiceNote: string = body.voiceNote || "";
@@ -184,7 +226,7 @@ When analyzing, you MUST:
 7. **Pricing**: Provide a realistic price range based on:
    - Recent eBay sold listings for comparable items in similar condition
    - For precious metals: ensure the minimum price is NEVER below the current melt value
-   - Current approximate spot prices to reference: Gold ~$2,650/oz, Silver ~$31/oz, Platinum ~$1,000/oz
+   - Current live spot prices (as of this analysis): Gold $${spotGold.toFixed(2)}/oz, Silver $${spotSilver.toFixed(2)}/oz, Platinum $${spotPlatinum.toFixed(2)}/oz
    - Factor in numismatic/collectible premium above melt value where applicable
 
 Return your analysis using the provided tool.`;
@@ -366,7 +408,29 @@ Return your analysis using the provided tool.`;
       listing.title = listing.title.substring(0, 80);
     }
 
-    return new Response(JSON.stringify(listing), {
+    // --- Server-side melt value enforcement ---
+    let meltValue: number | null = null;
+    if (listing.metalType && listing.metalType !== "none" && listing.metalWeightOz > 0) {
+      const spotPrice =
+        listing.metalType === "gold" ? spotGold :
+        listing.metalType === "silver" ? spotSilver :
+        listing.metalType === "platinum" ? spotPlatinum : 0;
+      if (spotPrice > 0) {
+        meltValue = parseFloat((spotPrice * listing.metalWeightOz).toFixed(2));
+        // Enforce: priceMin must never be below melt value
+        if (listing.priceMin < meltValue) {
+          console.warn(`priceMin ${listing.priceMin} below melt value ${meltValue} — correcting`);
+          listing.priceMin = meltValue;
+          // Also bump priceMax if it's somehow below melt
+          if (listing.priceMax < meltValue) {
+            listing.priceMax = parseFloat((meltValue * 1.1).toFixed(2));
+          }
+        }
+      }
+    }
+    // --- End melt value enforcement ---
+
+    return new Response(JSON.stringify({ ...listing, meltValue, spotPrices: { gold: spotGold, silver: spotSilver, platinum: spotPlatinum } }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

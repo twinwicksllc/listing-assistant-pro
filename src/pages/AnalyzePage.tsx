@@ -38,6 +38,8 @@ export default function AnalyzePage() {
   const [gradingRationale, setGradingRationale] = useState<string>("");
   const [isSlabbed, setIsSlabbed] = useState(false);
   const [gradeConfirmed, setGradeConfirmed] = useState(false);
+  const [meltValue, setMeltValue] = useState<number | null>(null);
+  const [spotPrices, setSpotPrices] = useState<{ gold: number; silver: number; platinum: number } | null>(null);
   const [consignor, setConsignor] = useState("");
   const [includeAiFooter, setIncludeAiFooter] = useState(true);
 
@@ -76,6 +78,8 @@ export default function AnalyzePage() {
       setSuggestedGrade(data.suggestedGrade || "");
       setGradingRationale(data.gradingRationale || "");
       setIsSlabbed(data.isSlabbed ?? false);
+      setMeltValue(data.meltValue ?? null);
+      setSpotPrices(data.spotPrices ?? null);
       setGradeConfirmed(false);
       setGenerated(true);
       await recordUsage("ai_analysis");
@@ -430,7 +434,7 @@ export default function AnalyzePage() {
             </div>
 
             {/* Pricing */}
-            <PricingCard priceMin={priceMin} priceMax={priceMax} searchQuery={title} metalType={metalType} metalWeightOz={metalWeightOz} />
+            <PricingCard priceMin={priceMin} priceMax={priceMax} searchQuery={title} metalType={metalType} metalWeightOz={metalWeightOz} initialMeltValue={meltValue} initialSpotPrices={spotPrices} />
 
             {/* Export */}
             <div className="space-y-2">
