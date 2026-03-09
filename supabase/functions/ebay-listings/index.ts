@@ -162,13 +162,14 @@ serve(async (req) => {
     const errorMsg = e instanceof Error ? e.message : "Unknown error";
     console.error("ebay-listings error:", errorMsg);
     console.error("Full error:", e);
+    const isProduction = Deno.env.get("ENVIRONMENT") === "production";
     return new Response(
       JSON.stringify({ 
         listings: [], 
         error: `Server error: ${errorMsg}`,
-        debug: process.env.NODE_ENV !== "production" ? String(e) : undefined
+        debug: !isProduction ? String(e) : undefined
       }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

@@ -76,13 +76,14 @@ serve(async (req) => {
     const errorMsg = e instanceof Error ? e.message : "Unknown error";
     console.error("ebay-user error:", errorMsg);
     console.error("Full error:", e);
+    const isProduction = Deno.env.get("ENVIRONMENT") === "production";
     return new Response(
       JSON.stringify({ 
         error: `Server error: ${errorMsg}`,
         needsAuth: false,
-        debug: typeof Deno !== "undefined" && Deno.env.get("DENO_ENV") !== "production" ? String(e) : undefined
+        debug: !isProduction ? String(e) : undefined
       }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
