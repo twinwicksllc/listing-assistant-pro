@@ -37,6 +37,7 @@ export default function DashboardPage() {
     if (!token) {
       setNeedsAuth(true);
       setEbayAccount(null);
+      setListings([]);
       return;
     }
 
@@ -60,6 +61,7 @@ export default function DashboardPage() {
         setNeedsAuth(true);
         setListings([]);
         setEbayAccount(null);
+        toast.error("eBay connection expired. Please reconnect in Settings.");
         return;
       }
       if (data?.error) {
@@ -85,9 +87,12 @@ export default function DashboardPage() {
           businessName: userData.businessName || "" 
         });
       }
+      
+      toast.success(`Refreshed! ${data.listings?.length || 0} listings loaded`);
     } catch (err: any) {
       console.error("Dashboard fetch error:", err);
       setError(err.message || "Failed to load listings");
+      toast.error("Failed to refresh listings");
     } finally {
       setLoading(false);
     }
