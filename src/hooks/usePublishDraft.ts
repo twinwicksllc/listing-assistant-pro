@@ -65,6 +65,9 @@ export function usePublishDraft() {
           condition: draft.condition ?? "USED_EXCELLENT",
           ebayCategoryId: draft.ebayCategoryId ?? "",
           itemSpecifics: draft.itemSpecifics ?? {},
+          fulfillmentPolicyId: draft.fulfillmentPolicyId ?? null,
+          paymentPolicyId: draft.paymentPolicyId ?? null,
+          returnPolicyId: draft.returnPolicyId ?? null,
         },
       });
 

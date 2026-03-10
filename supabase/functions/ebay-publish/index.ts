@@ -140,7 +140,7 @@ serve(async (req) => {
 
     // --- ACTION: Create draft listing via Inventory API ---
     if (action === "create_draft") {
-      const { userToken, title, description, listingFormat, listingPrice, auctionStartPrice, auctionBuyItNow, imageUrl, condition, ebayCategoryId, itemSpecifics } = payload;
+      const { userToken, title, description, listingFormat, listingPrice, auctionStartPrice, auctionBuyItNow, imageUrl, condition, ebayCategoryId, itemSpecifics, fulfillmentPolicyId: draftFulfillmentPolicyId, paymentPolicyId: draftPaymentPolicyId, returnPolicyId: draftReturnPolicyId } = payload;
       if (!userToken) throw new Error("No eBay user token provided");
 
       // eBay Partner Network campaign ID for affiliate revenue tracking
@@ -232,10 +232,11 @@ serve(async (req) => {
         return null;
       };
 
+      // Use draft-level policy IDs if provided, otherwise auto-fetch the first available
       const [fulfillmentPolicyId, paymentPolicyId, returnPolicyId] = await Promise.all([
-        fetchDefaultPolicy("fulfillment"),
-        fetchDefaultPolicy("payment"),
-        fetchDefaultPolicy("return"),
+        draftFulfillmentPolicyId ? Promise.resolve(draftFulfillmentPolicyId) : fetchDefaultPolicy("fulfillment"),
+        draftPaymentPolicyId     ? Promise.resolve(draftPaymentPolicyId)     : fetchDefaultPolicy("payment"),
+        draftReturnPolicyId      ? Promise.resolve(draftReturnPolicyId)      : fetchDefaultPolicy("return"),
       ]);
 
       // All three policy IDs are required by eBay to publish a listing
