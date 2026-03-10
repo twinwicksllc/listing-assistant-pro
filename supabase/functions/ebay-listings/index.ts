@@ -77,7 +77,7 @@ serve(async (req) => {
         let product: any = {};
         try {
           const itemResp = await fetch(
-            `${apiBase}/sell/inventory/v1/inventory_item/${offer.sku}`,
+            `${apiBase}/sell/inventory/v1/inventory_item/${encodeURIComponent(offer.sku)}`,
             { headers: ebayHeaders }
           );
           if (itemResp.ok) {
