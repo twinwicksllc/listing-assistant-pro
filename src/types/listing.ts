@@ -14,6 +14,8 @@ export interface ItemSpecifics {
   [key: string]: string | undefined;
 }
 
+export type ListingFormat = "FIXED_PRICE" | "AUCTION";
+
 export interface ListingDraft {
   id: string;
   imageUrl: string;
@@ -21,8 +23,11 @@ export interface ListingDraft {
   description: string;
   priceMin: number;
   priceMax: number;
+  listingPrice?: number;         // User-chosen listing price
+  listingFormat?: ListingFormat; // FIXED_PRICE (BIN) or AUCTION
   createdAt: Date;
   ebayCategoryId?: string;
+  ebayCategoryBreadcrumb?: string; // e.g. "Coins > US > Dollars > Morgan"
   itemSpecifics?: ItemSpecifics;
   condition?: string;
   consignor?: string;
