@@ -140,7 +140,7 @@ serve(async (req) => {
 
     // --- ACTION: Create draft listing via Inventory API ---
     if (action === "create_draft") {
-      const { userToken, title, description, priceMin, imageUrl, condition, ebayCategoryId, itemSpecifics } = payload;
+      const { userToken, title, description, listingFormat, listingPrice, auctionStartPrice, auctionBuyItNow, imageUrl, condition, ebayCategoryId, itemSpecifics } = payload;
       if (!userToken) throw new Error("No eBay user token provided");
 
       // eBay Partner Network campaign ID for affiliate revenue tracking
@@ -206,20 +206,39 @@ serve(async (req) => {
       }
 
       // Step 2: Create offer (draft listing)
+      const format = listingFormat === "AUCTION" ? "AUCTION" : "FIXED_PRICE";
       const offerBody: any = {
         sku,
         marketplaceId: "EBAY_US",
-        format: "FIXED_PRICE",
+        format,
         listingDescription: description,
         availableQuantity: 1,
-        pricingSummary: {
-          price: {
-            value: String(priceMin),
-            currency: "USD",
-          },
-        },
         listingPolicies: {},
       };
+
+      // Set pricing based on format
+      if (format === "FIXED_PRICE") {
+        offerBody.pricingSummary = {
+          price: {
+            value: String(listingPrice ?? 0),
+            currency: "USD",
+          },
+        };
+      } else {
+        // Auction: starting bid required; optional Buy It Now price
+        offerBody.pricingSummary = {
+          auctionStartPrice: {
+            value: String(auctionStartPrice ?? 0),
+            currency: "USD",
+          },
+        };
+        if (auctionBuyItNow && auctionBuyItNow > 0) {
+          offerBody.pricingSummary.price = {
+            value: String(auctionBuyItNow),
+            currency: "USD",
+          };
+        }
+      }
 
       // Set eBay category ID
       if (ebayCategoryId) {
