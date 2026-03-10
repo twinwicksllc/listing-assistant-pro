@@ -25,28 +25,45 @@ export type PublishStatus = "draft" | "publishing" | "published" | "failed";
 
 // ----------------------------------------------------------------
 // eBay condition mapping
-// The Inventory API accepts ConditionEnum strings (NEW, USED_EXCELLENT, etc.)
-// BUT many categories require the numeric conditionId in the offer.
-// We store the string internally and map to numeric at publish time.
-// Reference: https://developer.ebay.com/devzone/finding/callref/Enums/conditionIdList.html
+// As of 2024, eBay deprecated USED_EXCELLENT/USED_VERY_GOOD/USED_GOOD/USED_ACCEPTABLE.
+// Current valid ConditionEnum values for pre-owned items:
+//   PRE_OWNED_GOOD  -> replaces USED_EXCELLENT and USED_VERY_GOOD
+//   PRE_OWNED_FAIR  -> replaces USED_GOOD
+//   PRE_OWNED_POOR  -> replaces USED_ACCEPTABLE
+// We store the current enum strings internally and map to numeric conditionId at publish time.
+// Reference: https://developer.ebay.com/api-docs/sell/inventory/types/slr:ConditionEnum
 // ----------------------------------------------------------------
 export const EBAY_CONDITION_ID_MAP: Record<string, number> = {
   NEW: 1000,
-  LIKE_NEW: 2750,        // Like New / Open Box
-  USED_EXCELLENT: 3000,  // Used - Excellent
-  USED_VERY_GOOD: 4000,  // Used - Very Good
-  USED_GOOD: 5000,       // Used - Good
-  USED_ACCEPTABLE: 6000, // Used - Acceptable
+  LIKE_NEW: 2750,                   // Like New / Open Box
+  NEW_OTHER: 1500,                  // New Other (without tags)
+  NEW_WITH_DEFECTS: 1750,           // New with defects
+  CERTIFIED_REFURBISHED: 2000,
+  EXCELLENT_REFURBISHED: 2010,
+  VERY_GOOD_REFURBISHED: 2020,
+  GOOD_REFURBISHED: 2030,
+  SELLER_REFURBISHED: 2500,
+  PRE_OWNED_GOOD: 3000,             // replaces USED_EXCELLENT / USED_VERY_GOOD
+  PRE_OWNED_FAIR: 5000,             // replaces USED_GOOD
+  PRE_OWNED_POOR: 6000,             // replaces USED_ACCEPTABLE
+  FOR_PARTS_OR_NOT_WORKING: 7000,
 };
 
 // Human-readable labels for condition values
 export const CONDITION_LABELS: Record<string, string> = {
   NEW: "New",
   LIKE_NEW: "Like New",
-  USED_EXCELLENT: "Used – Excellent",
-  USED_VERY_GOOD: "Used – Very Good",
-  USED_GOOD: "Used – Good",
-  USED_ACCEPTABLE: "Used – Acceptable",
+  NEW_OTHER: "New Other (without tags)",
+  NEW_WITH_DEFECTS: "New with Defects",
+  CERTIFIED_REFURBISHED: "Certified Refurbished",
+  EXCELLENT_REFURBISHED: "Excellent – Refurbished",
+  VERY_GOOD_REFURBISHED: "Very Good – Refurbished",
+  GOOD_REFURBISHED: "Good – Refurbished",
+  SELLER_REFURBISHED: "Seller Refurbished",
+  PRE_OWNED_GOOD: "Pre-Owned – Good",
+  PRE_OWNED_FAIR: "Pre-Owned – Fair",
+  PRE_OWNED_POOR: "Pre-Owned – Poor",
+  FOR_PARTS_OR_NOT_WORKING: "For Parts or Not Working",
 };
 
 export interface ListingDraft {
@@ -62,7 +79,7 @@ export interface ListingDraft {
   ebayCategoryId?: string;
   ebayCategoryBreadcrumb?: string; // e.g. "Coins > US > Dollars > Morgan"
   itemSpecifics?: ItemSpecifics;
-  condition?: string;              // Internal enum: NEW, USED_EXCELLENT, etc.
+  condition?: string;              // Internal enum: NEW, PRE_OWNED_GOOD, PRE_OWNED_FAIR, etc.
   consignor?: string;
   fulfillmentPolicyId?: string;
   paymentPolicyId?: string;

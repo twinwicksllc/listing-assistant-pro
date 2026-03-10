@@ -26,12 +26,19 @@ interface Policies {
 }
 
 const CONDITIONS = [
-  { value: "NEW",            label: "New" },
-  { value: "LIKE_NEW",       label: "Like New" },
-  { value: "USED_EXCELLENT", label: "Used – Excellent" },
-  { value: "USED_VERY_GOOD", label: "Used – Very Good" },
-  { value: "USED_GOOD",      label: "Used – Good" },
-  { value: "USED_ACCEPTABLE",label: "Used – Acceptable" },
+  { value: "NEW",                      label: "New" },
+  { value: "LIKE_NEW",                 label: "Like New" },
+  { value: "NEW_OTHER",                label: "New Other (without tags)" },
+  { value: "NEW_WITH_DEFECTS",         label: "New with Defects" },
+  { value: "CERTIFIED_REFURBISHED",    label: "Certified Refurbished" },
+  { value: "EXCELLENT_REFURBISHED",    label: "Excellent – Refurbished" },
+  { value: "VERY_GOOD_REFURBISHED",    label: "Very Good – Refurbished" },
+  { value: "GOOD_REFURBISHED",         label: "Good – Refurbished" },
+  { value: "SELLER_REFURBISHED",       label: "Seller Refurbished" },
+  { value: "PRE_OWNED_GOOD",           label: "Pre-Owned – Good" },
+  { value: "PRE_OWNED_FAIR",           label: "Pre-Owned – Fair" },
+  { value: "PRE_OWNED_POOR",           label: "Pre-Owned – Poor" },
+  { value: "FOR_PARTS_OR_NOT_WORKING", label: "For Parts or Not Working" },
 ];
 
 const AUCTION_DURATIONS: { value: AuctionDuration; label: string }[] = [
@@ -52,7 +59,7 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
   const [auctionDuration, setAuctionDuration] = useState<AuctionDuration>(
     draft.auctionDuration ?? "Days_7"
   );
-  const [condition, setCondition]       = useState(draft.condition ?? "USED_EXCELLENT");
+  const [condition, setCondition]       = useState(draft.condition ?? "PRE_OWNED_GOOD");
   const [consignor, setConsignor]       = useState(draft.consignor ?? "");
   const [itemSpecifics, setItemSpecifics] = useState<Record<string, string>>(
     (draft.itemSpecifics as Record<string, string>) ?? {}

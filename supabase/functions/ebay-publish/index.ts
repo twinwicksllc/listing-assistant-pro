@@ -9,18 +9,53 @@ const corsHeaders = {
 
 // ----------------------------------------------------------------
 // eBay condition ID mapping
-// Inventory API accepts ConditionEnum strings, but many categories
-// also require the numeric conditionId in the offer payload.
-// We send both to maximize compatibility.
-// Reference: https://developer.ebay.com/devzone/finding/callref/Enums/conditionIdList.html
+// As of 2024, eBay deprecated USED_EXCELLENT/USED_VERY_GOOD/USED_GOOD/USED_ACCEPTABLE.
+// Current valid ConditionEnum values for pre-owned items:
+//   PRE_OWNED_GOOD  -> replaces USED_EXCELLENT and USED_VERY_GOOD
+//   PRE_OWNED_FAIR  -> replaces USED_GOOD
+//   PRE_OWNED_POOR  -> replaces USED_ACCEPTABLE
+// Reference: https://developer.ebay.com/api-docs/sell/inventory/types/slr:ConditionEnum
 // ----------------------------------------------------------------
 const CONDITION_ID_MAP: Record<string, number> = {
   NEW: 1000,
   LIKE_NEW: 2750,
-  USED_EXCELLENT: 3000,
-  USED_VERY_GOOD: 4000,
-  USED_GOOD: 5000,
-  USED_ACCEPTABLE: 6000,
+  NEW_OTHER: 1500,
+  NEW_WITH_DEFECTS: 1750,
+  CERTIFIED_REFURBISHED: 2000,
+  EXCELLENT_REFURBISHED: 2010,
+  VERY_GOOD_REFURBISHED: 2020,
+  GOOD_REFURBISHED: 2030,
+  SELLER_REFURBISHED: 2500,
+  PRE_OWNED_GOOD: 3000,
+  PRE_OWNED_FAIR: 5000,
+  PRE_OWNED_POOR: 6000,
+  FOR_PARTS_OR_NOT_WORKING: 7000,
+};
+
+// Human-readable condition descriptions for eBay conditionDescription field
+const CONDITION_DESCRIPTIONS: Record<string, string> = {
+  NEW: "Brand new, unused, unopened item in original packaging.",
+  LIKE_NEW: "Like new condition. May be open box but unused.",
+  NEW_OTHER: "New without original packaging or tags.",
+  NEW_WITH_DEFECTS: "New item with minor cosmetic defects.",
+  CERTIFIED_REFURBISHED: "Professionally refurbished and certified to work like new.",
+  EXCELLENT_REFURBISHED: "Refurbished to excellent working condition.",
+  VERY_GOOD_REFURBISHED: "Refurbished to very good working condition.",
+  GOOD_REFURBISHED: "Refurbished to good working condition.",
+  SELLER_REFURBISHED: "Seller-refurbished item in good working condition.",
+  PRE_OWNED_GOOD: "Pre-owned item in good condition. May show minor signs of wear.",
+  PRE_OWNED_FAIR: "Pre-owned item in fair condition. Shows visible signs of wear.",
+  PRE_OWNED_POOR: "Pre-owned item in poor condition. Heavy wear or cosmetic damage.",
+  FOR_PARTS_OR_NOT_WORKING: "Item is not fully functional. Sold for parts or repair.",
+};
+
+// Legacy condition code migration map
+// Converts deprecated eBay condition strings to current equivalents
+const LEGACY_CONDITION_MAP: Record<string, string> = {
+  USED_EXCELLENT: "PRE_OWNED_GOOD",
+  USED_VERY_GOOD: "PRE_OWNED_GOOD",
+  USED_GOOD: "PRE_OWNED_FAIR",
+  USED_ACCEPTABLE: "PRE_OWNED_POOR",
 };
 
 // ----------------------------------------------------------------
@@ -42,9 +77,18 @@ function buildFixedPriceOffer(params: {
   ebayCategoryId?: string;
   merchantLocationKey: string;
   fulfillmentPolicyId: string;
-  paymentPolicyId: string;
+  paymentPolicyId?: string | null;  // Optional: managed payments sellers don't need this
   returnPolicyId: string;
 }): Record<string, unknown> {
+  // Build listingPolicies — paymentPolicyId is omitted for managed payments sellers
+  const listingPolicies: Record<string, string> = {
+    fulfillmentPolicyId: params.fulfillmentPolicyId,
+    returnPolicyId: params.returnPolicyId,
+  };
+  if (params.paymentPolicyId) {
+    listingPolicies.paymentPolicyId = params.paymentPolicyId;
+  }
+
   const offer: Record<string, unknown> = {
     sku: params.sku,
     marketplaceId: "EBAY_US",
@@ -59,11 +103,7 @@ function buildFixedPriceOffer(params: {
         currency: "USD",
       },
     },
-    listingPolicies: {
-      fulfillmentPolicyId: params.fulfillmentPolicyId,
-      paymentPolicyId: params.paymentPolicyId,
-      returnPolicyId: params.returnPolicyId,
-    },
+    listingPolicies,
   };
   if (params.ebayCategoryId) {
     offer.categoryId = params.ebayCategoryId;
@@ -84,7 +124,7 @@ function buildAuctionOffer(params: {
   ebayCategoryId?: string;
   merchantLocationKey: string;
   fulfillmentPolicyId: string;
-  paymentPolicyId: string;
+  paymentPolicyId?: string | null;  // Optional: managed payments sellers don't need this
   returnPolicyId: string;
 }): Record<string, unknown> {
   // Validate auction duration
@@ -123,11 +163,14 @@ function buildAuctionOffer(params: {
     listingDuration: duration,
     merchantLocationKey: params.merchantLocationKey,
     pricingSummary,
-    listingPolicies: {
-      fulfillmentPolicyId: params.fulfillmentPolicyId,
-      paymentPolicyId: params.paymentPolicyId,
-      returnPolicyId: params.returnPolicyId,
-    },
+    listingPolicies: (() => {
+      const policies: Record<string, string> = {
+        fulfillmentPolicyId: params.fulfillmentPolicyId,
+        returnPolicyId: params.returnPolicyId,
+      };
+      if (params.paymentPolicyId) policies.paymentPolicyId = params.paymentPolicyId;
+      return policies;
+    })(),
   };
   if (params.ebayCategoryId) {
     offer.categoryId = params.ebayCategoryId;
@@ -328,7 +371,98 @@ serve(async (req) => {
       );
     }
 
-    // --- ACTION: Get stored eBay token for a user ---
+    // --- ACTION: Silently refresh eBay access token using stored refresh token ---
+    if (action === "refresh_token") {
+      const { userId } = payload;
+      if (!userId) throw new Error("No userId provided");
+
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (!supabaseUrl || !supabaseServiceKey) {
+        throw new Error("Supabase credentials not configured");
+      }
+
+      const supabase = createClient(supabaseUrl, supabaseServiceKey);
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("ebay_refresh_token")
+        .eq("id", userId)
+        .single();
+
+      if (error || !data?.ebay_refresh_token) {
+        return new Response(
+          JSON.stringify({ token: null, error: "No refresh token available. Please reconnect eBay." }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const credentials = btoa(`${clientId}:${clientSecret}`);
+      const refreshResp = await fetch(tokenUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${credentials}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: data.ebay_refresh_token,
+          scope: [
+            "https://api.ebay.com/oauth/api_scope",
+            "https://api.ebay.com/oauth/api_scope/sell.inventory",
+            "https://api.ebay.com/oauth/api_scope/sell.account",
+            "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
+          ].join(" "),
+        }).toString(),
+      });
+
+      if (!refreshResp.ok) {
+        const txt = await refreshResp.text();
+        console.error("refresh_token: eBay refresh failed:", refreshResp.status, txt);
+        return new Response(
+          JSON.stringify({ token: null, error: `Token refresh failed (${refreshResp.status}). Please reconnect eBay.` }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const tokenData = await refreshResp.json();
+      if (!tokenData.access_token) {
+        return new Response(
+          JSON.stringify({ token: null, error: "eBay returned no access token during refresh." }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Store the new access token (and new refresh token if provided)
+      const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
+      const updatePatch: Record<string, string> = {
+        ebay_access_token: tokenData.access_token,
+        ebay_token_expires_at: expiresAt,
+      };
+      if (tokenData.refresh_token) {
+        updatePatch.ebay_refresh_token = tokenData.refresh_token;
+      }
+
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update(updatePatch)
+        .eq("id", userId);
+
+      if (updateError) {
+        console.warn("refresh_token: failed to store refreshed token:", updateError.message);
+      } else {
+        console.log("refresh_token: token refreshed and stored for user", userId, "expires at", expiresAt);
+      }
+
+      return new Response(
+        JSON.stringify({
+          token: tokenData.access_token,
+          expiresIn: tokenData.expires_in,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // --- ACTION: Get stored eBay token for a user (with proactive refresh) ---
     if (action === "get_stored_token") {
       const { userId } = payload;
       if (!userId) throw new Error("No userId provided");
@@ -353,15 +487,80 @@ serve(async (req) => {
         );
       }
 
-      const isExpired = data.ebay_token_expires_at
-        ? new Date(data.ebay_token_expires_at) < new Date()
-        : false;
+      const now = new Date();
+      const expiresAt = data.ebay_token_expires_at ? new Date(data.ebay_token_expires_at) : null;
+      // Consider token expired if it expires within 5 minutes (proactive refresh window)
+      const REFRESH_BUFFER_MS = 5 * 60 * 1000;
+      const isExpiredOrExpiringSoon = expiresAt
+        ? expiresAt.getTime() - now.getTime() < REFRESH_BUFFER_MS
+        : true;
+
+      // Proactively refresh if token is expired or expiring within 5 minutes
+      if (isExpiredOrExpiringSoon && data.ebay_refresh_token) {
+        console.log("get_stored_token: token expiring soon, attempting proactive refresh for user", userId);
+        try {
+          const credentials = btoa(`${clientId}:${clientSecret}`);
+          const refreshResp = await fetch(tokenUrl, {
+            method: "POST",
+            headers: {
+              Authorization: `Basic ${credentials}`,
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: new URLSearchParams({
+              grant_type: "refresh_token",
+              refresh_token: data.ebay_refresh_token,
+              scope: [
+                "https://api.ebay.com/oauth/api_scope",
+                "https://api.ebay.com/oauth/api_scope/sell.inventory",
+                "https://api.ebay.com/oauth/api_scope/sell.account",
+                "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
+              ].join(" "),
+            }).toString(),
+          });
+
+          if (refreshResp.ok) {
+            const tokenData = await refreshResp.json();
+            if (tokenData.access_token) {
+              const newExpiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
+              const updatePatch: Record<string, string> = {
+                ebay_access_token: tokenData.access_token,
+                ebay_token_expires_at: newExpiresAt,
+              };
+              if (tokenData.refresh_token) {
+                updatePatch.ebay_refresh_token = tokenData.refresh_token;
+              }
+              await supabase.from("profiles").update(updatePatch).eq("id", userId);
+              console.log("get_stored_token: proactive refresh succeeded, new expiry:", newExpiresAt);
+
+              return new Response(
+                JSON.stringify({
+                  token: tokenData.access_token,
+                  postalCode: data.postal_code,
+                  isExpired: false,
+                  refreshed: true,
+                }),
+                { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              );
+            }
+          } else {
+            console.warn("get_stored_token: proactive refresh failed:", refreshResp.status);
+          }
+        } catch (refreshErr) {
+          console.warn("get_stored_token: proactive refresh error (non-fatal):", refreshErr);
+        }
+
+        // Refresh failed — return null so caller triggers re-auth
+        return new Response(
+          JSON.stringify({ token: null, postalCode: data.postal_code, isExpired: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
       return new Response(
         JSON.stringify({
-          token: isExpired ? null : data.ebay_access_token,
+          token: data.ebay_access_token,
           postalCode: data.postal_code,
-          isExpired,
+          isExpired: false,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -424,8 +623,13 @@ serve(async (req) => {
       // Map internal condition string to numeric conditionId
       // eBay Inventory API accepts ConditionEnum strings, but many categories
       // also require the numeric conditionId. We send both for maximum compatibility.
-      const conditionEnum = condition || "USED_EXCELLENT";
+      // Migrate any legacy deprecated condition codes to current equivalents.
+      const rawCondition = condition || "PRE_OWNED_GOOD";
+      const conditionEnum = LEGACY_CONDITION_MAP[rawCondition] ?? rawCondition;
       const conditionId = CONDITION_ID_MAP[conditionEnum] ?? 3000;
+      const conditionDesc = CONDITION_DESCRIPTIONS[conditionEnum]
+        ?? conditionEnum.replace(/_/g, " ").toLowerCase()
+             .replace(/\b\w/g, (c: string) => c.toUpperCase());
 
       // Step 1: Create/update inventory item (PUT is idempotent — safe to retry)
       // NOTE: description goes in the OFFER (listingDescription), not the inventory item.
@@ -440,8 +644,7 @@ serve(async (req) => {
         },
         // Send both string enum and numeric ID for maximum category compatibility
         condition: conditionEnum,
-        conditionDescription: conditionEnum.replace(/_/g, " ").toLowerCase()
-          .replace(/\b\w/g, (c: string) => c.toUpperCase()),
+        conditionDescription: conditionDesc,
         availability: {
           shipToLocationAvailability: {
             quantity: 1,
@@ -501,57 +704,59 @@ serve(async (req) => {
         return null;
       };
 
+      // Fetch policies — paymentPolicyId is optional for managed payments sellers.
+      // Most eBay sellers enrolled in managed payments do NOT need a payment policy.
+      // We only require fulfillment and return policies.
       const [fulfillmentPolicyId, paymentPolicyId, returnPolicyId] = await Promise.all([
         draftFulfillmentPolicyId ? Promise.resolve(draftFulfillmentPolicyId) : fetchDefaultPolicy("fulfillment"),
         draftPaymentPolicyId     ? Promise.resolve(draftPaymentPolicyId)     : fetchDefaultPolicy("payment"),
         draftReturnPolicyId      ? Promise.resolve(draftReturnPolicyId)      : fetchDefaultPolicy("return"),
       ]);
 
-      if (!fulfillmentPolicyId || !paymentPolicyId || !returnPolicyId) {
+      // Only fulfillment and return policies are required; payment policy is optional
+      if (!fulfillmentPolicyId || !returnPolicyId) {
         const missing = [
           !fulfillmentPolicyId && "Fulfillment (Shipping)",
-          !paymentPolicyId && "Payment",
           !returnPolicyId && "Return",
         ].filter(Boolean).join(", ");
 
         return new Response(
           JSON.stringify({
-            error: `Missing eBay business policies: ${missing}. Please create these policies in your eBay Seller Hub (https://www.ebay.com/sh/ovw/policies) before publishing.`,
+            error: `Missing required eBay business policies: ${missing}. Please create these policies in your eBay Seller Hub (https://www.ebay.com/sh/ovw/policies) before publishing.`,
             missingPolicies: true,
           }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      // Step 4: Build offer payload using separate builders for each format
-      const format = listingFormat === "AUCTION" ? "AUCTION" : "FIXED_PRICE";
-      let offerBody: Record<string, unknown>;
-
-      if (format === "FIXED_PRICE") {
-        offerBody = buildFixedPriceOffer({
-          sku,
-          description,
-          listingPrice: Number(listingPrice ?? 0),
-          ebayCategoryId: ebayCategoryId || undefined,
-          merchantLocationKey,
-          fulfillmentPolicyId,
-          paymentPolicyId,
-          returnPolicyId,
-        });
-      } else {
-        offerBody = buildAuctionOffer({
-          sku,
-          description,
-          auctionStartPrice: Number(auctionStartPrice ?? 0),
-          auctionBuyItNow: auctionBuyItNow ? Number(auctionBuyItNow) : undefined,
-          auctionDuration: auctionDuration || DEFAULT_AUCTION_DURATION,
-          ebayCategoryId: ebayCategoryId || undefined,
-          merchantLocationKey,
-          fulfillmentPolicyId,
-          paymentPolicyId,
-          returnPolicyId,
-        });
+      // Step 4: Build offer payload
+      // IMPORTANT: The eBay Inventory API (REST) only supports FIXED_PRICE format.
+      // Auction listings require the legacy Trading API (XML-based) which is a
+      // separate integration path. Attempting to pass format: "AUCTION" to the
+      // Inventory API will result in a 400 error.
+      // See: https://developer.ebay.com/api-docs/sell/inventory/resources/offer/methods/createOffer
+      if (listingFormat === "AUCTION") {
+        return new Response(
+          JSON.stringify({
+            error: "Auction format is not supported by the eBay Inventory API. " +
+              "Please change the listing format to Fixed Price, or use the eBay " +
+              "Seller Hub to create auction listings manually.",
+            auctionNotSupported: true,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
+
+      const offerBody = buildFixedPriceOffer({
+        sku,
+        description,
+        listingPrice: Number(listingPrice ?? 0),
+        ebayCategoryId: ebayCategoryId || undefined,
+        merchantLocationKey,
+        fulfillmentPolicyId,
+        paymentPolicyId,
+        returnPolicyId,
+      });
 
       const offerResp = await fetch(`${apiBase}/sell/inventory/v1/offer`, {
         method: "POST",

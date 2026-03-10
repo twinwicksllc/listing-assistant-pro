@@ -345,7 +345,7 @@ Return your analysis using the provided tool.`;
                     },
                     condition: {
                       type: "string",
-                      enum: ["NEW", "LIKE_NEW", "USED_EXCELLENT", "USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE"],
+                      enum: ["NEW", "LIKE_NEW", "NEW_OTHER", "NEW_WITH_DEFECTS", "CERTIFIED_REFURBISHED", "EXCELLENT_REFURBISHED", "VERY_GOOD_REFURBISHED", "GOOD_REFURBISHED", "SELLER_REFURBISHED", "PRE_OWNED_GOOD", "PRE_OWNED_FAIR", "PRE_OWNED_POOR", "FOR_PARTS_OR_NOT_WORKING"],
                       description: "eBay item condition enum value",
                     },
                     suggestedGrade: {
