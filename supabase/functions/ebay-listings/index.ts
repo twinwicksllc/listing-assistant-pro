@@ -65,14 +65,26 @@ serve(async (req) => {
       
       // Check if this is a SKU validation error - common with legacy data
       if (offersResp.status === 400 && errText.includes("SKU")) {
-        console.warn("eBay account has data validation issues with SKU values. Returning empty listings.");
-        return new Response(
-          JSON.stringify({ 
-            listings: [], 
-            warning: "Your eBay account has offers with invalid SKU values. Please review your inventory on eBay." 
-          }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        console.warn("eBay account has data validation issues with SKU values. Response:", errText);
+        try {
+          const errJson = JSON.parse(errText);
+          const errorDetails = errJson.errors?.[0]?.message || "Check your eBay inventory for invalid SKUs";
+          return new Response(
+            JSON.stringify({ 
+              listings: [], 
+              warning: `${errorDetails} — If you just fixed your SKUs, give eBay 5-10 minutes to propagate, then try refreshing again.`
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        } catch {
+          return new Response(
+            JSON.stringify({ 
+              listings: [], 
+              warning: "Your eBay account has offers with invalid SKU values. Please review your inventory on eBay." 
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
       }
       
       // For other errors, return error details instead of throwing (avoids 500)
