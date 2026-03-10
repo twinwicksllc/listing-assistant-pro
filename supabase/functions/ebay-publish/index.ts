@@ -205,7 +205,57 @@ serve(async (req) => {
         throw new Error(`Failed to create inventory item: ${inventoryResp.status} - ${errText}`);
       }
 
-      // Step 2: Create offer (draft listing)
+      // Step 2: Fetch user's default business policies from eBay Account API.
+      // Policies (fulfillment/payment/return) are required to publish a listing.
+      // We auto-fetch the first policy of each type and attach them to the offer.
+      const authHeaders = {
+        Authorization: `Bearer ${userToken}`,
+        "Content-Type": "application/json",
+      };
+
+      const fetchDefaultPolicy = async (policyType: string): Promise<string | null> => {
+        const resp = await fetch(
+          `${apiBase}/sell/account/v1/${policyType}_policy?marketplace_id=EBAY_US`,
+          { headers: authHeaders }
+        );
+        if (!resp.ok) {
+          console.warn(`Could not fetch ${policyType} policies:`, resp.status, await resp.text());
+          return null;
+        }
+        const data = await resp.json();
+        const policies = data[`${policyType}Policies`] || data[`${policyType}Policy`] || [];
+        if (Array.isArray(policies) && policies.length > 0) {
+          console.log(`Using ${policyType} policy: ${policies[0].name} (${policies[0][`${policyType}PolicyId`]})`);
+          return policies[0][`${policyType}PolicyId`] || null;
+        }
+        console.warn(`No ${policyType} policies found on this account`);
+        return null;
+      };
+
+      const [fulfillmentPolicyId, paymentPolicyId, returnPolicyId] = await Promise.all([
+        fetchDefaultPolicy("fulfillment"),
+        fetchDefaultPolicy("payment"),
+        fetchDefaultPolicy("return"),
+      ]);
+
+      // All three policy IDs are required by eBay to publish a listing
+      if (!fulfillmentPolicyId || !paymentPolicyId || !returnPolicyId) {
+        const missing = [
+          !fulfillmentPolicyId && "Fulfillment (Shipping)",
+          !paymentPolicyId && "Payment",
+          !returnPolicyId && "Return",
+        ].filter(Boolean).join(", ");
+
+        return new Response(
+          JSON.stringify({
+            error: `Missing eBay business policies: ${missing}. Please create these policies in your eBay Seller Hub (https://www.ebay.com/sh/ovw/policies) before publishing.`,
+            missingPolicies: true,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Step 3: Create offer with policies
       const format = listingFormat === "AUCTION" ? "AUCTION" : "FIXED_PRICE";
       const offerBody: any = {
         sku,
@@ -213,7 +263,11 @@ serve(async (req) => {
         format,
         listingDescription: description,
         availableQuantity: 1,
-        listingPolicies: {},
+        listingPolicies: {
+          fulfillmentPolicyId,
+          paymentPolicyId,
+          returnPolicyId,
+        },
       };
 
       // Set pricing based on format
@@ -247,11 +301,7 @@ serve(async (req) => {
 
       const offerResp = await fetch(`${apiBase}/sell/inventory/v1/offer`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${userToken}`,
-          "Content-Type": "application/json",
-          "Content-Language": "en-US",
-        },
+        headers: { ...authHeaders, "Content-Language": "en-US" },
         body: JSON.stringify(offerBody),
       });
 
@@ -262,20 +312,46 @@ serve(async (req) => {
       }
 
       const offerData = await offerResp.json();
+      const offerId = offerData.offerId;
 
-      // Build affiliate link if the offer already has a listingId (published immediately)
-      // or store the offerId so the frontend can construct it once the listing goes live
-      const listingId = offerData.listing?.listingId || null;
+      // Step 4: Publish the offer to make it a live listing
+      const publishResp = await fetch(
+        `${apiBase}/sell/inventory/v1/offer/${offerId}/publish`,
+        {
+          method: "POST",
+          headers: authHeaders,
+        }
+      );
+
+      if (!publishResp.ok) {
+        const errText = await publishResp.text();
+        console.error("eBay publish error:", publishResp.status, errText);
+        // Return offerId even if publish failed so we can debug
+        return new Response(
+          JSON.stringify({
+            error: `Offer created (ID: ${offerId}) but publish failed: ${publishResp.status} - ${errText}`,
+            offerId,
+            sku,
+            publishFailed: true,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const publishData = await publishResp.json();
+      const listingId = publishData.listingId || offerData.listing?.listingId || null;
       const affiliateUrl = listingId ? buildAffiliateUrl(listingId) : null;
+
+      console.log(`Successfully published listing: listingId=${listingId}, offerId=${offerId}, sku=${sku}`);
 
       return new Response(
         JSON.stringify({
           success: true,
-          offerId: offerData.offerId,
+          offerId,
           sku,
           listingId,
           affiliateUrl,
-          message: "Draft listing created on eBay",
+          message: "Listing published live on eBay!",
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
