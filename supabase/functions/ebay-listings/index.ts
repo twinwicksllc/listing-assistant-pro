@@ -90,7 +90,8 @@ async function fetchListingsViaTradingAPI(
       const status = get("ListingStatus") || "ACTIVE";
       const categoryId = get("CategoryID") || "";
 
-      if (listingId) {
+      // Only include active listings (skip sold, ended, deleted, etc.)
+      if (listingId && status === "Active") {
         listings.push({
           offerId: null,
           sku: sku || listingId,
