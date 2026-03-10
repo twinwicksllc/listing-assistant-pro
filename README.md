@@ -93,6 +93,34 @@ The app uses several Supabase Edge Functions:
 - `spot-prices`: Fetches and caches live metal spot prices
 - `ebay-publish`: Publishes listings directly to eBay
 
+## eBay Integration
+
+### Taxonomy API Module
+
+The app includes a complete `ebayTaxonomy.ts` module for automated category discovery and item specifics validation:
+
+- **Category Discovery**: Automatically suggest eBay categories based on item descriptions
+- **Item Specifics**: Fetch and validate required/recommended attributes for selected categories
+- **Intelligent Caching**: 24-hour category cache, 7-day aspect cache using localStorage
+- **Error Handling**: Comprehensive error recovery for OAuth, rate limits, and invalid data
+
+**Integration**: See [EBAY_TAXONOMY_INTEGRATION.md](./EBAY_TAXONOMY_INTEGRATION.md) for detailed setup and usage.
+
+### Business Policies
+
+The `useEbayPolicies` hook manages fulfillment, payment, and return policies with:
+- 24-hour cache to minimize API calls
+- Parallel policy fetching for performance
+- Manual refresh capability with cache age display
+
+### Form Validation
+
+List creation uses React Hook Form + Zod for comprehensive validation:
+- Required fields: title, description, category, pricing, policies
+- Conditional validation for FIXED_PRICE vs AUCTION formats
+- Real-time inline error display with disabled submit button
+- Full TypeScript type safety
+
 ## Database Schema
 
 Key tables:
