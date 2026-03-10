@@ -65,28 +65,63 @@ serve(async (req) => {
         );
       }
       
-      // Check if this is a SKU validation error - common with legacy data
+      // Check if this is a SKU validation error - scan inventory items to identify the bad SKU(s)
       if (offersResp.status === 400 && errText.includes("SKU")) {
-        console.warn("eBay account has data validation issues with SKU values. Response:", errText);
+        console.warn("eBay account has SKU validation issues. Attempting inventory scan to identify bad SKUs. Raw error:", errText);
+
+        // Try to enumerate all inventory items — their SKUs are returned as-is (no format validation on reads)
+        // This lets us check which SKUs contain non-alphanumeric characters
+        const badSkus: string[] = [];
+        let scanError: string | null = null;
         try {
-          const errJson = JSON.parse(errText);
-          const errorDetails = errJson.errors?.[0]?.message || "Check your eBay inventory for invalid SKUs";
-          return new Response(
-            JSON.stringify({ 
-              listings: [], 
-              warning: `${errorDetails} — If you just fixed your SKUs, give eBay 5-10 minutes to propagate, then try refreshing again.`
-            }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        } catch {
-          return new Response(
-            JSON.stringify({ 
-              listings: [], 
-              warning: "Your eBay account has offers with invalid SKU values. Please review your inventory on eBay." 
-            }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          let offset = 0;
+          const limit = 100;
+          let keepGoing = true;
+          while (keepGoing) {
+            const itemsResp = await fetch(
+              `${apiBase}/sell/inventory/v1/inventory_item?limit=${limit}&offset=${offset}`,
+              { headers: ebayHeaders }
+            );
+            if (!itemsResp.ok) {
+              scanError = `inventory_item scan failed: ${itemsResp.status}`;
+              console.warn(scanError);
+              break;
+            }
+            const itemsData = await itemsResp.json();
+            const items: any[] = itemsData.inventoryItems || [];
+            for (const item of items) {
+              const sku: string = item.sku || "";
+              // eBay only allows alphanumeric characters (letters, digits); max 50 chars
+              if (sku.length > 50 || !/^[a-zA-Z0-9\-_]*$/.test(sku)) {
+                badSkus.push(sku);
+              }
+            }
+            const total = itemsData.total || 0;
+            offset += items.length;
+            keepGoing = items.length === limit && offset < total;
+          }
+        } catch (scanErr) {
+          scanError = String(scanErr);
+          console.warn("Inventory scan exception:", scanErr);
         }
+
+        console.warn(`SKU scan complete — bad SKUs found: [${badSkus.join(", ")}]${scanError ? ` (scan error: ${scanError})` : ""}`);
+
+        let warning: string;
+        if (badSkus.length > 0) {
+          const skuList = badSkus.map(s => `"${s}"`).join(", ");
+          warning = `Your eBay inventory contains ${badSkus.length} listing(s) with invalid SKUs: ${skuList}. Go to eBay Seller Hub → Inventory, search for each one, and either delete the listing or edit its SKU to use only letters and numbers (no spaces or special characters). After fixing, wait a few minutes and reconnect.`;
+        } else if (scanError) {
+          warning = "Your eBay account has listings with invalid SKUs, but we couldn't identify them automatically. Go to eBay Seller Hub → Inventory and look for listings whose SKU contains spaces, slashes, or other special characters, then delete or fix them.";
+        } else {
+          // Scan succeeded but nothing flagged — eBay may allow hyphens/underscores in some contexts but reject them in the offer bulk query
+          warning = "Your eBay account has listings with SKUs that eBay considers invalid. Go to eBay Seller Hub → Inventory, find any listings with hyphens, underscores, or other non-alphanumeric characters in their SKU, and delete or fix them.";
+        }
+
+        return new Response(
+          JSON.stringify({ listings: [], warning }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
       
       // For other errors, return error details instead of throwing (avoids 500)
