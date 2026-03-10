@@ -64,6 +64,14 @@ export default function DashboardPage() {
         toast.error("eBay connection expired. Please reconnect in Settings.");
         return;
       }
+      if (data?.warning) {
+        // Display warning but keep the connection active (user can try to fix on eBay)
+        console.warn("ebay-listings warning:", data.warning);
+        setListings([]);
+        setNeedsAuth(false);
+        toast.error(data.warning);
+        return;
+      }
       if (data?.error) {
         // Show the actual error so we can diagnose it
         console.error("ebay-listings error response:", data.error);

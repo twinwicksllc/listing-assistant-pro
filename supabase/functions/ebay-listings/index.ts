@@ -54,6 +54,7 @@ serve(async (req) => {
     if (!offersResp.ok) {
       const errText = await offersResp.text();
       console.error("eBay offers error:", offersResp.status, errText);
+      
       // Return needsAuth for any auth-related error so frontend clears the token
       if (offersResp.status === 401 || offersResp.status === 403) {
         return new Response(
@@ -61,6 +62,19 @@ serve(async (req) => {
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+      
+      // Check if this is a SKU validation error - common with legacy data
+      if (offersResp.status === 400 && errText.includes("SKU")) {
+        console.warn("eBay account has data validation issues with SKU values. Returning empty listings.");
+        return new Response(
+          JSON.stringify({ 
+            listings: [], 
+            warning: "Your eBay account has offers with invalid SKU values. Please review your inventory on eBay." 
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
       // For other errors, return error details instead of throwing (avoids 500)
       return new Response(
         JSON.stringify({ listings: [], error: `eBay API error ${offersResp.status}: ${errText}` }),
