@@ -106,6 +106,11 @@ async function fetchListingsViaTradingAPI(
       const sku = get("SKU");
       const categoryId = get("CategoryID") || "";
       
+      // Parse listing status from SellingStatus section
+      // Items that sold but are in transit may still appear in ActiveList
+      // We need to explicitly check that ListingStatus is "Active"
+      const listingStatus = get("ListingStatus");
+      
       // Parse quantity fields to filter out sold items
       // eBay considers multi-quantity listings "active" even if all units sold
       // So we need to check: QuantityAvailable = Quantity - QuantitySold
@@ -115,9 +120,11 @@ async function fetchListingsViaTradingAPI(
       const quantitySold = quantitySoldStr ? parseInt(quantitySoldStr, 10) : 0;
       const quantityAvailable = quantity - quantitySold;
 
-      // Skip items with 0 remaining quantity (fully sold out)
-      if (listingId && quantityAvailable > 0) {
-        console.log(`Trading API item: ItemID=${listingId}, Title="${title}", SKU="${sku}", Qty=${quantityAvailable}`);
+      // Include only items that are:
+      // 1. Explicitly in "Active" listing status (not Ended, Completed, etc.)
+      // 2. Have remaining quantity available
+      if (listingId && listingStatus === "Active" && quantityAvailable > 0) {
+        console.log(`Trading API item: ItemID=${listingId}, Title="${title}", SKU="${sku}", Status=${listingStatus}, Qty=${quantityAvailable}`);
         listings.push({
           offerId: null,
           sku: sku || listingId,
@@ -125,12 +132,14 @@ async function fetchListingsViaTradingAPI(
           imageUrl,
           price,
           currency,
-          status: "Active",  // Items in ActiveList response are already active
+          status: "Active",
           categoryId,
           listingId,
           views: 0,
           ebayUrl: `https://www.ebay.com/itm/${listingId}`,
         });
+      } else if (listingId && listingStatus !== "Active") {
+        console.log(`Skipping non-active item: ItemID=${listingId}, Title="${title}", Status=${listingStatus}`);
       } else if (listingId && quantityAvailable <= 0) {
         console.log(`Skipping sold-out item: ItemID=${listingId}, Title="${title}" (Qty available: ${quantityAvailable})`);
       }
