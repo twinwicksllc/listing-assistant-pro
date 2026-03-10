@@ -50,6 +50,7 @@ serve(async (req) => {
     // Admin emails always get unlimited access
     const ADMIN_EMAILS = ["twinwicksllc@gmail.com"];
     const isAdmin = userEmail ? ADMIN_EMAILS.includes(userEmail) : false;
+    console.log("analyze-item: user email =", userEmail, "isAdmin =", isAdmin, "ADMIN_EMAILS =", ADMIN_EMAILS);
 
     // Check subscription status via Stripe to determine tier (skip for admins)
     let tier: "starter" | "pro" | "unlimited" = isAdmin ? "unlimited" : "starter";
