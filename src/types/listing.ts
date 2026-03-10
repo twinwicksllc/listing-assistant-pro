@@ -31,4 +31,7 @@ export interface ListingDraft {
   itemSpecifics?: ItemSpecifics;
   condition?: string;
   consignor?: string;
+  fulfillmentPolicyId?: string;
+  paymentPolicyId?: string;
+  returnPolicyId?: string;
 }
