@@ -87,11 +87,12 @@ async function fetchListingsViaTradingAPI(
       const currency = item.match(/<CurrentPrice currencyID="([^"]+)"/)?.[1] || "USD";
       const imageUrl = get("GalleryURL") || get("PictureURL") || "";
       const sku = get("SKU");
-      const status = get("ListingStatus") || "ACTIVE";
       const categoryId = get("CategoryID") || "";
 
-      // Only include active listings (skip sold, ended, deleted, etc.)
-      if (listingId && status === "Active") {
+      // Items in ActiveList are already active by definition — no need to filter by status.
+      // (The GetMyeBaySelling request specifies <ActiveList> which only returns active items)
+      if (listingId) {
+        console.log(`Trading API item: ItemID=${listingId}, Title="${title}", SKU="${sku}"`);
         listings.push({
           offerId: null,
           sku: sku || listingId,
@@ -99,7 +100,7 @@ async function fetchListingsViaTradingAPI(
           imageUrl,
           price,
           currency,
-          status,
+          status: "Active",  // Items in ActiveList response are already active
           categoryId,
           listingId,
           views: 0,
