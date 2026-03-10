@@ -94,8 +94,8 @@ export async function uploadListingImage(
 
     if (error) {
       console.error("Image upload error:", error);
-      // Fall back to data URL if upload fails
-      return dataUrl;
+      // Fall back to compressed data URL (not original) to avoid large payloads
+      return compressed;
     }
 
     const { data: urlData } = supabase.storage

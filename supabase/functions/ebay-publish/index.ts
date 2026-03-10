@@ -153,7 +153,8 @@ serve(async (req) => {
         return `https://rover.ebay.com/rover/1/711-53200-19255-0/1?campid=${encodeURIComponent(epnCampaignId)}&toolid=10001&customid=teckstart&mpre=${encodeURIComponent(baseUrl)}`;
       };
 
-      const sku = `LISTING-${Date.now()}`;
+      // Use a UUID-based SKU to avoid any account-level SKU validation conflicts
+      const sku = `LA-${crypto.randomUUID().replace(/-/g, "").slice(0, 16).toUpperCase()}`;
 
       // Build eBay-formatted item specifics (nameValueList)
       const aspects: Record<string, string[]> = {};
