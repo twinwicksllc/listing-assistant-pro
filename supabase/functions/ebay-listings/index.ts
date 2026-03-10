@@ -83,9 +83,17 @@ serve(async (req) => {
           if (itemResp.ok) {
             const itemData = await itemResp.json();
             product = itemData.product || {};
+          } else if (itemResp.status === 400 || itemResp.status === 404) {
+            // SKU is invalid or inventory item doesn't exist - skip it
+            console.warn(`Skipping inventory fetch for SKU "${offer.sku}": ${itemResp.status}`);
+          } else {
+            // Log other errors but don't fail
+            const errText = await itemResp.text();
+            console.warn(`Inventory fetch error for SKU "${offer.sku}": ${itemResp.status} ${errText}`);
           }
-        } catch {
-          // skip
+        } catch (err) {
+          // Network error or parsing error - skip silently
+          console.warn(`Error fetching inventory for SKU "${offer.sku}":`, err);
         }
 
         return {
