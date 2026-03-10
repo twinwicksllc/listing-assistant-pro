@@ -66,105 +66,98 @@ serve(async (req) => {
       
       // Check if this is a SKU validation error - scan inventory items to identify the bad SKU(s)
       if (offersResp.status === 400 && errText.includes("SKU")) {
-        console.warn("eBay offers bulk call failed with SKU error. Running binary search to locate the bad offer. Raw error:", errText);
+        console.warn("eBay offers bulk call failed with SKU error. Falling back to per-offer fetch to skip bad SKUs. Raw error:", errText);
 
-        // eBay's /offer?limit=N endpoint iterates internally over stored offers and chokes
-        // on any offer whose SKU contains non-alphanumeric characters — even ones created
-        // via Seller Hub which allows special characters. The error response never includes
-        // the specific bad SKU, so we binary-search with limit=1 per offset to find it.
-        let badOffset: number | null = null;
-        let badSku: string | null = null;
-        let cleanSkus: string[] = [];
-        let searchError: string | null = null;
+        // eBay's /offer?limit=N endpoint chokes internally on any stored offer whose SKU
+        // contains non-alphanumeric characters (e.g. "SKU-004" with a hyphen).
+        // Even inactive/appealed listings that can't be edited still block the bulk call.
+        // Solution: fetch limit=1 per offset, silently skip any that error, return the rest.
+        const goodOffers: any[] = [];
+        const badOffsets: number[] = [];
+        const MAX_OFFERS = 200; // safety cap
 
-        try {
-          // Phase 1: find which 10-item page contains the bad offer
-          const pageSize = 10;
-          let pageStart = 0;
-          let badPageStart: number | null = null;
-
-          while (pageStart <= 500) {
-            const r = await fetch(
-              `${apiBase}/sell/inventory/v1/offer?limit=${pageSize}&offset=${pageStart}`,
-              { headers: ebayHeaders }
-            );
-            if (!r.ok) {
-              const t = await r.text();
-              if (t.includes("SKU")) {
-                badPageStart = pageStart;
-                console.warn(`Binary search phase 1: bad offer is in offsets ${pageStart}–${pageStart + pageSize - 1}`);
-              }
-              break;
+        for (let i = 0; i < MAX_OFFERS; i++) {
+          const r = await fetch(
+            `${apiBase}/sell/inventory/v1/offer?limit=1&offset=${i}`,
+            { headers: ebayHeaders }
+          );
+          if (!r.ok) {
+            const t = await r.text();
+            if (t.includes("SKU")) {
+              badOffsets.push(i);
+              console.warn(`Skipping offer at offset ${i} — bad SKU (errorId 25707)`);
+              continue; // skip this one, keep going
             }
-            const d = await r.json();
-            const page: any[] = d.offers || [];
-            // Collect any SKUs we can read (for the warning message)
-            for (const o of page) {
-              if (o.sku) cleanSkus.push(o.sku);
-            }
-            if (page.length === 0) break; // no more offers
-            pageStart += page.length;
-            if (page.length < pageSize) break; // last page, no error found
+            // Any other error (auth, rate limit, etc.) — stop
+            console.warn(`Stopping per-offer fetch at offset ${i}: ${r.status} ${t}`);
+            break;
           }
-
-          // Phase 2: narrow to the exact offset within the bad page
-          if (badPageStart !== null) {
-            for (let i = badPageStart; i < badPageStart + pageSize; i++) {
-              const r = await fetch(
-                `${apiBase}/sell/inventory/v1/offer?limit=1&offset=${i}`,
-                { headers: ebayHeaders }
-              );
-              if (!r.ok) {
-                const t = await r.text();
-                if (t.includes("SKU")) {
-                  badOffset = i;
-                  console.warn(`Binary search phase 2: bad offer is at offset ${i}`);
-                  break;
-                }
-                break;
-              }
-              // This offset is clean — record its SKU
-              const d = await r.json();
-              const sku = d.offers?.[0]?.sku;
-              if (sku && !cleanSkus.includes(sku)) cleanSkus.push(sku);
-            }
-          }
-        } catch (searchErr) {
-          searchError = String(searchErr);
-          console.warn("Binary search exception:", searchErr);
+          const d = await r.json();
+          const page: any[] = d.offers || [];
+          if (page.length === 0) break; // no more offers
+          goodOffers.push(...page);
         }
 
         console.warn(
-          `Binary search complete — bad offset: ${badOffset ?? "not found"}, ` +
-          `clean SKUs seen: [${cleanSkus.join(", ")}]` +
-          (searchError ? `, error: ${searchError}` : "")
+          `Per-offer fetch complete — loaded ${goodOffers.length} offers, ` +
+          `skipped ${badOffsets.length} bad offset(s): [${badOffsets.join(", ")}]`
         );
 
-        let warning: string;
-        if (badOffset !== null) {
-          warning =
-            `eBay has an offer at position ${badOffset + 1} in your inventory with an invalid SKU ` +
-            `(special characters like hyphens, underscores, or spaces are not allowed). ` +
-            `Go to eBay Seller Hub → Inventory → Active Listings, find listing #${badOffset + 1} ` +
-            `in the list, and end or delete it. Then wait a few minutes and reconnect.`;
-        } else if (cleanSkus.length > 0) {
-          warning =
-            `eBay is rejecting your offers list with a SKU validation error. ` +
-            `We could read ${cleanSkus.length} offer(s) but couldn't pinpoint the bad one. ` +
-            `Go to eBay Seller Hub → Inventory and look for any listing whose Custom Label (SKU) ` +
-            `contains hyphens, underscores, spaces, or other special characters, then end or delete it.`;
-        } else {
-          warning =
-            `eBay returned a SKU validation error (errorId 25707). Your existing listings were likely ` +
-            `created through eBay's classic seller flow with non-alphanumeric SKUs. ` +
-            `Go to eBay Seller Hub → Listings → Active, look for listings with a Custom Label that ` +
-            `contains hyphens, underscores, spaces, or other special characters, and end or delete them. ` +
-            `After fixing all of them, wait a few minutes and reconnect.`;
+        // If we got some good offers, process them normally (fall through by returning early
+        // only if we got nothing useful)
+        if (goodOffers.length === 0) {
+          const warning = badOffsets.length > 0
+            ? `Your eBay account has ${badOffsets.length} listing(s) with invalid SKUs that are blocking the dashboard (e.g. SKUs with hyphens like "SKU-004"). These listings need to be deleted from eBay before the dashboard can show your active listings.`
+            : "No eBay offers found in your account.";
+          return new Response(
+            JSON.stringify({ listings: [], warning }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
 
+        // We have good offers — continue processing them below by reassigning and falling through
+        // (restructure: build listings from goodOffers directly and return)
+        const goodListings = await Promise.all(
+          goodOffers.map(async (offer: any) => {
+            let product: any = {};
+            try {
+              const itemResp = await fetch(
+                `${apiBase}/sell/inventory/v1/inventory_item/${encodeURIComponent(offer.sku)}`,
+                { headers: ebayHeaders }
+              );
+              if (itemResp.ok) {
+                const itemData = await itemResp.json();
+                product = itemData.product || {};
+              }
+            } catch { /* skip */ }
+            return {
+              offerId: offer.offerId,
+              sku: offer.sku,
+              title: product.title || offer.sku,
+              imageUrl: product.imageUrls?.[0] || "",
+              price: parseFloat(offer.pricingSummary?.price?.value || "0"),
+              currency: offer.pricingSummary?.price?.currency || "USD",
+              status: offer.status || "UNKNOWN",
+              categoryId: offer.categoryId || "",
+              listingId: offer.listing?.listingId || null,
+              views: 0,
+              ebayUrl: offer.listing?.listingId ? `https://www.ebay.com/itm/${offer.listing.listingId}` : null,
+            };
+          })
+        );
+
+        const skippedNote = badOffsets.length > 0
+          ? ` (${badOffsets.length} listing(s) with invalid SKUs were skipped)`
+          : "";
         return new Response(
-          JSON.stringify({ listings: [], warning }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({
+            listings: goodListings,
+            needsAuth: false,
+            warning: badOffsets.length > 0
+              ? `Loaded ${goodListings.length} listing(s). ${badOffsets.length} listing(s) with invalid SKUs (e.g. containing hyphens) were skipped and cannot be shown until removed from eBay.`
+              : undefined,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       
