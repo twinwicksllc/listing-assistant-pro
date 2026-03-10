@@ -116,7 +116,7 @@ serve(async (req) => {
     // --- End usage limit enforcement ---
 
     // --- Fetch live spot prices from shared DB cache ---
-    let spotGold = 2650, spotSilver = 31, spotPlatinum = 1000;
+    let spotGold = 2900, spotSilver = 32, spotPlatinum = 970;
     try {
       const { data: spotData, error: spotErr } = await svc
         .from("spot_price_cache")
@@ -126,8 +126,8 @@ serve(async (req) => {
 
       if (!spotErr && spotData) {
         const ageMinutes = (Date.now() - new Date(spotData.fetched_at).getTime()) / 60000;
-        if (ageMinutes < 30) {
-          // Use DB cache if less than 30 min old (spot-prices function refreshes every 15 min)
+        if (ageMinutes < 720) {
+          // Use DB cache if less than 12 hours old (spot-prices function refreshes every 12 hours)
           spotGold = Number(spotData.gold) || spotGold;
           spotSilver = Number(spotData.silver) || spotSilver;
           spotPlatinum = Number(spotData.platinum) || spotPlatinum;
