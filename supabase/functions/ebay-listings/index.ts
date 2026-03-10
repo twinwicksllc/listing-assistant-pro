@@ -30,9 +30,11 @@ serve(async (req) => {
       );
     }
 
-    console.log("ebay-listings: calling", `${apiBase}/sell/inventory/v1/offer?limit=100`);
+    console.log("ebay-listings: calling", `${apiBase}/sell/inventory/v1/offer?limit=100&status=PUBLISHED`);
 
-    // Fetch active listings via Sell > Inventory API (offers)
+    // Fetch PUBLISHED offers via Sell > Inventory API
+    // Note: eBay validates the entire account inventory, including archived items.
+    // If you get SKU validation errors, check for archived/inactive items with invalid SKUs.
     const ebayHeaders = {
       Authorization: `Bearer ${userToken}`,
       "Content-Type": "application/json",
@@ -40,7 +42,7 @@ serve(async (req) => {
     };
 
     const offersResp = await fetch(
-      `${apiBase}/sell/inventory/v1/offer?limit=100`,
+      `${apiBase}/sell/inventory/v1/offer?limit=100&status=PUBLISHED`,
       { headers: ebayHeaders }
     );
 
