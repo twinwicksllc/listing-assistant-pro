@@ -20,8 +20,10 @@ serve(async (req) => {
   }
 
   try {
+    console.log("analyze-item: parsing body...");
     // Parse body first (can only call req.json() once)
     const body = await req.json();
+    console.log("analyze-item: body parsed, images count =", body.images?.length);
 
     // --- Server-side usage limit enforcement ---
     const svc = createClient(
@@ -31,13 +33,19 @@ serve(async (req) => {
     );
 
     const authHeader = req.headers.get("Authorization");
+    console.log("analyze-item: authHeader present =", !!authHeader);
     let userId: string | null = null;
     let userEmail: string | null = null;
 
     if (authHeader) {
+      console.log("analyze-item: getting user from auth header...");
       const { data: ud } = await svc.auth.getUser(authHeader.replace("Bearer ", ""));
       userId = ud?.user?.id || null;
       userEmail = ud?.user?.email || null;
+      console.log("analyze-item: got user, email =", userEmail);
+    } else {
+      console.warn("analyze-item: NO Authorization header found!");
+      console.warn("analyze-item: available headers:", Array.from(req.headers.keys()));
     }
 
     if (!userId) {
@@ -50,7 +58,7 @@ serve(async (req) => {
     // Admin emails always get unlimited access
     const ADMIN_EMAILS = ["twinwicksllc@gmail.com"];
     const isAdmin = userEmail ? ADMIN_EMAILS.includes(userEmail) : false;
-    console.log("analyze-item: user email =", userEmail, "isAdmin =", isAdmin, "ADMIN_EMAILS =", ADMIN_EMAILS);
+    console.log("analyze-item: user email =", userEmail, "isAdmin =", isAdmin);
 
     // Check subscription status via Stripe to determine tier (skip for admins)
     let tier: "starter" | "pro" | "unlimited" = isAdmin ? "unlimited" : "starter";
@@ -440,8 +448,13 @@ Return your analysis using the provided tool.`;
     });
   } catch (e) {
     console.error("analyze-item error:", e);
+    if (e instanceof Error) {
+      console.error("Error message:", e.message);
+      console.error("Error stack:", e.stack);
+    }
+    const errorMsg = e instanceof Error ? e.message : String(e);
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
+      JSON.stringify({ error: errorMsg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
