@@ -8,6 +8,107 @@ const corsHeaders = {
   "Access-Control-Max-Age": "86400",
 };
 
+// Fallback: fetch active listings via the Trading API (XML-based, works for all account
+// types regardless of SKU format, not affected by Inventory API errorId 25707).
+async function fetchListingsViaTradingAPI(
+  apiBase: string,
+  userToken: string,
+  ebayHeaders: Record<string, string>,
+  corsHeaders: Record<string, string>
+): Promise<Response> {
+  const tradingUrl = apiBase.includes("sandbox")
+    ? "https://api.sandbox.ebay.com/ws/api.dll"
+    : "https://api.ebay.com/ws/api.dll";
+
+  const xml = `<?xml version="1.0" encoding="utf-8"?>
+<GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <RequesterCredentials>
+    <eBayAuthToken>${userToken}</eBayAuthToken>
+  </RequesterCredentials>
+  <ActiveList>
+    <Include>true</Include>
+    <Pagination>
+      <EntriesPerPage>100</EntriesPerPage>
+      <PageNumber>1</PageNumber>
+    </Pagination>
+  </ActiveList>
+  <DetailLevel>ReturnAll</DetailLevel>
+</GetMyeBaySellingRequest>`;
+
+  try {
+    const resp = await fetch(tradingUrl, {
+      method: "POST",
+      headers: {
+        "X-EBAY-API-CALL-NAME": "GetMyeBaySelling",
+        "X-EBAY-API-COMPATIBILITY-LEVEL": "967",
+        "X-EBAY-API-SITEID": "0",
+        "Content-Type": "text/xml",
+        "X-EBAY-API-IAF-TOKEN": userToken,
+      },
+      body: xml,
+    });
+
+    if (!resp.ok) {
+      const t = await resp.text();
+      console.error("Trading API error:", resp.status, t);
+      return new Response(
+        JSON.stringify({ listings: [], error: `Trading API error ${resp.status}` }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const xmlText = await resp.text();
+    console.log("Trading API response (first 500 chars):", xmlText.substring(0, 500));
+
+    // Parse the XML response — extract ItemID, Title, SellingStatus, CurrentPrice, PictureDetails
+    const listings: any[] = [];
+    const itemMatches = xmlText.matchAll(/<Item>([\s\S]*?)<\/Item>/g);
+    for (const match of itemMatches) {
+      const item = match[1];
+      const get = (tag: string) => {
+        const m = item.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`));
+        return m ? m[1].trim() : "";
+      };
+      const listingId = get("ItemID");
+      const title = get("Title");
+      const price = parseFloat(get("CurrentPrice") || get("BuyItNowPrice") || "0");
+      const currency = item.match(/CurrentPrice currencyID="([^"]+)"/)?.[1] || "USD";
+      const imageUrl = get("GalleryURL") || get("PictureURL") || "";
+      const sku = get("SKU");
+      const status = get("ListingStatus") || "ACTIVE";
+
+      if (listingId) {
+        listings.push({
+          offerId: null,
+          sku: sku || listingId,
+          title: title || listingId,
+          imageUrl,
+          price,
+          currency,
+          status,
+          categoryId: get("PrimaryCategory") ? get("CategoryID") : "",
+          listingId,
+          views: 0,
+          ebayUrl: `https://www.ebay.com/itm/${listingId}`,
+        });
+      }
+    }
+
+    console.log(`Trading API fallback: loaded ${listings.length} active listings`);
+
+    return new Response(
+      JSON.stringify({ listings, needsAuth: false }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (e) {
+    console.error("Trading API fallback exception:", e);
+    return new Response(
+      JSON.stringify({ listings: [], error: "Failed to load listings via Trading API fallback" }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -66,99 +167,14 @@ serve(async (req) => {
       
       // Check if this is a SKU validation error - scan inventory items to identify the bad SKU(s)
       if (offersResp.status === 400 && errText.includes("SKU")) {
-        console.warn("eBay offers bulk call failed with SKU error. Falling back to per-offer fetch to skip bad SKUs. Raw error:", errText);
+        console.warn("eBay Inventory API /offer rejected with SKU error — account has legacy listings incompatible with this endpoint. Falling back to Trading API GetMyeBaySelling.");
 
-        // eBay's /offer?limit=N endpoint chokes internally on any stored offer whose SKU
-        // contains non-alphanumeric characters (e.g. "SKU-004" with a hyphen).
-        // Even inactive/appealed listings that can't be edited still block the bulk call.
-        // Solution: fetch limit=1 per offset, silently skip any that error, return the rest.
-        const goodOffers: any[] = [];
-        const badOffsets: number[] = [];
-        const MAX_OFFERS = 200; // safety cap
-
-        for (let i = 0; i < MAX_OFFERS; i++) {
-          const r = await fetch(
-            `${apiBase}/sell/inventory/v1/offer?limit=1&offset=${i}`,
-            { headers: ebayHeaders }
-          );
-          if (!r.ok) {
-            const t = await r.text();
-            if (t.includes("SKU")) {
-              badOffsets.push(i);
-              console.warn(`Skipping offer at offset ${i} — bad SKU (errorId 25707)`);
-              continue; // skip this one, keep going
-            }
-            // Any other error (auth, rate limit, etc.) — stop
-            console.warn(`Stopping per-offer fetch at offset ${i}: ${r.status} ${t}`);
-            break;
-          }
-          const d = await r.json();
-          const page: any[] = d.offers || [];
-          if (page.length === 0) break; // no more offers
-          goodOffers.push(...page);
-        }
-
-        console.warn(
-          `Per-offer fetch complete — loaded ${goodOffers.length} offers, ` +
-          `skipped ${badOffsets.length} bad offset(s): [${badOffsets.join(", ")}]`
-        );
-
-        // If we got some good offers, process them normally (fall through by returning early
-        // only if we got nothing useful)
-        if (goodOffers.length === 0) {
-          const warning = badOffsets.length > 0
-            ? `Your eBay account has ${badOffsets.length} listing(s) with invalid SKUs that are blocking the dashboard (e.g. SKUs with hyphens like "SKU-004"). These listings need to be deleted from eBay before the dashboard can show your active listings.`
-            : "No eBay offers found in your account.";
-          return new Response(
-            JSON.stringify({ listings: [], warning }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        // We have good offers — continue processing them below by reassigning and falling through
-        // (restructure: build listings from goodOffers directly and return)
-        const goodListings = await Promise.all(
-          goodOffers.map(async (offer: any) => {
-            let product: any = {};
-            try {
-              const itemResp = await fetch(
-                `${apiBase}/sell/inventory/v1/inventory_item/${encodeURIComponent(offer.sku)}`,
-                { headers: ebayHeaders }
-              );
-              if (itemResp.ok) {
-                const itemData = await itemResp.json();
-                product = itemData.product || {};
-              }
-            } catch { /* skip */ }
-            return {
-              offerId: offer.offerId,
-              sku: offer.sku,
-              title: product.title || offer.sku,
-              imageUrl: product.imageUrls?.[0] || "",
-              price: parseFloat(offer.pricingSummary?.price?.value || "0"),
-              currency: offer.pricingSummary?.price?.currency || "USD",
-              status: offer.status || "UNKNOWN",
-              categoryId: offer.categoryId || "",
-              listingId: offer.listing?.listingId || null,
-              views: 0,
-              ebayUrl: offer.listing?.listingId ? `https://www.ebay.com/itm/${offer.listing.listingId}` : null,
-            };
-          })
-        );
-
-        const skippedNote = badOffsets.length > 0
-          ? ` (${badOffsets.length} listing(s) with invalid SKUs were skipped)`
-          : "";
-        return new Response(
-          JSON.stringify({
-            listings: goodListings,
-            needsAuth: false,
-            warning: badOffsets.length > 0
-              ? `Loaded ${goodListings.length} listing(s). ${badOffsets.length} listing(s) with invalid SKUs (e.g. containing hyphens) were skipped and cannot be shown until removed from eBay.`
-              : undefined,
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        // The Inventory API validates the entire account's offer data before applying
+        // limit/offset, so even limit=1&offset=0 returns the same error. This account
+        // has at least one legacy listing (e.g. SKU-004) that eBay considers invalid
+        // but the user cannot edit (e.g. under appeal). We fall back to the Trading API
+        // which works for all account types and ignores SKU format constraints.
+        return await fetchListingsViaTradingAPI(apiBase, userToken, ebayHeaders, corsHeaders);
       }
       
       // For other errors, return error details instead of throwing (avoids 500)
