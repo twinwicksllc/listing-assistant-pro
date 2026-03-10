@@ -66,62 +66,100 @@ serve(async (req) => {
       
       // Check if this is a SKU validation error - scan inventory items to identify the bad SKU(s)
       if (offersResp.status === 400 && errText.includes("SKU")) {
-        console.warn("eBay account has SKU validation issues. Attempting inventory scan to identify bad SKUs. Raw error:", errText);
+        console.warn("eBay offers bulk call failed with SKU error. Running binary search to locate the bad offer. Raw error:", errText);
 
-        // Try to enumerate all inventory items and check each SKU for non-alphanumeric characters.
-        // eBay's definition: ONLY letters and digits are valid (no hyphens, underscores, spaces, etc.)
-        const badSkus: string[] = [];
-        let totalItemsScanned = 0;
-        let scanError: string | null = null;
+        // eBay's /offer?limit=N endpoint iterates internally over stored offers and chokes
+        // on any offer whose SKU contains non-alphanumeric characters — even ones created
+        // via Seller Hub which allows special characters. The error response never includes
+        // the specific bad SKU, so we binary-search with limit=1 per offset to find it.
+        let badOffset: number | null = null;
+        let badSku: string | null = null;
+        let cleanSkus: string[] = [];
+        let searchError: string | null = null;
+
         try {
-          let offset = 0;
-          const limit = 100;
-          let keepGoing = true;
-          while (keepGoing) {
-            const itemsResp = await fetch(
-              `${apiBase}/sell/inventory/v1/inventory_item?limit=${limit}&offset=${offset}`,
+          // Phase 1: find which 10-item page contains the bad offer
+          const pageSize = 10;
+          let pageStart = 0;
+          let badPageStart: number | null = null;
+
+          while (pageStart <= 500) {
+            const r = await fetch(
+              `${apiBase}/sell/inventory/v1/offer?limit=${pageSize}&offset=${pageStart}`,
               { headers: ebayHeaders }
             );
-            if (!itemsResp.ok) {
-              const errBody = await itemsResp.text();
-              scanError = `inventory_item scan failed: ${itemsResp.status} ${errBody}`;
-              console.warn(scanError);
+            if (!r.ok) {
+              const t = await r.text();
+              if (t.includes("SKU")) {
+                badPageStart = pageStart;
+                console.warn(`Binary search phase 1: bad offer is in offsets ${pageStart}–${pageStart + pageSize - 1}`);
+              }
               break;
             }
-            const itemsData = await itemsResp.json();
-            const items: any[] = itemsData.inventoryItems || [];
-            totalItemsScanned += items.length;
-            for (const item of items) {
-              const sku: string = item.sku || "";
-              // Strictly alphanumeric only — no hyphens, underscores, spaces, etc.
-              if (sku.length === 0 || sku.length > 50 || !/^[a-zA-Z0-9]+$/.test(sku)) {
-                badSkus.push(sku);
-              }
+            const d = await r.json();
+            const page: any[] = d.offers || [];
+            // Collect any SKUs we can read (for the warning message)
+            for (const o of page) {
+              if (o.sku) cleanSkus.push(o.sku);
             }
-            const total = itemsData.total || 0;
-            offset += items.length;
-            keepGoing = items.length === limit && offset < total;
+            if (page.length === 0) break; // no more offers
+            pageStart += page.length;
+            if (page.length < pageSize) break; // last page, no error found
           }
-        } catch (scanErr) {
-          scanError = String(scanErr);
-          console.warn("Inventory scan exception:", scanErr);
+
+          // Phase 2: narrow to the exact offset within the bad page
+          if (badPageStart !== null) {
+            for (let i = badPageStart; i < badPageStart + pageSize; i++) {
+              const r = await fetch(
+                `${apiBase}/sell/inventory/v1/offer?limit=1&offset=${i}`,
+                { headers: ebayHeaders }
+              );
+              if (!r.ok) {
+                const t = await r.text();
+                if (t.includes("SKU")) {
+                  badOffset = i;
+                  console.warn(`Binary search phase 2: bad offer is at offset ${i}`);
+                  break;
+                }
+                break;
+              }
+              // This offset is clean — record its SKU
+              const d = await r.json();
+              const sku = d.offers?.[0]?.sku;
+              if (sku && !cleanSkus.includes(sku)) cleanSkus.push(sku);
+            }
+          }
+        } catch (searchErr) {
+          searchError = String(searchErr);
+          console.warn("Binary search exception:", searchErr);
         }
 
-        console.warn(`SKU scan complete — scanned ${totalItemsScanned} inventory items, bad SKUs: [${badSkus.join(", ")}]${scanError ? ` (scan error: ${scanError})` : ""}`);
+        console.warn(
+          `Binary search complete — bad offset: ${badOffset ?? "not found"}, ` +
+          `clean SKUs seen: [${cleanSkus.join(", ")}]` +
+          (searchError ? `, error: ${searchError}` : "")
+        );
 
         let warning: string;
-        if (badSkus.length > 0) {
-          const skuList = badSkus.map(s => `"${s}"`).join(", ");
-          warning = `Your eBay inventory contains ${badSkus.length} listing(s) with invalid SKUs: ${skuList}. Go to eBay Seller Hub → Inventory, search for each one, and either delete the listing or edit its SKU to use only letters and numbers (no spaces or special characters). After fixing, wait a few minutes and reconnect.`;
-        } else if (scanError) {
-          warning = "Your eBay account has listings with invalid SKUs, but we couldn't identify them automatically. Go to eBay Seller Hub → Inventory and look for listings whose SKU contains spaces, slashes, or other special characters, then delete or fix them.";
-        } else if (totalItemsScanned === 0) {
-          // No inventory items at all — the bad SKU must be in an offer without an inventory item
-          // (created via classic eBay seller flow, not the Inventory API)
-          warning = "eBay returned a SKU validation error but no Inventory API items were found in your account. Your existing eBay listings were likely created through the classic seller flow. Please go to eBay Seller Hub → Listings and end/delete any old listings that have non-alphanumeric characters in their SKU field, then reconnect.";
+        if (badOffset !== null) {
+          warning =
+            `eBay has an offer at position ${badOffset + 1} in your inventory with an invalid SKU ` +
+            `(special characters like hyphens, underscores, or spaces are not allowed). ` +
+            `Go to eBay Seller Hub → Inventory → Active Listings, find listing #${badOffset + 1} ` +
+            `in the list, and end or delete it. Then wait a few minutes and reconnect.`;
+        } else if (cleanSkus.length > 0) {
+          warning =
+            `eBay is rejecting your offers list with a SKU validation error. ` +
+            `We could read ${cleanSkus.length} offer(s) but couldn't pinpoint the bad one. ` +
+            `Go to eBay Seller Hub → Inventory and look for any listing whose Custom Label (SKU) ` +
+            `contains hyphens, underscores, spaces, or other special characters, then end or delete it.`;
         } else {
-          // Items scanned, none flagged — the bad SKU may contain only hyphens or underscores
-          warning = `Scanned ${totalItemsScanned} inventory items — no strictly-invalid SKUs found, but eBay is still rejecting the request. Please go to eBay Seller Hub → Inventory and look for any listings whose SKU contains hyphens, underscores, or other non-alphanumeric characters, then delete or fix them.`;
+          warning =
+            `eBay returned a SKU validation error (errorId 25707). Your existing listings were likely ` +
+            `created through eBay's classic seller flow with non-alphanumeric SKUs. ` +
+            `Go to eBay Seller Hub → Listings → Active, look for listings with a Custom Label that ` +
+            `contains hyphens, underscores, spaces, or other special characters, and end or delete them. ` +
+            `After fixing all of them, wait a few minutes and reconnect.`;
         }
 
         return new Response(
