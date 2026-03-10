@@ -1,10 +1,14 @@
-import { Trash2, FileText, ShoppingCart, Gavel, Tag } from "lucide-react";
+import { useState } from "react";
+import { Trash2, FileText, ShoppingCart, Gavel, Tag, Pencil } from "lucide-react";
 import { useDrafts } from "@/hooks/useDrafts";
 import BottomNav from "@/components/BottomNav";
+import EditDraftModal from "@/components/EditDraftModal";
 import { toast } from "sonner";
+import { ListingDraft } from "@/types/listing";
 
 export default function DraftsPage() {
   const { drafts, removeDraft } = useDrafts();
+  const [editingDraft, setEditingDraft] = useState<ListingDraft | null>(null);
 
   const handleDelete = (id: string) => {
     removeDraft(id);
@@ -29,7 +33,6 @@ export default function DraftsPage() {
         )}
 
         {drafts.map((draft) => {
-          // Prefer user-chosen listingPrice; fall back to midpoint of AI range
           const displayPrice =
             draft.listingPrice != null && draft.listingPrice > 0
               ? draft.listingPrice
@@ -88,18 +91,39 @@ export default function DraftsPage() {
                   {draft.createdAt.toLocaleDateString()}
                 </p>
               </div>
-              <button
-                onClick={() => handleDelete(draft.id)}
-                className="self-start p-1.5 text-muted-foreground hover:text-destructive transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+
+              {/* Action buttons */}
+              <div className="flex flex-col gap-1 self-start">
+                <button
+                  onClick={() => setEditingDraft(draft)}
+                  className="p-1.5 text-muted-foreground hover:text-primary transition-colors"
+                  title="Edit draft"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDelete(draft.id)}
+                  className="p-1.5 text-muted-foreground hover:text-destructive transition-colors"
+                  title="Delete draft"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           );
         })}
       </div>
 
       <BottomNav />
+
+      {/* Edit modal */}
+      {editingDraft && (
+        <EditDraftModal
+          draft={editingDraft}
+          onClose={() => setEditingDraft(null)}
+          onSaved={(updated) => setEditingDraft(null)}
+        />
+      )}
     </div>
   );
 }
