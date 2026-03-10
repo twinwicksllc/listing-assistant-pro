@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { LayoutDashboard, Eye, DollarSign, Package, RefreshCw, ExternalLink, AlertCircle, Loader2, Settings, X } from "lucide-react";
+import { LayoutDashboard, Eye, DollarSign, Package, RefreshCw, ExternalLink, AlertCircle, Loader2, Settings, X, LogOut } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import { useDrafts } from "@/hooks/useDrafts";
 import { useNavigate } from "react-router-dom";
 import BottomNav from "@/components/BottomNav";
@@ -24,6 +25,7 @@ const EBAY_TOKEN_KEY = "ebay-user-token";
 
 export default function DashboardPage() {
   const { drafts } = useDrafts();
+  const { signOut } = useAuth();
   const navigate = useNavigate();
   const [listings, setListings] = useState<EbayListing[]>([]);
   const [loading, setLoading] = useState(false);
@@ -141,6 +143,13 @@ export default function DashboardPage() {
             className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+          </button>
+          <button
+            onClick={signOut}
+            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            title="Sign out"
+          >
+            <LogOut className="w-4 h-4" />
           </button>
         </div>
       </header>
