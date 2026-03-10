@@ -1,13 +1,28 @@
-import { useState } from "react";
-import { X, Save, Loader2, DollarSign, Gavel, ShoppingCart, Tag, UserCircle } from "lucide-react";
-import { ListingDraft, ListingFormat } from "@/types/listing";
+import { useState, useEffect } from "react";
+import {
+  X, Save, Loader2, DollarSign, Gavel, ShoppingCart, Tag,
+  UserCircle, Truck, CreditCard, RotateCcw, AlertCircle, Clock,
+} from "lucide-react";
+import { ListingDraft, ListingFormat, AuctionDuration } from "@/types/listing";
 import { useDrafts } from "@/hooks/useDrafts";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface EditDraftModalProps {
   draft: ListingDraft;
   onClose: () => void;
   onSaved: (updated: ListingDraft) => void;
+}
+
+interface PolicyOption {
+  id: string;
+  name: string;
+}
+
+interface Policies {
+  fulfillment: PolicyOption[];
+  payment: PolicyOption[];
+  returns: PolicyOption[];
 }
 
 const CONDITIONS = [
@@ -19,6 +34,14 @@ const CONDITIONS = [
   { value: "USED_ACCEPTABLE",label: "Used – Acceptable" },
 ];
 
+const AUCTION_DURATIONS: { value: AuctionDuration; label: string }[] = [
+  { value: "Days_1",  label: "1 Day" },
+  { value: "Days_3",  label: "3 Days" },
+  { value: "Days_5",  label: "5 Days" },
+  { value: "Days_7",  label: "7 Days (recommended)" },
+  { value: "Days_10", label: "10 Days" },
+];
+
 export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftModalProps) {
   const { updateDraft } = useDrafts();
 
@@ -26,29 +49,80 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
   const [description, setDescription]   = useState(draft.description);
   const [listingFormat, setListingFormat] = useState<ListingFormat>(draft.listingFormat ?? "FIXED_PRICE");
   const [listingPrice, setListingPrice] = useState<number>(draft.listingPrice ?? 0);
+  const [auctionDuration, setAuctionDuration] = useState<AuctionDuration>(
+    draft.auctionDuration ?? "Days_7"
+  );
   const [condition, setCondition]       = useState(draft.condition ?? "USED_EXCELLENT");
   const [consignor, setConsignor]       = useState(draft.consignor ?? "");
   const [itemSpecifics, setItemSpecifics] = useState<Record<string, string>>(
     (draft.itemSpecifics as Record<string, string>) ?? {}
   );
+
+  // Policy state
+  const [policies, setPolicies]                     = useState<Policies | null>(null);
+  const [policiesLoading, setPoliciesLoading]       = useState(false);
+  const [policiesError, setPoliciesError]           = useState("");
+  const [fulfillmentPolicyId, setFulfillmentPolicyId] = useState(draft.fulfillmentPolicyId ?? "");
+  const [paymentPolicyId, setPaymentPolicyId]         = useState(draft.paymentPolicyId ?? "");
+  const [returnPolicyId, setReturnPolicyId]           = useState(draft.returnPolicyId ?? "");
+
   const [saving, setSaving] = useState(false);
 
   const displaySpecifics = Object.entries(itemSpecifics).filter(([, v]) => v !== undefined);
+
+  // Fetch eBay policies on mount if eBay token is available
+  useEffect(() => {
+    const ebayToken = localStorage.getItem("ebay-user-token");
+    if (!ebayToken) return;
+
+    setPoliciesLoading(true);
+    setPoliciesError("");
+
+    supabase.functions
+      .invoke("ebay-policies", { body: { userToken: ebayToken } })
+      .then(({ data, error }) => {
+        if (error || data?.error) {
+          setPoliciesError("Could not load eBay policies. Make sure your eBay account is connected.");
+        } else {
+          setPolicies(data as Policies);
+          // Auto-select first policy of each type if none already chosen
+          if (!fulfillmentPolicyId && data.fulfillment?.length > 0)
+            setFulfillmentPolicyId(data.fulfillment[0].id);
+          if (!paymentPolicyId && data.payment?.length > 0)
+            setPaymentPolicyId(data.payment[0].id);
+          if (!returnPolicyId && data.returns?.length > 0)
+            setReturnPolicyId(data.returns[0].id);
+        }
+      })
+      .finally(() => setPoliciesLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSave = async () => {
     if (!title.trim()) {
       toast.error("Title cannot be empty");
       return;
     }
+
+    // Validate auction-specific fields
+    if (listingFormat === "AUCTION" && listingPrice <= 0) {
+      toast.error("Please set a starting bid price for the auction");
+      return;
+    }
+
     setSaving(true);
     const updates: Partial<ListingDraft> = {
       title: title.slice(0, 80),
       description,
       listingFormat,
       listingPrice,
+      auctionDuration: listingFormat === "AUCTION" ? auctionDuration : undefined,
       condition,
       consignor,
       itemSpecifics,
+      fulfillmentPolicyId: fulfillmentPolicyId || undefined,
+      paymentPolicyId: paymentPolicyId || undefined,
+      returnPolicyId: returnPolicyId || undefined,
     };
     const ok = await updateDraft(draft.id, updates);
     setSaving(false);
@@ -162,7 +236,56 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
                 className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
+
+            {/* Auction Duration — only shown for AUCTION format */}
+            {listingFormat === "AUCTION" && (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Clock className="w-3 h-3 text-muted-foreground" />
+                  <label className="text-xs text-muted-foreground font-medium">Auction Duration</label>
+                </div>
+                <div className="bg-card border border-border rounded-lg divide-y divide-border">
+                  {AUCTION_DURATIONS.map((d) => (
+                    <button
+                      key={d.value}
+                      onClick={() => setAuctionDuration(d.value)}
+                      className={`w-full flex items-center justify-between px-3 py-2 text-xs transition-colors ${
+                        auctionDuration === d.value
+                          ? "text-primary font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <span>{d.label}</span>
+                      {auctionDuration === d.value && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  eBay requires an explicit duration for auction listings (1, 3, 5, 7, or 10 days).
+                </p>
+              </div>
+            )}
           </div>
+
+          {/* eBay Category */}
+          {(draft.ebayCategoryBreadcrumb || draft.ebayCategoryId) && (
+            <div className="bg-muted/50 rounded-lg px-3 py-2.5 flex items-start gap-2">
+              <Tag className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">eBay Category</p>
+                {draft.ebayCategoryBreadcrumb ? (
+                  <p className="text-xs text-foreground leading-snug">{draft.ebayCategoryBreadcrumb}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Category #{draft.ebayCategoryId}</p>
+                )}
+                {draft.ebayCategoryId && (
+                  <p className="text-[10px] font-mono text-muted-foreground/60 mt-0.5">ID: {draft.ebayCategoryId}</p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Item Specifics */}
           {displaySpecifics.length > 0 && (
@@ -170,11 +293,6 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
               <div className="flex items-center gap-1.5">
                 <Tag className="w-3.5 h-3.5 text-primary" />
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Item Specifics</label>
-                {draft.ebayCategoryId && (
-                  <span className="ml-auto text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                    Cat: {draft.ebayCategoryId}
-                  </span>
-                )}
               </div>
               <div className="bg-card border border-border rounded-lg divide-y divide-border">
                 {displaySpecifics.map(([key, value]) => (
@@ -238,18 +356,101 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
             />
           </div>
 
-          {/* Category (read-only info) */}
-          {(draft.ebayCategoryBreadcrumb || draft.ebayCategoryId) && (
-            <div className="bg-muted/50 rounded-lg px-3 py-2.5 flex items-start gap-2">
-              <Tag className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">eBay Category</p>
-                <p className="text-xs text-foreground leading-snug">
-                  {draft.ebayCategoryBreadcrumb || `Category #${draft.ebayCategoryId}`}
-                </p>
-              </div>
+          {/* eBay Business Policies */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-1.5">
+              <Truck className="w-3.5 h-3.5 text-primary" />
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">eBay Business Policies</label>
+              {policiesLoading && (
+                <Loader2 className="w-3 h-3 animate-spin text-muted-foreground ml-auto" />
+              )}
             </div>
-          )}
+
+            {policiesError && (
+              <div className="flex items-start gap-2 bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2.5">
+                <AlertCircle className="w-3.5 h-3.5 text-destructive flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-destructive">{policiesError}</p>
+              </div>
+            )}
+
+            {!policiesError && !localStorage.getItem("ebay-user-token") && (
+              <div className="flex items-start gap-2 bg-muted/50 border border-border rounded-lg px-3 py-2.5">
+                <AlertCircle className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-muted-foreground">Connect your eBay account in Settings to manage policies.</p>
+              </div>
+            )}
+
+            {policies && (
+              <div className="bg-card border border-border rounded-lg divide-y divide-border">
+                {/* Fulfillment / Shipping */}
+                <div className="flex items-center justify-between px-3 py-2.5 gap-3">
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <Truck className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-xs font-medium text-muted-foreground">Shipping</span>
+                  </div>
+                  {policies.fulfillment.length === 0 ? (
+                    <span className="text-xs text-destructive">No policies found</span>
+                  ) : (
+                    <select
+                      value={fulfillmentPolicyId}
+                      onChange={(e) => setFulfillmentPolicyId(e.target.value)}
+                      className="text-xs text-foreground bg-transparent border-none focus:outline-none cursor-pointer text-right max-w-[60%] truncate"
+                    >
+                      <option value="">— Select —</option>
+                      {policies.fulfillment.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                {/* Payment */}
+                <div className="flex items-center justify-between px-3 py-2.5 gap-3">
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <CreditCard className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-xs font-medium text-muted-foreground">Payment</span>
+                  </div>
+                  {policies.payment.length === 0 ? (
+                    <span className="text-xs text-destructive">No policies found</span>
+                  ) : (
+                    <select
+                      value={paymentPolicyId}
+                      onChange={(e) => setPaymentPolicyId(e.target.value)}
+                      className="text-xs text-foreground bg-transparent border-none focus:outline-none cursor-pointer text-right max-w-[60%] truncate"
+                    >
+                      <option value="">— Select —</option>
+                      {policies.payment.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                {/* Returns */}
+                <div className="flex items-center justify-between px-3 py-2.5 gap-3">
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <RotateCcw className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-xs font-medium text-muted-foreground">Returns</span>
+                  </div>
+                  {policies.returns.length === 0 ? (
+                    <span className="text-xs text-destructive">No policies found</span>
+                  ) : (
+                    <select
+                      value={returnPolicyId}
+                      onChange={(e) => setReturnPolicyId(e.target.value)}
+                      className="text-xs text-foreground bg-transparent border-none focus:outline-none cursor-pointer text-right max-w-[60%] truncate"
+                    >
+                      <option value="">— Select —</option>
+                      {policies.returns.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
         </div>
 
         {/* Footer */}

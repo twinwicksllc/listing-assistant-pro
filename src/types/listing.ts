@@ -34,4 +34,9 @@ export interface ListingDraft {
   fulfillmentPolicyId?: string;
   paymentPolicyId?: string;
   returnPolicyId?: string;
+  auctionDuration?: AuctionDuration; // Only for AUCTION format
 }
+
+// Auction duration options for eBay listings
+// eBay Inventory API requires one of these exact values for AUCTION format
+export type AuctionDuration = "Days_1" | "Days_3" | "Days_5" | "Days_7" | "Days_10";

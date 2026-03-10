@@ -1,10 +1,75 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+// ----------------------------------------------------------------
+// Listing duration constants
+// GTC = "Good 'Til Cancelled" — required for FIXED_PRICE listings
+// Auctions must use a specific day count: 1, 3, 5, 7, or 10
+// ----------------------------------------------------------------
+const FIXED_PRICE_DURATION = "GTC";
+const DEFAULT_AUCTION_DURATION = "Days_7";
+
+// ----------------------------------------------------------------
+// Ensure an eBay inventory location exists for the seller.
+// If one already exists with the given key, this is a no-op (PUT is idempotent).
+// Returns the merchantLocationKey on success.
+// ----------------------------------------------------------------
+async function ensureInventoryLocation(
+  apiBase: string,
+  userToken: string,
+  postalCode: string,
+  country = "US"
+): Promise<string> {
+  const merchantLocationKey = "default-location";
+
+  const locationBody = {
+    location: {
+      address: {
+        postalCode,
+        country,
+      },
+    },
+    locationEnabled: true,
+    name: "Default Seller Location",
+    merchantLocationStatus: "ENABLED",
+    locationTypes: ["WAREHOUSE"],
+  };
+
+  const resp = await fetch(
+    `${apiBase}/sell/inventory/v1/location/${merchantLocationKey}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${userToken}`,
+        "Content-Type": "application/json",
+        "Content-Language": "en-US",
+      },
+      body: JSON.stringify(locationBody),
+    }
+  );
+
+  // 204 = created, 409 = already exists — both are fine
+  if (!resp.ok && resp.status !== 409) {
+    const errText = await resp.text();
+    console.warn(
+      `ensureInventoryLocation: non-fatal error ${resp.status}: ${errText}`
+    );
+    // Non-fatal: we still return the key and let the offer creation attempt proceed.
+    // eBay may already have a location configured under a different key.
+  } else {
+    console.log(
+      `ensureInventoryLocation: location "${merchantLocationKey}" ready (status ${resp.status})`
+    );
+  }
+
+  return merchantLocationKey;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -37,9 +102,6 @@ serve(async (req) => {
 
     // --- ACTION: Get OAuth consent URL ---
     if (action === "get_auth_url") {
-      // EBAY_RUNAME is the RuName from eBay Developer Portal (used in OAuth authorize URL)
-      // EBAY_REDIRECT_URI is the actual callback URL (https://lister.teckstart.com/ebay/callback)
-      // If EBAY_RUNAME is not set, fall back to EBAY_REDIRECT_URI for backwards compatibility
       const ruName = Deno.env.get("EBAY_RUNAME") || Deno.env.get("EBAY_REDIRECT_URI");
       if (!ruName) throw new Error("EBAY_RUNAME not configured");
 
@@ -66,17 +128,23 @@ serve(async (req) => {
 
     // --- ACTION: Exchange auth code for user token ---
     if (action === "exchange_code") {
-      const { code } = payload;
+      const { code, userId } = payload;
       if (!code) throw new Error("No authorization code provided");
 
-      // For token exchange, eBay also expects the RuName (same value used in authorize URL)
       const ruName = Deno.env.get("EBAY_RUNAME") || Deno.env.get("EBAY_REDIRECT_URI");
       if (!ruName) {
         console.error("exchange_code: Missing required config: EBAY_RUNAME and EBAY_REDIRECT_URI");
         throw new Error("eBay callback URI not configured. Contact admin to set EBAY_RUNAME or EBAY_REDIRECT_URI.");
       }
 
-      console.log("exchange_code: code =", code?.substring(0, 20) + "...", "ruName =", ruName, "environment =", ebayEnv);
+      console.log(
+        "exchange_code: code =",
+        code?.substring(0, 20) + "...",
+        "ruName =",
+        ruName,
+        "environment =",
+        ebayEnv
+      );
 
       if (!clientId || !clientSecret) {
         console.error("exchange_code: Missing eBay credentials in environment");
@@ -84,7 +152,7 @@ serve(async (req) => {
       }
 
       const credentials = btoa(`${clientId}:${clientSecret}`);
-      
+
       console.log("exchange_code: POSTing to", tokenUrl, "with grant_type=authorization_code");
 
       const resp = await fetch(tokenUrl, {
@@ -106,8 +174,7 @@ serve(async (req) => {
         const txt = await resp.text();
         console.error("eBay token exchange error - status:", resp.status);
         console.error("eBay error response:", txt);
-        
-        // Try to extract meaningful error from eBay response
+
         let errorMsg = txt;
         try {
           const json = JSON.parse(txt);
@@ -120,13 +187,47 @@ serve(async (req) => {
       }
 
       const tokenData = await resp.json();
-      
+
       if (!tokenData.access_token) {
         console.error("exchange_code: No access_token in response. Response:", tokenData);
         throw new Error("eBay returned no access token. Authorization code may have expired or been reused.");
       }
 
-      console.log("exchange_code: Successfully obtained access_token (expires in", tokenData.expires_in, "seconds)");
+      console.log(
+        "exchange_code: Successfully obtained access_token (expires in",
+        tokenData.expires_in,
+        "seconds)"
+      );
+
+      // --- Store token server-side in Supabase profiles table ---
+      // This avoids exposing the token in localStorage (XSS risk).
+      // We store it only if a userId was provided (authenticated call).
+      if (userId) {
+        try {
+          const supabaseUrl = Deno.env.get("SUPABASE_URL");
+          const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+          if (supabaseUrl && supabaseServiceKey) {
+            const supabase = createClient(supabaseUrl, supabaseServiceKey);
+            const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
+            const { error: upsertError } = await supabase
+              .from("profiles")
+              .update({
+                ebay_access_token: tokenData.access_token,
+                ebay_refresh_token: tokenData.refresh_token ?? null,
+                ebay_token_expires_at: expiresAt,
+              })
+              .eq("id", userId);
+            if (upsertError) {
+              console.warn("exchange_code: failed to store token in profiles:", upsertError.message);
+            } else {
+              console.log("exchange_code: token stored in profiles for user", userId);
+            }
+          }
+        } catch (storeErr) {
+          // Non-fatal — still return the token to the client as fallback
+          console.warn("exchange_code: token storage error (non-fatal):", storeErr);
+        }
+      }
 
       return new Response(
         JSON.stringify({
@@ -138,9 +239,67 @@ serve(async (req) => {
       );
     }
 
+    // --- ACTION: Get stored eBay token for a user ---
+    if (action === "get_stored_token") {
+      const { userId } = payload;
+      if (!userId) throw new Error("No userId provided");
+
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (!supabaseUrl || !supabaseServiceKey) {
+        throw new Error("Supabase credentials not configured");
+      }
+
+      const supabase = createClient(supabaseUrl, supabaseServiceKey);
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("ebay_access_token, ebay_token_expires_at, ebay_refresh_token, postal_code")
+        .eq("id", userId)
+        .single();
+
+      if (error || !data) {
+        return new Response(
+          JSON.stringify({ token: null, postalCode: null }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Check if token is expired
+      const isExpired = data.ebay_token_expires_at
+        ? new Date(data.ebay_token_expires_at) < new Date()
+        : false;
+
+      return new Response(
+        JSON.stringify({
+          token: isExpired ? null : data.ebay_access_token,
+          postalCode: data.postal_code,
+          isExpired,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // --- ACTION: Create draft listing via Inventory API ---
     if (action === "create_draft") {
-      const { userToken, title, description, listingFormat, listingPrice, auctionStartPrice, auctionBuyItNow, imageUrl, condition, ebayCategoryId, itemSpecifics, fulfillmentPolicyId: draftFulfillmentPolicyId, paymentPolicyId: draftPaymentPolicyId, returnPolicyId: draftReturnPolicyId } = payload;
+      const {
+        userToken,
+        title,
+        description,
+        listingFormat,
+        listingPrice,
+        auctionStartPrice,
+        auctionBuyItNow,
+        auctionDuration,
+        imageUrl,
+        condition,
+        ebayCategoryId,
+        itemSpecifics,
+        postalCode,
+        fulfillmentPolicyId: draftFulfillmentPolicyId,
+        paymentPolicyId: draftPaymentPolicyId,
+        returnPolicyId: draftReturnPolicyId,
+      } = payload;
+
       if (!userToken) throw new Error("No eBay user token provided");
 
       // eBay Partner Network campaign ID for affiliate revenue tracking
@@ -156,7 +315,7 @@ serve(async (req) => {
       // Use a UUID-based SKU to avoid any account-level SKU validation conflicts
       const sku = `LA-${crypto.randomUUID().replace(/-/g, "").slice(0, 16).toUpperCase()}`;
 
-      // Build eBay-formatted item specifics (nameValueList)
+      // Build eBay-formatted item specifics (aspects)
       const aspects: Record<string, string[]> = {};
       if (itemSpecifics && typeof itemSpecifics === "object") {
         for (const [key, value] of Object.entries(itemSpecifics)) {
@@ -173,6 +332,8 @@ serve(async (req) => {
           description,
           imageUrls: imageUrl ? [imageUrl] : [],
         },
+        // ConditionEnum string values are correct for the Inventory API
+        // (numeric IDs are only for the Trading API / File Exchange CSV)
         condition: condition || "USED_EXCELLENT",
         availability: {
           shipToLocationAvailability: {
@@ -205,9 +366,17 @@ serve(async (req) => {
         throw new Error(`Failed to create inventory item: ${inventoryResp.status} - ${errText}`);
       }
 
-      // Step 2: Fetch user's default business policies from eBay Account API.
-      // Policies (fulfillment/payment/return) are required to publish a listing.
-      // We auto-fetch the first policy of each type and attach them to the offer.
+      // Step 2: Ensure inventory location exists (required for publishing)
+      // merchantLocationKey is required in the offer payload per eBay Inventory API spec.
+      // We auto-create a "default-location" using the seller's postal code.
+      const effectivePostalCode = postalCode || "10001"; // fallback to NYC if not set
+      const merchantLocationKey = await ensureInventoryLocation(
+        apiBase,
+        userToken,
+        effectivePostalCode
+      );
+
+      // Step 3: Fetch user's default business policies from eBay Account API.
       const authHeaders = {
         Authorization: `Bearer ${userToken}`,
         "Content-Type": "application/json",
@@ -256,14 +425,38 @@ serve(async (req) => {
         );
       }
 
-      // Step 3: Create offer with policies
+      // Step 4: Create offer
+      // Determine format and listing duration
+      // - FIXED_PRICE listings MUST use "GTC" (Good 'Til Cancelled)
+      // - AUCTION listings MUST use a specific day count: 1, 3, 5, 7, or 10
       const format = listingFormat === "AUCTION" ? "AUCTION" : "FIXED_PRICE";
+      const listingDuration =
+        format === "AUCTION"
+          ? (auctionDuration || DEFAULT_AUCTION_DURATION)
+          : FIXED_PRICE_DURATION;
+
+      // Validate auction duration value
+      const validAuctionDurations = ["Days_1", "Days_3", "Days_5", "Days_7", "Days_10"];
+      if (format === "AUCTION" && !validAuctionDurations.includes(listingDuration)) {
+        return new Response(
+          JSON.stringify({
+            error: `Invalid auction duration "${listingDuration}". Must be one of: ${validAuctionDurations.join(", ")}`,
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       const offerBody: any = {
         sku,
         marketplaceId: "EBAY_US",
         format,
         listingDescription: description,
         availableQuantity: 1,
+        // listingDuration is required by eBay Inventory API
+        // Fixed price: "GTC" | Auction: "Days_1", "Days_3", "Days_5", "Days_7", "Days_10"
+        listingDuration,
+        // merchantLocationKey is required for publishing — references the seller's inventory location
+        merchantLocationKey,
         listingPolicies: {
           fulfillmentPolicyId,
           paymentPolicyId,
@@ -315,7 +508,7 @@ serve(async (req) => {
       const offerData = await offerResp.json();
       const offerId = offerData.offerId;
 
-      // Step 4: Publish the offer to make it a live listing
+      // Step 5: Publish the offer to make it a live listing
       const publishResp = await fetch(
         `${apiBase}/sell/inventory/v1/offer/${offerId}/publish`,
         {
@@ -358,6 +551,87 @@ serve(async (req) => {
       );
     }
 
+    // --- ACTION: Bulk publish multiple drafts ---
+    // Uses sequential publishing with proper error tracking per item.
+    // Note: eBay's bulkPublishOffer endpoint requires offers to already exist.
+    // Our flow creates inventory item + offer + publishes in one shot per item,
+    // so true bulk is not applicable here without a two-phase approach.
+    // This action provides a server-side loop to avoid client-side sequential calls.
+    if (action === "bulk_create_draft") {
+      const { userToken, drafts, postalCode } = payload;
+      if (!userToken) throw new Error("No eBay user token provided");
+      if (!Array.isArray(drafts) || drafts.length === 0) {
+        throw new Error("No drafts provided for bulk publish");
+      }
+
+      const results: Array<{
+        draftId: string;
+        success: boolean;
+        listingId?: string;
+        offerId?: string;
+        sku?: string;
+        affiliateUrl?: string;
+        error?: string;
+      }> = [];
+
+      for (const draft of drafts) {
+        try {
+          // Re-invoke this same function with create_draft action for each draft
+          const singleResp = await fetch(req.url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: req.headers.get("Authorization") || "",
+            },
+            body: JSON.stringify({
+              action: "create_draft",
+              userToken,
+              postalCode,
+              ...draft,
+            }),
+          });
+
+          const singleData = await singleResp.json();
+
+          if (singleData.success) {
+            results.push({
+              draftId: draft.draftId,
+              success: true,
+              listingId: singleData.listingId,
+              offerId: singleData.offerId,
+              sku: singleData.sku,
+              affiliateUrl: singleData.affiliateUrl,
+            });
+          } else {
+            results.push({
+              draftId: draft.draftId,
+              success: false,
+              error: singleData.error || "Unknown error",
+            });
+          }
+        } catch (err) {
+          results.push({
+            draftId: draft.draftId,
+            success: false,
+            error: err instanceof Error ? err.message : "Unknown error",
+          });
+        }
+      }
+
+      const successCount = results.filter((r) => r.success).length;
+      const errorCount = results.filter((r) => !r.success).length;
+
+      return new Response(
+        JSON.stringify({
+          results,
+          successCount,
+          errorCount,
+          message: `${successCount} of ${drafts.length} listings published to eBay`,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     return new Response(JSON.stringify({ error: "Unknown action" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -366,22 +640,21 @@ serve(async (req) => {
     const errorMsg = e instanceof Error ? e.message : "Unknown error";
     console.error("ebay-publish error:", errorMsg);
     console.error("Full error details:", e);
-    
-    // Return 400 for client errors (configuration issues, bad input, etc)
-    // Return 500 only for unexpected server errors
-    const isClientError = errorMsg.includes("not configured") || 
-                         errorMsg.includes("not provided") ||
-                         errorMsg.includes("No authorization") ||
-                         errorMsg.includes("Missing");
-    
+
+    const isClientError =
+      errorMsg.includes("not configured") ||
+      errorMsg.includes("not provided") ||
+      errorMsg.includes("No authorization") ||
+      errorMsg.includes("Missing");
+
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         error: errorMsg,
-        status: isClientError ? 400 : 500
+        status: isClientError ? 400 : 500,
       }),
-      { 
-        status: isClientError ? 400 : 500, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      {
+        status: isClientError ? 400 : 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
   }

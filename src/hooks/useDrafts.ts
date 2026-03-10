@@ -45,6 +45,7 @@ export function useDrafts() {
           fulfillmentPolicyId: d.fulfillment_policy_id || undefined,
           paymentPolicyId: d.payment_policy_id || undefined,
           returnPolicyId: d.return_policy_id || undefined,
+          auctionDuration: d.auction_duration || undefined,
         }))
       );
     }
@@ -79,6 +80,7 @@ export function useDrafts() {
       fulfillment_policy_id: draft.fulfillmentPolicyId || null,
       payment_policy_id: draft.paymentPolicyId || null,
       return_policy_id: draft.returnPolicyId || null,
+      auction_duration: draft.auctionDuration || null,
     });
 
     if (error) {
@@ -116,6 +118,7 @@ export function useDrafts() {
     if (updates.fulfillmentPolicyId !== undefined)    patch.fulfillment_policy_id = updates.fulfillmentPolicyId || null;
     if (updates.paymentPolicyId !== undefined)        patch.payment_policy_id = updates.paymentPolicyId || null;
     if (updates.returnPolicyId !== undefined)         patch.return_policy_id = updates.returnPolicyId || null;
+    if (updates.auctionDuration !== undefined)        patch.auction_duration = updates.auctionDuration || null;
 
     const { error } = await supabase.from("drafts").update(patch).eq("id", id);
 
