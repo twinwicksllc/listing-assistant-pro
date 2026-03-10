@@ -83,19 +83,44 @@ export function useDrafts() {
       let imageUrl = draft.imageUrl;
       let imageUrls = draft.imageUrls;
 
+      console.log("Starting draft save with:", {
+        hasImages: !!imageUrls,
+        imageCount: imageUrls?.length,
+        userId: user.id,
+        orgId,
+      });
+
       if (imageUrls && imageUrls.length > 0) {
         // Upload all images in parallel; the first becomes the thumbnail
         const base64Urls = imageUrls.filter((u) => u.startsWith("data:"));
         const alreadyStoredUrls = imageUrls.filter((u) => !u.startsWith("data:"));
+        
+        console.log("Image processing:", {
+          needsUpload: base64Urls.length,
+          alreadyStored: alreadyStoredUrls.length,
+        });
+
         const uploadedUrls = base64Urls.length > 0
           ? await uploadListingImages(base64Urls, user.id)
           : [];
         imageUrls = [...uploadedUrls, ...alreadyStoredUrls];
         imageUrl = imageUrls[0];
+        
+        console.log("After upload/processing:", {
+          finalImageUrl: imageUrl,
+          totalImages: imageUrls.length,
+        });
       } else if (draft.imageUrl?.startsWith("data:")) {
+        console.log("Single base64 image, uploading...");
         imageUrl = await uploadListingImage(draft.imageUrl, user.id);
         imageUrls = [imageUrl];
       }
+
+      console.log("About to insert draft with payload:", {
+        hasImageUrl: !!imageUrl,
+        hasImageUrls: !!imageUrls,
+        itemSpecifics: draft.itemSpecifics,
+      });
 
       const { error } = await supabase.from("drafts").insert({
         id: draft.id,
@@ -123,8 +148,21 @@ export function useDrafts() {
           message: error.message,
           code: error.code,
           details: error.details,
+          status: error.status,
+          statusText: error.statusText,
         });
-        toast.error(`Failed to save draft: ${error.message}`);
+        
+        // More helpful error messages
+        let userMessage = "Failed to save draft";
+        if (error.code === "23503") {
+          userMessage = "Organization not found. Try creating a personal draft instead.";
+        } else if (error.code === "23502") {
+          userMessage = "Missing required field. Please fill in title and add an image.";
+        } else if (error.message?.includes("image_urls")) {
+          userMessage = "Image upload failed. Please try again.";
+        }
+        
+        toast.error(userMessage);
         return false;
       }
 

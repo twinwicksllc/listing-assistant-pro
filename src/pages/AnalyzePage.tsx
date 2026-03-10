@@ -179,7 +179,12 @@ export default function AnalyzePage() {
   };
 
   const handleSave = async () => {
-    const success = await addDraft({
+    if (!title || !imageUrls.length) {
+      toast.error("Title and at least one image are required");
+      return;
+    }
+
+    const draftData = {
       id: crypto.randomUUID(),
       imageUrl: imageUrls[0],
       imageUrls,
@@ -196,7 +201,11 @@ export default function AnalyzePage() {
       listingPrice,
       auctionStartPrice,
       auctionBuyItNow: auctionBuyItNowEnabled ? auctionBuyItNow : null,
-    });
+    };
+    
+    console.log("Saving draft with data:", draftData);
+
+    const success = await addDraft(draftData);
     if (success) {
       toast.success("Draft staged! Capture your next item.", {
         action: { label: "View Drafts", onClick: () => navigate("/drafts") },
