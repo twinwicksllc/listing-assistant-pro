@@ -55,7 +55,6 @@ export function useDrafts() {
   const addDraft = async (draft: ListingDraft) => {
     if (!user) return;
 
-    // Only include org_id if org has fully loaded and has a valid ID
     const orgId = (!org.loading && org.orgId) ? org.orgId : undefined;
 
     const { error } = await supabase.from("drafts").insert({
@@ -95,5 +94,33 @@ export function useDrafts() {
     }
   };
 
-  return { drafts, addDraft, removeDraft, loading, refetchDrafts: fetchDrafts };
+  const updateDraft = async (id: string, updates: Partial<ListingDraft>) => {
+    const patch: Record<string, any> = {};
+    if (updates.title !== undefined)                  patch.title = updates.title;
+    if (updates.description !== undefined)            patch.description = updates.description;
+    if (updates.listingPrice !== undefined)           patch.listing_price = updates.listingPrice;
+    if (updates.listingFormat !== undefined)          patch.listing_format = updates.listingFormat;
+    if (updates.ebayCategoryId !== undefined)         patch.ebay_category_id = updates.ebayCategoryId;
+    if (updates.ebayCategoryBreadcrumb !== undefined) patch.ebay_category_breadcrumb = updates.ebayCategoryBreadcrumb;
+    if (updates.itemSpecifics !== undefined)          patch.item_specifics = updates.itemSpecifics;
+    if (updates.condition !== undefined)              patch.condition = updates.condition;
+    if (updates.consignor !== undefined)              patch.consignor = updates.consignor;
+    if (updates.priceMin !== undefined)               patch.price_min = updates.priceMin;
+    if (updates.priceMax !== undefined)               patch.price_max = updates.priceMax;
+
+    const { error } = await supabase.from("drafts").update(patch).eq("id", id);
+
+    if (error) {
+      console.error("Error updating draft:", error);
+      toast.error("Failed to update draft");
+      return false;
+    } else {
+      setDrafts((prev) =>
+        prev.map((d) => (d.id === id ? { ...d, ...updates } : d))
+      );
+      return true;
+    }
+  };
+
+  return { drafts, addDraft, removeDraft, updateDraft, loading, refetchDrafts: fetchDrafts };
 }
