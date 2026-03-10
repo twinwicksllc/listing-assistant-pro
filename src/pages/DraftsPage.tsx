@@ -1,4 +1,4 @@
-import { Trash2, FileText } from "lucide-react";
+import { Trash2, FileText, ShoppingCart, Gavel, Tag } from "lucide-react";
 import { useDrafts } from "@/hooks/useDrafts";
 import BottomNav from "@/components/BottomNav";
 import { toast } from "sonner";
@@ -28,35 +28,75 @@ export default function DraftsPage() {
           </div>
         )}
 
-        {drafts.map((draft) => (
-          <div key={draft.id} className="bg-card border border-border rounded-xl p-3 flex gap-3">
-            <img
-              src={draft.imageUrl}
-              alt={draft.title}
-              className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
-            />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground line-clamp-2 leading-snug">{draft.title}</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                ${draft.priceMin.toFixed(2)} – ${draft.priceMax.toFixed(2)}
-              </p>
-              {draft.consignor && (
-                <p className="text-xs text-primary mt-0.5">
-                  Consignor: {draft.consignor}
+        {drafts.map((draft) => {
+          // Prefer user-chosen listingPrice; fall back to midpoint of AI range
+          const displayPrice =
+            draft.listingPrice != null && draft.listingPrice > 0
+              ? draft.listingPrice
+              : (draft.priceMin + draft.priceMax) / 2;
+
+          const isAuction = draft.listingFormat === "AUCTION";
+
+          return (
+            <div key={draft.id} className="bg-card border border-border rounded-xl p-3 flex gap-3">
+              <img
+                src={draft.imageUrl}
+                alt={draft.title}
+                className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-foreground line-clamp-2 leading-snug">{draft.title}</p>
+
+                {/* Price + Format badge */}
+                <div className="flex items-center gap-2 mt-1.5">
+                  <span className="text-sm font-bold text-primary">
+                    ${displayPrice.toFixed(2)}
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                      isAuction
+                        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                        : "bg-primary/10 text-primary"
+                    }`}
+                  >
+                    {isAuction ? (
+                      <><Gavel className="w-2.5 h-2.5" /> Auction</>
+                    ) : (
+                      <><ShoppingCart className="w-2.5 h-2.5" /> Buy It Now</>
+                    )}
+                  </span>
+                </div>
+
+                {/* Category breadcrumb */}
+                {(draft.ebayCategoryBreadcrumb || draft.ebayCategoryId) && (
+                  <div className="flex items-start gap-1 mt-1">
+                    <Tag className="w-3 h-3 text-muted-foreground flex-shrink-0 mt-0.5" />
+                    <p className="text-[10px] text-muted-foreground leading-tight line-clamp-2">
+                      {draft.ebayCategoryBreadcrumb || `Category #${draft.ebayCategoryId}`}
+                    </p>
+                  </div>
+                )}
+
+                {/* Consignor */}
+                {draft.consignor && (
+                  <p className="text-xs text-primary mt-0.5">
+                    Consignor: {draft.consignor}
+                  </p>
+                )}
+
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {draft.createdAt.toLocaleDateString()}
                 </p>
-              )}
-              <p className="text-xs text-muted-foreground">
-                {draft.createdAt.toLocaleDateString()}
-              </p>
+              </div>
+              <button
+                onClick={() => handleDelete(draft.id)}
+                className="self-start p-1.5 text-muted-foreground hover:text-destructive transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
             </div>
-            <button
-              onClick={() => handleDelete(draft.id)}
-              className="self-start p-1.5 text-muted-foreground hover:text-destructive transition-colors"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <BottomNav />

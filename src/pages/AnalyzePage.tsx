@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, Send, Tag, Crown, Download, FileSpreadsheet, Sheet, ShieldCheck, AlertTriangle, Check, X as XIcon, Lock, UserCircle, DollarSign, Gavel } from "lucide-react";
+import { ArrowLeft, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, Send, Tag, Crown, Download, FileSpreadsheet, Sheet, ShieldCheck, AlertTriangle, Check, X as XIcon, Lock, UserCircle, DollarSign, Gavel, ShoppingCart } from "lucide-react";
 import PricingCard from "@/components/PricingCard";
 import { useDrafts } from "@/hooks/useDrafts";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import type { ItemSpecifics } from "@/types/listing";
+import type { ItemSpecifics, ListingFormat } from "@/types/listing";
 import { useAuth, PLANS } from "@/contexts/AuthContext";
 import { exportListing, type ExportPlatform, type ExportFormat } from "@/lib/exportCSV";
+import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
 
 export default function AnalyzePage() {
   const { canAnalyze, canPublish, isPro, isUnlimited, isPaid, usage, recordUsage, isOwner, isLister, currentPlanLimits } = useAuth();
@@ -128,8 +129,11 @@ export default function AnalyzePage() {
       description: getDescriptionWithFooter(),
       priceMin,
       priceMax,
+      listingPrice: listingPrice > 0 ? listingPrice : auctionStartPrice > 0 ? auctionStartPrice : parseFloat(((priceMin + priceMax) / 2).toFixed(2)),
+      listingFormat: listingFormat as ListingFormat,
       createdAt: new Date(),
       ebayCategoryId,
+      ebayCategoryBreadcrumb: getEbayCategoryBreadcrumb(ebayCategoryId),
       itemSpecifics,
       condition,
       consignor,
