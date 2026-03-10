@@ -60,16 +60,29 @@ async function getSpotPrices(svc: ReturnType<typeof createClient>): Promise<{
     });
     if (resp.ok) {
       const data = await resp.json();
+      console.log("metals.live response:", JSON.stringify(data).substring(0, 500));
+      
+      // metals.live returns nested objects: { gold: { bid, ask }, silver: { bid, ask }, ... }
+      // We'll use the 'bid' price as the spot price
       const spot = Array.isArray(data) ? data[0] : data;
       const prices = {
-        gold: parseFloat(spot.gold) || 0,
-        silver: parseFloat(spot.silver) || 0,
-        platinum: parseFloat(spot.platinum) || 0,
+        // Handle both flat format (legacy) and nested bid/ask format (current)
+        gold: parseFloat(spot.gold?.bid || spot.gold?.price || spot.gold || 0) || 0,
+        silver: parseFloat(spot.silver?.bid || spot.silver?.price || spot.silver || 0) || 0,
+        platinum: parseFloat(spot.platinum?.bid || spot.platinum?.price || spot.platinum || 0) || 0,
       };
-      if (prices.gold > 0) {
+      
+      console.log("Parsed prices:", prices);
+      
+      if (prices.gold > 0 && prices.silver > 0) {
         fresh = prices;
         source = "metals.live";
+        console.log("Successfully fetched fresh prices from metals.live");
+      } else {
+        console.warn("Parsed prices invalid (likely wrong API response structure):", { prices });
       }
+    } else {
+      console.warn(`metals.live API returned status ${resp.status}`);
     }
   } catch (e) {
     console.error("metals.live fetch failed:", e);
