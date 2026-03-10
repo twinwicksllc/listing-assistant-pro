@@ -184,10 +184,32 @@ export default function AnalyzePage() {
           toast.error("eBay session expired. Please connect again.");
           return;
         }
+        // Missing business policies — guide user to Seller Hub
+        if (data?.missingPolicies) {
+          toast.error("eBay business policies not configured", {
+            description: data.error,
+            action: {
+              label: "Open Seller Hub",
+              onClick: () => window.open("https://www.ebay.com/sh/ovw/policies", "_blank"),
+            },
+            duration: 10000,
+          });
+          return;
+        }
+        // Offer created but publish step failed — show offerId for debugging
+        if (data?.publishFailed) {
+          toast.error("Offer created but couldn't go live", {
+            description: data.error,
+            duration: 8000,
+          });
+          return;
+        }
         throw new Error(data?.error || error?.message || "Publish failed");
       }
 
-      const successMsg = `Draft listing created on eBay! (Offer ID: ${data.offerId})`;
+      const successMsg = data.listingId
+        ? `Listing published live on eBay! (ID: ${data.listingId})`
+        : `Listing created on eBay (Offer ID: ${data.offerId})`;
       toast.success(successMsg, {
         description: data.affiliateUrl
           ? `Affiliate link ready — share it to earn EPN commissions.`
@@ -646,7 +668,7 @@ export default function AnalyzePage() {
                   ) : (
                     <>
                       <Send className="w-4 h-4" />
-                      Publish to eBay
+                      Publish Live to eBay
                     </>
                   )}
                 </button>
