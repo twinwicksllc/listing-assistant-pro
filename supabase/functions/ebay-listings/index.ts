@@ -13,20 +13,19 @@ const corsHeaders = {
 async function fetchListingsViaTradingAPI(
   apiBase: string,
   userToken: string,
-  ebayHeaders: Record<string, string>,
+  _ebayHeaders: Record<string, string>,
   corsHeaders: Record<string, string>
 ): Promise<Response> {
   const tradingUrl = apiBase.includes("sandbox")
     ? "https://api.sandbox.ebay.com/ws/api.dll"
     : "https://api.ebay.com/ws/api.dll";
 
+  // Do NOT include <RequesterCredentials> — the IAF-TOKEN header is sufficient
+  // and sending both can cause auth errors.
   const xml = `<?xml version="1.0" encoding="utf-8"?>
 <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
-  <RequesterCredentials>
-    <eBayAuthToken>${userToken}</eBayAuthToken>
-  </RequesterCredentials>
   <ActiveList>
-    <Include>true</Include>
+    <Sort>TimeLeft</Sort>
     <Pagination>
       <EntriesPerPage>100</EntriesPerPage>
       <PageNumber>1</PageNumber>
@@ -48,19 +47,30 @@ async function fetchListingsViaTradingAPI(
       body: xml,
     });
 
+    const xmlText = await resp.text();
+    console.log("Trading API response status:", resp.status, "— first 800 chars:", xmlText.substring(0, 800));
+
     if (!resp.ok) {
-      const t = await resp.text();
-      console.error("Trading API error:", resp.status, t);
+      console.error("Trading API HTTP error:", resp.status);
       return new Response(
         JSON.stringify({ listings: [], error: `Trading API error ${resp.status}` }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const xmlText = await resp.text();
-    console.log("Trading API response (first 500 chars):", xmlText.substring(0, 500));
+    // Check for eBay-level errors inside the XML (HTTP 200 but Ack=Failure)
+    if (xmlText.includes("<Ack>Failure</Ack>") || xmlText.includes("<Ack>PartialFailure</Ack>")) {
+      const errMsg = xmlText.match(/<LongMessage>([\s\S]*?)<\/LongMessage>/)?.[1] ||
+                     xmlText.match(/<ShortMessage>([\s\S]*?)<\/ShortMessage>/)?.[1] ||
+                     "Unknown Trading API error";
+      console.error("Trading API Ack failure:", errMsg);
+      return new Response(
+        JSON.stringify({ listings: [], error: `eBay Trading API error: ${errMsg}` }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
-    // Parse the XML response — extract ItemID, Title, SellingStatus, CurrentPrice, PictureDetails
+    // Items live inside <ActiveList><ItemArray><Item>...</Item></ItemArray></ActiveList>
     const listings: any[] = [];
     const itemMatches = xmlText.matchAll(/<Item>([\s\S]*?)<\/Item>/g);
     for (const match of itemMatches) {
@@ -71,11 +81,14 @@ async function fetchListingsViaTradingAPI(
       };
       const listingId = get("ItemID");
       const title = get("Title");
-      const price = parseFloat(get("CurrentPrice") || get("BuyItNowPrice") || "0");
-      const currency = item.match(/CurrentPrice currencyID="([^"]+)"/)?.[1] || "USD";
+      // CurrentPrice has a currencyID attribute: <CurrentPrice currencyID="USD">29.99</CurrentPrice>
+      const priceStr = get("CurrentPrice") || get("BuyItNowPrice") || "0";
+      const price = parseFloat(priceStr) || 0;
+      const currency = item.match(/<CurrentPrice currencyID="([^"]+)"/)?.[1] || "USD";
       const imageUrl = get("GalleryURL") || get("PictureURL") || "";
       const sku = get("SKU");
       const status = get("ListingStatus") || "ACTIVE";
+      const categoryId = get("CategoryID") || "";
 
       if (listingId) {
         listings.push({
@@ -86,7 +99,7 @@ async function fetchListingsViaTradingAPI(
           price,
           currency,
           status,
-          categoryId: get("PrimaryCategory") ? get("CategoryID") : "",
+          categoryId,
           listingId,
           views: 0,
           ebayUrl: `https://www.ebay.com/itm/${listingId}`,
@@ -94,7 +107,14 @@ async function fetchListingsViaTradingAPI(
       }
     }
 
-    console.log(`Trading API fallback: loaded ${listings.length} active listings`);
+    // Log any SKUs with non-alphanumeric characters (the "poisoned" ones)
+    const poisonedSkus = listings.filter(l => l.sku && /[^a-zA-Z0-9]/.test(l.sku));
+    if (poisonedSkus.length > 0) {
+      console.warn("Poisoned SKUs found via Trading API:",
+        JSON.stringify(poisonedSkus.map(l => ({ itemId: l.listingId, sku: l.sku, title: l.title }))));
+    }
+
+    console.log(`Trading API fallback: loaded ${listings.length} active listings, ${poisonedSkus.length} with non-alphanumeric SKUs`);
 
     return new Response(
       JSON.stringify({ listings, needsAuth: false }),
