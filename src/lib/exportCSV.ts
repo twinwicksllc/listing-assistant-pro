@@ -23,11 +23,11 @@ function downloadCSV(filename: string, content: string) {
 
 const EBAY_CONDITION_MAP: Record<string, string> = {
   NEW: "1000",
-  LIKE_NEW: "1500",
-  USED_EXCELLENT: "2750",
-  USED_VERY_GOOD: "3000",
-  USED_GOOD: "4000",
-  USED_ACCEPTABLE: "5000",
+  LIKE_NEW: "2750",        // Like New / Open Box
+  USED_EXCELLENT: "3000",  // Used - Excellent
+  USED_VERY_GOOD: "4000",  // Used - Very Good
+  USED_GOOD: "5000",       // Used - Good
+  USED_ACCEPTABLE: "6000", // Used - Acceptable
 };
 
 const FB_CONDITION_MAP: Record<string, string> = {

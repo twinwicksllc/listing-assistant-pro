@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { ListingDraft } from "@/types/listing";
+import { ListingDraft, PublishStatus } from "@/types/listing";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -45,6 +45,14 @@ export function useDrafts() {
           fulfillmentPolicyId: d.fulfillment_policy_id || undefined,
           paymentPolicyId: d.payment_policy_id || undefined,
           returnPolicyId: d.return_policy_id || undefined,
+          auctionDuration: d.auction_duration || undefined,
+          // Publish lifecycle
+          publishStatus: (d.publish_status as PublishStatus) || "draft",
+          publishedAt: d.published_at ? new Date(d.published_at) : undefined,
+          ebaySku: d.ebay_sku || undefined,
+          ebayOfferId: d.ebay_offer_id || undefined,
+          ebayListingId: d.ebay_listing_id || undefined,
+          lastPublishError: d.last_publish_error || undefined,
         }))
       );
     }
@@ -79,13 +87,15 @@ export function useDrafts() {
       fulfillment_policy_id: draft.fulfillmentPolicyId || null,
       payment_policy_id: draft.paymentPolicyId || null,
       return_policy_id: draft.returnPolicyId || null,
+      auction_duration: draft.auctionDuration || null,
+      publish_status: "draft",
     });
 
     if (error) {
       console.error("Error adding draft:", error);
       toast.error("Failed to save draft");
     } else {
-      setDrafts((prev) => [draft, ...prev]);
+      setDrafts((prev) => [{ ...draft, publishStatus: "draft" }, ...prev]);
     }
   };
 
@@ -116,6 +126,14 @@ export function useDrafts() {
     if (updates.fulfillmentPolicyId !== undefined)    patch.fulfillment_policy_id = updates.fulfillmentPolicyId || null;
     if (updates.paymentPolicyId !== undefined)        patch.payment_policy_id = updates.paymentPolicyId || null;
     if (updates.returnPolicyId !== undefined)         patch.return_policy_id = updates.returnPolicyId || null;
+    if (updates.auctionDuration !== undefined)        patch.auction_duration = updates.auctionDuration || null;
+    // Publish lifecycle fields
+    if (updates.publishStatus !== undefined)          patch.publish_status = updates.publishStatus;
+    if (updates.publishedAt !== undefined)            patch.published_at = updates.publishedAt?.toISOString() || null;
+    if (updates.ebaySku !== undefined)                patch.ebay_sku = updates.ebaySku || null;
+    if (updates.ebayOfferId !== undefined)            patch.ebay_offer_id = updates.ebayOfferId || null;
+    if (updates.ebayListingId !== undefined)          patch.ebay_listing_id = updates.ebayListingId || null;
+    if (updates.lastPublishError !== undefined)       patch.last_publish_error = updates.lastPublishError || null;
 
     const { error } = await supabase.from("drafts").update(patch).eq("id", id);
 
@@ -131,5 +149,44 @@ export function useDrafts() {
     }
   };
 
-  return { drafts, addDraft, removeDraft, updateDraft, loading, refetchDrafts: fetchDrafts };
+  /**
+   * Mark a draft as successfully published and remove it from the active drafts list.
+   * Stores the eBay listing metadata for reference.
+   */
+  const markDraftPublished = async (
+    id: string,
+    meta: { sku: string; offerId: string; listingId: string | null }
+  ) => {
+    await updateDraft(id, {
+      publishStatus: "published",
+      publishedAt: new Date(),
+      ebaySku: meta.sku,
+      ebayOfferId: meta.offerId,
+      ebayListingId: meta.listingId || undefined,
+      lastPublishError: undefined,
+    });
+    // Remove from active drafts list — published items appear in Dashboard
+    setDrafts((prev) => prev.filter((d) => d.id !== id));
+  };
+
+  /**
+   * Mark a draft as failed with an error message.
+   */
+  const markDraftFailed = async (id: string, errorMsg: string) => {
+    await updateDraft(id, {
+      publishStatus: "failed",
+      lastPublishError: errorMsg,
+    });
+  };
+
+  return {
+    drafts,
+    addDraft,
+    removeDraft,
+    updateDraft,
+    markDraftPublished,
+    markDraftFailed,
+    loading,
+    refetchDrafts: fetchDrafts,
+  };
 }
