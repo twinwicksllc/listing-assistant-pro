@@ -124,6 +124,7 @@ export default function AnalyzePage() {
     const success = await addDraft({
       id: crypto.randomUUID(),
       imageUrl: imageUrls[0],
+      imageUrls,
       title,
       description: getDescriptionWithFooter(),
       priceMin,
@@ -133,10 +134,16 @@ export default function AnalyzePage() {
       itemSpecifics,
       condition,
       consignor,
+      listingFormat,
+      listingPrice,
+      auctionStartPrice,
+      auctionBuyItNow: auctionBuyItNowEnabled ? auctionBuyItNow : null,
     });
     if (success) {
-      toast.success("Draft saved!");
-      navigate("/drafts");
+      toast.success("Draft staged! Capture your next item.", {
+        action: { label: "View Drafts", onClick: () => navigate("/drafts") },
+      });
+      navigate("/home");
     }
   };
 

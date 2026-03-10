@@ -92,8 +92,12 @@ export default function EbayCallbackPage() {
         setStatus("success");
         setMessage("eBay account connected successfully!");
 
-        // Redirect to dashboard after a short delay
-        setTimeout(() => navigate("/dashboard", { replace: true }), 1800);
+        // Check if a specific post-auth redirect was requested (e.g. /drafts?publish=all)
+        const postAuthRedirect = localStorage.getItem("ebay_post_auth_redirect") || "/dashboard";
+        localStorage.removeItem("ebay_post_auth_redirect");
+
+        // Redirect after a short delay
+        setTimeout(() => navigate(postAuthRedirect, { replace: true }), 1800);
       })
       .catch((err: any) => {
         console.error("EbayCallbackPage: catch error:", err);

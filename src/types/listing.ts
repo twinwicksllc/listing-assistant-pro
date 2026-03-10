@@ -16,7 +16,8 @@ export interface ItemSpecifics {
 
 export interface ListingDraft {
   id: string;
-  imageUrl: string;
+  imageUrl: string;          // first/thumbnail image URL (Supabase storage)
+  imageUrls?: string[];      // all image URLs (Supabase storage) for multi-photo listings
   title: string;
   description: string;
   priceMin: number;
@@ -26,4 +27,8 @@ export interface ListingDraft {
   itemSpecifics?: ItemSpecifics;
   condition?: string;
   consignor?: string;
+  listingFormat?: "FIXED_PRICE" | "AUCTION";
+  listingPrice?: number;
+  auctionStartPrice?: number;
+  auctionBuyItNow?: number | null;
 }
