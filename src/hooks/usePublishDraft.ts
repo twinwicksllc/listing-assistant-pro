@@ -62,7 +62,7 @@ export function usePublishDraft() {
           auctionStartPrice: draft.listingFormat === "AUCTION" ? (draft.listingPrice ?? 0) : 0,
           auctionBuyItNow: null,
           imageUrl: draft.imageUrl,
-          condition: draft.condition ?? "USED_EXCELLENT",
+          condition: draft.condition ?? "PRE_OWNED_GOOD",
           ebayCategoryId: draft.ebayCategoryId ?? "",
           itemSpecifics: draft.itemSpecifics ?? {},
           fulfillmentPolicyId: draft.fulfillmentPolicyId ?? null,
@@ -75,6 +75,25 @@ export function usePublishDraft() {
         if (data?.error?.includes("401") || data?.error?.includes("expired")) {
           localStorage.removeItem("ebay-user-token");
           toast.error("eBay session expired. Please reconnect and try again.");
+          return "error";
+        }
+        if (data?.auctionNotSupported) {
+          // Auction format is not supported by the Inventory API
+          await updateDraft(draft.id, { publishStatus: "draft" }); // revert to draft
+          toast.error("Auction format not supported", {
+            description:
+              "The eBay Inventory API only supports Fixed Price listings. " +
+              "Please edit this draft and change the format to Fixed Price.",
+            action: {
+              label: "Learn More",
+              onClick: () =>
+                window.open(
+                  "https://developer.ebay.com/api-docs/sell/inventory/resources/offer/methods/createOffer",
+                  "_blank"
+                ),
+            },
+            duration: 10000,
+          });
           return "error";
         }
         if (data?.missingPolicies) {
