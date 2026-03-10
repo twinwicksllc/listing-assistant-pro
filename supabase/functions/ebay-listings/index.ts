@@ -105,11 +105,19 @@ async function fetchListingsViaTradingAPI(
       const imageUrl = get("GalleryURL") || get("PictureURL") || "";
       const sku = get("SKU");
       const categoryId = get("CategoryID") || "";
+      
+      // Parse quantity fields to filter out sold items
+      // eBay considers multi-quantity listings "active" even if all units sold
+      // So we need to check: QuantityAvailable = Quantity - QuantitySold
+      const quantityStr = get("Quantity");
+      const quantitySoldStr = get("QuantitySold");
+      const quantity = quantityStr ? parseInt(quantityStr, 10) : 0;
+      const quantitySold = quantitySoldStr ? parseInt(quantitySoldStr, 10) : 0;
+      const quantityAvailable = quantity - quantitySold;
 
-      // Items in ActiveList are already active by definition — no need to filter by status.
-      // (The GetMyeBaySelling request specifies <ActiveList> which only returns active items)
-      if (listingId) {
-        console.log(`Trading API item: ItemID=${listingId}, Title="${title}", SKU="${sku}"`);
+      // Skip items with 0 remaining quantity (fully sold out)
+      if (listingId && quantityAvailable > 0) {
+        console.log(`Trading API item: ItemID=${listingId}, Title="${title}", SKU="${sku}", Qty=${quantityAvailable}`);
         listings.push({
           offerId: null,
           sku: sku || listingId,
@@ -123,6 +131,8 @@ async function fetchListingsViaTradingAPI(
           views: 0,
           ebayUrl: `https://www.ebay.com/itm/${listingId}`,
         });
+      } else if (listingId && quantityAvailable <= 0) {
+        console.log(`Skipping sold-out item: ItemID=${listingId}, Title="${title}" (Qty available: ${quantityAvailable})`);
       }
     }
 
