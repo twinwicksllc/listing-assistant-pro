@@ -119,11 +119,16 @@ async function fetchListingsViaTradingAPI(
       const quantity = quantityStr ? parseInt(quantityStr, 10) : 0;
       const quantitySold = quantitySoldStr ? parseInt(quantitySoldStr, 10) : 0;
       const quantityAvailable = quantity - quantitySold;
+      
+      // Multi-layer filtering to catch edge cases where eBay's status is unreliable
+      // 1. QuantityAvailable must be > 0 (most reliable indicator)
+      // 2. MUST NOT be Completed or Ended (reject these explicitly)
+      // 3. Single-quantity items that have any sales are completely done
+      const isCompletedOrEnded = listingStatus === "Completed" || listingStatus === "Ended";
+      const isSingleQtySold = quantity === 1 && quantitySold >= 1;
+      const isGenuinelyActive = quantityAvailable > 0 && !isCompletedOrEnded && !isSingleQtySold;
 
-      // Include only items that are:
-      // 1. Explicitly in "Active" listing status (not Ended, Completed, etc.)
-      // 2. Have remaining quantity available
-      if (listingId && listingStatus === "Active" && quantityAvailable > 0) {
+      if (listingId && isGenuinelyActive) {
         console.log(`Trading API item: ItemID=${listingId}, Title="${title}", SKU="${sku}", Status=${listingStatus}, Qty=${quantityAvailable}`);
         listings.push({
           offerId: null,
@@ -138,10 +143,15 @@ async function fetchListingsViaTradingAPI(
           views: 0,
           ebayUrl: `https://www.ebay.com/itm/${listingId}`,
         });
-      } else if (listingId && listingStatus !== "Active") {
-        console.log(`Skipping non-active item: ItemID=${listingId}, Title="${title}", Status=${listingStatus}`);
-      } else if (listingId && quantityAvailable <= 0) {
-        console.log(`Skipping sold-out item: ItemID=${listingId}, Title="${title}" (Qty available: ${quantityAvailable})`);
+      } else if (listingId) {
+        // Log why items were filtered out
+        if (quantityAvailable <= 0) {
+          console.log(`Skipping sold-out item: ItemID=${listingId}, Title="${title}", Qty available: ${quantityAvailable}`);
+        } else if (isCompletedOrEnded) {
+          console.log(`Skipping completed/ended item: ItemID=${listingId}, Title="${title}", Status: ${listingStatus}`);
+        } else if (isSingleQtySold) {
+          console.log(`Skipping single-qty sold item: ItemID=${listingId}, Title="${title}", Qty: ${quantity}, Sold: ${quantitySold}`);
+        }
       }
     }
 
