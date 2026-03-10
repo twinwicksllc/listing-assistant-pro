@@ -8,16 +8,136 @@ const corsHeaders = {
 };
 
 // ----------------------------------------------------------------
+// eBay condition ID mapping
+// Inventory API accepts ConditionEnum strings, but many categories
+// also require the numeric conditionId in the offer payload.
+// We send both to maximize compatibility.
+// Reference: https://developer.ebay.com/devzone/finding/callref/Enums/conditionIdList.html
+// ----------------------------------------------------------------
+const CONDITION_ID_MAP: Record<string, number> = {
+  NEW: 1000,
+  LIKE_NEW: 2750,
+  USED_EXCELLENT: 3000,
+  USED_VERY_GOOD: 4000,
+  USED_GOOD: 5000,
+  USED_ACCEPTABLE: 6000,
+};
+
+// ----------------------------------------------------------------
 // Listing duration constants
 // GTC = "Good 'Til Cancelled" — required for FIXED_PRICE listings
 // Auctions must use a specific day count: 1, 3, 5, 7, or 10
 // ----------------------------------------------------------------
 const FIXED_PRICE_DURATION = "GTC";
 const DEFAULT_AUCTION_DURATION = "Days_7";
+const VALID_AUCTION_DURATIONS = ["Days_1", "Days_3", "Days_5", "Days_7", "Days_10"];
+
+// ----------------------------------------------------------------
+// Build a fixed-price offer payload
+// ----------------------------------------------------------------
+function buildFixedPriceOffer(params: {
+  sku: string;
+  description: string;
+  listingPrice: number;
+  ebayCategoryId?: string;
+  merchantLocationKey: string;
+  fulfillmentPolicyId: string;
+  paymentPolicyId: string;
+  returnPolicyId: string;
+}): Record<string, unknown> {
+  const offer: Record<string, unknown> = {
+    sku: params.sku,
+    marketplaceId: "EBAY_US",
+    format: "FIXED_PRICE",
+    listingDescription: params.description,
+    availableQuantity: 1,
+    listingDuration: FIXED_PRICE_DURATION,
+    merchantLocationKey: params.merchantLocationKey,
+    pricingSummary: {
+      price: {
+        value: params.listingPrice.toFixed(2),
+        currency: "USD",
+      },
+    },
+    listingPolicies: {
+      fulfillmentPolicyId: params.fulfillmentPolicyId,
+      paymentPolicyId: params.paymentPolicyId,
+      returnPolicyId: params.returnPolicyId,
+    },
+  };
+  if (params.ebayCategoryId) {
+    offer.categoryId = params.ebayCategoryId;
+  }
+  return offer;
+}
+
+// ----------------------------------------------------------------
+// Build an auction offer payload
+// Auctions have different required fields and constraints vs fixed price.
+// ----------------------------------------------------------------
+function buildAuctionOffer(params: {
+  sku: string;
+  description: string;
+  auctionStartPrice: number;
+  auctionBuyItNow?: number;
+  auctionDuration: string;
+  ebayCategoryId?: string;
+  merchantLocationKey: string;
+  fulfillmentPolicyId: string;
+  paymentPolicyId: string;
+  returnPolicyId: string;
+}): Record<string, unknown> {
+  // Validate auction duration
+  const duration = VALID_AUCTION_DURATIONS.includes(params.auctionDuration)
+    ? params.auctionDuration
+    : DEFAULT_AUCTION_DURATION;
+
+  const pricingSummary: Record<string, unknown> = {
+    auctionStartPrice: {
+      value: params.auctionStartPrice.toFixed(2),
+      currency: "USD",
+    },
+  };
+
+  // Buy It Now price must be at least 30% above starting bid per eBay rules
+  if (params.auctionBuyItNow && params.auctionBuyItNow > 0) {
+    const minBuyItNow = params.auctionStartPrice * 1.3;
+    if (params.auctionBuyItNow >= minBuyItNow) {
+      pricingSummary.price = {
+        value: params.auctionBuyItNow.toFixed(2),
+        currency: "USD",
+      };
+    } else {
+      console.warn(
+        `Auction BIN price ${params.auctionBuyItNow} is less than 30% above start price ${params.auctionStartPrice}. Omitting BIN.`
+      );
+    }
+  }
+
+  const offer: Record<string, unknown> = {
+    sku: params.sku,
+    marketplaceId: "EBAY_US",
+    format: "AUCTION",
+    listingDescription: params.description,
+    availableQuantity: 1,
+    listingDuration: duration,
+    merchantLocationKey: params.merchantLocationKey,
+    pricingSummary,
+    listingPolicies: {
+      fulfillmentPolicyId: params.fulfillmentPolicyId,
+      paymentPolicyId: params.paymentPolicyId,
+      returnPolicyId: params.returnPolicyId,
+    },
+  };
+  if (params.ebayCategoryId) {
+    offer.categoryId = params.ebayCategoryId;
+  }
+  return offer;
+}
 
 // ----------------------------------------------------------------
 // Ensure an eBay inventory location exists for the seller.
-// If one already exists with the given key, this is a no-op (PUT is idempotent).
+// POST is idempotent for the same key — 204 = created, 409 = already exists.
 // Returns the merchantLocationKey on success.
 // ----------------------------------------------------------------
 async function ensureInventoryLocation(
@@ -60,8 +180,6 @@ async function ensureInventoryLocation(
     console.warn(
       `ensureInventoryLocation: non-fatal error ${resp.status}: ${errText}`
     );
-    // Non-fatal: we still return the key and let the offer creation attempt proceed.
-    // eBay may already have a location configured under a different key.
   } else {
     console.log(
       `ensureInventoryLocation: location "${merchantLocationKey}" ready (status ${resp.status})`
@@ -119,7 +237,7 @@ serve(async (req) => {
         `&response_type=code` +
         `&scope=${encodeURIComponent(scopes)}`;
 
-      console.log("get_auth_url: ruName =", ruName, "authUrl =", authUrl);
+      console.log("get_auth_url: ruName =", ruName);
 
       return new Response(JSON.stringify({ authUrl }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -133,27 +251,12 @@ serve(async (req) => {
 
       const ruName = Deno.env.get("EBAY_RUNAME") || Deno.env.get("EBAY_REDIRECT_URI");
       if (!ruName) {
-        console.error("exchange_code: Missing required config: EBAY_RUNAME and EBAY_REDIRECT_URI");
-        throw new Error("eBay callback URI not configured. Contact admin to set EBAY_RUNAME or EBAY_REDIRECT_URI.");
+        throw new Error("eBay callback URI not configured. Contact admin to set EBAY_RUNAME.");
       }
 
-      console.log(
-        "exchange_code: code =",
-        code?.substring(0, 20) + "...",
-        "ruName =",
-        ruName,
-        "environment =",
-        ebayEnv
-      );
-
-      if (!clientId || !clientSecret) {
-        console.error("exchange_code: Missing eBay credentials in environment");
-        throw new Error("eBay API credentials not configured. Contact admin.");
-      }
+      console.log("exchange_code: code =", code?.substring(0, 20) + "...", "env =", ebayEnv);
 
       const credentials = btoa(`${clientId}:${clientSecret}`);
-
-      console.log("exchange_code: POSTing to", tokenUrl, "with grant_type=authorization_code");
 
       const resp = await fetch(tokenUrl, {
         method: "POST",
@@ -168,40 +271,26 @@ serve(async (req) => {
         }).toString(),
       });
 
-      console.log("exchange_code: response status =", resp.status, resp.statusText);
-
       if (!resp.ok) {
         const txt = await resp.text();
-        console.error("eBay token exchange error - status:", resp.status);
-        console.error("eBay error response:", txt);
-
         let errorMsg = txt;
         try {
           const json = JSON.parse(txt);
           errorMsg = json.error_description || json.error || txt;
-        } catch {
-          // Not JSON, use raw text
-        }
-
+        } catch { /* not JSON */ }
         throw new Error(`eBay token exchange failed (${resp.status}): ${errorMsg}`);
       }
 
       const tokenData = await resp.json();
 
       if (!tokenData.access_token) {
-        console.error("exchange_code: No access_token in response. Response:", tokenData);
         throw new Error("eBay returned no access token. Authorization code may have expired or been reused.");
       }
 
-      console.log(
-        "exchange_code: Successfully obtained access_token (expires in",
-        tokenData.expires_in,
-        "seconds)"
-      );
+      console.log("exchange_code: token obtained, expires in", tokenData.expires_in, "seconds");
 
       // --- Store token server-side in Supabase profiles table ---
-      // This avoids exposing the token in localStorage (XSS risk).
-      // We store it only if a userId was provided (authenticated call).
+      // Avoids exposing the token in localStorage (XSS risk).
       if (userId) {
         try {
           const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -264,7 +353,6 @@ serve(async (req) => {
         );
       }
 
-      // Check if token is expired
       const isExpired = data.ebay_token_expires_at
         ? new Date(data.ebay_token_expires_at) < new Date()
         : false;
@@ -279,10 +367,11 @@ serve(async (req) => {
       );
     }
 
-    // --- ACTION: Create draft listing via Inventory API ---
+    // --- ACTION: Publish a single draft to eBay ---
     if (action === "create_draft") {
       const {
         userToken,
+        sku: incomingSku,
         title,
         description,
         listingFormat,
@@ -302,18 +391,25 @@ serve(async (req) => {
 
       if (!userToken) throw new Error("No eBay user token provided");
 
+      // Use deterministic SKU if provided (preferred — enables idempotent retries).
+      // Fall back to random UUID-based SKU only if not provided.
+      const sku = incomingSku ||
+        `LA-${crypto.randomUUID().replace(/-/g, "").slice(0, 16).toUpperCase()}`;
+
       // eBay Partner Network campaign ID for affiliate revenue tracking
       const epnCampaignId = Deno.env.get("EPN_CAMPAIGN_ID") || "";
 
-      // Helper: build EPN rover affiliate link from a listing ID
-      const buildAffiliateUrl = (listingId: string): string => {
-        const baseUrl = `https://www.ebay.com/itm/${listingId}`;
-        if (!epnCampaignId) return baseUrl;
-        return `https://rover.ebay.com/rover/1/711-53200-19255-0/1?campid=${encodeURIComponent(epnCampaignId)}&toolid=10001&customid=teckstart&mpre=${encodeURIComponent(baseUrl)}`;
+      // Build EPN rover affiliate link — wrapped in try/catch so EPN failure
+      // never blocks or fails the publish transaction
+      const buildAffiliateUrl = (listingId: string): string | null => {
+        try {
+          const baseUrl = `https://www.ebay.com/itm/${listingId}`;
+          if (!epnCampaignId) return baseUrl;
+          return `https://rover.ebay.com/rover/1/711-53200-19255-0/1?campid=${encodeURIComponent(epnCampaignId)}&toolid=10001&customid=teckstart&mpre=${encodeURIComponent(baseUrl)}`;
+        } catch {
+          return null;
+        }
       };
-
-      // Use a UUID-based SKU to avoid any account-level SKU validation conflicts
-      const sku = `LA-${crypto.randomUUID().replace(/-/g, "").slice(0, 16).toUpperCase()}`;
 
       // Build eBay-formatted item specifics (aspects)
       const aspects: Record<string, string[]> = {};
@@ -325,16 +421,27 @@ serve(async (req) => {
         }
       }
 
-      // Step 1: Create/update inventory item
-      const inventoryBody: any = {
+      // Map internal condition string to numeric conditionId
+      // eBay Inventory API accepts ConditionEnum strings, but many categories
+      // also require the numeric conditionId. We send both for maximum compatibility.
+      const conditionEnum = condition || "USED_EXCELLENT";
+      const conditionId = CONDITION_ID_MAP[conditionEnum] ?? 3000;
+
+      // Step 1: Create/update inventory item (PUT is idempotent — safe to retry)
+      // NOTE: description goes in the OFFER (listingDescription), not the inventory item.
+      // The inventory item holds product data; the offer holds listing-specific data.
+      // We include description in product for completeness but the offer's listingDescription
+      // is what eBay actually displays on the live listing.
+      const inventoryBody: Record<string, unknown> = {
         product: {
           title,
-          description,
+          // description here is for internal product record only
           imageUrls: imageUrl ? [imageUrl] : [],
         },
-        // ConditionEnum string values are correct for the Inventory API
-        // (numeric IDs are only for the Trading API / File Exchange CSV)
-        condition: condition || "USED_EXCELLENT",
+        // Send both string enum and numeric ID for maximum category compatibility
+        condition: conditionEnum,
+        conditionDescription: conditionEnum.replace(/_/g, " ").toLowerCase()
+          .replace(/\b\w/g, (c: string) => c.toUpperCase()),
         availability: {
           shipToLocationAvailability: {
             quantity: 1,
@@ -344,18 +451,19 @@ serve(async (req) => {
 
       // Add aspects (item specifics) to the product
       if (Object.keys(aspects).length > 0) {
-        inventoryBody.product.aspects = aspects;
+        (inventoryBody.product as Record<string, unknown>).aspects = aspects;
       }
+
+      const authHeaders = {
+        Authorization: `Bearer ${userToken}`,
+        "Content-Type": "application/json",
+      };
 
       const inventoryResp = await fetch(
         `${apiBase}/sell/inventory/v1/inventory_item/${sku}`,
         {
           method: "PUT",
-          headers: {
-            Authorization: `Bearer ${userToken}`,
-            "Content-Type": "application/json",
-            "Content-Language": "en-US",
-          },
+          headers: { ...authHeaders, "Content-Language": "en-US" },
           body: JSON.stringify(inventoryBody),
         }
       );
@@ -367,8 +475,6 @@ serve(async (req) => {
       }
 
       // Step 2: Ensure inventory location exists (required for publishing)
-      // merchantLocationKey is required in the offer payload per eBay Inventory API spec.
-      // We auto-create a "default-location" using the seller's postal code.
       const effectivePostalCode = postalCode || "10001"; // fallback to NYC if not set
       const merchantLocationKey = await ensureInventoryLocation(
         apiBase,
@@ -376,39 +482,31 @@ serve(async (req) => {
         effectivePostalCode
       );
 
-      // Step 3: Fetch user's default business policies from eBay Account API.
-      const authHeaders = {
-        Authorization: `Bearer ${userToken}`,
-        "Content-Type": "application/json",
-      };
-
+      // Step 3: Fetch business policies (use draft-level if set, else auto-fetch first)
       const fetchDefaultPolicy = async (policyType: string): Promise<string | null> => {
         const resp = await fetch(
           `${apiBase}/sell/account/v1/${policyType}_policy?marketplace_id=EBAY_US`,
           { headers: authHeaders }
         );
         if (!resp.ok) {
-          console.warn(`Could not fetch ${policyType} policies:`, resp.status, await resp.text());
+          console.warn(`Could not fetch ${policyType} policies:`, resp.status);
           return null;
         }
         const data = await resp.json();
         const policies = data[`${policyType}Policies`] || data[`${policyType}Policy`] || [];
         if (Array.isArray(policies) && policies.length > 0) {
-          console.log(`Using ${policyType} policy: ${policies[0].name} (${policies[0][`${policyType}PolicyId`]})`);
+          console.log(`Using ${policyType} policy: ${policies[0].name}`);
           return policies[0][`${policyType}PolicyId`] || null;
         }
-        console.warn(`No ${policyType} policies found on this account`);
         return null;
       };
 
-      // Use draft-level policy IDs if provided, otherwise auto-fetch the first available
       const [fulfillmentPolicyId, paymentPolicyId, returnPolicyId] = await Promise.all([
         draftFulfillmentPolicyId ? Promise.resolve(draftFulfillmentPolicyId) : fetchDefaultPolicy("fulfillment"),
         draftPaymentPolicyId     ? Promise.resolve(draftPaymentPolicyId)     : fetchDefaultPolicy("payment"),
         draftReturnPolicyId      ? Promise.resolve(draftReturnPolicyId)      : fetchDefaultPolicy("return"),
       ]);
 
-      // All three policy IDs are required by eBay to publish a listing
       if (!fulfillmentPolicyId || !paymentPolicyId || !returnPolicyId) {
         const missing = [
           !fulfillmentPolicyId && "Fulfillment (Shipping)",
@@ -425,72 +523,34 @@ serve(async (req) => {
         );
       }
 
-      // Step 4: Create offer
-      // Determine format and listing duration
-      // - FIXED_PRICE listings MUST use "GTC" (Good 'Til Cancelled)
-      // - AUCTION listings MUST use a specific day count: 1, 3, 5, 7, or 10
+      // Step 4: Build offer payload using separate builders for each format
       const format = listingFormat === "AUCTION" ? "AUCTION" : "FIXED_PRICE";
-      const listingDuration =
-        format === "AUCTION"
-          ? (auctionDuration || DEFAULT_AUCTION_DURATION)
-          : FIXED_PRICE_DURATION;
+      let offerBody: Record<string, unknown>;
 
-      // Validate auction duration value
-      const validAuctionDurations = ["Days_1", "Days_3", "Days_5", "Days_7", "Days_10"];
-      if (format === "AUCTION" && !validAuctionDurations.includes(listingDuration)) {
-        return new Response(
-          JSON.stringify({
-            error: `Invalid auction duration "${listingDuration}". Must be one of: ${validAuctionDurations.join(", ")}`,
-          }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      const offerBody: any = {
-        sku,
-        marketplaceId: "EBAY_US",
-        format,
-        listingDescription: description,
-        availableQuantity: 1,
-        // listingDuration is required by eBay Inventory API
-        // Fixed price: "GTC" | Auction: "Days_1", "Days_3", "Days_5", "Days_7", "Days_10"
-        listingDuration,
-        // merchantLocationKey is required for publishing — references the seller's inventory location
-        merchantLocationKey,
-        listingPolicies: {
+      if (format === "FIXED_PRICE") {
+        offerBody = buildFixedPriceOffer({
+          sku,
+          description,
+          listingPrice: Number(listingPrice ?? 0),
+          ebayCategoryId: ebayCategoryId || undefined,
+          merchantLocationKey,
           fulfillmentPolicyId,
           paymentPolicyId,
           returnPolicyId,
-        },
-      };
-
-      // Set pricing based on format
-      if (format === "FIXED_PRICE") {
-        offerBody.pricingSummary = {
-          price: {
-            value: String(listingPrice ?? 0),
-            currency: "USD",
-          },
-        };
+        });
       } else {
-        // Auction: starting bid required; optional Buy It Now price
-        offerBody.pricingSummary = {
-          auctionStartPrice: {
-            value: String(auctionStartPrice ?? 0),
-            currency: "USD",
-          },
-        };
-        if (auctionBuyItNow && auctionBuyItNow > 0) {
-          offerBody.pricingSummary.price = {
-            value: String(auctionBuyItNow),
-            currency: "USD",
-          };
-        }
-      }
-
-      // Set eBay category ID
-      if (ebayCategoryId) {
-        offerBody.categoryId = ebayCategoryId;
+        offerBody = buildAuctionOffer({
+          sku,
+          description,
+          auctionStartPrice: Number(auctionStartPrice ?? 0),
+          auctionBuyItNow: auctionBuyItNow ? Number(auctionBuyItNow) : undefined,
+          auctionDuration: auctionDuration || DEFAULT_AUCTION_DURATION,
+          ebayCategoryId: ebayCategoryId || undefined,
+          merchantLocationKey,
+          fulfillmentPolicyId,
+          paymentPolicyId,
+          returnPolicyId,
+        });
       }
 
       const offerResp = await fetch(`${apiBase}/sell/inventory/v1/offer`, {
@@ -520,7 +580,6 @@ serve(async (req) => {
       if (!publishResp.ok) {
         const errText = await publishResp.text();
         console.error("eBay publish error:", publishResp.status, errText);
-        // Return offerId even if publish failed so we can debug
         return new Response(
           JSON.stringify({
             error: `Offer created (ID: ${offerId}) but publish failed: ${publishResp.status} - ${errText}`,
@@ -534,9 +593,11 @@ serve(async (req) => {
 
       const publishData = await publishResp.json();
       const listingId = publishData.listingId || offerData.listing?.listingId || null;
+
+      // Build affiliate URL — non-fatal, wrapped in try/catch
       const affiliateUrl = listingId ? buildAffiliateUrl(listingId) : null;
 
-      console.log(`Successfully published listing: listingId=${listingId}, offerId=${offerId}, sku=${sku}`);
+      console.log(`Successfully published: listingId=${listingId}, offerId=${offerId}, sku=${sku}`);
 
       return new Response(
         JSON.stringify({
@@ -551,12 +612,7 @@ serve(async (req) => {
       );
     }
 
-    // --- ACTION: Bulk publish multiple drafts ---
-    // Uses sequential publishing with proper error tracking per item.
-    // Note: eBay's bulkPublishOffer endpoint requires offers to already exist.
-    // Our flow creates inventory item + offer + publishes in one shot per item,
-    // so true bulk is not applicable here without a two-phase approach.
-    // This action provides a server-side loop to avoid client-side sequential calls.
+    // --- ACTION: Bulk publish multiple drafts (server-side loop) ---
     if (action === "bulk_create_draft") {
       const { userToken, drafts, postalCode } = payload;
       if (!userToken) throw new Error("No eBay user token provided");
@@ -576,7 +632,6 @@ serve(async (req) => {
 
       for (const draft of drafts) {
         try {
-          // Re-invoke this same function with create_draft action for each draft
           const singleResp = await fetch(req.url, {
             method: "POST",
             headers: {
@@ -639,7 +694,6 @@ serve(async (req) => {
   } catch (e) {
     const errorMsg = e instanceof Error ? e.message : "Unknown error";
     console.error("ebay-publish error:", errorMsg);
-    console.error("Full error details:", e);
 
     const isClientError =
       errorMsg.includes("not configured") ||
@@ -648,10 +702,7 @@ serve(async (req) => {
       errorMsg.includes("Missing");
 
     return new Response(
-      JSON.stringify({
-        error: errorMsg,
-        status: isClientError ? 400 : 500,
-      }),
+      JSON.stringify({ error: errorMsg }),
       {
         status: isClientError ? 400 : 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
