@@ -63,8 +63,25 @@ export default function AnalyzePage() {
         body: { images: imageUrls, voiceNote },
       });
 
-      if (error) throw new Error(error.message || "Analysis failed");
-      if (data?.error) throw new Error(data.error);
+      if (error) {
+        if (error.status === 429) {
+          toast.error("Monthly AI analysis limit reached. Upgrade to Pro or Unlimited.");
+          navigate("/settings?tab=billing");
+          setGenerating(false);
+          return;
+        }
+        throw new Error(error.message || "Analysis failed");
+      }
+      
+      if (data?.error) {
+        if (data.error.includes("limit")) {
+          toast.error(data.error);
+          navigate("/settings?tab=billing");
+          setGenerating(false);
+          return;
+        }
+        throw new Error(data.error);
+      }
 
       setTitle((data.title || "").slice(0, 80));
       setDescription(data.description || "");
