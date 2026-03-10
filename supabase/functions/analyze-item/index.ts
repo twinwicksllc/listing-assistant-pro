@@ -116,7 +116,8 @@ serve(async (req) => {
     // --- End usage limit enforcement ---
 
     // --- Fetch live spot prices from shared DB cache ---
-    let spotGold = 2650, spotSilver = 31, spotPlatinum = 1000;
+    // Fallback values (in USD per troy oz) - updated March 2026
+    let spotGold = 2650, spotSilver = 89, spotPlatinum = 1040;
     try {
       const { data: spotData, error: spotErr } = await svc
         .from("spot_price_cache")

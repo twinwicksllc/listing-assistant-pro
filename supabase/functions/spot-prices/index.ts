@@ -8,7 +8,10 @@ const corsHeaders = {
 };
 
 const CACHE_TTL_MINUTES = 15;
-const FALLBACK = { gold: 2650, silver: 31, platinum: 1000 };
+// Fallback spot prices used when API fetch fails (in USD per troy oz)
+// These should be updated monthly or made configurable via env vars
+// Last updated: March 2026
+const FALLBACK = { gold: 2650, silver: 89, platinum: 1040 };
 
 async function getSpotPrices(svc: ReturnType<typeof createClient>): Promise<{
   gold: number;
