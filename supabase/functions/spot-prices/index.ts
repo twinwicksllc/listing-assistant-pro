@@ -15,7 +15,7 @@ const CACHE_TTL_MINUTES = 12 * 60; // 720 minutes
 // ── Fallback values ──────────────────────────────────────────────────────────
 // Updated to approximate March 2026 spot prices.
 // These are only used if the DB cache is empty AND metals.dev is unreachable.
-const FALLBACK = { gold: 2900, silver: 32, platinum: 970 };
+const FALLBACK = { gold: 5200, silver: 89, platinum: 2200 };
 
 // ── metals.dev API ───────────────────────────────────────────────────────────
 // API key stored as Supabase secret: METALS_DEV_API_KEY

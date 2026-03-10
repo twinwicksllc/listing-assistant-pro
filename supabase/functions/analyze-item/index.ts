@@ -116,7 +116,7 @@ serve(async (req) => {
     // --- End usage limit enforcement ---
 
     // --- Fetch live spot prices from shared DB cache ---
-    let spotGold = 2900, spotSilver = 32, spotPlatinum = 970;
+    let spotGold = 5200, spotSilver = 89, spotPlatinum = 2200;
     try {
       const { data: spotData, error: spotErr } = await svc
         .from("spot_price_cache")

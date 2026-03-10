@@ -2,14 +2,15 @@
 -- (metals.live was the old source and is now unreachable)
 -- New source: metals.dev (METALS_DEV_API_KEY Supabase secret)
 -- Cache TTL changed from 15 minutes to 12 hours to stay within
--- metals.dev free tier (100 req/month ÷ 2 refreshes/day = ~60 req/month)
+-- metals.dev free tier (100 req/month ÷ 2 refreshes/day = ~62 req/month)
 
 -- Update the seeded fallback row with current approximate spot prices (March 2026)
+-- Gold: ~$5,200/oz, Silver: ~$89/oz, Platinum: ~$2,200/oz
 UPDATE public.spot_price_cache
 SET
-  gold       = 2900,
-  silver     = 32,
-  platinum   = 970,
+  gold       = 5200,
+  silver     = 89,
+  platinum   = 2200,
   fetched_at = '2000-01-01T00:00:00Z',  -- keep epoch so first real fetch triggers immediately
   source     = 'fallback'
 WHERE id = 1;
