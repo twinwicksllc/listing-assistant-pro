@@ -22,16 +22,22 @@ async function fetchListingsViaTradingAPI(
 
   // Do NOT include <RequesterCredentials> — the IAF-TOKEN header is sufficient
   // and sending both can cause auth errors.
+  // IMPORTANT: DetailLevel=ReturnAll overrides specific list requests, so we remove it.
+  // Instead, explicitly disable SoldList, UnsoldList, and ScheduledList to ensure
+  // we only receive ActiveList items.
   const xml = `<?xml version="1.0" encoding="utf-8"?>
 <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <ActiveList>
+    <Include>true</Include>
     <Sort>TimeLeft</Sort>
     <Pagination>
       <EntriesPerPage>100</EntriesPerPage>
       <PageNumber>1</PageNumber>
     </Pagination>
   </ActiveList>
-  <DetailLevel>ReturnAll</DetailLevel>
+  <SoldList><Include>false</Include></SoldList>
+  <UnsoldList><Include>false</Include></UnsoldList>
+  <ScheduledList><Include>false</Include></ScheduledList>
 </GetMyeBaySellingRequest>`;
 
   try {
@@ -71,8 +77,19 @@ async function fetchListingsViaTradingAPI(
     }
 
     // Items live inside <ActiveList><ItemArray><Item>...</Item></ItemArray></ActiveList>
+    // Extract only the ActiveList container to ensure we don't parse items from SoldList, UnsoldList, etc.
+    const activeListMatch = xmlText.match(/<ActiveList[^>]*>([\s\S]*?)<\/ActiveList>/);
+    if (!activeListMatch) {
+      console.warn("No ActiveList container found in Trading API response");
+      return new Response(
+        JSON.stringify({ listings: [] }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
     const listings: any[] = [];
-    const itemMatches = xmlText.matchAll(/<Item>([\s\S]*?)<\/Item>/g);
+    const activeListContent = activeListMatch[1];
+    const itemMatches = activeListContent.matchAll(/<Item>([\s\S]*?)<\/Item>/g);
     for (const match of itemMatches) {
       const item = match[1];
       const get = (tag: string) => {
