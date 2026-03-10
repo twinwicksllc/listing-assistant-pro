@@ -32,7 +32,7 @@ export default function AnalyzePage() {
   const [metalWeightOz, setMetalWeightOz] = useState<number>(0);
   const [ebayCategoryId, setEbayCategoryId] = useState<string>("");
   const [itemSpecifics, setItemSpecifics] = useState<ItemSpecifics>({});
-  const [condition, setCondition] = useState<string>("USED_EXCELLENT");
+  const [condition, setCondition] = useState<string>("PRE_OWNED_GOOD");
   const [exportPlatform, setExportPlatform] = useState<ExportPlatform>("ebay_file_exchange");
   const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
   const [suggestedGrade, setSuggestedGrade] = useState<string>("");
@@ -100,7 +100,7 @@ export default function AnalyzePage() {
       setMetalWeightOz(data.metalWeightOz || 0);
       setEbayCategoryId(data.ebayCategoryId || "");
       setItemSpecifics(data.itemSpecifics || {});
-      setCondition(data.condition || "USED_EXCELLENT");
+      setCondition(data.condition || "PRE_OWNED_GOOD");
       setSuggestedGrade(data.suggestedGrade || "");
       setGradingRationale(data.gradingRationale || "");
       setIsSlabbed(data.isSlabbed ?? false);
@@ -392,10 +392,17 @@ export default function AnalyzePage() {
                   >
                     <option value="NEW">New</option>
                     <option value="LIKE_NEW">Like New</option>
-                    <option value="USED_EXCELLENT">Used - Excellent</option>
-                    <option value="USED_VERY_GOOD">Used - Very Good</option>
-                    <option value="USED_GOOD">Used - Good</option>
-                    <option value="USED_ACCEPTABLE">Used - Acceptable</option>
+                    <option value="NEW_OTHER">New Other (without tags)</option>
+                    <option value="NEW_WITH_DEFECTS">New with Defects</option>
+                    <option value="CERTIFIED_REFURBISHED">Certified Refurbished</option>
+                    <option value="EXCELLENT_REFURBISHED">Excellent – Refurbished</option>
+                    <option value="VERY_GOOD_REFURBISHED">Very Good – Refurbished</option>
+                    <option value="GOOD_REFURBISHED">Good – Refurbished</option>
+                    <option value="SELLER_REFURBISHED">Seller Refurbished</option>
+                    <option value="PRE_OWNED_GOOD">Pre-Owned – Good</option>
+                    <option value="PRE_OWNED_FAIR">Pre-Owned – Fair</option>
+                    <option value="PRE_OWNED_POOR">Pre-Owned – Poor</option>
+                    <option value="FOR_PARTS_OR_NOT_WORKING">For Parts or Not Working</option>
                   </select>
                 </div>
               </div>
