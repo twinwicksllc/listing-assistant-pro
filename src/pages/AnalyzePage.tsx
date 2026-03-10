@@ -136,7 +136,7 @@ export default function AnalyzePage() {
     }
     setPublishing(true);
     try {
-      let ebayToken = localStorage.getItem("ebay_user_token");
+      let ebayToken = localStorage.getItem("ebay-user-token");
 
       if (!ebayToken) {
         const { data, error } = await supabase.functions.invoke("ebay-publish", {
@@ -165,7 +165,7 @@ export default function AnalyzePage() {
 
       if (error || data?.error) {
         if (data?.error?.includes("401") || data?.error?.includes("expired")) {
-          localStorage.removeItem("ebay_user_token");
+          localStorage.removeItem("ebay-user-token");
           toast.error("eBay session expired. Please connect again.");
           return;
         }
