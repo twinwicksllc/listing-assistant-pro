@@ -63,8 +63,8 @@ export function useDrafts() {
     fetchDrafts();
   }, [fetchDrafts]);
 
-  const addDraft = async (draft: ListingDraft) => {
-    if (!user) return;
+  const addDraft = async (draft: ListingDraft): Promise<boolean> => {
+    if (!user) return false;
 
     const orgId = (!org.loading && org.orgId) ? org.orgId : undefined;
 
@@ -94,8 +94,10 @@ export function useDrafts() {
     if (error) {
       console.error("Error adding draft:", error);
       toast.error("Failed to save draft");
+      return false;
     } else {
       setDrafts((prev) => [{ ...draft, publishStatus: "draft" }, ...prev]);
+      return true;
     }
   };
 
