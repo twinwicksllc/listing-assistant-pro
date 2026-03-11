@@ -283,6 +283,8 @@ async function ensureInventoryLocation(
 }
 
 serve(async (req) => {
+  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v2 - with logging fixes) ***");
+  
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -921,17 +923,45 @@ serve(async (req) => {
         body: JSON.stringify(offerBody),
       });
 
+      let offerId: string | undefined;
+
       if (!offerResp.ok) {
         const errText = await offerResp.text();
         console.error("create_draft: eBay offer error:", offerResp.status, errText);
         console.error("create_draft: offer request body:", JSON.stringify(offerBody, null, 2));
-        throw new Error(`Failed to create offer: ${offerResp.status} - ${errText}`);
+
+        // Check if this is errorId 25002 — offer already exists.
+        // This can happen if a previous publish attempt created the offer but failed at publish step.
+        // Extract the existing offerId from the error response and proceed to publish.
+        try {
+          const errJson = JSON.parse(errText);
+          const offerExists = Array.isArray(errJson.errors) &&
+            errJson.errors.some((e: { errorId: number }) => e.errorId === 25002);
+          if (offerExists) {
+            const offerIdParam = errJson.errors[0]?.parameters?.find(
+              (p: { name: string; value: string }) => p.name === "offerId"
+            );
+            if (offerIdParam?.value) {
+              offerId = offerIdParam.value;
+              console.log(
+                `create_draft: offer already exists (errorId 25002), using existing offerId=${offerId}`
+              );
+            }
+          }
+        } catch {
+          // Not JSON or missing offerId — fall through to throw
+        }
+
+        if (!offerId) {
+          throw new Error(`Failed to create offer: ${offerResp.status} - ${errText}`);
+        }
+      } else {
+        const offerData = await offerResp.json();
+        offerId = offerData.offerId;
+        console.log(`create_draft: offer created successfully, offerId=${offerId}, about to publish...`);
       }
 
-      const offerData = await offerResp.json();
-      const offerId = offerData.offerId;
-
-      console.log(`create_draft: offer created successfully, offerId=${offerId}, about to publish...`);
+      console.log(`create_draft: proceeding to publish offerId=${offerId}...`);
 
       // Step 5: Publish the offer to make it a live listing
       const publishResp = await fetchWithTimeout(
