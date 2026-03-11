@@ -209,6 +209,65 @@ function buildAuctionOffer(params: {
 }
 
 // ----------------------------------------------------------------
+// Upload a base64 data URL image to Supabase Storage from within the edge function.
+// Returns the public HTTPS URL on success, or the original value on failure.
+// eBay's Inventory API rejects data: URLs (errorId 25721) — all images must be
+// real publicly-accessible HTTPS URLs before they're sent to eBay.
+// ----------------------------------------------------------------
+async function uploadDataUrlToStorage(dataUrl: string): Promise<string> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceKey) {
+    console.warn("uploadDataUrlToStorage: missing Supabase env vars — skipping upload");
+    return dataUrl;
+  }
+
+  try {
+    // Parse the MIME type and base64 payload
+    const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/s);
+    if (!matches) {
+      console.warn("uploadDataUrlToStorage: unrecognised data URL format");
+      return dataUrl;
+    }
+    const [, mime, b64] = matches;
+    const ext = mime.includes("png") ? "png" : "jpg";
+
+    // Decode base64 to binary
+    const binaryStr = atob(b64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
+    }
+
+    const filename = `server-uploads/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const uploadUrl = `${supabaseUrl}/storage/v1/object/listing-images/${filename}`;
+
+    const uploadResp = await fetch(uploadUrl, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${serviceKey}`,
+        "Content-Type": mime,
+        "x-upsert": "false",
+      },
+      body: bytes,
+    });
+
+    if (!uploadResp.ok) {
+      const errText = await uploadResp.text();
+      console.error("uploadDataUrlToStorage: upload failed:", uploadResp.status, errText);
+      return dataUrl;
+    }
+
+    const publicUrl = `${supabaseUrl}/storage/v1/object/public/listing-images/${filename}`;
+    console.log(`uploadDataUrlToStorage: uploaded to ${publicUrl}`);
+    return publicUrl;
+  } catch (err) {
+    console.error("uploadDataUrlToStorage: unexpected error:", err);
+    return dataUrl;
+  }
+}
+
+// ----------------------------------------------------------------
 // Ensure an eBay inventory location exists for the seller.
 // POST creates the location — 204 = created, 409 = already exists (both fine).
 // Returns the merchantLocationKey on success.
@@ -788,10 +847,23 @@ serve(async (req) => {
       // Step 2: Create/update inventory item (PUT is idempotent — safe to retry)
       // NOTE: description goes in the OFFER (listingDescription), not the inventory item.
       // The inventory item holds product data; the offer holds listing-specific data.
+
+      // Resolve imageUrl: eBay rejects base64 data: URLs (errorId 25721).
+      // Upload to Supabase Storage if needed to get a public HTTPS URL.
+      let resolvedImageUrl = imageUrl as string | undefined;
+      if (resolvedImageUrl?.startsWith("data:")) {
+        console.log("create_draft: imageUrl is base64 data URL — uploading to storage");
+        resolvedImageUrl = await uploadDataUrlToStorage(resolvedImageUrl);
+        if (resolvedImageUrl.startsWith("data:")) {
+          console.error("create_draft: image upload failed — proceeding without image");
+          resolvedImageUrl = undefined;
+        }
+      }
+
       const inventoryBody: Record<string, unknown> = {
         product: {
           title,
-          imageUrls: imageUrl ? [imageUrl] : [],
+          imageUrls: resolvedImageUrl ? [resolvedImageUrl] : [],
         },
         condition: conditionEnum,
         conditionDescription: conditionDesc,
