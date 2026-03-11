@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import {
   BusinessPolicies,
   SelectedPolicies,
@@ -41,45 +42,64 @@ export interface UseEbayPoliciesReturn {
 }
 
 /**
- * Fetch a specific type of eBay business policy from the Account API
- * @param policyType - Type of policy to fetch (fulfillment, payment, return)
- * @param userToken - OAuth user token with sell.account scope
- * @returns Promise with policy array
+ * Fetch business policies via the ebay-publish edge function to avoid CORS issues.
+ * The edge function handles the OAuth token and makes server-side API calls to eBay.
+ * @param userToken - Optional OAuth user token (edge function can also fetch from DB)
+ * @returns Promise with policies object
  */
-async function fetchPolicyType<T>(
-  policyType: "fulfillment" | "payment" | "return",
-  userToken: string
-): Promise<T[]> {
-  const policyEndpoint = {
-    fulfillment: "fulfillment_policy",
-    payment: "payment_policy",
-    return: "return_policy",
-  }[policyType];
+async function fetchPoliciesViaEdgeFunction(
+  userToken: string | null
+): Promise<{ fulfillment: EbayFulfillmentPolicy[]; payment: EbayPaymentPolicy[]; return: EbayReturnPolicy[] }> {
+  const { data, error } = await supabase.functions.invoke("ebay-publish", {
+    body: {
+      action: "get_policies",
+      userToken: userToken || undefined,
+    },
+  });
 
-  const response = await fetch(
-    `https://api.ebay.com/sell/account/v1/${policyEndpoint}?marketplace_id=EBAY_US`,
-    {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${userToken}`,
-        "Content-Type": "application/json",
-      },
-    }
-  );
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error("INVALID_TOKEN");
-    }
-    const error = await response.json().catch(() => ({}));
-    throw new Error(`Failed to fetch ${policyType} policies: ${error.message || response.statusText}`);
+  if (error) {
+    console.error("Edge function error:", error);
+    throw new Error(`Failed to fetch policies: ${error.message}`);
   }
 
-  const data = await response.json();
+  if (!data) {
+    throw new Error("No response from policy fetch");
+  }
 
-  // Extract the policies array from response (key varies: fulfillmentPolicies, paymentPolicies, returnPolicies)
-  const policyKey = `${policyType}Policies`;
-  return data[policyKey] || [];
+  // Edge function returns { fulfillment: [], payment: [], returns: [], policyErrors?: {} }
+  // Transform it to match our BusinessPolicies format
+  const fulfillment = (data.fulfillment || []).map(
+    (p: { id: string; name: string }, idx: number): EbayFulfillmentPolicy => ({
+      fulfillmentPolicyId: p.id,
+      name: p.name,
+    })
+  );
+
+  const payment = (data.payment || []).map(
+    (p: { id: string; name: string }, idx: number): EbayPaymentPolicy => ({
+      paymentPolicyId: p.id,
+      name: p.name,
+    })
+  );
+
+  const returnPolicies = (data.returns || []).map(
+    (p: { id: string; name: string }, idx: number): EbayReturnPolicy => ({
+      returnPolicyId: p.id,
+      name: p.name,
+    })
+  );
+
+  // Log if any policy type had errors (e.g., 401 unauthorized)
+  if (data.policyErrors) {
+    console.warn("Policy fetch partial failures:", data.policyErrors);
+  }
+
+  // Return empty on no token
+  if (data.noToken) {
+    return { fulfillment: [], payment: [], return: [] };
+  }
+
+  return { fulfillment, payment, return: returnPolicies };
 }
 
 /**
@@ -102,7 +122,7 @@ export function useEbayPolicies(userToken: string | null) {
   const [cacheAge, setCacheAge] = useState<number | null>(null);
 
   /**
-   * Load policies from cache or fetch from API
+   * Load policies from cache or fetch via edge function
    */
   const loadPolicies = useCallback(async () => {
     if (!userToken) {
@@ -150,12 +170,8 @@ export function useEbayPolicies(userToken: string | null) {
         }
       }
 
-      // Fetch all policy types in parallel
-      const [fulfillment, payment, returnPolicies] = await Promise.all([
-        fetchPolicyType<EbayFulfillmentPolicy>("fulfillment", userToken),
-        fetchPolicyType<EbayPaymentPolicy>("payment", userToken),
-        fetchPolicyType<EbayReturnPolicy>("return", userToken),
-      ]);
+      // Fetch policies via edge function (no CORS issues, server-side token resolution)
+      const { fulfillment, payment, return: returnPolicies } = await fetchPoliciesViaEdgeFunction(userToken);
 
       // Check if any policies exist
       if (fulfillment.length === 0 || payment.length === 0 || returnPolicies.length === 0) {
