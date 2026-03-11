@@ -152,12 +152,13 @@ export function useDrafts() {
   /**
    * Mark a draft as successfully published and remove it from the active drafts list.
    * Stores the eBay listing metadata for reference.
+   * Returns true if successful, false otherwise.
    */
   const markDraftPublished = async (
     id: string,
     meta: { sku: string; offerId: string; listingId: string | null }
-  ) => {
-    await updateDraft(id, {
+  ): Promise<boolean> => {
+    const success = await updateDraft(id, {
       publishStatus: "published",
       publishedAt: new Date(),
       ebaySku: meta.sku,
@@ -165,14 +166,22 @@ export function useDrafts() {
       ebayListingId: meta.listingId || undefined,
       lastPublishError: undefined,
     });
-    // Remove from active drafts list — published items appear in Dashboard
-    setDrafts((prev) => prev.filter((d) => d.id !== id));
+    if (success) {
+      console.log(`markDraftPublished: draft ${id} marked as published in database`);
+      // Remove from active drafts list — published items appear in Dashboard
+      setDrafts((prev) => prev.filter((d) => d.id !== id));
+      return true;
+    } else {
+      console.error(`markDraftPublished: failed to update draft ${id} in database`);
+      return false;
+    }
   };
 
   /**
    * Mark a draft as failed with an error message.
    */
   const markDraftFailed = async (id: string, errorMsg: string) => {
+    console.error(`markDraftFailed: draft ${id} failed with error: ${errorMsg}`);
     await updateDraft(id, {
       publishStatus: "failed",
       lastPublishError: errorMsg,

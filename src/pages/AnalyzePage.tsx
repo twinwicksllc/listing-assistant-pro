@@ -40,6 +40,7 @@ export default function AnalyzePage() {
   const [isSlabbed, setIsSlabbed] = useState(false);
   const [gradeConfirmed, setGradeConfirmed] = useState(false);
   const [meltValue, setMeltValue] = useState<number | null>(null);
+  const [pricingNotes, setPricingNotes] = useState<string>("");
   const [spotPrices, setSpotPrices] = useState<{ gold: number; silver: number; platinum: number } | null>(null);
   const [consignor, setConsignor] = useState("");
   const [includeAiFooter, setIncludeAiFooter] = useState(true);
@@ -106,6 +107,7 @@ export default function AnalyzePage() {
       setIsSlabbed(data.isSlabbed ?? false);
       setMeltValue(data.meltValue ?? null);
       setSpotPrices(data.spotPrices ?? null);
+      setPricingNotes(data.pricingNotes || "");
       setGradeConfirmed(false);
       // Pre-fill listing price with AI midpoint as a starting suggestion
       const aiMid = ((data.priceMin || 0) + (data.priceMax || data.priceMin || 0)) / 2;
@@ -524,7 +526,7 @@ export default function AnalyzePage() {
             </div>
 
             {/* Pricing */}
-            <PricingCard priceMin={priceMin} priceMax={priceMax} searchQuery={title} metalType={metalType} metalWeightOz={metalWeightOz} initialMeltValue={meltValue} initialSpotPrices={spotPrices} />
+            <PricingCard priceMin={priceMin} priceMax={priceMax} searchQuery={title} metalType={metalType} metalWeightOz={metalWeightOz} initialMeltValue={meltValue} initialSpotPrices={spotPrices} pricingNotes={pricingNotes} />
 
             {/* Listing Format + Price */}
             <div className="space-y-3">

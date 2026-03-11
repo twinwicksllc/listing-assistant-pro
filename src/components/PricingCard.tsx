@@ -24,9 +24,10 @@ interface PricingCardProps {
   metalWeightOz?: number;
   initialMeltValue?: number | null;
   initialSpotPrices?: { gold: number; silver: number; platinum: number } | null;
+  pricingNotes?: string;
 }
 
-export default function PricingCard({ priceMin, priceMax, searchQuery, metalType = "none", metalWeightOz = 0, initialMeltValue = null, initialSpotPrices = null }: PricingCardProps) {
+export default function PricingCard({ priceMin, priceMax, searchQuery, metalType = "none", metalWeightOz = 0, initialMeltValue = null, initialSpotPrices = null, pricingNotes = "" }: PricingCardProps) {
   const [loading, setLoading] = useState(false);
   const [soldItems, setSoldItems] = useState<SoldItem[]>([]);
   const [ebayAvg, setEbayAvg] = useState<number | null>(null);
@@ -139,6 +140,14 @@ export default function PricingCard({ priceMin, priceMax, searchQuery, metalType
         </div>
         {(loading || spotLoading) && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
       </div>
+
+      {/* AI Pricing Rationale */}
+      {pricingNotes && (
+        <div className="bg-muted/50 rounded-lg px-3 py-2.5">
+          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">AI Pricing Rationale</p>
+          <p className="text-xs text-foreground leading-relaxed">{pricingNotes}</p>
+        </div>
+      )}
 
       {error && (
         <p className="text-xs text-warning bg-warning/10 rounded-lg px-3 py-2">
