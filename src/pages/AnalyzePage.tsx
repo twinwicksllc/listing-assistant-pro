@@ -11,7 +11,7 @@ import { exportListing, type ExportPlatform, type ExportFormat } from "@/lib/exp
 import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
 
 export default function AnalyzePage() {
-  const { canAnalyze, canPublish, isPro, isUnlimited, isPaid, usage, recordUsage, isOwner, isLister, currentPlanLimits } = useAuth();
+  const { canAnalyze, canPublish, isPro, isUnlimited, isPaid, usage, recordUsage, isOwner, isLister, currentPlanLimits, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const { addDraft } = useDrafts();
