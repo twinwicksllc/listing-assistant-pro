@@ -9,6 +9,7 @@ import type { ItemSpecifics, ListingFormat } from "@/types/listing";
 import { useAuth, PLANS } from "@/contexts/AuthContext";
 import { exportListing, type ExportPlatform, type ExportFormat } from "@/lib/exportCSV";
 import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
+import { uploadListingImages, uploadListingImage } from "@/lib/imageUpload";
 
 export default function AnalyzePage() {
   const { canAnalyze, canPublish, isPro, isUnlimited, isPaid, usage, recordUsage, isOwner, isLister, currentPlanLimits, user } = useAuth();
@@ -124,9 +125,15 @@ export default function AnalyzePage() {
   };
 
   const handleSave = async () => {
+    // Upload base64 images to Supabase Storage so the draft stores a public URL.
+    // eBay (and other platforms) require real HTTPS URLs — data: URLs are rejected.
+    let uploadedUrls = imageUrls;
+    if (user?.id) {
+      uploadedUrls = await uploadListingImages(imageUrls, user.id);
+    }
     const success = await addDraft({
       id: crypto.randomUUID(),
-      imageUrl: imageUrls[0],
+      imageUrl: uploadedUrls[0],
       title,
       description: getDescriptionWithFooter(),
       priceMin,
@@ -199,7 +206,7 @@ export default function AnalyzePage() {
           listingPrice,
           auctionStartPrice,
           auctionBuyItNow: auctionBuyItNowEnabled ? auctionBuyItNow : null,
-          imageUrl: imageUrls[0],
+          imageUrl: user?.id ? await uploadListingImage(imageUrls[0], user.id) : imageUrls[0],
           condition,
           ebayCategoryId,
           itemSpecifics,

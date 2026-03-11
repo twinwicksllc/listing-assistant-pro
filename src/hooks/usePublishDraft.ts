@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ListingDraft } from "@/types/listing";
 import { useDrafts } from "@/hooks/useDrafts";
+import { uploadListingImage } from "@/lib/imageUpload";
 
 /**
  * Returns a publishDraft(draft) function that sends a single ListingDraft
@@ -100,6 +101,18 @@ export function usePublishDraft() {
       // Mark as "publishing" in DB so UI can show spinner and prevent duplicate submits
       await updateDraft(draft.id, { publishStatus: "publishing" });
 
+      // Ensure imageUrl is a public HTTPS URL — eBay rejects base64 data: URLs.
+      // Drafts saved before image upload was implemented may still carry data: URLs.
+      let resolvedImageUrl = draft.imageUrl;
+      if (resolvedImageUrl?.startsWith("data:") && user?.id) {
+        const uploaded = await uploadListingImage(resolvedImageUrl, user.id);
+        if (!uploaded.startsWith("data:")) {
+          resolvedImageUrl = uploaded;
+          // Persist the public URL so future publishes don't re-upload
+          await updateDraft(draft.id, { imageUrl: resolvedImageUrl });
+        }
+      }
+
       const publishPayload = {
         action: "create_draft",
         userToken: ebayToken,
@@ -116,7 +129,7 @@ export function usePublishDraft() {
         auctionDuration: draft.listingFormat === "AUCTION"
           ? (draft.auctionDuration || "Days_7")
           : undefined,
-        imageUrl: draft.imageUrl,
+        imageUrl: resolvedImageUrl,
         condition: draft.condition ?? "PRE_OWNED_GOOD",
         ebayCategoryId: draft.ebayCategoryId ?? "",
         itemSpecifics: draft.itemSpecifics ?? {},
