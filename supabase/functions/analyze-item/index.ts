@@ -207,6 +207,19 @@ When analyzing, you MUST:
    
    Set isSlabbed to true ONLY if the coin is visibly encapsulated in a certified holder.
 
+   **CRITICAL: Map Sheldon grades to eBay condition codes for coins & bullion:**
+   - MS-60 to MS-70 → Use "NEW" (uncirculated, mint state)
+   - AU-50 to AU-58 → Use "PRE_OWNED_GOOD" (almost uncirculated, minimal wear)
+   - XF-40 to XF-45 → Use "PRE_OWNED_GOOD" (extremely fine, light wear)
+   - VF-20 to VF-35 → Use "PRE_OWNED_FAIR" (very fine, moderate wear)
+   - F-12 to VF-12 → Use "PRE_OWNED_FAIR" (fine, visible wear)
+   - VG-8 to VG-10 → Use "PRE_OWNED_POOR" (very good, heavy wear)
+   - G-4 to G-6 → Use "PRE_OWNED_POOR" (good, very heavy wear)
+   - FR (Fair) or lower → Use "FOR_PARTS_OR_NOT_WORKING"
+   
+   For slabbed coins with certification (PCGS, NGC), use "CERTIFIED_REFURBISHED" as the eBay condition.
+   NEVER use "LIKE_NEW" for coins — it is not valid for coin categories on eBay.
+
 5. **eBay Item Specifics**: You MUST extract structured item specifics that map directly to eBay's required fields.
 
    **IMPORTANT**: Always include a "Type" field (e.g., "Bullion Coin", "Bar", "Round", "Coin", "Medal") — eBay requires this for category-specific listings, especially coins and bullion.
@@ -399,7 +412,7 @@ Return your analysis using the provided tool.`;
                     condition: {
                       type: "string",
                       enum: ["NEW", "LIKE_NEW", "NEW_OTHER", "NEW_WITH_DEFECTS", "CERTIFIED_REFURBISHED", "EXCELLENT_REFURBISHED", "VERY_GOOD_REFURBISHED", "GOOD_REFURBISHED", "SELLER_REFURBISHED", "PRE_OWNED_GOOD", "PRE_OWNED_FAIR", "PRE_OWNED_POOR", "FOR_PARTS_OR_NOT_WORKING"],
-                      description: "eBay item condition enum value",
+                      description: "eBay item condition. For coins/bullion: prefer NEW, CERTIFIED_REFURBISHED (slabbed), PRE_OWNED_GOOD (slightly used), PRE_OWNED_FAIR (worn), PRE_OWNED_POOR (heavily worn). AVOID LIKE_NEW for coins (not valid for those categories). For electronics/general items: use any condition that accurately reflects the item's state.",
                     },
                     suggestedGrade: {
                       type: "string",
