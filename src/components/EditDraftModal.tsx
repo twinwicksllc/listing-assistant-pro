@@ -90,6 +90,9 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
   // Token lookup order mirrors usePublishDraft:
   //   1. Server-side stored token in Supabase profiles (preferred — avoids XSS risk)
   //   2. localStorage fallback for backwards compatibility
+  //
+  // Policies are fetched via the ebay-publish function (get_policies action) rather than
+  // the separate ebay-policies function, to avoid CORS preflight issues with that function.
   useEffect(() => {
     let cancelled = false;
 
@@ -97,14 +100,16 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
       setPoliciesLoading(true);
       setPoliciesError("");
 
-      // 1. Try server-side stored token
+      // 1. Try server-side stored token (requires user to be loaded)
       let ebayToken: string | null = null;
       if (user?.id) {
         try {
-          const { data } = await supabase.functions.invoke("ebay-publish", {
+          const { data, error: tokenError } = await supabase.functions.invoke("ebay-publish", {
             body: { action: "get_stored_token", userId: user.id },
           });
-          if (data?.token) ebayToken = data.token;
+          if (!tokenError && data?.token) {
+            ebayToken = data.token;
+          }
         } catch {
           // fall through to localStorage
         }
@@ -125,8 +130,9 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
 
       setEbayConnected(true);
 
-      const { data, error } = await supabase.functions.invoke("ebay-policies", {
-        body: { userToken: ebayToken },
+      // Use get_policies action on ebay-publish (avoids CORS issues with ebay-policies function)
+      const { data, error } = await supabase.functions.invoke("ebay-publish", {
+        body: { action: "get_policies", userToken: ebayToken },
       });
 
       if (cancelled) return;
