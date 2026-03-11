@@ -210,7 +210,7 @@ function buildAuctionOffer(params: {
 
 // ----------------------------------------------------------------
 // Ensure an eBay inventory location exists for the seller.
-// POST is idempotent for the same key — 204 = created, 409 = already exists.
+// POST creates the location — 204 = created, 409 = already exists (both fine).
 // Returns the merchantLocationKey on success.
 // ----------------------------------------------------------------
 async function ensureInventoryLocation(
@@ -237,7 +237,7 @@ async function ensureInventoryLocation(
   const resp = await fetchWithTimeout(
     `${apiBase}/sell/inventory/v1/location/${merchantLocationKey}`,
     {
-      method: "PUT",
+      method: "POST",
       headers: {
         Authorization: `Bearer ${userToken}`,
         "Content-Type": "application/json",
@@ -249,8 +249,8 @@ async function ensureInventoryLocation(
     }
   );
 
-  // 204 = created/updated, 200 = success — both are fine
-  if (!resp.ok) {
+  // 204 = created, 409 = already exists — both mean the location is ready
+  if (!resp.ok && resp.status !== 409) {
     const errText = await resp.text();
     console.error(
       `ensureInventoryLocation: error ${resp.status}: ${errText}`
@@ -743,28 +743,45 @@ serve(async (req) => {
         ?? conditionEnum.replace(/_/g, " ").toLowerCase()
              .replace(/\b\w/g, (c: string) => c.toUpperCase());
 
-      // Step 1: Create/update inventory item (PUT is idempotent — safe to retry)
+      const authHeaders = {
+        Authorization: `Bearer ${userToken}`,
+        "Content-Type": "application/json",
+        "Accept-Language": "en-US",
+        "Content-Language": "en-US",
+      };
+
+      // Step 1: Ensure inventory location exists before creating the item.
+      // The item's shipToLocationAvailability references this location by key,
+      // so it must exist first.
+      const effectivePostalCode = postalCode || "10001"; // fallback to NYC if not set
+      const merchantLocationKey = await ensureInventoryLocation(
+        apiBase,
+        userToken,
+        effectivePostalCode
+      );
+
+      // Step 2: Create/update inventory item (PUT is idempotent — safe to retry)
       // NOTE: description goes in the OFFER (listingDescription), not the inventory item.
       // The inventory item holds product data; the offer holds listing-specific data.
-      // We include description in product for completeness but the offer's listingDescription
-      // is what eBay actually displays on the live listing.
       const inventoryBody: Record<string, unknown> = {
         product: {
           title,
-          // description here is for internal product record only
           imageUrls: imageUrl ? [imageUrl] : [],
         },
-        // Send both string enum and numeric ID for maximum category compatibility
         condition: conditionEnum,
         conditionDescription: conditionDesc,
         availability: {
-          // shipToLocationAvailability MUST be an array of objects with locationKey and quantity
-          shipToLocationAvailability: [
-            {
-              quantity: 1,
-              locationKey: "default-location",
-            },
-          ],
+          // shipToLocationAvailability is an OBJECT (not array).
+          // quantity = total available. availabilityDistributions = per-location breakdown.
+          shipToLocationAvailability: {
+            quantity: 1,
+            availabilityDistributions: [
+              {
+                merchantLocationKey,
+                quantity: 1,
+              },
+            ],
+          },
         },
       };
 
@@ -772,13 +789,6 @@ serve(async (req) => {
       if (Object.keys(aspects).length > 0) {
         (inventoryBody.product as Record<string, unknown>).aspects = aspects;
       }
-
-      const authHeaders = {
-        Authorization: `Bearer ${userToken}`,
-        "Content-Type": "application/json",
-        "Accept-Language": "en-US",
-        "Content-Language": "en-US",
-      };
 
       const inventoryResp = await fetchWithTimeout(
         `${apiBase}/sell/inventory/v1/inventory_item/${sku}`,
@@ -796,14 +806,6 @@ serve(async (req) => {
         console.error("Request body was:", JSON.stringify(inventoryBody, null, 2));
         throw new Error(`Failed to create inventory item: ${inventoryResp.status} - ${errText}`);
       }
-
-      // Step 2: Ensure inventory location exists (required for publishing)
-      const effectivePostalCode = postalCode || "10001"; // fallback to NYC if not set
-      const merchantLocationKey = await ensureInventoryLocation(
-        apiBase,
-        userToken,
-        effectivePostalCode
-      );
 
       // Step 3: Fetch business policies (use draft-level if set, else auto-fetch first)
       const fetchDefaultPolicy = async (policyType: string): Promise<string | null> => {
