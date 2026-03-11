@@ -208,7 +208,7 @@ async function ensureInventoryLocation(
   const resp = await fetch(
     `${apiBase}/sell/inventory/v1/location/${merchantLocationKey}`,
     {
-      method: "POST",
+      method: "PUT",
       headers: {
         Authorization: `Bearer ${userToken}`,
         "Content-Type": "application/json",
@@ -217,17 +217,20 @@ async function ensureInventoryLocation(
     }
   );
 
-  // 204 = created, 409 = already exists — both are fine
-  if (!resp.ok && resp.status !== 409) {
+  // 204 = created/updated, 200 = success — both are fine
+  if (!resp.ok) {
     const errText = await resp.text();
-    console.warn(
-      `ensureInventoryLocation: non-fatal error ${resp.status}: ${errText}`
+    console.error(
+      `ensureInventoryLocation: error ${resp.status}: ${errText}`
     );
-  } else {
-    console.log(
-      `ensureInventoryLocation: location "${merchantLocationKey}" ready (status ${resp.status})`
+    throw new Error(
+      `Failed to ensure inventory location: ${resp.status} - ${errText}`
     );
   }
+
+  console.log(
+    `ensureInventoryLocation: location "${merchantLocationKey}" ready (status ${resp.status})`
+  );
 
   return merchantLocationKey;
 }
@@ -238,7 +241,12 @@ serve(async (req) => {
   }
 
   try {
-    const { action, ...payload } = await req.json();
+    console.log(`ebay-publish request: method=${req.method}, url=${req.url}`);
+    
+    const requestBody = await req.json();
+    const { action, ...payload } = requestBody;
+    
+    console.log(`ebay-publish action: ${action}, payload keys: ${Object.keys(payload).join(", ")}`);
 
     const clientId = Deno.env.get("EBAY_CLIENT_ID");
     const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
