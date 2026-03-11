@@ -247,11 +247,28 @@ When analyzing, you MUST:
    - Legal tender silver/gold COINS (American Eagle, Canadian Maple, etc.) → use Coins category (261068/261064/261070)
    - Named, dated US coinage series → use the specific US Coins subcategory
 
-7. **Pricing**: Provide a realistic price range based on:
-   - Recent eBay sold listings for comparable items in similar condition
-   - For precious metals: ensure the minimum price is NEVER below the current melt value
-   - Current live spot prices (as of this analysis): Gold $${spotGold.toFixed(2)}/oz, Silver $${spotSilver.toFixed(2)}/oz, Platinum $${spotPlatinum.toFixed(2)}/oz
-   - Factor in numismatic/collectible premium above melt value where applicable
+7. **Pricing** — CRITICAL: Research the SPECIFIC item, not a generic equivalent.
+
+   **Step 1 — Identify the exact item**: Use ALL available identifiers — series name, character, mint, year, weight, mintage, issue number/edition (e.g., "#216/250"), country, denomination, grade, mint mark. The more specific the better.
+
+   **Step 2 — Apply a pricing hierarchy** (use the highest-specificity comp that exists):
+   a. **Exact match**: Find eBay sold comps for this specific item (e.g., "2025 Niue Disney Pocahontas 1oz Silver Bar", not just "1oz silver bar"). If it's a limited mintage, premiums can be 2x–10x melt value.
+   b. **Same series**: If no exact match, use other items from the same themed series (same mint, same character tier) to establish series premium.
+   c. **Key date / rarity premium**: For coins, apply a significant premium for key dates, low-mintage issues, or scarce mint marks in the assigned grade. A 1893-S Morgan in AU is worth vastly more than a common-date Morgan in the same grade.
+   d. **Grade-adjusted melt floor**: As a last resort, melt value × a premium multiplier based on metal purity, theme, and collectibility.
+
+   **Step 3 — Melt value floor**: For any precious metal item, priceMin MUST NEVER be below melt value.
+   Current live spot prices: Gold $${spotGold.toFixed(2)}/oz, Silver $${spotSilver.toFixed(2)}/oz, Platinum $${spotPlatinum.toFixed(2)}/oz
+
+   **Step 4 — Premium factors to consider**:
+   - Limited/numbered editions (e.g., "#216 of 250") → high collector premium
+   - Popular theme (Disney, Star Wars, sports teams) → 1.5x–4x melt
+   - Generic bullion (plain bar/round, no theme) → 1.05x–1.15x melt
+   - Key date coins → can be 10x–1000x melt depending on rarity
+   - Common date circulated coins → 1x–2x melt
+   - High-grade certified coins (MS65+) → significant numismatic premium
+
+   Return `pricingNotes` explaining exactly which comparables or logic you used.
 
 Return your analysis using the provided tool.`;
 
@@ -312,12 +329,17 @@ Return your analysis using the provided tool.`;
                     priceMin: {
                       type: "number",
                       description:
-                        "Minimum suggested price in USD (never below melt value for precious metals)",
+                        "Minimum suggested price in USD. For precious metals: never below melt value. Based on lowest recent sold comp for this specific item or series.",
                     },
                     priceMax: {
                       type: "number",
                       description:
-                        "Maximum suggested price in USD based on recent sold comps",
+                        "Maximum suggested price in USD. Based on highest recent sold comp for this specific item in this condition. Factor in key date, rarity, theme, and grade premiums.",
+                    },
+                    pricingNotes: {
+                      type: "string",
+                      description:
+                        "Brief explanation of how you priced this item: what specific comparables or logic you used (e.g., 'Recent eBay solds for 2025 Niue Disney series bars averaged $145-$180. Limited mintage of 250 supports upper range. Melt floor: $89.')",
                     },
                     metalType: {
                       type: "string",
@@ -363,9 +385,6 @@ Return your analysis using the provided tool.`;
                         "Circulated/Uncirculated": { type: "string", enum: ["Circulated", "Uncirculated"], description: "Whether the coin has been circulated" },
                         Certification: { type: "string", enum: ["PCGS", "NGC", "ANACS", "ICG", "Uncertified"], description: "Grading service certification" },
                         "Strike Type": { type: "string", enum: ["Business Strike", "Proof", "Reverse Proof", "Burnished", "Satin Finish"], description: "Type of strike" },
-                        "NGC Certification Number": { type: "string", description: "NGC cert number if slabbed by NGC" },
-                        "PCGS Certification Number": { type: "string", description: "PCGS cert number if slabbed by PCGS" },
-
                         // --- Non-coin/bullion items ---
                         Brand: { type: "string", description: "Brand name for non-coin items" },
                         Material: { type: "string", description: "Material for non-coin items" },
@@ -390,7 +409,7 @@ Return your analysis using the provided tool.`;
                       description: "True if the coin is already in a certified grading slab (PCGS, NGC, etc.)",
                     },
                   },
-                  required: ["title", "description", "priceMin", "priceMax", "metalType", "metalWeightOz", "ebayCategoryId", "itemSpecifics", "condition", "suggestedGrade", "gradingRationale", "isSlabbed"],
+                  required: ["title", "description", "priceMin", "priceMax", "pricingNotes", "metalType", "metalWeightOz", "ebayCategoryId", "itemSpecifics", "condition", "suggestedGrade", "gradingRationale", "isSlabbed"],
                   additionalProperties: false,
                 },
               },
