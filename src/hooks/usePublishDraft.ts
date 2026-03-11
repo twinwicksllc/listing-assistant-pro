@@ -100,31 +100,52 @@ export function usePublishDraft() {
       // Mark as "publishing" in DB so UI can show spinner and prevent duplicate submits
       await updateDraft(draft.id, { publishStatus: "publishing" });
 
+      const publishPayload = {
+        action: "create_draft",
+        userToken: ebayToken,
+        // Deterministic SKU based on draft ID — retries update the same eBay record
+        sku: `LA-${draft.id.replace(/-/g, "").slice(0, 16).toUpperCase()}`,
+        // Seller's postal code — used to create/verify the eBay inventory location
+        postalCode: postalCode || undefined,
+        title: draft.title,
+        description: draft.description,
+        listingFormat: draft.listingFormat ?? "FIXED_PRICE",
+        listingPrice: draft.listingPrice ?? 0,
+        auctionStartPrice: draft.listingFormat === "AUCTION" ? (draft.listingPrice ?? 0) : 0,
+        auctionBuyItNow: null,
+        auctionDuration: draft.listingFormat === "AUCTION"
+          ? (draft.auctionDuration || "Days_7")
+          : undefined,
+        imageUrl: draft.imageUrl,
+        condition: draft.condition ?? "PRE_OWNED_GOOD",
+        ebayCategoryId: draft.ebayCategoryId ?? "",
+        itemSpecifics: draft.itemSpecifics ?? {},
+        fulfillmentPolicyId: draft.fulfillmentPolicyId ?? null,
+        paymentPolicyId: draft.paymentPolicyId ?? null,
+        returnPolicyId: draft.returnPolicyId ?? null,
+      };
+
+      console.log("publishDraft: invoking ebay-publish with create_draft action", {
+        draftId: draft.id,
+        title: draft.title,
+        sku: publishPayload.sku,
+        format: publishPayload.listingFormat,
+        hasToken: !!ebayToken,
+      });
+
       const { data, error } = await supabase.functions.invoke("ebay-publish", {
-        body: {
-          action: "create_draft",
-          userToken: ebayToken,
-          // Deterministic SKU based on draft ID — retries update the same eBay record
-          sku: `LA-${draft.id.replace(/-/g, "").slice(0, 16).toUpperCase()}`,
-          // Seller's postal code — used to create/verify the eBay inventory location
-          postalCode: postalCode || undefined,
-          title: draft.title,
-          description: draft.description,
-          listingFormat: draft.listingFormat ?? "FIXED_PRICE",
-          listingPrice: draft.listingPrice ?? 0,
-          auctionStartPrice: draft.listingFormat === "AUCTION" ? (draft.listingPrice ?? 0) : 0,
-          auctionBuyItNow: null,
-          auctionDuration: draft.listingFormat === "AUCTION"
-            ? (draft.auctionDuration || "Days_7")
-            : undefined,
-          imageUrl: draft.imageUrl,
-          condition: draft.condition ?? "PRE_OWNED_GOOD",
-          ebayCategoryId: draft.ebayCategoryId ?? "",
-          itemSpecifics: draft.itemSpecifics ?? {},
-          fulfillmentPolicyId: draft.fulfillmentPolicyId ?? null,
-          paymentPolicyId: draft.paymentPolicyId ?? null,
-          returnPolicyId: draft.returnPolicyId ?? null,
-        },
+        body: publishPayload,
+      });
+
+      console.log("publishDraft: received response from ebay-publish", {
+        hasError: !!error,
+        errorMsg: error?.message,
+        success: data?.success,
+        publishFailed: data?.publishFailed,
+        missingPolicies: data?.missingPolicies,
+        auctionNotSupported: data?.auctionNotSupported,
+        hasListingId: !!data?.listingId,
+        hasOfferId: !!data?.offerId,
       });
 
       if (error || data?.error) {
@@ -183,11 +204,20 @@ export function usePublishDraft() {
       }
 
       // --- Success: mark draft as published and remove from drafts list ---
-      await markDraftPublished(draft.id, {
+      console.log("Publishing successful:", {
+        success: data.success,
+        listingId: data.listingId,
+        offerId: data.offerId,
+        sku: data.sku,
+      });
+
+      const markResult = await markDraftPublished(draft.id, {
         sku: data.sku,
         offerId: data.offerId,
         listingId: data.listingId,
       });
+
+      console.log("Draft marked as published:", markResult);
 
       // Build success toast — affiliate URL failure is non-fatal
       const successMsg = data.listingId

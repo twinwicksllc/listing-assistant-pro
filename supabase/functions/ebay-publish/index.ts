@@ -249,9 +249,24 @@ async function ensureInventoryLocation(
     }
   );
 
-  // 204 = created, 409 = already exists — both mean the location is ready
+  // 204 = created, 409 = already exists (sandbox), 400 + errorId 25803 = already exists (production)
+  // All three mean the location is ready. Only throw for genuine errors.
   if (!resp.ok && resp.status !== 409) {
     const errText = await resp.text();
+    // eBay production returns 400 + errorId 25803 when the location already exists.
+    // Treat this the same as 409 — the location is already there, proceed.
+    try {
+      const errJson = JSON.parse(errText);
+      const alreadyExists = Array.isArray(errJson.errors) &&
+        errJson.errors.some((e: { errorId: number }) => e.errorId === 25803);
+      if (alreadyExists) {
+        console.log(
+          `ensureInventoryLocation: location "${merchantLocationKey}" already exists (errorId 25803) — proceeding`
+        );
+        return merchantLocationKey;
+      }
+    } catch { /* not JSON — fall through to throw below */ }
+
     console.error(
       `ensureInventoryLocation: error ${resp.status}: ${errText}`
     );
@@ -272,11 +287,15 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Declare action outside try so the catch block can reference it in error logs.
+  let action: string | undefined;
+
   try {
     console.log(`ebay-publish request: method=${req.method}, url=${req.url}`);
     
     const requestBody = await req.json();
-    const { action, ...payload } = requestBody;
+    let payload: Record<string, unknown>;
+    ({ action, ...payload } = requestBody);
     
     console.log(`ebay-publish action: ${action}, payload keys: ${Object.keys(payload).join(", ")}`);
     if (action === "create_draft") {
@@ -702,10 +721,14 @@ serve(async (req) => {
 
       if (!userToken) throw new Error("No eBay user token provided");
 
+      console.log(`create_draft: starting publish - title="${title}", format=${listingFormat}, env=${ebayEnv}`);
+
       // Use deterministic SKU if provided (preferred — enables idempotent retries).
       // Fall back to random UUID-based SKU only if not provided.
       const sku = incomingSku ||
         `LA-${crypto.randomUUID().replace(/-/g, "").slice(0, 16).toUpperCase()}`;
+
+      console.log(`create_draft: sku=${sku}`);
 
       // eBay Partner Network campaign ID for affiliate revenue tracking
       const epnCampaignId = Deno.env.get("EPN_CAMPAIGN_ID") || "";
@@ -790,6 +813,8 @@ serve(async (req) => {
         (inventoryBody.product as Record<string, unknown>).aspects = aspects;
       }
 
+      console.log(`create_draft: creating inventory item for sku=${sku}, condition=${conditionEnum}, merchantLocationKey=${merchantLocationKey}`);
+
       const inventoryResp = await fetchWithTimeout(
         `${apiBase}/sell/inventory/v1/inventory_item/${sku}`,
         {
@@ -802,10 +827,12 @@ serve(async (req) => {
 
       if (!inventoryResp.ok) {
         const errText = await inventoryResp.text();
-        console.error("eBay inventory error:", inventoryResp.status, errText);
-        console.error("Request body was:", JSON.stringify(inventoryBody, null, 2));
+        console.error("create_draft: eBay inventory error:", inventoryResp.status, errText);
+        console.error("create_draft: inventory request body:", JSON.stringify(inventoryBody, null, 2));
         throw new Error(`Failed to create inventory item: ${inventoryResp.status} - ${errText}`);
       }
+
+      console.log(`create_draft: inventory item created successfully for sku=${sku}`);
 
       // Step 3: Fetch business policies (use draft-level if set, else auto-fetch first)
       const fetchDefaultPolicy = async (policyType: string): Promise<string | null> => {
@@ -842,6 +869,8 @@ serve(async (req) => {
           !returnPolicyId && "Return",
         ].filter(Boolean).join(", ");
 
+        console.error(`create_draft: missing required policies for sku ${sku}: ${missing}. draftFulfillment=${draftFulfillmentPolicyId}, draftReturn=${draftReturnPolicyId}`);
+
         return new Response(
           JSON.stringify({
             error: `Missing required eBay business policies: ${missing}. Please create these policies in your eBay Seller Hub (https://www.ebay.com/sh/ovw/policies) before publishing.`,
@@ -851,6 +880,8 @@ serve(async (req) => {
         );
       }
 
+      console.log(`create_draft: policies fetched - fulfillment=${fulfillmentPolicyId}, return=${returnPolicyId}, payment=${paymentPolicyId || "NONE"}`);
+
       // Step 4: Build offer payload
       // IMPORTANT: The eBay Inventory API (REST) only supports FIXED_PRICE format.
       // Auction listings require the legacy Trading API (XML-based) which is a
@@ -858,6 +889,7 @@ serve(async (req) => {
       // Inventory API will result in a 400 error.
       // See: https://developer.ebay.com/api-docs/sell/inventory/resources/offer/methods/createOffer
       if (listingFormat === "AUCTION") {
+        console.error(`create_draft: auction format requested but not supported by Inventory API for sku=${sku}`);
         return new Response(
           JSON.stringify({
             error: "Auction format is not supported by the eBay Inventory API. " +
@@ -880,6 +912,8 @@ serve(async (req) => {
         returnPolicyId,
       });
 
+      console.log(`create_draft: built offer for sku=${sku}, price=${listingPrice}, category=${ebayCategoryId || "NONE"}`);
+
       const offerResp = await fetchWithTimeout(`${apiBase}/sell/inventory/v1/offer`, {
         method: "POST",
         timeout: 15000,
@@ -889,12 +923,15 @@ serve(async (req) => {
 
       if (!offerResp.ok) {
         const errText = await offerResp.text();
-        console.error("eBay offer error:", offerResp.status, errText);
+        console.error("create_draft: eBay offer error:", offerResp.status, errText);
+        console.error("create_draft: offer request body:", JSON.stringify(offerBody, null, 2));
         throw new Error(`Failed to create offer: ${offerResp.status} - ${errText}`);
       }
 
       const offerData = await offerResp.json();
       const offerId = offerData.offerId;
+
+      console.log(`create_draft: offer created successfully, offerId=${offerId}, about to publish...`);
 
       // Step 5: Publish the offer to make it a live listing
       const publishResp = await fetchWithTimeout(
@@ -908,7 +945,8 @@ serve(async (req) => {
 
       if (!publishResp.ok) {
         const errText = await publishResp.text();
-        console.error("eBay publish error:", publishResp.status, errText);
+        console.error("create_draft: eBay publish error:", publishResp.status, errText);
+        console.error("create_draft: failing to publish offer", offerId, "for sku", sku);
         return new Response(
           JSON.stringify({
             error: `Offer created (ID: ${offerId}) but publish failed: ${publishResp.status} - ${errText}`,
@@ -926,7 +964,7 @@ serve(async (req) => {
       // Build affiliate URL — non-fatal, wrapped in try/catch
       const affiliateUrl = listingId ? buildAffiliateUrl(listingId) : null;
 
-      console.log(`Successfully published: listingId=${listingId}, offerId=${offerId}, sku=${sku}`);
+      console.log(`create_draft: Successfully published: listingId=${listingId}, offerId=${offerId}, sku=${sku}, publishData keys: ${Object.keys(publishData).join(", ")}`);
 
       return new Response(
         JSON.stringify({
@@ -1120,7 +1158,7 @@ serve(async (req) => {
     const errorMsg = e instanceof Error ? e.message : "Unknown error";
     // Include action in error log so we can identify which handler threw
     // (action may be undefined if JSON parsing itself failed)
-    const actionLabel = typeof action !== "undefined" ? action : "unknown";
+    const actionLabel = action ?? "unknown";
     console.error(`ebay-publish error [action=${actionLabel}]:`, errorMsg, e instanceof Error ? e.stack : "");
 
     // Only treat as a 400 client error for explicit configuration/input problems.
