@@ -107,17 +107,29 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
           const { data, error: tokenError } = await supabase.functions.invoke("ebay-publish", {
             body: { action: "get_stored_token", userId: user.id },
           });
-          if (!tokenError && data?.token) {
+          if (tokenError) {
+            console.warn("EditDraftModal: get_stored_token error:", tokenError);
+          } else if (data?.token) {
             ebayToken = data.token;
+            console.log("EditDraftModal: token resolved from server-side profiles");
+          } else {
+            console.log("EditDraftModal: get_stored_token returned no token (noToken:", data?.noToken, ")");
           }
-        } catch {
+        } catch (e) {
+          console.warn("EditDraftModal: get_stored_token threw:", e);
           // fall through to localStorage
         }
       }
 
+      // Check cancellation after async token fetch
+      if (cancelled) return;
+
       // 2. Fall back to localStorage
       if (!ebayToken) {
         ebayToken = localStorage.getItem("ebay-user-token");
+        if (ebayToken) {
+          console.log("EditDraftModal: token resolved from localStorage fallback");
+        }
       }
 
       if (cancelled) return;
@@ -139,10 +151,23 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
 
       if (cancelled) return;
 
-      if (error || data?.error) {
-        setPoliciesError("Could not load eBay policies. Make sure your eBay account is connected.");
+      if (error) {
+        // Supabase invoke-level error (network, CORS, function crash)
+        const detail = error instanceof Error ? error.message : String(error);
+        console.error("EditDraftModal: get_policies invoke error:", detail);
+        setPoliciesError(`Could not load eBay policies: ${detail}`);
+      } else if (data?.error) {
+        // Edge function returned a top-level error field
+        console.error("EditDraftModal: get_policies returned error:", data.error);
+        setPoliciesError(`Could not load eBay policies: ${data.error}`);
       } else {
         setPolicies(data as Policies);
+
+        // Log any per-policy-type errors (non-fatal — other types may still have loaded)
+        if (data?.policyErrors && Object.keys(data.policyErrors).length > 0) {
+          console.warn("EditDraftModal: some policy types had errors:", data.policyErrors);
+        }
+
         // Auto-select first policy of each type if none already chosen
         if (!fulfillmentPolicyId && data.fulfillment?.length > 0)
           setFulfillmentPolicyId(data.fulfillment[0].id);
