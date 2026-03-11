@@ -63,8 +63,11 @@ const LEGACY_CONDITION_MAP: Record<string, string> = {
 // ----------------------------------------------------------------
 // Validate condition for a given category
 // Different categories have different valid conditions.
-// For coins/bullion (category IDs 261068, 261069, etc.), LIKE_NEW is not valid.
-// Map invalid conditions to the closest valid alternative.
+// For coins/bullion (category IDs 261068, 261069, etc.), only specific conditions are valid:
+// - NEW: for uncirculated/BU coins
+// - CERTIFIED_REFURBISHED: for slabbed coins from grading services
+// - EXCELLENT_REFURBISHED, VERY_GOOD_REFURBISHED, GOOD_REFURBISHED: for some graded coins
+// PRE_OWNED_* conditions are NOT valid for most coin categories on eBay.
 // ----------------------------------------------------------------
 function normalizeConditionForCategory(
   rawCondition: string,
@@ -78,33 +81,34 @@ function normalizeConditionForCategory(
     categoryId && /^261[0-9]{3}$/.test(categoryId) && parseInt(categoryId) >= 261000 && parseInt(categoryId) <= 261073;
 
   if (isCoinOrBullion) {
-    // For coins/bullion, LIKE_NEW is not valid. Valid conditions:
+    // For most coin categories (esp. 261068), the valid conditions are:
     // NEW, CERTIFIED_REFURBISHED, EXCELLENT_REFURBISHED, VERY_GOOD_REFURBISHED,
-    // GOOD_REFURBISHED, PRE_OWNED_GOOD, PRE_OWNED_FAIR, PRE_OWNED_POOR, FOR_PARTS_OR_NOT_WORKING
+    // GOOD_REFURBISHED, and FOR_PARTS_OR_NOT_WORKING
+    // PRE_OWNED_* conditions are typically NOT valid for eBay coin categories.
     const validForCoins = [
       "NEW",
       "CERTIFIED_REFURBISHED",
       "EXCELLENT_REFURBISHED",
       "VERY_GOOD_REFURBISHED",
       "GOOD_REFURBISHED",
-      "PRE_OWNED_GOOD",
-      "PRE_OWNED_FAIR",
-      "PRE_OWNED_POOR",
       "FOR_PARTS_OR_NOT_WORKING",
     ];
 
     if (!validForCoins.includes(condition)) {
-      // Map invalid conditions to valid alternatives
+      // Map invalid conditions to valid alternatives for coins
       const conditionMap: Record<string, string> = {
-        LIKE_NEW: "PRE_OWNED_GOOD", // LIKE_NEW not valid for coins
-        NEW_OTHER: "PRE_OWNED_GOOD",
-        NEW_WITH_DEFECTS: "PRE_OWNED_FAIR",
+        LIKE_NEW: "NEW", // BU/LIKE_NEW coins should be NEW
+        NEW_OTHER: "NEW",
+        NEW_WITH_DEFECTS: "GOOD_REFURBISHED",
         SELLER_REFURBISHED: "GOOD_REFURBISHED",
+        PRE_OWNED_GOOD: "NEW", // If AI selected PRE_OWNED_GOOD, try NEW for uncirculated coins
+        PRE_OWNED_FAIR: "GOOD_REFURBISHED",
+        PRE_OWNED_POOR: "FOR_PARTS_OR_NOT_WORKING",
       };
 
-      const mappedCondition = conditionMap[condition] || "PRE_OWNED_GOOD";
+      const mappedCondition = conditionMap[condition] || "NEW";
       console.log(
-        `normalizeConditionForCategory: mapping invalid coin condition ${condition} -> ${mappedCondition}`
+        `normalizeConditionForCategory: mapping invalid coin condition ${condition} -> ${mappedCondition} for category ${categoryId}`
       );
       return { condition: mappedCondition, corrected: true };
     }
