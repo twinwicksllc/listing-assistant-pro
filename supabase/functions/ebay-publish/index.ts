@@ -892,6 +892,48 @@ serve(async (req) => {
       );
     }
 
+    // --- ACTION: Fetch eBay business policies for a user token ---
+    // Consolidated here to avoid CORS issues with the separate ebay-policies function.
+    // The ebay-publish function already has correct CORS headers and is proven to work.
+    if (action === "get_policies") {
+      const { userToken } = payload;
+      if (!userToken) throw new Error("No eBay user token provided");
+
+      const authHeaders = {
+        Authorization: `Bearer ${userToken}`,
+        "Content-Type": "application/json",
+      };
+
+      const fetchPolicies = async (policyType: string): Promise<Array<{ id: string; name: string }>> => {
+        const resp = await fetch(
+          `${apiBase}/sell/account/v1/${policyType}_policy?marketplace_id=EBAY_US`,
+          { headers: authHeaders }
+        );
+        if (!resp.ok) {
+          console.warn(`get_policies: could not fetch ${policyType} policies:`, resp.status);
+          return [];
+        }
+        const data = await resp.json();
+        const key = `${policyType}Policies`;
+        const policies = data[key] || [];
+        return policies.map((p: Record<string, string>) => ({
+          id: p[`${policyType}PolicyId`] || p.policyId || "",
+          name: p.name || "(unnamed)",
+        }));
+      };
+
+      const [fulfillment, payment, returns] = await Promise.all([
+        fetchPolicies("fulfillment"),
+        fetchPolicies("payment"),
+        fetchPolicies("return"),
+      ]);
+
+      return new Response(
+        JSON.stringify({ fulfillment, payment, returns }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     return new Response(JSON.stringify({ error: "Unknown action" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
