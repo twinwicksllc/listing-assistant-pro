@@ -283,7 +283,7 @@ async function ensureInventoryLocation(
 }
 
 serve(async (req) => {
-  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v2 - with logging fixes) ***");
+  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v3 - with offer-data scoping fix) ***");
   
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
