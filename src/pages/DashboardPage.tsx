@@ -25,7 +25,7 @@ const EBAY_TOKEN_KEY = "ebay-user-token";
 
 export default function DashboardPage() {
   const { drafts } = useDrafts();
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
   const navigate = useNavigate();
   const [listings, setListings] = useState<EbayListing[]>([]);
   const [loading, setLoading] = useState(false);
@@ -35,7 +35,39 @@ export default function DashboardPage() {
   const [setupDismissed, setSetupDismissed] = useState(false);
 
   const fetchListings = useCallback(async () => {
-    const token = localStorage.getItem(EBAY_TOKEN_KEY);
+    // Token lookup order mirrors usePublishDraft:
+    // 1. Server-side stored token in Supabase profiles (secure, preferred)
+    // 2. localStorage fallback for backwards compatibility
+    let token: string | null = null;
+
+    if (user?.id) {
+      try {
+        const { data: tokenData } = await supabase.functions.invoke("ebay-publish", {
+          body: { action: "get_stored_token", userId: user.id },
+        });
+        if (tokenData?.token) {
+          token = tokenData.token;
+          // Keep localStorage in sync for legacy code paths
+          localStorage.setItem(EBAY_TOKEN_KEY, token);
+        }
+        // If token is expired and refresh failed, tokenData.isExpired will be true
+        if (tokenData?.isExpired) {
+          localStorage.removeItem(EBAY_TOKEN_KEY);
+          setNeedsAuth(true);
+          setEbayAccount(null);
+          setListings([]);
+          toast.error("eBay session expired. Please reconnect in Settings.");
+          return;
+        }
+      } catch {
+        // fall through to localStorage
+      }
+    }
+
+    if (!token) {
+      token = localStorage.getItem(EBAY_TOKEN_KEY);
+    }
+
     if (!token) {
       setNeedsAuth(true);
       setEbayAccount(null);
@@ -106,7 +138,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     fetchListings();

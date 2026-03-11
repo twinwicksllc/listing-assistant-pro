@@ -57,10 +57,12 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
   const [title, setTitle]               = useState(draft.title);
   const [description, setDescription]   = useState(draft.description);
   const [listingFormat, setListingFormat] = useState<ListingFormat>(draft.listingFormat ?? "FIXED_PRICE");
-  // Bug fix: fall back to priceMin if listingPrice is undefined/null (price set during analysis
-  // is stored in priceMin; listingPrice is only set after the user explicitly edits it here)
+  // listingPrice is always saved by AnalyzePage.handleSave (never null/undefined for new drafts).
+  // We use it directly. If somehow missing (very old draft), fall back to priceMin as last resort.
   const [listingPrice, setListingPrice] = useState<number>(
-    draft.listingPrice ?? draft.priceMin ?? 0
+    draft.listingPrice != null && draft.listingPrice > 0
+      ? draft.listingPrice
+      : draft.priceMin ?? 0
   );
   const [auctionDuration, setAuctionDuration] = useState<AuctionDuration>(
     draft.auctionDuration ?? "Days_7"
