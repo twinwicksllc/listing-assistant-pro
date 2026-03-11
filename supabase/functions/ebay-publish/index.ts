@@ -33,6 +33,7 @@ const CONDITION_ID_MAP: Record<string, number> = {
 };
 
 // Human-readable condition descriptions for eBay conditionDescription field
+// Force redeploy to ensure Content-Language fix is live (PR #78)
 const CONDITION_DESCRIPTIONS: Record<string, string> = {
   NEW: "Brand new, unused, unopened item in original packaging.",
   LIKE_NEW: "Like new condition. May be open box but unused.",
