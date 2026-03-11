@@ -61,6 +61,59 @@ const LEGACY_CONDITION_MAP: Record<string, string> = {
 };
 
 // ----------------------------------------------------------------
+// Validate condition for a given category
+// Different categories have different valid conditions.
+// For coins/bullion (category IDs 261068, 261069, etc.), LIKE_NEW is not valid.
+// Map invalid conditions to the closest valid alternative.
+// ----------------------------------------------------------------
+function normalizeConditionForCategory(
+  rawCondition: string,
+  categoryId: string | undefined
+): { condition: string; corrected: boolean } {
+  // First apply legacy migration
+  const condition = LEGACY_CONDITION_MAP[rawCondition] ?? rawCondition;
+
+  // Coin/bullion category IDs (261000-261073 range)
+  const isCoinOrBullion =
+    categoryId && /^261[0-9]{3}$/.test(categoryId) && parseInt(categoryId) >= 261000 && parseInt(categoryId) <= 261073;
+
+  if (isCoinOrBullion) {
+    // For coins/bullion, LIKE_NEW is not valid. Valid conditions:
+    // NEW, CERTIFIED_REFURBISHED, EXCELLENT_REFURBISHED, VERY_GOOD_REFURBISHED,
+    // GOOD_REFURBISHED, PRE_OWNED_GOOD, PRE_OWNED_FAIR, PRE_OWNED_POOR, FOR_PARTS_OR_NOT_WORKING
+    const validForCoins = [
+      "NEW",
+      "CERTIFIED_REFURBISHED",
+      "EXCELLENT_REFURBISHED",
+      "VERY_GOOD_REFURBISHED",
+      "GOOD_REFURBISHED",
+      "PRE_OWNED_GOOD",
+      "PRE_OWNED_FAIR",
+      "PRE_OWNED_POOR",
+      "FOR_PARTS_OR_NOT_WORKING",
+    ];
+
+    if (!validForCoins.includes(condition)) {
+      // Map invalid conditions to valid alternatives
+      const conditionMap: Record<string, string> = {
+        LIKE_NEW: "PRE_OWNED_GOOD", // LIKE_NEW not valid for coins
+        NEW_OTHER: "PRE_OWNED_GOOD",
+        NEW_WITH_DEFECTS: "PRE_OWNED_FAIR",
+        SELLER_REFURBISHED: "GOOD_REFURBISHED",
+      };
+
+      const mappedCondition = conditionMap[condition] || "PRE_OWNED_GOOD";
+      console.log(
+        `normalizeConditionForCategory: mapping invalid coin condition ${condition} -> ${mappedCondition}`
+      );
+      return { condition: mappedCondition, corrected: true };
+    }
+  }
+
+  return { condition, corrected: false };
+}
+
+// ----------------------------------------------------------------
 // Listing duration constants
 // GTC = "Good 'Til Cancelled" — required for FIXED_PRICE listings
 // Auctions must use a specific day count: 1, 3, 5, 7, or 10
@@ -816,13 +869,24 @@ serve(async (req) => {
       // Map internal condition string to numeric conditionId
       // eBay Inventory API accepts ConditionEnum strings, but many categories
       // also require the numeric conditionId. We send both for maximum compatibility.
-      // Migrate any legacy deprecated condition codes to current equivalents.
+      // Migrate any legacy deprecated condition codes to current equivalents,
+      // then normalize based on the category (e.g., LIKE_NEW not valid for coins).
       const rawCondition = condition || "PRE_OWNED_GOOD";
-      const conditionEnum = LEGACY_CONDITION_MAP[rawCondition] ?? rawCondition;
+      const { condition: normalizedCondition, corrected } = normalizeConditionForCategory(
+        rawCondition,
+        ebayCategoryId
+      );
+      const conditionEnum = normalizedCondition;
       const conditionId = CONDITION_ID_MAP[conditionEnum] ?? 3000;
       const conditionDesc = CONDITION_DESCRIPTIONS[conditionEnum]
         ?? conditionEnum.replace(/_/g, " ").toLowerCase()
              .replace(/\b\w/g, (c: string) => c.toUpperCase());
+
+      if (corrected) {
+        console.log(
+          `create_draft: condition auto-corrected from ${rawCondition} to ${normalizedCondition} for category ${ebayCategoryId}`
+        );
+      }
 
       const authHeaders = {
         Authorization: `Bearer ${userToken}`,
