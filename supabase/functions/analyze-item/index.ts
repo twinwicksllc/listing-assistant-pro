@@ -116,8 +116,7 @@ serve(async (req) => {
     // --- End usage limit enforcement ---
 
     // --- Fetch live spot prices from shared DB cache ---
-    // Fallback values (in USD per troy oz) - updated March 2026
-    let spotGold = 2650, spotSilver = 89, spotPlatinum = 1040;
+    let spotGold = 5200, spotSilver = 89, spotPlatinum = 2200;
     try {
       const { data: spotData, error: spotErr } = await svc
         .from("spot_price_cache")
@@ -127,8 +126,8 @@ serve(async (req) => {
 
       if (!spotErr && spotData) {
         const ageMinutes = (Date.now() - new Date(spotData.fetched_at).getTime()) / 60000;
-        if (ageMinutes < 30) {
-          // Use DB cache if less than 30 min old (spot-prices function refreshes every 15 min)
+        if (ageMinutes < 720) {
+          // Use DB cache if less than 12 hours old (spot-prices function refreshes every 12 hours)
           spotGold = Number(spotData.gold) || spotGold;
           spotSilver = Number(spotData.silver) || spotSilver;
           spotPlatinum = Number(spotData.platinum) || spotPlatinum;
@@ -346,7 +345,7 @@ Return your analysis using the provided tool.`;
                     },
                     condition: {
                       type: "string",
-                      enum: ["NEW", "LIKE_NEW", "USED_EXCELLENT", "USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE"],
+                      enum: ["NEW", "LIKE_NEW", "NEW_OTHER", "NEW_WITH_DEFECTS", "CERTIFIED_REFURBISHED", "EXCELLENT_REFURBISHED", "VERY_GOOD_REFURBISHED", "GOOD_REFURBISHED", "SELLER_REFURBISHED", "PRE_OWNED_GOOD", "PRE_OWNED_FAIR", "PRE_OWNED_POOR", "FOR_PARTS_OR_NOT_WORKING"],
                       description: "eBay item condition enum value",
                     },
                     suggestedGrade: {

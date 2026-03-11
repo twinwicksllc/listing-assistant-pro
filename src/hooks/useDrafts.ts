@@ -1,15 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
-import { ListingDraft } from "@/types/listing";
+import { ListingDraft, PublishStatus } from "@/types/listing";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { uploadListingImage, uploadListingImages } from "@/lib/imageUpload";
 
 export function useDrafts() {
   const { user, org } = useAuth();
   const [drafts, setDrafts] = useState<ListingDraft[]>([]);
   const [loading, setLoading] = useState(true);
-  const [publishingIds, setPublishingIds] = useState<Set<string>>(new Set());
 
   const fetchDrafts = useCallback(async () => {
     if (!user) {
@@ -19,15 +17,10 @@ export function useDrafts() {
     }
 
     setLoading(true);
-    
-    // Filter by user_id - this ensures we only get the user's own drafts
-    const query = supabase
+    const { data, error } = await supabase
       .from("drafts")
       .select("*")
-      .eq("user_id", user.id)
       .order("created_at", { ascending: false });
-
-    const { data, error } = await query;
 
     if (error) {
       console.error("Error fetching drafts:", error);
@@ -37,23 +30,29 @@ export function useDrafts() {
         (data || []).map((d: any) => ({
           id: d.id,
           imageUrl: d.image_url,
-          imageUrls: d.image_urls ?? undefined,
           title: d.title,
           description: d.description,
           priceMin: Number(d.price_min),
           priceMax: Number(d.price_max),
+          listingPrice: d.listing_price != null ? Number(d.listing_price) : undefined,
+          listingFormat: d.listing_format || "FIXED_PRICE",
           createdAt: new Date(d.created_at),
           ebayCategoryId: d.ebay_category_id || undefined,
+          ebayCategoryBreadcrumb: d.ebay_category_breadcrumb || undefined,
           itemSpecifics: d.item_specifics || undefined,
           condition: d.condition || undefined,
           consignor: d.consignor || "",
-          listingFormat: (d.listing_format as "FIXED_PRICE" | "AUCTION") || "FIXED_PRICE",
-          listingPrice: Number(d.listing_price) || 0,
-          auctionStartPrice: Number(d.auction_start_price) || 0,
-          auctionBuyItNow: d.auction_buy_it_now != null ? Number(d.auction_buy_it_now) : null,
-          fulfillmentPolicyId: d.fulfillment_policy_id || null,
-          paymentPolicyId: d.payment_policy_id || null,
-          returnPolicyId: d.return_policy_id || null,
+          fulfillmentPolicyId: d.fulfillment_policy_id || undefined,
+          paymentPolicyId: d.payment_policy_id || undefined,
+          returnPolicyId: d.return_policy_id || undefined,
+          auctionDuration: d.auction_duration || undefined,
+          // Publish lifecycle
+          publishStatus: (d.publish_status as PublishStatus) || "draft",
+          publishedAt: d.published_at ? new Date(d.published_at) : undefined,
+          ebaySku: d.ebay_sku || undefined,
+          ebayOfferId: d.ebay_offer_id || undefined,
+          ebayListingId: d.ebay_listing_id || undefined,
+          lastPublishError: d.last_publish_error || undefined,
         }))
       );
     }
@@ -64,121 +63,39 @@ export function useDrafts() {
     fetchDrafts();
   }, [fetchDrafts]);
 
-  const addDraft = async (draft: ListingDraft): Promise<boolean> => {
-    if (!user) {
-      toast.error("Not authenticated");
-      return false;
-    }
+  const addDraft = async (draft: ListingDraft) => {
+    if (!user) return;
 
-    // Validate required fields
-    if (!draft.imageUrl || !draft.title) {
-      toast.error("Missing required fields: title and image");
-      return false;
-    }
+    const orgId = (!org.loading && org.orgId) ? org.orgId : undefined;
 
-    try {
-      // Only include org_id if org has fully loaded and has a valid ID
-      // Passing a null org_id when org is still loading can cause FK errors
-      const orgId = (!org.loading && org.orgId) ? org.orgId : undefined;
+    const { error } = await supabase.from("drafts").insert({
+      id: draft.id,
+      user_id: user.id,
+      ...(orgId ? { org_id: orgId } : {}),
+      image_url: draft.imageUrl,
+      title: draft.title,
+      description: draft.description,
+      price_min: draft.priceMin,
+      price_max: draft.priceMax,
+      listing_price: draft.listingPrice ?? null,
+      listing_format: draft.listingFormat ?? "FIXED_PRICE",
+      ebay_category_id: draft.ebayCategoryId || null,
+      ebay_category_breadcrumb: draft.ebayCategoryBreadcrumb || null,
+      item_specifics: draft.itemSpecifics || {},
+      condition: draft.condition || null,
+      consignor: draft.consignor || "",
+      fulfillment_policy_id: draft.fulfillmentPolicyId || null,
+      payment_policy_id: draft.paymentPolicyId || null,
+      return_policy_id: draft.returnPolicyId || null,
+      auction_duration: draft.auctionDuration || null,
+      publish_status: "draft",
+    });
 
-      // Upload all images to Supabase Storage if they are base64 data URLs
-      // This avoids hitting Supabase's 1MB REST API request size limit
-      let imageUrl = draft.imageUrl;
-      let imageUrls = draft.imageUrls;
-
-      console.log("Starting draft save with:", {
-        hasImages: !!imageUrls,
-        imageCount: imageUrls?.length,
-        userId: user.id,
-        orgId,
-      });
-
-      if (imageUrls && imageUrls.length > 0) {
-        // Upload all images in parallel; the first becomes the thumbnail
-        const base64Urls = imageUrls.filter((u) => u.startsWith("data:"));
-        const alreadyStoredUrls = imageUrls.filter((u) => !u.startsWith("data:"));
-        
-        console.log("Image processing:", {
-          needsUpload: base64Urls.length,
-          alreadyStored: alreadyStoredUrls.length,
-        });
-
-        const uploadedUrls = base64Urls.length > 0
-          ? await uploadListingImages(base64Urls, user.id)
-          : [];
-        imageUrls = [...uploadedUrls, ...alreadyStoredUrls];
-        imageUrl = imageUrls[0];
-        
-        console.log("After upload/processing:", {
-          finalImageUrl: imageUrl,
-          totalImages: imageUrls.length,
-        });
-      } else if (draft.imageUrl?.startsWith("data:")) {
-        console.log("Single base64 image, uploading...");
-        imageUrl = await uploadListingImage(draft.imageUrl, user.id);
-        imageUrls = [imageUrl];
-      }
-
-      console.log("About to insert draft with payload:", {
-        hasImageUrl: !!imageUrl,
-        hasImageUrls: !!imageUrls,
-        itemSpecifics: draft.itemSpecifics,
-      });
-
-      const { error } = await supabase.from("drafts").insert({
-        id: draft.id,
-        user_id: user.id,
-        ...(orgId ? { org_id: orgId } : {}),
-        image_url: imageUrl,
-        image_urls: imageUrls ?? null,
-        title: draft.title,
-        description: draft.description,
-        price_min: Number(draft.priceMin) || 0,
-        price_max: Number(draft.priceMax) || 0,
-        ebay_category_id: draft.ebayCategoryId || null,
-        item_specifics: draft.itemSpecifics || {},
-        condition: draft.condition || null,
-        consignor: draft.consignor || "",
-        listing_format: draft.listingFormat || "FIXED_PRICE",
-        listing_price: Number(draft.listingPrice) || 0,
-        auction_start_price: Number(draft.auctionStartPrice) || 0,
-        auction_buy_it_now: draft.auctionBuyItNow ?? null,
-        fulfillment_policy_id: draft.fulfillmentPolicyId || null,
-        payment_policy_id: draft.paymentPolicyId || null,
-        return_policy_id: draft.returnPolicyId || null,
-      });
-
-      if (error) {
-        console.error("Error adding draft:", error);
-        console.error("Error details:", {
-          message: error.message,
-          code: error.code,
-          details: error.details,
-          status: error.status,
-          statusText: error.statusText,
-        });
-        
-        // More helpful error messages
-        let userMessage = "Failed to save draft";
-        if (error.code === "23503") {
-          userMessage = "Organization not found. Try creating a personal draft instead.";
-        } else if (error.code === "23502") {
-          userMessage = "Missing required field. Please fill in title and add an image.";
-        } else if (error.message?.includes("image_urls")) {
-          userMessage = "Image upload failed. Please try again.";
-        }
-        
-        toast.error(userMessage);
-        return false;
-      }
-
-      // Update local state with the uploaded image URL
-      setDrafts((prev) => [{ ...draft, imageUrl, imageUrls }, ...prev]);
-      return true;
-    } catch (err: any) {
-      console.error("Unexpected error saving draft:", err);
-      toast.error("Unexpected error saving draft");
-      return false;
+    if (error) {
+      console.error("Error adding draft:", error);
+      toast.error("Failed to save draft");
+    } else {
+      setDrafts((prev) => [{ ...draft, publishStatus: "draft" }, ...prev]);
     }
   };
 
@@ -193,97 +110,83 @@ export function useDrafts() {
     }
   };
 
-  /**
-   * Publish a staged draft live to eBay using the user's stored token.
-   * Returns true on success (draft is also removed from local state).
-   */
-  const publishDraft = async (draft: ListingDraft, userToken: string): Promise<boolean> => {
-    // Proactively check token expiry (5-minute buffer) before attempting API calls
-    const expiresAt = localStorage.getItem("ebay-token-expires-at");
-    if (expiresAt && Date.now() + 5 * 60 * 1000 >= Number(expiresAt)) {
-      localStorage.removeItem("ebay-user-token");
-      toast.error("eBay session expired. Please reconnect eBay and try again.");
+  const updateDraft = async (id: string, updates: Partial<ListingDraft>) => {
+    const patch: Record<string, any> = {};
+    if (updates.title !== undefined)                  patch.title = updates.title;
+    if (updates.description !== undefined)            patch.description = updates.description;
+    if (updates.listingPrice !== undefined)           patch.listing_price = updates.listingPrice;
+    if (updates.listingFormat !== undefined)          patch.listing_format = updates.listingFormat;
+    if (updates.ebayCategoryId !== undefined)         patch.ebay_category_id = updates.ebayCategoryId;
+    if (updates.ebayCategoryBreadcrumb !== undefined) patch.ebay_category_breadcrumb = updates.ebayCategoryBreadcrumb;
+    if (updates.itemSpecifics !== undefined)          patch.item_specifics = updates.itemSpecifics;
+    if (updates.condition !== undefined)              patch.condition = updates.condition;
+    if (updates.consignor !== undefined)              patch.consignor = updates.consignor;
+    if (updates.priceMin !== undefined)               patch.price_min = updates.priceMin;
+    if (updates.priceMax !== undefined)               patch.price_max = updates.priceMax;
+    if (updates.fulfillmentPolicyId !== undefined)    patch.fulfillment_policy_id = updates.fulfillmentPolicyId || null;
+    if (updates.paymentPolicyId !== undefined)        patch.payment_policy_id = updates.paymentPolicyId || null;
+    if (updates.returnPolicyId !== undefined)         patch.return_policy_id = updates.returnPolicyId || null;
+    if (updates.auctionDuration !== undefined)        patch.auction_duration = updates.auctionDuration || null;
+    // Publish lifecycle fields
+    if (updates.publishStatus !== undefined)          patch.publish_status = updates.publishStatus;
+    if (updates.publishedAt !== undefined)            patch.published_at = updates.publishedAt?.toISOString() || null;
+    if (updates.ebaySku !== undefined)                patch.ebay_sku = updates.ebaySku || null;
+    if (updates.ebayOfferId !== undefined)            patch.ebay_offer_id = updates.ebayOfferId || null;
+    if (updates.ebayListingId !== undefined)          patch.ebay_listing_id = updates.ebayListingId || null;
+    if (updates.lastPublishError !== undefined)       patch.last_publish_error = updates.lastPublishError || null;
+
+    const { error } = await supabase.from("drafts").update(patch).eq("id", id);
+
+    if (error) {
+      console.error("Error updating draft:", error);
+      toast.error("Failed to update draft");
       return false;
-    }
-    setPublishingIds((prev) => new Set(prev).add(draft.id));
-    try {
-      const allImageUrls = draft.imageUrls?.length ? draft.imageUrls : [draft.imageUrl];
-      const { data, error } = await supabase.functions.invoke("ebay-publish", {
-        body: {
-          action: "create_draft",
-          userToken,
-          title: draft.title,
-          description: draft.description,
-          listingFormat: draft.listingFormat || "FIXED_PRICE",
-          listingPrice: draft.listingPrice || 0,
-          auctionStartPrice: draft.auctionStartPrice || 0,
-          auctionBuyItNow: draft.auctionBuyItNow ?? null,
-          imageUrl: allImageUrls[0],
-          imageUrls: allImageUrls,
-          condition: draft.condition,
-          ebayCategoryId: draft.ebayCategoryId,
-          itemSpecifics: draft.itemSpecifics,
-          ...(draft.fulfillmentPolicyId ? {
-            listingPolicies: {
-              fulfillmentPolicyId: draft.fulfillmentPolicyId,
-              paymentPolicyId: draft.paymentPolicyId,
-              returnPolicyId: draft.returnPolicyId,
-            },
-          } : {}),
-        },
-      });
-
-      if (error || data?.error) {
-        if (data?.missingPolicies) {
-          toast.error("eBay business policies not configured", {
-            description: data.error,
-            action: {
-              label: "Open Seller Hub",
-              onClick: () => window.open("https://www.ebay.com/sh/ovw/policies", "_blank"),
-            },
-            duration: 10000,
-          });
-          return false;
-        }
-        if (data?.publishFailed) {
-          toast.error(`"${draft.title}" — offer created but couldn't go live`, {
-            description: data.error,
-            duration: 8000,
-          });
-          return false;
-        }
-        const msg = data?.error || error?.message || "Publish failed";
-        if (msg.includes("401") || msg.includes("expired")) {
-          localStorage.removeItem("ebay-user-token");
-          toast.error("eBay session expired. Please reconnect eBay and try again.");
-          return false;
-        }
-        toast.error(`Failed to publish "${draft.title}": ${msg}`);
-        return false;
-      }
-
-      const listingId = data?.listingId || data?.offerId;
-      toast.success(`"${draft.title}" is live on eBay!`, {
-        description: listingId ? `Listing ID: ${listingId}` : undefined,
-        action: data?.affiliateUrl
-          ? { label: "Copy Link", onClick: () => navigator.clipboard.writeText(data.affiliateUrl) }
-          : undefined,
-      });
-
-      // Remove successfully published draft
-      await removeDraft(draft.id);
+    } else {
+      setDrafts((prev) =>
+        prev.map((d) => (d.id === id ? { ...d, ...updates } : d))
+      );
       return true;
-    } catch (err: any) {
-      toast.error(`Unexpected error publishing "${draft.title}"`);
-      return false;
-    } finally {
-      setPublishingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(draft.id);
-        return next;
-      });
     }
   };
 
-  return { drafts, addDraft, removeDraft, publishDraft, publishingIds, loading, refetchDrafts: fetchDrafts };
+  /**
+   * Mark a draft as successfully published and remove it from the active drafts list.
+   * Stores the eBay listing metadata for reference.
+   */
+  const markDraftPublished = async (
+    id: string,
+    meta: { sku: string; offerId: string; listingId: string | null }
+  ) => {
+    await updateDraft(id, {
+      publishStatus: "published",
+      publishedAt: new Date(),
+      ebaySku: meta.sku,
+      ebayOfferId: meta.offerId,
+      ebayListingId: meta.listingId || undefined,
+      lastPublishError: undefined,
+    });
+    // Remove from active drafts list — published items appear in Dashboard
+    setDrafts((prev) => prev.filter((d) => d.id !== id));
+  };
+
+  /**
+   * Mark a draft as failed with an error message.
+   */
+  const markDraftFailed = async (id: string, errorMsg: string) => {
+    await updateDraft(id, {
+      publishStatus: "failed",
+      lastPublishError: errorMsg,
+    });
+  };
+
+  return {
+    drafts,
+    addDraft,
+    removeDraft,
+    updateDraft,
+    markDraftPublished,
+    markDraftFailed,
+    loading,
+    refetchDrafts: fetchDrafts,
+  };
 }

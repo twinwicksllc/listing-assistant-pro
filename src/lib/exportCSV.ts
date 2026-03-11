@@ -23,20 +23,34 @@ function downloadCSV(filename: string, content: string) {
 
 const EBAY_CONDITION_MAP: Record<string, string> = {
   NEW: "1000",
-  LIKE_NEW: "1500",
-  USED_EXCELLENT: "2750",
-  USED_VERY_GOOD: "3000",
-  USED_GOOD: "4000",
-  USED_ACCEPTABLE: "5000",
+  LIKE_NEW: "2750",                   // Like New / Open Box
+  NEW_OTHER: "1500",                  // New Other (without tags)
+  NEW_WITH_DEFECTS: "1750",           // New with defects
+  CERTIFIED_REFURBISHED: "2000",
+  EXCELLENT_REFURBISHED: "2010",
+  VERY_GOOD_REFURBISHED: "2020",
+  GOOD_REFURBISHED: "2030",
+  SELLER_REFURBISHED: "2500",
+  PRE_OWNED_GOOD: "3000",             // replaces USED_EXCELLENT / USED_VERY_GOOD
+  PRE_OWNED_FAIR: "5000",             // replaces USED_GOOD
+  PRE_OWNED_POOR: "6000",             // replaces USED_ACCEPTABLE
+  FOR_PARTS_OR_NOT_WORKING: "7000",
 };
 
 const FB_CONDITION_MAP: Record<string, string> = {
   NEW: "new",
   LIKE_NEW: "used_like_new",
-  USED_EXCELLENT: "used_good",
-  USED_VERY_GOOD: "used_good",
-  USED_GOOD: "used_fair",
-  USED_ACCEPTABLE: "used_fair",
+  NEW_OTHER: "new_other",
+  NEW_WITH_DEFECTS: "new_other",
+  CERTIFIED_REFURBISHED: "used_like_new",
+  EXCELLENT_REFURBISHED: "used_like_new",
+  VERY_GOOD_REFURBISHED: "used_good",
+  GOOD_REFURBISHED: "used_good",
+  SELLER_REFURBISHED: "used_good",
+  PRE_OWNED_GOOD: "used_good",
+  PRE_OWNED_FAIR: "used_fair",
+  PRE_OWNED_POOR: "used_fair",
+  FOR_PARTS_OR_NOT_WORKING: "used_poor",
 };
 
 export interface ListingData {

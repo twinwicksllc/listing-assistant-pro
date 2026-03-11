@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Settings, User, CreditCard, Zap, Loader2, Check, ExternalLink, AlertCircle } from "lucide-react";
 import { useAuth, PLANS } from "@/contexts/AuthContext";
@@ -15,15 +15,46 @@ type SettingsTab = "profile" | "billing" | "integrations";
 export default function SettingsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { isPro, isUnlimited, isPaid, subscription, usage, refreshSubscription, currentPlanLimits, isOwner } = useAuth();
+  const { isPro, isUnlimited, isPaid, subscription, usage, refreshSubscription, currentPlanLimits, isOwner, user } = useAuth();
   const paramTab = searchParams.get("tab") as SettingsTab | null;
   const initialTab = (paramTab && ["profile", "billing", "integrations"].includes(paramTab) ? paramTab : "profile") as SettingsTab;
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [connectingEbay, setConnectingEbay] = useState(false);
+  // Start with localStorage as quick initial check; then verify server-side token on mount
   const [ebayConnected, setEbayConnected] = useState(!!localStorage.getItem(EBAY_TOKEN_KEY));
   const [showProfileModal, setShowProfileModal] = useState(false);
+
+  // On mount, verify eBay connection status using server-side stored token
+  // (mirrors the token lookup order in usePublishDraft and EditDraftModal)
+  useEffect(() => {
+    let cancelled = false;
+    const checkConnection = async () => {
+      // 1. Try server-side stored token
+      if (user?.id) {
+        try {
+          const { data } = await supabase.functions.invoke("ebay-publish", {
+            body: { action: "get_stored_token", userId: user.id },
+          });
+          if (cancelled) return;
+          if (data?.token) {
+            setEbayConnected(true);
+            // Also keep localStorage in sync for legacy code paths
+            localStorage.setItem(EBAY_TOKEN_KEY, data.token);
+            return;
+          }
+        } catch {
+          // fall through to localStorage check
+        }
+      }
+      if (cancelled) return;
+      // 2. Fall back to localStorage
+      setEbayConnected(!!localStorage.getItem(EBAY_TOKEN_KEY));
+    };
+    checkConnection();
+    return () => { cancelled = true; };
+  }, [user?.id]);
 
   const handleCheckout = async (planKey: "pro" | "unlimited") => {
     setCheckoutLoading(planKey);
@@ -79,11 +110,32 @@ export default function SettingsPage() {
     }
   };
 
-  const handleDisconnectEbay = () => {
+  const handleDisconnectEbay = async () => {
+    // Clear localStorage tokens
     localStorage.removeItem(EBAY_TOKEN_KEY);
     localStorage.removeItem("ebay-refresh-token");
     localStorage.removeItem("ebay-token-expires-at");
     setEbayConnected(false);
+
+    // Also clear server-side stored token in Supabase profiles
+    if (user?.id) {
+      try {
+        const { error } = await supabase
+          .from("profiles")
+          .update({
+            ebay_access_token: null,
+            ebay_refresh_token: null,
+            ebay_token_expires_at: null,
+          })
+          .eq("id", user.id);
+        if (error) {
+          console.warn("handleDisconnectEbay: failed to clear server-side token:", error.message);
+        }
+      } catch (err) {
+        console.warn("handleDisconnectEbay: error clearing server-side token:", err);
+      }
+    }
+
     toast.success("eBay account disconnected");
   };
 

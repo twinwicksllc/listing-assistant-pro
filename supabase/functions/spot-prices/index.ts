@@ -7,12 +7,64 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const CACHE_TTL_MINUTES = 15;
-// Fallback spot prices used when API fetch fails (in USD per troy oz)
-// These should be updated monthly or made configurable via env vars
-// Last updated: March 2026
-const FALLBACK = { gold: 2650, silver: 89, platinum: 1040 };
+// ── Cache TTL ────────────────────────────────────────────────────────────────
+// 12 hours keeps us well within metals.dev free tier (100 req/month).
+// 2 refreshes/day × 31 days = ~62 requests/month.
+const CACHE_TTL_MINUTES = 12 * 60; // 720 minutes
 
+// ── Fallback values ──────────────────────────────────────────────────────────
+// Updated to approximate March 2026 spot prices.
+// These are only used if the DB cache is empty AND metals.dev is unreachable.
+const FALLBACK = { gold: 5200, silver: 89, platinum: 2200 };
+
+// ── metals.dev API ───────────────────────────────────────────────────────────
+// API key stored as Supabase secret: METALS_DEV_API_KEY
+// Sign up free at https://metals.dev — 100 req/month on free tier.
+// Endpoint: GET https://api.metals.dev/v1/latest?api_key=KEY&currency=USD&unit=toz
+async function fetchFromMetalsDev(): Promise<{ gold: number; silver: number; platinum: number } | null> {
+  const apiKey = Deno.env.get("METALS_DEV_API_KEY");
+  if (!apiKey) {
+    console.warn("METALS_DEV_API_KEY secret not set — skipping live fetch");
+    return null;
+  }
+
+  try {
+    const url = `https://api.metals.dev/v1/latest?api_key=${apiKey}&currency=USD&unit=toz`;
+    const resp = await fetch(url, {
+      headers: { "Accept": "application/json" },
+      signal: AbortSignal.timeout(8000), // 8s timeout
+    });
+
+    if (!resp.ok) {
+      console.error(`metals.dev returned HTTP ${resp.status}`);
+      return null;
+    }
+
+    const data = await resp.json();
+
+    if (data.status !== "success" || !data.metals) {
+      console.error("metals.dev unexpected response:", JSON.stringify(data).slice(0, 200));
+      return null;
+    }
+
+    const gold     = parseFloat(data.metals.gold)     || 0;
+    const silver   = parseFloat(data.metals.silver)   || 0;
+    const platinum = parseFloat(data.metals.platinum) || 0;
+
+    if (gold <= 0 || silver <= 0) {
+      console.error("metals.dev returned zero/invalid prices:", data.metals);
+      return null;
+    }
+
+    console.log(`metals.dev prices — gold: ${gold}, silver: ${silver}, platinum: ${platinum}`);
+    return { gold, silver, platinum };
+  } catch (e) {
+    console.error("metals.dev fetch error:", e);
+    return null;
+  }
+}
+
+// ── Main cache logic ─────────────────────────────────────────────────────────
 async function getSpotPrices(svc: ReturnType<typeof createClient>): Promise<{
   gold: number;
   silver: number;
@@ -38,8 +90,9 @@ async function getSpotPrices(svc: ReturnType<typeof createClient>): Promise<{
     ? (now.getTime() - fetchedAt.getTime()) / 60000
     : Infinity;
 
-  // 2. If cache is fresh (< 15 min), return it immediately
+  // 2. If cache is fresh (< 12 hours), return it immediately — no API call needed
   if (cached && ageMinutes < CACHE_TTL_MINUTES) {
+    console.log(`Cache hit — age: ${Math.round(ageMinutes)}min, source: ${cached.source}`);
     return {
       gold: Number(cached.gold),
       silver: Number(cached.silver),
@@ -50,52 +103,22 @@ async function getSpotPrices(svc: ReturnType<typeof createClient>): Promise<{
     };
   }
 
-  // 3. Cache is stale — fetch fresh prices from metals.live
-  let fresh: { gold: number; silver: number; platinum: number } | null = null;
-  let source = "fallback";
+  console.log(`Cache stale (age: ${Math.round(ageMinutes)}min) — fetching from metals.dev`);
 
-  try {
-    const resp = await fetch("https://api.metals.live/v1/spot", {
-      headers: { "Accept": "application/json" },
-    });
-    if (resp.ok) {
-      const data = await resp.json();
-      console.log("metals.live response:", JSON.stringify(data).substring(0, 500));
-      
-      // metals.live returns nested objects: { gold: { bid, ask }, silver: { bid, ask }, ... }
-      // We'll use the 'bid' price as the spot price
-      const spot = Array.isArray(data) ? data[0] : data;
-      const prices = {
-        // Handle both flat format (legacy) and nested bid/ask format (current)
-        gold: parseFloat(spot.gold?.bid || spot.gold?.price || spot.gold || 0) || 0,
-        silver: parseFloat(spot.silver?.bid || spot.silver?.price || spot.silver || 0) || 0,
-        platinum: parseFloat(spot.platinum?.bid || spot.platinum?.price || spot.platinum || 0) || 0,
-      };
-      
-      console.log("Parsed prices:", prices);
-      
-      if (prices.gold > 0 && prices.silver > 0) {
-        fresh = prices;
-        source = "metals.live";
-        console.log("Successfully fetched fresh prices from metals.live");
-      } else {
-        console.warn("Parsed prices invalid (likely wrong API response structure):", { prices });
-      }
-    } else {
-      console.warn(`metals.live API returned status ${resp.status}`);
-    }
-  } catch (e) {
-    console.error("metals.live fetch failed:", e);
-  }
+  // 3. Cache is stale — fetch fresh prices from metals.dev
+  const fresh = await fetchFromMetalsDev();
 
   // 4. If live fetch failed, use existing cached values or hardcoded fallback
   const prices = fresh ?? (cached
     ? { gold: Number(cached.gold), silver: Number(cached.silver), platinum: Number(cached.platinum) }
     : FALLBACK);
 
+  const source = fresh
+    ? "metals.dev"
+    : cached ? "db-stale" : "fallback";
+
   if (!fresh) {
-    source = cached ? "db-stale" : "fallback";
-    console.warn(`Using ${source} spot prices`);
+    console.warn(`Using ${source} spot prices — metals.dev unavailable`);
   }
 
   // 5. Upsert fresh prices into DB so all users share the update
@@ -122,6 +145,7 @@ async function getSpotPrices(svc: ReturnType<typeof createClient>): Promise<{
   };
 }
 
+// ── HTTP handler ─────────────────────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -145,15 +169,15 @@ serve(async (req) => {
     try {
       const body = await req.json();
       metalType = body.metalType?.toLowerCase() || null;
-      weightOz = body.weightOz || null;
+      weightOz  = body.weightOz || null;
     } catch {
       // GET or empty body — just return spot prices
     }
 
     if (metalType && weightOz && weightOz > 0) {
       const spotPrice =
-        metalType === "gold" ? gold :
-        metalType === "silver" ? silver :
+        metalType === "gold"     ? gold :
+        metalType === "silver"   ? silver :
         metalType === "platinum" ? platinum : 0;
       meltValue = parseFloat((spotPrice * weightOz).toFixed(2));
     }

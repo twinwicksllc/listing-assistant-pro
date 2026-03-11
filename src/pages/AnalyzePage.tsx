@@ -1,24 +1,14 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, Send, Tag, Crown, Download, FileSpreadsheet, Sheet, ShieldCheck, AlertTriangle, Check, X as XIcon, Lock, UserCircle, DollarSign, Gavel, LockOpen, Search } from "lucide-react";
+import { ArrowLeft, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, Send, Tag, Crown, Download, FileSpreadsheet, Sheet, ShieldCheck, AlertTriangle, Check, X as XIcon, Lock, UserCircle, DollarSign, Gavel, ShoppingCart } from "lucide-react";
 import PricingCard from "@/components/PricingCard";
 import { useDrafts } from "@/hooks/useDrafts";
-import { EbayPolicySelector } from "@/components/EbayPolicySelector";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import type { ItemSpecifics } from "@/types/listing";
-import type { SelectedPolicies } from "@/types/ebay-policies";
-import { getPolicyValidationErrors } from "@/types/listing-form";
+import type { ItemSpecifics, ListingFormat } from "@/types/listing";
 import { useAuth, PLANS } from "@/contexts/AuthContext";
 import { exportListing, type ExportPlatform, type ExportFormat } from "@/lib/exportCSV";
-import {
-  getCategorySuggestions,
-  getRequiredAspects,
-  validateAspects,
-  type CategorySuggestion,
-  type AspectRequirements,
-  type ValidationResult,
-} from "@/lib/ebayTaxonomy";
+import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
 
 export default function AnalyzePage() {
   const { canAnalyze, canPublish, isPro, isUnlimited, isPaid, usage, recordUsage, isOwner, isLister, currentPlanLimits } = useAuth();
@@ -29,19 +19,7 @@ export default function AnalyzePage() {
   const state = location.state as any;
   const imageUrls: string[] = state?.imageUrls ?? (state?.imageUrl ? [state.imageUrl] : []);
   const voiceNote: string = state?.voiceNote || "";
-  // Get eBay token, clearing it if expired (with 5-minute buffer before expiry)
-  const ebayToken = (() => {
-    const token = localStorage.getItem("ebay-user-token");
-    if (!token) return null;
-    const expiresAt = localStorage.getItem("ebay-token-expires-at");
-    if (expiresAt && Date.now() + 5 * 60 * 1000 >= Number(expiresAt)) {
-      localStorage.removeItem("ebay-user-token");
-      return null;
-    }
-    return token;
-  })();
 
-  // Form state
   const [generated, setGenerated] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [title, setTitle] = useState("");
@@ -54,7 +32,7 @@ export default function AnalyzePage() {
   const [metalWeightOz, setMetalWeightOz] = useState<number>(0);
   const [ebayCategoryId, setEbayCategoryId] = useState<string>("");
   const [itemSpecifics, setItemSpecifics] = useState<ItemSpecifics>({});
-  const [condition, setCondition] = useState<string>("USED_EXCELLENT");
+  const [condition, setCondition] = useState<string>("PRE_OWNED_GOOD");
   const [exportPlatform, setExportPlatform] = useState<ExportPlatform>("ebay_file_exchange");
   const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
   const [suggestedGrade, setSuggestedGrade] = useState<string>("");
@@ -73,57 +51,9 @@ export default function AnalyzePage() {
   const [auctionStartPrice, setAuctionStartPrice] = useState(0);
   const [auctionBuyItNowEnabled, setAuctionBuyItNowEnabled] = useState(false);
   const [auctionBuyItNow, setAuctionBuyItNow] = useState(0);
-  const [selectedPolicies, setSelectedPolicies] = useState<SelectedPolicies>({
-    fulfillmentPolicyId: null,
-    paymentPolicyId: null,
-    returnPolicyId: null,
-  });
-
-  // Category and aspect discovery state
-  const [categoryId, setCategoryId] = useState<string>("");
-  const [categoryName, setCategoryName] = useState<string>("");
-  const [categorySuggestions, setCategorySuggestions] = useState<CategorySuggestion[]>([]);
-  const [aspects, setAspects] = useState<AspectRequirements | null>(null);
-  const [aspectValidation, setAspectValidation] = useState<ValidationResult | null>(null);
-  const [loadingCategory, setLoadingCategory] = useState(false);
-
-  // Compute field-level errors reactively from current state (replaces React Hook Form)
-  const errors = useMemo(() => {
-    if (!generated) return {} as Record<string, { message: string } | undefined>;
-    const e: Record<string, { message: string } | undefined> = {};
-    if (!title?.trim()) e.title = { message: "Title is required" };
-    else if (title.length > 80) e.title = { message: "Title must be 80 characters or less" };
-    if (!description || description.trim().length < 10) e.description = { message: "Description must be at least 10 characters" };
-    if (listingFormat === "FIXED_PRICE" && (!listingPrice || listingPrice <= 0)) {
-      e.listingPrice = { message: "Listing price is required and must be greater than $0" };
-    }
-    if (listingFormat === "AUCTION") {
-      if (!auctionStartPrice || auctionStartPrice <= 0) {
-        e.auctionStartPrice = { message: "Starting bid is required and must be greater than $0" };
-      }
-      if (auctionBuyItNowEnabled && (!auctionBuyItNow || auctionBuyItNow <= 0)) {
-        e.auctionBuyItNow = { message: "Buy It Now price is required and must be greater than $0" };
-      }
-    }
-    return e;
-  }, [generated, title, description, listingFormat, listingPrice, auctionStartPrice, auctionBuyItNowEnabled, auctionBuyItNow]);
-
-  // Form is valid when there are no field errors and all policies are selected
-  const isValid = useMemo(
-    () =>
-      generated &&
-      Object.keys(errors).length === 0 &&
-      !!selectedPolicies.fulfillmentPolicyId &&
-      !!selectedPolicies.paymentPolicyId &&
-      !!selectedPolicies.returnPolicyId,
-    [generated, errors, selectedPolicies]
-  );
 
   const AI_FOOTER = "\n\n---\nListing generated by Teckstart AI Assistant. All details should be verified by the buyer.";
   const getDescriptionWithFooter = () => includeAiFooter ? description + AI_FOOTER : description;
-
-  // Get policy validation errors for display
-  const policyValidationErrors = getPolicyValidationErrors(selectedPolicies);
 
   if (imageUrls.length === 0) {
     navigate("/home");
@@ -170,19 +100,13 @@ export default function AnalyzePage() {
       setMetalWeightOz(data.metalWeightOz || 0);
       setEbayCategoryId(data.ebayCategoryId || "");
       setItemSpecifics(data.itemSpecifics || {});
-      setCondition(data.condition || "USED_EXCELLENT");
+      setCondition(data.condition || "PRE_OWNED_GOOD");
       setSuggestedGrade(data.suggestedGrade || "");
       setGradingRationale(data.gradingRationale || "");
       setIsSlabbed(data.isSlabbed ?? false);
       setMeltValue(data.meltValue ?? null);
       setSpotPrices(data.spotPrices ?? null);
       setGradeConfirmed(false);
-      // Reset category discovery for fresh taxonomy lookup
-      setCategoryId("");
-      setCategoryName("");
-      setAspects(null);
-      setAspectValidation(null);
-      setCategorySuggestions([]);
       // Pre-fill listing price with AI midpoint as a starting suggestion
       const aiMid = ((data.priceMin || 0) + (data.priceMax || data.priceMin || 0)) / 2;
       setListingPrice(parseFloat(aiMid.toFixed(2)) || 0);
@@ -198,41 +122,25 @@ export default function AnalyzePage() {
   };
 
   const handleSave = async () => {
-    if (!title || !imageUrls.length) {
-      toast.error("Title and at least one image are required");
-      return;
-    }
-
-    const draftData = {
+    const success = await addDraft({
       id: crypto.randomUUID(),
       imageUrl: imageUrls[0],
-      imageUrls,
       title,
       description: getDescriptionWithFooter(),
       priceMin,
       priceMax,
+      listingPrice: listingPrice > 0 ? listingPrice : auctionStartPrice > 0 ? auctionStartPrice : parseFloat(((priceMin + priceMax) / 2).toFixed(2)),
+      listingFormat: listingFormat as ListingFormat,
       createdAt: new Date(),
       ebayCategoryId,
+      ebayCategoryBreadcrumb: getEbayCategoryBreadcrumb(ebayCategoryId),
       itemSpecifics,
       condition,
       consignor,
-      listingFormat,
-      listingPrice,
-      auctionStartPrice,
-      auctionBuyItNow: auctionBuyItNowEnabled ? auctionBuyItNow : null,
-      fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId,
-      paymentPolicyId: selectedPolicies.paymentPolicyId,
-      returnPolicyId: selectedPolicies.returnPolicyId,
-    };
-    
-    console.log("Saving draft with data:", draftData);
-
-    const success = await addDraft(draftData);
+    });
     if (success) {
-      toast.success("Draft staged! Capture your next item.", {
-        action: { label: "View Drafts", onClick: () => navigate("/drafts") },
-      });
-      navigate("/home");
+      toast.success("Draft saved!");
+      navigate("/drafts");
     }
   };
 
@@ -242,34 +150,38 @@ export default function AnalyzePage() {
       navigate("/billing");
       return;
     }
-    // Validate that policies are selected
-    if (!selectedPolicies.fulfillmentPolicyId || !selectedPolicies.paymentPolicyId || !selectedPolicies.returnPolicyId) {
-      toast.error("Please select all required eBay policies before publishing", {
-        description: "Shipping, Payment, and Return policies are required.",
-      });
-      return;
-    }
-    // NEW: Check category is selected
-    if (!categoryId) {
-      toast.error("Please discover and select a category first", {
-        description: "Use the 'Discover Category' button to find the right eBay category.",
-      });
-      return;
-    }
-    // NEW: Validate aspects before publishing
-    const aspectsValid = await validateItemAspects();
-    if (!aspectsValid) {
-      return;
-    }
     setPublishing(true);
     try {
+      // Token lookup order mirrors usePublishDraft:
+      // 1. Server-side stored token in Supabase profiles (secure, preferred)
+      // 2. localStorage fallback for backwards compatibility
+      let ebayToken: string | null = null;
+      let postalCode: string | null = null;
+
+      if (user?.id) {
+        try {
+          const { data: tokenData } = await supabase.functions.invoke("ebay-publish", {
+            body: { action: "get_stored_token", userId: user.id },
+          });
+          if (tokenData?.token) {
+            ebayToken = tokenData.token;
+            postalCode = tokenData.postalCode ?? null;
+          }
+        } catch {
+          // fall through to localStorage
+        }
+      }
+      if (!ebayToken) {
+        ebayToken = localStorage.getItem("ebay-user-token");
+      }
+
       if (!ebayToken) {
         const { data, error } = await supabase.functions.invoke("ebay-publish", {
           body: { action: "get_auth_url" },
         });
         if (error || data?.error) throw new Error(data?.error || error?.message || "Failed to get auth URL");
 
-        localStorage.setItem("pending_listing", JSON.stringify({ title, description: getDescriptionWithFooter(), listingFormat, listingPrice, auctionStartPrice, auctionBuyItNow: auctionBuyItNowEnabled ? auctionBuyItNow : null, imageUrl: imageUrls[0], ebayCategoryId: categoryId, itemSpecifics, condition }));
+        localStorage.setItem("pending_listing", JSON.stringify({ title, description: getDescriptionWithFooter(), listingFormat, listingPrice, auctionStartPrice, auctionBuyItNow: auctionBuyItNowEnabled ? auctionBuyItNow : null, imageUrl: imageUrls[0], ebayCategoryId, itemSpecifics, condition }));
         window.location.href = data.authUrl;
         return;
       }
@@ -278,6 +190,7 @@ export default function AnalyzePage() {
         body: {
           action: "create_draft",
           userToken: ebayToken,
+          postalCode: postalCode || undefined,
           title,
           description: getDescriptionWithFooter(),
           listingFormat,
@@ -286,18 +199,14 @@ export default function AnalyzePage() {
           auctionBuyItNow: auctionBuyItNowEnabled ? auctionBuyItNow : null,
           imageUrl: imageUrls[0],
           condition,
-          ebayCategoryId: categoryId,
+          ebayCategoryId,
           itemSpecifics,
-          listingPolicies: {
-            fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId,
-            paymentPolicyId: selectedPolicies.paymentPolicyId,
-            returnPolicyId: selectedPolicies.returnPolicyId,
-          },
         },
       });
 
       if (error || data?.error) {
         if (data?.error?.includes("401") || data?.error?.includes("expired")) {
+          // Clear stale token from both storage locations
           localStorage.removeItem("ebay-user-token");
           toast.error("eBay session expired. Please connect again.");
           return;
@@ -337,7 +246,6 @@ export default function AnalyzePage() {
           : undefined,
       });
       await recordUsage("ebay_publish");
-      navigate("/dashboard");
     } catch (err: any) {
       console.error("Publish error:", err);
       toast.error(err.message || "Failed to publish to eBay.");
@@ -348,95 +256,6 @@ export default function AnalyzePage() {
 
   // Filter out empty item specifics for display
   const displaySpecifics = Object.entries(itemSpecifics).filter(([, v]) => v && v.trim() !== "");
-
-  const handleCategoryDiscovery = async () => {
-    if (!title || !ebayToken) {
-      toast.error("Title and eBay connection required");
-      return;
-    }
-
-    setLoadingCategory(true);
-    try {
-      // Get category suggestions
-      const suggestions = await getCategorySuggestions(title, ebayToken);
-      
-      if (suggestions.length === 0) {
-        toast.error("No matching categories found. Try a different description.");
-        setCategorySuggestions([]);
-        setLoadingCategory(false);
-        return;
-      }
-
-      setCategorySuggestions(suggestions);
-      
-      // Auto-select the first (most relevant) suggestion
-      const selected = suggestions[0];
-      setCategoryId(selected.categoryId);
-      setCategoryName(selected.categoryName);
-
-      // Fetch required aspects for this category
-      const requirements = await getRequiredAspects(selected.categoryId, ebayToken);
-      setAspects(requirements);
-
-      toast.success(`Category selected: ${selected.categoryName}`);
-    } catch (error) {
-      console.error("Category discovery error:", error);
-      const message = error instanceof Error ? error.message : "Failed to discover category";
-      toast.error(message);
-    } finally {
-      setLoadingCategory(false);
-    }
-  };
-
-  const validateItemAspects = async () => {
-    if (!categoryId || !ebayToken) {
-      toast.error("Category not selected");
-      return false;
-    }
-
-    try {
-      // Build provided aspects from current form state
-      const provided: Record<string, string[]> = {};
-      
-      // Add any filled-in specifics from itemSpecifics
-      if (itemSpecifics) {
-        for (const [key, value] of Object.entries(itemSpecifics)) {
-          if (value && value.trim()) {
-            provided[key] = [value];
-          }
-        }
-      }
-
-      // Validate
-      const result = await validateAspects(categoryId, provided, ebayToken);
-      setAspectValidation(result);
-
-      if (!result.isValid) {
-        const errors = [
-          ...result.missingRequired.map(name => `Missing required: ${name}`),
-          ...result.invalidValues.map(
-            inv => `${inv.aspectName}: "${inv.providedValue}" not in allowed values`
-          ),
-        ];
-        toast.error(`Validation failed:\n${errors.join("\n")}`);
-        return false;
-      }
-
-      if (result.missingSuggested.length > 0) {
-        toast.info(
-          `Consider filling in: ${result.missingSuggested.join(", ")}`
-        );
-      }
-
-      toast.success("All required aspects valid!");
-      return true;
-    } catch (error) {
-      console.error("Aspect validation error:", error);
-      const message = error instanceof Error ? error.message : "Validation failed";
-      toast.error(message);
-      return false;
-    }
-  };
 
   return (
     <div className="min-h-screen bg-background pb-8">
@@ -526,112 +345,26 @@ export default function AnalyzePage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Validation Error Summary */}
-            {generated && !isValid && (
-              <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3.5 space-y-2">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-xs font-semibold text-destructive">
-                      {Object.keys(errors).length + Object.keys(policyValidationErrors).length} field{Object.keys(errors).length + Object.keys(policyValidationErrors).length !== 1 ? "s" : ""} need attention
-                    </p>
-                    <ul className="mt-1.5 space-y-1">
-                      {errors.title && (
-                        <li className="text-xs text-destructive flex items-center gap-1">
-                          • {errors.title.message}
-                        </li>
-                      )}
-                      {errors.description && (
-                        <li className="text-xs text-destructive flex items-center gap-1">
-                          • {errors.description.message}
-                        </li>
-                      )}
-                      {errors.listingPrice && (
-                        <li className="text-xs text-destructive flex items-center gap-1">
-                          • {errors.listingPrice.message}
-                        </li>
-                      )}
-                      {errors.auctionStartPrice && (
-                        <li className="text-xs text-destructive flex items-center gap-1">
-                          • {errors.auctionStartPrice.message}
-                        </li>
-                      )}
-                      {errors.auctionBuyItNow && (
-                        <li className="text-xs text-destructive flex items-center gap-1">
-                          • {errors.auctionBuyItNow.message}
-                        </li>
-                      )}
-                      {policyValidationErrors.fulfillmentPolicyId && (
-                        <li className="text-xs text-destructive flex items-center gap-1">
-                          • {policyValidationErrors.fulfillmentPolicyId}
-                        </li>
-                      )}
-                      {policyValidationErrors.paymentPolicyId && (
-                        <li className="text-xs text-destructive flex items-center gap-1">
-                          • {policyValidationErrors.paymentPolicyId}
-                        </li>
-                      )}
-                      {policyValidationErrors.returnPolicyId && (
-                        <li className="text-xs text-destructive flex items-center gap-1">
-                          • {policyValidationErrors.returnPolicyId}
-                        </li>
-                      )}
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            )}
-
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className={`text-xs font-medium text-muted-foreground uppercase tracking-wide ${
-                  errors.title ? "text-destructive" : ""
-                }`}>
-                  eBay Title
-                  {errors.title && <span className="text-destructive ml-1">*</span>}
-                </label>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">eBay Title</label>
                 <span className="text-xs text-muted-foreground">{title.length}/80</span>
               </div>
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value.slice(0, 80))}
-                className={`w-full bg-card border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 transition-colors ${
-                  errors.title
-                    ? "border-destructive focus:ring-destructive/50"
-                    : "border-border focus:ring-ring"
-                }`}
+                className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
-              {errors.title && (
-                <p className="text-xs text-destructive flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-                  {errors.title.message}
-                </p>
-              )}
             </div>
 
             <div className="space-y-1.5">
-              <label className={`text-xs font-medium text-muted-foreground uppercase tracking-wide ${
-                errors.description ? "text-destructive" : ""
-              }`}>
-                Item Description
-                {errors.description && <span className="text-destructive ml-1">*</span>}
-              </label>
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Item Description</label>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={5}
-                className={`w-full bg-card border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 resize-none transition-colors ${
-                  errors.description
-                    ? "border-destructive focus:ring-destructive/50"
-                    : "border-border focus:ring-ring"
-                }`}
+                className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
               />
-              {errors.description && (
-                <p className="text-xs text-destructive flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-                  {errors.description.message}
-                </p>
-              )}
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -682,10 +415,17 @@ export default function AnalyzePage() {
                   >
                     <option value="NEW">New</option>
                     <option value="LIKE_NEW">Like New</option>
-                    <option value="USED_EXCELLENT">Used - Excellent</option>
-                    <option value="USED_VERY_GOOD">Used - Very Good</option>
-                    <option value="USED_GOOD">Used - Good</option>
-                    <option value="USED_ACCEPTABLE">Used - Acceptable</option>
+                    <option value="NEW_OTHER">New Other (without tags)</option>
+                    <option value="NEW_WITH_DEFECTS">New with Defects</option>
+                    <option value="CERTIFIED_REFURBISHED">Certified Refurbished</option>
+                    <option value="EXCELLENT_REFURBISHED">Excellent – Refurbished</option>
+                    <option value="VERY_GOOD_REFURBISHED">Very Good – Refurbished</option>
+                    <option value="GOOD_REFURBISHED">Good – Refurbished</option>
+                    <option value="SELLER_REFURBISHED">Seller Refurbished</option>
+                    <option value="PRE_OWNED_GOOD">Pre-Owned – Good</option>
+                    <option value="PRE_OWNED_FAIR">Pre-Owned – Fair</option>
+                    <option value="PRE_OWNED_POOR">Pre-Owned – Poor</option>
+                    <option value="FOR_PARTS_OR_NOT_WORKING">For Parts or Not Working</option>
                   </select>
                 </div>
               </div>
@@ -768,107 +508,6 @@ export default function AnalyzePage() {
               </div>
             )}
 
-            {/* eBay Category Discovery */}
-            {generated && (
-              <div className="space-y-3 border-t border-border pt-4">
-                <div className="flex items-center gap-1.5">
-                  <Tag className="w-3.5 h-3.5 text-primary" />
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    eBay Category Discovery
-                  </label>
-                </div>
-
-                {!categoryId ? (
-                  <button
-                    onClick={handleCategoryDiscovery}
-                    disabled={loadingCategory || !title}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-secondary text-foreground text-xs font-medium transition-all hover:bg-secondary/80 active:scale-[0.98] disabled:opacity-60"
-                  >
-                    {loadingCategory ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        Discovering category...
-                      </>
-                    ) : (
-                      <>
-                        <Search className="w-3.5 h-3.5" />
-                        Discover Category
-                      </>
-                    )}
-                  </button>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="bg-card border border-border rounded-lg p-3">
-                      <p className="text-xs font-medium text-muted-foreground">Selected Category</p>
-                      <p className="text-sm font-semibold text-foreground">{categoryName}</p>
-                      <p className="text-[10px] text-muted-foreground mt-1">ID: {categoryId}</p>
-                    </div>
-
-                    {aspects && (
-                      <div className="bg-muted/40 rounded-lg p-3 space-y-2">
-                        <p className="text-xs font-medium text-foreground">
-                          Required Specifics ({aspects.required.length})
-                        </p>
-                        <div className="grid grid-cols-2 gap-2">
-                          {aspects.required.map((aspect) => (
-                            <div
-                              key={aspect.name}
-                              className="text-[10px] text-muted-foreground bg-card rounded px-2 py-1"
-                            >
-                              {aspect.name}
-                              {aspect.allowedValues && (
-                                <span className="block text-[9px] text-primary/70">
-                                  {aspect.allowedValues.length} options
-                                </span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <button
-                      onClick={() => {
-                        setCategoryId("");
-                        setCategoryName("");
-                        setAspects(null);
-                        setAspectValidation(null);
-                        setCategorySuggestions([]);
-                      }}
-                      className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
-                    >
-                      Change Category
-                    </button>
-                  </div>
-                )}
-
-                {categorySuggestions.length > 1 && categoryId && (
-                  <details className="text-xs">
-                    <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-                      Other suggestions ({categorySuggestions.length - 1})
-                    </summary>
-                    <div className="mt-2 space-y-1">
-                      {categorySuggestions.slice(1).map((cat) => (
-                        <button
-                          key={cat.categoryId}
-                          onClick={async () => {
-                            setCategoryId(cat.categoryId);
-                            setCategoryName(cat.categoryName);
-                            const reqs = await getRequiredAspects(cat.categoryId, ebayToken!);
-                            setAspects(reqs);
-                            toast.success(`Switched to ${cat.categoryName}`);
-                          }}
-                          className="block text-left w-full text-primary hover:underline py-1"
-                        >
-                          {cat.categoryName}
-                        </button>
-                      ))}
-                    </div>
-                  </details>
-                )}
-              </div>
-            )}
-
             {/* Consignor */}
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5">
@@ -923,12 +562,7 @@ export default function AnalyzePage() {
               {/* Buy It Now — single price */}
               {listingFormat === "FIXED_PRICE" && (
                 <div className="space-y-1">
-                  <label className={`text-xs text-muted-foreground ${
-                    errors.listingPrice ? "text-destructive" : ""
-                  }`}>
-                    Listing Price ($)
-                    {errors.listingPrice && <span className="text-destructive ml-1">*</span>}
-                  </label>
+                  <label className="text-xs text-muted-foreground">Listing Price ($)</label>
                   <input
                     type="number"
                     min="0"
@@ -936,18 +570,8 @@ export default function AnalyzePage() {
                     value={listingPrice || ""}
                     placeholder="0.00"
                     onChange={(e) => setListingPrice(parseFloat(e.target.value) || 0)}
-                    className={`w-full bg-card border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 transition-colors ${
-                      errors.listingPrice
-                        ? "border-destructive focus:ring-destructive/50"
-                        : "border-border focus:ring-ring"
-                    }`}
+                    className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
-                  {errors.listingPrice && (
-                    <p className="text-xs text-destructive flex items-center gap-1">
-                      <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-                      {errors.listingPrice.message}
-                    </p>
-                  )}
                 </div>
               )}
 
@@ -955,12 +579,7 @@ export default function AnalyzePage() {
               {listingFormat === "AUCTION" && (
                 <div className="space-y-3">
                   <div className="space-y-1">
-                    <label className={`text-xs text-muted-foreground ${
-                      errors.auctionStartPrice ? "text-destructive" : ""
-                    }`}>
-                      Starting Bid ($)
-                      {errors.auctionStartPrice && <span className="text-destructive ml-1">*</span>}
-                    </label>
+                    <label className="text-xs text-muted-foreground">Starting Bid ($)</label>
                     <input
                       type="number"
                       min="0"
@@ -968,18 +587,8 @@ export default function AnalyzePage() {
                       value={auctionStartPrice || ""}
                       placeholder="0.00"
                       onChange={(e) => setAuctionStartPrice(parseFloat(e.target.value) || 0)}
-                      className={`w-full bg-card border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 transition-colors ${
-                        errors.auctionStartPrice
-                          ? "border-destructive focus:ring-destructive/50"
-                          : "border-border focus:ring-ring"
-                      }`}
+                      className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     />
-                    {errors.auctionStartPrice && (
-                      <p className="text-xs text-destructive flex items-center gap-1">
-                        <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-                        {errors.auctionStartPrice.message}
-                      </p>
-                    )}
                   </div>
                   <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input
@@ -992,12 +601,7 @@ export default function AnalyzePage() {
                   </label>
                   {auctionBuyItNowEnabled && (
                     <div className="space-y-1">
-                      <label className={`text-xs text-muted-foreground ${
-                        errors.auctionBuyItNow ? "text-destructive" : ""
-                      }`}>
-                        Buy It Now Price ($)
-                        {errors.auctionBuyItNow && <span className="text-destructive ml-1">*</span>}
-                      </label>
+                      <label className="text-xs text-muted-foreground">Buy It Now Price ($)</label>
                       <input
                         type="number"
                         min="0"
@@ -1005,18 +609,8 @@ export default function AnalyzePage() {
                         value={auctionBuyItNow || ""}
                         placeholder="0.00"
                         onChange={(e) => setAuctionBuyItNow(parseFloat(e.target.value) || 0)}
-                        className={`w-full bg-card border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 transition-colors ${
-                          errors.auctionBuyItNow
-                            ? "border-destructive focus:ring-destructive/50"
-                            : "border-border focus:ring-ring"
-                        }`}
+                        className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       />
-                      {errors.auctionBuyItNow && (
-                        <p className="text-xs text-destructive flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-                          {errors.auctionBuyItNow.message}
-                        </p>
-                      )}
                     </div>
                   )}
                 </div>
@@ -1084,28 +678,6 @@ export default function AnalyzePage() {
               </button>
             </div>
 
-            {/* eBay Business Policies */}
-            {ebayToken && (
-              <div className="space-y-3 border-t border-border pt-4">
-                <div className="flex items-center gap-1.5">
-                  <LockOpen className="w-3.5 h-3.5 text-primary" />
-                  <label className={`text-xs font-medium uppercase tracking-wide ${
-                    Object.keys(policyValidationErrors).length > 0 ? "text-destructive" : "text-muted-foreground"
-                  }`}>
-                    eBay Policies
-                    {Object.keys(policyValidationErrors).length > 0 && <span className="text-destructive ml-1">*</span>}
-                  </label>
-                </div>
-                <EbayPolicySelector
-                  userToken={ebayToken}
-                  onPoliciesSelected={setSelectedPolicies}
-                  showDetails={false}
-                  disabled={publishing}
-                  policyErrors={policyValidationErrors}
-                />
-              </div>
-            )}
-
             {/* Action buttons */}
             <div className="space-y-2">
               <button
@@ -1119,15 +691,8 @@ export default function AnalyzePage() {
               {isOwner ? (
                 <button
                   onClick={handlePublish}
-                  disabled={publishing || !isValid || !categoryId}
+                  disabled={publishing}
                   className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
-                  title={
-                    !isValid
-                      ? "Please fill in all required fields correctly"
-                      : !categoryId
-                      ? "Discover and select a category first"
-                      : "Publish listing to eBay"
-                  }
                 >
                   {publishing ? (
                     <>
