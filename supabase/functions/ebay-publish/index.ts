@@ -243,6 +243,18 @@ serve(async (req) => {
     const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
 
+    // Environment diagnostic log — emitted on every invocation to aid debugging.
+    // Masks secrets: shows only first 8 chars of clientId, booleans for secrets.
+    console.log("ebay-publish invoked:", {
+      action,
+      ebayEnv,
+      hasClientId: !!clientId,
+      clientIdPrefix: clientId ? clientId.substring(0, 8) + "..." : "MISSING",
+      hasClientSecret: !!clientSecret,
+      hasSupabaseUrl: !!Deno.env.get("SUPABASE_URL"),
+      hasServiceKey: !!Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+    });
+
     // NOTE: clientId/clientSecret are only required for actions that call eBay OAuth endpoints
     // (exchange_code, refresh_token, get_auth_url, create_draft, bulk_create_draft).
     // get_stored_token and get_policies only need Supabase credentials, so we defer
@@ -338,6 +350,10 @@ serve(async (req) => {
 
       // --- Store token server-side in Supabase profiles table ---
       // Avoids exposing the token in localStorage (XSS risk).
+      // IMPORTANT: Use upsert (not update) so this works even if the profiles row
+      // doesn't exist yet. .update() silently affects 0 rows with no error when
+      // the row is missing — the token would never be stored server-side, causing
+      // get_stored_token to always return null and policies to fail to load.
       if (userId) {
         try {
           const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -345,18 +361,43 @@ serve(async (req) => {
           if (supabaseUrl && supabaseServiceKey) {
             const supabase = createClient(supabaseUrl, supabaseServiceKey);
             const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
+
+            // upsert with onConflict: "id" — creates the row if missing, updates if present
             const { error: upsertError } = await supabase
               .from("profiles")
-              .update({
-                ebay_access_token: tokenData.access_token,
-                ebay_refresh_token: tokenData.refresh_token ?? null,
-                ebay_token_expires_at: expiresAt,
-              })
-              .eq("id", userId);
+              .upsert(
+                {
+                  id: userId,
+                  ebay_access_token: tokenData.access_token,
+                  ebay_refresh_token: tokenData.refresh_token ?? null,
+                  ebay_token_expires_at: expiresAt,
+                },
+                { onConflict: "id" }
+              );
+
             if (upsertError) {
-              console.warn("exchange_code: failed to store token in profiles:", upsertError.message);
+              console.warn("exchange_code: failed to upsert token in profiles:", upsertError.message);
             } else {
-              console.log("exchange_code: token stored in profiles for user", userId);
+              // Read-back verification: confirm the token was actually stored
+              const { data: verifyData, error: verifyError } = await supabase
+                .from("profiles")
+                .select("ebay_access_token, ebay_token_expires_at")
+                .eq("id", userId)
+                .single();
+
+              if (verifyError || !verifyData?.ebay_access_token) {
+                console.warn(
+                  "exchange_code: upsert succeeded but read-back verification FAILED for user",
+                  userId,
+                  "verifyError:", verifyError?.message ?? "token null after upsert"
+                );
+              } else {
+                console.log(
+                  "exchange_code: token upserted and verified in profiles for user",
+                  userId,
+                  "expires_at:", verifyData.ebay_token_expires_at
+                );
+              }
             }
           }
         } catch (storeErr) {
@@ -944,32 +985,56 @@ serve(async (req) => {
         "Content-Type": "application/json",
       };
 
-      const fetchPolicies = async (policyType: string): Promise<Array<{ id: string; name: string }>> => {
-        const resp = await fetch(
-          `${apiBase}/sell/account/v1/${policyType}_policy?marketplace_id=EBAY_US`,
-          { headers: authHeaders }
-        );
-        if (!resp.ok) {
-          console.warn(`get_policies: could not fetch ${policyType} policies:`, resp.status);
-          return [];
+      // Fetch each policy type independently so one failure doesn't kill all three.
+      // Returns { policies, error } — error is non-null if the fetch failed.
+      const fetchPoliciesSafe = async (
+        policyType: string
+      ): Promise<{ policies: Array<{ id: string; name: string }>; error: string | null }> => {
+        try {
+          const resp = await fetch(
+            `${apiBase}/sell/account/v1/${policyType}_policy?marketplace_id=EBAY_US`,
+            { headers: authHeaders }
+          );
+          if (!resp.ok) {
+            const errText = await resp.text();
+            console.warn(`get_policies: ${policyType} policy fetch failed (${resp.status}):`, errText);
+            return { policies: [], error: `${policyType} policies unavailable (HTTP ${resp.status})` };
+          }
+          const data = await resp.json();
+          const key = `${policyType}Policies`;
+          const rawPolicies = data[key] || [];
+          const policies = rawPolicies.map((p: Record<string, string>) => ({
+            id: p[`${policyType}PolicyId`] || p.policyId || "",
+            name: p.name || "(unnamed)",
+          }));
+          console.log(`get_policies: fetched ${policies.length} ${policyType} policies`);
+          return { policies, error: null };
+        } catch (fetchErr) {
+          console.warn(`get_policies: ${policyType} policy fetch threw:`, fetchErr);
+          return { policies: [], error: `${policyType} policies fetch error` };
         }
-        const data = await resp.json();
-        const key = `${policyType}Policies`;
-        const policies = data[key] || [];
-        return policies.map((p: Record<string, string>) => ({
-          id: p[`${policyType}PolicyId`] || p.policyId || "",
-          name: p.name || "(unnamed)",
-        }));
       };
 
-      const [fulfillment, payment, returns] = await Promise.all([
-        fetchPolicies("fulfillment"),
-        fetchPolicies("payment"),
-        fetchPolicies("return"),
+      // Run all three fetches concurrently; each is independently error-isolated
+      const [fulfillmentResult, paymentResult, returnsResult] = await Promise.all([
+        fetchPoliciesSafe("fulfillment"),
+        fetchPoliciesSafe("payment"),
+        fetchPoliciesSafe("return"),
       ]);
 
+      // Collect any per-type errors for the client to display
+      const policyErrors: Record<string, string> = {};
+      if (fulfillmentResult.error) policyErrors.fulfillment = fulfillmentResult.error;
+      if (paymentResult.error)     policyErrors.payment     = paymentResult.error;
+      if (returnsResult.error)     policyErrors.returns     = returnsResult.error;
+
       return new Response(
-        JSON.stringify({ fulfillment, payment, returns }),
+        JSON.stringify({
+          fulfillment: fulfillmentResult.policies,
+          payment:     paymentResult.policies,
+          returns:     returnsResult.policies,
+          ...(Object.keys(policyErrors).length > 0 ? { policyErrors } : {}),
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -980,16 +1045,25 @@ serve(async (req) => {
     });
   } catch (e) {
     const errorMsg = e instanceof Error ? e.message : "Unknown error";
-    console.error("ebay-publish error:", errorMsg);
+    // Include action in error log so we can identify which handler threw
+    // (action may be undefined if JSON parsing itself failed)
+    const actionLabel = typeof action !== "undefined" ? action : "unknown";
+    console.error(`ebay-publish error [action=${actionLabel}]:`, errorMsg, e instanceof Error ? e.stack : "");
 
+    // Only treat as a 400 client error for explicit configuration/input problems.
+    // eBay API error strings (e.g. "Failed to create inventory item: 400 - {...}")
+    // must NOT match here — they should be 500s so the client knows it's a server-side
+    // eBay API failure, not a missing-parameter problem on the client side.
     const isClientError =
       errorMsg.includes("not configured") ||
       errorMsg.includes("not provided") ||
-      errorMsg.includes("No authorization") ||
-      errorMsg.includes("Missing");
+      errorMsg.includes("No authorization code") ||
+      errorMsg.includes("No userId provided") ||
+      errorMsg.includes("No drafts provided") ||
+      errorMsg.includes("No eBay user token provided");
 
     return new Response(
-      JSON.stringify({ error: errorMsg }),
+      JSON.stringify({ error: errorMsg, action: actionLabel }),
       {
         status: isClientError ? 400 : 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
