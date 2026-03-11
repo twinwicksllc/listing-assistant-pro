@@ -208,17 +208,18 @@ When analyzing, you MUST:
    Set isSlabbed to true ONLY if the coin is visibly encapsulated in a certified holder.
 
    **CRITICAL: Map Sheldon grades to eBay condition codes for coins & bullion:**
+   eBay coin categories (261068, etc.) do NOT support PRE_OWNED_* conditions. Use:
    - MS-60 to MS-70 → Use "NEW" (uncirculated, mint state)
-   - AU-50 to AU-58 → Use "PRE_OWNED_GOOD" (almost uncirculated, minimal wear)
-   - XF-40 to XF-45 → Use "PRE_OWNED_GOOD" (extremely fine, light wear)
-   - VF-20 to VF-35 → Use "PRE_OWNED_FAIR" (very fine, moderate wear)
-   - F-12 to VF-12 → Use "PRE_OWNED_FAIR" (fine, visible wear)
-   - VG-8 to VG-10 → Use "PRE_OWNED_POOR" (very good, heavy wear)
-   - G-4 to G-6 → Use "PRE_OWNED_POOR" (good, very heavy wear)
+   - AU-50 to AU-58 → Use "EXCELLENT_REFURBISHED" (almost uncirculated, minimal wear)
+   - XF-40 to XF-45 → Use "EXCELLENT_REFURBISHED" (extremely fine, light wear)
+   - VF-20 to VF-35 → Use "VERY_GOOD_REFURBISHED" (very fine, moderate wear)
+   - F-12 to VF-12 → Use "GOOD_REFURBISHED" (fine, visible wear)
+   - VG-8 to VG-10 → Use "GOOD_REFURBISHED" (very good, heavy wear)
+   - G-4 to G-6 → Use "FOR_PARTS_OR_NOT_WORKING" (good, very heavy wear)
    - FR (Fair) or lower → Use "FOR_PARTS_OR_NOT_WORKING"
    
    For slabbed coins with certification (PCGS, NGC), use "CERTIFIED_REFURBISHED" as the eBay condition.
-   NEVER use "LIKE_NEW" for coins — it is not valid for coin categories on eBay.
+   NEVER use "LIKE_NEW" or "PRE_OWNED_*" for coins — these are not valid for coin categories on eBay.
 
 5. **eBay Item Specifics**: You MUST extract structured item specifics that map directly to eBay's required fields.
 
@@ -372,6 +373,21 @@ Return your analysis using the provided tool.`;
                       description:
                         "The most specific eBay category ID for this item (e.g., '41111' for American Silver Eagles)",
                     },
+                    suggestedCategories: {
+                      type: "array",
+                      description: "Top 3 most relevant eBay category suggestions for this item, ordered by best match first. The first entry should match ebayCategoryId.",
+                      items: {
+                        type: "object",
+                        properties: {
+                          categoryId: { type: "string", description: "eBay category ID" },
+                          categoryName: { type: "string", description: "Human-readable full category path (e.g., 'Coins & Paper Money > Bullion > Silver > Rounds & Medallions')" },
+                          reason: { type: "string", description: "One-sentence reason why this category fits (e.g., 'Best match for silver rounds from foreign mints')" },
+                        },
+                        required: ["categoryId", "categoryName", "reason"],
+                      },
+                      minItems: 1,
+                      maxItems: 3,
+                    },
                     itemSpecifics: {
                       type: "object",
                       description: "Key-value pairs of eBay item specifics. Populate ALL applicable fields.",
@@ -412,7 +428,7 @@ Return your analysis using the provided tool.`;
                     condition: {
                       type: "string",
                       enum: ["NEW", "LIKE_NEW", "NEW_OTHER", "NEW_WITH_DEFECTS", "CERTIFIED_REFURBISHED", "EXCELLENT_REFURBISHED", "VERY_GOOD_REFURBISHED", "GOOD_REFURBISHED", "SELLER_REFURBISHED", "PRE_OWNED_GOOD", "PRE_OWNED_FAIR", "PRE_OWNED_POOR", "FOR_PARTS_OR_NOT_WORKING"],
-                      description: "eBay item condition. For coins/bullion: prefer NEW, CERTIFIED_REFURBISHED (slabbed), PRE_OWNED_GOOD (slightly used), PRE_OWNED_FAIR (worn), PRE_OWNED_POOR (heavily worn). AVOID LIKE_NEW for coins (not valid for those categories). For electronics/general items: use any condition that accurately reflects the item's state.",
+                      description: "eBay item condition. For coins/bullion: use NEW (uncirculated/MS), CERTIFIED_REFURBISHED (slabbed), EXCELLENT_REFURBISHED (AU/XF), VERY_GOOD_REFURBISHED (VF), GOOD_REFURBISHED (F/VG), or FOR_PARTS_OR_NOT_WORKING (G or poor). DO NOT use LIKE_NEW or PRE_OWNED_* for coins — they are not valid for eBay coin categories. For electronics/general items: use any condition that accurately reflects the item's state.",
                     },
                     suggestedGrade: {
                       type: "string",
@@ -427,7 +443,7 @@ Return your analysis using the provided tool.`;
                       description: "True if the coin is already in a certified grading slab (PCGS, NGC, etc.)",
                     },
                   },
-                  required: ["title", "description", "priceMin", "priceMax", "pricingNotes", "metalType", "metalWeightOz", "ebayCategoryId", "itemSpecifics", "condition", "suggestedGrade", "gradingRationale", "isSlabbed"],
+                  required: ["title", "description", "priceMin", "priceMax", "pricingNotes", "metalType", "metalWeightOz", "ebayCategoryId", "suggestedCategories", "itemSpecifics", "condition", "suggestedGrade", "gradingRationale", "isSlabbed"],
                   additionalProperties: false,
                 },
               },

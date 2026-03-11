@@ -34,6 +34,7 @@ export default function AnalyzePage() {
   const [metalType, setMetalType] = useState<string>("none");
   const [metalWeightOz, setMetalWeightOz] = useState<number>(0);
   const [ebayCategoryId, setEbayCategoryId] = useState<string>("");
+  const [suggestedCategories, setSuggestedCategories] = useState<Array<{ categoryId: string; categoryName: string; reason: string }>>([]);
   const [itemSpecifics, setItemSpecifics] = useState<ItemSpecifics>({});
   const [condition, setCondition] = useState<string>("PRE_OWNED_GOOD");
   const [exportPlatform, setExportPlatform] = useState<ExportPlatform>("ebay_file_exchange");
@@ -126,6 +127,7 @@ export default function AnalyzePage() {
       setMetalType(data.metalType || "none");
       setMetalWeightOz(data.metalWeightOz || 0);
       setEbayCategoryId(data.ebayCategoryId || "");
+      setSuggestedCategories(data.suggestedCategories || []);
       setItemSpecifics(data.itemSpecifics || {});
       setCondition(data.condition || "PRE_OWNED_GOOD");
       setSuggestedGrade(data.suggestedGrade || "");
@@ -440,10 +442,42 @@ export default function AnalyzePage() {
                 <div className="flex items-center gap-1.5">
                   <Tag className="w-3.5 h-3.5 text-primary" />
                   <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">eBay Item Specifics</label>
-                  {ebayCategoryId && (
-                    <span className="ml-auto text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                      Cat: {ebayCategoryId}
-                    </span>
+                </div>
+                {/* Category selector — top 3 AI suggestions + manual override */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">eBay Category</label>
+                  <select
+                    value={ebayCategoryId}
+                    onChange={(e) => setEbayCategoryId(e.target.value)}
+                    className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    {suggestedCategories.length > 0 ? (
+                      suggestedCategories.map((cat) => (
+                        <option key={cat.categoryId} value={cat.categoryId}>
+                          #{cat.categoryId} — {cat.categoryName}
+                        </option>
+                      ))
+                    ) : ebayCategoryId ? (
+                      <option value={ebayCategoryId}>#{ebayCategoryId} — {getEbayCategoryBreadcrumb(ebayCategoryId) || "AI selected"}</option>
+                    ) : (
+                      <option value="">No category selected</option>
+                    )}
+                    <option value="__custom__">✏️ Enter custom category ID...</option>
+                  </select>
+                  {ebayCategoryId === "__custom__" && (
+                    <input
+                      autoFocus
+                      type="text"
+                      placeholder="Enter eBay category ID (e.g. 261069)"
+                      className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                      onBlur={(e) => { if (e.target.value.trim()) setEbayCategoryId(e.target.value.trim()); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") { const v = (e.target as HTMLInputElement).value.trim(); if (v) setEbayCategoryId(v); } }}
+                    />
+                  )}
+                  {suggestedCategories.find(c => c.categoryId === ebayCategoryId)?.reason && (
+                    <p className="text-[10px] text-muted-foreground italic px-1">
+                      {suggestedCategories.find(c => c.categoryId === ebayCategoryId)?.reason}
+                    </p>
                   )}
                 </div>
                 <div className="bg-card border border-border rounded-lg divide-y divide-border">

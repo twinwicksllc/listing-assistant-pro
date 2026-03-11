@@ -63,12 +63,14 @@ const LEGACY_CONDITION_MAP: Record<string, string> = {
 // ----------------------------------------------------------------
 // Validate condition for a given category
 // Different categories have different valid conditions.
-// For coins/bullion (category IDs 261068, 261069, etc.), LIKE_NEW is not valid.
-// Map invalid conditions to the closest valid alternative.
+// For coins/bullion (category IDs 261068, 261069, etc.), restrictions vary:
+// - Coins (Type: "Coin"): Only NEW, REFURBISHED variants, FOR_PARTS allowed
+// - Bullion Rounds/Bars (Type: "Round", "Bar", etc.): Broader conditions allowed
 // ----------------------------------------------------------------
 function normalizeConditionForCategory(
   rawCondition: string,
-  categoryId: string | undefined
+  categoryId: string | undefined,
+  itemType: string | undefined = undefined
 ): { condition: string; corrected: boolean } {
   // First apply legacy migration
   const condition = LEGACY_CONDITION_MAP[rawCondition] ?? rawCondition;
@@ -78,33 +80,57 @@ function normalizeConditionForCategory(
     categoryId && /^261[0-9]{3}$/.test(categoryId) && parseInt(categoryId) >= 261000 && parseInt(categoryId) <= 261073;
 
   if (isCoinOrBullion) {
-    // For coins/bullion, LIKE_NEW is not valid. Valid conditions:
-    // NEW, CERTIFIED_REFURBISHED, EXCELLENT_REFURBISHED, VERY_GOOD_REFURBISHED,
-    // GOOD_REFURBISHED, PRE_OWNED_GOOD, PRE_OWNED_FAIR, PRE_OWNED_POOR, FOR_PARTS_OR_NOT_WORKING
-    const validForCoins = [
-      "NEW",
-      "CERTIFIED_REFURBISHED",
-      "EXCELLENT_REFURBISHED",
-      "VERY_GOOD_REFURBISHED",
-      "GOOD_REFURBISHED",
-      "PRE_OWNED_GOOD",
-      "PRE_OWNED_FAIR",
-      "PRE_OWNED_POOR",
-      "FOR_PARTS_OR_NOT_WORKING",
-    ];
+    // Determine if it's a coin or bullion round/bar
+    const isCoin = itemType?.toLowerCase().includes("coin");
+    const isBullion = itemType?.toLowerCase().match(/round|bar|ingot|wafer/i);
+    
+    let validConditions: string[];
+    
+    if (isCoin) {
+      // Coins have strict restrictions: NEW, CERTIFIED_REFURBISHED, EXCELLENT_REFURBISHED, 
+      // VERY_GOOD_REFURBISHED, GOOD_REFURBISHED, FOR_PARTS_OR_NOT_WORKING
+      validConditions = [
+        "NEW",
+        "CERTIFIED_REFURBISHED",
+        "EXCELLENT_REFURBISHED",
+        "VERY_GOOD_REFURBISHED",
+        "GOOD_REFURBISHED",
+        "FOR_PARTS_OR_NOT_WORKING",
+      ];
+    } else {
+      // Bullion rounds/bars may have broader condition support
+      // Allow most conditions except LIKE_NEW
+      validConditions = [
+        "NEW",
+        "NEW_OTHER",
+        "NEW_WITH_DEFECTS",
+        "CERTIFIED_REFURBISHED",
+        "EXCELLENT_REFURBISHED",
+        "VERY_GOOD_REFURBISHED",
+        "GOOD_REFURBISHED",
+        "SELLER_REFURBISHED",
+        "PRE_OWNED_GOOD",
+        "PRE_OWNED_FAIR",
+        "PRE_OWNED_POOR",
+        "FOR_PARTS_OR_NOT_WORKING",
+      ];
+    }
 
-    if (!validForCoins.includes(condition)) {
+    if (!validConditions.includes(condition)) {
       // Map invalid conditions to valid alternatives
       const conditionMap: Record<string, string> = {
-        LIKE_NEW: "PRE_OWNED_GOOD", // LIKE_NEW not valid for coins
-        NEW_OTHER: "PRE_OWNED_GOOD",
-        NEW_WITH_DEFECTS: "PRE_OWNED_FAIR",
-        SELLER_REFURBISHED: "GOOD_REFURBISHED",
+        LIKE_NEW: isCoin ? "NEW" : "PRE_OWNED_GOOD",
+        NEW_OTHER: isCoin ? "NEW" : "PRE_OWNED_GOOD",
+        NEW_WITH_DEFECTS: isCoin ? "GOOD_REFURBISHED" : "PRE_OWNED_FAIR",
+        SELLER_REFURBISHED: isCoin ? "GOOD_REFURBISHED" : "SELLER_REFURBISHED",
+        PRE_OWNED_GOOD: isCoin ? "NEW" : "PRE_OWNED_GOOD",
+        PRE_OWNED_FAIR: isCoin ? "GOOD_REFURBISHED" : "PRE_OWNED_FAIR",
+        PRE_OWNED_POOR: isCoin ? "FOR_PARTS_OR_NOT_WORKING" : "PRE_OWNED_POOR",
       };
 
-      const mappedCondition = conditionMap[condition] || "PRE_OWNED_GOOD";
+      const mappedCondition = conditionMap[condition] || (isCoin ? "NEW" : "PRE_OWNED_GOOD");
       console.log(
-        `normalizeConditionForCategory: mapping invalid coin condition ${condition} -> ${mappedCondition}`
+        `normalizeConditionForCategory: mapping ${condition} -> ${mappedCondition} for ${isCoin ? "coin" : "bullion"} in category ${categoryId} (Type: ${itemType || "unknown"})`
       );
       return { condition: mappedCondition, corrected: true };
     }
@@ -158,6 +184,8 @@ function buildFixedPriceOffer(params: {
   sku: string;
   description: string;
   listingPrice: number;
+  condition: string;
+  conditionDescription: string;
   ebayCategoryId?: string;
   merchantLocationKey: string;
   fulfillmentPolicyId: string;
@@ -188,6 +216,8 @@ function buildFixedPriceOffer(params: {
       },
     },
     listingPolicies,
+    condition: params.condition,
+    conditionDescription: params.conditionDescription,
   };
   if (params.ebayCategoryId) {
     offer.categoryId = params.ebayCategoryId;
@@ -205,6 +235,8 @@ function buildAuctionOffer(params: {
   auctionStartPrice: number;
   auctionBuyItNow?: number;
   auctionDuration: string;
+  condition: string;
+  conditionDescription: string;
   ebayCategoryId?: string;
   merchantLocationKey: string;
   fulfillmentPolicyId: string;
@@ -255,6 +287,8 @@ function buildAuctionOffer(params: {
       if (params.paymentPolicyId) policies.paymentPolicyId = params.paymentPolicyId;
       return policies;
     })(),
+    condition: params.condition,
+    conditionDescription: params.conditionDescription,
   };
   if (params.ebayCategoryId) {
     offer.categoryId = params.ebayCategoryId;
@@ -830,6 +864,8 @@ serve(async (req) => {
       if (!userToken) throw new Error("No eBay user token provided");
 
       console.log(`create_draft: starting publish - title="${title}", format=${listingFormat}, env=${ebayEnv}`);
+      console.log(`create_draft: received condition from payload: ${condition}`);
+      console.log(`create_draft: received ebayCategoryId=${ebayCategoryId}, condition=${condition}, itemSpecifics=${JSON.stringify(itemSpecifics || {})}`);
       console.log(`create_draft: itemSpecifics received:`, JSON.stringify(itemSpecifics || {}, null, 2));
 
       // Use deterministic SKU if provided (preferred — enables idempotent retries).
@@ -866,21 +902,30 @@ serve(async (req) => {
 
       console.log(`create_draft: aspects built from itemSpecifics:`, JSON.stringify(aspects, null, 2));
 
+      // Extract the item Type (e.g., "Coin", "Round", "Bar") from itemSpecifics
+      // This is used to disambiguate coins from bullion when validating conditions
+      const itemType = itemSpecifics && typeof itemSpecifics === "object" 
+        ? (itemSpecifics as Record<string, unknown>).Type as string | undefined
+        : undefined;
+
       // Map internal condition string to numeric conditionId
       // eBay Inventory API accepts ConditionEnum strings, but many categories
       // also require the numeric conditionId. We send both for maximum compatibility.
       // Migrate any legacy deprecated condition codes to current equivalents,
-      // then normalize based on the category (e.g., LIKE_NEW not valid for coins).
+      // then normalize based on the category and item type (e.g., LIKE_NEW not valid for coins).
       const rawCondition = condition || "PRE_OWNED_GOOD";
       const { condition: normalizedCondition, corrected } = normalizeConditionForCategory(
         rawCondition,
-        ebayCategoryId
+        ebayCategoryId,
+        itemType
       );
       const conditionEnum = normalizedCondition;
       const conditionId = CONDITION_ID_MAP[conditionEnum] ?? 3000;
       const conditionDesc = CONDITION_DESCRIPTIONS[conditionEnum]
         ?? conditionEnum.replace(/_/g, " ").toLowerCase()
              .replace(/\b\w/g, (c: string) => c.toUpperCase());
+
+      console.log(`create_draft: condition normalization - rawCondition=${rawCondition}, normalized=${normalizedCondition}, conditionId=${conditionId}, categoryId=${ebayCategoryId}, corrected=${corrected}`);
 
       if (corrected) {
         console.log(
@@ -943,7 +988,8 @@ serve(async (req) => {
         (inventoryBody.product as Record<string, unknown>).aspects = aspects;
       }
 
-      console.log(`create_draft: creating inventory item for sku=${sku}, condition=${conditionEnum}, merchantLocationKey=${merchantLocationKey}`);
+      console.log(`create_draft: creating inventory item for sku=${sku}, condition=${conditionEnum} (raw=${rawCondition}), merchantLocationKey=${merchantLocationKey}`);
+      console.log(`create_draft: inventory body condition:`, JSON.stringify({ condition: conditionEnum, conditionDescription: conditionDesc }));
 
       const inventoryResp = await fetchWithTimeout(
         `${apiBase}/sell/inventory/v1/inventory_item/${sku}`,
@@ -1035,6 +1081,8 @@ serve(async (req) => {
         sku,
         description,
         listingPrice: Number(listingPrice ?? 0),
+        condition: conditionEnum,
+        conditionDescription: conditionDesc,
         ebayCategoryId: ebayCategoryId || undefined,
         merchantLocationKey,
         fulfillmentPolicyId,
@@ -1043,6 +1091,8 @@ serve(async (req) => {
       });
 
       console.log(`create_draft: built offer for sku=${sku}, price=${listingPrice}, category=${ebayCategoryId || "NONE"}`);
+      console.log(`create_draft: offer body categories - categoryId in offer=${(offerBody as Record<string, unknown>).categoryId || "MISSING"}`);
+      console.log(`create_draft: offer body:`, JSON.stringify(offerBody, null, 2));
 
       const offerResp = await fetchWithTimeout(`${apiBase}/sell/inventory/v1/offer`, {
         method: "POST",
@@ -1093,12 +1143,18 @@ serve(async (req) => {
       console.log(`create_draft: proceeding to publish offerId=${offerId}...`);
 
       // Step 5: Publish the offer to make it a live listing
+      // The publish endpoint can accept a body with condition/conditionDescription to override inventory defaults
+      const publishBody: Record<string, unknown> = {
+        condition: conditionEnum,
+      };
+
       const publishResp = await fetchWithTimeout(
         `${apiBase}/sell/inventory/v1/offer/${offerId}/publish`,
         {
           method: "POST",
           timeout: 15000,
           headers: authHeaders,
+          body: JSON.stringify(publishBody),
         }
       );
 
@@ -1106,6 +1162,7 @@ serve(async (req) => {
         const errText = await publishResp.text();
         console.error("create_draft: eBay publish error:", publishResp.status, errText);
         console.error("create_draft: failing to publish offer", offerId, "for sku", sku);
+        console.error(`create_draft: publish failed with condition=${conditionEnum} (id=${conditionId}), category=${ebayCategoryId}, format=${listingFormat}`);
         return new Response(
           JSON.stringify({
             error: `Offer created (ID: ${offerId}) but publish failed: ${publishResp.status} - ${errText}`,
