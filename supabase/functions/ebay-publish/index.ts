@@ -69,6 +69,35 @@ const DEFAULT_AUCTION_DURATION = "Days_7";
 const VALID_AUCTION_DURATIONS = ["Days_1", "Days_3", "Days_5", "Days_7", "Days_10"];
 
 // ----------------------------------------------------------------
+// Helper: fetch with timeout to prevent hanging requests
+// ----------------------------------------------------------------
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit & { timeout?: number } = {}
+): Promise<Response> {
+  const timeout = options.timeout ?? 15000; // 15 second default
+  const { timeout: _timeout, ...fetchOptions } = options;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(url, {
+      ...fetchOptions,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Request to ${url} timed out after ${timeout}ms`);
+    }
+    throw error;
+  }
+}
+
+// ----------------------------------------------------------------
 // Build a fixed-price offer payload
 // ----------------------------------------------------------------
 function buildFixedPriceOffer(params: {
@@ -205,7 +234,7 @@ async function ensureInventoryLocation(
     locationTypes: ["WAREHOUSE"],
   };
 
-  const resp = await fetch(
+  const resp = await fetchWithTimeout(
     `${apiBase}/sell/inventory/v1/location/${merchantLocationKey}`,
     {
       method: "PUT",
@@ -216,6 +245,7 @@ async function ensureInventoryLocation(
         "Content-Language": "en-US",
       },
       body: JSON.stringify(locationBody),
+      timeout: 15000,
     }
   );
 
@@ -337,8 +367,9 @@ serve(async (req) => {
 
       const credentials = btoa(`${clientId}:${clientSecret}`);
 
-      const resp = await fetch(tokenUrl, {
+      const resp = await fetchWithTimeout(tokenUrl, {
         method: "POST",
+        timeout: 15000,
         headers: {
           Authorization: `Basic ${credentials}`,
           "Content-Type": "application/x-www-form-urlencoded",
@@ -464,8 +495,9 @@ serve(async (req) => {
       }
 
       const credentials = btoa(`${clientId}:${clientSecret}`);
-      const refreshResp = await fetch(tokenUrl, {
+      const refreshResp = await fetchWithTimeout(tokenUrl, {
         method: "POST",
+        timeout: 15000,
         headers: {
           Authorization: `Basic ${credentials}`,
           "Content-Type": "application/x-www-form-urlencoded",
@@ -577,11 +609,14 @@ serve(async (req) => {
         }
         try {
           const credentials = btoa(`${clientId}:${clientSecret}`);
-          const refreshResp = await fetch(tokenUrl, {
+          const refreshResp = await fetchWithTimeout(tokenUrl, {
             method: "POST",
+            timeout: 15000,
             headers: {
               Authorization: `Basic ${credentials}`,
               "Content-Type": "application/x-www-form-urlencoded",
+              "Accept-Language": "en-US",
+              "Content-Language": "en-US",
             },
             body: new URLSearchParams({
               grant_type: "refresh_token",
@@ -745,10 +780,11 @@ serve(async (req) => {
         "Content-Language": "en-US",
       };
 
-      const inventoryResp = await fetch(
+      const inventoryResp = await fetchWithTimeout(
         `${apiBase}/sell/inventory/v1/inventory_item/${sku}`,
         {
           method: "PUT",
+          timeout: 15000,
           headers: authHeaders,
           body: JSON.stringify(inventoryBody),
         }
@@ -771,9 +807,9 @@ serve(async (req) => {
 
       // Step 3: Fetch business policies (use draft-level if set, else auto-fetch first)
       const fetchDefaultPolicy = async (policyType: string): Promise<string | null> => {
-        const resp = await fetch(
+        const resp = await fetchWithTimeout(
           `${apiBase}/sell/account/v1/${policyType}_policy?marketplace_id=EBAY_US`,
-          { headers: authHeaders }
+          { headers: authHeaders, timeout: 15000 }
         );
         if (!resp.ok) {
           console.warn(`Could not fetch ${policyType} policies:`, resp.status);
@@ -842,8 +878,9 @@ serve(async (req) => {
         returnPolicyId,
       });
 
-      const offerResp = await fetch(`${apiBase}/sell/inventory/v1/offer`, {
+      const offerResp = await fetchWithTimeout(`${apiBase}/sell/inventory/v1/offer`, {
         method: "POST",
+        timeout: 15000,
         headers: authHeaders,
         body: JSON.stringify(offerBody),
       });
@@ -858,10 +895,11 @@ serve(async (req) => {
       const offerId = offerData.offerId;
 
       // Step 5: Publish the offer to make it a live listing
-      const publishResp = await fetch(
+      const publishResp = await fetchWithTimeout(
         `${apiBase}/sell/inventory/v1/offer/${offerId}/publish`,
         {
           method: "POST",
+          timeout: 15000,
           headers: authHeaders,
         }
       );
@@ -1024,9 +1062,9 @@ serve(async (req) => {
         policyType: string
       ): Promise<{ policies: Array<{ id: string; name: string }>; error: string | null }> => {
         try {
-          const resp = await fetch(
+          const resp = await fetchWithTimeout(
             `${apiBase}/sell/account/v1/${policyType}_policy?marketplace_id=EBAY_US`,
-            { headers: authHeaders }
+            { headers: authHeaders, timeout: 15000 }
           );
           if (!resp.ok) {
             const errText = await resp.text();
