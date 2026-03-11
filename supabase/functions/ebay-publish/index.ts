@@ -63,15 +63,14 @@ const LEGACY_CONDITION_MAP: Record<string, string> = {
 // ----------------------------------------------------------------
 // Validate condition for a given category
 // Different categories have different valid conditions.
-// For coins/bullion (category IDs 261068, 261069, etc.), only specific conditions are valid:
-// - NEW: for uncirculated/BU coins
-// - CERTIFIED_REFURBISHED: for slabbed coins from grading services
-// - EXCELLENT_REFURBISHED, VERY_GOOD_REFURBISHED, GOOD_REFURBISHED: for some graded coins
-// PRE_OWNED_* conditions are NOT valid for most coin categories on eBay.
+// For coins/bullion (category IDs 261068, 261069, etc.), restrictions vary:
+// - Coins (Type: "Coin"): Only NEW, REFURBISHED variants, FOR_PARTS allowed
+// - Bullion Rounds/Bars (Type: "Round", "Bar", etc.): Broader conditions allowed
 // ----------------------------------------------------------------
 function normalizeConditionForCategory(
   rawCondition: string,
-  categoryId: string | undefined
+  categoryId: string | undefined,
+  itemType: string | undefined = undefined
 ): { condition: string; corrected: boolean } {
   // First apply legacy migration
   const condition = LEGACY_CONDITION_MAP[rawCondition] ?? rawCondition;
@@ -81,34 +80,57 @@ function normalizeConditionForCategory(
     categoryId && /^261[0-9]{3}$/.test(categoryId) && parseInt(categoryId) >= 261000 && parseInt(categoryId) <= 261073;
 
   if (isCoinOrBullion) {
-    // For most coin categories (esp. 261068), the valid conditions are:
-    // NEW, CERTIFIED_REFURBISHED, EXCELLENT_REFURBISHED, VERY_GOOD_REFURBISHED,
-    // GOOD_REFURBISHED, and FOR_PARTS_OR_NOT_WORKING
-    // PRE_OWNED_* conditions are typically NOT valid for eBay coin categories.
-    const validForCoins = [
-      "NEW",
-      "CERTIFIED_REFURBISHED",
-      "EXCELLENT_REFURBISHED",
-      "VERY_GOOD_REFURBISHED",
-      "GOOD_REFURBISHED",
-      "FOR_PARTS_OR_NOT_WORKING",
-    ];
+    // Determine if it's a coin or bullion round/bar
+    const isCoin = itemType?.toLowerCase().includes("coin");
+    const isBullion = itemType?.toLowerCase().match(/round|bar|ingot|wafer/i);
+    
+    let validConditions: string[];
+    
+    if (isCoin) {
+      // Coins have strict restrictions: NEW, CERTIFIED_REFURBISHED, EXCELLENT_REFURBISHED, 
+      // VERY_GOOD_REFURBISHED, GOOD_REFURBISHED, FOR_PARTS_OR_NOT_WORKING
+      validConditions = [
+        "NEW",
+        "CERTIFIED_REFURBISHED",
+        "EXCELLENT_REFURBISHED",
+        "VERY_GOOD_REFURBISHED",
+        "GOOD_REFURBISHED",
+        "FOR_PARTS_OR_NOT_WORKING",
+      ];
+    } else {
+      // Bullion rounds/bars may have broader condition support
+      // Allow most conditions except LIKE_NEW
+      validConditions = [
+        "NEW",
+        "NEW_OTHER",
+        "NEW_WITH_DEFECTS",
+        "CERTIFIED_REFURBISHED",
+        "EXCELLENT_REFURBISHED",
+        "VERY_GOOD_REFURBISHED",
+        "GOOD_REFURBISHED",
+        "SELLER_REFURBISHED",
+        "PRE_OWNED_GOOD",
+        "PRE_OWNED_FAIR",
+        "PRE_OWNED_POOR",
+        "FOR_PARTS_OR_NOT_WORKING",
+      ];
+    }
 
-    if (!validForCoins.includes(condition)) {
-      // Map invalid conditions to valid alternatives for coins
+    if (!validConditions.includes(condition)) {
+      // Map invalid conditions to valid alternatives
       const conditionMap: Record<string, string> = {
-        LIKE_NEW: "NEW", // BU/LIKE_NEW coins should be NEW
-        NEW_OTHER: "NEW",
-        NEW_WITH_DEFECTS: "GOOD_REFURBISHED",
-        SELLER_REFURBISHED: "GOOD_REFURBISHED",
-        PRE_OWNED_GOOD: "NEW", // If AI selected PRE_OWNED_GOOD, try NEW for uncirculated coins
-        PRE_OWNED_FAIR: "GOOD_REFURBISHED",
-        PRE_OWNED_POOR: "FOR_PARTS_OR_NOT_WORKING",
+        LIKE_NEW: isCoin ? "NEW" : "PRE_OWNED_GOOD",
+        NEW_OTHER: isCoin ? "NEW" : "PRE_OWNED_GOOD",
+        NEW_WITH_DEFECTS: isCoin ? "GOOD_REFURBISHED" : "PRE_OWNED_FAIR",
+        SELLER_REFURBISHED: isCoin ? "GOOD_REFURBISHED" : "SELLER_REFURBISHED",
+        PRE_OWNED_GOOD: isCoin ? "NEW" : "PRE_OWNED_GOOD",
+        PRE_OWNED_FAIR: isCoin ? "GOOD_REFURBISHED" : "PRE_OWNED_FAIR",
+        PRE_OWNED_POOR: isCoin ? "FOR_PARTS_OR_NOT_WORKING" : "PRE_OWNED_POOR",
       };
 
-      const mappedCondition = conditionMap[condition] || "NEW";
+      const mappedCondition = conditionMap[condition] || (isCoin ? "NEW" : "PRE_OWNED_GOOD");
       console.log(
-        `normalizeConditionForCategory: mapping invalid coin condition ${condition} -> ${mappedCondition} for category ${categoryId}`
+        `normalizeConditionForCategory: mapping ${condition} -> ${mappedCondition} for ${isCoin ? "coin" : "bullion"} in category ${categoryId} (Type: ${itemType || "unknown"})`
       );
       return { condition: mappedCondition, corrected: true };
     }
@@ -880,15 +902,22 @@ serve(async (req) => {
 
       console.log(`create_draft: aspects built from itemSpecifics:`, JSON.stringify(aspects, null, 2));
 
+      // Extract the item Type (e.g., "Coin", "Round", "Bar") from itemSpecifics
+      // This is used to disambiguate coins from bullion when validating conditions
+      const itemType = itemSpecifics && typeof itemSpecifics === "object" 
+        ? (itemSpecifics as Record<string, unknown>).Type as string | undefined
+        : undefined;
+
       // Map internal condition string to numeric conditionId
       // eBay Inventory API accepts ConditionEnum strings, but many categories
       // also require the numeric conditionId. We send both for maximum compatibility.
       // Migrate any legacy deprecated condition codes to current equivalents,
-      // then normalize based on the category (e.g., LIKE_NEW not valid for coins).
+      // then normalize based on the category and item type (e.g., LIKE_NEW not valid for coins).
       const rawCondition = condition || "PRE_OWNED_GOOD";
       const { condition: normalizedCondition, corrected } = normalizeConditionForCategory(
         rawCondition,
-        ebayCategoryId
+        ebayCategoryId,
+        itemType
       );
       const conditionEnum = normalizedCondition;
       const conditionId = CONDITION_ID_MAP[conditionEnum] ?? 3000;
