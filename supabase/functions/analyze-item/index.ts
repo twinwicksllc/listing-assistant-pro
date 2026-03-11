@@ -268,7 +268,7 @@ When analyzing, you MUST:
    - Common date circulated coins → 1x–2x melt
    - High-grade certified coins (MS65+) → significant numismatic premium
 
-   Return `pricingNotes` explaining exactly which comparables or logic you used.
+   Return pricingNotes explaining exactly which comparables or logic you used.
 
 Return your analysis using the provided tool.`;
 
