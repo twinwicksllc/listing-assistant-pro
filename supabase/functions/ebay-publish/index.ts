@@ -249,6 +249,15 @@ serve(async (req) => {
     const { action, ...payload } = requestBody;
     
     console.log(`ebay-publish action: ${action}, payload keys: ${Object.keys(payload).join(", ")}`);
+    if (action === "create_draft") {
+      console.log(`create_draft payload:`, {
+        hasSku: !!payload.sku,
+        hasTitle: !!payload.title,
+        hasDescription: !!payload.description,
+        listingPrice: payload.listingPrice,
+        hasUserToken: !!payload.userToken,
+      });
+    }
 
     const clientId = Deno.env.get("EBAY_CLIENT_ID");
     const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
@@ -714,9 +723,13 @@ serve(async (req) => {
         condition: conditionEnum,
         conditionDescription: conditionDesc,
         availability: {
-          shipToLocationAvailability: {
-            quantity: 1,
-          },
+          // shipToLocationAvailability MUST be an array of objects with locationKey and quantity
+          shipToLocationAvailability: [
+            {
+              quantity: 1,
+              locationKey: "default-location",
+            },
+          ],
         },
       };
 
@@ -744,6 +757,7 @@ serve(async (req) => {
       if (!inventoryResp.ok) {
         const errText = await inventoryResp.text();
         console.error("eBay inventory error:", inventoryResp.status, errText);
+        console.error("Request body was:", JSON.stringify(inventoryBody, null, 2));
         throw new Error(`Failed to create inventory item: ${inventoryResp.status} - ${errText}`);
       }
 
