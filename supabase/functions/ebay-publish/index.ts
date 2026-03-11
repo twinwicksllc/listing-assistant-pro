@@ -211,7 +211,6 @@ async function ensureInventoryLocation(
       headers: {
         Authorization: `Bearer ${userToken}`,
         "Content-Type": "application/json",
-        "Content-Language": "en-US",
       },
       body: JSON.stringify(locationBody),
     }
@@ -666,7 +665,7 @@ serve(async (req) => {
         `${apiBase}/sell/inventory/v1/inventory_item/${sku}`,
         {
           method: "PUT",
-          headers: { ...authHeaders, "Content-Language": "en-US" },
+          headers: authHeaders,
           body: JSON.stringify(inventoryBody),
         }
       );
@@ -760,7 +759,7 @@ serve(async (req) => {
 
       const offerResp = await fetch(`${apiBase}/sell/inventory/v1/offer`, {
         method: "POST",
-        headers: { ...authHeaders, "Content-Language": "en-US" },
+        headers: authHeaders,
         body: JSON.stringify(offerBody),
       });
 
