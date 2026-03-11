@@ -158,6 +158,8 @@ function buildFixedPriceOffer(params: {
   sku: string;
   description: string;
   listingPrice: number;
+  condition: string;
+  conditionDescription: string;
   ebayCategoryId?: string;
   merchantLocationKey: string;
   fulfillmentPolicyId: string;
@@ -188,6 +190,8 @@ function buildFixedPriceOffer(params: {
       },
     },
     listingPolicies,
+    condition: params.condition,
+    conditionDescription: params.conditionDescription,
   };
   if (params.ebayCategoryId) {
     offer.categoryId = params.ebayCategoryId;
@@ -205,6 +209,8 @@ function buildAuctionOffer(params: {
   auctionStartPrice: number;
   auctionBuyItNow?: number;
   auctionDuration: string;
+  condition: string;
+  conditionDescription: string;
   ebayCategoryId?: string;
   merchantLocationKey: string;
   fulfillmentPolicyId: string;
@@ -255,6 +261,8 @@ function buildAuctionOffer(params: {
       if (params.paymentPolicyId) policies.paymentPolicyId = params.paymentPolicyId;
       return policies;
     })(),
+    condition: params.condition,
+    conditionDescription: params.conditionDescription,
   };
   if (params.ebayCategoryId) {
     offer.categoryId = params.ebayCategoryId;
@@ -1038,6 +1046,8 @@ serve(async (req) => {
         sku,
         description,
         listingPrice: Number(listingPrice ?? 0),
+        condition: conditionEnum,
+        conditionDescription: conditionDesc,
         ebayCategoryId: ebayCategoryId || undefined,
         merchantLocationKey,
         fulfillmentPolicyId,
