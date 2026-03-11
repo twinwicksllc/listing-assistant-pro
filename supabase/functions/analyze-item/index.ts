@@ -209,13 +209,15 @@ When analyzing, you MUST:
 
 5. **eBay Item Specifics**: You MUST extract structured item specifics that map directly to eBay's required fields.
 
-   For **bullion** (bars, rounds, ingots): Shape, Metal, Fineness, Precious Metal Content per Unit, Year, Country/Region of Manufacture, Manufacturer/Mint, Series/Theme (e.g., "Disney", "Star Wars"), Denomination (if any), Modified Item.
+   **IMPORTANT**: Always include a "Type" field (e.g., "Bullion Coin", "Bar", "Round", "Coin", "Medal") — eBay requires this for category-specific listings, especially coins and bullion.
+
+   For **bullion** (bars, rounds, ingots): Type, Shape, Metal, Fineness, Precious Metal Content per Unit, Year, Country/Region of Manufacture, Manufacturer/Mint, Series/Theme (e.g., "Disney", "Star Wars"), Denomination (if any), Modified Item.
    
-   For **coins**: Year, Denomination, Grade, Circulated/Uncirculated, Coin Type, Mint Location, Country/Region of Manufacture, Composition, Certification, Strike Type, Fineness (for precious metal coins), Precious Metal Content per Unit.
+   For **coins**: Type, Year, Denomination, Grade, Circulated/Uncirculated, Coin Type, Mint Location, Country/Region of Manufacture, Composition, Certification, Strike Type, Fineness (for precious metal coins), Precious Metal Content per Unit.
    
-   For **non-coin items**: Brand, Model, Material, Color, Size, and any other relevant specifics.
+   For **non-coin items**: Type, Brand, Model, Material, Color, Size, and any other relevant specifics.
    
-   Always populate as many relevant fields as visible from the photos or inferable from the item identity.
+   Always populate as many relevant fields as visible from the photos or inferable from the item identity. When in doubt, populate the field with your best inference.
 
 6. **eBay Category** — CRITICAL RULE: If the item contains ANY precious metal (silver, gold, platinum, palladium), classify it under **Coins & Paper Money > Bullion or Coins FIRST**, regardless of theme, brand, character, or design. A Disney-themed silver bar is BULLION, not a toy. A Star Wars silver round is BULLION. A sport team gold coin is a COIN. Precious metal content always overrides theme/brand for category purposes.
 
@@ -361,6 +363,9 @@ Return your analysis using the provided tool.`;
                       type: "object",
                       description: "Key-value pairs of eBay item specifics. Populate ALL applicable fields.",
                       properties: {
+                        // --- Type field required by eBay for coin/bullion categories ---
+                        Type: { type: "string", description: "Product type for eBay category matching (e.g., 'Bullion Coin', 'Bar', 'Round', 'Medal', 'Coin')" },
+                        
                         // --- Universal precious metals fields (coins AND bullion) ---
                         Year: { type: "string", description: "Year of manufacture/minting (e.g., '2025')" },
                         Metal: { type: "string", description: "Primary precious metal (e.g., 'Silver', 'Gold', 'Platinum', 'Palladium')" },

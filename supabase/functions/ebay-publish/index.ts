@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { decode as decodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -206,6 +207,58 @@ function buildAuctionOffer(params: {
     offer.categoryId = params.ebayCategoryId;
   }
   return offer;
+}
+
+// ----------------------------------------------------------------
+// Upload a base64 data URL image to Supabase Storage from within the edge function.
+// Returns the public HTTPS URL on success, or the original value on failure.
+// eBay's Inventory API rejects data: URLs (errorId 25721) — all images must be
+// real publicly-accessible HTTPS URLs before they're sent to eBay.
+// ----------------------------------------------------------------
+async function uploadDataUrlToStorage(dataUrl: string): Promise<string> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceKey) {
+    console.warn("uploadDataUrlToStorage: missing Supabase env vars — skipping upload");
+    return dataUrl;
+  }
+
+  try {
+    // Parse the MIME type and base64 payload
+    const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/s);
+    if (!matches) {
+      console.warn("uploadDataUrlToStorage: unrecognised data URL format");
+      return dataUrl;
+    }
+    const [, mime, b64] = matches;
+    const ext = mime.includes("png") ? "png" : "jpg";
+
+    // Decode base64 to binary using Deno's base64 decoder
+    const bytes = decodeBase64(b64);
+
+    const filename = `server-uploads/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+    // Use supabase-js client so auth headers are handled correctly
+    const adminClient = createClient(supabaseUrl, serviceKey);
+    const { error: uploadError } = await adminClient.storage
+      .from("listing-images")
+      .upload(filename, bytes, { contentType: mime, upsert: false });
+
+    if (uploadError) {
+      console.error("uploadDataUrlToStorage: upload failed:", uploadError.message);
+      return dataUrl;
+    }
+
+    const { data: urlData } = adminClient.storage
+      .from("listing-images")
+      .getPublicUrl(filename);
+
+    console.log(`uploadDataUrlToStorage: uploaded to ${urlData.publicUrl}`);
+    return urlData.publicUrl;
+  } catch (err) {
+    console.error("uploadDataUrlToStorage: unexpected error:", err);
+    return dataUrl;
+  }
 }
 
 // ----------------------------------------------------------------
@@ -724,6 +777,7 @@ serve(async (req) => {
       if (!userToken) throw new Error("No eBay user token provided");
 
       console.log(`create_draft: starting publish - title="${title}", format=${listingFormat}, env=${ebayEnv}`);
+      console.log(`create_draft: itemSpecifics received:`, JSON.stringify(itemSpecifics || {}, null, 2));
 
       // Use deterministic SKU if provided (preferred — enables idempotent retries).
       // Fall back to random UUID-based SKU only if not provided.
@@ -757,6 +811,8 @@ serve(async (req) => {
         }
       }
 
+      console.log(`create_draft: aspects built from itemSpecifics:`, JSON.stringify(aspects, null, 2));
+
       // Map internal condition string to numeric conditionId
       // eBay Inventory API accepts ConditionEnum strings, but many categories
       // also require the numeric conditionId. We send both for maximum compatibility.
@@ -788,24 +844,32 @@ serve(async (req) => {
       // Step 2: Create/update inventory item (PUT is idempotent — safe to retry)
       // NOTE: description goes in the OFFER (listingDescription), not the inventory item.
       // The inventory item holds product data; the offer holds listing-specific data.
+
+      // Resolve imageUrl: eBay rejects base64 data: URLs (errorId 25721).
+      // Upload to Supabase Storage if needed to get a public HTTPS URL.
+      let resolvedImageUrl = imageUrl as string | undefined;
+      if (resolvedImageUrl?.startsWith("data:")) {
+        console.log("create_draft: imageUrl is base64 data URL — uploading to storage");
+        resolvedImageUrl = await uploadDataUrlToStorage(resolvedImageUrl);
+        if (resolvedImageUrl.startsWith("data:")) {
+          console.error("create_draft: image upload failed — proceeding without image");
+          resolvedImageUrl = undefined;
+        }
+      }
+
       const inventoryBody: Record<string, unknown> = {
         product: {
           title,
-          imageUrls: imageUrl ? [imageUrl] : [],
+          imageUrls: resolvedImageUrl ? [resolvedImageUrl] : [],
         },
         condition: conditionEnum,
         conditionDescription: conditionDesc,
         availability: {
-          // shipToLocationAvailability is an OBJECT (not array).
-          // quantity = total available. availabilityDistributions = per-location breakdown.
+          // shipToLocationAvailability: use only the top-level quantity.
+          // availabilityDistributions is for multi-warehouse sellers and causes
+          // eBay error 25604 ("Availability not found") for standard single-location accounts.
           shipToLocationAvailability: {
             quantity: 1,
-            availabilityDistributions: [
-              {
-                merchantLocationKey,
-                quantity: 1,
-              },
-            ],
           },
         },
       };

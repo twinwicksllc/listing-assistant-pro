@@ -62,6 +62,9 @@ export interface ListingData {
   ebayCategoryId: string;
   itemSpecifics: ItemSpecifics;
   condition: string;
+  fulfillmentPolicyId?: string;
+  paymentPolicyId?: string;
+  returnPolicyId?: string;
 }
 
 // --- Row builders (shared between CSV and Excel/Sheets) ---
@@ -81,6 +84,11 @@ function buildEbayRows(listing: ListingData): { headers: string[]; values: (stri
   const specificEntries = Object.entries(listing.itemSpecifics).filter(([, v]) => v && v.trim() !== "");
   specificEntries.forEach(([key]) => headers.push(`C:${key}`));
 
+  // Include selected business policy IDs as supplemental columns
+  if (listing.fulfillmentPolicyId) headers.push("FulfillmentPolicyID");
+  if (listing.paymentPolicyId) headers.push("PaymentPolicyID");
+  if (listing.returnPolicyId) headers.push("ReturnPolicyID");
+
   const values: (string | number)[] = [
     "Add",
     listing.ebayCategoryId || "",
@@ -92,6 +100,10 @@ function buildEbayRows(listing: ListingData): { headers: string[]; values: (stri
     listing.imageUrl,
   ];
   specificEntries.forEach(([, value]) => values.push(value || ""));
+
+  if (listing.fulfillmentPolicyId) values.push(listing.fulfillmentPolicyId);
+  if (listing.paymentPolicyId) values.push(listing.paymentPolicyId);
+  if (listing.returnPolicyId) values.push(listing.returnPolicyId);
 
   return { headers, values };
 }

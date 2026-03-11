@@ -114,6 +114,7 @@ export function useDrafts() {
 
   const updateDraft = async (id: string, updates: Partial<ListingDraft>) => {
     const patch: Record<string, any> = {};
+    if (updates.imageUrl !== undefined)               patch.image_url = updates.imageUrl;
     if (updates.title !== undefined)                  patch.title = updates.title;
     if (updates.description !== undefined)            patch.description = updates.description;
     if (updates.listingPrice !== undefined)           patch.listing_price = updates.listingPrice;
