@@ -152,7 +152,28 @@ export default function AnalyzePage() {
     }
     setPublishing(true);
     try {
-      let ebayToken = localStorage.getItem("ebay-user-token");
+      // Token lookup order mirrors usePublishDraft:
+      // 1. Server-side stored token in Supabase profiles (secure, preferred)
+      // 2. localStorage fallback for backwards compatibility
+      let ebayToken: string | null = null;
+      let postalCode: string | null = null;
+
+      if (user?.id) {
+        try {
+          const { data: tokenData } = await supabase.functions.invoke("ebay-publish", {
+            body: { action: "get_stored_token", userId: user.id },
+          });
+          if (tokenData?.token) {
+            ebayToken = tokenData.token;
+            postalCode = tokenData.postalCode ?? null;
+          }
+        } catch {
+          // fall through to localStorage
+        }
+      }
+      if (!ebayToken) {
+        ebayToken = localStorage.getItem("ebay-user-token");
+      }
 
       if (!ebayToken) {
         const { data, error } = await supabase.functions.invoke("ebay-publish", {
@@ -169,6 +190,7 @@ export default function AnalyzePage() {
         body: {
           action: "create_draft",
           userToken: ebayToken,
+          postalCode: postalCode || undefined,
           title,
           description: getDescriptionWithFooter(),
           listingFormat,
@@ -184,6 +206,7 @@ export default function AnalyzePage() {
 
       if (error || data?.error) {
         if (data?.error?.includes("401") || data?.error?.includes("expired")) {
+          // Clear stale token from both storage locations
           localStorage.removeItem("ebay-user-token");
           toast.error("eBay session expired. Please connect again.");
           return;

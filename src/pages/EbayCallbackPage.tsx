@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 const EBAY_TOKEN_KEY = "ebay-user-token";
 
 export default function EbayCallbackPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("Connecting your eBay account…");
 
@@ -28,11 +30,13 @@ export default function EbayCallbackPage() {
       return;
     }
 
-    // Exchange the code for a user token via our Edge Function
+    // Exchange the code for a user token via our Edge Function.
+    // Pass userId so the edge function stores the token server-side in profiles
+    // (avoids XSS risk of keeping tokens only in localStorage).
     console.log("EbayCallbackPage: exchanging code", code?.substring(0, 20) + "...");
     supabase.functions
       .invoke("ebay-publish", {
-        body: { action: "exchange_code", code },
+        body: { action: "exchange_code", code, userId: user?.id ?? null },
       })
       .then(({ data, error: fnError }) => {
         console.log("EbayCallbackPage: exchange response status", { 
