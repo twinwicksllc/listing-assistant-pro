@@ -373,6 +373,21 @@ Return your analysis using the provided tool.`;
                       description:
                         "The most specific eBay category ID for this item (e.g., '41111' for American Silver Eagles)",
                     },
+                    suggestedCategories: {
+                      type: "array",
+                      description: "Top 3 most relevant eBay category suggestions for this item, ordered by best match first. The first entry should match ebayCategoryId.",
+                      items: {
+                        type: "object",
+                        properties: {
+                          categoryId: { type: "string", description: "eBay category ID" },
+                          categoryName: { type: "string", description: "Human-readable full category path (e.g., 'Coins & Paper Money > Bullion > Silver > Rounds & Medallions')" },
+                          reason: { type: "string", description: "One-sentence reason why this category fits (e.g., 'Best match for silver rounds from foreign mints')" },
+                        },
+                        required: ["categoryId", "categoryName", "reason"],
+                      },
+                      minItems: 1,
+                      maxItems: 3,
+                    },
                     itemSpecifics: {
                       type: "object",
                       description: "Key-value pairs of eBay item specifics. Populate ALL applicable fields.",
@@ -428,7 +443,7 @@ Return your analysis using the provided tool.`;
                       description: "True if the coin is already in a certified grading slab (PCGS, NGC, etc.)",
                     },
                   },
-                  required: ["title", "description", "priceMin", "priceMax", "pricingNotes", "metalType", "metalWeightOz", "ebayCategoryId", "itemSpecifics", "condition", "suggestedGrade", "gradingRationale", "isSlabbed"],
+                  required: ["title", "description", "priceMin", "priceMax", "pricingNotes", "metalType", "metalWeightOz", "ebayCategoryId", "suggestedCategories", "itemSpecifics", "condition", "suggestedGrade", "gradingRationale", "isSlabbed"],
                   additionalProperties: false,
                 },
               },
