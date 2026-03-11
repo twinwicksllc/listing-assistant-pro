@@ -830,6 +830,7 @@ serve(async (req) => {
       if (!userToken) throw new Error("No eBay user token provided");
 
       console.log(`create_draft: starting publish - title="${title}", format=${listingFormat}, env=${ebayEnv}`);
+      console.log(`create_draft: received ebayCategoryId=${ebayCategoryId}, condition=${condition}`);
       console.log(`create_draft: itemSpecifics received:`, JSON.stringify(itemSpecifics || {}, null, 2));
 
       // Use deterministic SKU if provided (preferred — enables idempotent retries).
@@ -881,6 +882,8 @@ serve(async (req) => {
       const conditionDesc = CONDITION_DESCRIPTIONS[conditionEnum]
         ?? conditionEnum.replace(/_/g, " ").toLowerCase()
              .replace(/\b\w/g, (c: string) => c.toUpperCase());
+
+      console.log(`create_draft: condition normalization - rawCondition=${rawCondition}, normalized=${normalizedCondition}, conditionId=${conditionId}, categoryId=${ebayCategoryId}, corrected=${corrected}`);
 
       if (corrected) {
         console.log(
@@ -1106,6 +1109,7 @@ serve(async (req) => {
         const errText = await publishResp.text();
         console.error("create_draft: eBay publish error:", publishResp.status, errText);
         console.error("create_draft: failing to publish offer", offerId, "for sku", sku);
+        console.error(`create_draft: publish failed with condition=${conditionEnum} (id=${conditionId}), category=${ebayCategoryId}, format=${listingFormat}`);
         return new Response(
           JSON.stringify({
             error: `Offer created (ID: ${offerId}) but publish failed: ${publishResp.status} - ${errText}`,
