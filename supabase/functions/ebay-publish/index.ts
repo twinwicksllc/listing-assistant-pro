@@ -862,16 +862,11 @@ serve(async (req) => {
         condition: conditionEnum,
         conditionDescription: conditionDesc,
         availability: {
-          // shipToLocationAvailability is an OBJECT (not array).
-          // quantity = total available. availabilityDistributions = per-location breakdown.
+          // shipToLocationAvailability: use only the top-level quantity.
+          // availabilityDistributions is for multi-warehouse sellers and causes
+          // eBay error 25604 ("Availability not found") for standard single-location accounts.
           shipToLocationAvailability: {
             quantity: 1,
-            availabilityDistributions: [
-              {
-                merchantLocationKey,
-                quantity: 1,
-              },
-            ],
           },
         },
       };
