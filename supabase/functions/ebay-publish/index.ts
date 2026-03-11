@@ -243,7 +243,12 @@ serve(async (req) => {
     const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
 
-    if (!clientId || !clientSecret) {
+    // NOTE: clientId/clientSecret are only required for actions that call eBay OAuth endpoints
+    // (exchange_code, refresh_token, get_auth_url, create_draft, bulk_create_draft).
+    // get_stored_token and get_policies only need Supabase credentials, so we defer
+    // this check to avoid blocking those actions when eBay app credentials are misconfigured.
+    const requiresEbayCredentials = !["get_stored_token", "get_policies"].includes(action);
+    if (requiresEbayCredentials && (!clientId || !clientSecret)) {
       throw new Error("eBay API credentials not configured");
     }
 
@@ -497,6 +502,14 @@ serve(async (req) => {
       // Proactively refresh if token is expired or expiring within 5 minutes
       if (isExpiredOrExpiringSoon && data.ebay_refresh_token) {
         console.log("get_stored_token: token expiring soon, attempting proactive refresh for user", userId);
+        // Skip proactive refresh if eBay app credentials are not configured
+        if (!clientId || !clientSecret) {
+          console.warn("get_stored_token: skipping proactive refresh — eBay credentials not configured");
+          return new Response(
+            JSON.stringify({ token: data.ebay_access_token, postalCode: data.postal_code, isExpired: false }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
         try {
           const credentials = btoa(`${clientId}:${clientSecret}`);
           const refreshResp = await fetch(tokenUrl, {
