@@ -924,10 +924,10 @@ serve(async (req) => {
       const inventoryBody: Record<string, unknown> = {
         product: {
           title,
+          condition: conditionEnum,
+          conditionDescription: conditionDesc,
           imageUrls: resolvedImageUrl ? [resolvedImageUrl] : [],
         },
-        condition: conditionEnum,
-        conditionDescription: conditionDesc,
         availability: {
           // shipToLocationAvailability: use only the top-level quantity.
           // availabilityDistributions is for multi-warehouse sellers and causes
