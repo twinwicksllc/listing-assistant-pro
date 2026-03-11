@@ -26,6 +26,10 @@ interface Policies {
   returns: PolicyOption[];
 }
 
+// eBay-approved conditions (Inventory API)
+// All conditions below are valid for most categories. Some categories (e.g., coins)
+// may have restrictions and auto-correct to valid alternatives on publish.
+// See: https://developer.ebay.com/api-docs/sell/inventory/types/slr:ConditionEnum
 const CONDITIONS = [
   { value: "NEW",                      label: "New" },
   { value: "LIKE_NEW",                 label: "Like New" },
