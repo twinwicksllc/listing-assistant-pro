@@ -1046,6 +1046,8 @@ serve(async (req) => {
       });
 
       console.log(`create_draft: built offer for sku=${sku}, price=${listingPrice}, category=${ebayCategoryId || "NONE"}`);
+      console.log(`create_draft: offer body categories - categoryId in offer=${(offerBody as Record<string, unknown>).categoryId || "MISSING"}`);
+      console.log(`create_draft: offer body:`, JSON.stringify(offerBody, null, 2));
 
       const offerResp = await fetchWithTimeout(`${apiBase}/sell/inventory/v1/offer`, {
         method: "POST",
