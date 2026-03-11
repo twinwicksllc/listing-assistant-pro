@@ -924,6 +924,7 @@ serve(async (req) => {
       });
 
       let offerId: string | undefined;
+      let offerData: Record<string, unknown> | null = null;
 
       if (!offerResp.ok) {
         const errText = await offerResp.text();
@@ -956,7 +957,7 @@ serve(async (req) => {
           throw new Error(`Failed to create offer: ${offerResp.status} - ${errText}`);
         }
       } else {
-        const offerData = await offerResp.json();
+        offerData = await offerResp.json();
         offerId = offerData.offerId;
         console.log(`create_draft: offer created successfully, offerId=${offerId}, about to publish...`);
       }
