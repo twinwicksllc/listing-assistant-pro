@@ -6,6 +6,7 @@ import {
 import { ListingDraft, ListingFormat, AuctionDuration } from "@/types/listing";
 import { useDrafts } from "@/hooks/useDrafts";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 interface EditDraftModalProps {
@@ -51,11 +52,16 @@ const AUCTION_DURATIONS: { value: AuctionDuration; label: string }[] = [
 
 export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftModalProps) {
   const { updateDraft } = useDrafts();
+  const { user } = useAuth();
 
   const [title, setTitle]               = useState(draft.title);
   const [description, setDescription]   = useState(draft.description);
   const [listingFormat, setListingFormat] = useState<ListingFormat>(draft.listingFormat ?? "FIXED_PRICE");
-  const [listingPrice, setListingPrice] = useState<number>(draft.listingPrice ?? 0);
+  // Bug fix: fall back to priceMin if listingPrice is undefined/null (price set during analysis
+  // is stored in priceMin; listingPrice is only set after the user explicitly edits it here)
+  const [listingPrice, setListingPrice] = useState<number>(
+    draft.listingPrice ?? draft.priceMin ?? 0
+  );
   const [auctionDuration, setAuctionDuration] = useState<AuctionDuration>(
     draft.auctionDuration ?? "Days_7"
   );
@@ -69,6 +75,7 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
   const [policies, setPolicies]                     = useState<Policies | null>(null);
   const [policiesLoading, setPoliciesLoading]       = useState(false);
   const [policiesError, setPoliciesError]           = useState("");
+  const [ebayConnected, setEbayConnected]           = useState(false);
   const [fulfillmentPolicyId, setFulfillmentPolicyId] = useState(draft.fulfillmentPolicyId ?? "");
   const [paymentPolicyId, setPaymentPolicyId]         = useState(draft.paymentPolicyId ?? "");
   const [returnPolicyId, setReturnPolicyId]           = useState(draft.returnPolicyId ?? "");
@@ -77,33 +84,71 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
 
   const displaySpecifics = Object.entries(itemSpecifics).filter(([, v]) => v !== undefined);
 
-  // Fetch eBay policies on mount if eBay token is available
+  // Fetch eBay policies on mount.
+  // Token lookup order mirrors usePublishDraft:
+  //   1. Server-side stored token in Supabase profiles (preferred — avoids XSS risk)
+  //   2. localStorage fallback for backwards compatibility
   useEffect(() => {
-    const ebayToken = localStorage.getItem("ebay-user-token");
-    if (!ebayToken) return;
+    let cancelled = false;
 
-    setPoliciesLoading(true);
-    setPoliciesError("");
+    const loadPolicies = async () => {
+      setPoliciesLoading(true);
+      setPoliciesError("");
 
-    supabase.functions
-      .invoke("ebay-policies", { body: { userToken: ebayToken } })
-      .then(({ data, error }) => {
-        if (error || data?.error) {
-          setPoliciesError("Could not load eBay policies. Make sure your eBay account is connected.");
-        } else {
-          setPolicies(data as Policies);
-          // Auto-select first policy of each type if none already chosen
-          if (!fulfillmentPolicyId && data.fulfillment?.length > 0)
-            setFulfillmentPolicyId(data.fulfillment[0].id);
-          if (!paymentPolicyId && data.payment?.length > 0)
-            setPaymentPolicyId(data.payment[0].id);
-          if (!returnPolicyId && data.returns?.length > 0)
-            setReturnPolicyId(data.returns[0].id);
+      // 1. Try server-side stored token
+      let ebayToken: string | null = null;
+      if (user?.id) {
+        try {
+          const { data } = await supabase.functions.invoke("ebay-publish", {
+            body: { action: "get_stored_token", userId: user.id },
+          });
+          if (data?.token) ebayToken = data.token;
+        } catch {
+          // fall through to localStorage
         }
-      })
-      .finally(() => setPoliciesLoading(false));
+      }
+
+      // 2. Fall back to localStorage
+      if (!ebayToken) {
+        ebayToken = localStorage.getItem("ebay-user-token");
+      }
+
+      if (cancelled) return;
+
+      if (!ebayToken) {
+        // No token found — eBay not connected
+        setPoliciesLoading(false);
+        return;
+      }
+
+      setEbayConnected(true);
+
+      const { data, error } = await supabase.functions.invoke("ebay-policies", {
+        body: { userToken: ebayToken },
+      });
+
+      if (cancelled) return;
+
+      if (error || data?.error) {
+        setPoliciesError("Could not load eBay policies. Make sure your eBay account is connected.");
+      } else {
+        setPolicies(data as Policies);
+        // Auto-select first policy of each type if none already chosen
+        if (!fulfillmentPolicyId && data.fulfillment?.length > 0)
+          setFulfillmentPolicyId(data.fulfillment[0].id);
+        if (!paymentPolicyId && data.payment?.length > 0)
+          setPaymentPolicyId(data.payment[0].id);
+        if (!returnPolicyId && data.returns?.length > 0)
+          setReturnPolicyId(data.returns[0].id);
+      }
+
+      setPoliciesLoading(false);
+    };
+
+    loadPolicies();
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user?.id]);
 
   const handleSave = async () => {
     if (!title.trim()) {
@@ -380,7 +425,7 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
               </div>
             )}
 
-            {!policiesError && !localStorage.getItem("ebay-user-token") && (
+            {!policiesError && !policiesLoading && !ebayConnected && (
               <div className="flex items-start gap-2 bg-muted/50 border border-border rounded-lg px-3 py-2.5">
                 <AlertCircle className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
                 <p className="text-xs text-muted-foreground">Connect your eBay account in Settings to manage policies.</p>
