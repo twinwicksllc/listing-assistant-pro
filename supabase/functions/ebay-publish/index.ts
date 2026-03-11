@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { decode as decodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -232,12 +233,8 @@ async function uploadDataUrlToStorage(dataUrl: string): Promise<string> {
     const [, mime, b64] = matches;
     const ext = mime.includes("png") ? "png" : "jpg";
 
-    // Decode base64 to binary
-    const binaryStr = atob(b64);
-    const bytes = new Uint8Array(binaryStr.length);
-    for (let i = 0; i < binaryStr.length; i++) {
-      bytes[i] = binaryStr.charCodeAt(i);
-    }
+    // Decode base64 to binary using Deno's base64 decoder
+    const bytes = decodeBase64(b64);
 
     const filename = `server-uploads/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     const uploadUrl = `${supabaseUrl}/storage/v1/object/listing-images/${filename}`;
