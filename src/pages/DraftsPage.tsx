@@ -278,7 +278,11 @@ export default function DraftsPage() {
         <EditDraftModal
           draft={editingDraft}
           onClose={() => setEditingDraft(null)}
-          onSaved={() => setEditingDraft(null)}
+          onSaved={(updated) => {
+            // Update the editingDraft with the saved values so re-opening the same draft
+            // shows the freshly saved data (e.g., selected policies)
+            setEditingDraft(updated);
+          }}
         />
       )}
     </div>
