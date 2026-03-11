@@ -896,11 +896,39 @@ serve(async (req) => {
     // Consolidated here to avoid CORS issues with the separate ebay-policies function.
     // The ebay-publish function already has correct CORS headers and is proven to work.
     if (action === "get_policies") {
-      const { userToken } = payload;
-      if (!userToken) throw new Error("No eBay user token provided");
+      const { userToken, userId } = payload;
+
+      // If no userToken provided directly, try to fetch it from server-side storage
+      let resolvedToken = userToken;
+      if (!resolvedToken && userId) {
+        try {
+          const supabaseUrl = Deno.env.get("SUPABASE_URL");
+          const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+          if (supabaseUrl && supabaseServiceKey) {
+            const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+            const supabase = createClient(supabaseUrl, supabaseServiceKey);
+            const { data } = await supabase
+              .from("profiles")
+              .select("ebay_access_token")
+              .eq("id", userId)
+              .single();
+            if (data?.ebay_access_token) resolvedToken = data.ebay_access_token;
+          }
+        } catch (e) {
+          console.warn("get_policies: could not fetch token from profiles:", e);
+        }
+      }
+
+      if (!resolvedToken) {
+        // Return empty policies rather than throwing — lets the UI show "no policies" gracefully
+        return new Response(
+          JSON.stringify({ fulfillment: [], payment: [], returns: [], noToken: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
       const authHeaders = {
-        Authorization: `Bearer ${userToken}`,
+        Authorization: `Bearer ${resolvedToken}`,
         "Content-Type": "application/json",
       };
 
