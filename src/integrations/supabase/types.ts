@@ -40,47 +40,71 @@ export type Database = {
       }
       drafts: {
         Row: {
+          auction_buy_it_now: number | null
+          auction_start_price: number
           condition: string | null
           consignor: string | null
           created_at: string
           description: string
           ebay_category_id: string | null
+          fulfillment_policy_id: string | null
           id: string
           image_url: string
+          image_urls: string[] | null
           item_specifics: Json | null
+          listing_format: string
+          listing_price: number
           org_id: string | null
+          payment_policy_id: string | null
           price_max: number
           price_min: number
+          return_policy_id: string | null
           title: string
           user_id: string
         }
         Insert: {
+          auction_buy_it_now?: number | null
+          auction_start_price?: number
           condition?: string | null
           consignor?: string | null
           created_at?: string
           description?: string
           ebay_category_id?: string | null
+          fulfillment_policy_id?: string | null
           id?: string
           image_url: string
+          image_urls?: string[] | null
           item_specifics?: Json | null
+          listing_format?: string
+          listing_price?: number
           org_id?: string | null
+          payment_policy_id?: string | null
           price_max?: number
           price_min?: number
+          return_policy_id?: string | null
           title: string
           user_id: string
         }
         Update: {
+          auction_buy_it_now?: number | null
+          auction_start_price?: number
           condition?: string | null
           consignor?: string | null
           created_at?: string
           description?: string
           ebay_category_id?: string | null
+          fulfillment_policy_id?: string | null
           id?: string
           image_url?: string
+          image_urls?: string[] | null
           item_specifics?: Json | null
+          listing_format?: string
+          listing_price?: number
           org_id?: string | null
+          payment_policy_id?: string | null
           price_max?: number
           price_min?: number
+          return_policy_id?: string | null
           title?: string
           user_id?: string
         }
