@@ -838,7 +838,8 @@ serve(async (req) => {
       if (!userToken) throw new Error("No eBay user token provided");
 
       console.log(`create_draft: starting publish - title="${title}", format=${listingFormat}, env=${ebayEnv}`);
-      console.log(`create_draft: received ebayCategoryId=${ebayCategoryId}, condition=${condition}`);
+      console.log(`create_draft: received condition from payload: ${condition}`);
+      console.log(`create_draft: received ebayCategoryId=${ebayCategoryId}, condition=${condition}, itemSpecifics=${JSON.stringify(itemSpecifics || {})}`);
       console.log(`create_draft: itemSpecifics received:`, JSON.stringify(itemSpecifics || {}, null, 2));
 
       // Use deterministic SKU if provided (preferred — enables idempotent retries).
@@ -954,7 +955,8 @@ serve(async (req) => {
         (inventoryBody.product as Record<string, unknown>).aspects = aspects;
       }
 
-      console.log(`create_draft: creating inventory item for sku=${sku}, condition=${conditionEnum}, merchantLocationKey=${merchantLocationKey}`);
+      console.log(`create_draft: creating inventory item for sku=${sku}, condition=${conditionEnum} (raw=${rawCondition}), merchantLocationKey=${merchantLocationKey}`);
+      console.log(`create_draft: inventory body condition:`, JSON.stringify({ condition: conditionEnum, conditionDescription: conditionDesc }));
 
       const inventoryResp = await fetchWithTimeout(
         `${apiBase}/sell/inventory/v1/inventory_item/${sku}`,
@@ -1108,12 +1110,18 @@ serve(async (req) => {
       console.log(`create_draft: proceeding to publish offerId=${offerId}...`);
 
       // Step 5: Publish the offer to make it a live listing
+      // The publish endpoint can accept a body with condition/conditionDescription to override inventory defaults
+      const publishBody: Record<string, unknown> = {
+        condition: conditionEnum,
+      };
+
       const publishResp = await fetchWithTimeout(
         `${apiBase}/sell/inventory/v1/offer/${offerId}/publish`,
         {
           method: "POST",
           timeout: 15000,
           headers: authHeaders,
+          body: JSON.stringify(publishBody),
         }
       );
 
