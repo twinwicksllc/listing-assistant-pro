@@ -777,6 +777,7 @@ serve(async (req) => {
       if (!userToken) throw new Error("No eBay user token provided");
 
       console.log(`create_draft: starting publish - title="${title}", format=${listingFormat}, env=${ebayEnv}`);
+      console.log(`create_draft: itemSpecifics received:`, JSON.stringify(itemSpecifics || {}, null, 2));
 
       // Use deterministic SKU if provided (preferred — enables idempotent retries).
       // Fall back to random UUID-based SKU only if not provided.
@@ -809,6 +810,8 @@ serve(async (req) => {
           }
         }
       }
+
+      console.log(`create_draft: aspects built from itemSpecifics:`, JSON.stringify(aspects, null, 2));
 
       // Map internal condition string to numeric conditionId
       // eBay Inventory API accepts ConditionEnum strings, but many categories

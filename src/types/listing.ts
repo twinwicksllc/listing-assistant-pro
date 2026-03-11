@@ -1,4 +1,5 @@
 export interface ItemSpecifics {
+  Type?: string;
   Year?: string;
   Denomination?: string;
   Grade?: string;
