@@ -130,9 +130,11 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
 
       setEbayConnected(true);
 
-      // Use get_policies action on ebay-publish (avoids CORS issues with ebay-policies function)
+      // Use get_policies action on ebay-publish (avoids CORS issues with ebay-policies function).
+      // Pass both userToken and userId so the edge function can self-resolve the token
+      // from Supabase profiles if userToken is somehow null (e.g. token never stored locally).
       const { data, error } = await supabase.functions.invoke("ebay-publish", {
-        body: { action: "get_policies", userToken: ebayToken },
+        body: { action: "get_policies", userToken: ebayToken, userId: user?.id ?? null },
       });
 
       if (cancelled) return;

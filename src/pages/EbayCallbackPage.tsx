@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,11 +8,16 @@ const EBAY_TOKEN_KEY = "ebay-user-token";
 
 export default function EbayCallbackPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("Connecting your eBay account…");
+  // Prevent double-execution when user loads after initial render
+  const exchangedRef = useRef(false);
 
   useEffect(() => {
+    // If we've already exchanged the code (e.g. effect re-ran when user loaded), skip
+    if (exchangedRef.current) return;
+
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
     const error = params.get("error");
@@ -30,10 +35,20 @@ export default function EbayCallbackPage() {
       return;
     }
 
+    // If auth context is still initializing, wait for the next render.
+    // This ensures userId is available when exchange_code is called so the
+    // token gets stored server-side in Supabase profiles (not just localStorage).
+    if (authLoading) {
+      return;
+    }
+
+    // Mark as exchanged to prevent re-running if user or authLoading changes again
+    exchangedRef.current = true;
+
     // Exchange the code for a user token via our Edge Function.
     // Pass userId so the edge function stores the token server-side in profiles
     // (avoids XSS risk of keeping tokens only in localStorage).
-    console.log("EbayCallbackPage: exchanging code", code?.substring(0, 20) + "...");
+    console.log("EbayCallbackPage: exchanging code", code?.substring(0, 20) + "...", "userId:", user?.id ?? "null");
     supabase.functions
       .invoke("ebay-publish", {
         body: { action: "exchange_code", code, userId: user?.id ?? null },
@@ -105,7 +120,10 @@ export default function EbayCallbackPage() {
         const msg = err?.message || "Failed to connect eBay account. Please try again.";
         setMessage(msg);
       });
-  }, [navigate]);
+  // Include authLoading in deps so the effect re-runs once auth context finishes
+  // loading, ensuring userId is available when exchange_code is called.
+  // exchangedRef prevents the code from being exchanged twice.
+  }, [navigate, user, authLoading]);
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-6">
