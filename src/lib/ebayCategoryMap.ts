@@ -42,8 +42,25 @@ export const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
   "261070": "Coins & Paper Money > Bullion > Platinum Bullion > Coins",
   "261072": "Coins & Paper Money > Bullion > Platinum Bullion > Bars & Rounds",
   "261073": "Coins & Paper Money > Bullion > Palladium Bullion",
+  "261074": "Coins & Paper Money > Bullion > Silver Bullion",
+  "261075": "Coins & Paper Money > Bullion > Gold Bullion",
+  "261076": "Coins & Paper Money > Bullion",
 
-  // --- World Coins ---
+  // --- US Coins (additional series) ---
+  "40161":  "Coins & Paper Money > Coins: US > Gold Coins > $20 Double Eagle",
+  "40162":  "Coins & Paper Money > Coins: US > Gold Coins > $10 Eagle",
+  "40163":  "Coins & Paper Money > Coins: US > Gold Coins > $5 Half Eagle",
+  "40164":  "Coins & Paper Money > Coins: US > Gold Coins > $2.50 Quarter Eagle",
+  "40165":  "Coins & Paper Money > Coins: US > Gold Coins > $1 Gold",
+  "40166":  "Coins & Paper Money > Coins: US > Gold Coins > American Gold Eagle",
+  "40167":  "Coins & Paper Money > Coins: US > Gold Coins > American Gold Buffalo",
+  "40158":  "Coins & Paper Money > Coins: US > Dollars > Sacagawea/Native American",
+  "40159":  "Coins & Paper Money > Coins: US > Dollars > Presidential",
+  "40160":  "Coins & Paper Money > Coins: US > Dollars > Susan B. Anthony",
+
+  // --- Paper Money ---
+  "3411":   "Coins & Paper Money > Paper Money: US",
+  "45244":  "Coins & Paper Money > Paper Money: World",
   "45243":  "Coins & Paper Money > Coins: World",
   "40196":  "Coins & Paper Money > Coins: World > Canada",
   "40197":  "Coins & Paper Money > Coins: World > Mexico",
