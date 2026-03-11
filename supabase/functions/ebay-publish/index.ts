@@ -714,6 +714,7 @@ serve(async (req) => {
       const authHeaders = {
         Authorization: `Bearer ${userToken}`,
         "Content-Type": "application/json",
+        // Force redeploy to ensure Accept-Language fix is live (PR #83)
       };
 
       const inventoryResp = await fetch(
