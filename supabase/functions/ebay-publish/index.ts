@@ -237,27 +237,24 @@ async function uploadDataUrlToStorage(dataUrl: string): Promise<string> {
     const bytes = decodeBase64(b64);
 
     const filename = `server-uploads/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const uploadUrl = `${supabaseUrl}/storage/v1/object/listing-images/${filename}`;
 
-    const uploadResp = await fetch(uploadUrl, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${serviceKey}`,
-        "Content-Type": mime,
-        "x-upsert": "false",
-      },
-      body: bytes,
-    });
+    // Use supabase-js client so auth headers are handled correctly
+    const adminClient = createClient(supabaseUrl, serviceKey);
+    const { error: uploadError } = await adminClient.storage
+      .from("listing-images")
+      .upload(filename, bytes, { contentType: mime, upsert: false });
 
-    if (!uploadResp.ok) {
-      const errText = await uploadResp.text();
-      console.error("uploadDataUrlToStorage: upload failed:", uploadResp.status, errText);
+    if (uploadError) {
+      console.error("uploadDataUrlToStorage: upload failed:", uploadError.message);
       return dataUrl;
     }
 
-    const publicUrl = `${supabaseUrl}/storage/v1/object/public/listing-images/${filename}`;
-    console.log(`uploadDataUrlToStorage: uploaded to ${publicUrl}`);
-    return publicUrl;
+    const { data: urlData } = adminClient.storage
+      .from("listing-images")
+      .getPublicUrl(filename);
+
+    console.log(`uploadDataUrlToStorage: uploaded to ${urlData.publicUrl}`);
+    return urlData.publicUrl;
   } catch (err) {
     console.error("uploadDataUrlToStorage: unexpected error:", err);
     return dataUrl;
