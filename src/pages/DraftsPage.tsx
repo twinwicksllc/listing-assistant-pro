@@ -33,7 +33,15 @@ export default function DraftsPage() {
 
   const getEbayToken = async (): Promise<string | null> => {
     const stored = localStorage.getItem(EBAY_TOKEN_KEY);
-    if (stored) return stored;
+    if (stored) {
+      // Validate token hasn't expired (5-minute buffer)
+      const expiresAt = localStorage.getItem("ebay-token-expires-at");
+      if (!expiresAt || Date.now() + 5 * 60 * 1000 < Number(expiresAt)) {
+        return stored;
+      }
+      // Token expired — clear it and fall through to re-auth
+      localStorage.removeItem(EBAY_TOKEN_KEY);
+    }
 
     // Not connected — initiate eBay OAuth and come back here after
     try {

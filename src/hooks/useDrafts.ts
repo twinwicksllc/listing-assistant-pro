@@ -51,6 +51,9 @@ export function useDrafts() {
           listingPrice: Number(d.listing_price) || 0,
           auctionStartPrice: Number(d.auction_start_price) || 0,
           auctionBuyItNow: d.auction_buy_it_now != null ? Number(d.auction_buy_it_now) : null,
+          fulfillmentPolicyId: d.fulfillment_policy_id || null,
+          paymentPolicyId: d.payment_policy_id || null,
+          returnPolicyId: d.return_policy_id || null,
         }))
       );
     }
@@ -140,6 +143,9 @@ export function useDrafts() {
         listing_price: Number(draft.listingPrice) || 0,
         auction_start_price: Number(draft.auctionStartPrice) || 0,
         auction_buy_it_now: draft.auctionBuyItNow ?? null,
+        fulfillment_policy_id: draft.fulfillmentPolicyId || null,
+        payment_policy_id: draft.paymentPolicyId || null,
+        return_policy_id: draft.returnPolicyId || null,
       });
 
       if (error) {
@@ -192,8 +198,16 @@ export function useDrafts() {
    * Returns true on success (draft is also removed from local state).
    */
   const publishDraft = async (draft: ListingDraft, userToken: string): Promise<boolean> => {
+    // Proactively check token expiry (5-minute buffer) before attempting API calls
+    const expiresAt = localStorage.getItem("ebay-token-expires-at");
+    if (expiresAt && Date.now() + 5 * 60 * 1000 >= Number(expiresAt)) {
+      localStorage.removeItem("ebay-user-token");
+      toast.error("eBay session expired. Please reconnect eBay and try again.");
+      return false;
+    }
     setPublishingIds((prev) => new Set(prev).add(draft.id));
     try {
+      const allImageUrls = draft.imageUrls?.length ? draft.imageUrls : [draft.imageUrl];
       const { data, error } = await supabase.functions.invoke("ebay-publish", {
         body: {
           action: "create_draft",
@@ -204,10 +218,18 @@ export function useDrafts() {
           listingPrice: draft.listingPrice || 0,
           auctionStartPrice: draft.auctionStartPrice || 0,
           auctionBuyItNow: draft.auctionBuyItNow ?? null,
-          imageUrl: (draft.imageUrls && draft.imageUrls.length > 0) ? draft.imageUrls[0] : draft.imageUrl,
+          imageUrl: allImageUrls[0],
+          imageUrls: allImageUrls,
           condition: draft.condition,
           ebayCategoryId: draft.ebayCategoryId,
           itemSpecifics: draft.itemSpecifics,
+          ...(draft.fulfillmentPolicyId ? {
+            listingPolicies: {
+              fulfillmentPolicyId: draft.fulfillmentPolicyId,
+              paymentPolicyId: draft.paymentPolicyId,
+              returnPolicyId: draft.returnPolicyId,
+            },
+          } : {}),
         },
       });
 

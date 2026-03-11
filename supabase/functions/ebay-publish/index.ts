@@ -140,7 +140,7 @@ serve(async (req) => {
 
     // --- ACTION: Create draft listing via Inventory API ---
     if (action === "create_draft") {
-      const { userToken, title, description, listingFormat, listingPrice, auctionStartPrice, auctionBuyItNow, imageUrl, condition, ebayCategoryId, itemSpecifics } = payload;
+      const { userToken, title, description, listingFormat, listingPrice, auctionStartPrice, auctionBuyItNow, imageUrl, imageUrls: imageUrlsParam, condition, ebayCategoryId, itemSpecifics, listingPolicies: incomingPolicies } = payload;
       if (!userToken) throw new Error("No eBay user token provided");
 
       // eBay Partner Network campaign ID for affiliate revenue tracking
@@ -167,11 +167,13 @@ serve(async (req) => {
       }
 
       // Step 1: Create/update inventory item
+      // Support both imageUrls array (multi-photo) and single imageUrl fallback
+      const allImageUrls: string[] = imageUrlsParam?.length ? imageUrlsParam : (imageUrl ? [imageUrl] : []);
       const inventoryBody: any = {
         product: {
           title,
           description,
-          imageUrls: imageUrl ? [imageUrl] : [],
+          imageUrls: allImageUrls,
         },
         condition: condition || "USED_EXCELLENT",
         availability: {
@@ -205,38 +207,55 @@ serve(async (req) => {
         throw new Error(`Failed to create inventory item: ${inventoryResp.status} - ${errText}`);
       }
 
-      // Step 2: Fetch user's default business policies from eBay Account API.
-      // Policies (fulfillment/payment/return) are required to publish a listing.
-      // We auto-fetch the first policy of each type and attach them to the offer.
+      // Step 2: Resolve business policies.
+      // Use frontend-provided policies when available; fall back to auto-fetching
+      // the first policy of each type from the eBay Account API.
       const authHeaders = {
         Authorization: `Bearer ${userToken}`,
         "Content-Type": "application/json",
       };
 
-      const fetchDefaultPolicy = async (policyType: string): Promise<string | null> => {
-        const resp = await fetch(
-          `${apiBase}/sell/account/v1/${policyType}_policy?marketplace_id=EBAY_US`,
-          { headers: authHeaders }
-        );
-        if (!resp.ok) {
-          console.warn(`Could not fetch ${policyType} policies:`, resp.status, await resp.text());
-          return null;
-        }
-        const data = await resp.json();
-        const policies = data[`${policyType}Policies`] || data[`${policyType}Policy`] || [];
-        if (Array.isArray(policies) && policies.length > 0) {
-          console.log(`Using ${policyType} policy: ${policies[0].name} (${policies[0][`${policyType}PolicyId`]})`);
-          return policies[0][`${policyType}PolicyId`] || null;
-        }
-        console.warn(`No ${policyType} policies found on this account`);
-        return null;
-      };
+      let fulfillmentPolicyId: string | null = null;
+      let paymentPolicyId: string | null = null;
+      let returnPolicyId: string | null = null;
 
-      const [fulfillmentPolicyId, paymentPolicyId, returnPolicyId] = await Promise.all([
-        fetchDefaultPolicy("fulfillment"),
-        fetchDefaultPolicy("payment"),
-        fetchDefaultPolicy("return"),
-      ]);
+      if (
+        incomingPolicies?.fulfillmentPolicyId &&
+        incomingPolicies?.paymentPolicyId &&
+        incomingPolicies?.returnPolicyId
+      ) {
+        // User selected specific policies on the frontend — honour their choice
+        fulfillmentPolicyId = incomingPolicies.fulfillmentPolicyId;
+        paymentPolicyId = incomingPolicies.paymentPolicyId;
+        returnPolicyId = incomingPolicies.returnPolicyId;
+        console.log("Using frontend-provided policies:", { fulfillmentPolicyId, paymentPolicyId, returnPolicyId });
+      } else {
+        // Auto-fetch the first available policy of each type
+        const fetchDefaultPolicy = async (policyType: string): Promise<string | null> => {
+          const resp = await fetch(
+            `${apiBase}/sell/account/v1/${policyType}_policy?marketplace_id=EBAY_US`,
+            { headers: authHeaders }
+          );
+          if (!resp.ok) {
+            console.warn(`Could not fetch ${policyType} policies:`, resp.status, await resp.text());
+            return null;
+          }
+          const data = await resp.json();
+          const policies = data[`${policyType}Policies`] || data[`${policyType}Policy`] || [];
+          if (Array.isArray(policies) && policies.length > 0) {
+            console.log(`Using ${policyType} policy: ${policies[0].name} (${policies[0][`${policyType}PolicyId`]})`);
+            return policies[0][`${policyType}PolicyId`] || null;
+          }
+          console.warn(`No ${policyType} policies found on this account`);
+          return null;
+        };
+
+        [fulfillmentPolicyId, paymentPolicyId, returnPolicyId] = await Promise.all([
+          fetchDefaultPolicy("fulfillment"),
+          fetchDefaultPolicy("payment"),
+          fetchDefaultPolicy("return"),
+        ]);
+      }
 
       // All three policy IDs are required by eBay to publish a listing
       if (!fulfillmentPolicyId || !paymentPolicyId || !returnPolicyId) {

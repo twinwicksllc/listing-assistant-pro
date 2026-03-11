@@ -31,4 +31,7 @@ export interface ListingDraft {
   listingPrice?: number;
   auctionStartPrice?: number;
   auctionBuyItNow?: number | null;
+  fulfillmentPolicyId?: string | null;
+  paymentPolicyId?: string | null;
+  returnPolicyId?: string | null;
 }
