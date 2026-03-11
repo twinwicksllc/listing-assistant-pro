@@ -213,6 +213,7 @@ async function ensureInventoryLocation(
         Authorization: `Bearer ${userToken}`,
         "Content-Type": "application/json",
         "Accept-Language": "en-US",
+        "Content-Language": "en-US",
       },
       body: JSON.stringify(locationBody),
     }
@@ -333,6 +334,7 @@ serve(async (req) => {
           Authorization: `Basic ${credentials}`,
           "Content-Type": "application/x-www-form-urlencoded",
           "Accept-Language": "en-US",
+          "Content-Language": "en-US",
         },
         body: new URLSearchParams({
           grant_type: "authorization_code",
@@ -459,6 +461,7 @@ serve(async (req) => {
           Authorization: `Basic ${credentials}`,
           "Content-Type": "application/x-www-form-urlencoded",
           "Accept-Language": "en-US",
+          "Content-Language": "en-US",
         },
         body: new URLSearchParams({
           grant_type: "refresh_token",
@@ -726,6 +729,7 @@ serve(async (req) => {
         Authorization: `Bearer ${userToken}`,
         "Content-Type": "application/json",
         "Accept-Language": "en-US",
+        "Content-Language": "en-US",
       };
 
       const inventoryResp = await fetch(
@@ -997,6 +1001,7 @@ serve(async (req) => {
         Authorization: `Bearer ${resolvedToken}`,
         "Content-Type": "application/json",
         "Accept-Language": "en-US",
+        "Content-Language": "en-US",
       };
 
       // Fetch each policy type independently so one failure doesn't kill all three.
