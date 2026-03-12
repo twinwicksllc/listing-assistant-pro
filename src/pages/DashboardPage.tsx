@@ -422,6 +422,7 @@ export default function DashboardPage() {
                         listingId={listing.listingId}
                         title={listing.title}
                         yourPrice={listing.price}
+                        ebayUrl={listing.ebayUrl}
                         competitor={listing.competitor}
                         onRefreshed={(snapshot) =>
                           setListings((prev) =>
