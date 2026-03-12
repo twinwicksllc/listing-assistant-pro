@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { LayoutDashboard, Eye, DollarSign, Package, RefreshCw, ExternalLink, AlertCircle, Loader2, Settings, X, LogOut } from "lucide-react";
+import { CompetitorPriceCard } from "@/components/CompetitorPriceCard";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDrafts } from "@/hooks/useDrafts";
 import { useNavigate } from "react-router-dom";
@@ -7,6 +8,17 @@ import BottomNav from "@/components/BottomNav";
 import { supabase } from "@/integrations/supabase/client";
 import teckstartLogo from "@/assets/teckstart-logo.png";
 import { toast } from "sonner";
+
+interface CompetitorPriceSnapshot {
+  avgPrice: number | null;
+  minPrice: number | null;
+  maxPrice: number | null;
+  medianPrice: number | null;
+  priceDelta: number | null;  // your_price - avg_price; negative = you're cheaper
+  competitorCount: number;
+  priceDistribution: { min: number; max: number; count: number }[];
+  fetchedAt: string;
+}
 
 interface EbayListing {
   offerId: string;
@@ -19,6 +31,7 @@ interface EbayListing {
   views: number;
   listingId: string | null;
   ebayUrl: string | null;
+  competitor?: CompetitorPriceSnapshot | null;
 }
 
 const EBAY_TOKEN_KEY = "ebay-user-token";
@@ -118,7 +131,53 @@ export default function DashboardPage() {
         return;
       }
 
-      setListings(data.listings || []);
+      const rawListings: EbayListing[] = data.listings || [];
+
+      // Fetch cached competitor prices from Supabase for all listings with a listingId
+      let competitorMap: Record<string, CompetitorPriceSnapshot> = {};
+      if (user?.id && rawListings.length > 0) {
+        try {
+          const listingIds = rawListings
+            .map((l) => l.listingId)
+            .filter(Boolean) as string[];
+
+          if (listingIds.length > 0) {
+            const { data: cpData } = await supabase
+              .from("competitor_prices")
+              .select(
+                "ebay_listing_id, avg_price, min_price, max_price, median_price, price_delta, competitor_count, price_distribution, fetched_at"
+              )
+              .eq("user_id", user.id)
+              .in("ebay_listing_id", listingIds)
+              .order("fetched_at", { ascending: false });
+
+            // Keep only the most recent snapshot per listing
+            for (const row of cpData ?? []) {
+              if (!competitorMap[row.ebay_listing_id]) {
+                competitorMap[row.ebay_listing_id] = {
+                  avgPrice: row.avg_price,
+                  minPrice: row.min_price,
+                  maxPrice: row.max_price,
+                  medianPrice: row.median_price,
+                  priceDelta: row.price_delta,
+                  competitorCount: row.competitor_count,
+                  priceDistribution: row.price_distribution ?? [],
+                  fetchedAt: row.fetched_at,
+                };
+              }
+            }
+          }
+        } catch (cpErr) {
+          console.warn("Could not load competitor prices (non-fatal):", cpErr);
+        }
+      }
+
+      const listingsWithCompetitors: EbayListing[] = rawListings.map((l) => ({
+        ...l,
+        competitor: l.listingId ? (competitorMap[l.listingId] ?? null) : null,
+      }));
+
+      setListings(listingsWithCompetitors);
       setNeedsAuth(false);
 
       // Get user info
@@ -358,6 +417,23 @@ export default function DashboardPage() {
                         </a>
                       )}
                     </div>
+                    {listing.listingId && (
+                      <CompetitorPriceCard
+                        listingId={listing.listingId}
+                        title={listing.title}
+                        yourPrice={listing.price}
+                        competitor={listing.competitor}
+                        onRefreshed={(snapshot) =>
+                          setListings((prev) =>
+                            prev.map((l) =>
+                              l.listingId === listing.listingId
+                                ? { ...l, competitor: snapshot }
+                                : l
+                            )
+                          )
+                        }
+                      />
+                    )}
                   </div>
                 </div>
               ))}

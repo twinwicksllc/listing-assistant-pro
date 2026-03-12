@@ -20,7 +20,7 @@ import { uploadListingImage } from "@/lib/imageUpload";
  */
 export function usePublishDraft() {
   const { canPublish, recordUsage, isOwner, user } = useAuth();
-  const { markDraftPublished, markDraftFailed, updateDraft } = useDrafts();
+  const { markDraftPublished, markDraftFailed, updateDraft, removeDraft } = useDrafts();
   const navigate = useNavigate();
 
   /**
@@ -255,10 +255,24 @@ export function usePublishDraft() {
           : undefined,
       });
 
+      // Show a follow-up action toast asking if user wants to delete the draft
+      toast("Delete this draft from your list?", {
+        action: {
+          label: "Delete",
+          onClick: async () => {
+            await removeDraft(draft.id);
+            toast.success("Draft deleted");
+          },
+        },
+        cancel: {
+          label: "Keep",
+        },
+      });
+
       await recordUsage("ebay_publish");
       return "ok";
     },
-    [canPublish, isOwner, navigate, recordUsage, getEbayToken, markDraftPublished, markDraftFailed, updateDraft]
+    [canPublish, isOwner, navigate, recordUsage, getEbayToken, markDraftPublished, markDraftFailed, updateDraft, removeDraft]
   );
 
   return { publishDraft };

@@ -29,3 +29,14 @@ verify_jwt = false
 
 [functions.customer-portal]
 verify_jwt = false
+
+[functions.ebay-competitor-search]
+verify_jwt = false
+
+[functions.competitor-prices-cron]
+verify_jwt = false
+
+[cron.competitor-prices-refresh]
+# Run daily at 2:00 AM UTC
+schedule = "0 2 * * *"
+function = "competitor-prices-cron"
