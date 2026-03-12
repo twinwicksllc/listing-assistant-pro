@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, Send, Tag, Crown, Download, FileSpreadsheet, Sheet, ShieldCheck, AlertTriangle, Check, X as XIcon, Lock, UserCircle, DollarSign, Gavel, ShoppingCart } from "lucide-react";
 import PricingCard from "@/components/PricingCard";
+import CategoryConfirmDialog from "@/components/CategoryConfirmDialog";
 import { useDrafts } from "@/hooks/useDrafts";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -48,6 +49,8 @@ export default function AnalyzePage() {
   const [spotPrices, setSpotPrices] = useState<{ gold: number; silver: number; platinum: number } | null>(null);
   const [consignor, setConsignor] = useState("");
   const [includeAiFooter, setIncludeAiFooter] = useState(true);
+  const [showCategoryConfirm, setShowCategoryConfirm] = useState(false);
+  const [pendingCategoryId, setPendingCategoryId] = useState<string>("");
 
   // eBay business policies — selected by the user on this page
   const [ebayTokenForPolicies, setEbayTokenForPolicies] = useState<string | null>(null);
@@ -470,8 +473,22 @@ export default function AnalyzePage() {
                       type="text"
                       placeholder="Enter eBay category ID (e.g. 261069)"
                       className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                      onBlur={(e) => { if (e.target.value.trim()) setEbayCategoryId(e.target.value.trim()); }}
-                      onKeyDown={(e) => { if (e.key === "Enter") { const v = (e.target as HTMLInputElement).value.trim(); if (v) setEbayCategoryId(v); } }}
+                      onBlur={(e) => {
+                        const v = e.target.value.trim();
+                        if (v) {
+                          setPendingCategoryId(v);
+                          setShowCategoryConfirm(true);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          const v = (e.target as HTMLInputElement).value.trim();
+                          if (v) {
+                            setPendingCategoryId(v);
+                            setShowCategoryConfirm(true);
+                          }
+                        }
+                      }}
                     />
                   )}
                   {suggestedCategories.find(c => c.categoryId === ebayCategoryId)?.reason && (
@@ -819,6 +836,22 @@ export default function AnalyzePage() {
           </div>
         )}
       </div>
+
+      {/* Category Confirmation Dialog */}
+      <CategoryConfirmDialog
+        open={showCategoryConfirm}
+        categoryId={pendingCategoryId}
+        onConfirm={(categoryId) => {
+          setEbayCategoryId(categoryId);
+          setShowCategoryConfirm(false);
+          toast.success(`Category ${categoryId} confirmed`);
+        }}
+        onCancel={() => {
+          setShowCategoryConfirm(false);
+          setPendingCategoryId("");
+          setEbayCategoryId("");
+        }}
+      />
     </div>
   );
 }
