@@ -1,8 +1,9 @@
-import { TrendingUp, TrendingDown, Minus, RefreshCw, Users } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, RefreshCw, Users, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { CompetitorDetailsModal } from "@/components/CompetitorDetailsModal";
 
 interface CompetitorPriceSnapshot {
   avgPrice: number | null;
@@ -20,6 +21,7 @@ interface CompetitorPriceCardProps {
   title: string;
   categoryId?: string;
   yourPrice: number;
+  ebayUrl?: string | null;
   competitor: CompetitorPriceSnapshot | null | undefined;
   onRefreshed: (snapshot: CompetitorPriceSnapshot) => void;
 }
@@ -29,11 +31,13 @@ export function CompetitorPriceCard({
   title,
   categoryId,
   yourPrice,
+  ebayUrl,
   competitor,
   onRefreshed,
 }: CompetitorPriceCardProps) {
   const { user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
+  const [showModal, setShowModal] = useState(false);
 
   const handleRefresh = async () => {
     if (!user?.id || refreshing) return;
@@ -194,6 +198,28 @@ export function CompetitorPriceCard({
         <PriceDistributionBar
           distribution={competitor.priceDistribution}
           yourPrice={yourPrice}
+        />
+      )}
+
+      <button
+        onClick={() => setShowModal(true)}
+        className="flex items-center gap-0.5 text-xs text-primary hover:underline mt-0.5"
+      >
+        View details <ChevronRight className="w-3 h-3" />
+      </button>
+
+      {showModal && (
+        <CompetitorDetailsModal
+          listingId={listingId}
+          title={title}
+          categoryId={categoryId}
+          yourPrice={yourPrice}
+          ebayUrl={ebayUrl}
+          competitor={competitor}
+          onClose={() => setShowModal(false)}
+          onRefreshed={(snapshot) => {
+            onRefreshed(snapshot);
+          }}
         />
       )}
     </div>
