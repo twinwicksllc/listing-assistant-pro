@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Trash2, FileText, ShoppingCart, Gavel, Tag, Pencil, Send, Loader2, CheckSquare, Square } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Trash2, FileText, ShoppingCart, Gavel, Tag, Pencil, Send, Loader2, CheckSquare, Square, AlertTriangle } from "lucide-react";
 import { useDrafts } from "@/hooks/useDrafts";
 import { usePublishDraft } from "@/hooks/usePublishDraft";
 import { useAuth } from "@/contexts/AuthContext";
@@ -7,6 +7,7 @@ import BottomNav from "@/components/BottomNav";
 import EditDraftModal from "@/components/EditDraftModal";
 import { toast } from "sonner";
 import { ListingDraft } from "@/types/listing";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function DraftsPage() {
   const { drafts, removeDraft } = useDrafts();
@@ -17,6 +18,22 @@ export default function DraftsPage() {
   const [selectedIds, setSelectedIds]       = useState<Set<string>>(new Set());
   const [publishing, setPublishing]         = useState(false);
   const [publishingIds, setPublishingIds]   = useState<Set<string>>(new Set());
+  const [spotPrices, setSpotPrices]         = useState<{ gold: number; silver: number; platinum: number } | null>(null);
+
+  // Fetch spot prices once when any draft has precious metal content
+  useEffect(() => {
+    const hasMetal = drafts.some(
+      (d) => d.metalType && d.metalType !== "none" && (d.metalWeightOz ?? 0) > 0
+    );
+    if (!hasMetal || spotPrices) return;
+
+    supabase.functions
+      .invoke("spot-prices", { body: { metalType: "gold", weightOz: 1 } })
+      .then(({ data }) => {
+        if (data?.spotPrices) setSpotPrices(data.spotPrices);
+      })
+      .catch(() => {}); // non-fatal — badge just won't show
+  }, [drafts, spotPrices]);
 
   // ── Selection helpers ──────────────────────────────────────────────────────
   const toggleSelect = (id: string) => {
@@ -170,6 +187,14 @@ export default function DraftsPage() {
           const isSelected     = selectedIds.has(draft.id);
           const isBeingPublished = publishingIds.has(draft.id);
 
+          // Melt value alert: check if listing price is below precious metal melt floor
+          const metalKey = draft.metalType?.toLowerCase() as keyof typeof spotPrices;
+          const liveMelt =
+            spotPrices && metalKey && metalKey !== "none" && (draft.metalWeightOz ?? 0) > 0
+              ? spotPrices[metalKey] * (draft.metalWeightOz ?? 0)
+              : null;
+          const isBelowMelt = liveMelt !== null && displayPrice < liveMelt;
+
           return (
             <div
               key={draft.id}
@@ -222,6 +247,11 @@ export default function DraftsPage() {
                   {isBeingPublished && (
                     <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400">
                       <Loader2 className="w-2.5 h-2.5 animate-spin" /> Publishing…
+                    </span>
+                  )}
+                  {isBelowMelt && liveMelt && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                      <AlertTriangle className="w-2.5 h-2.5" /> Below melt (${liveMelt.toFixed(2)})
                     </span>
                   )}
                 </div>

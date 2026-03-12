@@ -53,6 +53,9 @@ export function useDrafts() {
           ebayOfferId: d.ebay_offer_id || undefined,
           ebayListingId: d.ebay_listing_id || undefined,
           lastPublishError: d.last_publish_error || undefined,
+          // Precious metal content
+          metalType: d.metal_type || 'none',
+          metalWeightOz: Number(d.metal_weight_oz) || 0,
         }))
       );
     }
@@ -89,6 +92,9 @@ export function useDrafts() {
       return_policy_id: draft.returnPolicyId || null,
       auction_duration: draft.auctionDuration || null,
       publish_status: "draft",
+      // Precious metal content
+      metal_type: draft.metalType || 'none',
+      metal_weight_oz: draft.metalWeightOz ?? 0,
     });
 
     if (error) {
@@ -137,6 +143,8 @@ export function useDrafts() {
     if (updates.ebayOfferId !== undefined)            patch.ebay_offer_id = updates.ebayOfferId || null;
     if (updates.ebayListingId !== undefined)          patch.ebay_listing_id = updates.ebayListingId || null;
     if (updates.lastPublishError !== undefined)       patch.last_publish_error = updates.lastPublishError || null;
+    if (updates.metalType !== undefined)               patch.metal_type = updates.metalType;
+    if (updates.metalWeightOz !== undefined)           patch.metal_weight_oz = updates.metalWeightOz;
 
     const { error } = await supabase.from("drafts").update(patch).eq("id", id);
 

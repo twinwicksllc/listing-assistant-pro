@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { LayoutDashboard, Eye, DollarSign, Package, RefreshCw, ExternalLink, AlertCircle, Loader2, Settings, X, LogOut } from "lucide-react";
+import { LayoutDashboard, Eye, DollarSign, Package, RefreshCw, ExternalLink, AlertCircle, Loader2, Settings, X, LogOut, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import { CompetitorPriceCard } from "@/components/CompetitorPriceCard";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDrafts } from "@/hooks/useDrafts";
@@ -46,6 +46,23 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
   const [ebayAccount, setEbayAccount] = useState<{ username: string; businessName: string } | null>(null);
   const [setupDismissed, setSetupDismissed] = useState(false);
+  const [spotPrices, setSpotPrices] = useState<{ gold: number; silver: number; platinum: number } | null>(null);
+  const [meltAlertOpen, setMeltAlertOpen] = useState(true);
+
+  // Fetch spot prices once we have live listings with metal-content drafts
+  useEffect(() => {
+    const metalDrafts = drafts.filter(
+      (d) => d.ebayListingId && d.metalType && d.metalType !== "none" && (d.metalWeightOz ?? 0) > 0
+    );
+    if (metalDrafts.length === 0 || spotPrices) return;
+
+    supabase.functions
+      .invoke("spot-prices", { body: { metalType: "gold", weightOz: 1 } })
+      .then(({ data }) => {
+        if (data?.spotPrices) setSpotPrices(data.spotPrices);
+      })
+      .catch(() => {}); // non-fatal
+  }, [drafts, spotPrices]);
 
   const fetchListings = useCallback(async () => {
     // Token lookup order mirrors usePublishDraft:
@@ -210,6 +227,18 @@ export default function DashboardPage() {
   const draftValue = drafts.reduce((sum, d) => sum + (d.priceMin + d.priceMax) / 2, 0);
   const totalInventoryValue = liveValue + draftValue;
 
+  // Build at-risk listing alerts (price below melt floor)
+  const atRiskListings = spotPrices
+    ? listings.flatMap((listing) => {
+        const draft = drafts.find((d) => d.ebayListingId === listing.listingId);
+        if (!draft || !draft.metalType || draft.metalType === "none" || !(draft.metalWeightOz ?? 0)) return [];
+        const key = draft.metalType.toLowerCase() as keyof typeof spotPrices;
+        const meltFloor = spotPrices[key] * (draft.metalWeightOz ?? 0);
+        if (!meltFloor || listing.price >= meltFloor) return [];
+        return [{ listing, meltFloor, delta: meltFloor - listing.price }];
+      })
+    : [];
+
   return (
     <div className="min-h-screen bg-background pb-24">
       {/* Header */}
@@ -319,6 +348,48 @@ export default function DashboardPage() {
             <p className="text-[10px] text-muted-foreground">Ready to publish</p>
           </div>
         </div>
+
+        {/* Repricing Alert Banner — listings priced below melt floor */}
+        {atRiskListings.length > 0 && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl overflow-hidden">
+            <button
+              onClick={() => setMeltAlertOpen((o) => !o)}
+              className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left"
+            >
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+                  {atRiskListings.length} listing{atRiskListings.length !== 1 ? "s" : ""} below melt floor
+                </span>
+              </div>
+              {meltAlertOpen
+                ? <ChevronUp className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                : <ChevronDown className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+              }
+            </button>
+
+            {meltAlertOpen && (
+              <div className="px-4 pb-3 space-y-2">
+                <p className="text-xs text-amber-700/80 dark:text-amber-300/80">
+                  Spot prices have moved — these listings are priced below their precious metal melt value. Consider raising your prices.
+                </p>
+                {atRiskListings.map(({ listing, meltFloor, delta }) => (
+                  <div key={listing.offerId} className="flex items-center justify-between gap-2 text-xs bg-amber-500/10 rounded-lg px-3 py-2">
+                    <p className="text-foreground font-medium line-clamp-1 flex-1">{listing.title}</p>
+                    <div className="flex-shrink-0 text-right space-y-0.5">
+                      <p className="text-amber-700 dark:text-amber-300 font-semibold">
+                        Listed ${listing.price.toFixed(2)} · Melt ${meltFloor.toFixed(2)}
+                      </p>
+                      <p className="text-amber-600/80 dark:text-amber-400/80">
+                        ${delta.toFixed(2)} below floor
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Auth warning / Connect eBay CTA */}
         {needsAuth && (
