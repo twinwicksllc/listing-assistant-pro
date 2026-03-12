@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Settings, User, CreditCard, Zap, Loader2, Check, ExternalLink, AlertCircle } from "lucide-react";
+import { ArrowLeft, Settings, User, CreditCard, Zap, Loader2, Check, ExternalLink, AlertCircle, Shield } from "lucide-react";
 import { useAuth, PLANS } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -15,7 +15,7 @@ type SettingsTab = "profile" | "billing" | "integrations";
 export default function SettingsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { isPro, isUnlimited, isPaid, subscription, usage, refreshSubscription, currentPlanLimits, isOwner, user } = useAuth();
+  const { isPro, isUnlimited, isPaid, subscription, usage, refreshSubscription, currentPlanLimits, isOwner, user, isAdmin } = useAuth();
   const paramTab = searchParams.get("tab") as SettingsTab | null;
   const initialTab = (paramTab && ["profile", "billing", "integrations"].includes(paramTab) ? paramTab : "profile") as SettingsTab;
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
@@ -210,6 +210,19 @@ export default function SettingsPage() {
                 <p className="text-sm font-medium text-foreground">Edit Profile</p>
                 <p className="text-xs text-muted-foreground mt-1">Update your name, email, and display preferences</p>
               </button>
+
+              {isAdmin && (
+                <button
+                  onClick={() => navigate("/admin")}
+                  className="px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 transition-colors text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                    <p className="text-sm font-medium text-foreground">Admin Dashboard</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Manage system and user settings</p>
+                </button>
+              )}
 
               <div className="border-t border-border pt-6">
                 <h3 className="font-semibold text-foreground mb-3">Security</h3>
