@@ -4,11 +4,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Shield, CheckCircle2, XCircle, AlertTriangle, RefreshCw,
-  Users, CreditCard, Cpu, Zap, ArrowLeft, Activity, DollarSign, Bell
+  Users, CreditCard, Cpu, Zap, ArrowLeft, Activity, DollarSign, Bell, TrendingUp, Code
 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, PieChart, Pie, Cell } from "recharts";
 
 const ADMIN_EMAIL = "twinwicksllc@gmail.com";
+const COST_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
 
 interface SystemData {
   stripe: { mode: string; activeSubscriptions: number; error: string };
@@ -18,7 +19,11 @@ interface SystemData {
     totalTokens: number;
     totalCalls: number;
     estimatedCost: number;
-    last30Days: { date: string; calls: number; tokens: number }[];
+    inputTokens: number;
+    outputTokens: number;
+    last30Days: { date: string; calls: number; tokens: number; cost: number; inputTokens: number; outputTokens: number }[];
+    last30DaysCost: { date: string; calls: number; tokens: number; cost: number; inputTokens: number; outputTokens: number }[];
+    byFunction: Record<string, { calls: number; cost: number; inputTokens: number; outputTokens: number }>;
   };
   featureUsage: { ai_analysis: number; ebay_publish: number; optimize: number; export: number };
   lastCostAlert: { sent_at: string; total_cost: number; total_requests: number } | null;
@@ -260,7 +265,7 @@ export default function AdminPage() {
             {/* Gemini Usage Chart */}
             {data.gemini.last30Days.length > 0 && (
               <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-                <h2 className="text-sm font-semibold text-foreground">AI Usage (Last 30 Days)</h2>
+                <h2 className="text-sm font-semibold text-foreground">AI Calls (Last 30 Days)</h2>
                 <div className="h-48">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={data.gemini.last30Days}>
@@ -282,6 +287,119 @@ export default function AdminPage() {
                       <Bar dataKey="calls" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="API Calls" />
                     </BarChart>
                   </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            {/* Daily Cost Trend Chart */}
+            {data.gemini.last30DaysCost.length > 0 && (
+              <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+                <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-primary" />
+                  Daily Cost Trend (Last 30 Days)
+                </h2>
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={data.gemini.last30DaysCost}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                        tickFormatter={(v) => v.slice(5)}
+                      />
+                      <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                      <Tooltip
+                        contentStyle={{
+                          background: "hsl(var(--card))",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: "8px",
+                          fontSize: "12px",
+                        }}
+                        formatter={(value: any) => `$${parseFloat(value).toFixed(4)}`}
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="cost" 
+                        stroke="hsl(var(--primary))" 
+                        dot={false}
+                        name="Daily Cost"
+                        strokeWidth={2}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            {/* Token Breakdown */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-card border border-border rounded-xl p-4 space-y-1">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Code className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-medium uppercase tracking-wide">Input Tokens</span>
+                </div>
+                <p className="text-2xl font-bold text-foreground">{data.gemini.inputTokens.toLocaleString()}</p>
+                <p className="text-[10px] text-muted-foreground">${(data.gemini.inputTokens * 0.00000125).toFixed(4)}</p>
+              </div>
+
+              <div className="bg-card border border-border rounded-xl p-4 space-y-1">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Code className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-medium uppercase tracking-wide">Output Tokens</span>
+                </div>
+                <p className="text-2xl font-bold text-foreground">{data.gemini.outputTokens.toLocaleString()}</p>
+                <p className="text-[10px] text-muted-foreground">${(data.gemini.outputTokens * 0.000005).toFixed(4)}</p>
+              </div>
+
+              <div className="bg-card border border-border rounded-xl p-4 space-y-1">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <DollarSign className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-medium uppercase tracking-wide">Total Cost</span>
+                </div>
+                <p className="text-2xl font-bold text-foreground">${data.gemini.estimatedCost.toFixed(4)}</p>
+                <p className="text-[10px] text-muted-foreground">30-day total</p>
+              </div>
+            </div>
+
+            {/* Cost by Function */}
+            {Object.keys(data.gemini.byFunction).length > 0 && (
+              <div className="bg-card border border-border rounded-xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-border">
+                  <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <Cpu className="w-4 h-4 text-primary" />
+                    Cost by Function
+                  </h2>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="border-b border-border bg-secondary/50">
+                      <tr>
+                        <th className="px-4 py-2 text-left font-semibold text-foreground">Function</th>
+                        <th className="px-4 py-2 text-right font-semibold text-foreground">Calls</th>
+                        <th className="px-4 py-2 text-right font-semibold text-foreground">Input Tokens</th>
+                        <th className="px-4 py-2 text-right font-semibold text-foreground">Output Tokens</th>
+                        <th className="px-4 py-2 text-right font-semibold text-foreground">Cost</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {Object.entries(data.gemini.byFunction)
+                        .sort((a, b) => b[1].cost - a[1].cost)
+                        .map(([funcName, stats]) => (
+                          <tr key={funcName} className="hover:bg-secondary/50 transition-colors">
+                            <td className="px-4 py-2 text-foreground font-medium">{funcName}</td>
+                            <td className="px-4 py-2 text-right text-muted-foreground">{stats.calls}</td>
+                            <td className="px-4 py-2 text-right text-muted-foreground">{stats.inputTokens.toLocaleString()}</td>
+                            <td className="px-4 py-2 text-right text-muted-foreground">{stats.outputTokens.toLocaleString()}</td>
+                            <td className="px-4 py-2 text-right font-semibold text-foreground">
+                              ${stats.cost.toFixed(4)}
+                              <div className="text-[10px] text-muted-foreground">
+                                {((stats.cost / data.gemini.estimatedCost) * 100).toFixed(1)}%
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}

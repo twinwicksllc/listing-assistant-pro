@@ -72,7 +72,16 @@ serve(async (req) => {
     }
 
     // --- Gemini Usage ---
-    let geminiUsage = { totalTokens: 0, totalCalls: 0, last30Days: [] as any[], estimatedCost: 0 };
+    let geminiUsage = { 
+      totalTokens: 0, 
+      totalCalls: 0, 
+      last30Days: [] as any[], 
+      estimatedCost: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      byFunction: {} as Record<string, { calls: number; cost: number; inputTokens: number; outputTokens: number }>,
+      last30DaysCost: [] as any[]
+    };
     try {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -82,25 +91,49 @@ serve(async (req) => {
         .select("*", { count: "exact" })
         .gte("created_at", thirtyDaysAgo.toISOString())
         .order("created_at", { ascending: false })
-        .limit(100);
+        .limit(500);
 
       geminiUsage.totalCalls = count || 0;
       if (usageData) {
-        geminiUsage.totalTokens = usageData.reduce((sum: number, r: any) => sum + (r.total_tokens || 0), 0);
-        // Rough cost estimate: ~$0.15 per 1M input tokens, ~$0.60 per 1M output tokens (Gemini Flash pricing)
         const inputTokens = usageData.reduce((sum: number, r: any) => sum + (r.prompt_tokens || 0), 0);
         const outputTokens = usageData.reduce((sum: number, r: any) => sum + (r.completion_tokens || 0), 0);
-        geminiUsage.estimatedCost = (inputTokens * 0.00000015) + (outputTokens * 0.0000006);
+        const inputCost = inputTokens * 0.00000125;
+        const outputCost = outputTokens * 0.000005;
+        
+        geminiUsage.inputTokens = inputTokens;
+        geminiUsage.outputTokens = outputTokens;
+        geminiUsage.totalTokens = inputTokens + outputTokens;
+        geminiUsage.estimatedCost = inputCost + outputCost;
 
-        // Group by day for chart
-        const byDay: Record<string, { calls: number; tokens: number }> = {};
+        // Group by day for chart (with daily cost)
+        const byDay: Record<string, { calls: number; tokens: number; cost: number; inputTokens: number; outputTokens: number }> = {};
         for (const row of usageData) {
           const day = row.created_at.split("T")[0];
-          if (!byDay[day]) byDay[day] = { calls: 0, tokens: 0 };
+          const dailyInputCost = (row.prompt_tokens || 0) * 0.00000125;
+          const dailyOutputCost = (row.completion_tokens || 0) * 0.000005;
+          if (!byDay[day]) byDay[day] = { calls: 0, tokens: 0, cost: 0, inputTokens: 0, outputTokens: 0 };
           byDay[day].calls++;
           byDay[day].tokens += row.total_tokens || 0;
+          byDay[day].cost += dailyInputCost + dailyOutputCost;
+          byDay[day].inputTokens += row.prompt_tokens || 0;
+          byDay[day].outputTokens += row.completion_tokens || 0;
         }
         geminiUsage.last30Days = Object.entries(byDay).map(([date, v]) => ({ date, ...v })).sort((a, b) => a.date.localeCompare(b.date));
+        geminiUsage.last30DaysCost = geminiUsage.last30Days;
+
+        // Group by function for breakdown
+        const byFunction: Record<string, { calls: number; cost: number; inputTokens: number; outputTokens: number }> = {};
+        for (const row of usageData) {
+          const func = row.function_name || "unknown";
+          const inputCost = (row.prompt_tokens || 0) * 0.00000125;
+          const outputCost = (row.completion_tokens || 0) * 0.000005;
+          if (!byFunction[func]) byFunction[func] = { calls: 0, cost: 0, inputTokens: 0, outputTokens: 0 };
+          byFunction[func].calls++;
+          byFunction[func].cost += inputCost + outputCost;
+          byFunction[func].inputTokens += row.prompt_tokens || 0;
+          byFunction[func].outputTokens += row.completion_tokens || 0;
+        }
+        geminiUsage.byFunction = byFunction;
       }
     } catch {
       // skip
