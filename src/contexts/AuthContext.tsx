@@ -58,6 +58,7 @@ interface AuthContextType {
   isPro: boolean;
   isUnlimited: boolean;
   isPaid: boolean;
+  isAdmin: boolean;
   canAnalyze: boolean;
   canPublish: boolean;
   recordUsage: (actionType: "ai_analysis" | "ebay_publish" | "optimize" | "export") => Promise<void>;
@@ -80,6 +81,7 @@ const AuthContext = createContext<AuthContextType>({
   isPro: false,
   isUnlimited: false,
   isPaid: false,
+  isAdmin: false,
   canAnalyze: true,
   canPublish: true,
   recordUsage: async () => {},
@@ -251,6 +253,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isPro,
         isUnlimited,
         isPaid,
+        isAdmin,
         canAnalyze: finalCanAnalyze,
         canPublish: finalCanPublish,
         recordUsage,

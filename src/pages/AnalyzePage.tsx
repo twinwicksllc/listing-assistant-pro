@@ -188,6 +188,8 @@ export default function AnalyzePage() {
       fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId ?? undefined,
       paymentPolicyId: selectedPolicies.paymentPolicyId ?? undefined,
       returnPolicyId: selectedPolicies.returnPolicyId ?? undefined,
+      metalType: metalType !== "none" ? metalType : undefined,
+      metalWeightOz: metalWeightOz > 0 ? metalWeightOz : undefined,
     });
     if (success) {
       toast.success("Draft saved!");

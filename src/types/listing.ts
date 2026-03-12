@@ -88,6 +88,10 @@ export interface ListingDraft {
   returnPolicyId?: string;
   auctionDuration?: AuctionDuration; // Only for AUCTION format
 
+  // Precious metal content (used for melt-value floor alerts)
+  metalType?: string;        // "gold" | "silver" | "platinum" | "none"
+  metalWeightOz?: number;    // troy oz of precious metal content
+
   // eBay publish lifecycle tracking
   publishStatus?: PublishStatus;
   publishedAt?: Date;
