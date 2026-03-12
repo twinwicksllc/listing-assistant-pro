@@ -13,8 +13,12 @@ const SUPABASE_PUBLISHABLE_KEY =
 // Temporary: verify env vars are defined at init time (scrubs middle chars)
 const scrub = (s: string | undefined) =>
   s ? `${s.slice(0, 8)}...${s.slice(-4)}` : 'UNDEFINED';
-console.log('[supabase] URL:', scrub(SUPABASE_URL));
-console.log('[supabase] KEY:', scrub(SUPABASE_PUBLISHABLE_KEY));
+
+// Only log debug info in development mode
+if (import.meta.env.DEV) {
+  console.log('[supabase] URL:', scrub(SUPABASE_URL));
+  console.log('[supabase] KEY:', scrub(SUPABASE_PUBLISHABLE_KEY));
+}
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
