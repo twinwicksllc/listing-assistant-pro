@@ -6,10 +6,9 @@ import {
   Shield, CheckCircle2, XCircle, AlertTriangle, RefreshCw,
   Users, CreditCard, Cpu, Zap, ArrowLeft, Activity, DollarSign, Bell, TrendingUp, Code
 } from "lucide-react";
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, PieChart, Pie, Cell } from "recharts";
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 const ADMIN_EMAIL = "twinwicksllc@gmail.com";
-const COST_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
 
 interface SystemData {
   stripe: { mode: string; activeSubscriptions: number; error: string };
@@ -263,7 +262,7 @@ export default function AdminPage() {
             </div>
 
             {/* Gemini Usage Chart */}
-            {data.gemini.last30Days.length > 0 && (
+            {data.gemini?.last30Days && Array.isArray(data.gemini.last30Days) && data.gemini.last30Days.length > 0 && (
               <div className="bg-card border border-border rounded-xl p-4 space-y-3">
                 <h2 className="text-sm font-semibold text-foreground">AI Calls (Last 30 Days)</h2>
                 <div className="h-48">
@@ -292,7 +291,7 @@ export default function AdminPage() {
             )}
 
             {/* Daily Cost Trend Chart */}
-            {data.gemini.last30DaysCost.length > 0 && (
+            {data.gemini?.last30DaysCost && Array.isArray(data.gemini.last30DaysCost) && data.gemini.last30DaysCost.length > 0 && (
               <div className="bg-card border border-border rounded-xl p-4 space-y-3">
                 <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-primary" />
@@ -362,7 +361,7 @@ export default function AdminPage() {
             </div>
 
             {/* Cost by Function */}
-            {Object.keys(data.gemini.byFunction).length > 0 && (
+            {data.gemini?.byFunction && Object.keys(data.gemini.byFunction).length > 0 && (
               <div className="bg-card border border-border rounded-xl overflow-hidden">
                 <div className="px-4 py-3 border-b border-border">
                   <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
