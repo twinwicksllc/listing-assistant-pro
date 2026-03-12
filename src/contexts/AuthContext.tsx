@@ -31,6 +31,8 @@ interface SubscriptionState {
   subscribed: boolean;
   productId: string | null;
   subscriptionEnd: string | null;
+  status: string | null;           // 'active' | 'trialing' | 'past_due' | 'canceled' | null
+  cancelAtPeriodEnd: boolean;      // true = will cancel at end of billing period
   loading: boolean;
 }
 
@@ -58,6 +60,7 @@ interface AuthContextType {
   isPro: boolean;
   isUnlimited: boolean;
   isPaid: boolean;
+  isPastDue: boolean;
   isAdmin: boolean;
   canAnalyze: boolean;
   canPublish: boolean;
@@ -74,13 +77,14 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   signOut: async () => {},
-  subscription: { subscribed: false, productId: null, subscriptionEnd: null, loading: true },
+  subscription: { subscribed: false, productId: null, subscriptionEnd: null, status: null, cancelAtPeriodEnd: false, loading: true },
   usage: { aiAnalysis: 0, ebayPublish: 0 },
   refreshSubscription: async () => {},
   refreshUsage: async () => {},
   isPro: false,
   isUnlimited: false,
   isPaid: false,
+  isPastDue: false,
   isAdmin: false,
   canAnalyze: true,
   canPublish: true,
@@ -142,6 +146,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         subscribed: data.subscribed ?? false,
         productId: data.product_id ?? null,
         subscriptionEnd: data.subscription_end ?? null,
+        status: data.status ?? null,
+        cancelAtPeriodEnd: data.cancel_at_period_end ?? false,
         loading: false,
       });
     } catch {
@@ -182,7 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session) {
           setTimeout(() => { refreshSubscription(); refreshUsage(); refreshOrg(); }, 0);
         } else {
-          setSubscription({ subscribed: false, productId: null, subscriptionEnd: null, loading: false });
+          setSubscription({ subscribed: false, productId: null, subscriptionEnd: null, status: null, cancelAtPeriodEnd: false, loading: false });
           setUsage({ aiAnalysis: 0, ebayPublish: 0 });
           setOrg({ orgId: null, orgName: null, role: null, loading: false });
         }
@@ -213,9 +219,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session, refreshSubscription]);
 
   const isAdmin = ADMIN_EMAILS.includes(session?.user?.email ?? "");
-  const isPro = !isAdmin && subscription.subscribed && subscription.productId === PLANS.pro.productId;
-  const isUnlimited = isAdmin || (subscription.subscribed && subscription.productId === PLANS.unlimited.productId);
+  // trialing counts as a paid plan (Stripe sends trialing status before first charge)
+  const isActivePaid = subscription.subscribed || subscription.status === "trialing";
+  const isPro = !isAdmin && isActivePaid && subscription.productId === PLANS.pro.productId;
+  const isUnlimited = isAdmin || (isActivePaid && subscription.productId === PLANS.unlimited.productId);
   const isPaid = isPro || isUnlimited;
+  const isPastDue = subscription.status === "past_due";
   const currentPlanLimits = isUnlimited
     ? { analysisLimit: Infinity, publishLimit: Infinity }
     : isPro
@@ -253,6 +262,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isPro,
         isUnlimited,
         isPaid,
+        isPastDue,
         isAdmin,
         canAnalyze: finalCanAnalyze,
         canPublish: finalCanPublish,

@@ -18,6 +18,102 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Use the service role client so we can read/write profiles and validate JWTs
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    { auth: { persistSession: false } }
+  );
+
+  try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) throw new Error("No authorization header");
+    const token = authHeader.replace("Bearer ", "");
+
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !user?.email) throw new Error("User not authenticated");
+
+    const body = await req.json().catch(() => ({}));
+    const priceId = body.priceId || VALID_PRICES[0];
+    if (!VALID_PRICES.includes(priceId)) throw new Error("Invalid price selected");
+
+    const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
+      apiVersion: "2025-08-27.basil",
+    });
+
+    // ── Resolve or create the Stripe customer ──────────────────────────────
+    // Prefer the cached stripe_customer_id from their profile.
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("stripe_customer_id")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    let customerId: string = profile?.stripe_customer_id;
+
+    if (!customerId) {
+      // Check Stripe by email in case they subscribed before we cached the ID
+      const existing = await stripe.customers.list({ email: user.email, limit: 1 });
+
+      if (existing.data.length > 0) {
+        customerId = existing.data[0].id;
+      } else {
+        // Create a new customer with metadata so the webhook can link them
+        // even if client_reference_id is somehow missing
+        const newCustomer = await stripe.customers.create({
+          email: user.email,
+          metadata: { supabase_user_id: user.id },
+        });
+        customerId = newCustomer.id;
+      }
+
+      // Persist immediately so future calls skip the Stripe lookup
+      await supabase
+        .from("profiles")
+        .update({ stripe_customer_id: customerId })
+        .eq("id", user.id);
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      // client_reference_id lets the webhook reliably identify the user
+      // without needing to search by email
+      client_reference_id: user.id,
+      line_items: [{ price: priceId, quantity: 1 }],
+      mode: "subscription",
+      success_url: `${req.headers.get("origin")}/billing?success=true`,
+      cancel_url: `${req.headers.get("origin")}/billing?canceled=true`,
+    });
+
+    return new Response(JSON.stringify({ url: session.url }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200,
+    });
+  } catch (error) {
+    return new Response(JSON.stringify({ error: (error as Error).message }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+    });
+  }
+});
+
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+const VALID_PRICES = [
+  "price_1T8lVU4bX0d1SiThMDayhDj5", // Pro $19.99
+  "price_1T8mZ84bX0d1SiThFgvRubiN", // Unlimited $49.99
+];
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
   const supabaseClient = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_ANON_KEY") ?? ""

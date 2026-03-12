@@ -36,6 +36,10 @@ verify_jwt = false
 [functions.competitor-prices-cron]
 verify_jwt = false
 
+[functions.stripe-webhook]
+# Stripe POSTs here directly — no Supabase JWT, verified via Stripe-Signature header
+verify_jwt = false
+
 [cron.competitor-prices-refresh]
 # Run daily at 2:00 AM UTC
 schedule = "0 2 * * *"
