@@ -193,7 +193,7 @@ export default function AdminPage() {
                     <div>
                       <p className="text-sm font-medium text-foreground">Gemini AI</p>
                       <p className="text-xs text-muted-foreground">
-                        {data.gemini.totalCalls} calls · {data.gemini.totalTokens.toLocaleString()} tokens (30d)
+                        {data.gemini.totalCalls} calls · {(data.gemini.totalTokens ?? 0).toLocaleString()} tokens (30d)
                       </p>
                     </div>
                   </div>
@@ -233,8 +233,8 @@ export default function AdminPage() {
                   <Zap className="w-3.5 h-3.5" />
                   <span className="text-[10px] font-medium uppercase tracking-wide">Est. AI Cost</span>
                 </div>
-                <p className="text-2xl font-bold text-foreground">${data.gemini.estimatedCost.toFixed(4)}</p>
-                <p className="text-[10px] text-muted-foreground">{data.gemini.totalTokens.toLocaleString()} tokens</p>
+                <p className="text-2xl font-bold text-foreground">${(data.gemini.estimatedCost ?? 0).toFixed(4)}</p>
+                <p className="text-[10px] text-muted-foreground">{(data.gemini.totalTokens ?? 0).toLocaleString()} tokens</p>
               </div>
             </div>
 
@@ -337,8 +337,8 @@ export default function AdminPage() {
                   <Code className="w-3.5 h-3.5" />
                   <span className="text-[10px] font-medium uppercase tracking-wide">Input Tokens</span>
                 </div>
-                <p className="text-2xl font-bold text-foreground">{data.gemini.inputTokens.toLocaleString()}</p>
-                <p className="text-[10px] text-muted-foreground">${(data.gemini.inputTokens * 0.00000125).toFixed(4)}</p>
+                <p className="text-2xl font-bold text-foreground">{(data.gemini.inputTokens ?? 0).toLocaleString()}</p>
+                <p className="text-[10px] text-muted-foreground">${((data.gemini.inputTokens ?? 0) * 0.00000125).toFixed(4)}</p>
               </div>
 
               <div className="bg-card border border-border rounded-xl p-4 space-y-1">
@@ -346,8 +346,8 @@ export default function AdminPage() {
                   <Code className="w-3.5 h-3.5" />
                   <span className="text-[10px] font-medium uppercase tracking-wide">Output Tokens</span>
                 </div>
-                <p className="text-2xl font-bold text-foreground">{data.gemini.outputTokens.toLocaleString()}</p>
-                <p className="text-[10px] text-muted-foreground">${(data.gemini.outputTokens * 0.000005).toFixed(4)}</p>
+                <p className="text-2xl font-bold text-foreground">{(data.gemini.outputTokens ?? 0).toLocaleString()}</p>
+                <p className="text-[10px] text-muted-foreground">${((data.gemini.outputTokens ?? 0) * 0.000005).toFixed(4)}</p>
               </div>
 
               <div className="bg-card border border-border rounded-xl p-4 space-y-1">
@@ -387,8 +387,8 @@ export default function AdminPage() {
                           <tr key={funcName} className="hover:bg-secondary/50 transition-colors">
                             <td className="px-4 py-2 text-foreground font-medium">{funcName}</td>
                             <td className="px-4 py-2 text-right text-muted-foreground">{stats.calls}</td>
-                            <td className="px-4 py-2 text-right text-muted-foreground">{stats.inputTokens.toLocaleString()}</td>
-                            <td className="px-4 py-2 text-right text-muted-foreground">{stats.outputTokens.toLocaleString()}</td>
+                            <td className="px-4 py-2 text-right text-muted-foreground">{(stats.inputTokens ?? 0).toLocaleString()}</td>
+                            <td className="px-4 py-2 text-right text-muted-foreground">{(stats.outputTokens ?? 0).toLocaleString()}</td>
                             <td className="px-4 py-2 text-right font-semibold text-foreground">
                               ${stats.cost.toFixed(4)}
                               <div className="text-[10px] text-muted-foreground">
