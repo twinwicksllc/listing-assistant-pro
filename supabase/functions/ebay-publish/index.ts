@@ -883,11 +883,16 @@ serve(async (req) => {
       };
 
       // Build eBay-formatted item specifics (aspects)
+      // Skip blank, "None", "Unknown", "N/A", "Other" values — eBay rejects placeholder text
+      const ASPECT_SKIP_VALUES = new Set(["none", "unknown", "n/a", "other", "unspecified", "not applicable"]);
       const aspects: Record<string, string[]> = {};
       if (itemSpecifics && typeof itemSpecifics === "object") {
         for (const [key, value] of Object.entries(itemSpecifics)) {
           if (value && typeof value === "string" && value.trim()) {
-            aspects[key] = [value.trim()];
+            const trimmed = value.trim();
+            if (!ASPECT_SKIP_VALUES.has(trimmed.toLowerCase())) {
+              aspects[key] = [trimmed];
+            }
           }
         }
       }
