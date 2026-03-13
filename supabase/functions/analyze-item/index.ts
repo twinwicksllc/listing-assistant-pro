@@ -461,7 +461,7 @@ Seller's note: "${voiceNote}"`;
                         Fineness: { type: "string", description: "Fineness as decimal ONLY: '0.999', '0.9999', '0.9675', '0.925', '0.900' — never '999 fine' or '99.9%'" },
                         Composition: { type: "string", enum: ["Gold", "Silver", "Platinum", "Palladium", "Bronze", "Copper", "Nickel", "Steel", "Zinc"], description: "Metal composition — must match allowed values exactly" },
                         "Precious Metal Content per Unit": { type: "string", description: "Metal weight per piece (e.g., '1 Troy oz', '1/2 Troy oz', '1/4 Troy oz', '1 g')" },
-                        "Country of Origin": { type: "string", description: "Country that issued or manufactured the item" },
+                        "Country of Origin": { type: "string", description: "Short country name only (e.g. 'United States', 'Canada', 'China'). Maximum 65 characters. Must be a real country name — never a description, sentence, or explanation. If unknown, omit this field entirely." },
                         Grade: { type: "string", description: "Coin grade with SPACE separator: 'MS 65', 'AU 55', 'VF 30' — never 'MS-65' or 'MS65'" },
                         Denomination: { type: "string", description: "Face value: half-dollar series use '50C'; dollar series use '$1'; other denominations as shown on coin" },
                         "Circulated/Uncirculated": { type: "string", enum: ["Circulated", "Uncirculated", "Unknown"], description: "Circulation status — must be exactly one of the three allowed values" },

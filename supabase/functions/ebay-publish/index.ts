@@ -8,6 +8,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Force redeploy v14: fix errorId 25002 "Country of Origin value too long" — drop Country of Origin if value > 65 chars or contains sentence punctuation (AI hallucination guard)
 // Force redeploy v13: fix errorId 25005 "not a leaf category" for US Mint Proof Sets — correct category 253→41109 (US Coin Proof Sets), add CATEGORY_ASPECT_RULES for 41109 and 526
 // fineness/denomination/grade normalisation, required-aspect safety-fill (PR #118)
 
@@ -26,14 +27,14 @@ interface AspectRule {
 }
 
 const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
-  // Gold Bars &amp; Rounds
+  // Gold Bars & Rounds
   "178906": {
     required: [],
     preferred: ["Shape", "Precious Metal Content per Unit", "Brand/Mint", "Fineness"],
     defaults: {},
     fixedValues: { "Composition": "Gold" },
   },
-  // Silver Bars &amp; Rounds
+  // Silver Bars & Rounds
   "39489": {
     required: [],
     preferred: ["Shape", "Precious Metal Content per Unit", "Brand/Mint", "Fineness"],
@@ -113,7 +114,7 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
 // ================================================================
 const VALID_ASPECT_VALUES: Record<string, Set<string>> = {
   "Certification": new Set([
-    "Uncertified", "PCGS", "NGC", "PCGS &amp; CAC", "NGC &amp; CAC",
+    "Uncertified", "PCGS", "NGC", "PCGS & CAC", "NGC & CAC",
     "U.S. Mint", "ANACS", "ICG", "CAC", "ICCS",
   ]),
   "Circulated/Uncirculated": new Set(["Uncirculated", "Circulated", "Unknown"]),
@@ -375,6 +376,18 @@ function buildAndNormalizeAspects(
     else if (key === "Circulated/Uncirculated") {
       const gradeHint = (rawSpecifics["Grade"] as string) || undefined;
       value = normalizeCirculatedUncirculated(trimmed, gradeHint);
+    }
+
+    // eBay hard limit for Country of Origin is 65 characters.
+    // Guard against AI hallucination where description text is placed in this field:
+    // drop the value if it exceeds 65 chars OR contains sentence-like punctuation
+    // (periods, commas in long strings) that no valid country name would ever contain.
+    if (key === "Country of Origin") {
+      const looksLikeSentence = value.length > 65 || /[.!?]/.test(value) || (value.includes(",") && value.length > 40);
+      if (looksLikeSentence) {
+        console.warn(`buildAndNormalizeAspects: dropping Country of Origin — value looks like AI-generated text (${value.length} chars): "${value.slice(0, 80)}..."`);
+        continue;
+      }
     }
 
     if (VALID_ASPECT_VALUES[key] && !VALID_ASPECT_VALUES[key].has(value)) {
@@ -823,7 +836,7 @@ async function ensureInventoryLocation(
 }
 
 serve(async (req) => {
-  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v13 - fix 25005 not-a-leaf-category for proof sets: 253→41109 US Coin Proof Sets, added aspect rules for 41109/526) ***");
+  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v14 - fix 25002 Country of Origin too long: drop hallucinated AI text > 65 chars or with sentence punctuation) ***");
   
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
