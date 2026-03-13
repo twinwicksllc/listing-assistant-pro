@@ -34,7 +34,7 @@ const CONDITION_ID_MAP: Record<string, number> = {
 };
 
 // Human-readable condition descriptions for eBay conditionDescription field
-// Force redeploy v5: Accept-Language/Content-Language headers removed, condition at root level (PR #112/#113)
+// Force redeploy v6: Accept-Language/Content-Language explicitly set to "" in ALL header locations to suppress Deno injection (PR #117)
 const CONDITION_DESCRIPTIONS: Record<string, string> = {
   NEW: "Brand new, unused, unopened item in original packaging.",
   LIKE_NEW: "Like new condition. May be open box but unused.",
@@ -381,6 +381,9 @@ async function ensureInventoryLocation(
       headers: {
         Authorization: `Bearer ${userToken}`,
         "Content-Type": "application/json",
+        // eBay rejects Accept-Language header (errorId 25709); override Deno's automatic injection
+        "Accept-Language": "",
+        "Content-Language": "",
       },
       body: JSON.stringify(locationBody),
       timeout: 15000,
@@ -421,7 +424,7 @@ async function ensureInventoryLocation(
 }
 
 serve(async (req) => {
-  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v5 - Accept-Language headers removed, condition at root level) ***");
+  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v6 - Accept-Language/Content-Language suppressed in ALL header locations) ***");
   
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -930,11 +933,14 @@ serve(async (req) => {
         );
       }
 
-      // NOTE: Do NOT include Accept-Language or Content-Language headers.
-      // eBay Inventory API rejects these with errorId 25709.
+      // NOTE: eBay Inventory API rejects Accept-Language and Content-Language
+      // headers with errorId 25709. Deno fetch may inject Accept-Language automatically
+      // based on system locale, so we explicitly override with empty string to suppress it.
       const authHeaders = {
         Authorization: `Bearer ${userToken}`,
         "Content-Type": "application/json",
+        "Accept-Language": "",
+        "Content-Language": "",
       };
 
       // Step 1: Ensure inventory location exists before creating the item.
@@ -1324,9 +1330,14 @@ serve(async (req) => {
         );
       }
 
+      // NOTE: eBay Inventory API rejects Accept-Language and Content-Language
+      // headers with errorId 25709. Deno fetch may inject Accept-Language automatically
+      // based on system locale, so we explicitly override with empty string to suppress it.
       const authHeaders = {
         Authorization: `Bearer ${resolvedToken}`,
         "Content-Type": "application/json",
+        "Accept-Language": "",
+        "Content-Language": "",
       };
 
       // Fetch each policy type independently so one failure doesn't kill all three.
