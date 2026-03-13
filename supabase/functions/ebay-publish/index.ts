@@ -8,7 +8,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Force redeploy v10: USED_* condition codes for coins, fee-adjusted melt floor (×1.19) — correct IDs, C: prefix normalisation,
+// Force redeploy v12: normalizePreciousMetalContent() — fix errorId 25604 "Product not found" for non-standard bullion weights (e.g. "0.1607 Troy oz" -> "5 g")
 // fineness/denomination/grade normalisation, required-aspect safety-fill (PR #118)
 
 // ================================================================
@@ -180,6 +180,116 @@ function normalizeCirculatedUncirculated(
   return "Unknown";
 }
 
+// ----------------------------------------------------------------
+// Normalize "Precious Metal Content per Unit" to eBay-accepted values.
+// eBay category 39489 (Silver Bars & Rounds) and related bullion categories
+// reject non-standard values like "0.1607 Troy oz" at publishOffer time
+// with errorId 25604 "Product not found". The accepted values use:
+//   - Grams: "1 g", "2 g", "5 g", "10 g", "20 g", "50 g", "100 g", "250 g", "1000 g"
+//   - Fractions: "1/20 oz", "1/10 oz", "1/4 oz", "1/2 oz", "1 oz", "2 oz",
+//                "5 oz", "10 oz", "1 kilo" (NO "Troy" in the value)
+// Strategy:
+//   1. Strip " Troy" from any value ("1 Troy oz" -> "1 oz")
+//   2. Recognize common gram weights ("5g", "5 g", "5 grams")
+//   3. Convert decimal oz to nearest matching fraction or gram equivalent
+//      ("0.1607 Troy oz" -> 0.1607 oz -> 5.0g -> "5 g")
+//   4. Map decimal fractions to fraction strings ("0.5 oz" -> "1/2 oz")
+// ----------------------------------------------------------------
+function normalizePreciousMetalContent(value: string): string {
+  const v = value.trim();
+
+  // Already a valid eBay format -- return as-is
+  const validFormats = new Set([
+    "1/20 oz", "1/10 oz", "1/4 oz", "1/2 oz",
+    "1 oz", "2 oz", "5 oz", "10 oz", "1 kilo",
+    "1 g", "2 g", "2.5 g", "5 g", "10 g", "20 g",
+    "25 g", "50 g", "100 g", "250 g", "500 g", "1000 g",
+  ]);
+  if (validFormats.has(v)) return v;
+
+  // Step 1: Strip " Troy" (case-insensitive) -> normalize to plain oz
+  // "1 Troy oz" -> "1 oz", "0.1607 Troy oz" -> "0.1607 oz"
+  const stripped = v.replace(/\s*troy\s*/i, " ").replace(/\s+/g, " ").trim();
+
+  // Step 2: Try to parse gram values
+  // Matches: "5g", "5 g", "5 grams", "5.0g", "10 grams"
+  const gramMatch = stripped.match(/^(\d+(?:\.\d+)?)\s*g(?:rams?)?$/i);
+  if (gramMatch) {
+    const grams = parseFloat(gramMatch[1]);
+    const gramMap: [number, string][] = [
+      [1, "1 g"], [2, "2 g"], [2.5, "2.5 g"], [5, "5 g"], [10, "10 g"],
+      [20, "20 g"], [25, "25 g"], [50, "50 g"], [100, "100 g"],
+      [250, "250 g"], [500, "500 g"], [1000, "1000 g"],
+    ];
+    for (const [target, label] of gramMap) {
+      if (Math.abs(grams - target) / target < 0.02) return label;
+    }
+    return `${grams % 1 === 0 ? grams : grams} g`;
+  }
+
+  // Step 3: Parse oz values (after stripping Troy)
+  // Matches: "1 oz", "1/4 oz", "0.5 oz", "0.1607 oz"
+  const ozMatch = stripped.match(/^(\d+(?:[./]\d+)?)\s*oz$/i);
+  if (ozMatch) {
+    const ozStr = ozMatch[1];
+
+    // Already a fraction string -- normalize
+    const fractionMap: Record<string, string> = {
+      "1/20": "1/20 oz", "1/10": "1/10 oz", "1/4": "1/4 oz",
+      "1/2": "1/2 oz", "1": "1 oz", "2": "2 oz", "5": "5 oz",
+      "10": "10 oz",
+    };
+    if (fractionMap[ozStr]) return fractionMap[ozStr];
+
+    // Parse as decimal
+    let ozVal: number;
+    if (ozStr.includes("/")) {
+      const [num, den] = ozStr.split("/").map(Number);
+      ozVal = num / den;
+    } else {
+      ozVal = parseFloat(ozStr);
+    }
+
+    // For values like "0.1607 oz" (5g expressed in troy oz),
+    // convert to grams first (1 troy oz = 31.1035g) and match gram denominations
+    const gramsFromOz = ozVal * 31.1035;
+    const gramMapOz: [number, string][] = [
+      [1, "1 g"], [2, "2 g"], [2.5, "2.5 g"], [5, "5 g"], [10, "10 g"],
+      [20, "20 g"], [25, "25 g"], [50, "50 g"], [100, "100 g"],
+      [250, "250 g"], [500, "500 g"], [1000, "1000 g"],
+    ];
+    for (const [target, label] of gramMapOz) {
+      if (Math.abs(gramsFromOz - target) / target < 0.03) return label;
+    }
+
+    // Map decimal oz values to eBay fraction strings
+    const ozFractionMap: [number, string][] = [
+      [0.05,  "1/20 oz"],
+      [0.10,  "1/10 oz"],
+      [0.25,  "1/4 oz"],
+      [0.50,  "1/2 oz"],
+      [1.0,   "1 oz"],
+      [2.0,   "2 oz"],
+      [5.0,   "5 oz"],
+      [10.0,  "10 oz"],
+      [32.15, "1 kilo"],
+    ];
+    for (const [target, label] of ozFractionMap) {
+      if (Math.abs(ozVal - target) / target < 0.10) return label;
+    }
+
+    return `${ozVal} oz`;
+  }
+
+  // Step 4: Handle "1 kilo" variants
+  if (/^1\s*kilo(?:gram)?$/i.test(stripped) || /^1000\s*g(?:rams?)?$/i.test(stripped)) {
+    return "1 kilo";
+  }
+
+  // Fallback: return stripped value (removed "Troy" at minimum)
+  return stripped;
+}
+
 const ASPECT_KEY_ALIASES: Record<string, string> = {
   "Circulated/Uncirculated":         "Circulated/Uncirculated",
   "CirculatedUncirculated":          "Circulated/Uncirculated",
@@ -249,6 +359,7 @@ function buildAndNormalizeAspects(
     if (key === "Fineness") value = normalizeFineness(trimmed);
     else if (key === "Grade") value = normalizeGrade(trimmed);
     else if (key === "Denomination") value = normalizeDenomination(trimmed, categoryId);
+    else if (key === "Precious Metal Content per Unit") value = normalizePreciousMetalContent(trimmed);
     else if (key === "Circulated/Uncirculated") {
       const gradeHint = (rawSpecifics["Grade"] as string) || undefined;
       value = normalizeCirculatedUncirculated(trimmed, gradeHint);
@@ -700,7 +811,7 @@ async function ensureInventoryLocation(
 }
 
 serve(async (req) => {
-  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v11 - explicit Accept-Language: en-US overrides Deno runtime injection) ***");
+  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v12 - normalizePreciousMetalContent: fix 25604 Product not found for non-standard bullion weights) ***");
   
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
