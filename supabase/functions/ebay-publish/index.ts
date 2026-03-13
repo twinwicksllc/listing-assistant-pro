@@ -8,15 +8,289 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// ----------------------------------------------------------------
-// eBay condition ID mapping
-// As of 2024, eBay deprecated USED_EXCELLENT/USED_VERY_GOOD/USED_GOOD/USED_ACCEPTABLE.
-// Current valid ConditionEnum values for pre-owned items:
-//   PRE_OWNED_GOOD  -> replaces USED_EXCELLENT and USED_VERY_GOOD
-//   PRE_OWNED_FAIR  -> replaces USED_GOOD
-//   PRE_OWNED_POOR  -> replaces USED_ACCEPTABLE
-// Reference: https://developer.ebay.com/api-docs/sell/inventory/types/slr:ConditionEnum
-// ----------------------------------------------------------------
+// Force redeploy v7: Category-aware aspect engine — correct IDs, C: prefix normalisation,
+// fineness/denomination/grade normalisation, required-aspect safety-fill (PR #118)
+
+// ================================================================
+// CATEGORY ASPECT RULES
+// ================================================================
+// Defines required and preferred aspects for the 10 "template" categories.
+// For ANY other category the app falls through to generic normalisation.
+// ================================================================
+
+interface AspectRule {
+  required: string[];
+  preferred: string[];
+  defaults: Record<string, string>;
+  fixedValues?: Record<string, string>;
+}
+
+const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
+  // Gold Bars &amp; Rounds
+  "178906": {
+    required: [],
+    preferred: ["C:Shape", "C:Precious Metal Content per Unit", "C:Brand/Mint", "C:Fineness"],
+    defaults: {},
+    fixedValues: { "C:Composition": "Gold" },
+  },
+  // Silver Bars &amp; Rounds
+  "39489": {
+    required: [],
+    preferred: ["C:Shape", "C:Precious Metal Content per Unit", "C:Brand/Mint", "C:Fineness"],
+    defaults: {},
+    fixedValues: { "C:Composition": "Silver" },
+  },
+  // Other Silver Bullion
+  "3361": {
+    required: ["C:Certification"],
+    preferred: ["C:Type"],
+    defaults: { "C:Certification": "Uncertified" },
+    fixedValues: { "C:Composition": "Silver" },
+  },
+  // Ancient Coins
+  "532": {
+    required: [],
+    preferred: ["C:KM Number", "C:Fineness"],
+    defaults: {},
+  },
+  // Medieval Coins
+  "173685": {
+    required: [],
+    preferred: ["C:KM Number", "C:Fineness"],
+    defaults: {},
+  },
+  // Eisenhower Dollars 1971-1978
+  "11981": {
+    required: ["C:Certification", "C:Circulated/Uncirculated"],
+    preferred: ["C:Year", "C:Strike Type", "C:Mint Location", "C:Fineness", "C:Denomination"],
+    defaults: { "C:Certification": "Uncertified", "C:Circulated/Uncirculated": "Unknown", "C:Denomination": "$1" },
+    fixedValues: { "C:Denomination": "$1" },
+  },
+  // Morgan Dollars 1878-1921
+  "39464": {
+    required: ["C:Certification", "C:Circulated/Uncirculated"],
+    preferred: ["C:Composition", "C:Year", "C:Mint Location", "C:Strike Type", "C:Fineness", "C:Denomination"],
+    defaults: { "C:Certification": "Uncertified", "C:Circulated/Uncirculated": "Unknown", "C:Denomination": "$1" },
+    fixedValues: { "C:Denomination": "$1", "C:Composition": "Silver", "C:Fineness": "0.900" },
+  },
+  // Peace Dollars 1921-1935
+  "11980": {
+    required: ["C:Certification", "C:Circulated/Uncirculated"],
+    preferred: ["C:Year", "C:Mint Location", "C:Strike Type", "C:Fineness", "C:Denomination"],
+    defaults: { "C:Certification": "Uncertified", "C:Circulated/Uncirculated": "Unknown", "C:Denomination": "$1" },
+    fixedValues: { "C:Denomination": "$1", "C:Composition": "Silver", "C:Fineness": "0.900" },
+  },
+  // Barber Half Dollars 1892-1915
+  "11971": {
+    required: ["C:Certification", "C:Circulated/Uncirculated"],
+    preferred: ["C:Year", "C:Mint Location", "C:Strike Type", "C:Fineness", "C:Denomination"],
+    defaults: { "C:Certification": "Uncertified", "C:Circulated/Uncirculated": "Unknown", "C:Denomination": "50C" },
+    fixedValues: { "C:Denomination": "50C", "C:Composition": "Silver", "C:Fineness": "0.900" },
+  },
+  // Liberty Walking Half Dollars 1916-1947
+  "41099": {
+    required: ["C:Certification", "C:Circulated/Uncirculated"],
+    preferred: ["C:Year", "C:Mint Location", "C:Strike Type", "C:Fineness", "C:Denomination"],
+    defaults: { "C:Certification": "Uncertified", "C:Circulated/Uncirculated": "Unknown", "C:Denomination": "50C" },
+    fixedValues: { "C:Denomination": "50C", "C:Composition": "Silver", "C:Fineness": "0.900" },
+  },
+};
+
+// ================================================================
+// VALID ASPECT VALUES
+// ================================================================
+const VALID_ASPECT_VALUES: Record<string, Set<string>> = {
+  "C:Certification": new Set([
+    "Uncertified", "PCGS", "NGC", "PCGS &amp; CAC", "NGC &amp; CAC",
+    "U.S. Mint", "ANACS", "ICG", "CAC", "ICCS",
+  ]),
+  "C:Circulated/Uncirculated": new Set(["Uncirculated", "Circulated", "Unknown"]),
+  "C:Shape": new Set(["Bar", "Round"]),
+  "C:Strike Type": new Set([
+    "Business", "Proof", "Proof-Like", "Deep Mirror Proof-Like", "Satin", "Matte",
+  ]),
+  "C:Composition": new Set([
+    "Gold", "Silver", "Platinum", "Palladium", "Bronze", "Copper", "Nickel", "Steel", "Zinc",
+  ]),
+};
+
+// ================================================================
+// ASPECT NORMALISATION HELPERS
+// ================================================================
+
+const ASPECT_SKIP_VALUES = new Set([
+  "none", "unknown", "n/a", "other", "unspecified", "not applicable",
+  "unknown/not applicable", "not specified",
+]);
+
+function normalizeFineness(value: string): string {
+  const v = value.trim();
+  if (/^0\.\d{2,5}$/.test(v)) return v;
+  if (/^\d{3,5}$/.test(v)) {
+    const n = parseInt(v, 10);
+    const decimals = v.length === 3 ? 3 : v.length === 4 ? 4 : 5;
+    return (n / Math.pow(10, decimals)).toFixed(decimals);
+  }
+  const pct = v.match(/^(\d+\.?\d*)\s*%$/);
+  if (pct) return (parseFloat(pct[1]) / 100).toFixed(3);
+  const dec = v.match(/\b(0\.\d{2,5})\b/);
+  if (dec) return dec[1];
+  return v;
+}
+
+function normalizeGrade(value: string): string {
+  const v = value.trim();
+  const withHyphen = v.match(/^(MS|PR|AU|XF|VF|F|VG|G|AG|FA|P)-?(\d+)$/i);
+  if (withHyphen) return `${withHyphen[1].toUpperCase()} ${withHyphen[2]}`;
+  const noSep = v.match(/^(MS|PR|AU|XF|VF|VG|AG|FA)([\s-]?)(\d+)$/i);
+  if (noSep) return `${noSep[1].toUpperCase()} ${noSep[3]}`;
+  return v;
+}
+
+function normalizeDenomination(value: string, categoryId: string): string {
+  const v = value.trim();
+  const halfDollarCategories = new Set(["11971", "41099"]);
+  const dollarCategories = new Set(["11981", "39464", "11980"]);
+  if (halfDollarCategories.has(categoryId)) {
+    if (/half.?dollar|50.?cent|\$0\.50|^0\.50$/i.test(v)) return "50C";
+    if (v === "50C" || v === "50c") return "50C";
+  }
+  if (dollarCategories.has(categoryId)) {
+    if (/one.?dollar|1.?dollar|\$1\.00|^1\.00$/i.test(v)) return "$1";
+    if (v === "$1") return "$1";
+  }
+  return v;
+}
+
+function normalizeCirculatedUncirculated(
+  value: string | undefined,
+  grade: string | undefined,
+): string {
+  if (value) {
+    const v = value.trim();
+    if (/^uncirculated$/i.test(v)) return "Uncirculated";
+    if (/^circulated$/i.test(v)) return "Circulated";
+    if (/^unknown$/i.test(v)) return "Unknown";
+  }
+  if (grade) {
+    const g = grade.trim().toUpperCase();
+    if (/^(MS|PR)\s*\d+/.test(g)) return "Uncirculated";
+    if (/^(AU|XF|VF|F|VG|G|AG|FA|P)\s*\d+/.test(g)) return "Circulated";
+  }
+  return "Unknown";
+}
+
+const ASPECT_KEY_ALIASES: Record<string, string> = {
+  "Circulated/Uncirculated":         "C:Circulated/Uncirculated",
+  "CirculatedUncirculated":          "C:Circulated/Uncirculated",
+  "Mint Location":                   "C:Mint Location",
+  "MintLocation":                    "C:Mint Location",
+  "Strike Type":                     "C:Strike Type",
+  "StrikeType":                      "C:Strike Type",
+  "KM Number":                       "C:KM Number",
+  "KMNumber":                        "C:KM Number",
+  "Precious Metal Content per Unit": "C:Precious Metal Content per Unit",
+  "PreciousMetalContentperUnit":     "C:Precious Metal Content per Unit",
+  "Metal Content":                   "C:Precious Metal Content per Unit",
+  "Brand/Mint":                      "C:Brand/Mint",
+  "Manufacturer/Mint":               "C:Brand/Mint",
+  "Fineness":                        "C:Fineness",
+  "Certification":                   "C:Certification",
+  "Denomination":                    "C:Denomination",
+  "Composition":                     "C:Composition",
+  "Year":                            "C:Year",
+  "Shape":                           "C:Shape",
+  "Grade":                           "C:Grade",
+  "Coin":                            "C:Coin",
+  "Coin Type":                       "C:Coin",
+  "Coin/Bullion Type":               "C:Coin",
+  "Country of Origin":               "C:Country of Origin",
+  "Country/Region of Manufacture":   "C:Country of Origin",
+  "Total Precious Metal Content":    "C:Total Precious Metal Content",
+  "Certification Number":            "C:Certification Number",
+  "Variety":                         "C:Variety",
+  "Era":                             "C:Era",
+  "Cleaned/Uncleaned":               "C:Cleaned/Uncleaned",
+  "Provenance":                      "C:Provenance",
+};
+
+const NON_ASPECT_KEYS = new Set([
+  "Type", "Brand", "Material", "Color", "Size", "Mintage",
+  "Series", "Modified Item", "Mint Mark",
+]);
+
+function normalizeAspectKey(key: string): string {
+  if (key.startsWith("C:")) return key;
+  if (NON_ASPECT_KEYS.has(key)) return key;
+  if (ASPECT_KEY_ALIASES[key]) return ASPECT_KEY_ALIASES[key];
+  return `C:${key}`;
+}
+
+function buildAndNormalizeAspects(
+  rawSpecifics: Record<string, unknown>,
+  categoryId: string,
+): Record<string, string[]> {
+  const aspects: Record<string, string[]> = {};
+  const rule = CATEGORY_ASPECT_RULES[categoryId];
+
+  for (const [rawKey, rawValue] of Object.entries(rawSpecifics)) {
+    if (!rawValue || typeof rawValue !== "string") continue;
+    const trimmed = rawValue.trim();
+    if (!trimmed) continue;
+    if (ASPECT_SKIP_VALUES.has(trimmed.toLowerCase())) continue;
+
+    const key = normalizeAspectKey(rawKey);
+    if (NON_ASPECT_KEYS.has(key)) continue; // skip internal-only keys
+
+    let value = trimmed;
+    if (key === "C:Fineness") value = normalizeFineness(trimmed);
+    else if (key === "C:Grade") value = normalizeGrade(trimmed);
+    else if (key === "C:Denomination") value = normalizeDenomination(trimmed, categoryId);
+    else if (key === "C:Circulated/Uncirculated") {
+      const gradeHint = (rawSpecifics["Grade"] as string) || (rawSpecifics["C:Grade"] as string);
+      value = normalizeCirculatedUncirculated(trimmed, gradeHint);
+    }
+
+    if (VALID_ASPECT_VALUES[key] && !VALID_ASPECT_VALUES[key].has(value)) {
+      console.warn(`buildAndNormalizeAspects: invalid value "${value}" for ${key} — skipping`);
+      continue;
+    }
+
+    aspects[key] = [value];
+  }
+
+  // Apply fixed values for known categories (override AI output)
+  if (rule?.fixedValues) {
+    for (const [k, v] of Object.entries(rule.fixedValues)) {
+      aspects[k] = [v];
+    }
+  }
+
+  // Fill required aspects with defaults if still missing
+  if (rule) {
+    if (
+      rule.required.includes("C:Circulated/Uncirculated") &&
+      !aspects["C:Circulated/Uncirculated"]
+    ) {
+      const grade = aspects["C:Grade"]?.[0];
+      const circVal = normalizeCirculatedUncirculated(undefined, grade);
+      aspects["C:Circulated/Uncirculated"] = [circVal];
+      console.log(`buildAndNormalizeAspects: derived C:Circulated/Uncirculated="${circVal}" from grade="${grade}"`);
+    }
+    for (const [k, v] of Object.entries(rule.defaults)) {
+      if (!aspects[k]) {
+        aspects[k] = [v];
+        console.log(`buildAndNormalizeAspects: filled default ${k}="${v}" for category ${categoryId}`);
+      }
+    }
+  }
+
+  return aspects;
+}
+
+// ================================================================
+// CONDITION ID MAPPING
+// ================================================================
 const CONDITION_ID_MAP: Record<string, number> = {
   NEW: 1000,
   LIKE_NEW: 2750,
@@ -33,8 +307,6 @@ const CONDITION_ID_MAP: Record<string, number> = {
   FOR_PARTS_OR_NOT_WORKING: 7000,
 };
 
-// Human-readable condition descriptions for eBay conditionDescription field
-// Force redeploy v6: Accept-Language/Content-Language explicitly set to "" in ALL header locations to suppress Deno injection (PR #117)
 const CONDITION_DESCRIPTIONS: Record<string, string> = {
   NEW: "Brand new, unused, unopened item in original packaging.",
   LIKE_NEW: "Like new condition. May be open box but unused.",
@@ -51,8 +323,6 @@ const CONDITION_DESCRIPTIONS: Record<string, string> = {
   FOR_PARTS_OR_NOT_WORKING: "Item is not fully functional. Sold for parts or repair.",
 };
 
-// Legacy condition code migration map
-// Converts deprecated eBay condition strings to current equivalents
 const LEGACY_CONDITION_MAP: Record<string, string> = {
   USED_EXCELLENT: "PRE_OWNED_GOOD",
   USED_VERY_GOOD: "PRE_OWNED_GOOD",
@@ -60,79 +330,54 @@ const LEGACY_CONDITION_MAP: Record<string, string> = {
   USED_ACCEPTABLE: "PRE_OWNED_POOR",
 };
 
-// ----------------------------------------------------------------
-// Validate condition for a given category
-// Different categories have different valid conditions.
-// For coins/bullion (category IDs 261068, 261069, etc.), restrictions vary:
-// - Coins (Type: "Coin"): Only NEW, REFURBISHED variants, FOR_PARTS allowed
-// - Bullion Rounds/Bars (Type: "Round", "Bar", etc.): Broader conditions allowed
-// ----------------------------------------------------------------
+// Coin categories that only accept the restricted eBay condition set
+const COIN_CATEGORY_IDS = new Set(["11981", "39464", "11980", "11971", "41099"]);
+const BULLION_CATEGORY_IDS = new Set(["178906", "39489", "3361", "532", "173685"]);
+
 function normalizeConditionForCategory(
   rawCondition: string,
   categoryId: string | undefined,
   itemType: string | undefined = undefined
 ): { condition: string; corrected: boolean } {
-  // First apply legacy migration
+  // Apply legacy migration first
   const condition = LEGACY_CONDITION_MAP[rawCondition] ?? rawCondition;
 
-  // Coin/bullion category IDs (261000-261073 range)
-  const isCoinOrBullion =
-    categoryId && /^261[0-9]{3}$/.test(categoryId) && parseInt(categoryId) >= 261000 && parseInt(categoryId) <= 261073;
+  const isCoin = COIN_CATEGORY_IDS.has(categoryId ?? "") ||
+    (!BULLION_CATEGORY_IDS.has(categoryId ?? "") && itemType?.toLowerCase().includes("coin"));
 
-  if (isCoinOrBullion) {
-    // Determine if it's a coin or bullion round/bar
-    const isCoin = itemType?.toLowerCase().includes("coin");
-    const isBullion = itemType?.toLowerCase().match(/round|bar|ingot|wafer/i);
-    
-    let validConditions: string[];
-    
-    if (isCoin) {
-      // Coins have strict restrictions: NEW, CERTIFIED_REFURBISHED, EXCELLENT_REFURBISHED, 
-      // VERY_GOOD_REFURBISHED, GOOD_REFURBISHED, FOR_PARTS_OR_NOT_WORKING
-      validConditions = [
-        "NEW",
-        "CERTIFIED_REFURBISHED",
-        "EXCELLENT_REFURBISHED",
-        "VERY_GOOD_REFURBISHED",
-        "GOOD_REFURBISHED",
-        "FOR_PARTS_OR_NOT_WORKING",
-      ];
-    } else {
-      // Bullion rounds/bars may have broader condition support
-      // Allow most conditions except LIKE_NEW
-      validConditions = [
-        "NEW",
-        "NEW_OTHER",
-        "NEW_WITH_DEFECTS",
-        "CERTIFIED_REFURBISHED",
-        "EXCELLENT_REFURBISHED",
-        "VERY_GOOD_REFURBISHED",
-        "GOOD_REFURBISHED",
-        "SELLER_REFURBISHED",
-        "PRE_OWNED_GOOD",
-        "PRE_OWNED_FAIR",
-        "PRE_OWNED_POOR",
-        "FOR_PARTS_OR_NOT_WORKING",
-      ];
-    }
+  const isBullion = BULLION_CATEGORY_IDS.has(categoryId ?? "") ||
+    (!isCoin && !!itemType?.toLowerCase().match(/round|bar|ingot|wafer/i));
 
-    if (!validConditions.includes(condition)) {
-      // Map invalid conditions to valid alternatives
-      const conditionMap: Record<string, string> = {
-        LIKE_NEW: isCoin ? "NEW" : "PRE_OWNED_GOOD",
-        NEW_OTHER: isCoin ? "NEW" : "PRE_OWNED_GOOD",
-        NEW_WITH_DEFECTS: isCoin ? "GOOD_REFURBISHED" : "PRE_OWNED_FAIR",
-        SELLER_REFURBISHED: isCoin ? "GOOD_REFURBISHED" : "SELLER_REFURBISHED",
-        PRE_OWNED_GOOD: isCoin ? "NEW" : "PRE_OWNED_GOOD",
-        PRE_OWNED_FAIR: isCoin ? "GOOD_REFURBISHED" : "PRE_OWNED_FAIR",
-        PRE_OWNED_POOR: isCoin ? "FOR_PARTS_OR_NOT_WORKING" : "PRE_OWNED_POOR",
+  // Also handle the legacy 261xxx range for silver/gold bullion coins/bars
+  const isLegacyBullion = categoryId
+    ? /^261[0-9]{3}$/.test(categoryId) && parseInt(categoryId) >= 261000 && parseInt(categoryId) <= 261076
+    : false;
+
+  if (isCoin) {
+    // Named coin series: strict restricted set
+    const validCoinConditions = new Set([
+      "NEW", "CERTIFIED_REFURBISHED", "EXCELLENT_REFURBISHED",
+      "VERY_GOOD_REFURBISHED", "GOOD_REFURBISHED", "FOR_PARTS_OR_NOT_WORKING",
+    ]);
+    if (!validCoinConditions.has(condition)) {
+      const fallbackMap: Record<string, string> = {
+        LIKE_NEW: "NEW",
+        NEW_OTHER: "NEW",
+        NEW_WITH_DEFECTS: "GOOD_REFURBISHED",
+        SELLER_REFURBISHED: "GOOD_REFURBISHED",
+        PRE_OWNED_GOOD: "EXCELLENT_REFURBISHED",
+        PRE_OWNED_FAIR: "GOOD_REFURBISHED",
+        PRE_OWNED_POOR: "FOR_PARTS_OR_NOT_WORKING",
       };
-
-      const mappedCondition = conditionMap[condition] || (isCoin ? "NEW" : "PRE_OWNED_GOOD");
-      console.log(
-        `normalizeConditionForCategory: mapping ${condition} -> ${mappedCondition} for ${isCoin ? "coin" : "bullion"} in category ${categoryId} (Type: ${itemType || "unknown"})`
-      );
-      return { condition: mappedCondition, corrected: true };
+      const mapped = fallbackMap[condition] ?? "EXCELLENT_REFURBISHED";
+      console.log(`normalizeConditionForCategory: coin category ${categoryId} — ${condition} -> ${mapped}`);
+      return { condition: mapped, corrected: true };
+    }
+  } else if (isBullion || isLegacyBullion) {
+    // Bullion: allow everything except LIKE_NEW
+    if (condition === "LIKE_NEW") {
+      console.log(`normalizeConditionForCategory: bullion category ${categoryId} — LIKE_NEW -> NEW`);
+      return { condition: "NEW", corrected: true };
     }
   }
 
@@ -885,22 +1130,24 @@ serve(async (req) => {
         }
       };
 
-      // Build eBay-formatted item specifics (aspects)
-      // Skip blank, "None", "Unknown", "N/A", "Other" values — eBay rejects placeholder text
-      const ASPECT_SKIP_VALUES = new Set(["none", "unknown", "n/a", "other", "unspecified", "not applicable"]);
-      const aspects: Record<string, string[]> = {};
-      if (itemSpecifics && typeof itemSpecifics === "object") {
-        for (const [key, value] of Object.entries(itemSpecifics)) {
-          if (value && typeof value === "string" && value.trim()) {
-            const trimmed = value.trim();
-            if (!ASPECT_SKIP_VALUES.has(trimmed.toLowerCase())) {
-              aspects[key] = [trimmed];
-            }
-          }
-        }
-      }
+      // Build eBay-formatted item specifics (aspects) using the category-aware
+      // normalisation engine. This handles:
+      //   - C: prefix normalisation (AI may omit it)
+      //   - Fineness format: "999 fine" / "99.9%" -> "0.999"
+      //   - Grade format: "MS-65" -> "MS 65"
+      //   - Denomination: "Half Dollar" -> "50C", "One Dollar" -> "$1"
+      //   - Circulated/Uncirculated: derived from grade if missing
+      //   - Required aspect safety-fill (Certification, Circulated/Uncirculated)
+      //   - Fixed values for known categories (Composition, Fineness for silver dollars, etc.)
+      //   - Drops placeholder values (none / unknown / n/a / other / etc.)
+      const aspects = buildAndNormalizeAspects(
+        (itemSpecifics && typeof itemSpecifics === "object"
+          ? itemSpecifics
+          : {}) as Record<string, unknown>,
+        ebayCategoryId ?? ""
+      );
 
-      console.log(`create_draft: aspects built from itemSpecifics:`, JSON.stringify(aspects, null, 2));
+      console.log(`create_draft: aspects built for category ${ebayCategoryId}:`, JSON.stringify(aspects, null, 2));
 
       // Extract the item Type (e.g., "Coin", "Round", "Bar") from itemSpecifics
       // This is used to disambiguate coins from bullion when validating conditions
