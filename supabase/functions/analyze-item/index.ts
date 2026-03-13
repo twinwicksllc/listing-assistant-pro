@@ -201,15 +201,29 @@ B. Unslabbed Coins/Collectibles (Visual Grading)
 Set isSlabbed to false. Perform a conservative visual grade assessment evaluating: wear on high points, luster presence/breaks, strike sharpness, contact marks/scratches, cleaning/environmental damage, and mint mark clarity. Assign a conservative Sheldon-scale grade (e.g., MS-63, AU-55, XF-45, VF-30) and provide a gradingRationale referencing visible evidence. If photos are insufficient, give a conservative range and explain why.
 
 Condition Code Mapping (output as the "condition" field):
-- MS-60 to MS-70 → NEW
-- AU-50 to AU-58 → EXCELLENT_REFURBISHED
-- XF-40 to XF-45 → EXCELLENT_REFURBISHED
-- VF-20 to VF-35 → VERY_GOOD_REFURBISHED
-- F-12 to VF-12 → GOOD_REFURBISHED
-- VG-8 to VG-10 → GOOD_REFURBISHED
-- G-4 to G-6 → FOR_PARTS_OR_NOT_WORKING
-- FR or lower → FOR_PARTS_OR_NOT_WORKING
-NEVER use "LIKE_NEW" or "PRE_OWNED_*" — these are invalid for coin categories.
+
+For COIN categories (Morgan, Peace, Barber, Liberty Walking, Eisenhower, Silver Eagle, etc.):
+eBay's Coins & Paper Money category tree uses the USED_* condition family — NOT *_REFURBISHED.
+- MS-60 to MS-70 (Uncirculated) → NEW
+- Slabbed/Certified coins (any grade) → NEW
+- AU-50 to AU-58, XF-40 to XF-45 → USED_EXCELLENT
+- VF-20 to VF-35 → USED_VERY_GOOD
+- F-12 to F-15, VG-8 to VG-10 → USED_GOOD
+- G-4 to G-6 → USED_ACCEPTABLE  (worn but identifiable — NOT "for parts")
+- FR-2 or lower, damaged/holed/bent/corroded → FOR_PARTS_OR_NOT_WORKING
+
+NEVER use *_REFURBISHED, LIKE_NEW, or PRE_OWNED_* for coin categories — eBay rejects these.
+
+For NON-COIN items (electronics, general collectibles, etc.):
+- Unused/sealed → NEW
+- Open but unused → LIKE_NEW
+- Light use → USED_EXCELLENT
+- Moderate use → USED_VERY_GOOD
+- Heavy use → USED_GOOD
+- Poor condition → USED_ACCEPTABLE
+- Non-functional → FOR_PARTS_OR_NOT_WORKING
+
+IMPORTANT — OMIT UNKNOWN FIELDS: If a value cannot be determined from the images, OMIT the field entirely. Do NOT output placeholder values like "Unknown", "N/A", "Not Specified", "Not Applicable", "None", or "Other". An absent field is always better than a placeholder.
 
 5. STRUCTURED ITEM SPECIFICS — BARE KEYS (NO C: PREFIX)
 ALL aspect keys in itemSpecifics must use BARE key names — no "C:" prefix. The eBay Inventory API expects plain keys like Fineness, Grade, Year, Certification. The C: prefix only exists in eBay's internal Category Tree taxonomy and must NEVER appear in listing payloads.
@@ -299,15 +313,22 @@ BULLION — Coins // Bars & Rounds:
 7. PRICING GUIDANCE
 Price the EXACT item first using this hierarchy: 1. Exact sold comps 2. Same series/mint 3. Key date/rarity premium 4. Grade-adjusted melt floor.
 
-Melt Value Floor: priceMin must NEVER fall below the melt value for precious metals.
+Melt Value Floor: priceMin must NEVER fall below the melt value PLUS eBay fees.
+eBay charges ~13.25% final value fee + ~2.9% payment processing = ~16% total. Use 1.19x melt as the minimum floor so listings at priceMin still cover melt after fees.
 Current live spot prices: Gold $${spotGold.toFixed(2)}/oz | Silver $${spotSilver.toFixed(2)}/oz | Platinum $${spotPlatinum.toFixed(2)}/oz
 
-Premium multipliers:
-- Generic bullion (plain bar/round, no theme) → 1.05x–1.15x melt
+Fee-adjusted melt floor = meltValue × 1.19
+
+Premium multipliers (applied ON TOP of fee-adjusted floor):
+- Generic bullion (plain bar/round, no theme) → 1.05x–1.15x melt (plus fees)
 - Popular themes (Disney, Star Wars, sports teams) → 1.5x–4x melt
 - Key dates / high-grade certified coins → significant numismatic premium
 
 Return pricingNotes explaining exactly which comparables or logic you used.
+
+metalWeightOz: Always express in TROY OUNCES (not grams, not avoirdupois ounces).
+Common conversions: 1 troy oz = 31.1035g | 5g = 0.1607 oz | 10g = 0.3215 oz | 1/2 oz = 0.5 | 1/4 oz = 0.25 | 1/10 oz = 0.1
+Set to 0 for non-precious-metal items.
 
 Return your analysis using the provided tool.`;
 
@@ -323,7 +344,15 @@ Return your analysis using the provided tool.`;
     let userText = `I've provided ${imageList.length} photo${imageList.length > 1 ? "s" : ""} of the same item from different angles. Analyze all photos together to identify the item precisely, generate a title and description, extract eBay item specifics, determine the correct eBay category ID, and provide pricing based on recent sold comps and melt value (if precious metal).`;
 
     if (voiceNote) {
-      userText += `\n\nIMPORTANT — The seller recorded the following voice note about the item's condition, flaws, or special features. You MUST incorporate this information into the item description and condition assessment:\n\n"${voiceNote}"`;
+      userText += `\n\nSELLER'S VOICE NOTE (treat as authoritative — override visual assessment where applicable):
+The seller recorded the following about this item. Follow these rules:
+- If the seller mentions specific flaws NOT visible in photos: include them in description and adjust grade/condition downward accordingly.
+- If the seller mentions cleaning, damage, repairs, or alterations: disclose in description and lower condition.
+- If the seller mentions provenance, purchase history, or authentication details: include in description.
+- If the seller mentions packaging, accessories, certificates, or extras: note them in description.
+- If the seller's assessment contradicts your visual grade (e.g., they say "heavily worn" but photos look better): trust the seller.
+
+Seller's note: "${voiceNote}"`;
     }
 
     contentParts.push({
@@ -340,7 +369,7 @@ Return your analysis using the provided tool.`;
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gemini-2.0-flash",
+          model: "gemini-2.5-flash-preview-04-17",
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: contentParts },
@@ -449,8 +478,8 @@ Return your analysis using the provided tool.`;
                     },
                     condition: {
                       type: "string",
-                      enum: ["NEW", "LIKE_NEW", "NEW_OTHER", "NEW_WITH_DEFECTS", "CERTIFIED_REFURBISHED", "EXCELLENT_REFURBISHED", "VERY_GOOD_REFURBISHED", "GOOD_REFURBISHED", "SELLER_REFURBISHED", "PRE_OWNED_GOOD", "PRE_OWNED_FAIR", "PRE_OWNED_POOR", "FOR_PARTS_OR_NOT_WORKING"],
-                      description: "eBay item condition. For coins/bullion: use NEW (uncirculated/MS), CERTIFIED_REFURBISHED (slabbed), EXCELLENT_REFURBISHED (AU/XF), VERY_GOOD_REFURBISHED (VF), GOOD_REFURBISHED (F/VG), or FOR_PARTS_OR_NOT_WORKING (G or poor). DO NOT use LIKE_NEW or PRE_OWNED_* for coins — they are not valid for eBay coin categories. For electronics/general items: use any condition that accurately reflects the item's state.",
+                      enum: ["NEW", "LIKE_NEW", "NEW_OTHER", "NEW_WITH_DEFECTS", "CERTIFIED_REFURBISHED", "SELLER_REFURBISHED", "USED_EXCELLENT", "USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE", "FOR_PARTS_OR_NOT_WORKING"],
+                      description: "eBay item condition. For COIN categories: NEW (MS/uncirculated or slabbed), USED_EXCELLENT (AU/XF), USED_VERY_GOOD (VF), USED_GOOD (F/VG), USED_ACCEPTABLE (G), FOR_PARTS_OR_NOT_WORKING (damaged/holed only). NEVER use *_REFURBISHED or PRE_OWNED_* for coins. For non-coin items: use any value that accurately reflects the item state.",
                     },
                     suggestedGrade: {
                       type: "string",
@@ -464,8 +493,22 @@ Return your analysis using the provided tool.`;
                       type: "boolean",
                       description: "True if the coin is already in a certified grading slab (PCGS, NGC, etc.)",
                     },
+                    listingFormat: {
+                      type: "string",
+                      enum: ["FIXED_PRICE", "AUCTION"],
+                      description: "Suggested listing format. Use FIXED_PRICE for most items. Use AUCTION only for rare/key-date coins (CC mint mark Morgan, 1893-S, 1895 proof, etc.) or items where competitive bidding would likely drive price above fixed price.",
+                    },
+                    confidence: {
+                      type: "number",
+                      description: "Identification confidence score 0.0-1.0. Below 0.7 = suggest user verify. Below 0.5 = suggest better photos needed.",
+                    },
+                    photoSuggestions: {
+                      type: "array",
+                      items: { "type": "string" },
+                      description: "Suggestions for additional photos that would improve identification accuracy (e.g., 'Close-up of mint mark area', 'Photo of edge/reeding', 'Reverse side needed'). Empty array if photos are sufficient.",
+                    },
                   },
-                  required: ["title", "description", "priceMin", "priceMax", "pricingNotes", "metalType", "metalWeightOz", "ebayCategoryId", "suggestedCategories", "itemSpecifics", "condition", "suggestedGrade", "gradingRationale", "isSlabbed"],
+                  required: ["title", "description", "priceMin", "priceMax", "pricingNotes", "metalType", "metalWeightOz", "ebayCategoryId", "suggestedCategories", "itemSpecifics", "condition", "suggestedGrade", "gradingRationale", "isSlabbed", "listingFormat", "confidence", "photoSuggestions"],
                   additionalProperties: false,
                 },
               },
@@ -506,7 +549,7 @@ Return your analysis using the provided tool.`;
       await svc.from("gemini_usage").insert({
         user_id: userId,
         function_name: "analyze-item",
-        model: "gemini-2.0-flash",
+        model: "gemini-2.5-flash-preview-04-17",
         prompt_tokens: usage?.prompt_tokens || 0,
         completion_tokens: usage?.completion_tokens || 0,
         total_tokens: usage?.total_tokens || 0,
@@ -522,7 +565,8 @@ Return your analysis using the provided tool.`;
     const listing = JSON.parse(toolCall.function.arguments);
 
     if (listing.title && listing.title.length > 80) {
-      listing.title = listing.title.substring(0, 80);
+      // Truncate at last complete word within 80 chars to avoid cutting mid-word
+      listing.title = listing.title.substring(0, 80).replace(/\s+\S*$/, "").trim();
     }
 
     // --- Server-side melt value enforcement ---
@@ -534,18 +578,30 @@ Return your analysis using the provided tool.`;
         listing.metalType === "platinum" ? spotPlatinum : 0;
       if (spotPrice > 0) {
         meltValue = parseFloat((spotPrice * listing.metalWeightOz).toFixed(2));
-        // Enforce: priceMin must never be below melt value
-        if (listing.priceMin < meltValue) {
-          console.warn(`priceMin ${listing.priceMin} below melt value ${meltValue} — correcting`);
-          listing.priceMin = meltValue;
-          // Also bump priceMax if it's somehow below melt
-          if (listing.priceMax < meltValue) {
-            listing.priceMax = parseFloat((meltValue * 1.1).toFixed(2));
+        // Enforce: priceMin must never be below melt value PLUS eBay fees.
+        // ~13.25% FVF + ~2.9% payment processing = ~16% total fees. Use 1.19x for margin.
+        const feeAdjustedFloor = parseFloat((meltValue * 1.19).toFixed(2));
+        if (listing.priceMin < feeAdjustedFloor) {
+          console.warn(`priceMin ${listing.priceMin} below fee-adjusted melt floor ${feeAdjustedFloor} (melt: ${meltValue}) — correcting`);
+          listing.priceMin = feeAdjustedFloor;
+          // Also bump priceMax if it's somehow below the floor
+          if (listing.priceMax < feeAdjustedFloor) {
+            listing.priceMax = parseFloat((feeAdjustedFloor * 1.1).toFixed(2));
           }
         }
       }
     }
     // --- End melt value enforcement ---
+
+    // Track this analysis for rate limiting (increment usage counter)
+    try {
+      await svc.from("usage_tracking").insert({
+        user_id: userId,
+        action_type: "ai_analysis",
+      });
+    } catch (trackErr) {
+      console.error("Failed to track usage:", trackErr);
+    }
 
     return new Response(JSON.stringify({ ...listing, meltValue, spotPrices: { gold: spotGold, silver: spotSilver, platinum: spotPlatinum } }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

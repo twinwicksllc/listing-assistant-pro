@@ -8,7 +8,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Force redeploy v9: Strip C: prefix from all aspect keys — eBay Inventory API uses bare keys only — correct IDs, C: prefix normalisation,
+// Force redeploy v10: USED_* condition codes for coins, fee-adjusted melt floor (×1.19) — correct IDs, C: prefix normalisation,
 // fineness/denomination/grade normalisation, required-aspect safety-fill (PR #118)
 
 // ================================================================
@@ -295,42 +295,59 @@ function buildAndNormalizeAspects(
 // CONDITION ID MAPPING
 // ================================================================
 const CONDITION_ID_MAP: Record<string, number> = {
+  // Universal conditions
   NEW: 1000,
-  LIKE_NEW: 2750,
   NEW_OTHER: 1500,
   NEW_WITH_DEFECTS: 1750,
+  LIKE_NEW: 2750,
+  // Refurbished (electronics/appliances — NOT for coins)
   CERTIFIED_REFURBISHED: 2000,
-  EXCELLENT_REFURBISHED: 2010,
-  VERY_GOOD_REFURBISHED: 2020,
-  GOOD_REFURBISHED: 2030,
   SELLER_REFURBISHED: 2500,
+  // USED_* family — correct for Coins & Paper Money category tree
+  USED_EXCELLENT: 3000,   // AU-50 to XF-45
+  USED_VERY_GOOD: 4000,   // VF-20 to VF-35
+  USED_GOOD: 5000,         // F-12 to VG-10
+  USED_ACCEPTABLE: 6000,   // G-4 to G-6
+  FOR_PARTS_OR_NOT_WORKING: 7000, // Damaged/holed/bent coins, junk
+  // Legacy *_REFURBISHED aliases — mapped to USED_* for coin categories
+  EXCELLENT_REFURBISHED: 3000,
+  VERY_GOOD_REFURBISHED: 4000,
+  GOOD_REFURBISHED: 5000,
   PRE_OWNED_GOOD: 3000,
   PRE_OWNED_FAIR: 5000,
   PRE_OWNED_POOR: 6000,
-  FOR_PARTS_OR_NOT_WORKING: 7000,
 };
 
 const CONDITION_DESCRIPTIONS: Record<string, string> = {
-  NEW: "Brand new, unused, unopened item in original packaging.",
-  LIKE_NEW: "Like new condition. May be open box but unused.",
+  NEW: "Uncirculated coin or brand new item in original packaging.",
   NEW_OTHER: "New without original packaging or tags.",
   NEW_WITH_DEFECTS: "New item with minor cosmetic defects.",
+  LIKE_NEW: "Like new condition.",
   CERTIFIED_REFURBISHED: "Professionally refurbished and certified to work like new.",
-  EXCELLENT_REFURBISHED: "Refurbished to excellent working condition.",
-  VERY_GOOD_REFURBISHED: "Refurbished to very good working condition.",
-  GOOD_REFURBISHED: "Refurbished to good working condition.",
   SELLER_REFURBISHED: "Seller-refurbished item in good working condition.",
-  PRE_OWNED_GOOD: "Pre-owned item in good condition. May show minor signs of wear.",
-  PRE_OWNED_FAIR: "Pre-owned item in fair condition. Shows visible signs of wear.",
-  PRE_OWNED_POOR: "Pre-owned item in poor condition. Heavy wear or cosmetic damage.",
-  FOR_PARTS_OR_NOT_WORKING: "Item is not fully functional. Sold for parts or repair.",
+  // USED_* — correct conditions for Coins & Paper Money category tree
+  USED_EXCELLENT: "Lightly circulated. AU-50 to XF-45. Shows minimal wear on high points only.",
+  USED_VERY_GOOD: "Moderately circulated. VF-20 to VF-35. Major details clear with moderate wear.",
+  USED_GOOD: "Heavily circulated. F-12 to VG-10. All major features visible but worn.",
+  USED_ACCEPTABLE: "Heavily worn but identifiable. G-4 to G-6. Outline and major features visible.",
+  FOR_PARTS_OR_NOT_WORKING: "Damaged, holed, bent, or corroded. Not suitable for collecting.",
+  // Legacy aliases kept for backward compatibility
+  EXCELLENT_REFURBISHED: "Lightly circulated. Shows minimal wear on high points only.",
+  VERY_GOOD_REFURBISHED: "Moderately circulated. Major details clear with moderate wear.",
+  GOOD_REFURBISHED: "Heavily circulated. All major features visible but worn.",
+  PRE_OWNED_GOOD: "Pre-owned item in good condition.",
+  PRE_OWNED_FAIR: "Pre-owned item in fair condition.",
+  PRE_OWNED_POOR: "Pre-owned item in poor condition.",
 };
 
 const LEGACY_CONDITION_MAP: Record<string, string> = {
-  USED_EXCELLENT: "PRE_OWNED_GOOD",
-  USED_VERY_GOOD: "PRE_OWNED_GOOD",
-  USED_GOOD: "PRE_OWNED_FAIR",
-  USED_ACCEPTABLE: "PRE_OWNED_POOR",
+  // Map old *_REFURBISHED and PRE_OWNED_* to correct USED_* for coin categories
+  EXCELLENT_REFURBISHED: "USED_EXCELLENT",
+  VERY_GOOD_REFURBISHED: "USED_VERY_GOOD",
+  GOOD_REFURBISHED: "USED_GOOD",
+  PRE_OWNED_GOOD: "USED_EXCELLENT",
+  PRE_OWNED_FAIR: "USED_GOOD",
+  PRE_OWNED_POOR: "USED_ACCEPTABLE",
 };
 
 // Coin categories that only accept the restricted eBay condition set
@@ -357,22 +374,31 @@ function normalizeConditionForCategory(
     : false;
 
   if (isCoin) {
-    // Named coin series: strict restricted set
+    // Coins & Paper Money category tree uses USED_* condition family, NOT *_REFURBISHED.
+    // Valid coin conditions per eBay's getItemConditionPolicies for this category tree:
     const validCoinConditions = new Set([
-      "NEW", "CERTIFIED_REFURBISHED", "EXCELLENT_REFURBISHED",
-      "VERY_GOOD_REFURBISHED", "GOOD_REFURBISHED", "FOR_PARTS_OR_NOT_WORKING",
+      "NEW",             // MS-60 to MS-70 (uncirculated) and slabbed/certified
+      "USED_EXCELLENT",  // AU-50 to XF-45 (lightly circulated)
+      "USED_VERY_GOOD",  // VF-20 to VF-35 (moderately circulated)
+      "USED_GOOD",       // F-12 to VG-10 (heavily circulated)
+      "USED_ACCEPTABLE", // G-4 to G-6 (heavily worn but identifiable)
+      "FOR_PARTS_OR_NOT_WORKING", // Damaged/holed/bent only
     ]);
     if (!validCoinConditions.has(condition)) {
       const fallbackMap: Record<string, string> = {
         LIKE_NEW: "NEW",
         NEW_OTHER: "NEW",
-        NEW_WITH_DEFECTS: "GOOD_REFURBISHED",
-        SELLER_REFURBISHED: "GOOD_REFURBISHED",
-        PRE_OWNED_GOOD: "EXCELLENT_REFURBISHED",
-        PRE_OWNED_FAIR: "GOOD_REFURBISHED",
-        PRE_OWNED_POOR: "FOR_PARTS_OR_NOT_WORKING",
+        NEW_WITH_DEFECTS: "USED_GOOD",
+        CERTIFIED_REFURBISHED: "NEW",      // slabbed coins are "new" on eBay
+        SELLER_REFURBISHED: "USED_GOOD",
+        EXCELLENT_REFURBISHED: "USED_EXCELLENT",
+        VERY_GOOD_REFURBISHED: "USED_VERY_GOOD",
+        GOOD_REFURBISHED: "USED_GOOD",
+        PRE_OWNED_GOOD: "USED_EXCELLENT",
+        PRE_OWNED_FAIR: "USED_GOOD",
+        PRE_OWNED_POOR: "USED_ACCEPTABLE",
       };
-      const mapped = fallbackMap[condition] ?? "EXCELLENT_REFURBISHED";
+      const mapped = fallbackMap[condition] ?? "USED_EXCELLENT";
       console.log(`normalizeConditionForCategory: coin category ${categoryId} — ${condition} -> ${mapped}`);
       return { condition: mapped, corrected: true };
     }
@@ -671,7 +697,7 @@ async function ensureInventoryLocation(
 }
 
 serve(async (req) => {
-  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v9 - bare aspect keys, no C: prefix in inventory payloads) ***");
+  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v10 - USED_* condition codes for coins, fee-adjusted melt floor) ***");
   
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -1162,7 +1188,7 @@ serve(async (req) => {
       // also require the numeric conditionId. We send both for maximum compatibility.
       // Migrate any legacy deprecated condition codes to current equivalents,
       // then normalize based on the category and item type (e.g., LIKE_NEW not valid for coins).
-      const rawCondition = condition || "PRE_OWNED_GOOD";
+      const rawCondition = condition || "USED_EXCELLENT";
       const { condition: normalizedCondition, corrected } = normalizeConditionForCategory(
         rawCondition,
         ebayCategoryId,
