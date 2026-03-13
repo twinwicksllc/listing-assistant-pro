@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { X, AlertCircle, CheckCircle2, Loader2, HelpCircle } from "lucide-react";
 import { EBAY_CATEGORY_BREADCRUMBS } from "@/lib/ebayCategoryMap";
 
 interface CategoryConfirmDialogProps {
@@ -9,9 +9,16 @@ interface CategoryConfirmDialogProps {
   onCancel: () => void;
 }
 
+type LookupState = "known" | "unknown" | "empty";
+
 /**
- * Dialog to confirm custom eBay category entry
- * Shows the category name/breadcrumb and asks user to confirm
+ * Dialog to confirm custom eBay category entry.
+ *
+ * Three states:
+ *  - known:   ID is in our local breadcrumb map → show full name + green check
+ *  - unknown: ID is NOT in our map but is non-empty → show advisory warning,
+ *             still allow Confirm (eBay has 20,000+ categories; our map is a subset)
+ *  - empty:   No ID entered → Confirm disabled
  */
 export default function CategoryConfirmDialog({
   open,
@@ -21,22 +28,28 @@ export default function CategoryConfirmDialog({
 }: CategoryConfirmDialogProps) {
   const [loading, setLoading] = useState(true);
   const [categoryName, setCategoryName] = useState<string | null>(null);
-  const [isValid, setIsValid] = useState(false);
+  const [lookupState, setLookupState] = useState<LookupState>("empty");
 
-  // Look up category when dialog opens
   useEffect(() => {
     if (!open) return;
 
     setLoading(true);
-    // Simulate brief lookup delay for UX polish
+    // Brief delay for UX polish
     const timer = setTimeout(() => {
-      const breadcrumb = EBAY_CATEGORY_BREADCRUMBS[categoryId];
-      if (breadcrumb) {
-        setCategoryName(breadcrumb);
-        setIsValid(true);
-      } else {
+      if (!categoryId.trim()) {
+        setLookupState("empty");
         setCategoryName(null);
-        setIsValid(false);
+      } else {
+        const breadcrumb = EBAY_CATEGORY_BREADCRUMBS[categoryId];
+        if (breadcrumb) {
+          setCategoryName(breadcrumb);
+          setLookupState("known");
+        } else {
+          // Not in our local map — but that doesn't mean it's invalid on eBay.
+          // Our map covers ~100 categories; eBay has 20,000+.
+          setCategoryName(null);
+          setLookupState("unknown");
+        }
       }
       setLoading(false);
     }, 300);
@@ -45,6 +58,9 @@ export default function CategoryConfirmDialog({
   }, [open, categoryId]);
 
   if (!open) return null;
+
+  // Confirm is allowed for known AND unknown (but not empty)
+  const canConfirm = lookupState === "known" || lookupState === "unknown";
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -66,10 +82,10 @@ export default function CategoryConfirmDialog({
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-5 h-5 text-primary animate-spin" />
             </div>
-          ) : isValid ? (
+          ) : lookupState === "known" ? (
             <>
               <div className="flex items-start gap-3">
-                <CheckCircle2 className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
+                <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Category ID</p>
                   <p className="text-sm font-bold text-foreground">{categoryId}</p>
@@ -77,7 +93,7 @@ export default function CategoryConfirmDialog({
               </div>
 
               <div className="flex items-start gap-3">
-                <CheckCircle2 className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
+                <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Category Name</p>
                   <p className="text-sm text-foreground">{categoryName}</p>
@@ -85,25 +101,48 @@ export default function CategoryConfirmDialog({
               </div>
 
               <p className="text-xs text-muted-foreground border-l-2 border-primary/30 pl-3 py-2">
-                This category exists in eBay's taxonomy and will be used for your listing.
+                This category is recognized and will be used for your listing.
               </p>
             </>
-          ) : (
+          ) : lookupState === "unknown" ? (
             <>
               <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+                <HelpCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-xs font-medium text-destructive uppercase tracking-wide">Category Not Found</p>
-                  <p className="text-sm text-destructive/90">
-                    Category ID <strong>{categoryId}</strong> is not recognized by eBay's taxonomy.
+                  <p className="text-xs font-medium text-amber-600 dark:text-amber-400 uppercase tracking-wide">Category ID</p>
+                  <p className="text-sm font-bold text-foreground">{categoryId}</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-medium text-amber-600 dark:text-amber-400 uppercase tracking-wide">Not in local category list</p>
+                  <p className="text-sm text-foreground/80">
+                    This ID isn't in our built-in category list, but eBay has thousands of
+                    categories we don't map locally. If you verified this ID on eBay, it
+                    will work fine — you can still confirm below.
                   </p>
                 </div>
               </div>
 
-              <p className="text-xs text-muted-foreground border-l-2 border-destructive/30 pl-3 py-2">
-                This may cause issues when publishing. Please check the ID and try again.
+              <p className="text-xs text-muted-foreground border-l-2 border-amber-500/30 pl-3 py-2">
+                Tip: verify at{" "}
+                <a
+                  href={`https://www.ebay.com/b/bn_${categoryId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline"
+                >
+                  ebay.com/b/bn_{categoryId}
+                </a>
               </p>
             </>
+          ) : (
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-destructive">Please enter a category ID.</p>
+            </div>
           )}
         </div>
 
@@ -117,10 +156,10 @@ export default function CategoryConfirmDialog({
           </button>
           <button
             onClick={() => onConfirm(categoryId)}
-            disabled={!isValid}
+            disabled={!canConfirm}
             className="flex-1 px-4 py-2 rounded-lg text-xs font-medium text-white bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            Confirm
+            {lookupState === "unknown" ? "Use Anyway" : "Confirm"}
           </button>
         </div>
       </div>
