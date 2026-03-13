@@ -30,6 +30,7 @@ export function usePublishDraft() {
   const getEbayToken = useCallback(async (): Promise<{
     token: string | null;
     postalCode: string | null;
+    city: string | null;
   }> => {
     // 1. Try server-side stored token (secure, preferred)
     if (user?.id) {
@@ -38,7 +39,11 @@ export function usePublishDraft() {
           body: { action: "get_stored_token", userId: user.id },
         });
         if (!error && data?.token) {
-          return { token: data.token, postalCode: data.postalCode ?? null };
+          return {
+            token: data.token,
+            postalCode: data.postalCode ?? null,
+            city: data.city ?? null,
+          };
         }
       } catch {
         // Fall through to localStorage
@@ -47,7 +52,7 @@ export function usePublishDraft() {
 
     // 2. Fall back to localStorage (legacy / backwards compat)
     const localToken = localStorage.getItem("ebay-user-token");
-    return { token: localToken, postalCode: null };
+    return { token: localToken, postalCode: null, city: null };
   }, [user?.id]);
 
   const publishDraft = useCallback(
@@ -77,7 +82,7 @@ export function usePublishDraft() {
         );
       }
 
-      const { token: ebayToken, postalCode } = await getEbayToken();
+      const { token: ebayToken, postalCode, city } = await getEbayToken();
 
       if (!ebayToken) {
         // Save all pending draft IDs so we can resume after OAuth
@@ -118,8 +123,9 @@ export function usePublishDraft() {
         userToken: ebayToken,
         // Deterministic SKU based on draft ID — retries update the same eBay record
         sku: `LA-${draft.id.replace(/-/g, "").slice(0, 16).toUpperCase()}`,
-        // Seller's postal code — used to create/verify the eBay inventory location
+        // Seller's postal code + city — used to create/verify the eBay inventory location
         postalCode: postalCode || undefined,
+        city: city || undefined,
         title: draft.title,
         description: draft.description,
         listingFormat: draft.listingFormat ?? "FIXED_PRICE",

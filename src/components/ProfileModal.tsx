@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, User, Camera, Loader2, Check } from "lucide-react";
+import { X, User, Camera, Loader2, Check, MapPin } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -12,9 +12,11 @@ interface ProfileModalProps {
 export default function ProfileModal({ open, onClose }: ProfileModalProps) {
   const { user } = useAuth();
   const [displayName, setDisplayName] = useState("");
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [avatarUrl, setAvatarUrl]     = useState<string | null>(null);
+  const [postalCode, setPostalCode]   = useState("");
+  const [city, setCity]               = useState("");
+  const [loading, setLoading]         = useState(false);
+  const [saving, setSaving]           = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -24,17 +26,21 @@ export default function ProfileModal({ open, onClose }: ProfileModalProps) {
     setLoading(true);
     supabase
       .from("profiles")
-      .select("display_name, avatar_url")
+      .select("display_name, avatar_url, postal_code, city")
       .eq("id", user.id)
       .single()
       .then(({ data }) => {
         if (data) {
-          setDisplayName(data.display_name || "");
-          setAvatarUrl(data.avatar_url || null);
+          setDisplayName((data as any).display_name || "");
+          setAvatarUrl((data as any).avatar_url || null);
+          setPostalCode((data as any).postal_code || "");
+          setCity((data as any).city || "");
         } else {
           // No profile row yet — prefill with email prefix
           setDisplayName(user.email ? user.email.split("@")[0] : "");
           setAvatarUrl(null);
+          setPostalCode("");
+          setCity("");
         }
         setLoading(false);
       });
@@ -51,8 +57,10 @@ export default function ProfileModal({ open, onClose }: ProfileModalProps) {
             id: user.id,
             display_name: displayName.trim() || null,
             avatar_url: avatarUrl,
+            postal_code: postalCode.trim() || null,
+            city: city.trim() || null,
             updated_at: new Date().toISOString(),
-          },
+          } as any,
           { onConflict: "id" }
         );
 
@@ -71,7 +79,6 @@ export default function ProfileModal({ open, onClose }: ProfileModalProps) {
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
-    // Validate file type and size
     if (!file.type.startsWith("image/")) {
       toast.error("Please select an image file");
       return;
@@ -100,7 +107,6 @@ export default function ProfileModal({ open, onClose }: ProfileModalProps) {
       toast.success("Avatar uploaded!");
     } catch (err: any) {
       console.error("Avatar upload error:", err);
-      // If storage bucket doesn't exist, just show a friendly message
       if (err.message?.includes("Bucket not found") || err.message?.includes("bucket")) {
         toast.error("Avatar storage not configured yet. Display name saved.");
       } else {
@@ -139,7 +145,7 @@ export default function ProfileModal({ open, onClose }: ProfileModalProps) {
         </div>
 
         {/* Body */}
-        <div className="px-5 py-5 space-y-5">
+        <div className="px-5 py-5 space-y-5 max-h-[70vh] overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-6 h-6 text-primary animate-spin" />
@@ -215,13 +221,52 @@ export default function ProfileModal({ open, onClose }: ProfileModalProps) {
                   Email cannot be changed here.
                 </p>
               </div>
+
+              {/* Shipping Location — used for eBay inventory location */}
+              <div className="space-y-3 pt-1">
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-3.5 h-3.5 text-primary" />
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Shipping Location
+                  </label>
+                </div>
+                <p className="text-xs text-muted-foreground -mt-1">
+                  Used as your eBay inventory location when publishing listings.
+                </p>
+
+                {/* City */}
+                <div className="space-y-1.5">
+                  <label className="text-xs text-muted-foreground">City</label>
+                  <input
+                    type="text"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    placeholder="e.g. Chicago"
+                    maxLength={100}
+                    className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
+                  />
+                </div>
+
+                {/* Zip / Postal Code */}
+                <div className="space-y-1.5">
+                  <label className="text-xs text-muted-foreground">ZIP / Postal Code</label>
+                  <input
+                    type="text"
+                    value={postalCode}
+                    onChange={(e) => setPostalCode(e.target.value.replace(/[^0-9A-Za-z\s-]/g, ""))}
+                    placeholder="e.g. 60601"
+                    maxLength={10}
+                    className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
+                  />
+                </div>
+              </div>
             </>
           )}
         </div>
 
         {/* Footer */}
         {!loading && (
-          <div className="px-5 pb-5 flex gap-3">
+          <div className="px-5 pb-5 flex gap-3 border-t border-border pt-4">
             <button
               onClick={onClose}
               className="flex-1 py-2.5 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-secondary transition-colors"

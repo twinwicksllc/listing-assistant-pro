@@ -8,6 +8,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Force redeploy v15: shipping location from profile — city+postalCode passed to ensureInventoryLocation; fallback NYC→Chicago
 // Force redeploy v14: fix errorId 25002 "Country of Origin value too long" — drop Country of Origin if value > 65 chars or contains sentence punctuation (AI hallucination guard)
 // Force redeploy v13: fix errorId 25005 "not a leaf category" for US Mint Proof Sets — correct category 253→41109 (US Coin Proof Sets), add CATEGORY_ASPECT_RULES for 41109 and 526
 // fineness/denomination/grade normalisation, required-aspect safety-fill (PR #118)
@@ -767,6 +768,7 @@ async function ensureInventoryLocation(
   apiBase: string,
   userToken: string,
   postalCode: string,
+  city = "",
   country = "US"
 ): Promise<string> {
   const merchantLocationKey = "default-location";
@@ -774,6 +776,7 @@ async function ensureInventoryLocation(
   const locationBody = {
     location: {
       address: {
+        ...(city ? { city } : {}),
         postalCode,
         country,
       },
@@ -836,7 +839,7 @@ async function ensureInventoryLocation(
 }
 
 serve(async (req) => {
-  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v14 - fix 25002 Country of Origin too long: drop hallucinated AI text > 65 chars or with sentence punctuation) ***");
+  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v15 - shipping location from profile: city+postalCode passed to ensureInventoryLocation, fallback changed from NYC 10001 to Chicago 60601) ***");
   
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -1147,13 +1150,13 @@ serve(async (req) => {
       const supabase = createClient(supabaseUrl, supabaseServiceKey);
       const { data, error } = await supabase
         .from("profiles")
-        .select("ebay_access_token, ebay_token_expires_at, ebay_refresh_token, postal_code")
+        .select("ebay_access_token, ebay_token_expires_at, ebay_refresh_token, postal_code, city")
         .eq("id", userId)
         .single();
 
       if (error || !data) {
         return new Response(
-          JSON.stringify({ token: null, postalCode: null }),
+          JSON.stringify({ token: null, postalCode: null, city: null }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -1173,7 +1176,7 @@ serve(async (req) => {
         if (!clientId || !clientSecret) {
           console.warn("get_stored_token: skipping proactive refresh — eBay credentials not configured");
           return new Response(
-            JSON.stringify({ token: data.ebay_access_token, postalCode: data.postal_code, isExpired: false }),
+            JSON.stringify({ token: data.ebay_access_token, postalCode: data.postal_code, city: (data as any).city ?? null, isExpired: false }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
@@ -1216,6 +1219,7 @@ serve(async (req) => {
                 JSON.stringify({
                   token: tokenData.access_token,
                   postalCode: data.postal_code,
+                  city: (data as any).city ?? null,
                   isExpired: false,
                   refreshed: true,
                 }),
@@ -1231,7 +1235,7 @@ serve(async (req) => {
 
         // Refresh failed — return null so caller triggers re-auth
         return new Response(
-          JSON.stringify({ token: null, postalCode: data.postal_code, isExpired: true }),
+          JSON.stringify({ token: null, postalCode: data.postal_code, city: (data as any).city ?? null, isExpired: true }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -1240,6 +1244,7 @@ serve(async (req) => {
         JSON.stringify({
           token: data.ebay_access_token,
           postalCode: data.postal_code,
+          city: (data as any).city ?? null,
           isExpired: false,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -1263,6 +1268,7 @@ serve(async (req) => {
         ebayCategoryId,
         itemSpecifics,
         postalCode,
+        city: payloadCity,
         fulfillmentPolicyId: draftFulfillmentPolicyId,
         paymentPolicyId: draftPaymentPolicyId,
         returnPolicyId: draftReturnPolicyId,
@@ -1361,11 +1367,13 @@ serve(async (req) => {
       // Step 1: Ensure inventory location exists before creating the item.
       // The item's shipToLocationAvailability references this location by key,
       // so it must exist first.
-      const effectivePostalCode = postalCode || "10001"; // fallback to NYC if not set
+      const effectivePostalCode = postalCode || "60601"; // fallback to Chicago if not set
+      const effectiveCity = payloadCity || "";
       const merchantLocationKey = await ensureInventoryLocation(
         apiBase,
         userToken,
-        effectivePostalCode
+        effectivePostalCode,
+        effectiveCity
       );
 
       // Step 2: Create/update inventory item (PUT is idempotent — safe to retry)
