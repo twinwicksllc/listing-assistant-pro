@@ -34,7 +34,7 @@ const CONDITION_ID_MAP: Record<string, number> = {
 };
 
 // Human-readable condition descriptions for eBay conditionDescription field
-// Force redeploy to ensure Content-Language fix is live (PR #78)
+// Force redeploy v5: Accept-Language/Content-Language headers removed, condition at root level (PR #112/#113)
 const CONDITION_DESCRIPTIONS: Record<string, string> = {
   NEW: "Brand new, unused, unopened item in original packaging.",
   LIKE_NEW: "Like new condition. May be open box but unused.",
@@ -421,7 +421,7 @@ async function ensureInventoryLocation(
 }
 
 serve(async (req) => {
-  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v3 - with offer-data scoping fix) ***");
+  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v5 - Accept-Language headers removed, condition at root level) ***");
   
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
