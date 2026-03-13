@@ -211,12 +211,26 @@ Condition Code Mapping (output as the "condition" field):
 - FR or lower → FOR_PARTS_OR_NOT_WORKING
 NEVER use "LIKE_NEW" or "PRE_OWNED_*" — these are invalid for coin categories.
 
-5. STRUCTURED ITEM SPECIFICS
-Extract structured fields mapped to eBay's required specifics. Always include a "Type" field.
+5. STRUCTURED ITEM SPECIFICS — C: PREFIX REQUIRED
+ALL aspect keys in itemSpecifics for coin and bullion items MUST use the "C:" prefix (e.g., "C:Fineness", "C:Grade", "C:Certification"). This prefix is mandatory for eBay's Inventory API.
 
-For bullion (bars, rounds, ingots): Type, Shape, Metal, Fineness, Precious Metal Content per Unit, Year, Country/Region of Manufacture, Manufacturer/Mint, Series/Theme, Denomination, Modified Item.
-For coins: Type, Year, Denomination, Grade, Circulated/Uncirculated, Coin Type, Mint Location, Country/Region of Manufacture, Composition, Certification, Strike Type, Fineness, Precious Metal Content per Unit.
-For non-coin collectibles: Type, Brand, Model, Material, Color, Size, Country/Region of Manufacture, Franchise/Theme/Character, Year.
+EXCEPTIONS — these keys do NOT get the C: prefix (they are metadata, not eBay aspects):
+  Type, Brand, Material, Color, Size, Mintage, Series, Modified Item, Mint Mark
+
+ASPECT VALUE FORMATS (strictly enforced):
+- C:Fineness: decimal format ONLY → "0.999", "0.9999", "0.925", "0.900" (NOT "999 fine", "99.9%", "999/1000")
+- C:Grade: space-separated format → "MS 65", "AU 55", "VF 30" (NOT "MS-65", "MS65")
+- C:Denomination (half dollar series): exactly "50C" (NOT "Half Dollar", "50 Cents", "$0.50")
+- C:Denomination (dollar series): exactly "$1" (NOT "One Dollar", "1 Dollar", "$1.00")
+- C:Circulated/Uncirculated: exactly "Circulated", "Uncirculated", or "Unknown"
+- C:Certification: exactly one of "Uncertified", "PCGS", "NGC", "ANACS", "ICG", "CAC"
+- C:Strike Type: exactly one of "Business", "Proof", "Proof-Like", "Deep Mirror Proof-Like", "Satin", "Matte"
+- C:Shape (bullion): exactly "Bar" or "Round"
+- C:Composition: exactly one of "Gold", "Silver", "Platinum", "Palladium", "Bronze", "Copper", "Nickel"
+
+For bullion (bars, rounds, ingots): Type, C:Shape, C:Metal, C:Fineness, C:Precious Metal Content per Unit, C:Year, C:Country of Origin, C:Brand/Mint, C:Denomination, Modified Item.
+For coins: Type, C:Year, C:Denomination, C:Grade, C:Circulated/Uncirculated, C:Mint Location, C:Country of Origin, C:Composition, C:Certification, C:Strike Type, C:Fineness, C:Precious Metal Content per Unit.
+For non-coin collectibles: Type, Brand, Material, Color, Size, C:Country of Origin, C:Year.
 Omit fields that cannot be confidently determined.
 
 6. CATEGORY ROUTING
@@ -226,10 +240,64 @@ Shape Rules for Bullion:
 - Legal tender coin → Bullion Coins subcategory.
 - Named US coinage series → Specific US Coins subcategory.
 
-Select the most specific ID from this list:
-US Coins: 39482 (Morgan), 39483 (Peace), 41111 (Silver Eagle), 39484 (Eisenhower), 164743 (State Quarters), 11116 (Lincoln Cent), 39481 (Walking Liberty), 40156 (Kennedy Half), 40166 (Gold Eagle), 40167 (Gold Buffalo), 253 (US Coins General).
-World Coins: 45243.
-Bullion (Coins // Bars & Rounds): Silver (261068 // 261069), Gold (261064 // 261071), Platinum (261070 // 261072), Palladium (261073).
+CORRECT eBay Category IDs — use EXACTLY these values:
+
+PRIORITY CATEGORIES (seller's primary inventory — match these first):
+  Gold Bars & Rounds:          178906
+  Silver Bars & Rounds:         39489
+  Other Silver Bullion:          3361
+  Ancient Coins:                  532
+  Medieval Coins:              173685
+  Eisenhower Dollars (1971-78): 11981
+  Morgan Dollars (1878-1921):   39464
+  Peace Dollars (1921-35):      11980
+  Barber Half Dollars (1892-1915): 11971
+  Liberty Walking Half Dollars (1916-47): 41099
+
+FIXED ASPECTS for priority coin categories (do NOT override these — they are enforced server-side):
+  Morgan Dollars (39464):          C:Composition="Silver", C:Fineness="0.900", C:Denomination="$1"
+  Peace Dollars (11980):           C:Composition="Silver", C:Fineness="0.900", C:Denomination="$1"
+  Barber Half Dollars (11971):     C:Composition="Silver", C:Fineness="0.900", C:Denomination="50C"
+  Liberty Walking Half (41099):    C:Composition="Silver", C:Fineness="0.900", C:Denomination="50C"
+  Gold Bars & Rounds (178906):     C:Composition="Gold"
+  Silver Bars & Rounds (39489):    C:Composition="Silver"
+  Other Silver Bullion (3361):     C:Composition="Silver"
+
+REQUIRED ASPECTS for priority coin categories (always include these):
+  Eisenhower, Morgan, Peace, Barber, Liberty Walking → C:Certification, C:Circulated/Uncirculated
+  Other Silver Bullion (3361)                        → C:Certification (default: "Uncertified")
+
+OTHER US COINS (use when no priority category matches):
+  American Silver Eagle: 41111
+  Kennedy Half Dollar:   40156
+  Franklin Half Dollar:  40157
+  State Quarters:       164743
+  Lincoln Cent:          11116
+  American Gold Eagle:   40166
+  American Gold Buffalo: 40167
+  Susan B. Anthony:      40160
+  Sacagawea/Native American Dollar: 40158
+  Presidential Dollar:   40159
+  Mercury Dime:          40151
+  Roosevelt Dime:        40150
+  Buffalo Nickel:        40153
+  Jefferson Nickel:      40152
+  Indian Head Cent:      40154
+  Lincoln Wheat Cent:    40155
+  Washington Quarter:    40149
+  $20 Double Eagle:      40161
+  $10 Eagle:             40162
+  $5 Half Eagle:         40163
+  $2.50 Quarter Eagle:   40164
+  $1 Gold:               40165
+  US Coins General:        253
+
+WORLD COINS: 45243
+BULLION — Coins // Bars & Rounds:
+  Silver:   261068 // 261069
+  Gold:     261064 // 261071
+  Platinum: 261070 // 261072
+  Palladium: 261073
 
 7. PRICING GUIDANCE
 Price the EXACT item first using this hierarchy: 1. Exact sold comps 2. Same series/mint 3. Key date/rarity premium 4. Grade-adjusted melt floor.
@@ -329,7 +397,7 @@ Return your analysis using the provided tool.`;
                     ebayCategoryId: {
                       type: "string",
                       description:
-                        "The most specific eBay category ID for this item (e.g., '41111' for American Silver Eagles)",
+                        "The most specific eBay category ID. Priority categories: Gold Bars/Rounds=178906, Silver Bars/Rounds=39489, Other Silver Bullion=3361, Ancient Coins=532, Medieval Coins=173685, Eisenhower Dollars=11981, Morgan Dollars=39464, Peace Dollars=11980, Barber Half Dollars=11971, Liberty Walking Half=41099. Other: Silver Eagle=41111, Kennedy Half=40156, Gold Eagle=40166, Gold Buffalo=40167, US Coins General=253, World Coins=45243.",
                     },
                     suggestedCategories: {
                       type: "array",
@@ -348,38 +416,37 @@ Return your analysis using the provided tool.`;
                     },
                     itemSpecifics: {
                       type: "object",
-                      description: "Key-value pairs of eBay item specifics. Populate ALL applicable fields.",
+                      description: "Key-value pairs of eBay item specifics. ALL coin/bullion aspect keys MUST use the 'C:' prefix (e.g., 'C:Fineness', 'C:Grade'). Exception: Type, Brand, Material, Color, Size, Mintage, Series, Modified Item, Mint Mark do NOT get C: prefix.",
                       properties: {
-                        // --- Type field required by eBay for coin/bullion categories ---
-                        Type: { type: "string", description: "Product type for eBay category matching (e.g., 'Bullion Coin', 'Bar', 'Round', 'Medal', 'Coin')" },
-                        
-                        // --- Universal precious metals fields (coins AND bullion) ---
-                        Year: { type: "string", description: "Year of manufacture/minting (e.g., '2025')" },
-                        Metal: { type: "string", description: "Primary precious metal (e.g., 'Silver', 'Gold', 'Platinum', 'Palladium')" },
-                        Fineness: { type: "string", description: "Fineness/purity of the metal (e.g., '0.999', '0.9999', '0.925')" },
-                        Composition: { type: "string", description: "Full composition description (e.g., '.999 Fine Silver', '90% Silver, 10% Copper')" },
-                        "Precious Metal Content per Unit": { type: "string", description: "Metal weight per piece (e.g., '1 Troy oz', '1/2 Troy oz', '1/4 Troy oz', '1 g')" },
-                        "Country/Region of Manufacture": { type: "string", description: "Country that issued or manufactured the item" },
+                        // --- Non-aspect metadata fields (NO C: prefix) ---
+                        Type: { type: "string", description: "Product type metadata (e.g., 'Bullion Coin', 'Bar', 'Round', 'Medal', 'Coin') — NO C: prefix" },
+                        Series: { type: "string", description: "Series or theme name (e.g., 'Disney', 'Star Wars') — NO C: prefix" },
+                        "Modified Item": { type: "string", description: "Whether item has been modified — almost always 'No' — NO C: prefix" },
+                        Mintage: { type: "string", description: "Total mintage/edition size if known (e.g., '250', '5000') — NO C: prefix" },
+                        "Mint Mark": { type: "string", description: "Mint mark on the coin (e.g., 'P', 'D', 'S', 'W', 'CC', 'O', 'None') — NO C: prefix" },
+                        Brand: { type: "string", description: "Brand name for non-coin items — NO C: prefix" },
+                        Material: { type: "string", description: "Material for non-coin items — NO C: prefix" },
 
-                        // --- Bullion-specific fields ---
-                        Shape: { type: "string", description: "Physical form of the bullion: 'Bar', 'Round', 'Ingot', 'Coin', 'Medal', 'Wafer'" },
-                        "Manufacturer/Mint": { type: "string", description: "Who made/minted the item (e.g., 'New Zealand Mint', 'Perth Mint', 'APMEX', 'Scottsdale Mint')" },
-                        Series: { type: "string", description: "Series or theme name (e.g., 'Disney', 'Star Wars', 'Marvel', 'Pokemon')" },
-                        "Modified Item": { type: "string", description: "Whether item has been modified from original — almost always 'No'" },
-                        Denomination: { type: "string", description: "Face value denomination if any (e.g., '2 Dollars', '1 Dollar', '5 Dollars')" },
-                        Mintage: { type: "string", description: "Total mintage/edition size if known or visible (e.g., '250', '5000', 'Limited Edition')" },
-
-                        // --- Coin-specific fields ---
-                        "Coin/Bullion Type": { type: "string", description: "Specific coin type (e.g., 'American Silver Eagle', 'Morgan Dollar', 'Canadian Maple Leaf')" },
-                        "Mint Location": { type: "string", description: "Mint facility (e.g., 'Philadelphia', 'Denver', 'San Francisco', 'West Point')" },
-                        "Mint Mark": { type: "string", description: "Mint mark on the coin (e.g., 'P', 'D', 'S', 'W', 'CC', 'O', 'None')" },
-                        Grade: { type: "string", description: "Coin grade using Sheldon scale or 'Ungraded' (e.g., 'MS-65', 'VF-30', 'AU-55')" },
-                        "Circulated/Uncirculated": { type: "string", enum: ["Circulated", "Uncirculated"], description: "Whether the coin has been circulated" },
-                        Certification: { type: "string", enum: ["PCGS", "NGC", "ANACS", "ICG", "Uncertified"], description: "Grading service certification" },
-                        "Strike Type": { type: "string", enum: ["Business Strike", "Proof", "Reverse Proof", "Burnished", "Satin Finish"], description: "Type of strike" },
-                        // --- Non-coin/bullion items ---
-                        Brand: { type: "string", description: "Brand name for non-coin items" },
-                        Material: { type: "string", description: "Material for non-coin items" },
+                        // --- C: prefixed eBay aspect fields (REQUIRED prefix) ---
+                        "C:Year": { type: "string", description: "Year of manufacture/minting (e.g., '2025')" },
+                        "C:Metal": { type: "string", description: "Primary precious metal (e.g., 'Silver', 'Gold', 'Platinum', 'Palladium')" },
+                        "C:Fineness": { type: "string", description: "Fineness as decimal ONLY: '0.999', '0.9999', '0.9675', '0.925', '0.900' — never '999 fine' or '99.9%'" },
+                        "C:Composition": { type: "string", enum: ["Gold", "Silver", "Platinum", "Palladium", "Bronze", "Copper", "Nickel", "Steel", "Zinc"], description: "Metal composition — must match allowed values exactly" },
+                        "C:Precious Metal Content per Unit": { type: "string", description: "Metal weight per piece (e.g., '1 Troy oz', '1/2 Troy oz', '1/4 Troy oz', '1 g')" },
+                        "C:Country of Origin": { type: "string", description: "Country that issued or manufactured the item" },
+                        "C:Grade": { type: "string", description: "Coin grade with SPACE separator: 'MS 65', 'AU 55', 'VF 30' — never 'MS-65' or 'MS65'" },
+                        "C:Denomination": { type: "string", description: "Face value: half-dollar series use '50C'; dollar series use '$1'; other denominations as shown on coin" },
+                        "C:Circulated/Uncirculated": { type: "string", enum: ["Circulated", "Uncirculated", "Unknown"], description: "Circulation status — must be exactly one of the three allowed values" },
+                        "C:Certification": { type: "string", enum: ["Uncertified", "PCGS", "NGC", "ANACS", "ICG", "CAC"], description: "Grading certification — default to 'Uncertified' if no slab visible" },
+                        "C:Strike Type": { type: "string", enum: ["Business", "Proof", "Proof-Like", "Deep Mirror Proof-Like", "Satin", "Matte"], description: "Type of strike — use 'Business' for standard circulation strikes" },
+                        "C:Shape": { type: "string", enum: ["Bar", "Round"], description: "Bullion physical form — must be exactly 'Bar' or 'Round'" },
+                        "C:Mint Location": { type: "string", description: "Mint facility (e.g., 'Philadelphia', 'Denver', 'San Francisco', 'West Point', 'Carson City', 'New Orleans')" },
+                        "C:Brand/Mint": { type: "string", description: "Who made/minted bullion (e.g., 'New Zealand Mint', 'Perth Mint', 'APMEX', 'Scottsdale Mint')" },
+                        "C:KM Number": { type: "string", description: "Krause-Mishler catalog number for ancient/medieval/world coins" },
+                        "C:Era": { type: "string", description: "Historical era for ancient/medieval coins (e.g., 'Byzantine', 'Roman Imperial', 'Medieval')" },
+                        "C:Cleaned/Uncleaned": { type: "string", description: "Whether ancient/medieval coin has been cleaned" },
+                        "C:Provenance": { type: "string", description: "Known provenance or collection history for ancient/medieval coins" },
+                        "C:Variety": { type: "string", description: "Die variety or VAM designation if known" },
                       },
                       additionalProperties: true,
                     },

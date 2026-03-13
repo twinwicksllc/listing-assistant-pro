@@ -1,19 +1,30 @@
 /**
  * Maps eBay category IDs to human-readable breadcrumb strings.
- * Covers the most common categories for coins, bullion, and collectibles
- * used by the Teckstart AI analysis engine.
+ *
+ * The 10 "template categories" below (marked ★) are the ones our seller
+ * actively lists in. Their required/preferred aspects are enforced in
+ * ebay-publish via CATEGORY_ASPECT_RULES. All other categories fall through
+ * to the generic aspect-normalization path, so the app works for any eBay
+ * category the AI picks — it just won't apply category-specific validation.
  */
 export const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
-  // --- US Coins ---
+
+  // ★ Template categories — fully validated in ebay-publish
+  "178906": "Coins & Paper Money > Bullion > Gold > Bars & Rounds",            // ★ Gold Bars/Rounds
+  "39489":  "Coins & Paper Money > Bullion > Silver > Bars & Rounds",          // ★ Silver Bars/Rounds
+  "3361":   "Coins & Paper Money > Bullion > Silver > Other",                  // ★ Other Silver Bullion
+  "532":    "Coins & Paper Money > Coins: Ancient",                             // ★ Ancient Coins
+  "173685": "Coins & Paper Money > Coins: Medieval",                           // ★ Medieval Coins
+  "11981":  "Coins & Paper Money > Coins: US > Dollars > Eisenhower (1971-78)",// ★ Eisenhower
+  "39464":  "Coins & Paper Money > Coins: US > Dollars > Morgan (1878-1921)",  // ★ Morgan Dollar
+  "11980":  "Coins & Paper Money > Coins: US > Dollars > Peace (1921-35)",     // ★ Peace Dollar
+  "11971":  "Coins & Paper Money > Coins: US > Half Dollars > Barber (1892-1915)", // ★ Barber Half
+  "41099":  "Coins & Paper Money > Coins: US > Half Dollars > Liberty Walking (1916-47)", // ★ Liberty Walking Half
+
+  // --- US Coins (general + other series) ---
   "253":    "Coins & Paper Money > Coins: US",
   "11116":  "Coins & Paper Money > Coins: US > Pennies > Lincoln Memorial (1959-2008)",
-  "39481":  "Coins & Paper Money > Coins: US > Half Dollars > Walking Liberty (1916-1947)",
   "11118":  "Coins & Paper Money > Coins: US > Half Dollars",
-  "39482":  "Coins & Paper Money > Coins: US > Dollars > Morgan (1878-1921)",
-  "39483":  "Coins & Paper Money > Coins: US > Dollars > Peace (1921-1935)",
-  "39484":  "Coins & Paper Money > Coins: US > Dollars > Eisenhower (1971-1978)",
-  "41111":  "Coins & Paper Money > Coins: US > Dollars > American Silver Eagle",
-  "164743": "Coins & Paper Money > Coins: US > Quarters > 50 States & Territories",
   "40149":  "Coins & Paper Money > Coins: US > Quarters > Washington (1932-1998)",
   "40150":  "Coins & Paper Money > Coins: US > Dimes > Roosevelt (1946-Now)",
   "40151":  "Coins & Paper Money > Coins: US > Dimes > Mercury (1916-1945)",
@@ -26,27 +37,10 @@ export const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
   "40158":  "Coins & Paper Money > Coins: US > Dollars > Sacagawea/Native American",
   "40159":  "Coins & Paper Money > Coins: US > Dollars > Presidential",
   "40160":  "Coins & Paper Money > Coins: US > Dollars > Susan B. Anthony",
-  "40161":  "Coins & Paper Money > Coins: US > Gold Coins > $20 Double Eagle",
-  "40162":  "Coins & Paper Money > Coins: US > Gold Coins > $10 Eagle",
-  "40163":  "Coins & Paper Money > Coins: US > Gold Coins > $5 Half Eagle",
-  "40164":  "Coins & Paper Money > Coins: US > Gold Coins > $2.5 Quarter Eagle",
-  "40165":  "Coins & Paper Money > Coins: US > Gold Coins > $1 Gold",
-  "40166":  "Coins & Paper Money > Coins: US > Gold Coins > American Gold Eagle",
-  "40167":  "Coins & Paper Money > Coins: US > Gold Coins > American Gold Buffalo",
+  "41111":  "Coins & Paper Money > Coins: US > Dollars > American Silver Eagle",
+  "164743": "Coins & Paper Money > Coins: US > Quarters > 50 States & Territories",
 
-  // --- Bullion ---
-  "261069": "Coins & Paper Money > Bullion > Silver Bullion > Bars & Rounds",
-  "261064": "Coins & Paper Money > Bullion > Gold Bullion > Coins",
-  "261071": "Coins & Paper Money > Bullion > Gold Bullion > Bars & Rounds",
-  "261068": "Coins & Paper Money > Bullion > Silver Bullion > Coins",
-  "261070": "Coins & Paper Money > Bullion > Platinum Bullion > Coins",
-  "261072": "Coins & Paper Money > Bullion > Platinum Bullion > Bars & Rounds",
-  "261073": "Coins & Paper Money > Bullion > Palladium Bullion",
-  "261074": "Coins & Paper Money > Bullion > Silver Bullion",
-  "261075": "Coins & Paper Money > Bullion > Gold Bullion",
-  "261076": "Coins & Paper Money > Bullion",
-
-  // --- US Coins (additional series) ---
+  // --- US Gold Coins ---
   "40161":  "Coins & Paper Money > Coins: US > Gold Coins > $20 Double Eagle",
   "40162":  "Coins & Paper Money > Coins: US > Gold Coins > $10 Eagle",
   "40163":  "Coins & Paper Money > Coins: US > Gold Coins > $5 Half Eagle",
@@ -54,13 +48,20 @@ export const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
   "40165":  "Coins & Paper Money > Coins: US > Gold Coins > $1 Gold",
   "40166":  "Coins & Paper Money > Coins: US > Gold Coins > American Gold Eagle",
   "40167":  "Coins & Paper Money > Coins: US > Gold Coins > American Gold Buffalo",
-  "40158":  "Coins & Paper Money > Coins: US > Dollars > Sacagawea/Native American",
-  "40159":  "Coins & Paper Money > Coins: US > Dollars > Presidential",
-  "40160":  "Coins & Paper Money > Coins: US > Dollars > Susan B. Anthony",
 
-  // --- Paper Money ---
-  "3411":   "Coins & Paper Money > Paper Money: US",
-  "45244":  "Coins & Paper Money > Paper Money: World",
+  // --- Bullion (other) ---
+  "261064": "Coins & Paper Money > Bullion > Gold > Coins",
+  "261068": "Coins & Paper Money > Bullion > Silver > Coins",
+  "261069": "Coins & Paper Money > Bullion > Silver > Bars & Rounds",
+  "261070": "Coins & Paper Money > Bullion > Platinum > Coins",
+  "261071": "Coins & Paper Money > Bullion > Gold > Bars & Rounds",
+  "261072": "Coins & Paper Money > Bullion > Platinum > Bars & Rounds",
+  "261073": "Coins & Paper Money > Bullion > Palladium",
+  "261074": "Coins & Paper Money > Bullion > Silver",
+  "261075": "Coins & Paper Money > Bullion > Gold",
+  "261076": "Coins & Paper Money > Bullion",
+
+  // --- World Coins ---
   "45243":  "Coins & Paper Money > Coins: World",
   "40196":  "Coins & Paper Money > Coins: World > Canada",
   "40197":  "Coins & Paper Money > Coins: World > Mexico",
@@ -88,10 +89,35 @@ export const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
 };
 
 /**
+ * The 10 template categories our seller uses, with their correct eBay IDs.
+ * Used by the UI to highlight known categories.
+ */
+export const TEMPLATE_CATEGORY_IDS = new Set([
+  "178906", // Gold Bars & Rounds
+  "39489",  // Silver Bars & Rounds
+  "3361",   // Other Silver Bullion
+  "532",    // Ancient Coins
+  "173685", // Medieval Coins
+  "11981",  // Eisenhower Dollars
+  "39464",  // Morgan Dollars
+  "11980",  // Peace Dollars
+  "11971",  // Barber Half Dollars
+  "41099",  // Liberty Walking Half Dollars
+]);
+
+/**
  * Returns the breadcrumb string for a given eBay category ID.
  * Falls back to "Category #<id>" if the ID is not in the map.
  */
 export function getEbayCategoryBreadcrumb(categoryId: string | undefined): string {
   if (!categoryId) return "";
   return EBAY_CATEGORY_BREADCRUMBS[categoryId] ?? `Category #${categoryId}`;
+}
+
+/**
+ * Returns true if this is one of our 10 fully-validated template categories.
+ */
+export function isTemplateCategory(categoryId: string | undefined): boolean {
+  if (!categoryId) return false;
+  return TEMPLATE_CATEGORY_IDS.has(categoryId);
 }
