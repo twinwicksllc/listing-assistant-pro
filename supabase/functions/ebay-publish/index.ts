@@ -656,7 +656,10 @@ async function ensureInventoryLocation(
         Authorization: `Bearer ${userToken}`,
         "Content-Type": "application/json",
         "Content-Language": "en-US",
-        // Accept-Language intentionally omitted — empty string causes errorId 25709
+        // Accept-Language must be explicitly set to "en-US".
+        // Deno's runtime auto-injects the system locale when omitted,
+        // sending an invalid value that eBay rejects with errorId 25709.
+        "Accept-Language": "en-US",
       },
       body: JSON.stringify(locationBody),
       timeout: 15000,
@@ -697,7 +700,7 @@ async function ensureInventoryLocation(
 }
 
 serve(async (req) => {
-  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v10 - USED_* condition codes for coins, fee-adjusted melt floor) ***");
+  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v11 - explicit Accept-Language: en-US overrides Deno runtime injection) ***");
   
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -1208,13 +1211,15 @@ serve(async (req) => {
         );
       }
 
-      // NOTE: Accept-Language must be OMITTED entirely — setting it to "" sends an invalid
-      // empty locale string which eBay rejects with errorId 25709. Content-Language must
-      // be a valid locale (en-US). Simply don't include Accept-Language at all.
+      // NOTE: Accept-Language must be explicitly set to "en-US".
+      // Deno's runtime auto-injects the system locale when this header is omitted,
+      // sending an invalid value that eBay rejects with errorId 25709.
+      // Explicitly providing "en-US" overrides Deno's injected value.
       const authHeaders = {
         Authorization: `Bearer ${userToken}`,
         "Content-Type": "application/json",
         "Content-Language": "en-US",
+        "Accept-Language": "en-US",
       };
 
       // Step 1: Ensure inventory location exists before creating the item.
@@ -1604,13 +1609,15 @@ serve(async (req) => {
         );
       }
 
-      // NOTE: Accept-Language must be OMITTED entirely — setting it to "" sends an invalid
-      // empty locale string which eBay rejects with errorId 25709. Content-Language must
-      // be a valid locale (en-US). Simply don't include Accept-Language at all.
+      // NOTE: Accept-Language must be explicitly set to "en-US".
+      // Deno's runtime auto-injects the system locale when this header is omitted,
+      // sending an invalid value that eBay rejects with errorId 25709.
+      // Explicitly providing "en-US" overrides Deno's injected value.
       const authHeaders = {
         Authorization: `Bearer ${resolvedToken}`,
         "Content-Type": "application/json",
         "Content-Language": "en-US",
+        "Accept-Language": "en-US",
       };
 
       // Fetch each policy type independently so one failure doesn't kill all three.
