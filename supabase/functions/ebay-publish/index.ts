@@ -381,8 +381,6 @@ async function ensureInventoryLocation(
       headers: {
         Authorization: `Bearer ${userToken}`,
         "Content-Type": "application/json",
-        "Accept-Language": "en-US",
-        "Content-Language": "en-US",
       },
       body: JSON.stringify(locationBody),
       timeout: 15000,
@@ -534,8 +532,6 @@ serve(async (req) => {
         headers: {
           Authorization: `Basic ${credentials}`,
           "Content-Type": "application/x-www-form-urlencoded",
-          "Accept-Language": "en-US",
-          "Content-Language": "en-US",
         },
         body: new URLSearchParams({
           grant_type: "authorization_code",
@@ -662,8 +658,6 @@ serve(async (req) => {
         headers: {
           Authorization: `Basic ${credentials}`,
           "Content-Type": "application/x-www-form-urlencoded",
-          "Accept-Language": "en-US",
-          "Content-Language": "en-US",
         },
         body: new URLSearchParams({
           grant_type: "refresh_token",
@@ -776,8 +770,6 @@ serve(async (req) => {
             headers: {
               Authorization: `Basic ${credentials}`,
               "Content-Type": "application/x-www-form-urlencoded",
-              "Accept-Language": "en-US",
-              "Content-Language": "en-US",
             },
             body: new URLSearchParams({
               grant_type: "refresh_token",
@@ -933,11 +925,11 @@ serve(async (req) => {
         );
       }
 
+      // NOTE: Do NOT include Accept-Language or Content-Language headers.
+      // eBay Inventory API rejects these with errorId 25709.
       const authHeaders = {
         Authorization: `Bearer ${userToken}`,
         "Content-Type": "application/json",
-        "Accept-Language": "en-US",
-        "Content-Language": "en-US",
       };
 
       // Step 1: Ensure inventory location exists before creating the item.
@@ -966,13 +958,18 @@ serve(async (req) => {
         }
       }
 
+      // IMPORTANT: condition and conditionDescription belong at the ROOT level
+      // of the inventory item body, NOT inside product. Placing them inside product
+      // causes eBay error 25021 ("Item condition is required for this category")
+      // at publish time, even though the offer creation succeeds.
+      // Reference: https://developer.ebay.com/api-docs/sell/inventory/resources/inventory_item/methods/createOrReplaceInventoryItem
       const inventoryBody: Record<string, unknown> = {
         product: {
           title,
-          condition: conditionEnum,
-          conditionDescription: conditionDesc,
           imageUrls: resolvedImageUrl ? [resolvedImageUrl] : [],
         },
+        condition: conditionEnum,
+        conditionDescription: conditionDesc,
         availability: {
           // shipToLocationAvailability: use only the top-level quantity.
           // availabilityDistributions is for multi-warehouse sellers and causes
@@ -1111,7 +1108,8 @@ serve(async (req) => {
 
         // Check if this is errorId 25002 — offer already exists.
         // This can happen if a previous publish attempt created the offer but failed at publish step.
-        // Extract the existing offerId from the error response and proceed to publish.
+        // When this happens, UPDATE the existing offer with the corrected payload (PUT /offer/{offerId})
+        // to ensure any fixes (e.g., condition, policies) take effect before publishing.
         try {
           const errJson = JSON.parse(errText);
           const offerExists = Array.isArray(errJson.errors) &&
@@ -1123,8 +1121,26 @@ serve(async (req) => {
             if (offerIdParam?.value) {
               offerId = offerIdParam.value;
               console.log(
-                `create_draft: offer already exists (errorId 25002), using existing offerId=${offerId}`
+                `create_draft: offer already exists (errorId 25002), updating existing offerId=${offerId} before publish`
               );
+              // Update the existing offer so our corrected payload takes effect
+              const updateResp = await fetchWithTimeout(
+                `${apiBase}/sell/inventory/v1/offer/${offerId}`,
+                {
+                  method: "PUT",
+                  timeout: 15000,
+                  headers: authHeaders,
+                  body: JSON.stringify(offerBody),
+                }
+              );
+              if (!updateResp.ok) {
+                const updateErrText = await updateResp.text();
+                console.warn(
+                  `create_draft: offer update failed (non-fatal), will still attempt publish: ${updateResp.status} - ${updateErrText}`
+                );
+              } else {
+                console.log(`create_draft: existing offer ${offerId} updated successfully`);
+              }
             }
           }
         } catch {
@@ -1142,19 +1158,17 @@ serve(async (req) => {
 
       console.log(`create_draft: proceeding to publish offerId=${offerId}...`);
 
-      // Step 5: Publish the offer to make it a live listing
-      // The publish endpoint can accept a body with condition/conditionDescription to override inventory defaults
-      const publishBody: Record<string, unknown> = {
-        condition: conditionEnum,
-      };
-
+      // Step 5: Publish the offer to make it a live listing.
+      // The publish endpoint does NOT accept a request body — condition is already
+      // set on the inventory item (root level). Sending extra body fields causes
+      // unexpected behavior. POST with no body is the correct usage.
+      // Reference: https://developer.ebay.com/api-docs/sell/inventory/resources/offer/methods/publishOffer
       const publishResp = await fetchWithTimeout(
         `${apiBase}/sell/inventory/v1/offer/${offerId}/publish`,
         {
           method: "POST",
           timeout: 15000,
           headers: authHeaders,
-          body: JSON.stringify(publishBody),
         }
       );
 
@@ -1308,8 +1322,6 @@ serve(async (req) => {
       const authHeaders = {
         Authorization: `Bearer ${resolvedToken}`,
         "Content-Type": "application/json",
-        "Accept-Language": "en-US",
-        "Content-Language": "en-US",
       };
 
       // Fetch each policy type independently so one failure doesn't kill all three.
