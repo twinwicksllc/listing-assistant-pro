@@ -40,7 +40,12 @@ verify_jwt = false
 # Stripe POSTs here directly — no Supabase JWT, verified via Stripe-Signature header
 verify_jwt = false
 
-[cron.competitor-prices-refresh]
-# Run daily at 2:00 AM UTC
-schedule = "0 2 * * *"
-function = "competitor-prices-cron"
+# NOTE: Supabase CLI cron scheduling support requires CLI v2.x or later.
+# This config is commented out to prevent deployment failures with older CLI versions.
+# To re-enable, uncomment after upgrading supabase/setup-cli@v1 to a version that
+# supports [cron.*] config keys.
+#
+# [cron.competitor-prices-refresh]
+# # Run daily at 2:00 AM UTC
+# schedule = "0 2 * * *"
+# function = "competitor-prices-cron"
