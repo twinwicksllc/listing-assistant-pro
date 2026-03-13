@@ -301,7 +301,9 @@ OTHER US COINS (use when no priority category matches):
   $5 Half Eagle:         40163
   $2.50 Quarter Eagle:   40164
   $1 Gold:               40165
-  US Coins General:        253
+  US Coin Proof Sets:      41109
+  US Coin Mint Sets:         526
+  US Coins General:          253
 
 WORLD COINS: 45243
 BULLION — Coins // Bars & Rounds:
@@ -423,7 +425,7 @@ Seller's note: "${voiceNote}"`;
                     ebayCategoryId: {
                       type: "string",
                       description:
-                        "The most specific eBay category ID. Priority categories: Gold Bars/Rounds=178906, Silver Bars/Rounds=39489, Other Silver Bullion=3361, Ancient Coins=532, Medieval Coins=173685, Eisenhower Dollars=11981, Morgan Dollars=39464, Peace Dollars=11980, Barber Half Dollars=11971, Liberty Walking Half=41099. Other: Silver Eagle=41111, Kennedy Half=40156, Gold Eagle=40166, Gold Buffalo=40167, US Coins General=253, World Coins=45243.",
+                        "The most specific eBay category ID. Priority categories: Gold Bars/Rounds=178906, Silver Bars/Rounds=39489, Other Silver Bullion=3361, Ancient Coins=532, Medieval Coins=173685, Eisenhower Dollars=11981, Morgan Dollars=39464, Peace Dollars=11980, Barber Half Dollars=11971, Liberty Walking Half=41099. Other: Silver Eagle=41111, Kennedy Half=40156, Gold Eagle=40166, Gold Buffalo=40167, US Proof Sets=41109, US Mint Sets=526, US Coins General=253, World Coins=45243. IMPORTANT: For any US Mint Proof Set (annual proof sets, prestige proof sets), always use 41109. For US Mint uncirculated/mint sets, use 526. Never use 253 for proof sets or mint sets.",
                     },
                     suggestedCategories: {
                       type: "array",

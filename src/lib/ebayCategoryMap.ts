@@ -21,6 +21,10 @@ export const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
   "11971":  "Coins & Paper Money > Coins: US > Half Dollars > Barber (1892-1915)", // ★ Barber Half
   "41099":  "Coins & Paper Money > Coins: US > Half Dollars > Liberty Walking (1916-47)", // ★ Liberty Walking Half
 
+  // ★ Proof Sets & Mint Sets — leaf categories
+  "41109":  "Coins & Paper Money > Coins: US > Proof Sets",                 // ★ US Coin Proof Sets
+  "526":    "Coins & Paper Money > Coins: US > Mint Sets",                   // ★ US Coin Mint Sets
+
   // --- US Coins (general + other series) ---
   "253":    "Coins & Paper Money > Coins: US",
   "11116":  "Coins & Paper Money > Coins: US > Pennies > Lincoln Memorial (1959-2008)",
@@ -103,6 +107,8 @@ export const TEMPLATE_CATEGORY_IDS = new Set([
   "11980",  // Peace Dollars
   "11971",  // Barber Half Dollars
   "41099",  // Liberty Walking Half Dollars
+  "41109",  // US Coin Proof Sets
+  "526",    // US Coin Mint Sets
 ]);
 
 /**

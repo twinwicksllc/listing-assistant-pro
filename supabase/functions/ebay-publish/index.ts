@@ -8,7 +8,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Force redeploy v12: normalizePreciousMetalContent() — fix errorId 25604 "Product not found" for non-standard bullion weights (e.g. "0.1607 Troy oz" -> "5 g")
+// Force redeploy v13: fix errorId 25005 "not a leaf category" for US Mint Proof Sets — correct category 253→41109 (US Coin Proof Sets), add CATEGORY_ASPECT_RULES for 41109 and 526
 // fineness/denomination/grade normalisation, required-aspect safety-fill (PR #118)
 
 // ================================================================
@@ -93,6 +93,18 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
     preferred: ["Year", "Mint Location", "Strike Type", "Fineness", "Denomination"],
     defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "50C" },
     fixedValues: { "Denomination": "50C", "Composition": "Silver", "Fineness": "0.900" },
+  },
+  // US Coin Proof Sets
+  "41109": {
+    required: ["Certification", "Circulated/Uncirculated"],
+    preferred: ["Year", "Mint Location", "Strike Type", "Country/Region of Manufacture"],
+    defaults: { "Certification": "U.S. Mint", "Circulated/Uncirculated": "Uncirculated", "Strike Type": "Proof", "Country/Region of Manufacture": "United States" },
+  },
+  // US Coin Mint Sets (uncirculated)
+  "526": {
+    required: ["Certification", "Circulated/Uncirculated"],
+    preferred: ["Year", "Mint Location", "Country/Region of Manufacture"],
+    defaults: { "Certification": "U.S. Mint", "Circulated/Uncirculated": "Uncirculated", "Country/Region of Manufacture": "United States" },
   },
 };
 
@@ -811,7 +823,7 @@ async function ensureInventoryLocation(
 }
 
 serve(async (req) => {
-  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v12 - normalizePreciousMetalContent: fix 25604 Product not found for non-standard bullion weights) ***");
+  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v13 - fix 25005 not-a-leaf-category for proof sets: 253→41109 US Coin Proof Sets, added aspect rules for 41109/526) ***");
   
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
