@@ -74,12 +74,15 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
   const [condition, setCondition]       = useState(draft.condition ?? "PRE_OWNED_GOOD");
   const [consignor, setConsignor]       = useState(draft.consignor ?? "");
   const [ebayCategoryId, setEbayCategoryId] = useState(draft.ebayCategoryId ?? "");
+  // Track whether the user has changed the category ID so we can clear the stale breadcrumb
+  const [categoryChanged, setCategoryChanged] = useState(false);
   const [customCategoryInput, setCustomCategoryInput] = useState(false);
   const [itemSpecifics, setItemSpecifics] = useState<Record<string, string>>(
     (draft.itemSpecifics as Record<string, string>) ?? {}
   );
 
-  // Policy state
+  // Policy state — seeded directly from the saved draft values so the selects
+  // show the correct selection immediately, before the options list loads.
   const [policies, setPolicies]                     = useState<Policies | null>(null);
   const [policiesLoading, setPoliciesLoading]       = useState(false);
   const [policiesError, setPoliciesError]           = useState("");
@@ -127,7 +130,6 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
         }
       }
 
-      // Check cancellation after async token fetch
       if (cancelled) return;
 
       // 2. Fall back to localStorage
@@ -148,9 +150,6 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
 
       setEbayConnected(true);
 
-      // Use get_policies action on ebay-publish (avoids CORS issues with ebay-policies function).
-      // Pass both userToken and userId so the edge function can self-resolve the token
-      // from Supabase profiles if userToken is somehow null (e.g. token never stored locally).
       const { data, error } = await supabase.functions.invoke("ebay-publish", {
         body: { action: "get_policies", userToken: ebayToken, userId: user?.id ?? null },
       });
@@ -158,29 +157,24 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
       if (cancelled) return;
 
       if (error) {
-        // Supabase invoke-level error (network, CORS, function crash)
         const detail = error instanceof Error ? error.message : String(error);
         console.error("EditDraftModal: get_policies invoke error:", detail);
         setPoliciesError(`Could not load eBay policies: ${detail}`);
       } else if (data?.error) {
-        // Edge function returned a top-level error field
         console.error("EditDraftModal: get_policies returned error:", data.error);
         setPoliciesError(`Could not load eBay policies: ${data.error}`);
       } else {
         setPolicies(data as Policies);
 
-        // Log any per-policy-type errors (non-fatal — other types may still have loaded)
         if (data?.policyErrors && Object.keys(data.policyErrors).length > 0) {
           console.warn("EditDraftModal: some policy types had errors:", data.policyErrors);
         }
 
-        // Auto-select first policy of each type if none already chosen
-        if (!fulfillmentPolicyId && data.fulfillment?.length > 0)
-          setFulfillmentPolicyId(data.fulfillment[0].id);
-        if (!paymentPolicyId && data.payment?.length > 0)
-          setPaymentPolicyId(data.payment[0].id);
-        if (!returnPolicyId && data.returns?.length > 0)
-          setReturnPolicyId(data.returns[0].id);
+        // Auto-select the first policy of each type ONLY when the draft had no saved
+        // policy. Use the functional updater so we never overwrite an already-set value.
+        setFulfillmentPolicyId((prev) => (!prev && data.fulfillment?.length > 0) ? data.fulfillment[0].id : prev);
+        setPaymentPolicyId((prev)      => (!prev && data.payment?.length > 0)    ? data.payment[0].id    : prev);
+        setReturnPolicyId((prev)       => (!prev && data.returns?.length > 0)    ? data.returns[0].id    : prev);
       }
 
       setPoliciesLoading(false);
@@ -191,19 +185,40 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
+  // When user types a new category ID, track that it differs from the saved value
+  const handleCategoryIdChange = (val: string) => {
+    const cleaned = val.replace(/\D/g, "");
+    setEbayCategoryId(cleaned);
+    setCategoryChanged(cleaned !== (draft.ebayCategoryId ?? ""));
+  };
+
+  // Breadcrumb to display in the non-edit view:
+  // - If the user changed the category ID, show "Category #<id>" (stale breadcrumb is misleading)
+  // - Otherwise show the saved breadcrumb, falling back to "Category #<id>"
+  const displayBreadcrumb = categoryChanged
+    ? (ebayCategoryId ? `Category #${ebayCategoryId}` : "")
+    : (draft.ebayCategoryBreadcrumb || (ebayCategoryId ? `Category #${ebayCategoryId}` : ""));
+
   const handleSave = async () => {
     if (!title.trim()) {
       toast.error("Title cannot be empty");
       return;
     }
 
-    // Validate auction-specific fields
     if (listingFormat === "AUCTION" && listingPrice <= 0) {
       toast.error("Please set a starting bid price for the auction");
       return;
     }
 
     setSaving(true);
+
+    // When the category ID was changed, clear the stale breadcrumb in the DB so it
+    // does not show misleading text from the original category going forward.
+    const newCategoryId  = ebayCategoryId || undefined;
+    const newBreadcrumb  = categoryChanged
+      ? undefined                         // clear stale breadcrumb when ID changed
+      : draft.ebayCategoryBreadcrumb;     // keep existing breadcrumb if ID unchanged
+
     const updates: Partial<ListingDraft> = {
       title: title.slice(0, 80),
       description,
@@ -212,12 +227,14 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
       auctionDuration: listingFormat === "AUCTION" ? auctionDuration : undefined,
       condition,
       consignor,
-      ebayCategoryId: ebayCategoryId || undefined,
+      ebayCategoryId:        newCategoryId,
+      ebayCategoryBreadcrumb: newBreadcrumb,
       itemSpecifics,
       fulfillmentPolicyId: fulfillmentPolicyId || undefined,
-      paymentPolicyId: paymentPolicyId || undefined,
-      returnPolicyId: returnPolicyId || undefined,
+      paymentPolicyId:     paymentPolicyId     || undefined,
+      returnPolicyId:      returnPolicyId      || undefined,
     };
+
     const ok = await updateDraft(draft.id, updates);
     setSaving(false);
     if (ok) {
@@ -375,7 +392,7 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
                   autoFocus
                   type="text"
                   value={ebayCategoryId}
-                  onChange={(e) => setEbayCategoryId(e.target.value.replace(/\D/g, ""))}
+                  onChange={(e) => handleCategoryIdChange(e.target.value)}
                   placeholder="Enter eBay category ID (e.g. 261069)"
                   className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                 />
@@ -393,7 +410,8 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
                 <div className="min-w-0 flex-1">
                   {ebayCategoryId ? (
                     <>
-                      <p className="text-xs text-foreground leading-snug">{draft.ebayCategoryBreadcrumb || `Category #${ebayCategoryId}`}</p>
+                      {/* displayBreadcrumb reflects any unsaved category change live */}
+                      <p className="text-xs text-foreground leading-snug">{displayBreadcrumb}</p>
                       <p className="text-[10px] font-mono text-muted-foreground/60 mt-0.5">ID: {ebayCategoryId}</p>
                     </>
                   ) : (
@@ -503,15 +521,23 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
               </div>
             )}
 
-            {policies && (
+            {/* Render policy selects as soon as eBay is connected — even while the options
+                list is still loading. This prevents the "flash of nothing selected" that
+                occurred when the block was gated on `policies !== null`:
+                - While loading: show "Loading…" text in place of the select
+                - Once loaded: render the select with the saved value already highlighted   */}
+            {ebayConnected && (
               <div className="bg-card border border-border rounded-lg divide-y divide-border">
+
                 {/* Fulfillment / Shipping */}
                 <div className="flex items-center justify-between px-3 py-2.5 gap-3">
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <Truck className="w-3.5 h-3.5 text-muted-foreground" />
                     <span className="text-xs font-medium text-muted-foreground">Shipping</span>
                   </div>
-                  {policies.fulfillment.length === 0 ? (
+                  {policiesLoading ? (
+                    <span className="text-xs text-muted-foreground italic">Loading…</span>
+                  ) : policies && policies.fulfillment.length === 0 ? (
                     <span className="text-xs text-destructive">No policies found</span>
                   ) : (
                     <select
@@ -520,7 +546,7 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
                       className="text-xs text-foreground bg-transparent border-none focus:outline-none cursor-pointer text-right max-w-[60%] truncate"
                     >
                       <option value="">— Select —</option>
-                      {policies.fulfillment.map((p) => (
+                      {(policies?.fulfillment ?? []).map((p) => (
                         <option key={p.id} value={p.id}>{p.name}</option>
                       ))}
                     </select>
@@ -533,7 +559,9 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
                     <CreditCard className="w-3.5 h-3.5 text-muted-foreground" />
                     <span className="text-xs font-medium text-muted-foreground">Payment</span>
                   </div>
-                  {policies.payment.length === 0 ? (
+                  {policiesLoading ? (
+                    <span className="text-xs text-muted-foreground italic">Loading…</span>
+                  ) : policies && policies.payment.length === 0 ? (
                     <span className="text-xs text-destructive">No policies found</span>
                   ) : (
                     <select
@@ -542,7 +570,7 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
                       className="text-xs text-foreground bg-transparent border-none focus:outline-none cursor-pointer text-right max-w-[60%] truncate"
                     >
                       <option value="">— Select —</option>
-                      {policies.payment.map((p) => (
+                      {(policies?.payment ?? []).map((p) => (
                         <option key={p.id} value={p.id}>{p.name}</option>
                       ))}
                     </select>
@@ -555,7 +583,9 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
                     <RotateCcw className="w-3.5 h-3.5 text-muted-foreground" />
                     <span className="text-xs font-medium text-muted-foreground">Returns</span>
                   </div>
-                  {policies.returns.length === 0 ? (
+                  {policiesLoading ? (
+                    <span className="text-xs text-muted-foreground italic">Loading…</span>
+                  ) : policies && policies.returns.length === 0 ? (
                     <span className="text-xs text-destructive">No policies found</span>
                   ) : (
                     <select
@@ -564,12 +594,13 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
                       className="text-xs text-foreground bg-transparent border-none focus:outline-none cursor-pointer text-right max-w-[60%] truncate"
                     >
                       <option value="">— Select —</option>
-                      {policies.returns.map((p) => (
+                      {(policies?.returns ?? []).map((p) => (
                         <option key={p.id} value={p.id}>{p.name}</option>
                       ))}
                     </select>
                   )}
                 </div>
+
               </div>
             )}
           </div>

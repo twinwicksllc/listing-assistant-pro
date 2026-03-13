@@ -125,8 +125,13 @@ export function useDrafts() {
     if (updates.description !== undefined)            patch.description = updates.description;
     if (updates.listingPrice !== undefined)           patch.listing_price = updates.listingPrice;
     if (updates.listingFormat !== undefined)          patch.listing_format = updates.listingFormat;
-    if (updates.ebayCategoryId !== undefined)         patch.ebay_category_id = updates.ebayCategoryId;
-    if (updates.ebayCategoryBreadcrumb !== undefined) patch.ebay_category_breadcrumb = updates.ebayCategoryBreadcrumb;
+    if (updates.ebayCategoryId !== undefined)         patch.ebay_category_id = updates.ebayCategoryId || null;
+    // Always patch breadcrumb when ebayCategoryId is being updated, even if breadcrumb is
+    // undefined (meaning "clear it"). This ensures a stale breadcrumb from the old category
+    // is never left in the DB when the user picks a new category ID.
+    if (updates.ebayCategoryId !== undefined || updates.ebayCategoryBreadcrumb !== undefined) {
+      patch.ebay_category_breadcrumb = updates.ebayCategoryBreadcrumb || null;
+    }
     if (updates.itemSpecifics !== undefined)          patch.item_specifics = updates.itemSpecifics;
     if (updates.condition !== undefined)              patch.condition = updates.condition;
     if (updates.consignor !== undefined)              patch.consignor = updates.consignor;
