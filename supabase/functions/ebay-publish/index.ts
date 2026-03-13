@@ -8,7 +8,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Force redeploy v8: Content-Language: en-US in all 3 eBay API header locations, Accept-Language omitted — correct IDs, C: prefix normalisation,
+// Force redeploy v9: Strip C: prefix from all aspect keys — eBay Inventory API uses bare keys only — correct IDs, C: prefix normalisation,
 // fineness/denomination/grade normalisation, required-aspect safety-fill (PR #118)
 
 // ================================================================
@@ -29,70 +29,70 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
   // Gold Bars &amp; Rounds
   "178906": {
     required: [],
-    preferred: ["C:Shape", "C:Precious Metal Content per Unit", "C:Brand/Mint", "C:Fineness"],
+    preferred: ["Shape", "Precious Metal Content per Unit", "Brand/Mint", "Fineness"],
     defaults: {},
-    fixedValues: { "C:Composition": "Gold" },
+    fixedValues: { "Composition": "Gold" },
   },
   // Silver Bars &amp; Rounds
   "39489": {
     required: [],
-    preferred: ["C:Shape", "C:Precious Metal Content per Unit", "C:Brand/Mint", "C:Fineness"],
+    preferred: ["Shape", "Precious Metal Content per Unit", "Brand/Mint", "Fineness"],
     defaults: {},
-    fixedValues: { "C:Composition": "Silver" },
+    fixedValues: { "Composition": "Silver" },
   },
   // Other Silver Bullion
   "3361": {
-    required: ["C:Certification"],
-    preferred: ["C:Type"],
-    defaults: { "C:Certification": "Uncertified" },
-    fixedValues: { "C:Composition": "Silver" },
+    required: ["Certification"],
+    preferred: ["Type"],
+    defaults: { "Certification": "Uncertified" },
+    fixedValues: { "Composition": "Silver" },
   },
   // Ancient Coins
   "532": {
     required: [],
-    preferred: ["C:KM Number", "C:Fineness"],
+    preferred: ["KM Number", "Fineness"],
     defaults: {},
   },
   // Medieval Coins
   "173685": {
     required: [],
-    preferred: ["C:KM Number", "C:Fineness"],
+    preferred: ["KM Number", "Fineness"],
     defaults: {},
   },
   // Eisenhower Dollars 1971-1978
   "11981": {
-    required: ["C:Certification", "C:Circulated/Uncirculated"],
-    preferred: ["C:Year", "C:Strike Type", "C:Mint Location", "C:Fineness", "C:Denomination"],
-    defaults: { "C:Certification": "Uncertified", "C:Circulated/Uncirculated": "Unknown", "C:Denomination": "$1" },
-    fixedValues: { "C:Denomination": "$1" },
+    required: ["Certification", "Circulated/Uncirculated"],
+    preferred: ["Year", "Strike Type", "Mint Location", "Fineness", "Denomination"],
+    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "$1" },
+    fixedValues: { "Denomination": "$1" },
   },
   // Morgan Dollars 1878-1921
   "39464": {
-    required: ["C:Certification", "C:Circulated/Uncirculated"],
-    preferred: ["C:Composition", "C:Year", "C:Mint Location", "C:Strike Type", "C:Fineness", "C:Denomination"],
-    defaults: { "C:Certification": "Uncertified", "C:Circulated/Uncirculated": "Unknown", "C:Denomination": "$1" },
-    fixedValues: { "C:Denomination": "$1", "C:Composition": "Silver", "C:Fineness": "0.900" },
+    required: ["Certification", "Circulated/Uncirculated"],
+    preferred: ["Composition", "Year", "Mint Location", "Strike Type", "Fineness", "Denomination"],
+    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "$1" },
+    fixedValues: { "Denomination": "$1", "Composition": "Silver", "Fineness": "0.900" },
   },
   // Peace Dollars 1921-1935
   "11980": {
-    required: ["C:Certification", "C:Circulated/Uncirculated"],
-    preferred: ["C:Year", "C:Mint Location", "C:Strike Type", "C:Fineness", "C:Denomination"],
-    defaults: { "C:Certification": "Uncertified", "C:Circulated/Uncirculated": "Unknown", "C:Denomination": "$1" },
-    fixedValues: { "C:Denomination": "$1", "C:Composition": "Silver", "C:Fineness": "0.900" },
+    required: ["Certification", "Circulated/Uncirculated"],
+    preferred: ["Year", "Mint Location", "Strike Type", "Fineness", "Denomination"],
+    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "$1" },
+    fixedValues: { "Denomination": "$1", "Composition": "Silver", "Fineness": "0.900" },
   },
   // Barber Half Dollars 1892-1915
   "11971": {
-    required: ["C:Certification", "C:Circulated/Uncirculated"],
-    preferred: ["C:Year", "C:Mint Location", "C:Strike Type", "C:Fineness", "C:Denomination"],
-    defaults: { "C:Certification": "Uncertified", "C:Circulated/Uncirculated": "Unknown", "C:Denomination": "50C" },
-    fixedValues: { "C:Denomination": "50C", "C:Composition": "Silver", "C:Fineness": "0.900" },
+    required: ["Certification", "Circulated/Uncirculated"],
+    preferred: ["Year", "Mint Location", "Strike Type", "Fineness", "Denomination"],
+    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "50C" },
+    fixedValues: { "Denomination": "50C", "Composition": "Silver", "Fineness": "0.900" },
   },
   // Liberty Walking Half Dollars 1916-1947
   "41099": {
-    required: ["C:Certification", "C:Circulated/Uncirculated"],
-    preferred: ["C:Year", "C:Mint Location", "C:Strike Type", "C:Fineness", "C:Denomination"],
-    defaults: { "C:Certification": "Uncertified", "C:Circulated/Uncirculated": "Unknown", "C:Denomination": "50C" },
-    fixedValues: { "C:Denomination": "50C", "C:Composition": "Silver", "C:Fineness": "0.900" },
+    required: ["Certification", "Circulated/Uncirculated"],
+    preferred: ["Year", "Mint Location", "Strike Type", "Fineness", "Denomination"],
+    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "50C" },
+    fixedValues: { "Denomination": "50C", "Composition": "Silver", "Fineness": "0.900" },
   },
 };
 
@@ -100,16 +100,16 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
 // VALID ASPECT VALUES
 // ================================================================
 const VALID_ASPECT_VALUES: Record<string, Set<string>> = {
-  "C:Certification": new Set([
+  "Certification": new Set([
     "Uncertified", "PCGS", "NGC", "PCGS &amp; CAC", "NGC &amp; CAC",
     "U.S. Mint", "ANACS", "ICG", "CAC", "ICCS",
   ]),
-  "C:Circulated/Uncirculated": new Set(["Uncirculated", "Circulated", "Unknown"]),
-  "C:Shape": new Set(["Bar", "Round"]),
-  "C:Strike Type": new Set([
+  "Circulated/Uncirculated": new Set(["Uncirculated", "Circulated", "Unknown"]),
+  "Shape": new Set(["Bar", "Round"]),
+  "Strike Type": new Set([
     "Business", "Proof", "Proof-Like", "Deep Mirror Proof-Like", "Satin", "Matte",
   ]),
-  "C:Composition": new Set([
+  "Composition": new Set([
     "Gold", "Silver", "Platinum", "Palladium", "Bronze", "Copper", "Nickel", "Steel", "Zinc",
   ]),
 };
@@ -181,37 +181,37 @@ function normalizeCirculatedUncirculated(
 }
 
 const ASPECT_KEY_ALIASES: Record<string, string> = {
-  "Circulated/Uncirculated":         "C:Circulated/Uncirculated",
-  "CirculatedUncirculated":          "C:Circulated/Uncirculated",
-  "Mint Location":                   "C:Mint Location",
-  "MintLocation":                    "C:Mint Location",
-  "Strike Type":                     "C:Strike Type",
-  "StrikeType":                      "C:Strike Type",
-  "KM Number":                       "C:KM Number",
-  "KMNumber":                        "C:KM Number",
-  "Precious Metal Content per Unit": "C:Precious Metal Content per Unit",
-  "PreciousMetalContentperUnit":     "C:Precious Metal Content per Unit",
-  "Metal Content":                   "C:Precious Metal Content per Unit",
-  "Brand/Mint":                      "C:Brand/Mint",
-  "Manufacturer/Mint":               "C:Brand/Mint",
-  "Fineness":                        "C:Fineness",
-  "Certification":                   "C:Certification",
-  "Denomination":                    "C:Denomination",
-  "Composition":                     "C:Composition",
-  "Year":                            "C:Year",
-  "Shape":                           "C:Shape",
-  "Grade":                           "C:Grade",
-  "Coin":                            "C:Coin",
-  "Coin Type":                       "C:Coin",
-  "Coin/Bullion Type":               "C:Coin",
-  "Country of Origin":               "C:Country of Origin",
-  "Country/Region of Manufacture":   "C:Country of Origin",
-  "Total Precious Metal Content":    "C:Total Precious Metal Content",
-  "Certification Number":            "C:Certification Number",
-  "Variety":                         "C:Variety",
-  "Era":                             "C:Era",
-  "Cleaned/Uncleaned":               "C:Cleaned/Uncleaned",
-  "Provenance":                      "C:Provenance",
+  "Circulated/Uncirculated":         "Circulated/Uncirculated",
+  "CirculatedUncirculated":          "Circulated/Uncirculated",
+  "Mint Location":                   "Mint Location",
+  "MintLocation":                    "Mint Location",
+  "Strike Type":                     "Strike Type",
+  "StrikeType":                      "Strike Type",
+  "KM Number":                       "KM Number",
+  "KMNumber":                        "KM Number",
+  "Precious Metal Content per Unit": "Precious Metal Content per Unit",
+  "PreciousMetalContentperUnit":     "Precious Metal Content per Unit",
+  "Metal Content":                   "Precious Metal Content per Unit",
+  "Brand/Mint":                      "Brand/Mint",
+  "Manufacturer/Mint":               "Brand/Mint",
+  "Fineness":                        "Fineness",
+  "Certification":                   "Certification",
+  "Denomination":                    "Denomination",
+  "Composition":                     "Composition",
+  "Year":                            "Year",
+  "Shape":                           "Shape",
+  "Grade":                           "Grade",
+  "Coin":                            "Coin",
+  "Coin Type":                       "Coin",
+  "Coin/Bullion Type":               "Coin",
+  "Country of Origin":               "Country of Origin",
+  "Country/Region of Manufacture":   "Country of Origin",
+  "Total Precious Metal Content":    "Total Precious Metal Content",
+  "Certification Number":            "Certification Number",
+  "Variety":                         "Variety",
+  "Era":                             "Era",
+  "Cleaned/Uncleaned":               "Cleaned/Uncleaned",
+  "Provenance":                      "Provenance",
 };
 
 const NON_ASPECT_KEYS = new Set([
@@ -220,10 +220,13 @@ const NON_ASPECT_KEYS = new Set([
 ]);
 
 function normalizeAspectKey(key: string): string {
-  if (key.startsWith("C:")) return key;
-  if (NON_ASPECT_KEYS.has(key)) return key;
-  if (ASPECT_KEY_ALIASES[key]) return ASPECT_KEY_ALIASES[key];
-  return `C:${key}`;
+  // eBay Inventory API expects BARE keys (Fineness, Grade, Year — NOT C:Fineness etc.)
+  // The C: prefix is only used in eBay's Category Tree API taxonomy responses, never in payloads.
+  // Strip any C: prefix the AI might have output, then resolve aliases to canonical bare names.
+  const bare = key.startsWith("C:") ? key.slice(2) : key;
+  if (NON_ASPECT_KEYS.has(bare)) return bare;
+  if (ASPECT_KEY_ALIASES[bare]) return ASPECT_KEY_ALIASES[bare];
+  return bare;
 }
 
 function buildAndNormalizeAspects(
@@ -243,11 +246,11 @@ function buildAndNormalizeAspects(
     if (NON_ASPECT_KEYS.has(key)) continue; // skip internal-only keys
 
     let value = trimmed;
-    if (key === "C:Fineness") value = normalizeFineness(trimmed);
-    else if (key === "C:Grade") value = normalizeGrade(trimmed);
-    else if (key === "C:Denomination") value = normalizeDenomination(trimmed, categoryId);
-    else if (key === "C:Circulated/Uncirculated") {
-      const gradeHint = (rawSpecifics["Grade"] as string) || (rawSpecifics["C:Grade"] as string);
+    if (key === "Fineness") value = normalizeFineness(trimmed);
+    else if (key === "Grade") value = normalizeGrade(trimmed);
+    else if (key === "Denomination") value = normalizeDenomination(trimmed, categoryId);
+    else if (key === "Circulated/Uncirculated") {
+      const gradeHint = (rawSpecifics["Grade"] as string) || undefined;
       value = normalizeCirculatedUncirculated(trimmed, gradeHint);
     }
 
@@ -269,13 +272,13 @@ function buildAndNormalizeAspects(
   // Fill required aspects with defaults if still missing
   if (rule) {
     if (
-      rule.required.includes("C:Circulated/Uncirculated") &&
-      !aspects["C:Circulated/Uncirculated"]
+      rule.required.includes("Circulated/Uncirculated") &&
+      !aspects["Circulated/Uncirculated"]
     ) {
-      const grade = aspects["C:Grade"]?.[0];
+      const grade = aspects["Grade"]?.[0];
       const circVal = normalizeCirculatedUncirculated(undefined, grade);
-      aspects["C:Circulated/Uncirculated"] = [circVal];
-      console.log(`buildAndNormalizeAspects: derived C:Circulated/Uncirculated="${circVal}" from grade="${grade}"`);
+      aspects["Circulated/Uncirculated"] = [circVal];
+      console.log(`buildAndNormalizeAspects: derived Circulated/Uncirculated="${circVal}" from grade="${grade}"`);
     }
     for (const [k, v] of Object.entries(rule.defaults)) {
       if (!aspects[k]) {
@@ -668,7 +671,7 @@ async function ensureInventoryLocation(
 }
 
 serve(async (req) => {
-  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v8 - Content-Language: en-US in all 3 header locations, Accept-Language omitted) ***");
+  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v9 - bare aspect keys, no C: prefix in inventory payloads) ***");
   
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
