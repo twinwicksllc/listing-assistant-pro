@@ -238,7 +238,7 @@ ASPECT VALUE FORMATS (strictly enforced):
 - Strike Type: exactly one of "Business", "Proof", "Proof-Like", "Deep Mirror Proof-Like", "Satin", "Matte"
 - Shape (bullion): exactly "Bar" or "Round"
 - Composition: exactly one of "Gold", "Silver", "Platinum", "Palladium", "Bronze", "Copper", "Nickel", "Steel", "Zinc", "Brass", "Aluminum", "Bimetallic", "Copper-Nickel", "Copper Clad", "Zinc Plated Steel"
-- Color (world coins copper/bronze only): exactly "RD" (>=90% red luster), "RB" (mixed red-brown), or "BN" (mostly brown). Only include for copper or bronze composition coins in category 45243.
+- Color (world coins): RD/RB/BN for copper/bronze coins, BM for bi-metallic coins. Always include for category 45243.
 
 For bullion (bars, rounds, ingots): Type, Shape, Metal, Fineness, Precious Metal Content per Unit, Year, Country of Origin, Brand/Mint, Denomination, Modified Item.
 For coins: Type, Year, Denomination, Grade, Circulated/Uncirculated, Mint Location, Country of Origin, Composition, Certification, Strike Type, Fineness, Precious Metal Content per Unit.
@@ -313,7 +313,7 @@ WORLD COINS: 45243
   KEY RULES for 45243:
   - "Materials sourced from" = the country that ISSUED the coin (e.g., "Mexico", "Germany", "Japan") — NOT the seller's country
   - "Country of Origin" = seller's country (usually "United States" for US-based sellers)
-  - "Color" = only for copper/bronze coins: RD (red), RB (red-brown), BN (brown)
+  - "Color" = RD/RB/BN for copper/bronze coins, BM for bi-metallic coins (always include for category 45243)
   - "KM Number" = Krause-Mishler catalog number (e.g., "KM# 64") — include if visible or identifiable
   - "Denomination" = face value as shown on coin (e.g., "1 Peso", "50 Centavos", "1 Mark", "5 Francs")
   - "Composition" = use expanded values: Copper-Nickel, Brass, Bimetallic, Aluminum, etc. (not just Gold/Silver)
@@ -488,7 +488,7 @@ Seller's note: "${voiceNote}"`;
                         "Cleaned/Uncleaned": { type: "string", description: "Whether ancient/medieval coin has been cleaned" },
                         Provenance: { type: "string", description: "Known provenance or collection history for ancient/medieval coins" },
                         Variety: { type: "string", description: "Die variety or VAM designation if known" },
-                        Color: { type: "string", enum: ["RD", "RB", "BN"], description: "Copper coin color designation (world coins category 45243 only): RD=Red (90%+ red), RB=Red-Brown (mixed), BN=Brown (mostly brown). Only set for copper/bronze composition coins." },
+                        Color: { type: "string", enum: ["RD", "RB", "BN", "BM"], description: "Coin color designation for world coins category 45243: RD=Red (90%+ red copper), RB=Red-Brown (mixed copper), BN=Brown (mostly brown copper), BM=Bi-Metallic. Always include this aspect for category 45243." },
                         "Materials sourced from": { type: "string", description: "For world coins (45243): the issuing country of the coin — i.e., which country produced/issued it. Different from Country of Origin (seller's country). E.g., 'Mexico', 'Germany', 'Japan'." },
                       },
                       additionalProperties: true,
