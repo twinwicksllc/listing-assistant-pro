@@ -98,6 +98,27 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
     defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "50C" },
     fixedValues: { "Denomination": "50C", "Composition": "Silver", "Fineness": "0.900" },
   },
+  // Kennedy Half Dollars (1964-present)
+  "40156": {
+    required: ["Certification", "Circulated/Uncirculated"],
+    preferred: ["Year", "Mint Location", "Strike Type", "Denomination"],
+    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "50C" },
+    fixedValues: { "Denomination": "50C" },
+  },
+  // Franklin Half Dollars (1948-1963)
+  "40157": {
+    required: ["Certification", "Circulated/Uncirculated"],
+    preferred: ["Year", "Mint Location", "Strike Type", "Fineness", "Denomination"],
+    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "50C" },
+    fixedValues: { "Denomination": "50C", "Composition": "Silver", "Fineness": "0.900" },
+  },
+  // American Silver Eagle
+  "41111": {
+    required: ["Certification", "Circulated/Uncirculated"],
+    preferred: ["Year", "Strike Type", "Denomination"],
+    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Uncirculated", "Denomination": "$1" },
+    fixedValues: { "Denomination": "$1", "Composition": "Silver", "Fineness": "0.999" },
+  },
   // US Coin Proof Sets
   "41109": {
     required: ["Certification", "Circulated/Uncirculated"],
