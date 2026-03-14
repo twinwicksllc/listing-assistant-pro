@@ -312,8 +312,8 @@ REQUIRED ASPECTS for priority coin categories (always include these):
 
 OTHER US COINS (use when no priority category matches):
   American Silver Eagle: 41111
-  Kennedy Half Dollar:   40156
-  Franklin Half Dollar:  40157
+  Kennedy Half Dollar:   253 (US Coins General - specific 40156 not a valid leaf category)
+  Franklin Half Dollar:  253 (US Coins General - specific 40157 not a valid leaf category)
   State Quarters:       164743
   Lincoln Cent:          11116
   American Gold Eagle:   40166
@@ -469,7 +469,7 @@ Seller's note: "${voiceNote}"`;
                     ebayCategoryId: {
                       type: "string",
                       description:
-                        "The most specific eBay category ID. Priority categories: Gold Bars/Rounds=178906, Silver Bars/Rounds=39489, Other Silver Bullion=3361, Ancient Coins=532, Medieval Coins=173685, Eisenhower Dollars=11981, Morgan Dollars=39464, Peace Dollars=11980, Barber Half Dollars=11971, Liberty Walking Half=41099. Other: Silver Eagle=41111, Kennedy Half=40156, Gold Eagle=40166, Gold Buffalo=40167, US Proof Sets=41109, US Mint Sets=526, US Coins General=253, World Coins=45243. IMPORTANT: For any US Mint Proof Set (annual proof sets, prestige proof sets), always use 41109. For US Mint uncirculated/mint sets, use 526. Never use 253 for proof sets or mint sets.",
+                        "The most specific eBay category ID. Priority categories: Gold Bars/Rounds=178906, Silver Bars/Rounds=39489, Other Silver Bullion=3361, Ancient Coins=532, Medieval Coins=173685, Eisenhower Dollars=11981, Morgan Dollars=39464, Peace Dollars=11980, Barber Half Dollars=11971, Liberty Walking Half=41099. Other: Silver Eagle=41111, Kennedy Half=253, Franklin Half=253, Gold Eagle=40166, Gold Buffalo=40167, US Proof Sets=41109, US Mint Sets=526, US Coins General=253, World Coins=45243. IMPORTANT: For any US Mint Proof Set (annual proof sets, prestige proof sets), always use 41109. For US Mint uncirculated/mint sets, use 526. Use 253 (US Coins General) for coins whose specific category IDs aren't in the priority list.",
                     },
                     suggestedCategories: {
                       type: "array",

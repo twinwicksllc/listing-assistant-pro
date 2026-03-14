@@ -131,6 +131,12 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
     preferred: ["Year", "Mint Location", "Country/Region of Manufacture"],
     defaults: { "Certification": "U.S. Mint", "Circulated/Uncirculated": "Uncirculated", "Country/Region of Manufacture": "United States" },
   },
+  // US Coins General (catch-all fallback for any US coin category)
+  "253": {
+    required: ["Certification", "Circulated/Uncirculated"],
+    preferred: ["Year", "Mint Location", "Denomination", "Strike Type", "Fineness"],
+    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown" },
+  },
   // World Coins (general)
   "45243": {
     required: [],
@@ -1421,11 +1427,20 @@ serve(async (req) => {
       //   - Required aspect safety-fill (Certification, Circulated/Uncirculated)
       //   - Fixed values for known categories (Composition, Fineness for silver dollars, etc.)
       //   - Drops placeholder values (none / unknown / n/a / other / etc.)
+      
+      // Fallback: if ebayCategoryId is not in CATEGORY_ASPECT_RULES, use US Coins General (253)
+      // This handles edge cases where AI assigns an invalid/unsupported category ID
+      let categoryForAspects = ebayCategoryId ?? "";
+      if (!CATEGORY_ASPECT_RULES[categoryForAspects]) {
+        console.warn(`create_draft: category ${categoryForAspects} not in CATEGORY_ASPECT_RULES, falling back to US Coins General (253)`);
+        categoryForAspects = "253"; // US Coins General
+      }
+      
       const aspects = buildAndNormalizeAspects(
         (itemSpecifics && typeof itemSpecifics === "object"
           ? itemSpecifics
           : {}) as Record<string, unknown>,
-        ebayCategoryId ?? ""
+        categoryForAspects
       );
 
       console.log(`create_draft: aspects built for category ${ebayCategoryId}:`, JSON.stringify(aspects, null, 2));
