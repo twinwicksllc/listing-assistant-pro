@@ -1190,14 +1190,17 @@ serve(async (req) => {
         .eq("id", userId)
         .single();
 
-      console.log("get_stored_token: query result for user", userId, {
+      console.log("get_stored_token: database query result", {
+        userId,
         hasData: !!data,
-        error: error?.message,
-        postal_code: data?.postal_code,
-        city: (data as any)?.city,
+        queryError: error?.message,
+        dbPostalCode: data?.postal_code || "NULL",
+        dbCity: (data as any)?.city || "NULL",
+        dbCityType: typeof (data as any)?.city,
       });
 
       if (error || !data) {
+        console.warn("get_stored_token: no profile found or query error for user", userId);
         return new Response(
           JSON.stringify({ token: null, postalCode: null, city: null }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -1413,7 +1416,14 @@ serve(async (req) => {
       // The item's shipToLocationAvailability references this location by key,
       // so it must exist first.
       const effectivePostalCode = postalCode || "60601"; // fallback to Chicago if not set
-      const effectiveCity = payloadCity || "";
+      const effectiveCity = payloadCity || ""; // city may be empty but will be omitted in address if so
+      console.log("create_draft: inventory location setup", {
+        receivedPostalCode: postalCode || "NOT_SET",
+        receivedCity: payloadCity || "NOT_SET",
+        effectivePostalCode,
+        effectiveCity,
+        isFallback: !postalCode,
+      });
       const merchantLocationKey = await ensureInventoryLocation(
         apiBase,
         userToken,

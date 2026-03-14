@@ -24,8 +24,11 @@ export function usePublishDraft() {
   const navigate = useNavigate();
 
   /**
-   * Retrieve the eBay user token.
+   * Retrieve the eBay user token and location data (postal code + city).
    * Prefers server-side storage (Supabase profiles) over localStorage.
+   * 
+   * Flow:
+   * 1. Try get_stored_token from ebay-publish (returns token + location from profiles table)   * 2. If no token, fall back to localStorage + return null for location
    */
   const getEbayToken = useCallback(async (): Promise<{
     token: string | null;
@@ -39,19 +42,26 @@ export function usePublishDraft() {
           body: { action: "get_stored_token", userId: user.id },
         });
         if (!error && data?.token) {
+          console.log("getEbayToken: server-side token found:", {
+            tokenExists: !!data.token,
+            postalCode: data.postalCode || "NOT_SET",
+            city: data.city || "NOT_SET",
+          });
           return {
             token: data.token,
             postalCode: data.postalCode ?? null,
             city: data.city ?? null,
           };
         }
-      } catch {
+      } catch (err) {
+        console.warn("getEbayToken: server-side token fetch failed:", err);
         // Fall through to localStorage
       }
     }
 
     // 2. Fall back to localStorage (legacy / backwards compat)
     const localToken = localStorage.getItem("ebay-user-token");
+    console.log("getEbayToken: using localStorage token (no server-side token found)");
     return { token: localToken, postalCode: null, city: null };
   }, [user?.id]);
 
