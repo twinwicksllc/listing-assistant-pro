@@ -98,15 +98,15 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
     defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "50C" },
     fixedValues: { "Denomination": "50C", "Composition": "Silver", "Fineness": "0.900" },
   },
-  // Kennedy Half Dollars (1964-present)
-  "40156": {
+  // Kennedy Half Dollars (1964-present) - Coins & Paper Money > US Coins
+  "41102": {
     required: ["Certification", "Circulated/Uncirculated"],
     preferred: ["Year", "Mint Location", "Strike Type", "Denomination"],
     defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "50C" },
     fixedValues: { "Denomination": "50C" },
   },
-  // Franklin Half Dollars (1948-1963)
-  "40157": {
+  // Franklin Half Dollars (1948-1963) - Coins & Paper Money > US Coins
+  "11973": {
     required: ["Certification", "Circulated/Uncirculated"],
     preferred: ["Year", "Mint Location", "Strike Type", "Fineness", "Denomination"],
     defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "50C" },
@@ -118,6 +118,13 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
     preferred: ["Year", "Strike Type", "Denomination"],
     defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Uncirculated", "Denomination": "$1" },
     fixedValues: { "Denomination": "$1", "Composition": "Silver", "Fineness": "0.999" },
+  },
+  // Copper Rounds (non-legal-tender) - Coins & Paper Money > Bullion > Other Bullion
+  "166679": {
+    required: ["Certification", "Circulated/Uncirculated", "Type"],
+    preferred: ["Year", "Composition", "Fineness", "Denomination", "Brand/Mint"],
+    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Type": "Round" },
+    fixedValues: { "Composition": "Copper" },
   },
   // US Coin Proof Sets
   "41109": {

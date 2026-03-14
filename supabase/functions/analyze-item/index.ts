@@ -311,23 +311,24 @@ REQUIRED ASPECTS for priority coin categories (always include these):
   Other Silver Bullion (3361)                        → Certification (default: "Uncertified")
 
 OTHER US COINS (use when no priority category matches):
-  American Silver Eagle: 41111
-  Kennedy Half Dollar:   253 (US Coins General - specific 40156 not a valid leaf category)
-  Franklin Half Dollar:  253 (US Coins General - specific 40157 not a valid leaf category)
-  State Quarters:       164743
-  Lincoln Cent:          11116
-  American Gold Eagle:   40166
-  American Gold Buffalo: 40167
-  Susan B. Anthony:      40160
-  Sacagawea/Native American Dollar: 40158
-  Presidential Dollar:   40159
-  Mercury Dime:          40151
-  Roosevelt Dime:        40150
-  Buffalo Nickel:        40153
-  Jefferson Nickel:      40152
-  Indian Head Cent:      40154
-  Lincoln Wheat Cent:    40155
-  Washington Quarter:    40149
+  Kennedy Half Dollar (1964-present): 41102
+  Franklin Half Dollar (1948-1963):   11973
+  American Silver Eagle:              41111
+  Copper Rounds (non-legal-tender):   166679 (Coins & Paper Money > Bullion > Other Bullion)
+  State Quarters:                     164743
+  Lincoln Cent:                       11116
+  American Gold Eagle:                40166
+  American Gold Buffalo:              40167
+  Susan B. Anthony:                   40160
+  Sacagawea/Native American Dollar:   40158
+  Presidential Dollar:                40159
+  Mercury Dime:                       40151
+  Roosevelt Dime:                     40150
+  Buffalo Nickel:                     40153
+  Jefferson Nickel:                   40152
+  Indian Head Cent:                   40154
+  Lincoln Wheat Cent:                 40155
+  Washington Quarter:                 40149
   $20 Double Eagle:      40161
   $10 Eagle:             40162
   $5 Half Eagle:         40163
@@ -469,7 +470,12 @@ Seller's note: "${voiceNote}"`;
                     ebayCategoryId: {
                       type: "string",
                       description:
-                        "The most specific eBay category ID. Priority categories: Gold Bars/Rounds=178906, Silver Bars/Rounds=39489, Other Silver Bullion=3361, Ancient Coins=532, Medieval Coins=173685, Eisenhower Dollars=11981, Morgan Dollars=39464, Peace Dollars=11980, Barber Half Dollars=11971, Liberty Walking Half=41099. Other: Silver Eagle=41111, Kennedy Half=253, Franklin Half=253, Gold Eagle=40166, Gold Buffalo=40167, US Proof Sets=41109, US Mint Sets=526, US Coins General=253, World Coins=45243. IMPORTANT: For any US Mint Proof Set (annual proof sets, prestige proof sets), always use 41109. For US Mint uncirculated/mint sets, use 526. Use 253 (US Coins General) for coins whose specific category IDs aren't in the priority list.",
+                        "The most specific eBay category ID. Priority categories: Gold Bars/Rounds=178906, Silver Bars/Rounds=39489, Other Silver Bullion=3361, Ancient Coins=532, Medieval Coins=173685, Eisenhower Dollars=11981, Morgan Dollars=39464, Peace Dollars=11980, Barber Half Dollars=11971, Liberty Walking Half=41099. Secondary: Kennedy Half=41102, Franklin Half=11973, Silver Eagle=41111, Copper Rounds=166679, Gold Eagle=40166, Gold Buffalo=40167, US Proof Sets=41109, US Mint Sets=526, World Coins=45243. IMPORTANT: Only use web search (GoogleSearch tool) if you're UNCERTAIN about a coin's correct eBay category ID. Always verify category IDs against eBay's actual category hierarchy to avoid invalid/non-leaf categories. For any uncertain coins, use GoogleSearch to find the correct category.",
+                    },
+                    ebaySearchQuery: {
+                      type: "string",
+                      description:
+                        "Optional: If you used GoogleSearch to verify the ebayCategoryId, include the search query and result here for audit trail. Format: 'Query: <search query>; Result: <verified category>'. Leave empty if you didn't need to search.",
                     },
                     suggestedCategories: {
                       type: "array",
@@ -556,8 +562,27 @@ Seller's note: "${voiceNote}"`;
                       description: "Suggestions for additional photos that would improve identification accuracy (e.g., 'Close-up of mint mark area', 'Photo of edge/reeding', 'Reverse side needed'). Empty array if photos are sufficient.",
                     },
                   },
-                  required: ["title", "description", "priceMin", "priceMax", "pricingNotes", "metalType", "metalWeightOz", "ebayCategoryId", "suggestedCategories", "itemSpecifics", "condition", "suggestedGrade", "gradingRationale", "isSlabbed", "listingFormat", "confidence", "photoSuggestions"],
+                  required: ["title", "description", "priceMin", "priceMax", "pricingNotes", "metalType", "metalWeightOz", "ebayCategoryId", "ebaySearchQuery", "suggestedCategories", "itemSpecifics", "condition", "suggestedGrade", "gradingRationale", "isSlabbed", "listingFormat", "confidence", "photoSuggestions"],
                   additionalProperties: false,
+                },
+              },
+            },
+            {
+              type: "function",
+              function: {
+                name: "google_search",
+                description:
+                  "Search Google for information about eBay category IDs, coin specifications, or other research. Use this when you're uncertain about a coin's correct eBay category ID.",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    query: {
+                      type: "string",
+                      description:
+                        "Search query (e.g., 'eBay category ID Kennedy Half Dollar 1964', 'copper round eBay category bullion')",
+                    },
+                  },
+                  required: ["query"],
                 },
               },
             },
