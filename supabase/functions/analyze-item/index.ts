@@ -183,22 +183,51 @@ CRITICAL: Use ONLY what is visible in the photos plus reasonable, factual item i
 Identify the item as precisely as possible. Determine the item type, series, year, denomination, metal content, purity/fineness, mint/manufacturer, country, variety/edition, and certification details (if slabbed).
 
 2. EBAY TITLE (Strictly ≤ 80 characters)
-Create ONE SEO-optimized title. Include when applicable: Year, mint/brand, denomination/weight, metal, purity, coin/bar/round type, grade/certification, and key series name. Exclude filler words, hype (e.g., "L@@K"), and unnecessary punctuation. Use standard eBay abbreviations where necessary to save space.
+Create ONE SEO-optimized title. Include when applicable: Year, key dates (scarce years), mint mark, denomination/weight, metal, purity, coin/bar/round type, condition words, and key series name. Exclude filler words, hype (e.g., "L@@K"), and unnecessary punctuation. Use standard eBay abbreviations where necessary to save space.
+
+For coins: **Emphasize key dates and key mint marks** (e.g., "1893-S Morgan", "1916-D Mercury Dime", "1909-S VDB Penny") — these attract collectors and command premiums.
+For bullion: **Emphasize key producers** where known (e.g., Perth Mint, Royal Canadian Mint).
+
+⚠️ CRITICAL: Do NOT include numerical grades (MS-65, AU-55, VF-30) for uncertified coins. eBay prohibits this. Only include numerical grades if the coin is certified by an official grading company (NGC, PCGS, ANACS, ICG, CAC, ICCS). For uncertified coins, use descriptive condition words only: "Circulated", "Uncirculated", "Excellent condition", etc.
 
 3. ITEM DESCRIPTION
 Write a concise, professional, factual description covering:
-- Exact item identification.
+- Exact item identification (year, series, denomination, type).
+- **KEY DATES**: Always note if the item is a scarce or key date (e.g., 1893-S Morgan rare, 1916-D Mercury Dime, 1909-S VDB penny, 1895 proof, etc.)
+- **MINT MARKS & VARIETIES**: Clearly identify mint mark (P, D, S, W, CC, O, None) and any notable die varieties (e.g., VAM numbers for Morgans).
+- **KEY PRODUCERS** (for bullion): Brand name, country of production (e.g., Perth Mint, Royal Canadian Mint, New Zealand Mint, Scottsdale Mint, APMEX, etc.). Note if it's a scarce or limited-mintage producer.
 - Physical condition based strictly on visible evidence (obverse, reverse, edge, holder/packaging).
 - Metal content, purity, weight, and dimensions (if visible or reliably inferable).
-- Mint marks, varieties, notable features, and authentication notes.
+- Notable features, authentication notes, packaging/capsule condition.
 
-4. GRADING & CONDITION MAPPING
+⚠️ For uncertified coins: Use ONLY descriptive condition language. Do NOT use numerical grades (AU-55, MS-65, VF-30) unless the coin is certified by an official grading company. Instead describe condition as "shows light wear on high points", "excellent original luster", "minimal contact marks", etc.
+
+4. CONDITION ASSESSMENT & GRADING
 
 A. Slabbed Coins (Certified)
-Set isSlabbed to true ONLY if the item is visibly in a certified grading holder (e.g., PCGS, NGC). Use the exact grade shown on the holder. Condition: CERTIFIED_REFURBISHED.
+Set isSlabbed to true ONLY if the item is visibly in a certified grading holder (e.g., PCGS, NGC). Extract the exact grade shown on the holder label. Condition: NEW.
 
-B. Unslabbed Coins/Collectibles (Visual Grading)
-Set isSlabbed to false. Perform a conservative visual grade assessment evaluating: wear on high points, luster presence/breaks, strike sharpness, contact marks/scratches, cleaning/environmental damage, and mint mark clarity. Assign a conservative Sheldon-scale grade (e.g., MS-63, AU-55, XF-45, VF-30) and provide a gradingRationale referencing visible evidence. If photos are insufficient, give a conservative range and explain why.
+B. Unslabbed Coins/Collectibles (Visual Condition Assessment)
+Set isSlabbed to false. DO NOT assign a numerical Sheldon-scale grade. Instead:
+- Visually assess wear on high points, luster presence/breaks, strike sharpness, contact marks/scratches, cleaning/environmental damage
+- Document these observations in the description using descriptive language only ("light wear", "strong luster", "minimal contact marks", etc.)
+- These observations will inform the condition code mapping (see below), but DO NOT expose them as a numerical grade (MS-65, AU-55, etc.)
+- Omit the Grade field entirely from itemSpecifics for uncertified coins
+
+KEY DATES & MINT MARKS: Always examine and document:
+- Year of issue — note if it's a scarce or key date (e.g., 1893-S Morgan, 1895 proof, 1916-D dime, 1909-S VDB penny, etc.)
+- Mint mark location and clarity (P, D, S, W, CC, O, None, etc.)  
+- Key varieties or die variations (e.g., VAM numbers for Morgans)
+- For bullion: producer/brand name, mintage if known, whether it's a scarce producer
+
+This key-date and mint-mark analysis informs pricing and rarity assessment.
+
+⚠️ CRITICAL GRADING RULE FOR UNCERTIFIED COINS ⚠️
+eBay STRICTLY PROHIBITS numerical grades (MS-65, AU-58, VF-30, etc.) in titles, descriptions, or item specifics UNLESS the coin has been graded by an official certifier:
+- Approved certifiers: NGC, PCGS, ANACS, ICG, CAC, ICCS
+- If Certification = 'Uncertified' or coin is NOT in a certified slab → DO NOT output ANY numerical grade anywhere
+- Instead: Use ONLY descriptive language in title/description (e.g., "Circulated", "Uncirculated", "Light wear", "Excellent condition")
+- If Certification = one of the official grading companies → numerical grades ARE allowed in Grade field and may appear in title if space permits
 
 Condition Code Mapping (output as the "condition" field):
 
@@ -228,9 +257,11 @@ IMPORTANT — OMIT UNKNOWN FIELDS: If a value cannot be determined from the imag
 5. STRUCTURED ITEM SPECIFICS — BARE KEYS (NO C: PREFIX)
 ALL aspect keys in itemSpecifics must use BARE key names — no "C:" prefix. The eBay Inventory API expects plain keys like Fineness, Grade, Year, Certification. The C: prefix only exists in eBay's internal Category Tree taxonomy and must NEVER appear in listing payloads.
 
+🚨 SPECIAL RULE: If Certification = 'Uncertified', DO NOT include the Grade field in itemSpecifics at all. Omit it entirely. Only include the Grade field when the coin is certified by an official grading company (NGC, PCGS, ANACS, ICG, CAC, ICCS).
+
 ASPECT VALUE FORMATS (strictly enforced):
 - Fineness: decimal format ONLY → "0.999", "0.9999", "0.925", "0.900" (NOT "999 fine", "99.9%", "999/1000")
-- Grade: space-separated format → "MS 65", "AU 55", "VF 30" (NOT "MS-65", "MS65")
+- Grade: space-separated format → "MS 65", "AU 55", "VF 30" (NOT "MS-65", "MS65"). ⚠️ CRITICAL: Only include Grade field if Certification is NOT "Uncertified". If uncertified, omit Grade field entirely.
 - Denomination (half dollar series): exactly "50C" (NOT "Half Dollar", "50 Cents", "$0.50")
 - Denomination (dollar series): exactly "$1" (NOT "One Dollar", "1 Dollar", "$1.00")
 - Circulated/Uncirculated: exactly "Circulated", "Uncirculated", or "Unknown"
@@ -475,7 +506,7 @@ Seller's note: "${voiceNote}"`;
                         Composition: { type: "string", enum: ["Gold", "Silver", "Platinum", "Palladium", "Bronze", "Copper", "Nickel", "Steel", "Zinc", "Brass", "Aluminum", "Bimetallic", "Copper-Nickel", "Copper Clad", "Zinc Plated Steel"], description: "Metal composition — must match allowed values exactly" },
                         "Precious Metal Content per Unit": { type: "string", description: "Metal weight per piece (e.g., '1 Troy oz', '1/2 Troy oz', '1/4 Troy oz', '1 g')" },
                         "Country of Origin": { type: "string", description: "Short country name only (e.g. 'United States', 'Canada', 'China'). Maximum 65 characters. Must be a real country name — never a description, sentence, or explanation. If unknown, omit this field entirely." },
-                        Grade: { type: "string", description: "Coin grade with SPACE separator: 'MS 65', 'AU 55', 'VF 30' — never 'MS-65' or 'MS65'" },
+                        Grade: { type: "string", description: "Coin grade with SPACE separator: 'MS 65', 'AU 55', 'VF 30' — never 'MS-65' or 'MS65'. 🚨 CRITICAL: Only include this field if Certification is NOT 'Uncertified'. If Certification='Uncertified', omit this field entirely per eBay policy prohibiting numerical grades for uncertified coins." },
                         Denomination: { type: "string", description: "Face value: half-dollar series use '50C'; dollar series use '$1'; other denominations as shown on coin" },
                         "Circulated/Uncirculated": { type: "string", enum: ["Circulated", "Uncirculated", "Unknown"], description: "Circulation status — must be exactly one of the three allowed values" },
                         Certification: { type: "string", enum: ["Uncertified", "PCGS", "NGC", "ANACS", "ICG", "CAC"], description: "Grading certification — default to 'Uncertified' if no slab visible" },
@@ -500,11 +531,11 @@ Seller's note: "${voiceNote}"`;
                     },
                     suggestedGrade: {
                       type: "string",
-                      description: "Sheldon scale grade for unslabbed coins (e.g., 'MS-63', 'AU-55', 'VF-30'). Set to null or empty string for non-coin items or already-slabbed coins.",
+                      description: "DO NOT POPULATE FOR UNCERTIFIED COINS. Grade should ONLY be used when coin is certified by NGC/PCGS/ANACS/ICG/CAC/ICCS. For CERTIFIED coins: Sheldon scale grade (e.g., 'MS-63', 'AU-55', 'VF-30'). For UNCERTIFIED coins: leave empty string or null. Do NOT assign numerical grades to unslabbed coins.",
                     },
                     gradingRationale: {
                       type: "string",
-                      description: "Detailed explanation of why this grade was assigned, referencing specific visual evidence (wear, luster, strikes, marks). Empty for non-coin items.",
+                      description: "DO NOT POPULATE FOR UNCERTIFIED COINS. This field is ONLY for slabbed/certified coins to explain the grade shown on the holder. For uncertified coins, leave empty. Visual condition observations go in the description field using descriptive language only (wear patterns, luster, strike sharpness, etc.), NOT as a numerical grade justification.",
                     },
                     isSlabbed: {
                       type: "boolean",

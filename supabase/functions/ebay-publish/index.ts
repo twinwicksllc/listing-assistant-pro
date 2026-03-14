@@ -8,6 +8,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Force redeploy v19: fix inventory location update — when location exists, PATCH to update city/postal_code instead of reusing stale address
 // Force redeploy v17: fix errorId 25002 for category 45243 (World Coins) - Brand removed from NON_ASPECT_KEYS, Color updated to include BM (Bi-Metallic) for non-copper coins
 // Force redeploy v15: shipping location from profile — city+postalCode passed to ensureInventoryLocation; fallback NYC→Chicago
 // Force redeploy v14: fix errorId 25002 "Country of Origin value too long" — drop Country of Origin if value > 65 chars or contains sentence punctuation (AI hallucination guard)
@@ -96,6 +97,27 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
     preferred: ["Year", "Mint Location", "Strike Type", "Fineness", "Denomination"],
     defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "50C" },
     fixedValues: { "Denomination": "50C", "Composition": "Silver", "Fineness": "0.900" },
+  },
+  // Kennedy Half Dollars (1964-present)
+  "40156": {
+    required: ["Certification", "Circulated/Uncirculated"],
+    preferred: ["Year", "Mint Location", "Strike Type", "Denomination"],
+    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "50C" },
+    fixedValues: { "Denomination": "50C" },
+  },
+  // Franklin Half Dollars (1948-1963)
+  "40157": {
+    required: ["Certification", "Circulated/Uncirculated"],
+    preferred: ["Year", "Mint Location", "Strike Type", "Fineness", "Denomination"],
+    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "50C" },
+    fixedValues: { "Denomination": "50C", "Composition": "Silver", "Fineness": "0.900" },
+  },
+  // American Silver Eagle
+  "41111": {
+    required: ["Certification", "Circulated/Uncirculated"],
+    preferred: ["Year", "Strike Type", "Denomination"],
+    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Uncirculated", "Denomination": "$1" },
+    fixedValues: { "Denomination": "$1", "Composition": "Silver", "Fineness": "0.999" },
   },
   // US Coin Proof Sets
   "41109": {
@@ -797,7 +819,9 @@ async function uploadDataUrlToStorage(dataUrl: string): Promise<string> {
 
 // ----------------------------------------------------------------
 // Ensure an eBay inventory location exists for the seller.
-// POST creates the location — 204 = created, 409 = already exists (both fine).
+// POST creates or updates the location.
+// If location exists: PATCH updates it with new address.
+// 204 = created, 409 = already exists (both fine).
 // Returns the merchantLocationKey on success.
 // ----------------------------------------------------------------
 async function ensureInventoryLocation(
@@ -823,6 +847,11 @@ async function ensureInventoryLocation(
     locationTypes: ["WAREHOUSE"],
   };
 
+  console.log(
+    `ensureInventoryLocation: attempting to create/update location "${merchantLocationKey}" with address:`,
+    locationBody.location.address
+  );
+
   const resp = await fetchWithTimeout(
     `${apiBase}/sell/inventory/v1/location/${merchantLocationKey}`,
     {
@@ -841,41 +870,72 @@ async function ensureInventoryLocation(
     }
   );
 
-  // 204 = created, 409 = already exists (sandbox), 400 + errorId 25803 = already exists (production)
-  // All three mean the location is ready. Only throw for genuine errors.
-  if (!resp.ok && resp.status !== 409) {
-    const errText = await resp.text();
-    // eBay production returns 400 + errorId 25803 when the location already exists.
-    // Treat this the same as 409 — the location is already there, proceed.
-    try {
-      const errJson = JSON.parse(errText);
-      const alreadyExists = Array.isArray(errJson.errors) &&
-        errJson.errors.some((e: { errorId: number }) => e.errorId === 25803);
-      if (alreadyExists) {
-        console.log(
-          `ensureInventoryLocation: location "${merchantLocationKey}" already exists (errorId 25803) — proceeding`
-        );
-        return merchantLocationKey;
-      }
-    } catch { /* not JSON — fall through to throw below */ }
-
-    console.error(
-      `ensureInventoryLocation: error ${resp.status}: ${errText}`
+  // 204 = created. If location already exists, POST returns error with errorId 25803.
+  // In that case, PATCH the location to update the address.
+  if (resp.ok) {
+    console.log(
+      `ensureInventoryLocation: location "${merchantLocationKey}" created successfully (status ${resp.status})`
     );
-    throw new Error(
-      `Failed to ensure inventory location: ${resp.status} - ${errText}`
-    );
+    return merchantLocationKey;
   }
 
-  console.log(
-    `ensureInventoryLocation: location "${merchantLocationKey}" ready (status ${resp.status})`
-  );
+  // Location already exists — update it with PATCH
+  const errText = await resp.text();
+  let alreadyExists = false;
+  
+  try {
+    const errJson = JSON.parse(errText);
+    alreadyExists = Array.isArray(errJson.errors) &&
+      errJson.errors.some((e: { errorId: number }) => e.errorId === 25803);
+  } catch { /* not JSON */ }
 
-  return merchantLocationKey;
+  if (resp.status === 409 || alreadyExists) {
+    console.log(
+      `ensureInventoryLocation: location "${merchantLocationKey}" already exists — updating with PATCH to new address`
+    );
+
+    // PATCH the existing location to update the address
+    const patchResp = await fetchWithTimeout(
+      `${apiBase}/sell/inventory/v1/location/${merchantLocationKey}`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+          "Content-Type": "application/json",
+          "Content-Language": "en-US",
+          "Accept-Language": "en-US",
+        },
+        body: JSON.stringify(locationBody),
+        timeout: 15000,
+      }
+    );
+
+    if (!patchResp.ok) {
+      const patchErrText = await patchResp.text();
+      console.warn(
+        `ensureInventoryLocation: PATCH update failed with status ${patchResp.status}: ${patchErrText}. Proceeding with existing location.`
+      );
+      // Don't throw — the location exists, even if we couldn't update it.
+      return merchantLocationKey;
+    }
+
+    console.log(
+      `ensureInventoryLocation: location "${merchantLocationKey}" updated successfully (status ${patchResp.status})`
+    );
+    return merchantLocationKey;
+  }
+
+  // Genuine error — not a "already exists" case
+  console.error(
+    `ensureInventoryLocation: unexpected error ${resp.status}: ${errText}`
+  );
+  throw new Error(
+    `Failed to ensure inventory location: ${resp.status} - ${errText}`
+  );
 }
 
 serve(async (req) => {
-  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v17 - fix 25002 for category 45243: Brand passes through, Color includes BM for bi-metallic coins) ***");
+  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v19 - fix inventory location update: PATCH existing location when city/zip changes) ***");
   
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -1190,14 +1250,17 @@ serve(async (req) => {
         .eq("id", userId)
         .single();
 
-      console.log("get_stored_token: query result for user", userId, {
+      console.log("get_stored_token: database query result", {
+        userId,
         hasData: !!data,
-        error: error?.message,
-        postal_code: data?.postal_code,
-        city: (data as any)?.city,
+        queryError: error?.message,
+        dbPostalCode: data?.postal_code || "NULL",
+        dbCity: (data as any)?.city || "NULL",
+        dbCityType: typeof (data as any)?.city,
       });
 
       if (error || !data) {
+        console.warn("get_stored_token: no profile found or query error for user", userId);
         return new Response(
           JSON.stringify({ token: null, postalCode: null, city: null }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -1413,7 +1476,14 @@ serve(async (req) => {
       // The item's shipToLocationAvailability references this location by key,
       // so it must exist first.
       const effectivePostalCode = postalCode || "60601"; // fallback to Chicago if not set
-      const effectiveCity = payloadCity || "";
+      const effectiveCity = payloadCity || ""; // city may be empty but will be omitted in address if so
+      console.log("create_draft: inventory location setup", {
+        receivedPostalCode: postalCode || "NOT_SET",
+        receivedCity: payloadCity || "NOT_SET",
+        effectivePostalCode,
+        effectiveCity,
+        isFallback: !postalCode,
+      });
       const merchantLocationKey = await ensureInventoryLocation(
         apiBase,
         userToken,
