@@ -10,7 +10,7 @@ import { ListingDraft } from "@/types/listing";
 import { supabase } from "@/integrations/supabase/client";
 
 export default function DraftsPage() {
-  const { drafts, removeDraft } = useDrafts();
+  const { drafts, removeDraft, updateDraft } = useDrafts();
   const { publishDraft } = usePublishDraft();
   const { isOwner } = useAuth();
 
@@ -306,13 +306,11 @@ export default function DraftsPage() {
       {/* Edit modal */}
       {editingDraft && (
         <EditDraftModal
+          key={editingDraft.id}
           draft={editingDraft}
+          updateDraft={updateDraft}
           onClose={() => setEditingDraft(null)}
-          onSaved={(updated) => {
-            // Update the editingDraft with the saved values so re-opening the same draft
-            // shows the freshly saved data (e.g., selected policies)
-            setEditingDraft(updated);
-          }}
+          onSaved={() => setEditingDraft(null)}
         />
       )}
     </div>

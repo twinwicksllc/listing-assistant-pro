@@ -98,15 +98,15 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
     defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "50C" },
     fixedValues: { "Denomination": "50C", "Composition": "Silver", "Fineness": "0.900" },
   },
-  // Kennedy Half Dollars (1964-present)
-  "40156": {
+  // Kennedy Half Dollars (1964-present) - Coins & Paper Money > US Coins
+  "41102": {
     required: ["Certification", "Circulated/Uncirculated"],
     preferred: ["Year", "Mint Location", "Strike Type", "Denomination"],
     defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "50C" },
     fixedValues: { "Denomination": "50C" },
   },
-  // Franklin Half Dollars (1948-1963)
-  "40157": {
+  // Franklin Half Dollars (1948-1963) - Coins & Paper Money > US Coins
+  "11973": {
     required: ["Certification", "Circulated/Uncirculated"],
     preferred: ["Year", "Mint Location", "Strike Type", "Fineness", "Denomination"],
     defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "50C" },
@@ -119,6 +119,13 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
     defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Uncirculated", "Denomination": "$1" },
     fixedValues: { "Denomination": "$1", "Composition": "Silver", "Fineness": "0.999" },
   },
+  // Copper Rounds (non-legal-tender) - Coins & Paper Money > Bullion > Other Bullion
+  "166679": {
+    required: ["Certification", "Circulated/Uncirculated", "Type"],
+    preferred: ["Year", "Composition", "Fineness", "Denomination", "Brand/Mint"],
+    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Type": "Round" },
+    fixedValues: { "Composition": "Copper" },
+  },
   // US Coin Proof Sets
   "41109": {
     required: ["Certification", "Circulated/Uncirculated"],
@@ -130,6 +137,12 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
     required: ["Certification", "Circulated/Uncirculated"],
     preferred: ["Year", "Mint Location", "Country/Region of Manufacture"],
     defaults: { "Certification": "U.S. Mint", "Circulated/Uncirculated": "Uncirculated", "Country/Region of Manufacture": "United States" },
+  },
+  // US Coins General (catch-all fallback for any US coin category)
+  "253": {
+    required: ["Certification", "Circulated/Uncirculated"],
+    preferred: ["Year", "Mint Location", "Denomination", "Strike Type", "Fineness"],
+    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown" },
   },
   // World Coins (general)
   "45243": {
@@ -1421,11 +1434,20 @@ serve(async (req) => {
       //   - Required aspect safety-fill (Certification, Circulated/Uncirculated)
       //   - Fixed values for known categories (Composition, Fineness for silver dollars, etc.)
       //   - Drops placeholder values (none / unknown / n/a / other / etc.)
+      
+      // Fallback: if ebayCategoryId is not in CATEGORY_ASPECT_RULES, use US Coins General (253)
+      // This handles edge cases where AI assigns an invalid/unsupported category ID
+      let categoryForAspects = ebayCategoryId ?? "";
+      if (!CATEGORY_ASPECT_RULES[categoryForAspects]) {
+        console.warn(`create_draft: category ${categoryForAspects} not in CATEGORY_ASPECT_RULES, falling back to US Coins General (253)`);
+        categoryForAspects = "253"; // US Coins General
+      }
+      
       const aspects = buildAndNormalizeAspects(
         (itemSpecifics && typeof itemSpecifics === "object"
           ? itemSpecifics
           : {}) as Record<string, unknown>,
-        ebayCategoryId ?? ""
+        categoryForAspects
       );
 
       console.log(`create_draft: aspects built for category ${ebayCategoryId}:`, JSON.stringify(aspects, null, 2));
