@@ -1,5 +1,19 @@
 # Listing Assistant Pro — Fix Tracker
 
+## eBay grading policy enforcement (errorId 25019) [COMPLETE — commit 31eff7c]
+- [x] Identify issue: eBay prohibits numerical grades (AU-55, MS-65, VF-30) unless coin is certified by official grader (NGC, PCGS, ANACS, ICG, CAC, ICCS)
+- [x] Three coins failed today with this exact error:
+  1. "1972 Eisenhower Dollar US $1 Coin Circulated Type I Philadelphia Mint"
+  2. "1921 P Morgan Silver Dollar $1 US Coin 90% Silver AU 58 Uncertified"
+  3. "1974-D Eisenhower Dollar IKE $1 Coin US Mint Denver Circulated AU 55"
+- [x] Add CRITICAL GRADING RULE to analyze-item system prompt (section 4)
+- [x] Update EBAY TITLE section (section 2) — forbid numerical grades for uncertified coins
+- [x] Update ITEM DESCRIPTION section (section 3) — use descriptive language only for uncertified
+- [x] Update STRUCTURED ITEM SPECIFICS section (section 5) — omit Grade field if Certification='Uncertified'
+- [x] Update ASPECT VALUE FORMATS — explicitly state Grade only for certified coins
+- [x] Update tool parameter description for Grade field to enforce the rule
+- [x] Commit: v18 enforce eBay grading policy (31eff7c)
+
 ## Shipping location from profile (city + zip) [COMPLETE — commit 6c1e96c]
 - [x] Audit publish flow — found postalCode already read from profiles but city was missing; fallback hardcoded to NYC 10001
 - [x] Migration: add city column to profiles (postal_code already existed)
