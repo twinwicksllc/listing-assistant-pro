@@ -1,5 +1,19 @@
 # Listing Assistant Pro — Fix Tracker
 
+## Location data flow audit & fix [IN PROGRESS — commit 7a2883f]
+- [x] User reported: city/postal_code set in profile but listings showing NYC instead of 60046 (Skokie, IL)
+- [x] Traced data flow:
+  1. ProfileModal saves postal_code + city correctly ✓
+  2. usePublishDraft.getEbayToken() receives postal_code (60046) ✓ but city=undefined ✗
+  3. Root cause: city column migration exists but wasn't executed in Supabase database
+- [x] Added enhanced logging to identify exactly where data is lost:
+  - get_stored_token: logs db query results with types for both postal_code and city
+  - usePublishDraft: logs when server-side vs localStorage token is used
+  - create_draft: logs effective postal_code/city and fallback usage
+- [ ] User action required: Run migration 20260318000000_add_city_to_profiles.sql in Supabase
+- [ ] User action required: Save profile again with city + postal_code
+- [ ] User action required: Re-publish a draft and verify logs show city flowing through
+
 ## eBay grading policy enforcement (errorId 25019) [COMPLETE — commit 31eff7c]
 - [x] Identify issue: eBay prohibits numerical grades (AU-55, MS-65, VF-30) unless coin is certified by official grader (NGC, PCGS, ANACS, ICG, CAC, ICCS)
 - [x] Three coins failed today with this exact error:
@@ -14,7 +28,7 @@
 - [x] Update tool parameter description for Grade field to enforce the rule
 - [x] Commit: v18 enforce eBay grading policy (31eff7c)
 
-## Shipping location from profile (city + zip) [COMPLETE — commit 6c1e96c]
+## Shipping location from profile (city + zip) [MOSTLY COMPLETE — v15 @ 6c1e96c]
 - [x] Audit publish flow — found postalCode already read from profiles but city was missing; fallback hardcoded to NYC 10001
 - [x] Migration: add city column to profiles (postal_code already existed)
 - [x] ProfileModal: add City + ZIP fields under "Shipping Location" section with MapPin icon
