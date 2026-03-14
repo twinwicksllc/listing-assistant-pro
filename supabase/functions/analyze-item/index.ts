@@ -185,12 +185,16 @@ Identify the item as precisely as possible. Determine the item type, series, yea
 2. EBAY TITLE (Strictly ≤ 80 characters)
 Create ONE SEO-optimized title. Include when applicable: Year, mint/brand, denomination/weight, metal, purity, coin/bar/round type, grade/certification, and key series name. Exclude filler words, hype (e.g., "L@@K"), and unnecessary punctuation. Use standard eBay abbreviations where necessary to save space.
 
+⚠️ CRITICAL: Do NOT include numerical grades (MS-65, AU-55, VF-30) for uncertified coins. eBay prohibits this. Only include numerical grades if the coin is certified by an official grading company (NGC, PCGS, ANACS, ICG, CAC, ICCS). For uncertified coins, use descriptive condition words only: "Circulated", "Uncirculated", "Excellent condition", etc.
+
 3. ITEM DESCRIPTION
 Write a concise, professional, factual description covering:
 - Exact item identification.
 - Physical condition based strictly on visible evidence (obverse, reverse, edge, holder/packaging).
 - Metal content, purity, weight, and dimensions (if visible or reliably inferable).
 - Mint marks, varieties, notable features, and authentication notes.
+
+⚠️ For uncertified coins: Use ONLY descriptive condition language in the description. Do NOT use numerical grades (AU-55, MS-65, VF-30) unless the coin is certified by an official grading company. Instead describe condition as "shows light wear", "excellent luster", "worn around high points", etc.
 
 4. GRADING & CONDITION MAPPING
 
@@ -199,6 +203,13 @@ Set isSlabbed to true ONLY if the item is visibly in a certified grading holder 
 
 B. Unslabbed Coins/Collectibles (Visual Grading)
 Set isSlabbed to false. Perform a conservative visual grade assessment evaluating: wear on high points, luster presence/breaks, strike sharpness, contact marks/scratches, cleaning/environmental damage, and mint mark clarity. Assign a conservative Sheldon-scale grade (e.g., MS-63, AU-55, XF-45, VF-30) and provide a gradingRationale referencing visible evidence. If photos are insufficient, give a conservative range and explain why.
+
+⚠️ CRITICAL GRADING RULE FOR UNCERTIFIED COINS ⚠️
+eBay STRICTLY PROHIBITS numerical grades (MS-65, AU-58, VF-30, etc.) in titles, descriptions, or item specifics UNLESS the coin has been graded by an official certifier:
+- Approved certifiers: NGC, PCGS, ANACS, ICG, CAC, ICCS
+- If Certification = 'Uncertified' or coin is NOT in a certified slab → DO NOT include ANY numerical grade
+- Instead: Omit the Grade field entirely from itemSpecifics and use only descriptive language in title/description (e.g., "Circulated", "Excellent condition", "shows light wear on high points")
+- If Certification = one of the official grading companies → numerical grades ARE allowed in Grade field and may appear in title if space permits
 
 Condition Code Mapping (output as the "condition" field):
 
@@ -228,9 +239,11 @@ IMPORTANT — OMIT UNKNOWN FIELDS: If a value cannot be determined from the imag
 5. STRUCTURED ITEM SPECIFICS — BARE KEYS (NO C: PREFIX)
 ALL aspect keys in itemSpecifics must use BARE key names — no "C:" prefix. The eBay Inventory API expects plain keys like Fineness, Grade, Year, Certification. The C: prefix only exists in eBay's internal Category Tree taxonomy and must NEVER appear in listing payloads.
 
+🚨 SPECIAL RULE: If Certification = 'Uncertified', DO NOT include the Grade field in itemSpecifics at all. Omit it entirely. Only include the Grade field when the coin is certified by an official grading company (NGC, PCGS, ANACS, ICG, CAC, ICCS).
+
 ASPECT VALUE FORMATS (strictly enforced):
 - Fineness: decimal format ONLY → "0.999", "0.9999", "0.925", "0.900" (NOT "999 fine", "99.9%", "999/1000")
-- Grade: space-separated format → "MS 65", "AU 55", "VF 30" (NOT "MS-65", "MS65")
+- Grade: space-separated format → "MS 65", "AU 55", "VF 30" (NOT "MS-65", "MS65"). ⚠️ CRITICAL: Only include Grade field if Certification is NOT "Uncertified". If uncertified, omit Grade field entirely.
 - Denomination (half dollar series): exactly "50C" (NOT "Half Dollar", "50 Cents", "$0.50")
 - Denomination (dollar series): exactly "$1" (NOT "One Dollar", "1 Dollar", "$1.00")
 - Circulated/Uncirculated: exactly "Circulated", "Uncirculated", or "Unknown"
@@ -475,7 +488,7 @@ Seller's note: "${voiceNote}"`;
                         Composition: { type: "string", enum: ["Gold", "Silver", "Platinum", "Palladium", "Bronze", "Copper", "Nickel", "Steel", "Zinc", "Brass", "Aluminum", "Bimetallic", "Copper-Nickel", "Copper Clad", "Zinc Plated Steel"], description: "Metal composition — must match allowed values exactly" },
                         "Precious Metal Content per Unit": { type: "string", description: "Metal weight per piece (e.g., '1 Troy oz', '1/2 Troy oz', '1/4 Troy oz', '1 g')" },
                         "Country of Origin": { type: "string", description: "Short country name only (e.g. 'United States', 'Canada', 'China'). Maximum 65 characters. Must be a real country name — never a description, sentence, or explanation. If unknown, omit this field entirely." },
-                        Grade: { type: "string", description: "Coin grade with SPACE separator: 'MS 65', 'AU 55', 'VF 30' — never 'MS-65' or 'MS65'" },
+                        Grade: { type: "string", description: "Coin grade with SPACE separator: 'MS 65', 'AU 55', 'VF 30' — never 'MS-65' or 'MS65'. 🚨 CRITICAL: Only include this field if Certification is NOT 'Uncertified'. If Certification='Uncertified', omit this field entirely per eBay policy prohibiting numerical grades for uncertified coins." },
                         Denomination: { type: "string", description: "Face value: half-dollar series use '50C'; dollar series use '$1'; other denominations as shown on coin" },
                         "Circulated/Uncirculated": { type: "string", enum: ["Circulated", "Uncirculated", "Unknown"], description: "Circulation status — must be exactly one of the three allowed values" },
                         Certification: { type: "string", enum: ["Uncertified", "PCGS", "NGC", "ANACS", "ICG", "CAC"], description: "Grading certification — default to 'Uncertified' if no slab visible" },
