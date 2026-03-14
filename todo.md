@@ -1,5 +1,26 @@
 # Listing Assistant Pro — Fix Tracker
 
+## Numerical grade removal for uncertified coins [COMPLETE — commit 64958da]
+- [x] User reported: analyze function still assigning numerical grades despite v18 fix
+- [x] Root cause: Section 4B contradicted the CRITICAL GRADING RULE
+  - 4B said: "Assign a conservative Sheldon-scale grade (e.g., MS-63, AU-55, XF-45)"  
+  - Critical Rule said: "Do NOT include ANY numerical grade if Uncertified"
+  - AI was following the detailed instruction, not the rule
+- [x] Complete rewrite of Section 4 (Condition Assessment & Grading):
+  - Removed: instruction to assign numerical grades to unslabbed coins
+  - Added: documentation of visual condition features (descriptively only)
+  - Clarified: condition code is derived from observations, not exposed as grade
+  - Enforced: numerical grades explicitly forbidden for uncertified coins
+- [x] Enhanced key date/mint mark focus:
+  - Section 2 (Title): Emphasize key dates and mint marks in SEO-optimized titles
+  - Section 3 (Description): Highlight scarce years, mint marks, key producers (bullion)
+  - Pricing: Key dates/scarce years get significant numismatic premium
+- [x] Updated tool parameter descriptions:
+  - suggestedGrade: Explicitly "DO NOT POPULATE FOR UNCERTIFIED COINS"
+  - gradingRationale: Explicitly "DO NOT POPULATE FOR UNCERTIFIED COINS"  
+  - Both now clear: ONLY for slabbed/certified coins
+- [x] Version: v20
+
 ## Location data flow audit & fix [COMPLETE — commit 76b50b7]
 - [x] User reported: city/postal_code set in profile but listings showing NYC instead of 60046 (Lake Villa, IL)
 - [x] Traced data flow:
