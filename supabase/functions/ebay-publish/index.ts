@@ -1154,6 +1154,13 @@ serve(async (req) => {
         .eq("id", userId)
         .single();
 
+      console.log("get_stored_token: query result for user", userId, {
+        hasData: !!data,
+        error: error?.message,
+        postal_code: data?.postal_code,
+        city: (data as any)?.city,
+      });
+
       if (error || !data) {
         return new Response(
           JSON.stringify({ token: null, postalCode: null, city: null }),
@@ -1278,6 +1285,8 @@ serve(async (req) => {
 
       console.log(`create_draft: starting publish - title="${title}", format=${listingFormat}, env=${ebayEnv}`);
       console.log(`create_draft: received condition from payload: ${condition}`);
+      console.log(`create_draft: postalCode from payload:`, postalCode, `city from payload:`, payloadCity);
+      console.log(`create_draft: _debug_postalCode:`, payload._debug_postalCode, `_debug_city:`, payload._debug_city);
       console.log(`create_draft: received ebayCategoryId=${ebayCategoryId}, condition=${condition}, itemSpecifics=${JSON.stringify(itemSpecifics || {})}`);
       console.log(`create_draft: itemSpecifics received:`, JSON.stringify(itemSpecifics || {}, null, 2));
 

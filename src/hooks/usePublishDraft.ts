@@ -84,6 +84,12 @@ export function usePublishDraft() {
 
       const { token: ebayToken, postalCode, city } = await getEbayToken();
 
+      console.log("usePublishDraft: getEbayToken result:", {
+        hasToken: !!ebayToken,
+        postalCode,
+        city,
+      });
+
       if (!ebayToken) {
         // Save all pending draft IDs so we can resume after OAuth
         const pendingIds: string[] = JSON.parse(
@@ -126,6 +132,8 @@ export function usePublishDraft() {
         // Seller's postal code + city — used to create/verify the eBay inventory location
         postalCode: postalCode || undefined,
         city: city || undefined,
+        _debug_postalCode: postalCode,
+        _debug_city: city,
         title: draft.title,
         description: draft.description,
         listingFormat: draft.listingFormat ?? "FIXED_PRICE",
