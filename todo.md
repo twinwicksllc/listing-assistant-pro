@@ -1,18 +1,25 @@
 # Listing Assistant Pro — Fix Tracker
 
-## Location data flow audit & fix [IN PROGRESS — commit 7a2883f]
-- [x] User reported: city/postal_code set in profile but listings showing NYC instead of 60046 (Skokie, IL)
+## Location data flow audit & fix [COMPLETE — commit 76b50b7]
+- [x] User reported: city/postal_code set in profile but listings showing NYC instead of 60046 (Lake Villa, IL)
 - [x] Traced data flow:
   1. ProfileModal saves postal_code + city correctly ✓
-  2. usePublishDraft.getEbayToken() receives postal_code (60046) ✓ but city=undefined ✗
-  3. Root cause: city column migration exists but wasn't executed in Supabase database
-- [x] Added enhanced logging to identify exactly where data is lost:
-  - get_stored_token: logs db query results with types for both postal_code and city
-  - usePublishDraft: logs when server-side vs localStorage token is used
-  - create_draft: logs effective postal_code/city and fallback usage
-- [ ] User action required: Run migration 20260318000000_add_city_to_profiles.sql in Supabase
-- [ ] User action required: Save profile again with city + postal_code
-- [ ] User action required: Re-publish a draft and verify logs show city flowing through
+  2. Database stores postal_code + city correctly ✓
+  3. usePublishDraft.getEbayToken() receives postal_code + city correctly ✓
+  4. Payload sent to ebay-publish includes postalCode + city correctly ✓
+- [x] Root cause identified: ensureInventoryLocation() was reusing stale location
+  - "default-location" already existed from earlier publishes with old address
+  - Function detected "already exists" (errorId 25803) and just returned key without updating
+  - Should PATCH the existing location with new address, not reuse it
+- [x] Added enhanced logging (commit 7a2883f):
+  - get_stored_token: detailed database query results  
+  - usePublishDraft: token source logging
+  - create_draft: location setup logging
+- [x] Fixed ensureInventoryLocation() (commit 76b50b7):
+  - Try POST to create location
+  - If exists (409/25803), PATCH to update address
+  - PATCH sends new city/postal_code to eBay
+  - Updated v17→v19 for code version
 
 ## eBay grading policy enforcement (errorId 25019) [COMPLETE — commit 31eff7c]
 - [x] Identify issue: eBay prohibits numerical grades (AU-55, MS-65, VF-30) unless coin is certified by official grader (NGC, PCGS, ANACS, ICG, CAC, ICCS)
