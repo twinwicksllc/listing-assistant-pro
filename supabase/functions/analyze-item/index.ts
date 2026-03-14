@@ -237,7 +237,8 @@ ASPECT VALUE FORMATS (strictly enforced):
 - Certification: exactly one of "Uncertified", "PCGS", "NGC", "ANACS", "ICG", "CAC"
 - Strike Type: exactly one of "Business", "Proof", "Proof-Like", "Deep Mirror Proof-Like", "Satin", "Matte"
 - Shape (bullion): exactly "Bar" or "Round"
-- Composition: exactly one of "Gold", "Silver", "Platinum", "Palladium", "Bronze", "Copper", "Nickel"
+- Composition: exactly one of "Gold", "Silver", "Platinum", "Palladium", "Bronze", "Copper", "Nickel", "Steel", "Zinc", "Brass", "Aluminum", "Bimetallic", "Copper-Nickel", "Copper Clad", "Zinc Plated Steel"
+- Color (world coins copper/bronze only): exactly "RD" (>=90% red luster), "RB" (mixed red-brown), or "BN" (mostly brown). Only include for copper or bronze composition coins in category 45243.
 
 For bullion (bars, rounds, ingots): Type, Shape, Metal, Fineness, Precious Metal Content per Unit, Year, Country of Origin, Brand/Mint, Denomination, Modified Item.
 For coins: Type, Year, Denomination, Grade, Circulated/Uncirculated, Mint Location, Country of Origin, Composition, Certification, Strike Type, Fineness, Precious Metal Content per Unit.
@@ -306,6 +307,18 @@ OTHER US COINS (use when no priority category matches):
   US Coins General:          253
 
 WORLD COINS: 45243
+  Use for any non-US coin that doesn't fit a more specific category.
+  REQUIRED aspects: Year, Denomination, Composition, Circulated/Uncirculated, Country of Origin
+  PREFERRED aspects: Certification, Grade, KM Number, Materials sourced from, Color (copper/bronze only), Fineness (precious metal coins), Strike Type
+  KEY RULES for 45243:
+  - "Materials sourced from" = the country that ISSUED the coin (e.g., "Mexico", "Germany", "Japan") — NOT the seller's country
+  - "Country of Origin" = seller's country (usually "United States" for US-based sellers)
+  - "Color" = only for copper/bronze coins: RD (red), RB (red-brown), BN (brown)
+  - "KM Number" = Krause-Mishler catalog number (e.g., "KM# 64") — include if visible or identifiable
+  - "Denomination" = face value as shown on coin (e.g., "1 Peso", "50 Centavos", "1 Mark", "5 Francs")
+  - "Composition" = use expanded values: Copper-Nickel, Brass, Bimetallic, Aluminum, etc. (not just Gold/Silver)
+  - Default Certification = "Uncertified" unless slab is visible
+
 BULLION — Coins // Bars & Rounds:
   Silver:   261068 // 261069
   Gold:     261064 // 261071
@@ -444,7 +457,7 @@ Seller's note: "${voiceNote}"`;
                     },
                     itemSpecifics: {
                       type: "object",
-                      description: "Key-value pairs of eBay item specifics. ALL coin/bullion aspect keys MUST use the 'C:' prefix (e.g., 'C:Fineness', 'C:Grade'). Exception: Type, Brand, Material, Color, Size, Mintage, Series, Modified Item, Mint Mark do NOT get C: prefix.",
+                      description: "Key-value pairs of eBay item specifics. ALL keys must use BARE key names — NO 'C:' prefix ever. Use plain keys like 'Fineness', 'Grade', 'Year', 'Certification', 'Color', 'Materials sourced from'. The C: prefix is internal to eBay's taxonomy and must never appear in payloads.",
                       properties: {
                         // --- Metadata fields (not sent as eBay aspects, used for listing context) ---
                         Type: { type: "string", description: "Product type (e.g., 'Bullion Coin', 'Bar', 'Round', 'Medal', 'Coin')" },
@@ -459,7 +472,7 @@ Seller's note: "${voiceNote}"`;
                         Year: { type: "string", description: "Year of manufacture/minting (e.g., '2025')" },
                         Metal: { type: "string", description: "Primary precious metal (e.g., 'Silver', 'Gold', 'Platinum', 'Palladium')" },
                         Fineness: { type: "string", description: "Fineness as decimal ONLY: '0.999', '0.9999', '0.9675', '0.925', '0.900' — never '999 fine' or '99.9%'" },
-                        Composition: { type: "string", enum: ["Gold", "Silver", "Platinum", "Palladium", "Bronze", "Copper", "Nickel", "Steel", "Zinc"], description: "Metal composition — must match allowed values exactly" },
+                        Composition: { type: "string", enum: ["Gold", "Silver", "Platinum", "Palladium", "Bronze", "Copper", "Nickel", "Steel", "Zinc", "Brass", "Aluminum", "Bimetallic", "Copper-Nickel", "Copper Clad", "Zinc Plated Steel"], description: "Metal composition — must match allowed values exactly" },
                         "Precious Metal Content per Unit": { type: "string", description: "Metal weight per piece (e.g., '1 Troy oz', '1/2 Troy oz', '1/4 Troy oz', '1 g')" },
                         "Country of Origin": { type: "string", description: "Short country name only (e.g. 'United States', 'Canada', 'China'). Maximum 65 characters. Must be a real country name — never a description, sentence, or explanation. If unknown, omit this field entirely." },
                         Grade: { type: "string", description: "Coin grade with SPACE separator: 'MS 65', 'AU 55', 'VF 30' — never 'MS-65' or 'MS65'" },
@@ -470,11 +483,13 @@ Seller's note: "${voiceNote}"`;
                         Shape: { type: "string", enum: ["Bar", "Round"], description: "Bullion physical form — must be exactly 'Bar' or 'Round'" },
                         "Mint Location": { type: "string", description: "Mint facility (e.g., 'Philadelphia', 'Denver', 'San Francisco', 'West Point', 'Carson City', 'New Orleans')" },
                         "Brand/Mint": { type: "string", description: "Who made/minted bullion (e.g., 'New Zealand Mint', 'Perth Mint', 'APMEX', 'Scottsdale Mint')" },
-                        "KM Number": { type: "string", description: "Krause-Mishler catalog number for ancient/medieval/world coins" },
+                        "KM Number": { type: "string", description: "Krause-Mishler catalog number for ancient/medieval/world coins (e.g., 'KM# 64', 'KM# 169')" },
                         Era: { type: "string", description: "Historical era for ancient/medieval coins (e.g., 'Byzantine', 'Roman Imperial', 'Medieval')" },
                         "Cleaned/Uncleaned": { type: "string", description: "Whether ancient/medieval coin has been cleaned" },
                         Provenance: { type: "string", description: "Known provenance or collection history for ancient/medieval coins" },
                         Variety: { type: "string", description: "Die variety or VAM designation if known" },
+                        Color: { type: "string", enum: ["RD", "RB", "BN"], description: "Copper coin color designation (world coins category 45243 only): RD=Red (90%+ red), RB=Red-Brown (mixed), BN=Brown (mostly brown). Only set for copper/bronze composition coins." },
+                        "Materials sourced from": { type: "string", description: "For world coins (45243): the issuing country of the coin — i.e., which country produced/issued it. Different from Country of Origin (seller's country). E.g., 'Mexico', 'Germany', 'Japan'." },
                       },
                       additionalProperties: true,
                     },

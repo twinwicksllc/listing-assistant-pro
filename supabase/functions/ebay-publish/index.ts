@@ -108,6 +108,12 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
     preferred: ["Year", "Mint Location", "Country/Region of Manufacture"],
     defaults: { "Certification": "U.S. Mint", "Circulated/Uncirculated": "Uncirculated", "Country/Region of Manufacture": "United States" },
   },
+  // World Coins (general)
+  "45243": {
+    required: [],
+    preferred: ["Year", "Denomination", "Composition", "Circulated/Uncirculated", "Certification", "Grade", "KM Number", "Country of Origin", "Materials sourced from", "Color", "Fineness", "Strike Type"],
+    defaults: { "Certification": "Uncertified" },
+  },
 };
 
 // ================================================================
@@ -125,7 +131,10 @@ const VALID_ASPECT_VALUES: Record<string, Set<string>> = {
   ]),
   "Composition": new Set([
     "Gold", "Silver", "Platinum", "Palladium", "Bronze", "Copper", "Nickel", "Steel", "Zinc",
+    "Brass", "Aluminum", "Bimetallic", "Copper-Nickel", "Copper Clad", "Zinc Plated Steel",
   ]),
+  // Copper coin color designations (used in World Coins and US Copper coins)
+  "Color": new Set(["RD", "RB", "BN"]),
 };
 
 // ================================================================

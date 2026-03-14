@@ -1,12 +1,12 @@
-# Fix errorId 25604 "Product not found" — Triceratops Bar
-
-## Root Cause
-`"Precious Metal Content per Unit": "0.1607 Troy oz"` is non-standard.
-eBay category 39489 requires values like `"5 g"`, `"1 oz"`, `"1/10 oz"`.
+# World Coins Category 45243 — Analyze & Publish Support
 
 ## Tasks
-- [x] Research eBay accepted values for "Precious Metal Content per Unit"
-- [x] Add `normalizePreciousMetalContent()` function to ebay-publish/index.ts
-- [x] Wire it into `buildAndNormalizeAspects()` for the "Precious Metal Content per Unit" key
-- [x] Update version banner to v12
-- [x] Commit and push to main (triggers GitHub Actions deploy)
+- [x] Research eBay category 45243 required/recommended item specifics
+- [x] Check current TEMPLATE_CATEGORY_IDS and CATEGORY_ASPECT_RULES for 45243
+- [x] Check analyze-item prompt for world coin aspects
+- [ ] Update CATEGORY_ASPECT_RULES in ebay-publish for 45243 (add preferred aspects + Composition enum)
+- [ ] Update VALID_ASPECT_VALUES for Color (RD/RB/BN) and Materials sourced from
+- [ ] Update analyze-item AI prompt: world coin aspects (Color, Materials sourced from, KM Number)
+- [ ] Update analyze-item schema: add Color and Materials sourced from fields
+- [ ] Update TEMPLATE_CATEGORY_IDS to include 45243
+- [ ] Commit and push all changes
