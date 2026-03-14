@@ -8,6 +8,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Force redeploy v16: fix errorId 25019 (Grade stripped for uncertified coins; "Ungraded" added to skip list) + fix errorId 25002 (Type/Color removed from NON_ASPECT_KEYS so they pass through as real eBay aspects)
 // Force redeploy v15: shipping location from profile — city+postalCode passed to ensureInventoryLocation; fallback NYC→Chicago
 // Force redeploy v14: fix errorId 25002 "Country of Origin value too long" — drop Country of Origin if value > 65 chars or contains sentence punctuation (AI hallucination guard)
 // Force redeploy v13: fix errorId 25005 "not a leaf category" for US Mint Proof Sets — correct category 253→41109 (US Coin Proof Sets), add CATEGORY_ASPECT_RULES for 41109 and 526
@@ -144,6 +145,9 @@ const VALID_ASPECT_VALUES: Record<string, Set<string>> = {
 const ASPECT_SKIP_VALUES = new Set([
   "none", "unknown", "n/a", "other", "unspecified", "not applicable",
   "unknown/not applicable", "not specified",
+  // "Ungraded" is not a valid Sheldon-scale grade — eBay treats any grade value on an
+  // uncertified coin as a numerical-grade policy violation (errorId 25019).  Drop it.
+  "ungraded",
 ]);
 
 function normalizeFineness(value: string): string {
@@ -345,10 +349,18 @@ const ASPECT_KEY_ALIASES: Record<string, string> = {
   "Era":                             "Era",
   "Cleaned/Uncleaned":               "Cleaned/Uncleaned",
   "Provenance":                      "Provenance",
+  // These were previously in NON_ASPECT_KEYS; now pass through as real eBay aspects:
+  "Type":                            "Type",       // required by 261068 (Silver Bullion Coins) — errorId 25002
+  "Color":                           "Color",      // used by 45243 (World Coins) for copper/bronze coins
+  "Materials sourced from":          "Materials sourced from",
 };
 
 const NON_ASPECT_KEYS = new Set([
-  "Type", "Brand", "Material", "Color", "Size", "Mintage",
+  // "Type" removed — eBay bullion categories (e.g. 261068 Silver Bullion Coins) require
+  // "Type" as a real aspect (errorId 25002 when missing).  It must pass through to the
+  // Inventory API rather than being silently dropped.
+  // "Color" removed — world coins category 45243 uses Color (RD/RB/BN) as a real eBay aspect.
+  "Brand", "Material", "Size", "Mintage",
   "Series", "Modified Item", "Mint Mark",
 ]);
 
@@ -432,6 +444,19 @@ function buildAndNormalizeAspects(
         console.log(`buildAndNormalizeAspects: filled default ${k}="${v}" for category ${categoryId}`);
       }
     }
+  }
+
+  // eBay errorId 25019: numerical/descriptive grades are ONLY allowed on certified coins.
+  // If Certification is "Uncertified" (or absent), drop the Grade aspect entirely.
+  // Sending any grade value on an uncertified coin triggers a policy violation.
+  const certValue = aspects["Certification"]?.[0];
+  const CERTIFIED_GRADERS = new Set(["PCGS", "NGC", "ANACS", "ICG", "CAC", "PCGS & CAC", "NGC & CAC"]);
+  if (aspects["Grade"] && (!certValue || !CERTIFIED_GRADERS.has(certValue))) {
+    console.warn(
+      `buildAndNormalizeAspects: dropping Grade="${aspects["Grade"][0]}" for category ${categoryId} ` +
+      `because Certification="${certValue ?? "not set"}" is not a recognized grading service (eBay errorId 25019)`
+    );
+    delete aspects["Grade"];
   }
 
   return aspects;
@@ -848,7 +873,7 @@ async function ensureInventoryLocation(
 }
 
 serve(async (req) => {
-  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v15 - shipping location from profile: city+postalCode passed to ensureInventoryLocation, fallback changed from NYC 10001 to Chicago 60601) ***");
+  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v16 - fix 25019: Grade stripped for uncertified coins; fix 25002: Type+Color pass through as real eBay aspects) ***");
   
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
