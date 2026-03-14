@@ -4,7 +4,6 @@ import {
   UserCircle, Truck, CreditCard, RotateCcw, AlertCircle, Clock,
 } from "lucide-react";
 import { ListingDraft, ListingFormat, AuctionDuration } from "@/types/listing";
-import { useDrafts } from "@/hooks/useDrafts";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -12,7 +11,9 @@ import { toast } from "sonner";
 interface EditDraftModalProps {
   draft: ListingDraft;
   onClose: () => void;
-  onSaved: (updated: ListingDraft) => void;
+  onSaved: () => void;
+  /** updateDraft must come from the same useDrafts() instance as the parent's drafts list */
+  updateDraft: (id: string, updates: Partial<ListingDraft>) => Promise<boolean>;
 }
 
 interface PolicyOption {
@@ -54,8 +55,7 @@ const AUCTION_DURATIONS: { value: AuctionDuration; label: string }[] = [
   { value: "Days_10", label: "10 Days" },
 ];
 
-export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftModalProps) {
-  const { updateDraft } = useDrafts();
+export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }: EditDraftModalProps) {
   const { user } = useAuth();
 
   const [title, setTitle]               = useState(draft.title);
@@ -239,7 +239,7 @@ export default function EditDraftModal({ draft, onClose, onSaved }: EditDraftMod
     setSaving(false);
     if (ok) {
       toast.success("Draft updated!");
-      onSaved({ ...draft, ...updates });
+      onSaved();
       onClose();
     }
   };
