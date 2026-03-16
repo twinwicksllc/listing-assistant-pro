@@ -25,6 +25,48 @@ export function usePublishDraft() {
   const isPublishingRef = useRef(false);
   const [, setPublishingState] = useState(false); // force re-render on queue changes
 
+  const fetchProfileLocation = useCallback(async () => {
+    if (!user?.id) return { postalCode: null, city: null };
+
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("postal_code, city")
+        .eq("id", user.id)
+        .single();
+
+      if (error || !data) {
+        if (error) console.warn("fetchProfileLocation: failed to load profile location", error.message);
+        return { postalCode: null, city: null };
+      }
+
+      return {
+        postalCode: (data as any).postal_code ?? null,
+        city: (data as any).city ?? null,
+      };
+    } catch (err: any) {
+      console.warn("fetchProfileLocation: unexpected error", err?.message ?? err);
+      return { postalCode: null, city: null };
+    }
+  }, [user?.id]);
+
+  const fillMissingLocation = useCallback(
+    async (
+      postalCode: string | null | undefined,
+      city: string | null | undefined,
+    ): Promise<{ postalCode: string | null; city: string | null }> => {
+      if (postalCode) {
+        return { postalCode, city: city ?? null };
+      }
+      const profileLocation = await fetchProfileLocation();
+      return {
+        postalCode: profileLocation.postalCode,
+        city: city ?? profileLocation.city,
+      };
+    },
+    [fetchProfileLocation],
+  );
+
   /**
    * Retrieve the eBay user token and location data (postal code + city).
    * Prefers server-side storage (Supabase profiles) over localStorage.
@@ -45,26 +87,31 @@ export function usePublishDraft() {
           body: { action: "get_stored_token", userId: user.id },
         });
         if (!error && data?.token) {
+          const location = await fillMissingLocation(data.postalCode ?? null, data.city ?? null);
           console.log("getEbayToken: server-side token found:", {
             tokenExists: !!data.token,
-            postalCode: data.postalCode || "NOT_SET",
-            city: data.city || "NOT_SET",
+            postalCode: location.postalCode || "NOT_SET",
+            city: location.city || "NOT_SET",
             isExpired: data.isExpired || false,
           });
           return {
             token: data.token,
-            postalCode: data.postalCode ?? null,
-            city: data.city ?? null,
+            postalCode: location.postalCode,
+            city: location.city,
             isExpired: data.isExpired ?? false,
           };
         }
         if (!error && data?.isExpired) {
+          const location = await fillMissingLocation(data.postalCode ?? null, data.city ?? null);
           // Token is expired and refresh failed
-          console.log("getEbayToken: token expired, refresh failed");
+          console.log("getEbayToken: token expired, refresh failed", {
+            postalCode: location.postalCode || "NOT_SET",
+            city: location.city || "NOT_SET",
+          });
           return {
             token: null,
-            postalCode: data.postalCode ?? null,
-            city: data.city ?? null,
+            postalCode: location.postalCode,
+            city: location.city,
             isExpired: true,
           };
         }
@@ -76,9 +123,13 @@ export function usePublishDraft() {
 
     // 2. Fall back to localStorage (legacy / backwards compat)
     const localToken = localStorage.getItem("ebay-user-token");
-    console.log("getEbayToken: using localStorage token (no server-side token found)");
-    return { token: localToken, postalCode: null, city: null };
-  }, [user?.id]);
+    const location = await fillMissingLocation(null, null);
+    console.log("getEbayToken: using localStorage token (no server-side token found)", {
+      postalCode: location.postalCode || "NOT_SET",
+      city: location.city || "NOT_SET",
+    });
+    return { token: localToken, postalCode: location.postalCode, city: location.city };
+  }, [user?.id, fillMissingLocation]);
 
   /**
    * Attempt to publish a single draft with retry logic.
