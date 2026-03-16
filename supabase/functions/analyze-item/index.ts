@@ -285,6 +285,16 @@ Shape Rules for Bullion:
 
 CORRECT eBay Category IDs — use EXACTLY these values:
 
+⚠️ **CRITICAL CATEGORY VERIFICATION REQUIREMENT** ⚠️
+For ANY coin you're unsure about, you MUST use the google_search tool to verify the leaf category ID on eBay BEFORE outputting the listing. This prevents publishing to non-leaf categories which causes failures.
+
+VERIFICATION RULE:
+- If you have high confidence (>95%) that your identified coin matches one of the hard-coded categories below → use that ID directly
+- If you have lower confidence (<95%), or the coin is not in the hard-coded list below → use google_search to verify the correct leaf category ID on eBay
+- Always search with format: "eBay leaf category ID <coin name> <year range>"
+- Example: "eBay leaf category ID wheat penny 1909-1958" or "eBay 39455 category"
+- Store the verified mapping for future reference by including it in ebaySearchQuery field
+
 PRIORITY CATEGORIES (seller's primary inventory — match these first):
   Gold Bars & Rounds:          178906
   Silver Bars & Rounds:         39489
