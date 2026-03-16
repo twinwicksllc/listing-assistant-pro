@@ -126,8 +126,8 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
     defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "1C", "Material": "Copper" },
     fixedValues: { "Denomination": "1C", "Material": "Copper" },
   },
-  // Braided Hair Large Cent
-  "41085": {
+  // Braided Hair Large Cent (1793-1857)
+  "11950": {
     required: ["Certification", "Circulated/Uncirculated", "Material"],
     preferred: ["Year", "Mint Location", "Strike Type", "Denomination"],
     defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "1C", "Material": "Copper" },
