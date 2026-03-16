@@ -51,6 +51,7 @@ export default function AnalyzePage() {
   const [includeAiFooter, setIncludeAiFooter] = useState(true);
   const [showCategoryConfirm, setShowCategoryConfirm] = useState(false);
   const [pendingCategoryId, setPendingCategoryId] = useState<string>("");
+  const [customCategoryInput, setCustomCategoryInput] = useState<string>("");
 
   // eBay business policies — selected by the user on this page
   const [ebayTokenForPolicies, setEbayTokenForPolicies] = useState<string | null>(null);
@@ -453,7 +454,16 @@ export default function AnalyzePage() {
                   <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">eBay Category</label>
                   <select
                     value={ebayCategoryId}
-                    onChange={(e) => setEbayCategoryId(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "__custom__") {
+                        // Enter custom mode without changing ebayCategoryId yet
+                        setCustomCategoryInput("");
+                      } else {
+                        setEbayCategoryId(val);
+                        setCustomCategoryInput("");
+                      }
+                    }}
                     className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   >
                     {suggestedCategories.length > 0 ? (
@@ -462,36 +472,49 @@ export default function AnalyzePage() {
                           #{cat.categoryId} — {cat.categoryName}
                         </option>
                       ))
-                    ) : ebayCategoryId ? (
-                      <option value={ebayCategoryId}>#{ebayCategoryId} — {getEbayCategoryBreadcrumb(ebayCategoryId) || "AI selected"}</option>
                     ) : (
                       <option value="">No category selected</option>
                     )}
+                    {/* Show current selected category even if not in suggestions (for custom categories) */}
+                    {ebayCategoryId && !suggestedCategories.find(c => c.categoryId === ebayCategoryId) && ebayCategoryId !== "__custom__" && (
+                      <option value={ebayCategoryId}>
+                        #{ebayCategoryId} — {getEbayCategoryBreadcrumb(ebayCategoryId) || "Custom category"}
+                      </option>
+                    )}
                     <option value="__custom__">✏️ Enter custom category ID...</option>
                   </select>
-                  {ebayCategoryId === "__custom__" && (
-                    <input
-                      autoFocus
-                      type="text"
-                      placeholder="Enter eBay category ID (e.g. 261069)"
-                      className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                      onBlur={(e) => {
-                        const v = e.target.value.trim();
-                        if (v) {
-                          setPendingCategoryId(v);
-                          setShowCategoryConfirm(true);
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          const v = (e.target as HTMLInputElement).value.trim();
+                  {(ebayCategoryId === "__custom__" || customCategoryInput) && (
+                    <div className="space-y-1.5 mt-2 p-3 bg-card border border-border rounded-lg">
+                      <input
+                        autoFocus
+                        type="text"
+                        placeholder="Enter eBay category ID (e.g. 39455)"
+                        value={customCategoryInput}
+                        onChange={(e) => setCustomCategoryInput(e.target.value.replace(/\D/g, ""))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            const v = customCategoryInput.trim();
+                            if (v) {
+                              setPendingCategoryId(v);
+                              setShowCategoryConfirm(true);
+                            }
+                          }
+                        }}
+                        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                      <button
+                        onClick={() => {
+                          const v = customCategoryInput.trim();
                           if (v) {
                             setPendingCategoryId(v);
                             setShowCategoryConfirm(true);
                           }
-                        }
-                      }}
-                    />
+                        }}
+                        className="w-full py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:opacity-90 font-medium transition-colors"
+                      >
+                        Confirm Category
+                      </button>
+                    </div>
                   )}
                   {suggestedCategories.find(c => c.categoryId === ebayCategoryId)?.reason && (
                     <p className="text-[10px] text-muted-foreground italic px-1">
@@ -845,13 +868,14 @@ export default function AnalyzePage() {
         categoryId={pendingCategoryId}
         onConfirm={(categoryId) => {
           setEbayCategoryId(categoryId);
+          setCustomCategoryInput("");
           setShowCategoryConfirm(false);
           toast.success(`Category ${categoryId} confirmed`);
         }}
         onCancel={() => {
           setShowCategoryConfirm(false);
           setPendingCategoryId("");
-          setEbayCategoryId("");
+          // Don't reset customCategoryInput — user might want to try a different ID
         }}
       />
     </div>
