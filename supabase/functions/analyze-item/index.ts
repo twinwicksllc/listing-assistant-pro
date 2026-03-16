@@ -3,9 +3,17 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Max-Age": "86400",
 };
+
+// Table initialization deferred - will be created by category-lookup on first use
+async function ensureTableExists() {
+  // No-op for now - category-lookup will initialize the table
+  return;
+}
 
 function parseImageDataUrl(dataUrl: string) {
   const base64Data = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
@@ -14,13 +22,19 @@ function parseImageDataUrl(dataUrl: string) {
   return { base64Data, mimeType };
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
+  // IMPORTANT: Handle OPTIONS preflight first, before anything else
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders,
+    });
   }
 
   try {
     console.log("analyze-item: parsing body...");
+    // Initialize table in background (non-blocking)
+    ensureTableExists().catch((e) => console.warn("Table init error:", e));
     // Parse body first (can only call req.json() once)
     const body = await req.json();
     console.log("analyze-item: body parsed, images count =", body.images?.length);
@@ -285,6 +299,16 @@ Shape Rules for Bullion:
 
 CORRECT eBay Category IDs — use EXACTLY these values:
 
+⚠️ **CRITICAL CATEGORY VERIFICATION REQUIREMENT** ⚠️
+For ANY coin you're unsure about, you MUST use the google_search tool to verify the leaf category ID on eBay BEFORE outputting the listing. This prevents publishing to non-leaf categories which causes failures.
+
+VERIFICATION RULE:
+- If you have high confidence (>95%) that your identified coin matches one of the hard-coded categories below → use that ID directly
+- If you have lower confidence (<95%), or the coin is not in the hard-coded list below → use google_search to verify the correct leaf category ID on eBay
+- Always search with format: "eBay leaf category ID <coin name> <year range>"
+- Example: "eBay leaf category ID wheat penny 1909-1958" or "eBay 39455 category"
+- Store the verified mapping for future reference by including it in ebaySearchQuery field
+
 PRIORITY CATEGORIES (seller's primary inventory — match these first):
   Gold Bars & Rounds:          178906
   Silver Bars & Rounds:         39489
@@ -314,9 +338,9 @@ OTHER US COINS (use when no priority category matches):
   Kennedy Half Dollar (1964-present): 41102
   Franklin Half Dollar (1948-1963):   11973
   American Silver Eagle:              41111
-  Copper Rounds (non-legal-tender):   166679 (Coins & Paper Money > Bullion > Other Bullion)
+  Copper Rounds (non-legal-tenant):   166679 (Coins & Paper Money > Bullion > Other Bullion)
+  Wheat Penny (1909-1958):            39455
   State Quarters:                     164743
-  Lincoln Cent:                       11116
   American Gold Eagle:                40166
   American Gold Buffalo:              40167
   Susan B. Anthony:                   40160
@@ -327,7 +351,6 @@ OTHER US COINS (use when no priority category matches):
   Buffalo Nickel:                     40153
   Jefferson Nickel:                   40152
   Indian Head Cent:                   40154
-  Lincoln Wheat Cent:                 40155
   Washington Quarter:                 40149
   $20 Double Eagle:      40161
   $10 Eagle:             40162
@@ -470,7 +493,7 @@ Seller's note: "${voiceNote}"`;
                     ebayCategoryId: {
                       type: "string",
                       description:
-                        "The most specific eBay category ID. Priority categories: Gold Bars/Rounds=178906, Silver Bars/Rounds=39489, Other Silver Bullion=3361, Ancient Coins=532, Medieval Coins=173685, Eisenhower Dollars=11981, Morgan Dollars=39464, Peace Dollars=11980, Barber Half Dollars=11971, Liberty Walking Half=41099. Secondary: Kennedy Half=41102, Franklin Half=11973, Silver Eagle=41111, Copper Rounds=166679, Gold Eagle=40166, Gold Buffalo=40167, US Proof Sets=41109, US Mint Sets=526, World Coins=45243. IMPORTANT: Only use web search (GoogleSearch tool) if you're UNCERTAIN about a coin's correct eBay category ID. Always verify category IDs against eBay's actual category hierarchy to avoid invalid/non-leaf categories. For any uncertain coins, use GoogleSearch to find the correct category.",
+                        "The most specific eBay category ID. Priority categories: Gold Bars/Rounds=178906, Silver Bars/Rounds=39489, Other Silver Bullion=3361, Ancient Coins=532, Medieval Coins=173685, Eisenhower Dollars=11981, Morgan Dollars=39464, Peace Dollars=11980, Barber Half Dollars=11971, Liberty Walking Half=41099. Secondary: Kennedy Half=41102, Franklin Half=11973, Silver Eagle=41111, Wheat Penny=39455, Copper Rounds=166679, Gold Eagle=40166, Gold Buffalo=40167, US Proof Sets=41109, US Mint Sets=526, World Coins=45243. IMPORTANT: Only use web search (GoogleSearch tool) if you're UNCERTAIN about a coin's correct eBay category ID. Always verify category IDs against eBay's actual category hierarchy to avoid invalid/non-leaf categories. For any uncertain coins, use GoogleSearch to find the correct category.",
                     },
                     ebaySearchQuery: {
                       type: "string",

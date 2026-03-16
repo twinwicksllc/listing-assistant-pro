@@ -52,6 +52,7 @@ export default function AnalyzePage() {
   const [showCategoryConfirm, setShowCategoryConfirm] = useState(false);
   const [pendingCategoryId, setPendingCategoryId] = useState<string>("");
   const [customCategoryInput, setCustomCategoryInput] = useState<string>("");
+  const [isCustomCategoryMode, setIsCustomCategoryMode] = useState(false);
 
   // eBay business policies — selected by the user on this page
   const [ebayTokenForPolicies, setEbayTokenForPolicies] = useState<string | null>(null);
@@ -131,6 +132,7 @@ export default function AnalyzePage() {
       setMetalType(data.metalType || "none");
       setMetalWeightOz(data.metalWeightOz || 0);
       setEbayCategoryId(data.ebayCategoryId || "");
+      setIsCustomCategoryMode(false);
       setSuggestedCategories(data.suggestedCategories || []);
       setItemSpecifics(data.itemSpecifics || {});
       setCondition(data.condition || "PRE_OWNED_GOOD");
@@ -486,43 +488,52 @@ export default function AnalyzePage() {
                 {/* Category selector — top 3 AI suggestions + manual override */}
                 <div className="space-y-1">
                   <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">eBay Category</label>
-                  <select
-                    value={ebayCategoryId}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === "__custom__") {
-                        // Enter custom mode without changing ebayCategoryId yet
-                        setCustomCategoryInput("");
-                      } else {
-                        setEbayCategoryId(val);
-                        setCustomCategoryInput("");
-                      }
-                    }}
-                    className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    {suggestedCategories.length > 0 ? (
-                      suggestedCategories.map((cat) => (
-                        <option key={cat.categoryId} value={cat.categoryId}>
-                          #{cat.categoryId} — {cat.categoryName}
-                        </option>
-                      ))
-                    ) : (
-                      <option value="">No category selected</option>
-                    )}
-                    {/* Show current selected category even if not in suggestions (for custom categories) */}
-                    {ebayCategoryId && !suggestedCategories.find(c => c.categoryId === ebayCategoryId) && ebayCategoryId !== "__custom__" && (
-                      <option value={ebayCategoryId}>
-                        #{ebayCategoryId} — {getEbayCategoryBreadcrumb(ebayCategoryId) || "Custom category"}
-                      </option>
-                    )}
-                    <option value="__custom__">✏️ Enter custom category ID...</option>
-                  </select>
-                  {(ebayCategoryId === "__custom__" || customCategoryInput) && (
-                    <div className="space-y-1.5 mt-2 p-3 bg-card border border-border rounded-lg">
+                  {!isCustomCategoryMode ? (
+                    <>
+                      <select
+                        value={ebayCategoryId}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === "__custom__") {
+                            setIsCustomCategoryMode(true);
+                            setCustomCategoryInput("");
+                          } else {
+                            setEbayCategoryId(val);
+                            setCustomCategoryInput("");
+                          }
+                        }}
+                        className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                      >
+                        {suggestedCategories.length > 0 ? (
+                          suggestedCategories.map((cat) => (
+                            <option key={cat.categoryId} value={cat.categoryId}>
+                              #{cat.categoryId} — {cat.categoryName}
+                            </option>
+                          ))
+                        ) : (
+                          <option value="">No category selected</option>
+                        )}
+                        {ebayCategoryId && !suggestedCategories.find(c => c.categoryId === ebayCategoryId) && (
+                          <option value={ebayCategoryId}>
+                            #{ebayCategoryId} — {getEbayCategoryBreadcrumb(ebayCategoryId) || "Custom category"}
+                          </option>
+                        )}
+                        <option value="__custom__">✏️ Enter custom category ID...</option>
+                      </select>
+                      {suggestedCategories.find(c => c.categoryId === ebayCategoryId)?.reason && (
+                        <p className="text-[10px] text-muted-foreground italic px-1">
+                          {suggestedCategories.find(c => c.categoryId === ebayCategoryId)?.reason}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <div className="space-y-2 p-3 bg-card border border-primary rounded-lg">
+                      <p className="text-[10px] font-medium text-muted-foreground">Enter custom eBay category ID</p>
                       <input
                         autoFocus
                         type="text"
-                        placeholder="Enter eBay category ID (e.g. 39455)"
+                        inputMode="numeric"
+                        placeholder="e.g. 39455 for Wheat Penny"
                         value={customCategoryInput}
                         onChange={(e) => setCustomCategoryInput(e.target.value.replace(/\D/g, ""))}
                         onKeyDown={(e) => {
@@ -536,24 +547,31 @@ export default function AnalyzePage() {
                         }}
                         className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       />
-                      <button
-                        onClick={() => {
-                          const v = customCategoryInput.trim();
-                          if (v) {
-                            setPendingCategoryId(v);
-                            setShowCategoryConfirm(true);
-                          }
-                        }}
-                        className="w-full py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:opacity-90 font-medium transition-colors"
-                      >
-                        Confirm Category
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            const v = customCategoryInput.trim();
+                            if (v) {
+                              setPendingCategoryId(v);
+                              setShowCategoryConfirm(true);
+                            }
+                          }}
+                          disabled={!customCategoryInput.trim()}
+                          className="flex-1 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 font-medium transition-colors"
+                        >
+                          Confirm ID
+                        </button>
+                        <button
+                          onClick={() => {
+                            setIsCustomCategoryMode(false);
+                            setCustomCategoryInput("");
+                          }}
+                          className="flex-1 py-1.5 text-xs rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 font-medium transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </div>
-                  )}
-                  {suggestedCategories.find(c => c.categoryId === ebayCategoryId)?.reason && (
-                    <p className="text-[10px] text-muted-foreground italic px-1">
-                      {suggestedCategories.find(c => c.categoryId === ebayCategoryId)?.reason}
-                    </p>
                   )}
                 </div>
                 <div className="bg-card border border-border rounded-lg divide-y divide-border">
