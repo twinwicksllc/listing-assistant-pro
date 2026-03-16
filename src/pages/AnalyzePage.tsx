@@ -52,6 +52,7 @@ export default function AnalyzePage() {
   const [showCategoryConfirm, setShowCategoryConfirm] = useState(false);
   const [pendingCategoryId, setPendingCategoryId] = useState<string>("");
   const [customCategoryInput, setCustomCategoryInput] = useState<string>("");
+  const [isCustomCategoryMode, setIsCustomCategoryMode] = useState(false);
 
   // eBay business policies — selected by the user on this page
   const [ebayTokenForPolicies, setEbayTokenForPolicies] = useState<string | null>(null);
@@ -131,6 +132,7 @@ export default function AnalyzePage() {
       setMetalType(data.metalType || "none");
       setMetalWeightOz(data.metalWeightOz || 0);
       setEbayCategoryId(data.ebayCategoryId || "");
+      setIsCustomCategoryMode(false);
       setSuggestedCategories(data.suggestedCategories || []);
       setItemSpecifics(data.itemSpecifics || {});
       setCondition(data.condition || "PRE_OWNED_GOOD");
@@ -487,14 +489,14 @@ export default function AnalyzePage() {
                 <div className="space-y-1">
                   <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">eBay Category</label>
                   <select
-                    value={ebayCategoryId === "__custom__" || customCategoryInput ? "__custom__" : ebayCategoryId}
+                    value={isCustomCategoryMode ? "__custom__" : ebayCategoryId}
                     onChange={(e) => {
                       const val = e.target.value;
                       if (val === "__custom__") {
-                        // Enter custom mode
-                        setEbayCategoryId("__custom__");
+                        setIsCustomCategoryMode(true);
                         setCustomCategoryInput("");
                       } else {
+                        setIsCustomCategoryMode(false);
                         setEbayCategoryId(val);
                         setCustomCategoryInput("");
                       }
@@ -511,14 +513,14 @@ export default function AnalyzePage() {
                       <option value="">No category selected</option>
                     )}
                     {/* Show current selected category even if not in suggestions (for custom categories) */}
-                    {ebayCategoryId && !suggestedCategories.find(c => c.categoryId === ebayCategoryId) && ebayCategoryId !== "__custom__" && (
+                    {ebayCategoryId && !suggestedCategories.find(c => c.categoryId === ebayCategoryId) && !isCustomCategoryMode && (
                       <option value={ebayCategoryId}>
                         #{ebayCategoryId} — {getEbayCategoryBreadcrumb(ebayCategoryId) || "Custom category"}
                       </option>
                     )}
                     <option value="__custom__">✏️ Enter custom category ID...</option>
                   </select>
-                  {(ebayCategoryId === "__custom__" || customCategoryInput) && (
+                  {isCustomCategoryMode && (
                     <div className="space-y-1.5 mt-2 p-3 bg-card border border-border rounded-lg">
                       <input
                         autoFocus
