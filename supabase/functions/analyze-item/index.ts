@@ -341,6 +341,8 @@ OTHER US COINS (use when no priority category matches):
   Copper Rounds (non-legal-tenant):   166679 (Coins & Paper Money > Bullion > Other Bullion)
   Wheat Penny (1909-1958):            39455
   Indian Head Cent:                   41084
+  Braided Hair Large Cent:            41085
+  Flying Eagle Cent:                  40156
   State Quarters:                     164743
   American Gold Eagle:                40166
   American Gold Buffalo:              40167
