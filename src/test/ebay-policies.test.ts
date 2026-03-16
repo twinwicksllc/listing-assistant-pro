@@ -416,3 +416,27 @@ export default {
   MockStorageManager,
   runAllTests,
 };
+
+// Vitest test integration
+import { describe, it, expect } from "vitest";
+
+describe("eBay policy helper scenarios", () => {
+  it("all mock scenarios should pass basic expectations", () => {
+    const scenarios = [
+      testScenario_FirstFetch,
+      testScenario_CacheHit,
+      testScenario_CacheExpired,
+      testScenario_ManualRefresh,
+      testScenario_InvalidToken,
+      testScenario_NoPolicies,
+      testScenario_SelectPolicies,
+    ];
+
+    for (const fn of scenarios) {
+      const result = fn();
+      // Each scenario function returns an object with `success: boolean`
+      expect(result).toHaveProperty("success");
+      expect(result.success).toBe(true);
+    }
+  });
+});

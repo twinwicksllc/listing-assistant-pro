@@ -88,8 +88,119 @@ export async function handleRequest(req: Request): Promise<Response> {
       }
     }
 
+    if (action === "verify") {
+      // Verify whether a given eBay category ID is valid.
+      const cid = (categoryId || "").toString().trim();
+      if (!cid) throw new Error("categoryId required for verify action");
+
+      // First check local mappings for a quick positive
+      try {
+        const { data: local } = await supabase
+          .from("category_mappings")
+          .select("ebay_category_id, category_name")
+          .eq("ebay_category_id", cid)
+          .single();
+        if (local && local.ebay_category_id) {
+          return new Response(
+            JSON.stringify({ valid: true, source: "db", categoryName: local.category_name || null }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      } catch (e) {
+        // ignore local lookup errors and continue to remote verification
+        console.warn("category-lookup: local verify lookup failed", e);
+      }
+
+      // Remote verification via eBay Taxonomy API using app credentials
+      const clientId = Deno.env.get("EBAY_CLIENT_ID");
+      const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
+      const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
+      if (!clientId || !clientSecret) {
+        // Cannot verify remotely without app credentials — report unknown
+        return new Response(JSON.stringify({ valid: null, source: "none", message: "No eBay app credentials configured" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      try {
+        const credentials = btoa(`${clientId}:${clientSecret}`);
+        const tokenUrl = ebayEnv === "production"
+          ? "https://api.ebay.com/identity/v1/oauth2/token"
+          : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
+
+        const tokenResp = await fetch(tokenUrl, {
+          method: "POST",
+          headers: { "Authorization": `Basic ${credentials}`, "Content-Type": "application/x-www-form-urlencoded" },
+          body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
+        });
+
+        if (!tokenResp.ok) {
+          const txt = await tokenResp.text();
+          console.error("category-lookup: failed to get eBay app token", tokenResp.status, txt);
+          return new Response(JSON.stringify({ valid: null, source: "remote", error: `Token error ${tokenResp.status}` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const tokenJson = await tokenResp.json();
+        const appToken = tokenJson.access_token;
+        const base = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
+
+        // Use Taxonomy API get_category_subtree as a means to validate category existence
+        const subtreeUrl = `${base}/commerce/taxonomy/v1/category_tree/0/get_category_subtree?category_id=${encodeURIComponent(cid)}`;
+        const subtreeResp = await fetch(subtreeUrl, {
+          method: "GET",
+          headers: { "Authorization": `Bearer ${appToken}`, "Content-Type": "application/json" },
+        });
+
+        if (subtreeResp.status === 404) {
+          return new Response(JSON.stringify({ valid: false, source: "remote" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (!subtreeResp.ok) {
+          const txt = await subtreeResp.text();
+          console.error("category-lookup: taxonomy API error", subtreeResp.status, txt);
+          return new Response(JSON.stringify({ valid: null, source: "remote", error: `Taxonomy API error ${subtreeResp.status}` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const subtreeJson = await subtreeResp.json();
+        // Attempt to extract a category name if present
+        const categoryName = subtreeJson?.categorySubtree?.category?.categoryName || subtreeJson?.category?.categoryName || null;
+        return new Response(JSON.stringify({ valid: true, source: "remote", categoryName }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      } catch (err) {
+        console.error("category-lookup: remote verify exception", err);
+        return new Response(JSON.stringify({ valid: null, source: "remote", error: String(err) }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+
     if (action === "store") {
       // Store a new or updated category mapping
+      // Require an Authorization header and admin privileges to upsert mappings
+      const authHeader = req.headers.get("authorization");
+      if (!authHeader) {
+        return new Response(
+          JSON.stringify({ error: "Authorization required for store action" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Validate user and admin flag
+      const token = authHeader.replace(/^Bearer\s+/i, "");
+      const { data: userData, error: userErr } = await supabase.auth.getUser(token);
+      if (userErr || !userData?.user?.id) {
+        console.error('category-lookup: auth.getUser failed', userErr);
+        return new Response(
+          JSON.stringify({ error: "Invalid authorization token" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const userId = userData.user.id;
+      const { data: profile } = await supabase.from("profiles").select("is_admin").eq("id", userId).single();
+      const isAdmin = profile?.is_admin === true;
+      if (!isAdmin) {
+        return new Response(
+          JSON.stringify({ error: "Admin privileges required to store mappings" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       const normalizedType = (coinType || "").toLowerCase().trim();
 
       if (!categoryId) {
