@@ -61,13 +61,19 @@ async function ensureTableExists() {
 }
 
 export async function handleRequest(req: Request): Promise<Response> {
-  // Handle CORS
+  // Handle CORS — always return 200 with headers for preflight
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", {
+      status: 200,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/plain",
+      },
+    });
   }
 
-  // Ensure table exists on first call
-  await ensureTableExists();
+  // Initialize table in background (non-blocking)
+  ensureTableExists().catch((e) => console.warn("Table init error:", e));
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");

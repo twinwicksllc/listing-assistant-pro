@@ -62,14 +62,19 @@ function parseImageDataUrl(dataUrl: string) {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", {
+      status: 200,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/plain",
+      },
+    });
   }
-
-  // Ensure category_mappings table exists before processing
-  await ensureTableExists();
 
   try {
     console.log("analyze-item: parsing body...");
+    // Initialize table in background (non-blocking)
+    ensureTableExists().catch((e) => console.warn("Table init error:", e));
     // Parse body first (can only call req.json() once)
     const body = await req.json();
     console.log("analyze-item: body parsed, images count =", body.images?.length);
