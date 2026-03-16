@@ -119,6 +119,20 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
     defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "1C" },
     fixedValues: { "Denomination": "1C", "Composition": "Copper" },
   },
+  // Indian Head Cent
+  "41084": {
+    required: ["Certification", "Circulated/Uncirculated", "Material"],
+    preferred: ["Year", "Mint Location", "Strike Type", "Denomination"],
+    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "1C", "Material": "Copper" },
+    fixedValues: { "Denomination": "1C", "Material": "Copper" },
+  },
+  // Braided Hair Large Cent
+  "41085": {
+    required: ["Certification", "Circulated/Uncirculated", "Material"],
+    preferred: ["Year", "Mint Location", "Strike Type", "Denomination"],
+    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "1C", "Material": "Copper" },
+    fixedValues: { "Denomination": "1C", "Material": "Copper" },
+  },
   // American Silver Eagle
   "41111": {
     required: ["Certification", "Circulated/Uncirculated"],
