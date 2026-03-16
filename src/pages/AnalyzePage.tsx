@@ -487,11 +487,12 @@ export default function AnalyzePage() {
                 <div className="space-y-1">
                   <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">eBay Category</label>
                   <select
-                    value={ebayCategoryId}
+                    value={ebayCategoryId === "__custom__" || customCategoryInput ? "__custom__" : ebayCategoryId}
                     onChange={(e) => {
                       const val = e.target.value;
                       if (val === "__custom__") {
-                        // Enter custom mode without changing ebayCategoryId yet
+                        // Enter custom mode
+                        setEbayCategoryId("__custom__");
                         setCustomCategoryInput("");
                       } else {
                         setEbayCategoryId(val);
