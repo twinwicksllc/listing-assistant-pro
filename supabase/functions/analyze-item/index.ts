@@ -1,11 +1,57 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import postgres from "https://deno.land/x/postgres@v0.17.0/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+// Ensure category_mappings table exists
+async function ensureTableExists() {
+  const databaseUrl = Deno.env.get("DATABASE_URL");
+  if (!databaseUrl) return;
+
+  const client = new postgres.Client(databaseUrl);
+  try {
+    await client.connect();
+
+    const createTableSQL = `
+      CREATE TABLE IF NOT EXISTS public.category_mappings (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        coin_type TEXT NOT NULL UNIQUE,
+        ebay_category_id TEXT NOT NULL,
+        category_name TEXT,
+        verified_at TIMESTAMPTZ DEFAULT NOW(),
+        verification_source TEXT DEFAULT 'user_verified',
+        confidence SMALLINT DEFAULT 100,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_category_mappings_coin_type ON public.category_mappings(coin_type);
+      INSERT INTO public.category_mappings (coin_type, ebay_category_id, category_name, verification_source, confidence)
+      VALUES
+        ('wheat penny 1909-1958', '39455', 'Wheat Penny (1909-1958)', 'user_verified', 100),
+        ('kennedy half dollar', '41102', 'Kennedy Half Dollar', 'user_verified', 100),
+        ('franklin half dollar', '11973', 'Franklin Half Dollar', 'user_verified', 100),
+        ('copper rounds', '166679', 'Copper Rounds', 'user_verified', 100),
+        ('morgan dollar', '41419', 'Morgan Dollar', 'user_verified', 100),
+        ('peace dollar', '41421', 'Peace Dollar', 'user_verified', 100),
+        ('barber coin', '11970', 'Barber Coin', 'user_verified', 100),
+        ('liberty walking half dollar', '11973', 'Liberty Walking Half Dollar', 'user_verified', 100),
+        ('lincoln cent 1909-1958', '39455', 'Lincoln Cent (1909-1958)', 'user_verified', 100),
+        ('silver eagle', '165752', 'Silver Eagle', 'user_verified', 100)
+      ON CONFLICT (coin_type) DO NOTHING;
+    `;
+
+    await client.queryArray(createTableSQL);
+    console.log("analyze-item: category_mappings table initialized");
+    await client.end();
+  } catch (error) {
+    console.warn("analyze-item: error ensuring table exists:", error);
+  }
+}
 
 function parseImageDataUrl(dataUrl: string) {
   const base64Data = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
@@ -18,6 +64,9 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  // Ensure category_mappings table exists before processing
+  await ensureTableExists();
 
   try {
     console.log("analyze-item: parsing body...");
