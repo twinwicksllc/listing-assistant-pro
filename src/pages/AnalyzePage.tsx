@@ -176,6 +176,7 @@ export default function AnalyzePage() {
     const success = await addDraft({
       id: crypto.randomUUID(),
       imageUrl: uploadedUrls[0],
+      imageUrls: uploadedUrls,
       title,
       description: getDescriptionWithFooter(),
       priceMin,
@@ -254,6 +255,7 @@ export default function AnalyzePage() {
         });
         if (error || data?.error) throw new Error(data?.error || error?.message || "Failed to get auth URL");
 
+        // Store all image URLs in pending listing so we can resume publish with full images after auth
         localStorage.setItem("pending_listing", JSON.stringify({
           title,
           description: getDescriptionWithFooter(),
@@ -261,7 +263,7 @@ export default function AnalyzePage() {
           listingPrice,
           auctionStartPrice,
           auctionBuyItNow: auctionBuyItNowEnabled ? auctionBuyItNow : null,
-          imageUrl: imageUrls[0],
+          imageUrls: imageUrls,
           ebayCategoryId,
           itemSpecifics,
           condition,
@@ -287,7 +289,8 @@ export default function AnalyzePage() {
           listingPrice,
           auctionStartPrice,
           auctionBuyItNow: auctionBuyItNowEnabled ? auctionBuyItNow : null,
-          imageUrl: user?.id ? await uploadListingImage(imageUrls[0], user.id) : imageUrls[0],
+          // Upload all images and pass the array to the server so the final eBay payload includes every image.
+          imageUrls: user?.id ? await uploadListingImages(imageUrls, user.id) : imageUrls,
           condition,
           ebayCategoryId,
           itemSpecifics,
@@ -856,9 +859,14 @@ export default function AnalyzePage() {
               <button
                 onClick={() => {
                   exportListing(exportPlatform, exportFormat, {
-                    title, description, priceMin, priceMax,
-                    imageUrl: imageUrls[0],
-                    ebayCategoryId, itemSpecifics, condition,
+                    title,
+                    description,
+                    priceMin,
+                    priceMax,
+                    imageUrls: imageUrls,
+                    ebayCategoryId,
+                    itemSpecifics,
+                    condition,
                     fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId ?? undefined,
                     paymentPolicyId: selectedPolicies.paymentPolicyId ?? undefined,
                     returnPolicyId: selectedPolicies.returnPolicyId ?? undefined,

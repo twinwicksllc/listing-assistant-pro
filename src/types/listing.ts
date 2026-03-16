@@ -69,7 +69,9 @@ export const CONDITION_LABELS: Record<string, string> = {
 
 export interface ListingDraft {
   id: string;
+  // Prefer storing multiple images; keep `imageUrl` for backward compatibility
   imageUrl: string;
+  imageUrls?: string[];
   title: string;
   description: string;
   priceMin: number;
