@@ -112,6 +112,13 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
     defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "50C" },
     fixedValues: { "Denomination": "50C", "Composition": "Silver", "Fineness": "0.900" },
   },
+  // Wheat Penny (1909-1958) - Coins & Paper Money > US Coins
+  "39455": {
+    required: ["Certification", "Circulated/Uncirculated"],
+    preferred: ["Year", "Mint Location", "Strike Type", "Composition", "Denomination"],
+    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "1C" },
+    fixedValues: { "Denomination": "1C", "Composition": "Copper" },
+  },
   // American Silver Eagle
   "41111": {
     required: ["Certification", "Circulated/Uncirculated"],
