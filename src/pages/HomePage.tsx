@@ -47,7 +47,8 @@ const TOUR_STEPS: TourStep[] = [
 
 export default function HomePage() {
   const { signOut, recordUsage } = useAuth();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const [stagedImages, setStagedImages] = useState<string[]>([]);
@@ -133,7 +134,20 @@ export default function HomePage() {
   };
 
   const handleCapture = () => {
-    fileInputRef.current?.click();
+    if (isMobile) {
+      cameraInputRef.current?.click();
+    } else {
+      galleryInputRef.current?.click();
+    }
+  };
+
+  const handleGalleryUpload = () => {
+    galleryInputRef.current?.click();
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    validateAndStageFiles(e.target.files);
+    e.target.value = "";
   };
 
   // --- Voice recording ---
@@ -295,7 +309,7 @@ export default function HomePage() {
               </div>
 
               <button
-                onClick={handleCapture}
+                onClick={handleGalleryUpload}
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-secondary text-foreground text-sm font-medium transition-colors hover:bg-secondary/80"
               >
                 <Upload className="w-4 h-4" />
@@ -476,16 +490,20 @@ export default function HomePage() {
       </div>
 
       <input
-        ref={fileInputRef}
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleFileInputChange}
+      />
+      <input
+        ref={galleryInputRef}
         type="file"
         accept={ACCEPT_STRING}
-        {...(isMobile ? { capture: "environment" as const } : {})}
         multiple
         className="hidden"
-        onChange={(e) => {
-          validateAndStageFiles(e.target.files);
-          e.target.value = "";
-        }}
+        onChange={handleFileInputChange}
       />
 
       <BottomNav />
