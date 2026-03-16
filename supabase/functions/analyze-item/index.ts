@@ -4,8 +4,10 @@ import postgres from "https://deno.land/x/postgres@v0.17.0/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Max-Age": "86400",
 };
 
 // Ensure category_mappings table exists
@@ -60,14 +62,12 @@ function parseImageDataUrl(dataUrl: string) {
   return { base64Data, mimeType };
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
+  // IMPORTANT: Handle OPTIONS preflight first, before anything else
   if (req.method === "OPTIONS") {
-    return new Response("ok", {
-      status: 200,
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "text/plain",
-      },
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders,
     });
   }
 

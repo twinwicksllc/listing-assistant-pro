@@ -3,8 +3,10 @@ import postgres from "https://deno.land/x/postgres@v0.17.0/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Max-Age": "86400",
 };
 
 // Initialize the category_mappings table if it doesn't exist
@@ -61,14 +63,11 @@ async function ensureTableExists() {
 }
 
 export async function handleRequest(req: Request): Promise<Response> {
-  // Handle CORS — always return 200 with headers for preflight
+  // IMPORTANT: Handle OPTIONS preflight first, before anything else
   if (req.method === "OPTIONS") {
-    return new Response("ok", {
-      status: 200,
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "text/plain",
-      },
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders,
     });
   }
 
