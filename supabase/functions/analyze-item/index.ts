@@ -340,6 +340,7 @@ OTHER US COINS (use when no priority category matches):
   American Silver Eagle:              41111
   Copper Rounds (non-legal-tenant):   166679 (Coins & Paper Money > Bullion > Other Bullion)
   Wheat Penny (1909-1958):            39455
+  Indian Head Cent:                   41084
   State Quarters:                     164743
   American Gold Eagle:                40166
   American Gold Buffalo:              40167
@@ -350,7 +351,6 @@ OTHER US COINS (use when no priority category matches):
   Roosevelt Dime:                     40150
   Buffalo Nickel:                     40153
   Jefferson Nickel:                   40152
-  Indian Head Cent:                   40154
   Washington Quarter:                 40149
   $20 Double Eagle:      40161
   $10 Eagle:             40162
