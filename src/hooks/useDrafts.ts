@@ -30,6 +30,7 @@ export function useDrafts() {
         (data || []).map((d: any) => ({
           id: d.id,
           imageUrl: d.image_url,
+          imageUrls: d.image_urls || (d.image_url ? [d.image_url] : []),
           title: d.title,
           description: d.description,
           priceMin: Number(d.price_min),
@@ -71,11 +72,12 @@ export function useDrafts() {
 
     const orgId = (!org.loading && org.orgId) ? org.orgId : undefined;
 
-    const { error } = await supabase.from("drafts").insert({
+      const { error } = await supabase.from("drafts").insert({
       id: draft.id,
       user_id: user.id,
       ...(orgId ? { org_id: orgId } : {}),
-      image_url: draft.imageUrl,
+        image_url: draft.imageUrl || (draft.imageUrls && draft.imageUrls.length > 0 ? draft.imageUrls[0] : ""),
+        image_urls: draft.imageUrls && draft.imageUrls.length > 0 ? draft.imageUrls : null,
       title: draft.title,
       description: draft.description,
       price_min: draft.priceMin,
@@ -121,6 +123,7 @@ export function useDrafts() {
   const updateDraft = async (id: string, updates: Partial<ListingDraft>) => {
     const patch: Record<string, any> = {};
     if (updates.imageUrl !== undefined)               patch.image_url = updates.imageUrl;
+    if (updates.imageUrls !== undefined)              patch.image_urls = updates.imageUrls;
     if (updates.title !== undefined)                  patch.title = updates.title;
     if (updates.description !== undefined)            patch.description = updates.description;
     if (updates.listingPrice !== undefined)           patch.listing_price = updates.listingPrice;

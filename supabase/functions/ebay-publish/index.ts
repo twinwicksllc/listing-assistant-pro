@@ -1404,6 +1404,7 @@ serve(async (req) => {
         auctionBuyItNow,
         auctionDuration,
         imageUrl,
+        imageUrls,
         condition,
         ebayCategoryId,
         itemSpecifics,
@@ -1540,13 +1541,22 @@ serve(async (req) => {
 
       // Resolve imageUrl: eBay rejects base64 data: URLs (errorId 25721).
       // Upload to Supabase Storage if needed to get a public HTTPS URL.
-      let resolvedImageUrl = imageUrl as string | undefined;
-      if (resolvedImageUrl?.startsWith("data:")) {
-        console.log("create_draft: imageUrl is base64 data URL — uploading to storage");
-        resolvedImageUrl = await uploadDataUrlToStorage(resolvedImageUrl);
-        if (resolvedImageUrl.startsWith("data:")) {
-          console.error("create_draft: image upload failed — proceeding without image");
-          resolvedImageUrl = undefined;
+      // Support multiple images: prefer `imageUrls` array if provided, else fall back to singular `imageUrl` for compatibility.
+      let resolvedImageUrls: string[] = [];
+      const incomingImageUrls = Array.isArray(imageUrls) && imageUrls.length > 0 ? imageUrls : (imageUrl ? [imageUrl as string] : []);
+      if (incomingImageUrls.length > 0) {
+        console.log(`create_draft: received ${incomingImageUrls.length} image(s) — resolving to public URLs`);
+        for (const img of incomingImageUrls) {
+          let resolved = img as string;
+          if (resolved?.startsWith("data:")) {
+            console.log("create_draft: image is base64 data URL — uploading to storage");
+            resolved = await uploadDataUrlToStorage(resolved);
+            if (resolved.startsWith("data:")) {
+              console.error("create_draft: one image upload failed — skipping this image");
+              continue;
+            }
+          }
+          if (resolved) resolvedImageUrls.push(resolved);
         }
       }
 
@@ -1558,7 +1568,7 @@ serve(async (req) => {
       const inventoryBody: Record<string, unknown> = {
         product: {
           title,
-          imageUrls: resolvedImageUrl ? [resolvedImageUrl] : [],
+          imageUrls: resolvedImageUrls,
         },
         condition: conditionEnum,
         conditionDescription: conditionDesc,

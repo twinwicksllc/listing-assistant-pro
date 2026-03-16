@@ -58,7 +58,9 @@ export interface ListingData {
   description: string;
   priceMin: number;
   priceMax: number;
-  imageUrl: string;
+  // Prefer multiple images; keep imageUrl for single-image compatibility
+  imageUrl?: string;
+  imageUrls?: string[];
   ebayCategoryId: string;
   itemSpecifics: ItemSpecifics;
   condition: string;
@@ -97,7 +99,10 @@ function buildEbayRows(listing: ListingData): { headers: string[]; values: (stri
     EBAY_CONDITION_MAP[listing.condition] || "3000",
     "FixedPrice",
     listing.priceMin,
-    listing.imageUrl,
+    // eBay File Exchange supports multiple picture URLs separated by semicolons
+    (listing.imageUrls && listing.imageUrls.length > 0)
+      ? listing.imageUrls.join(";")
+      : (listing.imageUrl || ""),
   ];
   specificEntries.forEach(([, value]) => values.push(value || ""));
 
@@ -117,7 +122,8 @@ function buildFacebookRows(listing: ListingData): { headers: string[]; values: (
     FB_CONDITION_MAP[listing.condition] || "used_good",
     listing.priceMin,
     "USD",
-    listing.imageUrl,
+    // Facebook expects a single image link — use the first provided image
+    (listing.imageUrls && listing.imageUrls.length > 0) ? listing.imageUrls[0] : (listing.imageUrl || ""),
     listing.itemSpecifics.Brand || listing.itemSpecifics["Coin/Bullion Type"] || "",
   ];
   return { headers, values };

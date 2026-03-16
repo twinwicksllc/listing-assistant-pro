@@ -164,13 +164,29 @@ export function usePublishDraft() {
       // --- Mark as "publishing" in DB ---
       await updateDraft(draft.id, { publishStatus: "publishing" });
 
-      // --- Ensure imageUrl is a public HTTPS URL ---
+      // --- Ensure image(s) are public HTTPS URLs ---
+      // Support drafts that may include a single `imageUrl` (legacy) or an `imageUrls` array.
       let resolvedImageUrl = draft.imageUrl;
-      if (resolvedImageUrl?.startsWith("data:") && user?.id) {
-        const uploaded = await uploadListingImage(resolvedImageUrl, user.id);
-        if (!uploaded.startsWith("data:")) {
-          resolvedImageUrl = uploaded;
-          await updateDraft(draft.id, { imageUrl: resolvedImageUrl });
+      let resolvedImageUrls: string[] | undefined = undefined;
+
+      if (Array.isArray((draft as any).imageUrls) && (draft as any).imageUrls.length > 0) {
+        // Upload any data: URLs and preserve remote URLs
+        resolvedImageUrls = [];
+        for (const img of (draft as any).imageUrls) {
+          let r = img as string;
+          if (r?.startsWith("data:") && user?.id) {
+            const uploaded = await uploadListingImage(r, user.id);
+            if (!uploaded.startsWith("data:")) r = uploaded;
+          }
+          if (r) resolvedImageUrls.push(r);
+        }
+      } else {
+        if (resolvedImageUrl?.startsWith("data:") && user?.id) {
+          const uploaded = await uploadListingImage(resolvedImageUrl, user.id);
+          if (!uploaded.startsWith("data:")) {
+            resolvedImageUrl = uploaded;
+            await updateDraft(draft.id, { imageUrl: resolvedImageUrl });
+          }
         }
       }
 
@@ -191,7 +207,8 @@ export function usePublishDraft() {
         auctionDuration: draft.listingFormat === "AUCTION"
           ? (draft.auctionDuration || "Days_7")
           : undefined,
-        imageUrl: resolvedImageUrl,
+        // Include either `imageUrls` (preferred) or legacy `imageUrl`.
+        ...(resolvedImageUrls ? { imageUrls: resolvedImageUrls } : { imageUrl: resolvedImageUrl }),
         condition: draft.condition ?? "PRE_OWNED_GOOD",
         ebayCategoryId: draft.ebayCategoryId ?? "",
         itemSpecifics: draft.itemSpecifics ?? {},
