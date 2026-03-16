@@ -211,6 +211,7 @@ export default function AnalyzePage() {
       // 2. localStorage fallback for backwards compatibility
       let ebayToken: string | null = null;
       let postalCode: string | null = null;
+      let city: string | null = null;
 
       if (user?.id) {
         try {
@@ -220,8 +221,24 @@ export default function AnalyzePage() {
           if (tokenData?.token) {
             ebayToken = tokenData.token;
             postalCode = tokenData.postalCode ?? null;
+            city = tokenData.city ?? null;
+            console.log("AnalyzePage: retrieved stored token data", {
+              hasToken: !!tokenData.token,
+              postalCode,
+              city,
+            });
+          } else {
+            // Token retrieval failed, but we can still get postal_code from database
+            // This happens when eBay token is expired but profile is set
+            postalCode = tokenData?.postalCode ?? null;
+            city = tokenData?.city ?? null;
+            console.log("AnalyzePage: no token but got location data from database", {
+              postalCode,
+              city,
+            });
           }
-        } catch {
+        } catch (e) {
+          console.error("AnalyzePage: get_stored_token error", e);
           // fall through to localStorage
         }
       }
@@ -235,7 +252,23 @@ export default function AnalyzePage() {
         });
         if (error || data?.error) throw new Error(data?.error || error?.message || "Failed to get auth URL");
 
-        localStorage.setItem("pending_listing", JSON.stringify({ title, description: getDescriptionWithFooter(), listingFormat, listingPrice, auctionStartPrice, auctionBuyItNow: auctionBuyItNowEnabled ? auctionBuyItNow : null, imageUrl: imageUrls[0], ebayCategoryId, itemSpecifics, condition, fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId, paymentPolicyId: selectedPolicies.paymentPolicyId, returnPolicyId: selectedPolicies.returnPolicyId }));
+        localStorage.setItem("pending_listing", JSON.stringify({
+          title,
+          description: getDescriptionWithFooter(),
+          listingFormat,
+          listingPrice,
+          auctionStartPrice,
+          auctionBuyItNow: auctionBuyItNowEnabled ? auctionBuyItNow : null,
+          imageUrl: imageUrls[0],
+          ebayCategoryId,
+          itemSpecifics,
+          condition,
+          postalCode: postalCode || undefined,
+          city: city || undefined,
+          fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId,
+          paymentPolicyId: selectedPolicies.paymentPolicyId,
+          returnPolicyId: selectedPolicies.returnPolicyId,
+        }));
         window.location.href = data.authUrl;
         return;
       }
@@ -245,6 +278,7 @@ export default function AnalyzePage() {
           action: "create_draft",
           userToken: ebayToken,
           postalCode: postalCode || undefined,
+          city: city || undefined,
           title,
           description: getDescriptionWithFooter(),
           listingFormat,
