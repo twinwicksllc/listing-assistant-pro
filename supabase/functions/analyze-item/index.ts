@@ -667,6 +667,16 @@ Seller's note: "${voiceNote}"`;
       listing.title = listing.title.substring(0, 80).replace(/\s+\S*$/, "").trim();
     }
 
+    // --- Build suggestedCategories (dedupe, backfill names via exact DB lookup) ---
+    try {
+      const { buildSuggestedCategories } = await import("./_helpers/suggestedCategories.ts");
+      listing.suggestedCategories = await buildSuggestedCategories(listing, svc);
+    } catch (suggestErr) {
+      console.warn("Failed to build suggestedCategories:", suggestErr);
+      // keep whatever AI returned
+    }
+    // --- end suggestedCategories processing ---
+
     // --- Server-side melt value enforcement ---
     let meltValue: number | null = null;
     if (listing.metalType && listing.metalType !== "none" && listing.metalWeightOz > 0) {

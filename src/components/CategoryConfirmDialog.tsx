@@ -10,6 +10,7 @@ interface CategoryConfirmDialogProps {
 }
 
 type LookupState = "known" | "unknown" | "empty";
+type RemoteState = "unknown" | "valid" | "invalid" | "checking";
 
 /**
  * Dialog to confirm custom eBay category entry.
@@ -29,26 +30,51 @@ export default function CategoryConfirmDialog({
   const [loading, setLoading] = useState(true);
   const [categoryName, setCategoryName] = useState<string | null>(null);
   const [lookupState, setLookupState] = useState<LookupState>("empty");
+  const [remoteState, setRemoteState] = useState<RemoteState | null>(null);
 
   useEffect(() => {
     if (!open) return;
 
     setLoading(true);
     // Brief delay for UX polish
-    const timer = setTimeout(() => {
+      const timer = setTimeout(() => {
       if (!categoryId.trim()) {
         setLookupState("empty");
         setCategoryName(null);
+        setRemoteState(null);
       } else {
         const breadcrumb = EBAY_CATEGORY_BREADCRUMBS[categoryId];
         if (breadcrumb) {
           setCategoryName(breadcrumb);
           setLookupState("known");
+          setRemoteState("valid");
         } else {
-          // Not in our local map — but that doesn't mean it's invalid on eBay.
-          // Our map covers ~100 categories; eBay has 20,000+.
+          // Not in our local map — perform remote verification via function
           setCategoryName(null);
           setLookupState("unknown");
+          setRemoteState("checking");
+
+          (async () => {
+            try {
+              const resp = await fetch("/api/functions/v1/category-lookup", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "verify", categoryId }),
+              });
+              const json = await resp.json();
+              if (json.valid === true) {
+                setCategoryName(json.categoryName || null);
+                setRemoteState("valid");
+              } else if (json.valid === false) {
+                setRemoteState("invalid");
+              } else {
+                setRemoteState("unknown");
+              }
+            } catch (e) {
+              console.warn("Category verify request failed", e);
+              setRemoteState("unknown");
+            }
+          })();
         }
       }
       setLoading(false);
@@ -59,8 +85,8 @@ export default function CategoryConfirmDialog({
 
   if (!open) return null;
 
-  // Confirm is allowed for known AND unknown (but not empty)
-  const canConfirm = lookupState === "known" || lookupState === "unknown";
+  // Confirm allowed when known or remote-validated as valid; disallow when invalid or empty
+  const canConfirm = lookupState === "known" || remoteState === "valid" || remoteState === "checking";
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -127,15 +153,24 @@ export default function CategoryConfirmDialog({
               </div>
 
               <p className="text-xs text-muted-foreground border-l-2 border-amber-500/30 pl-3 py-2">
-                Tip: verify at{" "}
-                <a
-                  href={`https://www.ebay.com/b/bn_${categoryId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary underline"
-                >
-                  ebay.com/b/bn_{categoryId}
-                </a>
+                {remoteState === "checking" ? (
+                  "Checking category on eBay..."
+                ) : remoteState === "valid" ? (
+                  "Category verified on eBay."
+                ) : remoteState === "invalid" ? (
+                  "This category ID does not appear to exist on eBay. Please verify the number and try again."
+                ) : (
+                  <>Tip: verify at{' '}
+                    <a
+                      href={`https://www.ebay.com/b/bn_${categoryId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary underline"
+                    >
+                      ebay.com/b/bn_{categoryId}
+                    </a>
+                  </>
+                )}
               </p>
             </>
           ) : (
