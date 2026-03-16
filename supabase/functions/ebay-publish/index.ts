@@ -555,10 +555,11 @@ const CONDITION_DESCRIPTIONS: Record<string, string> = {
   CERTIFIED_REFURBISHED: "Professionally refurbished and certified to work like new.",
   SELLER_REFURBISHED: "Seller-refurbished item in good working condition.",
   // USED_* — correct conditions for Coins & Paper Money category tree
-  USED_EXCELLENT: "Lightly circulated. AU-50 to XF-45. Shows minimal wear on high points only.",
-  USED_VERY_GOOD: "Moderately circulated. VF-20 to VF-35. Major details clear with moderate wear.",
-  USED_GOOD: "Heavily circulated. F-12 to VG-10. All major features visible but worn.",
-  USED_ACCEPTABLE: "Heavily worn but identifiable. G-4 to G-6. Outline and major features visible.",
+  // NOTE: Do NOT include numerical grades (AU-50, MS-65, etc.) in descriptions unless coin is certified by NGC, PCGS, ANACS, ICG, CAC, or ICCS
+  USED_EXCELLENT: "Lightly circulated. Shows minimal wear on high points only.",
+  USED_VERY_GOOD: "Moderately circulated. Major details clear with moderate wear.",
+  USED_GOOD: "Heavily circulated. All major features visible but worn.",
+  USED_ACCEPTABLE: "Heavily worn but identifiable. Outline and major features visible.",
   FOR_PARTS_OR_NOT_WORKING: "Damaged, holed, bent, or corroded. Not suitable for collecting.",
   // Legacy aliases kept for backward compatibility
   EXCELLENT_REFURBISHED: "Lightly circulated. Shows minimal wear on high points only.",
