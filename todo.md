@@ -1,6 +1,47 @@
-# Listing Assistant Pro — Fix Tracker
+# Listing Assistant Pro — Feature Tracker & Status
 
-## Numerical grade removal for uncertified coins [COMPLETE — commit 64958da]
+## Recently Completed Features (v17-v27)
+
+### Multi-Image Support [COMPLETE — v27 #127]
+- [x] Support analyzing multiple photos of the same item
+- [x] Drafts can now store multiple image URLs (image_urls array)
+- [x] Fixed capture button flow for better UX
+- [x] Updated useDrafts, usePublishDraft, AnalyzePage, HomePage, exportCSV
+
+### Category Verification & Suggestions [COMPLETE — v26 #126]
+- [x] Improved category-lookup function with google_search integration
+- [x] Enhanced suggestedCategories helper function
+- [x] Added admin requirement for category store operations
+- [x] Added unit tests for category suggestions
+
+### Braided Hair Large Cent Categories [COMPLETE — v24, v25]
+- [x] Correct category ID to 39454 with Material requirement
+- [x] Added category 41085 for Braided Hair Large Cent
+
+### Category Input & CORS Fixes [COMPLETE — v23]
+- [x] Fixed custom category input persistence on AnalyzePage
+- [x] Fixed CORS issues for category-lookup
+- [x] Fixed wheat penny category fallback
+
+### Postal Code Persistence [COMPLETE — v26 #122]
+- [x] Fixed postal code persistence during eBay authentication
+- [x] Ensures location data flows correctly through auth flow
+
+### Custom Category Persistence [COMPLETE — v25 #121]
+- [x] Fixed custom category persistence on AnalyzePage
+- [x] Ensures user-selected categories are saved correctly
+
+### Edit Draft Persistence [COMPLETE — v24 #120]
+- [x] Fixed split-state bug in EditDraftModal
+- [x] Ensures draft edits persist correctly
+
+### Sequential Publishing [COMPLETE — v21 #119]
+- [x] Added sequential publishing logic with retry
+- [x] Added missing coin category mappings
+
+## Previous Fixes
+
+### Numerical grade removal for uncertified coins [COMPLETE — commit 64958da]
 - [x] User reported: analyze function still assigning numerical grades despite v18 fix
 - [x] Root cause: Section 4B contradicted the CRITICAL GRADING RULE
   - 4B said: "Assign a conservative Sheldon-scale grade (e.g., MS-63, AU-55, XF-45)"  
@@ -84,6 +125,168 @@
 - [x] analyze-item: fixed stale C: prefix note in itemSpecifics description
 - [x] analyze-item: added Color format rule to ASPECT VALUE FORMATS section
 - [x] Committed and pushed (2 commits: 0e98492, f59241a → main)
+
+## Additional Features to Consider
+
+### Based on Recent Codebase Analysis
+
+#### 1. Enhanced Category Mapping System [HIGH PRIORITY]
+**Current State:**
+- `category-lookup` function provides verified coin→category mappings
+- `setup-categories` seeds initial mappings (10 common coin types)
+- `category_mappings` table with confidence scores and verification sources
+
+**Potential Enhancements:**
+- [ ] Add bulk import tool for category mappings (CSV/JSON upload)
+- [ ] Implement category mapping approval workflow for team members
+- [ ] Add category mapping analytics (most requested, accuracy tracking)
+- [ ] Create admin UI for managing category mappings
+- [ ] Add automatic category suggestion improvement based on user feedback
+- [ ] Integrate more verification sources beyond Google Search
+
+#### 2. Multi-Image Analysis Improvements [MEDIUM PRIORITY]
+**Current State:**
+- Multi-image drafts are now supported (v27)
+- Images stored in `image_urls` array
+
+**Potential Enhancements:**
+- [ ] AI analysis of multiple angles (front, back, edge, obverse)
+- [ ] Image quality detection and enhancement suggestions
+- [ ] Automatic image ordering (obverse first, reverse second, etc.)
+- [ ] Image comparison for detecting multiple items in one listing
+- [ ] Multi-image pricing (different angles may reveal different conditions)
+
+#### 3. Advanced Pricing Features [HIGH PRIORITY]
+**Current State:**
+- AI-generated price range based on recent sold listings
+- Melt value protection for precious metals
+- Competitor price tracking
+
+**Potential Enhancements:**
+- [ ] Price trend analysis (historical price charts)
+- [ ] Seasonal pricing adjustments
+- [ ] Bulk pricing suggestions for multiple items
+- [ ] Price optimization algorithms (maximize sell-through vs. profit)
+- [ ] Competitive intelligence (market position relative to competitors)
+- [ ] Price alerts when similar items sell outside expected range
+
+#### 4. Draft Management Enhancements [MEDIUM PRIORITY]
+**Current State:**
+- Drafts stored in database
+- Edit functionality available
+- Export to CSV/other formats
+
+**Potential Enhancements:**
+- [ ] Draft templates and presets
+- [ ] Batch operations (bulk publish, bulk delete, bulk edit)
+- [ ] Draft sharing between team members
+- [ ] Draft versioning and history
+- [ ] Auto-save improvements (debounced saving)
+- [ ] Draft analytics (completion rates, common edit patterns)
+
+#### 5. eBay Integration Improvements [HIGH PRIORITY]
+**Current State:**
+- Direct publishing to eBay
+- Business policy selection
+- Inventory location management
+- Sequential publishing with retry logic
+
+**Potential Enhancements:**
+- [ ] eBay listing monitoring (views, watchers, offers)
+- [ ] Automatic price adjustments based on market data
+- [ ] Bulk listing updates (price, quantity, descriptions)
+- [ ] eBay order syncing and management
+- [ ] Message inbox integration
+- [ ] Listing performance analytics
+
+#### 6. Organization & Team Features [MEDIUM PRIORITY]
+**Current State:**
+- Organization support exists
+- Team member management
+
+**Potential Enhancements:**
+- [ ] Role-based permissions (admin, lister, viewer)
+- [ ] Team activity logging and audit trail
+- [ ] Organization-wide analytics and reporting
+- [ ] Shared templates and policies
+- [ ] Team collaboration features (comments, assignments)
+
+#### 7. AI & Analysis Improvements [HIGH PRIORITY]
+**Current State:**
+- Gemini AI for image analysis
+- Voice note support
+- Title/description/item specifics generation
+
+**Potential Enhancements:**
+- [ ] Fine-tuned AI models for specific coin categories
+- [ ] Counterfeit detection alerts
+- [ ] Historical significance highlighting
+- [ ] Rarity scoring and key date identification
+- [ ] Condition grading consistency checks
+- [ ] Multi-language support for international listings
+
+#### 8. User Experience & UI Improvements [MEDIUM PRIORITY]
+**Current State:**
+- PWA support
+- Mobile-responsive design
+- Welcome tour
+
+**Potential Enhancements:**
+- [ ] Dark mode support
+- [ ] Keyboard shortcuts and hotkeys
+- [ ] Advanced search and filtering
+- [ ] Customizable dashboards
+- [ ] Drag-and-drop image reordering
+- [ ] Mobile app (React Native)
+
+#### 9. Analytics & Reporting [HIGH PRIORITY]
+**Current State:**
+- Usage tracking
+- System status monitoring
+
+**Potential Enhancements:**
+- [ ] Detailed sales analytics
+- [ ] Profit/loss tracking
+- [ ] Time-to-sell analysis
+- [ ] Category performance reports
+- [ ] AI accuracy metrics
+- [ ] Export to various formats (PDF, Excel, Google Sheets)
+
+#### 10. Integration Extensions [LOW PRIORITY]
+**Current State:**
+- eBay integration
+- Stripe for payments
+- Supabase for backend
+
+**Potential Enhancements:**
+- [ ] Other marketplace integrations (Etsy, Mercari, Poshmark)
+- [ ] Shipping carrier integrations (USPS, FedEx, UPS)
+- [ ] Inventory management system integrations
+- [ ] Accounting software integrations (QuickBooks, Xero)
+- [ ] Email marketing integrations
+
+### Infrastructure & DevOps Improvements
+
+#### Testing & Quality Assurance
+- [ ] Comprehensive unit test suite
+- [ ] E2E testing with Playwright
+- [ ] Load testing for concurrent users
+- [ ] Automated regression testing
+- [ ] Performance monitoring and optimization
+
+#### Documentation & Onboarding
+- [ ] API documentation
+- [ ] Developer guide for extensions
+- [ ] Video tutorials
+- [ ] FAQ and troubleshooting guide
+- [ ] Community forum setup
+
+#### Security & Compliance
+- [ ] Security audit
+- [ ] GDPR compliance checklist
+- [ ] Data encryption at rest
+- [ ] Enhanced rate limiting
+- [ ] Fraud detection systems
 
 ## Previous fixes
 - [x] v14 (072bc76): fix errorId 25002 Country of Origin too long — AI hallucination guard
