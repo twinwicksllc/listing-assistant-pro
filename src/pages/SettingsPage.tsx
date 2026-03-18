@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Settings, User, CreditCard, Zap, Loader2, Check, ExternalLink, AlertCircle, Shield } from "lucide-react";
+import { ArrowLeft, Settings, User, CreditCard, Zap, Loader2, Check, ExternalLink, AlertCircle, Shield, Crown, Store } from "lucide-react";
 import { useAuth, PLANS } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -15,7 +15,11 @@ type SettingsTab = "profile" | "billing" | "integrations";
 export default function SettingsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { isPro, isUnlimited, isPaid, subscription, usage, refreshSubscription, currentPlanLimits, isOwner, user, isAdmin } = useAuth();
+  const {
+    currentPlan, isStarter, isPro, isShop, isPaid, subscription, usage,
+    refreshSubscription, currentPlanLimits, isOwner, user, isAdmin, planFeatures,
+    isUnlimited,
+  } = useAuth();
   const paramTab = searchParams.get("tab") as SettingsTab | null;
   const initialTab = (paramTab && ["profile", "billing", "integrations"].includes(paramTab) ? paramTab : "profile") as SettingsTab;
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
@@ -56,11 +60,13 @@ export default function SettingsPage() {
     return () => { cancelled = true; };
   }, [user?.id]);
 
-  const handleCheckout = async (planKey: "pro" | "unlimited") => {
+  const handleCheckout = async (planKey: "starter" | "pro" | "shop") => {
     setCheckoutLoading(planKey);
     try {
+      const plan = PLANS[planKey];
+      if (!("priceId" in plan)) throw new Error("No price configured for this plan");
       const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { priceId: PLANS[planKey].priceId },
+        body: { priceId: plan.priceId },
       });
       if (error) throw error;
       if (data?.url) {
@@ -138,6 +144,16 @@ export default function SettingsPage() {
 
     toast.success("eBay account disconnected");
   };
+
+  // Build current plan display string
+  const planDisplayName = (() => {
+    switch (currentPlan) {
+      case "shop": return "Shop - $99/month";
+      case "pro": return "Pro - $49/month";
+      case "starter": return "Starter - $19/month";
+      default: return "Free";
+    }
+  })();
 
   const tabs = [
     { id: "profile" as const, label: "Profile", icon: User },
@@ -247,13 +263,7 @@ export default function SettingsPage() {
                 <div className="flex items-start justify-between mb-4">
                   <div>
                     <h3 className="font-semibold text-foreground">Current Plan</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {isUnlimited
-                        ? "Unlimited - $49.99/month"
-                        : isPro
-                          ? "Pro - $19.99/month"
-                          : "Starter - Free"}
-                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">{planDisplayName}</p>
                   </div>
                   {isPaid && (
                     <span className="px-3 py-1 rounded-full bg-green-500/20 text-green-600 text-xs font-medium">
@@ -269,11 +279,11 @@ export default function SettingsPage() {
                     <div className="space-y-2 text-sm mb-4">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">AI Analysis</span>
-                        <span className="font-medium">{usage.aiAnalysis} / {currentPlanLimits.analysisLimit === Infinity ? "∞" : currentPlanLimits.analysisLimit}</span>
+                        <span className="font-medium">{usage.aiAnalysis} / {currentPlanLimits.analysisLimit}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">eBay Publishes</span>
-                        <span className="font-medium">{usage.ebayPublish} / {currentPlanLimits.publishLimit === Infinity ? "∞" : currentPlanLimits.publishLimit}</span>
+                        <span className="font-medium">{usage.ebayPublish} / {currentPlanLimits.publishLimit}</span>
                       </div>
                     </div>
 
@@ -290,66 +300,47 @@ export default function SettingsPage() {
                 )}
               </div>
 
-              {/* Plan Comparison */}
-              {!isPaid && (
+              {/* Upgrade Options */}
+              {!isShop && (
                 <div className="space-y-4">
                   <h3 className="font-semibold text-foreground">Upgrade Your Plan</h3>
 
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {/* Pro Plan */}
-                    <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-colors">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Zap className="w-5 h-5 text-primary" />
-                        <h4 className="font-semibold text-foreground">Pro</h4>
-                      </div>
-                      <p className="text-2xl font-bold text-foreground mb-4">$19.99/mo</p>
-                      <ul className="space-y-2 mb-6 text-sm">
-                        <li className="flex items-center gap-2">
-                          <Check className="w-4 h-4 text-green-500" />
-                          <span className="text-muted-foreground">50 AI Analyses</span>
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <Check className="w-4 h-4 text-green-500" />
-                          <span className="text-muted-foreground">25 eBay Publishes</span>
-                        </li>
-                      </ul>
-                      <button
-                        onClick={() => handleCheckout("pro")}
-                        disabled={checkoutLoading === "pro"}
-                        className="w-full py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
-                      >
-                        {checkoutLoading === "pro" ? "Loading..." : "Upgrade to Pro"}
-                      </button>
-                    </div>
-
-                    {/* Unlimited Plan */}
-                    <div className="bg-card border border-border rounded-xl p-6 relative hover:border-primary/50 transition-colors ring-1 ring-primary/20">
-                      <span className="absolute top-0 right-0 bg-primary text-primary-foreground text-xs font-semibold px-3 py-1 rounded-bl-lg">
-                        RECOMMENDED
-                      </span>
-                      <div className="flex items-center gap-2 mb-3">
-                        <Zap className="w-5 h-5 text-primary" />
-                        <h4 className="font-semibold text-foreground">Unlimited</h4>
-                      </div>
-                      <p className="text-2xl font-bold text-foreground mb-4">$49.99/mo</p>
-                      <ul className="space-y-2 mb-6 text-sm">
-                        <li className="flex items-center gap-2">
-                          <Check className="w-4 h-4 text-green-500" />
-                          <span className="text-muted-foreground">Unlimited AI Analyses</span>
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <Check className="w-4 h-4 text-green-500" />
-                          <span className="text-muted-foreground">Unlimited eBay Publishes</span>
-                        </li>
-                      </ul>
-                      <button
-                        onClick={() => handleCheckout("unlimited")}
-                        disabled={checkoutLoading === "unlimited"}
-                        className="w-full py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
-                      >
-                        {checkoutLoading === "unlimited" ? "Loading..." : "Upgrade to Unlimited"}
-                      </button>
-                    </div>
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {/* Show plans higher than current */}
+                    {currentPlan === "free" && (
+                      <UpgradeCard
+                        icon={Crown}
+                        name="Starter"
+                        price="$19/mo"
+                        features={["25 listings / month", "Basic AI enhancement"]}
+                        onUpgrade={() => handleCheckout("starter")}
+                        loading={checkoutLoading === "starter"}
+                        disabled={checkoutLoading !== null}
+                      />
+                    )}
+                    {(currentPlan === "free" || currentPlan === "starter") && (
+                      <UpgradeCard
+                        icon={Zap}
+                        name="Pro"
+                        price="$49/mo"
+                        features={["200 listings / month", "Voice notes + melt protection", "Listing analytics"]}
+                        onUpgrade={() => handleCheckout("pro")}
+                        loading={checkoutLoading === "pro"}
+                        disabled={checkoutLoading !== null}
+                        recommended
+                      />
+                    )}
+                    {currentPlan !== "shop" && (
+                      <UpgradeCard
+                        icon={Store}
+                        name="Shop"
+                        price="$99/mo"
+                        features={["~1,200 listings / month", "Everything in Pro", "Team / multi-user org"]}
+                        onUpgrade={() => handleCheckout("shop")}
+                        loading={checkoutLoading === "shop"}
+                        disabled={checkoutLoading !== null}
+                      />
+                    )}
                   </div>
                 </div>
               )}
@@ -446,6 +437,53 @@ export default function SettingsPage() {
 
       <BottomNav />
       <ProfileModal open={showProfileModal} onClose={() => setShowProfileModal(false)} />
+    </div>
+  );
+}
+
+// ─── Upgrade Card Sub-component ────────────────────────────────────────────
+
+function UpgradeCard({
+  icon: Icon, name, price, features, onUpgrade, loading, disabled, recommended,
+}: {
+  icon: React.ElementType;
+  name: string;
+  price: string;
+  features: string[];
+  onUpgrade: () => void;
+  loading: boolean;
+  disabled: boolean;
+  recommended?: boolean;
+}) {
+  return (
+    <div className={`bg-card border rounded-xl p-6 hover:border-primary/50 transition-colors ${
+      recommended ? "ring-1 ring-primary/20 relative" : "border-border"
+    }`}>
+      {recommended && (
+        <span className="absolute top-0 right-0 bg-primary text-primary-foreground text-xs font-semibold px-3 py-1 rounded-bl-lg">
+          RECOMMENDED
+        </span>
+      )}
+      <div className="flex items-center gap-2 mb-3">
+        <Icon className="w-5 h-5 text-primary" />
+        <h4 className="font-semibold text-foreground">{name}</h4>
+      </div>
+      <p className="text-2xl font-bold text-foreground mb-4">{price}</p>
+      <ul className="space-y-2 mb-6 text-sm">
+        {features.map((f) => (
+          <li key={f} className="flex items-center gap-2">
+            <Check className="w-4 h-4 text-green-500" />
+            <span className="text-muted-foreground">{f}</span>
+          </li>
+        ))}
+      </ul>
+      <button
+        onClick={onUpgrade}
+        disabled={disabled}
+        className="w-full py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+      >
+        {loading ? "Loading..." : `Upgrade to ${name}`}
+      </button>
     </div>
   );
 }

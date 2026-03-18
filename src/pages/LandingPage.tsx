@@ -92,28 +92,36 @@ const STEPS = [
 
 const PLANS = [
   {
-    name: "Starter",
+    name: "Free",
     price: "Free",
     period: "",
-    features: ["5 AI analyses / month", "3 eBay publishes / month", "Basic item recognition", "Draft saving"],
+    features: ["6 listings / month", "Basic item recognition", "Draft saving"],
     cta: "Get Started Free",
     highlight: false,
   },
   {
-    name: "Pro",
-    price: "$19.99",
+    name: "Starter",
+    price: "$19",
     period: "/mo",
-    features: ["50 AI analyses / month", "25 eBay publishes / month", "Coin grading + rationale", "Live spot price protection", "eBay sold comps"],
-    cta: "Start Pro",
+    features: ["25 listings / month", "Basic AI enhancement", "eBay publishing", "Draft saving"],
+    cta: "Start Listing",
+    highlight: false,
+  },
+  {
+    name: "Pro",
+    price: "$49",
+    period: "/mo",
+    features: ["200 listings / month", "Full AI enhancement", "Voice notes", "Melt value protection", "Listing analytics"],
+    cta: "Go Pro",
     highlight: true,
     badge: "Most Popular",
   },
   {
-    name: "Unlimited",
-    price: "$49.99",
+    name: "Shop",
+    price: "$99",
     period: "/mo",
-    features: ["Unlimited AI analyses", "Unlimited eBay publishes", "Everything in Pro", "Team / multi-lister support", "Priority support"],
-    cta: "Go Unlimited",
+    features: ["~1,200 listings / month", "Everything in Pro", "Team / multi-user org", "Priority support"],
+    cta: "Open Shop",
     highlight: false,
   },
 ];
@@ -342,7 +350,7 @@ export default function LandingPage() {
             <h2 className="text-2xl sm:text-3xl font-extrabold text-foreground">Simple, transparent pricing</h2>
             <p className="text-sm text-muted-foreground">Start free. Upgrade when you're ready to scale.</p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {PLANS.map((plan) => (
               <div
                 key={plan.name}

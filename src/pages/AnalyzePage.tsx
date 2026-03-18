@@ -15,7 +15,7 @@ import { EbayPolicySelector } from "@/components/EbayPolicySelector";
 import type { SelectedPolicies } from "@/types/ebay-policies";
 
 export default function AnalyzePage() {
-  const { canAnalyze, canPublish, isPro, isUnlimited, isPaid, usage, recordUsage, isOwner, isLister, currentPlanLimits, user } = useAuth();
+  const { canAnalyze, canPublish, isPro, isShop, isUnlimited, isPaid, usage, recordUsage, isOwner, isLister, currentPlanLimits, planFeatures, currentPlan, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const { addDraft } = useDrafts();
@@ -95,7 +95,7 @@ export default function AnalyzePage() {
 
   const handleGenerate = async () => {
     if (!canAnalyze) {
-      toast.error(`Monthly AI analysis limit reached (${PLANS.starter.analysisLimit}). Upgrade to Pro for unlimited.`);
+      toast.error(`Monthly analysis limit reached (${currentPlanLimits.analysisLimit}). Upgrade for more listings.`);
       navigate("/billing");
       return;
     }
@@ -203,7 +203,7 @@ export default function AnalyzePage() {
 
   const handlePublish = async () => {
     if (!canPublish) {
-      toast.error(`Monthly publish limit reached (${PLANS.starter.publishLimit}). Upgrade to Pro for unlimited.`);
+      toast.error(`Monthly publish limit reached (${currentPlanLimits.publishLimit}). Upgrade for more listings.`);
       navigate("/billing");
       return;
     }
@@ -415,11 +415,9 @@ export default function AnalyzePage() {
               <Loader2 className="w-4 h-4 animate-spin" />
               Analyzing {imageUrls.length} photo{imageUrls.length !== 1 && "s"} with AI...
             </div>
-            {!isUnlimited && (
-              <p className="text-center text-xs text-muted-foreground">
-                {usage.aiAnalysis}/{currentPlanLimits.analysisLimit === Infinity ? "∞" : currentPlanLimits.analysisLimit} analyses used this month
-              </p>
-            )}
+            <p className="text-center text-xs text-muted-foreground">
+              {usage.aiAnalysis}/{currentPlanLimits.analysisLimit} analyses used this month
+            </p>
           </div>
         ) : !generated ? (
           // Analysis failed — let user retry
@@ -432,16 +430,14 @@ export default function AnalyzePage() {
               <Sparkles className="w-4 h-4" />
               Retry Analysis
             </button>
-            {!isUnlimited && (
-              <p className="text-center text-xs text-muted-foreground">
-                {usage.aiAnalysis}/{currentPlanLimits.analysisLimit === Infinity ? "∞" : currentPlanLimits.analysisLimit} analyses used this month
-                {!canAnalyze && (
-                  <button onClick={() => navigate("/billing")} className="ml-1 text-primary hover:underline inline-flex items-center gap-0.5">
-                    <Crown className="w-3 h-3" /> Upgrade
-                  </button>
-                )}
-              </p>
-            )}
+            <p className="text-center text-xs text-muted-foreground">
+              {usage.aiAnalysis}/{currentPlanLimits.analysisLimit} analyses used this month
+              {!canAnalyze && (
+                <button onClick={() => navigate("/billing")} className="ml-1 text-primary hover:underline inline-flex items-center gap-0.5">
+                  <Crown className="w-3 h-3" /> Upgrade
+                </button>
+              )}
+            </p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -707,8 +703,17 @@ export default function AnalyzePage() {
               />
             </div>
 
-            {/* Pricing */}
-            <PricingCard priceMin={priceMin} priceMax={priceMax} searchQuery={title} metalType={metalType} metalWeightOz={metalWeightOz} initialMeltValue={meltValue} initialSpotPrices={spotPrices} pricingNotes={pricingNotes} />
+            {/* Pricing — melt protection gated to Pro/Shop */}
+            <PricingCard
+              priceMin={priceMin}
+              priceMax={priceMax}
+              searchQuery={title}
+              metalType={planFeatures.hasMeltProtection ? metalType : undefined}
+              metalWeightOz={planFeatures.hasMeltProtection ? metalWeightOz : undefined}
+              initialMeltValue={planFeatures.hasMeltProtection ? meltValue : null}
+              initialSpotPrices={planFeatures.hasMeltProtection ? spotPrices : undefined}
+              pricingNotes={pricingNotes}
+            />
 
             {/* Listing Format + Price */}
             <div className="space-y-3">

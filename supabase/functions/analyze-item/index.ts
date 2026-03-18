@@ -69,13 +69,26 @@ serve(async (req: Request) => {
       });
     }
 
-    // Admin emails always get unlimited access
+    // Admin emails always get full Shop-level access
     const ADMIN_EMAILS = ["twinwicksllc@gmail.com"];
     const isAdmin = userEmail ? ADMIN_EMAILS.includes(userEmail) : false;
     console.log("analyze-item: user email =", userEmail, "isAdmin =", isAdmin);
 
-    // Check subscription status via Stripe to determine tier (skip for admins)
-    let tier: "starter" | "pro" | "unlimited" = isAdmin ? "unlimited" : "starter";
+    // ── 4-Tier plan detection via Stripe ────────────────────────────────────
+    // Tiers: free (6/mo) → starter $19 (25/mo) → pro $49 (200/mo) → shop $99 (1200/mo soft)
+    const PRODUCT_MAP: Record<string, "starter" | "pro" | "shop"> = {
+      "prod_U6zUiC1SYuPrGU": "starter",   // Starter $19/mo  TODO: confirm
+      "prod_U70aT1KvuI2uDx": "pro",       // Pro $49/mo      TODO: confirm
+      "prod_SHOP_PLACEHOLDER": "shop",     // Shop $99/mo     TODO: replace
+    };
+    const TIER_LIMITS: Record<string, number> = {
+      free: 6,
+      starter: 25,
+      pro: 200,
+      shop: 1200,
+    };
+
+    let tier: "free" | "starter" | "pro" | "shop" = isAdmin ? "shop" : "free";
     const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
     if (!isAdmin && STRIPE_SECRET_KEY && userEmail) {
       try {
@@ -86,11 +99,7 @@ serve(async (req: Request) => {
           const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: "active", limit: 1 });
           if (subs.data.length > 0) {
             const productId = subs.data[0].items.data[0].price.product;
-            if (productId === "prod_U70aT1KvuI2uDx") {
-              tier = "unlimited";
-            } else if (productId === "prod_U6zUiC1SYuPrGU") {
-              tier = "pro";
-            }
+            tier = PRODUCT_MAP[productId as string] ?? "free";
           }
         }
       } catch (stripeErr) {
@@ -99,7 +108,9 @@ serve(async (req: Request) => {
     }
 
     // Count this month's AI analyses from usage_tracking
-    if (tier !== "unlimited") {
+    // Shop tier uses a soft threshold — warn but still allow (for now)
+    const ANALYSIS_LIMIT = TIER_LIMITS[tier];
+    {
       const startOfMonth = new Date();
       startOfMonth.setDate(1);
       startOfMonth.setHours(0, 0, 0, 0);
@@ -111,19 +122,24 @@ serve(async (req: Request) => {
         .eq("action_type", "ai_analysis")
         .gte("created_at", startOfMonth.toISOString());
 
-      const ANALYSIS_LIMIT = tier === "pro" ? 50 : 5;
       const currentCount = count ?? 0;
 
       if (countErr) {
         console.error("Usage count query failed:", countErr);
-      } else if (currentCount >= ANALYSIS_LIMIT) {
-        const upgradeMsg = tier === "pro"
-          ? `Monthly analysis limit reached (${ANALYSIS_LIMIT}). Upgrade to Unlimited for no limits.`
-          : `Monthly analysis limit reached (${ANALYSIS_LIMIT}). Upgrade to Pro or Unlimited for more.`;
+      } else if (tier !== "shop" && currentCount >= ANALYSIS_LIMIT) {
+        // Hard limit for free, starter, pro — suggest next tier up
+        const upgradeHints: Record<string, string> = {
+          free: "Upgrade to Starter ($19/mo) for 25 listings, or Pro for even more.",
+          starter: "Upgrade to Pro ($49/mo) for 200 listings with voice notes & analytics.",
+          pro: "Upgrade to Shop ($99/mo) for ~1,200 listings and team features.",
+        };
         return new Response(
-          JSON.stringify({ error: upgradeMsg }),
+          JSON.stringify({ error: `Monthly limit reached (${ANALYSIS_LIMIT}). ${upgradeHints[tier]}` }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
+      } else if (tier === "shop" && currentCount >= ANALYSIS_LIMIT) {
+        // Soft threshold for Shop — log warning but allow
+        console.warn(`Shop user ${userId} exceeded soft threshold: ${currentCount}/${ANALYSIS_LIMIT}`);
       }
     }
 

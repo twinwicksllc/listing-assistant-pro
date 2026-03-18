@@ -46,7 +46,7 @@ const TOUR_STEPS: TourStep[] = [
 ];
 
 export default function HomePage() {
-  const { signOut, recordUsage } = useAuth();
+  const { signOut, recordUsage, planFeatures } = useAuth();
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
@@ -417,6 +417,7 @@ export default function HomePage() {
               </div>
 
               {/* Voice Note Section */}
+              {planFeatures.hasVoiceNotes ? (
               <div className="space-y-2">
                 <div className="flex items-center gap-1.5">
                   <Mic className="w-3.5 h-3.5 text-primary" />
@@ -474,6 +475,15 @@ export default function HomePage() {
                   </div>
                 )}
               </div>
+              ) : (
+              <div className="bg-muted/50 border border-border rounded-lg px-4 py-3 flex items-center gap-3">
+                <Mic className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Voice Notes</p>
+                  <p className="text-[10px] text-muted-foreground/70">Upgrade to Pro ($49/mo) to add voice notes to your listings.</p>
+                </div>
+              </div>
+              )}
 
               {/* Process button */}
               <button

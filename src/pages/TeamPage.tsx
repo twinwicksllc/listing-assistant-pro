@@ -30,7 +30,7 @@ interface PendingInvite {
 
 export default function TeamPage() {
   const navigate = useNavigate();
-  const { user, org, isOwner, refreshOrg } = useAuth();
+  const { user, org, isOwner, refreshOrg, planFeatures } = useAuth();
   const [members, setMembers] = useState<OrgMember[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
@@ -204,6 +204,23 @@ export default function TeamPage() {
       </header>
 
       <div className="px-5 md:px-8 lg:px-12 max-w-3xl mx-auto space-y-6">
+        {/* Shop-tier gate for org/team features */}
+        {!planFeatures.hasOrgFeature && (
+          <div className="bg-muted/50 border border-border rounded-xl p-6 text-center space-y-3">
+            <h3 className="text-sm font-semibold text-foreground">Team features require Shop plan</h3>
+            <p className="text-xs text-muted-foreground">
+              Upgrade to Shop ($99/mo) to invite team members, manage multiple listers, and share inventory across your organization.
+            </p>
+            <button
+              onClick={() => navigate("/billing")}
+              className="px-6 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              Upgrade to Shop
+            </button>
+          </div>
+        )}
+
+        {planFeatures.hasOrgFeature && <>
         {/* Pending invitations for current user */}
         {pendingInvites.length > 0 && (
           <div className="space-y-2">
@@ -340,6 +357,7 @@ export default function TeamPage() {
             )}
           </div>
         )}
+        </>}
       </div>
 
       <BottomNav />

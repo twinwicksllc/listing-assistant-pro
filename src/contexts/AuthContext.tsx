@@ -2,27 +2,65 @@ import { createContext, useContext, useEffect, useState, useCallback, ReactNode 
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
+// ─── 4-Tier Plan Configuration ──────────────────────────────────────────────
+// Stripe product/price IDs are placeholders — update with real values after
+// creating them in the Stripe Dashboard.
 export const PLANS = {
-  starter: { name: "Starter", price: 0, analysisLimit: 5, publishLimit: 3 },
+  free: {
+    name: "Free",
+    price: 0,
+    publishLimit: 6,
+    analysisLimit: 6,
+    hasAiEnhancement: false,
+    hasVoiceNotes: false,
+    hasMeltProtection: false,
+    hasListingAnalytics: false,
+    hasOrgFeature: false,
+  },
+  starter: {
+    name: "Starter",
+    price: 19,
+    publishLimit: 25,
+    analysisLimit: 25,
+    priceId: "price_1T8lVU4bX0d1SiThMDayhDj5",   // TODO: confirm or replace
+    productId: "prod_U6zUiC1SYuPrGU",              // TODO: confirm or replace
+    hasAiEnhancement: true,   // basic AI enhancement
+    hasVoiceNotes: false,
+    hasMeltProtection: false,
+    hasListingAnalytics: false,
+    hasOrgFeature: false,
+  },
   pro: {
     name: "Pro",
-    price: 19.99,
-    analysisLimit: 50,
-    publishLimit: 25,
-    priceId: "price_1T8lVU4bX0d1SiThMDayhDj5",
-    productId: "prod_U6zUiC1SYuPrGU",
+    price: 49,
+    publishLimit: 200,
+    analysisLimit: 200,
+    priceId: "price_1T8mZ84bX0d1SiThFgvRubiN",    // TODO: confirm or replace
+    productId: "prod_U70aT1KvuI2uDx",              // TODO: confirm or replace
+    hasAiEnhancement: true,   // full AI enhancement
+    hasVoiceNotes: true,
+    hasMeltProtection: true,
+    hasListingAnalytics: true,
+    hasOrgFeature: false,
   },
-  unlimited: {
-    name: "Unlimited",
-    price: 49.99,
-    analysisLimit: Infinity,
-    publishLimit: Infinity,
-    priceId: "price_1T8mZ84bX0d1SiThFgvRubiN",
-    productId: "prod_U70aT1KvuI2uDx",
+  shop: {
+    name: "Shop",
+    price: 99,
+    publishLimit: 1200,       // soft threshold
+    analysisLimit: 1200,      // soft threshold
+    priceId: "price_SHOP_PLACEHOLDER",              // TODO: create in Stripe
+    productId: "prod_SHOP_PLACEHOLDER",             // TODO: create in Stripe
+    hasAiEnhancement: true,   // full AI enhancement
+    hasVoiceNotes: true,
+    hasMeltProtection: true,
+    hasListingAnalytics: true,
+    hasOrgFeature: true,
   },
 } as const;
 
-// Admin emails that always get unlimited access regardless of subscription
+export type PlanKey = keyof typeof PLANS;
+
+// Admin emails that always get full Shop-level access regardless of subscription
 const ADMIN_EMAILS = ["twinwicksllc@gmail.com"];
 
 export type OrgRole = "owner" | "lister";
@@ -48,6 +86,14 @@ interface OrgState {
   loading: boolean;
 }
 
+interface PlanFeatures {
+  hasAiEnhancement: boolean;
+  hasVoiceNotes: boolean;
+  hasMeltProtection: boolean;
+  hasListingAnalytics: boolean;
+  hasOrgFeature: boolean;
+}
+
 interface AuthContextType {
   session: Session | null;
   user: User | null;
@@ -57,11 +103,19 @@ interface AuthContextType {
   usage: UsageState;
   refreshSubscription: () => Promise<void>;
   refreshUsage: () => Promise<void>;
+  // Tier booleans
+  currentPlan: PlanKey;
+  isStarter: boolean;
   isPro: boolean;
-  isUnlimited: boolean;
+  isShop: boolean;
   isPaid: boolean;
   isPastDue: boolean;
   isAdmin: boolean;
+  // Feature flags (derived from plan)
+  planFeatures: PlanFeatures;
+  // Legacy aliases kept for backward-compat during migration
+  isUnlimited: boolean;
+  // Usage gates
   canAnalyze: boolean;
   canPublish: boolean;
   recordUsage: (actionType: "ai_analysis" | "ebay_publish" | "optimize" | "export") => Promise<void>;
@@ -72,6 +126,14 @@ interface AuthContextType {
   currentPlanLimits: { analysisLimit: number; publishLimit: number };
 }
 
+const defaultFeatures: PlanFeatures = {
+  hasAiEnhancement: false,
+  hasVoiceNotes: false,
+  hasMeltProtection: false,
+  hasListingAnalytics: false,
+  hasOrgFeature: false,
+};
+
 const AuthContext = createContext<AuthContextType>({
   session: null,
   user: null,
@@ -81,11 +143,15 @@ const AuthContext = createContext<AuthContextType>({
   usage: { aiAnalysis: 0, ebayPublish: 0 },
   refreshSubscription: async () => {},
   refreshUsage: async () => {},
+  currentPlan: "free",
+  isStarter: false,
   isPro: false,
-  isUnlimited: false,
+  isShop: false,
   isPaid: false,
   isPastDue: false,
   isAdmin: false,
+  planFeatures: defaultFeatures,
+  isUnlimited: false,
   canAnalyze: true,
   canPublish: true,
   recordUsage: async () => {},
@@ -93,7 +159,7 @@ const AuthContext = createContext<AuthContextType>({
   isOwner: false,
   isLister: false,
   refreshOrg: async () => {},
-  currentPlanLimits: { analysisLimit: 5, publishLimit: 3 },
+  currentPlanLimits: { analysisLimit: 6, publishLimit: 6 },
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -103,6 +169,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     subscribed: false,
     productId: null,
     subscriptionEnd: null,
+    status: null,
+    cancelAtPeriodEnd: false,
     loading: true,
   });
   const [usage, setUsage] = useState<UsageState>({ aiAnalysis: 0, ebayPublish: 0 });
@@ -218,29 +286,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [session, refreshSubscription]);
 
+  // ─── Derived tier values ──────────────────────────────────────────────────
   const isAdmin = ADMIN_EMAILS.includes(session?.user?.email ?? "");
-  // trialing counts as a paid plan (Stripe sends trialing status before first charge)
   const isActivePaid = subscription.subscribed || subscription.status === "trialing";
-  const isPro = !isAdmin && isActivePaid && subscription.productId === PLANS.pro.productId;
-  const isUnlimited = isAdmin || (isActivePaid && subscription.productId === PLANS.unlimited.productId);
-  const isPaid = isPro || isUnlimited;
+
+  // Determine current plan from product ID
+  const resolvedPlan: PlanKey = (() => {
+    if (isAdmin) return "shop";
+    if (!isActivePaid) return "free";
+    if (subscription.productId === PLANS.shop.productId) return "shop";
+    if (subscription.productId === PLANS.pro.productId) return "pro";
+    if (subscription.productId === PLANS.starter.productId) return "starter";
+    return "free";
+  })();
+
+  const isStarter = resolvedPlan === "starter";
+  const isPro = resolvedPlan === "pro";
+  const isShop = resolvedPlan === "shop";
+  const isPaid = isStarter || isPro || isShop;
   const isPastDue = subscription.status === "past_due";
-  const currentPlanLimits = isUnlimited
-    ? { analysisLimit: Infinity, publishLimit: Infinity }
-    : isPro
-      ? { analysisLimit: PLANS.pro.analysisLimit, publishLimit: PLANS.pro.publishLimit }
-      : { analysisLimit: PLANS.starter.analysisLimit, publishLimit: PLANS.starter.publishLimit };
-  // Unlimited users always have access; Pro users checked against Pro limits; Starter against Starter limits
-  const finalCanAnalyze = isUnlimited
-    ? true
-    : isPro
-      ? usage.aiAnalysis < PLANS.pro.analysisLimit
-      : usage.aiAnalysis < PLANS.starter.analysisLimit;
-  const finalCanPublish = isUnlimited
-    ? true
-    : isPro
-      ? usage.ebayPublish < PLANS.pro.publishLimit
-      : usage.ebayPublish < PLANS.starter.publishLimit;
+
+  // Legacy alias
+  const isUnlimited = isShop;
+
+  // Feature flags for current plan
+  const planFeatures: PlanFeatures = {
+    hasAiEnhancement: PLANS[resolvedPlan].hasAiEnhancement,
+    hasVoiceNotes: PLANS[resolvedPlan].hasVoiceNotes,
+    hasMeltProtection: PLANS[resolvedPlan].hasMeltProtection,
+    hasListingAnalytics: PLANS[resolvedPlan].hasListingAnalytics,
+    hasOrgFeature: PLANS[resolvedPlan].hasOrgFeature,
+  };
+
+  // Limits for current plan
+  const currentPlanLimits = {
+    analysisLimit: PLANS[resolvedPlan].analysisLimit,
+    publishLimit: PLANS[resolvedPlan].publishLimit,
+  };
+
+  // Usage gates — Shop plan uses soft threshold (warn but don't hard-block)
+  const finalCanAnalyze = usage.aiAnalysis < currentPlanLimits.analysisLimit;
+  const finalCanPublish = usage.ebayPublish < currentPlanLimits.publishLimit;
+
   const isOwner = org.role === "owner";
   const isLister = org.role === "lister";
 
@@ -259,11 +346,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         usage,
         refreshSubscription,
         refreshUsage,
+        currentPlan: resolvedPlan,
+        isStarter,
         isPro,
-        isUnlimited,
+        isShop,
         isPaid,
         isPastDue,
         isAdmin,
+        planFeatures,
+        isUnlimited,
         canAnalyze: finalCanAnalyze,
         canPublish: finalCanPublish,
         recordUsage,

@@ -16,7 +16,7 @@ import { uploadListingImage } from "@/lib/imageUpload";
  * Returns: "ok" | "auth_redirect" | "error"
  */
 export function usePublishDraft() {
-  const { canPublish, recordUsage, isOwner, user } = useAuth();
+  const { canPublish, recordUsage, isOwner, user, currentPlanLimits } = useAuth();
   const { markDraftPublished, markDraftFailed, updateDraft, removeDraft } = useDrafts();
   const navigate = useNavigate();
 
@@ -100,7 +100,7 @@ export function usePublishDraft() {
 
       if (!canPublish) {
         toast.error(
-          `Monthly publish limit reached (${PLANS.starter.publishLimit}). Upgrade to Pro for unlimited.`
+          `Monthly publish limit reached (${currentPlanLimits.publishLimit}). Upgrade for more listings.`
         );
         navigate("/billing");
         await markDraftFailed(draft.id, "Monthly publish limit reached");

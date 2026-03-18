@@ -477,7 +477,7 @@ function StatPill({ icon: Icon, value, label, highlight = false }: {
 
 export default function DashboardPage() {
   const { drafts } = useDrafts();
-  const { signOut, user } = useAuth();
+  const { signOut, user, planFeatures } = useAuth();
   const navigate = useNavigate();
 
   const [listings, setListings] = useState<EbayListing[]>([]);
@@ -796,7 +796,8 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Views — all 3 windows */}
+          {/* Views — all 3 windows (Pro/Shop only) */}
+          {planFeatures.hasListingAnalytics ? (
           <div className="bg-card border border-border rounded-xl p-4 space-y-1">
             <div className="flex items-center gap-1.5 text-muted-foreground">
               <Eye className="w-3.5 h-3.5" />
@@ -811,8 +812,18 @@ export default function DashboardPage() {
               <span className="flex items-center gap-0.5"><span className="opacity-60">90d</span> <span className="font-medium text-foreground">{totalViews90d.toLocaleString()}</span></span>
             </div>
           </div>
+          ) : (
+          <div className="bg-card border border-border rounded-xl p-4 space-y-1">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <Eye className="w-3.5 h-3.5" />
+              <span className="text-[10px] font-medium uppercase tracking-wide">Views</span>
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">Upgrade to Pro for listing analytics</p>
+          </div>
+          )}
 
-          {/* Watchers */}
+          {/* Watchers (Pro/Shop only) */}
+          {planFeatures.hasListingAnalytics ? (
           <div className="bg-card border border-border rounded-xl p-4 space-y-1">
             <div className="flex items-center gap-1.5 text-muted-foreground">
               <Heart className="w-3.5 h-3.5" />
@@ -821,6 +832,15 @@ export default function DashboardPage() {
             <p className="text-xl font-bold text-foreground">{totalWatches.toLocaleString()}</p>
             <p className="text-[10px] text-muted-foreground">Across all listings</p>
           </div>
+          ) : (
+          <div className="bg-card border border-border rounded-xl p-4 space-y-1">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <Heart className="w-3.5 h-3.5" />
+              <span className="text-[10px] font-medium uppercase tracking-wide">Watchers</span>
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">Upgrade to Pro</p>
+          </div>
+          )}
 
           {/* Transactions */}
           <div className="bg-card border border-border rounded-xl p-4 space-y-1">
@@ -975,7 +995,8 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Engagement filters */}
+              {/* Engagement filters — Pro/Shop only */}
+              {planFeatures.hasListingAnalytics ? (
               <div className="space-y-2">
                 <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Engagement filters</p>
                 {/* Quick presets */}
@@ -1028,6 +1049,12 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
+              ) : (
+              <div className="bg-muted/50 border border-border rounded-lg px-4 py-3">
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Engagement Filters</p>
+                <p className="text-xs text-muted-foreground mt-1">Upgrade to Pro ($49/mo) to filter by views, watchers, trends, and more.</p>
+              </div>
+              )}
 
               {/* Sort */}
               <div>
@@ -1103,7 +1130,7 @@ export default function DashboardPage() {
                       <div className="flex items-start gap-2 flex-wrap">
                         <p className="text-sm font-medium text-foreground line-clamp-1 flex-1">{listing.title}</p>
                         <div className="flex items-center gap-1 flex-shrink-0">
-                          <TrendBadge listing={listing} />
+                          {planFeatures.hasListingAnalytics && <TrendBadge listing={listing} />}
                           <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${statusColor(listing.status)}`}>
                             {statusLabel(listing.status)}
                           </span>
@@ -1120,10 +1147,11 @@ export default function DashboardPage() {
                         )}
                       </div>
 
-                      {/* 3-window views trend row */}
-                      <ViewsTrendRow listing={listing} />
+                      {/* 3-window views trend row — Pro/Shop only */}
+                      {planFeatures.hasListingAnalytics && <ViewsTrendRow listing={listing} />}
 
-                      {/* Other live stats */}
+                      {/* Other live stats — Pro/Shop only */}
+                      {planFeatures.hasListingAnalytics ? (
                       <div className="flex flex-wrap items-center gap-1 mt-1">
                         {listing.watchCount > 0 && (
                           <StatPill icon={Heart} value={listing.watchCount} label="Watchers" highlight />
@@ -1138,6 +1166,11 @@ export default function DashboardPage() {
                           <StatPill icon={MessageSquare} value={listing.questionCount} label="Questions" />
                         )}
                       </div>
+                      ) : (
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        Upgrade to Pro for listing analytics
+                      </p>
+                      )}
 
                       {/* Meta row */}
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-[10px] text-muted-foreground">
