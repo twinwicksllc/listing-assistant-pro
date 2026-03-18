@@ -3,7 +3,8 @@ import {
   LayoutDashboard, Eye, DollarSign, Package, RefreshCw, ExternalLink,
   AlertCircle, Loader2, X, LogOut, AlertTriangle, ChevronDown, ChevronUp,
   Search, SlidersHorizontal, ArrowUpDown, ArrowUp, ArrowDown, Pencil,
-  Check, CheckSquare, Square, Tag, TrendingUp, Clock, Hash,
+  Check, CheckSquare, Square, Tag, TrendingUp, Clock, Hash, Heart,
+  BarChart2, MousePointerClick, ShoppingCart, MessageSquare,
 } from "lucide-react";
 import { CompetitorPriceCard } from "@/components/CompetitorPriceCard";
 import { useAuth } from "@/contexts/AuthContext";
@@ -35,7 +36,16 @@ interface EbayListing {
   price: number;
   currency: string;
   status: string;
+  // Analytics stats (last 30 days)
   views: number;
+  impressions: number;
+  clickThroughRate: number;       // decimal e.g. 0.045 = 4.5%
+  salesConversionRate: number;    // decimal e.g. 0.02 = 2%
+  transactions: number;
+  // Trading API stats
+  watchCount: number;
+  questionCount: number;
+  // Listing metadata
   listingId: string | null;
   ebayUrl: string | null;
   categoryId?: string;
@@ -46,7 +56,16 @@ interface EbayListing {
   competitor?: CompetitorPriceSnapshot | null;
 }
 
-type SortField = "title" | "price" | "views" | "listingDate" | "status";
+type SortField =
+  | "title"
+  | "price"
+  | "views"
+  | "impressions"
+  | "watchCount"
+  | "transactions"
+  | "clickThroughRate"
+  | "listingDate"
+  | "status";
 type SortDir = "asc" | "desc";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -78,7 +97,12 @@ function statusColor(status: string): string {
   return "bg-muted text-muted-foreground";
 }
 
-// ─── Inline Price Editor ──────────────────────────────────────────────────────
+function fmtPct(val: number): string {
+  if (!val) return "0%";
+  return `${(val * 100).toFixed(1)}%`;
+}
+
+// ─── Inline Price Editor ───────────────────────────────────────────────────────
 
 interface PriceEditorProps {
   listing: EbayListing;
@@ -175,7 +199,7 @@ function InlinePriceEditor({ listing, onSaved, userToken, userId }: PriceEditorP
   );
 }
 
-// ─── Bulk Price Modal ─────────────────────────────────────────────────────────
+// ─── Bulk Price Modal ──────────────────────────────────────────────────────────
 
 interface BulkPriceModalProps {
   selected: EbayListing[];
@@ -252,7 +276,6 @@ function BulkPriceModal({ selected, onClose, onSuccess, userToken, userId }: Bul
         const failed = results?.filter((r: any) => !r.success) || [];
         toast.error(`${failCount} update${failCount !== 1 ? "s" : ""} failed: ${failed[0]?.error || "Unknown error"}`);
       }
-      // Pass successful updates back
       const successfulUpdates = updates.filter((u, i) => results?.[i]?.success !== false);
       onSuccess(successfulUpdates.map((u) => ({
         offerId: u.offerId,
@@ -270,7 +293,6 @@ function BulkPriceModal({ selected, onClose, onSuccess, userToken, userId }: Bul
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-card border border-border rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
-        {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-border">
           <div>
             <h2 className="text-base font-semibold text-foreground">Bulk Price Update</h2>
@@ -281,7 +303,6 @@ function BulkPriceModal({ selected, onClose, onSuccess, userToken, userId }: Bul
           </button>
         </div>
 
-        {/* Quick Adjust */}
         <div className="px-5 py-3 border-b border-border bg-secondary/30">
           <p className="text-xs font-medium text-muted-foreground mb-2">Quick adjust all prices</p>
           <div className="flex gap-2">
@@ -318,7 +339,6 @@ function BulkPriceModal({ selected, onClose, onSuccess, userToken, userId }: Bul
           </p>
         </div>
 
-        {/* Per-listing price inputs */}
         <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
           {selected.map((l) => {
             const k = key(l);
@@ -349,7 +369,6 @@ function BulkPriceModal({ selected, onClose, onSuccess, userToken, userId }: Bul
           })}
         </div>
 
-        {/* Footer */}
         <div className="px-5 py-4 border-t border-border flex gap-3">
           <button
             onClick={onClose}
@@ -371,7 +390,7 @@ function BulkPriceModal({ selected, onClose, onSuccess, userToken, userId }: Bul
   );
 }
 
-// ─── Sort Button Helper ───────────────────────────────────────────────────────
+// ─── Sort Button Helper ────────────────────────────────────────────────────────
 
 function SortBtn({
   field, label, current, dir, onSort,
@@ -397,6 +416,34 @@ function SortBtn({
   );
 }
 
+// ─── Stat Pill ─────────────────────────────────────────────────────────────────
+
+function StatPill({
+  icon: Icon,
+  value,
+  label,
+  highlight = false,
+}: {
+  icon: React.ElementType;
+  value: string | number;
+  label: string;
+  highlight?: boolean;
+}) {
+  return (
+    <span
+      className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md ${
+        highlight
+          ? "bg-primary/10 text-primary font-semibold"
+          : "text-muted-foreground"
+      }`}
+      title={label}
+    >
+      <Icon className="w-2.5 h-2.5 flex-shrink-0" />
+      {value}
+    </span>
+  );
+}
+
 // ─── Main Dashboard Component ─────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -414,7 +461,7 @@ export default function DashboardPage() {
   const [meltAlertOpen, setMeltAlertOpen] = useState(true);
   const [ebayToken, setEbayToken] = useState<string>("");
 
-  // Sorting & filtering state
+  // Sorting & filtering
   const [sortField, setSortField] = useState<SortField>("listingDate");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [searchQuery, setSearchQuery] = useState("");
@@ -423,7 +470,7 @@ export default function DashboardPage() {
   const [filterMaxPrice, setFilterMaxPrice] = useState("");
   const [showFilters, setShowFilters] = useState(false);
 
-  // Selection & bulk edit state
+  // Selection & bulk edit
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkModal, setShowBulkModal] = useState(false);
 
@@ -554,17 +601,16 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchListings(); }, [fetchListings]);
 
-  // ── Sort handler ────────────────────────────────────────────────────────────
+  // ── Sort handler ──────────────────────────────────────────────────────────────
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else { setSortField(field); setSortDir("asc"); }
+    else { setSortField(field); setSortDir("desc"); }
   };
 
-  // ── Filtered + sorted listings ──────────────────────────────────────────────
+  // ── Filtered + sorted listings ────────────────────────────────────────────────
   const filteredListings = useMemo(() => {
     let list = [...listings];
 
-    // Text search
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter(
@@ -575,24 +621,25 @@ export default function DashboardPage() {
       );
     }
 
-    // Status filter
     if (filterStatus === "active") {
       list = list.filter((l) => l.status === "PUBLISHED" || l.status === "Active" || l.status === "ACTIVE");
     } else if (filterStatus === "inactive") {
       list = list.filter((l) => l.status !== "PUBLISHED" && l.status !== "Active" && l.status !== "ACTIVE");
     }
 
-    // Price range filter
     const minP = parseFloat(filterMinPrice);
     const maxP = parseFloat(filterMaxPrice);
     if (!isNaN(minP)) list = list.filter((l) => l.price >= minP);
     if (!isNaN(maxP)) list = list.filter((l) => l.price <= maxP);
 
-    // Sort
     list.sort((a, b) => {
       let cmp = 0;
       if (sortField === "price") cmp = a.price - b.price;
       else if (sortField === "views") cmp = a.views - b.views;
+      else if (sortField === "impressions") cmp = a.impressions - b.impressions;
+      else if (sortField === "watchCount") cmp = a.watchCount - b.watchCount;
+      else if (sortField === "transactions") cmp = a.transactions - b.transactions;
+      else if (sortField === "clickThroughRate") cmp = a.clickThroughRate - b.clickThroughRate;
       else if (sortField === "title") cmp = a.title.localeCompare(b.title);
       else if (sortField === "status") cmp = statusLabel(a.status).localeCompare(statusLabel(b.status));
       else if (sortField === "listingDate") {
@@ -606,7 +653,7 @@ export default function DashboardPage() {
     return list;
   }, [listings, searchQuery, filterStatus, filterMinPrice, filterMaxPrice, sortField, sortDir]);
 
-  // ── Selection helpers ───────────────────────────────────────────────────────
+  // ── Selection helpers ─────────────────────────────────────────────────────────
   const listingKey = (l: EbayListing) => l.offerId || l.listingId || l.sku;
 
   const toggleSelect = (l: EbayListing) => {
@@ -629,7 +676,7 @@ export default function DashboardPage() {
 
   const selectedListings = filteredListings.filter((l) => selectedIds.has(listingKey(l)));
 
-  // ── Price update callback ───────────────────────────────────────────────────
+  // ── Price update callbacks ────────────────────────────────────────────────────
   const handlePriceSaved = (offerId: string | null, listingId: string | null, newPrice: number) => {
     setListings((prev) =>
       prev.map((l) => {
@@ -652,9 +699,11 @@ export default function DashboardPage() {
     setSelectedIds(new Set());
   };
 
-  // ── Stats ───────────────────────────────────────────────────────────────────
+  // ── Aggregate stats ───────────────────────────────────────────────────────────
   const activeListings = listings.filter((l) => l.status === "PUBLISHED" || l.status === "Active" || l.status === "ACTIVE");
-  const totalViews = listings.reduce((sum, l) => sum + l.views, 0);
+  const totalViews = listings.reduce((sum, l) => sum + (l.views || 0), 0);
+  const totalWatches = listings.reduce((sum, l) => sum + (l.watchCount || 0), 0);
+  const totalTransactions = listings.reduce((sum, l) => sum + (l.transactions || 0), 0);
   const liveValue = listings.reduce((sum, l) => sum + l.price, 0);
   const draftValue = drafts.reduce((sum, d) => sum + (d.priceMin + d.priceMax) / 2, 0);
   const totalInventoryValue = liveValue + draftValue;
@@ -673,7 +722,7 @@ export default function DashboardPage() {
 
   const hasActiveFilters = searchQuery || filterStatus !== "all" || filterMinPrice || filterMaxPrice;
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background pb-24">
       {/* Header */}
@@ -734,7 +783,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Summary Cards */}
+        {/* Summary Cards — 2x3 grid */}
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-card border border-border rounded-xl p-4 space-y-1">
             <div className="flex items-center gap-1.5 text-muted-foreground">
@@ -760,6 +809,24 @@ export default function DashboardPage() {
               <span className="text-[10px] font-medium uppercase tracking-wide">Total Views</span>
             </div>
             <p className="text-xl font-bold text-foreground">{totalViews.toLocaleString()}</p>
+            <p className="text-[10px] text-muted-foreground">Last 30 days</p>
+          </div>
+
+          <div className="bg-card border border-border rounded-xl p-4 space-y-1">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <Heart className="w-3.5 h-3.5" />
+              <span className="text-[10px] font-medium uppercase tracking-wide">Total Watchers</span>
+            </div>
+            <p className="text-xl font-bold text-foreground">{totalWatches.toLocaleString()}</p>
+            <p className="text-[10px] text-muted-foreground">Across all listings</p>
+          </div>
+
+          <div className="bg-card border border-border rounded-xl p-4 space-y-1">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <ShoppingCart className="w-3.5 h-3.5" />
+              <span className="text-[10px] font-medium uppercase tracking-wide">Transactions</span>
+            </div>
+            <p className="text-xl font-bold text-foreground">{totalTransactions.toLocaleString()}</p>
             <p className="text-[10px] text-muted-foreground">Last 30 days</p>
           </div>
 
@@ -841,7 +908,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ── Listings Section ──────────────────────────────────────────────── */}
+        {/* ── Listings Section ─────────────────────────────────────────────────── */}
         <div className="space-y-3">
           {/* Section header */}
           <div className="flex items-center justify-between gap-2">
@@ -946,13 +1013,17 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Sort */}
+              {/* Sort — 2 rows */}
               <div>
                 <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Sort by</p>
                 <div className="flex flex-wrap gap-1.5">
                   <SortBtn field="listingDate" label="Date" current={sortField} dir={sortDir} onSort={handleSort} />
                   <SortBtn field="price" label="Price" current={sortField} dir={sortDir} onSort={handleSort} />
                   <SortBtn field="views" label="Views" current={sortField} dir={sortDir} onSort={handleSort} />
+                  <SortBtn field="impressions" label="Impressions" current={sortField} dir={sortDir} onSort={handleSort} />
+                  <SortBtn field="watchCount" label="Watchers" current={sortField} dir={sortDir} onSort={handleSort} />
+                  <SortBtn field="transactions" label="Sales" current={sortField} dir={sortDir} onSort={handleSort} />
+                  <SortBtn field="clickThroughRate" label="CTR" current={sortField} dir={sortDir} onSort={handleSort} />
                   <SortBtn field="title" label="Title" current={sortField} dir={sortDir} onSort={handleSort} />
                   <SortBtn field="status" label="Status" current={sortField} dir={sortDir} onSort={handleSort} />
                 </div>
@@ -970,7 +1041,7 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Select all bar — only shown when listings exist */}
+          {/* Select all bar */}
           {filteredListings.length > 0 && (
             <div className="flex items-center gap-2 px-1">
               <button onClick={toggleSelectAll} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
@@ -1049,7 +1120,7 @@ export default function DashboardPage() {
                         </span>
                       </div>
 
-                      {/* Price (inline editable) + Views */}
+                      {/* Price (inline editable) + external link */}
                       <div className="flex items-center gap-3 mt-1.5">
                         <InlinePriceEditor
                           listing={listing}
@@ -1057,15 +1128,62 @@ export default function DashboardPage() {
                           userToken={ebayToken}
                           userId={user?.id || ""}
                         />
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Eye className="w-3 h-3" />
-                          {listing.views.toLocaleString()}
-                        </span>
                         {listing.ebayUrl && (
                           <a href={listing.ebayUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-0.5 text-xs text-primary hover:underline">
                             <ExternalLink className="w-3 h-3" />
                             View
                           </a>
+                        )}
+                      </div>
+
+                      {/* Live stats row */}
+                      <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                        {/* Views */}
+                        <StatPill
+                          icon={Eye}
+                          value={listing.views.toLocaleString()}
+                          label="Views (last 30d)"
+                          highlight={listing.views > 0}
+                        />
+                        {/* Impressions */}
+                        <StatPill
+                          icon={BarChart2}
+                          value={listing.impressions > 999
+                            ? `${(listing.impressions / 1000).toFixed(1)}k`
+                            : listing.impressions.toLocaleString()}
+                          label="Impressions (last 30d)"
+                        />
+                        {/* Watchers */}
+                        <StatPill
+                          icon={Heart}
+                          value={listing.watchCount}
+                          label="Watchers"
+                          highlight={listing.watchCount > 0}
+                        />
+                        {/* Sales */}
+                        {listing.transactions > 0 && (
+                          <StatPill
+                            icon={ShoppingCart}
+                            value={listing.transactions}
+                            label="Sales (last 30d)"
+                            highlight
+                          />
+                        )}
+                        {/* CTR */}
+                        {listing.clickThroughRate > 0 && (
+                          <StatPill
+                            icon={MousePointerClick}
+                            value={fmtPct(listing.clickThroughRate)}
+                            label="Click-through rate"
+                          />
+                        )}
+                        {/* Questions */}
+                        {listing.questionCount > 0 && (
+                          <StatPill
+                            icon={MessageSquare}
+                            value={listing.questionCount}
+                            label="Questions"
+                          />
                         )}
                       </div>
 

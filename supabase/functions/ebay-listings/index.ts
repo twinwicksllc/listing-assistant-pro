@@ -8,8 +8,154 @@ const corsHeaders = {
   "Access-Control-Max-Age": "86400",
 };
 
-// Fallback: fetch active listings via the Trading API (XML-based, works for all account
-// types regardless of SKU format, not affected by Inventory API errorId 25707).
+// ─── Analytics metrics we want per listing ───────────────────────────────────
+// LISTING_VIEWS_TOTAL         → views (page views on the listing)
+// LISTING_IMPRESSION_TOTAL    → impressions (how many times listing appeared in search/browse)
+// CLICK_THROUGH_RATE          → ctr  (impressions → listing page clicks, as decimal e.g. 0.045)
+// SALES_CONVERSION_RATE       → cvr  (listing views → purchases, as decimal)
+// TRANSACTION                 → transactions (completed sales count)
+const ANALYTICS_METRICS = [
+  "LISTING_VIEWS_TOTAL",
+  "LISTING_IMPRESSION_TOTAL",
+  "CLICK_THROUGH_RATE",
+  "SALES_CONVERSION_RATE",
+  "TRANSACTION",
+].join(",");
+
+// ─── Fetch multi-metric traffic data from Sell Analytics API ─────────────────
+async function fetchAnalyticsData(
+  apiBase: string,
+  ebayHeaders: Record<string, string>
+): Promise<Record<string, {
+  views: number;
+  impressions: number;
+  clickThroughRate: number;
+  salesConversionRate: number;
+  transactions: number;
+}>> {
+  const result: Record<string, {
+    views: number;
+    impressions: number;
+    clickThroughRate: number;
+    salesConversionRate: number;
+    transactions: number;
+  }> = {};
+
+  try {
+    const today = new Date();
+    const thirtyDaysAgo = new Date(today);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const dateRange = `${thirtyDaysAgo.toISOString().split("T")[0]}..${today.toISOString().split("T")[0]}`;
+
+    const trafficResp = await fetch(
+      `${apiBase}/sell/analytics/v1/traffic_report?dimension=LISTING&filter=date_range:[${dateRange}]&metric=${ANALYTICS_METRICS}`,
+      { headers: ebayHeaders }
+    );
+
+    if (!trafficResp.ok) {
+      console.warn("Analytics API error:", trafficResp.status);
+      return result;
+    }
+
+    const trafficData = await trafficResp.json();
+    const metricHeaders: string[] = (trafficData.metricHeaders || []).map((h: any) => h.name);
+    const records = trafficData.records || [];
+
+    for (const record of records) {
+      const listingKey = record.dimensionValues?.[0]?.value || "";
+      if (!listingKey) continue;
+
+      const metricValues = record.metricValues || [];
+      const getMetric = (name: string): number => {
+        const idx = metricHeaders.indexOf(name);
+        if (idx < 0 || idx >= metricValues.length) return 0;
+        const val = metricValues[idx]?.value;
+        return val ? parseFloat(val) : 0;
+      };
+
+      result[listingKey] = {
+        views: Math.round(getMetric("LISTING_VIEWS_TOTAL")),
+        impressions: Math.round(getMetric("LISTING_IMPRESSION_TOTAL")),
+        clickThroughRate: getMetric("CLICK_THROUGH_RATE"),
+        salesConversionRate: getMetric("SALES_CONVERSION_RATE"),
+        transactions: Math.round(getMetric("TRANSACTION")),
+      };
+    }
+
+    console.log(`Analytics API: loaded metrics for ${Object.keys(result).length} listings`);
+  } catch (e) {
+    console.error("Analytics API error (non-fatal):", e);
+  }
+
+  return result;
+}
+
+// ─── Fetch WatchCount + QuestionCount for a batch of listing IDs via GetItem ──
+// Used for Inventory API path where these aren't available in the offer data.
+async function fetchWatchDataForListings(
+  listingIds: string[],
+  tradingUrl: string,
+  userToken: string
+): Promise<Record<string, { watchCount: number; questionCount: number }>> {
+  const result: Record<string, { watchCount: number; questionCount: number }> = {};
+  if (listingIds.length === 0) return result;
+
+  // Batch in groups of 20 to avoid oversized requests
+  const BATCH_SIZE = 20;
+  for (let i = 0; i < listingIds.length; i += BATCH_SIZE) {
+    const batch = listingIds.slice(i, i + BATCH_SIZE);
+    const itemIdXml = batch.map((id) => `<ItemID>${id}</ItemID>`).join("\n");
+
+    const xml = `<?xml version="1.0" encoding="utf-8"?>
+<GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <ItemID>${batch[0]}</ItemID>
+  <IncludeWatchCount>true</IncludeWatchCount>
+  <OutputSelector>ItemID,WatchCount,QuestionCount</OutputSelector>
+</GetItemRequest>`;
+
+    // For batching multiple items, we need individual GetItem calls per item
+    // OR use GetMultipleItems (Shopping API) — but that doesn't return WatchCount.
+    // Trading API GetItem is 1 item per call. We'll call them concurrently.
+    const promises = batch.map(async (itemId) => {
+      const singleXml = `<?xml version="1.0" encoding="utf-8"?>
+<GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <ItemID>${itemId}</ItemID>
+  <IncludeWatchCount>true</IncludeWatchCount>
+  <OutputSelector>ItemID,WatchCount,QuestionCount</OutputSelector>
+</GetItemRequest>`;
+
+      try {
+        const resp = await fetch(tradingUrl, {
+          method: "POST",
+          headers: {
+            "X-EBAY-API-CALL-NAME": "GetItem",
+            "X-EBAY-API-COMPATIBILITY-LEVEL": "967",
+            "X-EBAY-API-SITEID": "0",
+            "Content-Type": "text/xml",
+            "X-EBAY-API-IAF-TOKEN": userToken,
+          },
+          body: singleXml,
+        });
+
+        if (!resp.ok) return;
+        const xmlText = await resp.text();
+        const getTag = (tag: string) => xmlText.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`))?.[1]?.trim() || "";
+
+        const watchCount = parseInt(getTag("WatchCount") || "0", 10);
+        const questionCount = parseInt(getTag("QuestionCount") || "0", 10);
+        result[itemId] = { watchCount: isNaN(watchCount) ? 0 : watchCount, questionCount: isNaN(questionCount) ? 0 : questionCount };
+      } catch (e) {
+        console.warn(`GetItem failed for ${itemId}:`, e);
+      }
+    });
+
+    await Promise.all(promises);
+  }
+
+  return result;
+}
+
+// ─── Trading API fallback ─────────────────────────────────────────────────────
 async function fetchListingsViaTradingAPI(
   apiBase: string,
   userToken: string,
@@ -20,11 +166,7 @@ async function fetchListingsViaTradingAPI(
     ? "https://api.sandbox.ebay.com/ws/api.dll"
     : "https://api.ebay.com/ws/api.dll";
 
-  // Do NOT include <RequesterCredentials> — the IAF-TOKEN header is sufficient
-  // and sending both can cause auth errors.
-  // IMPORTANT: DetailLevel=ReturnAll overrides specific list requests, so we remove it.
-  // Instead, explicitly disable SoldList, UnsoldList, and ScheduledList to ensure
-  // we only receive ActiveList items.
+  // GetMyeBaySelling with WatchCount included
   const xml = `<?xml version="1.0" encoding="utf-8"?>
 <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <ActiveList>
@@ -38,6 +180,7 @@ async function fetchListingsViaTradingAPI(
   <SoldList><Include>false</Include></SoldList>
   <UnsoldList><Include>false</Include></UnsoldList>
   <ScheduledList><Include>false</Include></ScheduledList>
+  <IncludeWatchCount>true</IncludeWatchCount>
 </GetMyeBaySellingRequest>`;
 
   try {
@@ -64,7 +207,6 @@ async function fetchListingsViaTradingAPI(
       );
     }
 
-    // Check for eBay-level errors inside the XML (HTTP 200 but Ack=Failure)
     if (xmlText.includes("<Ack>Failure</Ack>") || xmlText.includes("<Ack>PartialFailure</Ack>")) {
       const errMsg = xmlText.match(/<LongMessage>([\s\S]*?)<\/LongMessage>/)?.[1] ||
                      xmlText.match(/<ShortMessage>([\s\S]*?)<\/ShortMessage>/)?.[1] ||
@@ -76,8 +218,6 @@ async function fetchListingsViaTradingAPI(
       );
     }
 
-    // Items live inside <ActiveList><ItemArray><Item>...</Item></ItemArray></ActiveList>
-    // Extract only the ActiveList container to ensure we don't parse items from SoldList, UnsoldList, etc.
     const activeListMatch = xmlText.match(/<ActiveList[^>]*>([\s\S]*?)<\/ActiveList>/);
     if (!activeListMatch) {
       console.warn("No ActiveList container found in Trading API response");
@@ -86,54 +226,52 @@ async function fetchListingsViaTradingAPI(
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    
+
     const listings: any[] = [];
     const activeListContent = activeListMatch[1];
     const itemMatches = activeListContent.matchAll(/<Item>([\s\S]*?)<\/Item>/g);
+
     for (const match of itemMatches) {
       const item = match[1];
       const get = (tag: string) => {
         const m = item.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`));
         return m ? m[1].trim() : "";
       };
+
       const listingId = get("ItemID");
       const title = get("Title");
-      // CurrentPrice has a currencyID attribute: <CurrentPrice currencyID="USD">29.99</CurrentPrice>
       const priceStr = get("CurrentPrice") || get("BuyItNowPrice") || "0";
       const price = parseFloat(priceStr) || 0;
       const currency = item.match(/<CurrentPrice currencyID="([^"]+)"/)?.[1] || "USD";
       const imageUrl = get("GalleryURL") || get("PictureURL") || "";
       const sku = get("SKU");
       const categoryId = get("CategoryID") || "";
-      
-      // Parse listing status from SellingStatus section
-      // Items that sold but are in transit may still appear in ActiveList
-      // We need to explicitly check that ListingStatus is "Active"
+
       const listingStatus = get("ListingStatus");
-      
-      // Parse quantity fields to filter out sold items
-      // eBay considers multi-quantity listings "active" even if all units sold
-      // So we need to check: QuantityAvailable = Quantity - QuantitySold
+
       const quantityStr = get("Quantity");
       const quantitySoldStr = get("QuantitySold");
       const quantity = quantityStr ? parseInt(quantityStr, 10) : 0;
       const quantitySold = quantitySoldStr ? parseInt(quantitySoldStr, 10) : 0;
       const quantityAvailable = quantity - quantitySold;
-      
-      // Multi-layer filtering to catch edge cases where eBay's status is unreliable
-      // 1. QuantityAvailable must be > 0 (most reliable indicator)
-      // 2. MUST NOT be Completed or Ended (reject these explicitly)
-      // 3. Single-quantity items that have any sales are completely done
+
       const isCompletedOrEnded = listingStatus === "Completed" || listingStatus === "Ended";
       const isSingleQtySold = quantity === 1 && quantitySold >= 1;
       const isGenuinelyActive = quantityAvailable > 0 && !isCompletedOrEnded && !isSingleQtySold;
 
       if (listingId && isGenuinelyActive) {
-        console.log(`Trading API item: ItemID=${listingId}, Title="${title}", SKU="${sku}", Status=${listingStatus}, Qty=${quantityAvailable}`);
-        // Parse listing start time for Trading API listings
         const listingDate = get("StartTime") || null;
         const listingType = get("ListingType") || "FixedPriceItem";
         const conditionName = get("ConditionDisplayName") || "";
+
+        // Parse WatchCount and QuestionCount from Trading API response
+        const watchCountStr = get("WatchCount");
+        const watchCount = watchCountStr ? parseInt(watchCountStr, 10) : 0;
+        const questionCountStr = get("QuestionCount");
+        const questionCount = questionCountStr ? parseInt(questionCountStr, 10) : 0;
+
+        console.log(`Trading API item: ItemID=${listingId}, Title="${title}", SKU="${sku}", Status=${listingStatus}, Qty=${quantityAvailable}, Watches=${watchCount}`);
+
         listings.push({
           offerId: null,
           sku: sku || listingId,
@@ -144,16 +282,20 @@ async function fetchListingsViaTradingAPI(
           status: "Active",
           categoryId,
           listingId,
-          views: 0,
+          views: 0,       // filled by Analytics API below
+          impressions: 0,
+          clickThroughRate: 0,
+          salesConversionRate: 0,
+          transactions: 0,
+          watchCount: isNaN(watchCount) ? 0 : watchCount,
+          questionCount: isNaN(questionCount) ? 0 : questionCount,
           ebayUrl: `https://www.ebay.com/itm/${listingId}`,
-          // Enhanced fields
           quantity: quantityAvailable,
           format: listingType === "Chinese" ? "AUCTION" : "FIXED_PRICE",
           condition: conditionName,
           listingDate,
         });
       } else if (listingId) {
-        // Log why items were filtered out
         if (quantityAvailable <= 0) {
           console.log(`Skipping sold-out item: ItemID=${listingId}, Title="${title}", Qty available: ${quantityAvailable}`);
         } else if (isCompletedOrEnded) {
@@ -164,17 +306,48 @@ async function fetchListingsViaTradingAPI(
       }
     }
 
-    // Log any SKUs with non-alphanumeric characters (the "poisoned" ones)
-    const poisonedSkus = listings.filter(l => l.sku && /[^a-zA-Z0-9]/.test(l.sku));
+    // Fetch analytics for all listing IDs
+    const ebayHeaders = {
+      Authorization: `Bearer ${userToken}`,
+      "Content-Type": "application/json",
+      "Accept-Language": "en-US",
+    };
+    const analyticsMap = await fetchAnalyticsData(apiBase, ebayHeaders);
+
+    // Merge analytics into listings
+    const enriched = listings.map((l) => {
+      const a = analyticsMap[l.listingId] || analyticsMap[l.sku] || null;
+      return {
+        ...l,
+        views: a?.views ?? l.views,
+        impressions: a?.impressions ?? l.impressions,
+        clickThroughRate: a?.clickThroughRate ?? l.clickThroughRate,
+        salesConversionRate: a?.salesConversionRate ?? l.salesConversionRate,
+        transactions: a?.transactions ?? l.transactions,
+      };
+    });
+
+    // Build EPN affiliate links
+    const epnCampaignId = Deno.env.get("EPN_CAMPAIGN_ID") || "";
+    const buildEbayUrl = (listingId: string | null) => {
+      if (!listingId) return null;
+      const baseUrl = `https://www.ebay.com/itm/${listingId}`;
+      if (!epnCampaignId) return baseUrl;
+      return `https://rover.ebay.com/rover/1/711-53200-19255-0/1?campid=${epnCampaignId}&toolid=10001&customid=teckstart&mpre=${encodeURIComponent(baseUrl)}`;
+    };
+
+    const finalListings = enriched.map((l) => ({ ...l, ebayUrl: buildEbayUrl(l.listingId) }));
+
+    const poisonedSkus = finalListings.filter(l => l.sku && /[^a-zA-Z0-9]/.test(l.sku));
     if (poisonedSkus.length > 0) {
       console.warn("Poisoned SKUs found via Trading API:",
         JSON.stringify(poisonedSkus.map(l => ({ itemId: l.listingId, sku: l.sku, title: l.title }))));
     }
 
-    console.log(`Trading API fallback: loaded ${listings.length} active listings, ${poisonedSkus.length} with non-alphanumeric SKUs`);
+    console.log(`Trading API fallback: loaded ${finalListings.length} active listings, ${poisonedSkus.length} with non-alphanumeric SKUs`);
 
     return new Response(
-      JSON.stringify({ listings, needsAuth: false }),
+      JSON.stringify({ listings: finalListings, needsAuth: false }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
@@ -208,8 +381,6 @@ serve(async (req) => {
       );
     }
 
-    // Note: `status` is NOT a documented query param for GET /offer — do not add it.
-    // The only valid filters are: sku, format, marketplace_id, limit, offset.
     console.log("ebay-listings: calling", `${apiBase}/sell/inventory/v1/offer?limit=100`);
 
     const ebayHeaders = {
@@ -233,28 +404,19 @@ serve(async (req) => {
     if (!offersResp.ok) {
       const errText = await offersResp.text();
       console.error("eBay offers error:", offersResp.status, errText);
-      
-      // Return needsAuth for any auth-related error so frontend clears the token
+
       if (offersResp.status === 401 || offersResp.status === 403) {
         return new Response(
           JSON.stringify({ listings: [], needsAuth: true, debug: `eBay API ${offersResp.status}: ${errText}` }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      
-      // Check if this is a SKU validation error - scan inventory items to identify the bad SKU(s)
-      if (offersResp.status === 400 && errText.includes("SKU")) {
-        console.warn("eBay Inventory API /offer rejected with SKU error — account has legacy listings incompatible with this endpoint. Falling back to Trading API GetMyeBaySelling.");
 
-        // The Inventory API validates the entire account's offer data before applying
-        // limit/offset, so even limit=1&offset=0 returns the same error. This account
-        // has at least one legacy listing (e.g. SKU-004) that eBay considers invalid
-        // but the user cannot edit (e.g. under appeal). We fall back to the Trading API
-        // which works for all account types and ignores SKU format constraints.
+      if (offersResp.status === 400 && errText.includes("SKU")) {
+        console.warn("eBay Inventory API /offer rejected with SKU error — falling back to Trading API.");
         return await fetchListingsViaTradingAPI(apiBase, userToken, ebayHeaders, corsHeaders);
       }
-      
-      // For other errors, return error details instead of throwing (avoids 500)
+
       return new Response(
         JSON.stringify({ listings: [], error: `eBay API error ${offersResp.status}: ${errText}` }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -277,15 +439,12 @@ serve(async (req) => {
             const itemData = await itemResp.json();
             product = itemData.product || {};
           } else if (itemResp.status === 400 || itemResp.status === 404) {
-            // SKU is invalid or inventory item doesn't exist - skip it
             console.warn(`Skipping inventory fetch for SKU "${offer.sku}": ${itemResp.status}`);
           } else {
-            // Log other errors but don't fail
             const errText = await itemResp.text();
             console.warn(`Inventory fetch error for SKU "${offer.sku}": ${itemResp.status} ${errText}`);
           }
         } catch (err) {
-          // Network error or parsing error - skip silently
           console.warn(`Error fetching inventory for SKU "${offer.sku}":`, err);
         }
 
@@ -299,40 +458,32 @@ serve(async (req) => {
           status: offer.status || "UNKNOWN",
           categoryId: offer.categoryId || "",
           listingId: offer.listing?.listingId || null,
-          // Enhanced fields
           quantity: offer.availableQuantity ?? 1,
           format: offer.format || "FIXED_PRICE",
           condition: offer.condition || "",
           listingDate: offer.listing?.publishedDate || null,
+          // Stats — filled below
+          views: 0,
+          impressions: 0,
+          clickThroughRate: 0,
+          salesConversionRate: 0,
+          transactions: 0,
+          watchCount: 0,
+          questionCount: 0,
         };
       })
     );
 
-    // Try to get traffic data via Sell Analytics API
-    let trafficMap: Record<string, number> = {};
-    try {
-      const today = new Date();
-      const thirtyDaysAgo = new Date(today);
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    // Fetch WatchCount for Inventory API listings via Trading API GetItem
+    const tradingUrl = apiBase.includes("sandbox")
+      ? "https://api.sandbox.ebay.com/ws/api.dll"
+      : "https://api.ebay.com/ws/api.dll";
 
-      const dateRange = `${thirtyDaysAgo.toISOString().split("T")[0]}..${today.toISOString().split("T")[0]}`;
-      const trafficResp = await fetch(
-        `${apiBase}/sell/analytics/v1/traffic_report?dimension=LISTING&filter=date_range:[${dateRange}]&metric=LISTING_VIEWS_TOTAL`,
-        { headers: ebayHeaders }
-      );
+    const listingIds = listings.map((l: any) => l.listingId).filter(Boolean) as string[];
+    const watchMap = await fetchWatchDataForListings(listingIds, tradingUrl, userToken);
 
-      if (trafficResp.ok) {
-        const trafficData = await trafficResp.json();
-        const records = trafficData.records || [];
-        for (const record of records) {
-          const listingKey = record.dimensionValues?.[0]?.value || "";
-          const views = record.metricValues?.[0]?.value || "0";
-          trafficMap[listingKey] = parseInt(views, 10);
-        }
-      }
-    } catch (e) {
-      console.error("Traffic API error (non-fatal):", e);
-    }
+    // Fetch multi-metric analytics
+    const analyticsMap = await fetchAnalyticsData(apiBase, ebayHeaders);
 
     // Build EPN affiliate link helper
     const epnCampaignId = Deno.env.get("EPN_CAMPAIGN_ID") || "";
@@ -340,16 +491,25 @@ serve(async (req) => {
       if (!listingId) return null;
       const baseUrl = `https://www.ebay.com/itm/${listingId}`;
       if (!epnCampaignId) return baseUrl;
-      // eBay Partner Network rover link format
       return `https://rover.ebay.com/rover/1/711-53200-19255-0/1?campid=${epnCampaignId}&toolid=10001&customid=teckstart&mpre=${encodeURIComponent(baseUrl)}`;
     };
 
-    // Merge traffic data and EPN links
-    const enrichedListings = listings.map((l: any) => ({
-      ...l,
-      views: trafficMap[l.listingId] || trafficMap[l.sku] || 0,
-      ebayUrl: buildEbayUrl(l.listingId),
-    }));
+    // Merge all data
+    const enrichedListings = listings.map((l: any) => {
+      const a = analyticsMap[l.listingId] || analyticsMap[l.sku] || null;
+      const w = l.listingId ? (watchMap[l.listingId] || null) : null;
+      return {
+        ...l,
+        views: a?.views ?? 0,
+        impressions: a?.impressions ?? 0,
+        clickThroughRate: a?.clickThroughRate ?? 0,
+        salesConversionRate: a?.salesConversionRate ?? 0,
+        transactions: a?.transactions ?? 0,
+        watchCount: w?.watchCount ?? 0,
+        questionCount: w?.questionCount ?? 0,
+        ebayUrl: buildEbayUrl(l.listingId),
+      };
+    });
 
     return new Response(
       JSON.stringify({ listings: enrichedListings, needsAuth: false }),
@@ -361,8 +521,8 @@ serve(async (req) => {
     console.error("Full error:", e);
     const isProduction = Deno.env.get("ENVIRONMENT") === "production";
     return new Response(
-      JSON.stringify({ 
-        listings: [], 
+      JSON.stringify({
+        listings: [],
         error: `Server error: ${errorMsg}`,
         debug: !isProduction ? String(e) : undefined
       }),
