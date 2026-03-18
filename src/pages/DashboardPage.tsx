@@ -1,5 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
-import { LayoutDashboard, Eye, DollarSign, Package, RefreshCw, ExternalLink, AlertCircle, Loader2, Settings, X, LogOut, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import {
+  LayoutDashboard, Eye, DollarSign, Package, RefreshCw, ExternalLink,
+  AlertCircle, Loader2, X, LogOut, AlertTriangle, ChevronDown, ChevronUp,
+  Search, SlidersHorizontal, ArrowUpDown, ArrowUp, ArrowDown, Pencil,
+  Check, CheckSquare, Square, Tag, TrendingUp, Clock, Hash,
+} from "lucide-react";
 import { CompetitorPriceCard } from "@/components/CompetitorPriceCard";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDrafts } from "@/hooks/useDrafts";
@@ -9,19 +14,21 @@ import { supabase } from "@/integrations/supabase/client";
 import teckstartLogo from "@/assets/teckstart-logo.png";
 import { toast } from "sonner";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 interface CompetitorPriceSnapshot {
   avgPrice: number | null;
   minPrice: number | null;
   maxPrice: number | null;
   medianPrice: number | null;
-  priceDelta: number | null;  // your_price - avg_price; negative = you're cheaper
+  priceDelta: number | null;
   competitorCount: number;
   priceDistribution: { min: number; max: number; count: number }[];
   fetchedAt: string;
 }
 
 interface EbayListing {
-  offerId: string;
+  offerId: string | null;
   sku: string;
   title: string;
   imageUrl: string;
@@ -31,15 +38,372 @@ interface EbayListing {
   views: number;
   listingId: string | null;
   ebayUrl: string | null;
+  categoryId?: string;
+  quantity?: number;
+  format?: string;
+  condition?: string;
+  listingDate?: string | null;
   competitor?: CompetitorPriceSnapshot | null;
 }
 
+type SortField = "title" | "price" | "views" | "listingDate" | "status";
+type SortDir = "asc" | "desc";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
 const EBAY_TOKEN_KEY = "ebay-user-token";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function daysAgo(dateStr: string | null | undefined): string {
+  if (!dateStr) return "—";
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return "—";
+  const diff = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
+  if (diff === 0) return "Today";
+  if (diff === 1) return "1 day ago";
+  return `${diff}d ago`;
+}
+
+function statusLabel(status: string): string {
+  if (status === "PUBLISHED" || status === "Active") return "Active";
+  if (status === "UNPUBLISHED") return "Draft";
+  return status;
+}
+
+function statusColor(status: string): string {
+  const s = statusLabel(status);
+  if (s === "Active") return "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400";
+  if (s === "Draft") return "bg-amber-500/15 text-amber-600 dark:text-amber-400";
+  return "bg-muted text-muted-foreground";
+}
+
+// ─── Inline Price Editor ──────────────────────────────────────────────────────
+
+interface PriceEditorProps {
+  listing: EbayListing;
+  onSaved: (offerId: string | null, listingId: string | null, newPrice: number) => void;
+  userToken: string;
+  userId: string;
+}
+
+function InlinePriceEditor({ listing, onSaved, userToken, userId }: PriceEditorProps) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(listing.price.toFixed(2));
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    const newPrice = parseFloat(value);
+    if (isNaN(newPrice) || newPrice <= 0) {
+      toast.error("Enter a valid price greater than 0");
+      return;
+    }
+    if (newPrice === listing.price) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("ebay-reprice", {
+        body: {
+          action: "single_update",
+          userToken,
+          userId,
+          offerId: listing.offerId,
+          sku: listing.sku,
+          listingId: listing.listingId,
+          newPrice,
+          currency: listing.currency,
+        },
+      });
+      if (error || !data?.success) {
+        toast.error(`Price update failed: ${data?.error || error?.message || "Unknown error"}`);
+      } else {
+        toast.success(`Price updated to $${newPrice.toFixed(2)}`);
+        onSaved(listing.offerId, listing.listingId, newPrice);
+        setEditing(false);
+      }
+    } catch (e: any) {
+      toast.error(`Error: ${e.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => { setValue(listing.price.toFixed(2)); setEditing(true); }}
+        className="group flex items-center gap-1 text-sm font-semibold text-primary hover:text-primary/80 transition-colors"
+        title="Click to edit price"
+      >
+        ${listing.price.toFixed(2)}
+        <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-sm text-muted-foreground">$</span>
+      <input
+        type="number"
+        step="0.01"
+        min="0.01"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") handleSave();
+          if (e.key === "Escape") setEditing(false);
+        }}
+        className="w-20 text-sm font-semibold border border-primary/50 rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+        autoFocus
+      />
+      {saving ? (
+        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+      ) : (
+        <>
+          <button onClick={handleSave} className="text-emerald-600 hover:text-emerald-500 transition-colors" title="Save">
+            <Check className="w-4 h-4" />
+          </button>
+          <button onClick={() => setEditing(false)} className="text-muted-foreground hover:text-foreground transition-colors" title="Cancel">
+            <X className="w-4 h-4" />
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Bulk Price Modal ─────────────────────────────────────────────────────────
+
+interface BulkPriceModalProps {
+  selected: EbayListing[];
+  onClose: () => void;
+  onSuccess: (updates: Array<{ offerId: string | null; listingId: string | null; newPrice: number }>) => void;
+  userToken: string;
+  userId: string;
+}
+
+function BulkPriceModal({ selected, onClose, onSuccess, userToken, userId }: BulkPriceModalProps) {
+  const [prices, setPrices] = useState<Record<string, string>>(() => {
+    const m: Record<string, string> = {};
+    for (const l of selected) {
+      m[l.offerId || l.listingId || l.sku] = l.price.toFixed(2);
+    }
+    return m;
+  });
+  const [adjustMode, setAdjustMode] = useState<"fixed" | "pct" | "amount">("fixed");
+  const [adjustValue, setAdjustValue] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const key = (l: EbayListing) => l.offerId || l.listingId || l.sku;
+
+  const applyAdjustment = () => {
+    const adj = parseFloat(adjustValue);
+    if (isNaN(adj)) return;
+    const updated: Record<string, string> = {};
+    for (const l of selected) {
+      const k = key(l);
+      const base = parseFloat(prices[k] || l.price.toFixed(2));
+      let newVal = base;
+      if (adjustMode === "pct") newVal = base * (1 + adj / 100);
+      else if (adjustMode === "amount") newVal = base + adj;
+      else newVal = adj;
+      updated[k] = Math.max(0.01, newVal).toFixed(2);
+    }
+    setPrices(updated);
+  };
+
+  const handleSave = async () => {
+    const updates = selected.map((l) => {
+      const k = key(l);
+      return {
+        offerId: l.offerId,
+        sku: l.sku,
+        listingId: l.listingId,
+        newPrice: parseFloat(prices[k] || l.price.toFixed(2)),
+        currency: l.currency,
+        title: l.title,
+      };
+    });
+
+    for (const u of updates) {
+      if (!u.newPrice || u.newPrice <= 0) {
+        toast.error(`Invalid price for "${u.title?.substring(0, 30)}..."`);
+        return;
+      }
+    }
+
+    setSaving(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("ebay-reprice", {
+        body: { action: "bulk_update", userToken, userId, updates },
+      });
+      if (error) {
+        toast.error(`Bulk update failed: ${error.message}`);
+        return;
+      }
+      const { successCount, failCount, results } = data;
+      if (successCount > 0) {
+        toast.success(`${successCount} listing${successCount !== 1 ? "s" : ""} updated successfully`);
+      }
+      if (failCount > 0) {
+        const failed = results?.filter((r: any) => !r.success) || [];
+        toast.error(`${failCount} update${failCount !== 1 ? "s" : ""} failed: ${failed[0]?.error || "Unknown error"}`);
+      }
+      // Pass successful updates back
+      const successfulUpdates = updates.filter((u, i) => results?.[i]?.success !== false);
+      onSuccess(successfulUpdates.map((u) => ({
+        offerId: u.offerId,
+        listingId: u.listingId,
+        newPrice: u.newPrice,
+      })));
+      if (failCount === 0) onClose();
+    } catch (e: any) {
+      toast.error(`Error: ${e.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-border">
+          <div>
+            <h2 className="text-base font-semibold text-foreground">Bulk Price Update</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">{selected.length} listing{selected.length !== 1 ? "s" : ""} selected</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Quick Adjust */}
+        <div className="px-5 py-3 border-b border-border bg-secondary/30">
+          <p className="text-xs font-medium text-muted-foreground mb-2">Quick adjust all prices</p>
+          <div className="flex gap-2">
+            <div className="flex border border-border rounded-lg overflow-hidden text-xs">
+              {(["fixed", "pct", "amount"] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setAdjustMode(m)}
+                  className={`px-2.5 py-1.5 transition-colors ${adjustMode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+                >
+                  {m === "fixed" ? "Set $" : m === "pct" ? "% ±" : "$ ±"}
+                </button>
+              ))}
+            </div>
+            <input
+              type="number"
+              step="0.01"
+              value={adjustValue}
+              onChange={(e) => setAdjustValue(e.target.value)}
+              placeholder={adjustMode === "pct" ? "e.g. 10 or -5" : "e.g. 49.99"}
+              className="flex-1 text-xs border border-border rounded-lg px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <button
+              onClick={applyAdjustment}
+              className="px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+            >
+              Apply
+            </button>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-1.5">
+            {adjustMode === "fixed" && "Set all prices to this exact value"}
+            {adjustMode === "pct" && "Raise (+) or lower (-) by percentage. e.g. -10 = 10% off"}
+            {adjustMode === "amount" && "Add (+) or subtract (-) a dollar amount from each price"}
+          </p>
+        </div>
+
+        {/* Per-listing price inputs */}
+        <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
+          {selected.map((l) => {
+            const k = key(l);
+            return (
+              <div key={k} className="flex items-center gap-3">
+                {l.imageUrl ? (
+                  <img src={l.imageUrl} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                ) : (
+                  <div className="w-10 h-10 rounded-lg bg-secondary flex-shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-foreground line-clamp-1">{l.title}</p>
+                  <p className="text-[10px] text-muted-foreground">Current: ${l.price.toFixed(2)}</p>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <span className="text-xs text-muted-foreground">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={prices[k] || ""}
+                    onChange={(e) => setPrices((prev) => ({ ...prev, [k]: e.target.value }))}
+                    className="w-20 text-sm font-semibold border border-border rounded px-1.5 py-1 bg-background focus:outline-none focus:ring-1 focus:ring-primary text-right"
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-border flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 text-sm font-medium border border-border rounded-xl text-foreground hover:bg-secondary transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 py-2.5 text-sm font-medium bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+            {saving ? "Updating..." : `Update ${selected.length} Price${selected.length !== 1 ? "s" : ""}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Sort Button Helper ───────────────────────────────────────────────────────
+
+function SortBtn({
+  field, label, current, dir, onSort,
+}: {
+  field: SortField; label: string; current: SortField; dir: SortDir;
+  onSort: (f: SortField) => void;
+}) {
+  const active = current === field;
+  return (
+    <button
+      onClick={() => onSort(field)}
+      className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg transition-colors ${
+        active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+      }`}
+    >
+      {label}
+      {active ? (
+        dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+      ) : (
+        <ArrowUpDown className="w-3 h-3 opacity-40" />
+      )}
+    </button>
+  );
+}
+
+// ─── Main Dashboard Component ─────────────────────────────────────────────────
 
 export default function DashboardPage() {
   const { drafts } = useDrafts();
   const { signOut, user } = useAuth();
   const navigate = useNavigate();
+
   const [listings, setListings] = useState<EbayListing[]>([]);
   const [loading, setLoading] = useState(false);
   const [needsAuth, setNeedsAuth] = useState(false);
@@ -48,28 +412,35 @@ export default function DashboardPage() {
   const [setupDismissed, setSetupDismissed] = useState(false);
   const [spotPrices, setSpotPrices] = useState<{ gold: number; silver: number; platinum: number } | null>(null);
   const [meltAlertOpen, setMeltAlertOpen] = useState(true);
+  const [ebayToken, setEbayToken] = useState<string>("");
 
-  // Fetch spot prices once we have live listings with metal-content drafts
+  // Sorting & filtering state
+  const [sortField, setSortField] = useState<SortField>("listingDate");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterStatus, setFilterStatus] = useState<"all" | "active" | "inactive">("all");
+  const [filterMinPrice, setFilterMinPrice] = useState("");
+  const [filterMaxPrice, setFilterMaxPrice] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Selection & bulk edit state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkModal, setShowBulkModal] = useState(false);
+
+  // Fetch spot prices once
   useEffect(() => {
     const metalDrafts = drafts.filter(
       (d) => d.ebayListingId && d.metalType && d.metalType !== "none" && (d.metalWeightOz ?? 0) > 0
     );
     if (metalDrafts.length === 0 || spotPrices) return;
-
     supabase.functions
       .invoke("spot-prices", { body: { metalType: "gold", weightOz: 1 } })
-      .then(({ data }) => {
-        if (data?.spotPrices) setSpotPrices(data.spotPrices);
-      })
-      .catch(() => {}); // non-fatal
+      .then(({ data }) => { if (data?.spotPrices) setSpotPrices(data.spotPrices); })
+      .catch(() => {});
   }, [drafts, spotPrices]);
 
   const fetchListings = useCallback(async () => {
-    // Token lookup order mirrors usePublishDraft:
-    // 1. Server-side stored token in Supabase profiles (secure, preferred)
-    // 2. localStorage fallback for backwards compatibility
     let token: string | null = null;
-
     if (user?.id) {
       try {
         const { data: tokenData } = await supabase.functions.invoke("ebay-publish", {
@@ -77,10 +448,9 @@ export default function DashboardPage() {
         });
         if (tokenData?.token) {
           token = tokenData.token;
-          // Keep localStorage in sync for legacy code paths
-          localStorage.setItem(EBAY_TOKEN_KEY, token);
+          localStorage.setItem(EBAY_TOKEN_KEY, token!);
+          setEbayToken(token!);
         }
-        // If token is expired and refresh failed, tokenData.isExpired will be true
         if (tokenData?.isExpired) {
           localStorage.removeItem(EBAY_TOKEN_KEY);
           setNeedsAuth(true);
@@ -89,38 +459,24 @@ export default function DashboardPage() {
           toast.error("eBay session expired. Please reconnect in Settings.");
           return;
         }
-      } catch {
-        // fall through to localStorage
-      }
+      } catch { /* fall through */ }
     }
+    if (!token) token = localStorage.getItem(EBAY_TOKEN_KEY);
+    if (token) setEbayToken(token);
 
-    if (!token) {
-      token = localStorage.getItem(EBAY_TOKEN_KEY);
-    }
-
-    if (!token) {
-      setNeedsAuth(true);
-      setEbayAccount(null);
-      setListings([]);
-      return;
-    }
+    if (!token) { setNeedsAuth(true); setEbayAccount(null); setListings([]); return; }
 
     setLoading(true);
     setError("");
 
-    // Fetch user info in parallel with listings
-    const userPromise = supabase.functions.invoke("ebay-user", {
-      body: { userToken: token },
-    });
+    const userPromise = supabase.functions.invoke("ebay-user", { body: { userToken: token } });
 
     try {
       const { data, error: fnError } = await supabase.functions.invoke("ebay-listings", {
         body: { userToken: token },
       });
 
-      // If the function errors or returns needsAuth, show the connect button
       if (fnError || data?.needsAuth) {
-        // Clear the invalid token so we don't keep trying with it
         localStorage.removeItem(EBAY_TOKEN_KEY);
         setNeedsAuth(true);
         setListings([]);
@@ -129,17 +485,12 @@ export default function DashboardPage() {
         return;
       }
       if (data?.warning) {
-        // Display warning but keep the connection active (user can try to fix on eBay)
-        console.warn("ebay-listings warning:", data.warning);
         setListings([]);
         setNeedsAuth(false);
         toast.error(data.warning);
         return;
       }
       if (data?.error) {
-        // Show the actual error so we can diagnose it
-        console.error("ebay-listings error response:", data.error);
-        // Clear invalid token on API error too
         localStorage.removeItem(EBAY_TOKEN_KEY);
         setNeedsAuth(true);
         setListings([]);
@@ -150,25 +501,18 @@ export default function DashboardPage() {
 
       const rawListings: EbayListing[] = data.listings || [];
 
-      // Fetch cached competitor prices from Supabase for all listings with a listingId
+      // Fetch competitor prices
       let competitorMap: Record<string, CompetitorPriceSnapshot> = {};
       if (user?.id && rawListings.length > 0) {
         try {
-          const listingIds = rawListings
-            .map((l) => l.listingId)
-            .filter(Boolean) as string[];
-
+          const listingIds = rawListings.map((l) => l.listingId).filter(Boolean) as string[];
           if (listingIds.length > 0) {
             const { data: cpData } = await supabase
               .from("competitor_prices")
-              .select(
-                "ebay_listing_id, avg_price, min_price, max_price, median_price, price_delta, competitor_count, price_distribution, fetched_at"
-              )
+              .select("ebay_listing_id, avg_price, min_price, max_price, median_price, price_delta, competitor_count, price_distribution, fetched_at")
               .eq("user_id", user.id)
               .in("ebay_listing_id", listingIds)
               .order("fetched_at", { ascending: false });
-
-            // Keep only the most recent snapshot per listing
             for (const row of cpData ?? []) {
               if (!competitorMap[row.ebay_listing_id]) {
                 competitorMap[row.ebay_listing_id] = {
@@ -184,31 +528,23 @@ export default function DashboardPage() {
               }
             }
           }
-        } catch (cpErr) {
-          console.warn("Could not load competitor prices (non-fatal):", cpErr);
-        }
+        } catch (cpErr) { console.warn("Competitor prices non-fatal:", cpErr); }
       }
 
-      const listingsWithCompetitors: EbayListing[] = rawListings.map((l) => ({
+      const enriched: EbayListing[] = rawListings.map((l) => ({
         ...l,
         competitor: l.listingId ? (competitorMap[l.listingId] ?? null) : null,
       }));
 
-      setListings(listingsWithCompetitors);
+      setListings(enriched);
       setNeedsAuth(false);
 
-      // Get user info
       const { data: userData } = await userPromise;
       if (userData?.username) {
-        setEbayAccount({ 
-          username: userData.username, 
-          businessName: userData.businessName || "" 
-        });
+        setEbayAccount({ username: userData.username, businessName: userData.businessName || "" });
       }
-      
-      toast.success(`Refreshed! ${data.listings?.length || 0} listings loaded`);
+      toast.success(`Refreshed! ${enriched.length} listings loaded`);
     } catch (err: any) {
-      console.error("Dashboard fetch error:", err);
       setError(err.message || "Failed to load listings");
       toast.error("Failed to refresh listings");
     } finally {
@@ -216,18 +552,114 @@ export default function DashboardPage() {
     }
   }, [user?.id]);
 
-  useEffect(() => {
-    fetchListings();
-  }, [fetchListings]);
+  useEffect(() => { fetchListings(); }, [fetchListings]);
 
-  // Compute stats
-  const activeListings = listings.filter((l) => l.status === "PUBLISHED" || l.status === "ACTIVE");
+  // ── Sort handler ────────────────────────────────────────────────────────────
+  const handleSort = (field: SortField) => {
+    if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortField(field); setSortDir("asc"); }
+  };
+
+  // ── Filtered + sorted listings ──────────────────────────────────────────────
+  const filteredListings = useMemo(() => {
+    let list = [...listings];
+
+    // Text search
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(
+        (l) =>
+          l.title.toLowerCase().includes(q) ||
+          l.sku.toLowerCase().includes(q) ||
+          (l.listingId || "").includes(q)
+      );
+    }
+
+    // Status filter
+    if (filterStatus === "active") {
+      list = list.filter((l) => l.status === "PUBLISHED" || l.status === "Active" || l.status === "ACTIVE");
+    } else if (filterStatus === "inactive") {
+      list = list.filter((l) => l.status !== "PUBLISHED" && l.status !== "Active" && l.status !== "ACTIVE");
+    }
+
+    // Price range filter
+    const minP = parseFloat(filterMinPrice);
+    const maxP = parseFloat(filterMaxPrice);
+    if (!isNaN(minP)) list = list.filter((l) => l.price >= minP);
+    if (!isNaN(maxP)) list = list.filter((l) => l.price <= maxP);
+
+    // Sort
+    list.sort((a, b) => {
+      let cmp = 0;
+      if (sortField === "price") cmp = a.price - b.price;
+      else if (sortField === "views") cmp = a.views - b.views;
+      else if (sortField === "title") cmp = a.title.localeCompare(b.title);
+      else if (sortField === "status") cmp = statusLabel(a.status).localeCompare(statusLabel(b.status));
+      else if (sortField === "listingDate") {
+        const da = a.listingDate ? new Date(a.listingDate).getTime() : 0;
+        const db = b.listingDate ? new Date(b.listingDate).getTime() : 0;
+        cmp = da - db;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+
+    return list;
+  }, [listings, searchQuery, filterStatus, filterMinPrice, filterMaxPrice, sortField, sortDir]);
+
+  // ── Selection helpers ───────────────────────────────────────────────────────
+  const listingKey = (l: EbayListing) => l.offerId || l.listingId || l.sku;
+
+  const toggleSelect = (l: EbayListing) => {
+    const k = listingKey(l);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredListings.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredListings.map(listingKey)));
+    }
+  };
+
+  const selectedListings = filteredListings.filter((l) => selectedIds.has(listingKey(l)));
+
+  // ── Price update callback ───────────────────────────────────────────────────
+  const handlePriceSaved = (offerId: string | null, listingId: string | null, newPrice: number) => {
+    setListings((prev) =>
+      prev.map((l) => {
+        if (offerId && l.offerId === offerId) return { ...l, price: newPrice };
+        if (listingId && l.listingId === listingId) return { ...l, price: newPrice };
+        return l;
+      })
+    );
+  };
+
+  const handleBulkSuccess = (updates: Array<{ offerId: string | null; listingId: string | null; newPrice: number }>) => {
+    setListings((prev) =>
+      prev.map((l) => {
+        const match = updates.find(
+          (u) => (u.offerId && u.offerId === l.offerId) || (u.listingId && u.listingId === l.listingId)
+        );
+        return match ? { ...l, price: match.newPrice } : l;
+      })
+    );
+    setSelectedIds(new Set());
+  };
+
+  // ── Stats ───────────────────────────────────────────────────────────────────
+  const activeListings = listings.filter((l) => l.status === "PUBLISHED" || l.status === "Active" || l.status === "ACTIVE");
   const totalViews = listings.reduce((sum, l) => sum + l.views, 0);
   const liveValue = listings.reduce((sum, l) => sum + l.price, 0);
   const draftValue = drafts.reduce((sum, d) => sum + (d.priceMin + d.priceMax) / 2, 0);
   const totalInventoryValue = liveValue + draftValue;
 
-  // Build at-risk listing alerts (price below melt floor)
+  // Melt floor alerts
   const atRiskListings = spotPrices
     ? listings.flatMap((listing) => {
         const draft = drafts.find((d) => d.ebayListingId === listing.listingId);
@@ -239,6 +671,9 @@ export default function DashboardPage() {
       })
     : [];
 
+  const hasActiveFilters = searchQuery || filterStatus !== "all" || filterMinPrice || filterMaxPrice;
+
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background pb-24">
       {/* Header */}
@@ -257,25 +692,28 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
-          <button
-            onClick={fetchListings}
-            disabled={loading}
-            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-          </button>
-          <button
-            onClick={signOut}
-            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-            title="Sign out"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={fetchListings}
+              disabled={loading}
+              className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors disabled:opacity-50"
+              title="Refresh listings"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+            </button>
+            <button
+              onClick={signOut}
+              className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              title="Sign out"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </header>
 
-      <div className="px-5 md:px-8 lg:px-12 max-w-3xl mx-auto space-y-6">
-        {/* Setup Progress Widget */}
+      <div className="px-5 md:px-8 lg:px-12 max-w-3xl mx-auto space-y-5">
+        {/* Setup: Connect eBay */}
         {needsAuth && !setupDismissed && (
           <div className="bg-accent/50 border border-accent rounded-xl p-4 flex items-start justify-between gap-4">
             <div className="flex-1 flex items-start gap-3">
@@ -283,19 +721,14 @@ export default function DashboardPage() {
               <div className="space-y-1">
                 <p className="text-sm font-medium text-foreground">Setup: Connect eBay</p>
                 <p className="text-xs text-muted-foreground">
-                  Step 1 of 1 — <button
-                    onClick={() => navigate("/settings?tab=integrations")}
-                    className="text-primary font-medium hover:underline"
-                  >
+                  Step 1 of 1 —{" "}
+                  <button onClick={() => navigate("/settings?tab=integrations")} className="text-primary font-medium hover:underline">
                     Go to Settings
                   </button>
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => setSetupDismissed(true)}
-              className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-            >
+            <button onClick={() => setSetupDismissed(true)} className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -349,7 +782,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Repricing Alert Banner — listings priced below melt floor */}
+        {/* Melt Floor Alerts */}
         {atRiskListings.length > 0 && (
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl overflow-hidden">
             <button
@@ -364,25 +797,21 @@ export default function DashboardPage() {
               </div>
               {meltAlertOpen
                 ? <ChevronUp className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-                : <ChevronDown className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-              }
+                : <ChevronDown className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />}
             </button>
-
             {meltAlertOpen && (
               <div className="px-4 pb-3 space-y-2">
                 <p className="text-xs text-amber-700/80 dark:text-amber-300/80">
-                  Spot prices have moved — these listings are priced below their precious metal melt value. Consider raising your prices.
+                  Spot prices have moved — these listings are priced below their precious metal melt value.
                 </p>
                 {atRiskListings.map(({ listing, meltFloor, delta }) => (
-                  <div key={listing.offerId} className="flex items-center justify-between gap-2 text-xs bg-amber-500/10 rounded-lg px-3 py-2">
+                  <div key={listing.offerId || listing.listingId} className="flex items-center justify-between gap-2 text-xs bg-amber-500/10 rounded-lg px-3 py-2">
                     <p className="text-foreground font-medium line-clamp-1 flex-1">{listing.title}</p>
                     <div className="flex-shrink-0 text-right space-y-0.5">
                       <p className="text-amber-700 dark:text-amber-300 font-semibold">
                         Listed ${listing.price.toFixed(2)} · Melt ${meltFloor.toFixed(2)}
                       </p>
-                      <p className="text-amber-600/80 dark:text-amber-400/80">
-                        ${delta.toFixed(2)} below floor
-                      </p>
+                      <p className="text-amber-600/80 dark:text-amber-400/80">${delta.toFixed(2)} below floor</p>
                     </div>
                   </div>
                 ))}
@@ -391,19 +820,14 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Auth warning / Connect eBay CTA */}
+        {/* Auth Warning */}
         {needsAuth && (
           <div className="bg-accent/50 border border-accent rounded-xl p-4 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-sm font-medium text-foreground">eBay not connected</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Connect your eBay account in Settings to see your listings and traffic data.
-              </p>
-              <button
-                onClick={() => navigate("/settings?tab=integrations")}
-                className="mt-2 text-xs font-medium text-primary hover:underline"
-              >
+              <p className="text-xs text-muted-foreground mt-0.5">Connect your eBay account in Settings to see listings and traffic data.</p>
+              <button onClick={() => navigate("/settings?tab=integrations")} className="mt-2 text-xs font-medium text-primary hover:underline">
                 Go to Integrations →
               </button>
             </div>
@@ -417,102 +841,300 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Active Listings Table */}
+        {/* ── Listings Section ──────────────────────────────────────────────── */}
         <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-foreground">eBay Listings</h2>
-            {needsAuth && (
+          {/* Section header */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-foreground">eBay Listings</h2>
+              {listings.length > 0 && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">
+                  {filteredListings.length}{filteredListings.length !== listings.length ? ` / ${listings.length}` : ""}
+                </span>
+              )}
+              {needsAuth && (
+                <button
+                  onClick={() => navigate("/settings?tab=integrations")}
+                  className="px-2.5 py-0.5 rounded-full bg-destructive/20 text-destructive text-xs font-medium hover:bg-destructive/30 transition-colors flex items-center gap-1"
+                >
+                  <span className="inline-block w-1.5 h-1.5 bg-destructive rounded-full" />
+                  Disconnected
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5">
+              {selectedIds.size > 0 && (
+                <button
+                  onClick={() => setShowBulkModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                >
+                  <Tag className="w-3.5 h-3.5" />
+                  Edit {selectedIds.size} Price{selectedIds.size !== 1 ? "s" : ""}
+                </button>
+              )}
               <button
-                onClick={() => navigate("/settings?tab=integrations")}
-                className="px-2.5 py-0.5 rounded-full bg-destructive/20 text-destructive text-xs font-medium hover:bg-destructive/30 transition-colors flex items-center gap-1"
+                onClick={() => setShowFilters((v) => !v)}
+                className={`flex items-center gap-1 p-1.5 rounded-lg text-xs transition-colors ${
+                  showFilters || hasActiveFilters
+                    ? "bg-primary/15 text-primary"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                }`}
+                title="Filters & sort"
               >
-                <span className="inline-block w-1.5 h-1.5 bg-destructive rounded-full" />
-                Disconnected
+                <SlidersHorizontal className="w-4 h-4" />
+                {hasActiveFilters && <span className="w-1.5 h-1.5 rounded-full bg-primary" />}
               </button>
-            )}
+            </div>
           </div>
 
+          {/* Filter / Sort Panel */}
+          {showFilters && (
+            <div className="bg-card border border-border rounded-xl p-4 space-y-4">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search title, SKU, listing ID…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-8 pr-3 py-2 text-xs bg-secondary border border-transparent rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Status filter + Price range */}
+              <div className="flex flex-wrap gap-3">
+                <div className="flex-1 min-w-[120px]">
+                  <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 block">Status</label>
+                  <div className="flex border border-border rounded-lg overflow-hidden text-xs">
+                    {(["all", "active", "inactive"] as const).map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setFilterStatus(s)}
+                        className={`flex-1 py-1.5 capitalize transition-colors ${
+                          filterStatus === s ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-end gap-1.5">
+                  <div>
+                    <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 block">Min $</label>
+                    <input
+                      type="number" min="0" placeholder="0"
+                      value={filterMinPrice} onChange={(e) => setFilterMinPrice(e.target.value)}
+                      className="w-20 text-xs border border-border rounded-lg px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  <span className="text-muted-foreground text-xs pb-1.5">–</span>
+                  <div>
+                    <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 block">Max $</label>
+                    <input
+                      type="number" min="0" placeholder="∞"
+                      value={filterMaxPrice} onChange={(e) => setFilterMaxPrice(e.target.value)}
+                      className="w-20 text-xs border border-border rounded-lg px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Sort */}
+              <div>
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Sort by</p>
+                <div className="flex flex-wrap gap-1.5">
+                  <SortBtn field="listingDate" label="Date" current={sortField} dir={sortDir} onSort={handleSort} />
+                  <SortBtn field="price" label="Price" current={sortField} dir={sortDir} onSort={handleSort} />
+                  <SortBtn field="views" label="Views" current={sortField} dir={sortDir} onSort={handleSort} />
+                  <SortBtn field="title" label="Title" current={sortField} dir={sortDir} onSort={handleSort} />
+                  <SortBtn field="status" label="Status" current={sortField} dir={sortDir} onSort={handleSort} />
+                </div>
+              </div>
+
+              {/* Clear filters */}
+              {hasActiveFilters && (
+                <button
+                  onClick={() => { setSearchQuery(""); setFilterStatus("all"); setFilterMinPrice(""); setFilterMaxPrice(""); }}
+                  className="text-xs text-muted-foreground hover:text-foreground underline"
+                >
+                  Clear all filters
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Select all bar — only shown when listings exist */}
+          {filteredListings.length > 0 && (
+            <div className="flex items-center gap-2 px-1">
+              <button onClick={toggleSelectAll} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                {selectedIds.size === filteredListings.length && filteredListings.length > 0
+                  ? <CheckSquare className="w-4 h-4 text-primary" />
+                  : <Square className="w-4 h-4" />}
+                {selectedIds.size === filteredListings.length && filteredListings.length > 0
+                  ? "Deselect all"
+                  : `Select all (${filteredListings.length})`}
+              </button>
+              {selectedIds.size > 0 && (
+                <span className="text-xs text-muted-foreground">· {selectedIds.size} selected</span>
+              )}
+            </div>
+          )}
+
+          {/* Listing cards */}
           {loading && listings.length === 0 ? (
             <div className="text-center py-12">
               <RefreshCw className="w-6 h-6 text-muted-foreground animate-spin mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">Loading listings...</p>
+              <p className="text-sm text-muted-foreground">Loading listings…</p>
             </div>
-          ) : listings.length === 0 && !needsAuth ? (
+          ) : filteredListings.length === 0 && !needsAuth ? (
             <div className="text-center py-12 space-y-2">
               <Package className="w-8 h-8 text-muted-foreground/50 mx-auto" />
-              <p className="text-sm text-muted-foreground">No listings found on eBay yet.</p>
+              <p className="text-sm text-muted-foreground">
+                {hasActiveFilters ? "No listings match your filters." : "No listings found on eBay yet."}
+              </p>
+              {hasActiveFilters && (
+                <button
+                  onClick={() => { setSearchQuery(""); setFilterStatus("all"); setFilterMinPrice(""); setFilterMaxPrice(""); }}
+                  className="text-xs text-primary hover:underline"
+                >
+                  Clear filters
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-2">
-              {listings.map((listing) => (
-                <div key={listing.offerId} className="bg-card border border-border rounded-xl p-3 flex gap-3">
-                  {listing.imageUrl ? (
-                    <img
-                      src={listing.imageUrl}
-                      alt={listing.title}
-                      className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
-                    />
-                  ) : (
-                    <div className="w-16 h-16 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0">
-                      <Package className="w-6 h-6 text-muted-foreground" />
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground line-clamp-1">{listing.title}</p>
-                    <div className="flex items-center gap-3 mt-1">
-                      <span className="text-sm font-semibold text-primary">
-                        ${listing.price.toFixed(2)}
-                      </span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                        listing.status === "PUBLISHED" || listing.status === "ACTIVE"
-                          ? "bg-primary/10 text-primary"
-                          : "bg-muted text-muted-foreground"
-                      }`}>
-                        {listing.status}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Eye className="w-3 h-3" />
-                        {listing.views} views
-                      </span>
-                      {listing.ebayUrl && (
-                        <a
-                          href={listing.ebayUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-0.5 text-primary hover:underline"
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                          View
-                        </a>
+              {filteredListings.map((listing) => {
+                const k = listingKey(listing);
+                const isSelected = selectedIds.has(k);
+                return (
+                  <div
+                    key={k}
+                    className={`bg-card border rounded-xl p-3 flex gap-3 transition-colors ${
+                      isSelected ? "border-primary/50 bg-primary/5" : "border-border"
+                    }`}
+                  >
+                    {/* Checkbox */}
+                    <button
+                      onClick={() => toggleSelect(listing)}
+                      className="flex-shrink-0 mt-0.5 text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      {isSelected
+                        ? <CheckSquare className="w-4 h-4 text-primary" />
+                        : <Square className="w-4 h-4" />}
+                    </button>
+
+                    {/* Image */}
+                    {listing.imageUrl ? (
+                      <img src={listing.imageUrl} alt={listing.title} className="w-16 h-16 rounded-lg object-cover flex-shrink-0" />
+                    ) : (
+                      <div className="w-16 h-16 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0">
+                        <Package className="w-6 h-6 text-muted-foreground" />
+                      </div>
+                    )}
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      {/* Title + Status */}
+                      <div className="flex items-start gap-2">
+                        <p className="text-sm font-medium text-foreground line-clamp-1 flex-1">{listing.title}</p>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${statusColor(listing.status)}`}>
+                          {statusLabel(listing.status)}
+                        </span>
+                      </div>
+
+                      {/* Price (inline editable) + Views */}
+                      <div className="flex items-center gap-3 mt-1.5">
+                        <InlinePriceEditor
+                          listing={listing}
+                          onSaved={handlePriceSaved}
+                          userToken={ebayToken}
+                          userId={user?.id || ""}
+                        />
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Eye className="w-3 h-3" />
+                          {listing.views.toLocaleString()}
+                        </span>
+                        {listing.ebayUrl && (
+                          <a href={listing.ebayUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-0.5 text-xs text-primary hover:underline">
+                            <ExternalLink className="w-3 h-3" />
+                            View
+                          </a>
+                        )}
+                      </div>
+
+                      {/* Meta row: SKU · Format · Condition · Date */}
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-[10px] text-muted-foreground">
+                        {listing.sku && listing.sku !== listing.listingId && (
+                          <span className="flex items-center gap-0.5">
+                            <Hash className="w-2.5 h-2.5" />
+                            {listing.sku}
+                          </span>
+                        )}
+                        {listing.format && (
+                          <span className="flex items-center gap-0.5">
+                            <Tag className="w-2.5 h-2.5" />
+                            {listing.format === "FIXED_PRICE" ? "BIN" : listing.format === "AUCTION" ? "Auction" : listing.format}
+                          </span>
+                        )}
+                        {listing.condition && (
+                          <span>{listing.condition}</span>
+                        )}
+                        {listing.listingDate && (
+                          <span className="flex items-center gap-0.5">
+                            <Clock className="w-2.5 h-2.5" />
+                            {daysAgo(listing.listingDate)}
+                          </span>
+                        )}
+                        {listing.categoryId && (
+                          <span className="flex items-center gap-0.5 opacity-60">
+                            Cat. {listing.categoryId}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Competitor Price Card */}
+                      {listing.listingId && (
+                        <CompetitorPriceCard
+                          listingId={listing.listingId}
+                          title={listing.title}
+                          yourPrice={listing.price}
+                          ebayUrl={listing.ebayUrl}
+                          competitor={listing.competitor}
+                          onRefreshed={(snapshot) =>
+                            setListings((prev) =>
+                              prev.map((l) =>
+                                l.listingId === listing.listingId ? { ...l, competitor: snapshot } : l
+                              )
+                            )
+                          }
+                        />
                       )}
                     </div>
-                    {listing.listingId && (
-                      <CompetitorPriceCard
-                        listingId={listing.listingId}
-                        title={listing.title}
-                        yourPrice={listing.price}
-                        ebayUrl={listing.ebayUrl}
-                        competitor={listing.competitor}
-                        onRefreshed={(snapshot) =>
-                          setListings((prev) =>
-                            prev.map((l) =>
-                              l.listingId === listing.listingId
-                                ? { ...l, competitor: snapshot }
-                                : l
-                            )
-                          )
-                        }
-                      />
-                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
       </div>
+
+      {/* Bulk Price Modal */}
+      {showBulkModal && (
+        <BulkPriceModal
+          selected={selectedListings}
+          onClose={() => setShowBulkModal(false)}
+          onSuccess={handleBulkSuccess}
+          userToken={ebayToken}
+          userId={user?.id || ""}
+        />
+      )}
 
       <BottomNav />
     </div>

@@ -130,6 +130,10 @@ async function fetchListingsViaTradingAPI(
 
       if (listingId && isGenuinelyActive) {
         console.log(`Trading API item: ItemID=${listingId}, Title="${title}", SKU="${sku}", Status=${listingStatus}, Qty=${quantityAvailable}`);
+        // Parse listing start time for Trading API listings
+        const listingDate = get("StartTime") || null;
+        const listingType = get("ListingType") || "FixedPriceItem";
+        const conditionName = get("ConditionDisplayName") || "";
         listings.push({
           offerId: null,
           sku: sku || listingId,
@@ -142,6 +146,11 @@ async function fetchListingsViaTradingAPI(
           listingId,
           views: 0,
           ebayUrl: `https://www.ebay.com/itm/${listingId}`,
+          // Enhanced fields
+          quantity: quantityAvailable,
+          format: listingType === "Chinese" ? "AUCTION" : "FIXED_PRICE",
+          condition: conditionName,
+          listingDate,
         });
       } else if (listingId) {
         // Log why items were filtered out
@@ -290,6 +299,11 @@ serve(async (req) => {
           status: offer.status || "UNKNOWN",
           categoryId: offer.categoryId || "",
           listingId: offer.listing?.listingId || null,
+          // Enhanced fields
+          quantity: offer.availableQuantity ?? 1,
+          format: offer.format || "FIXED_PRICE",
+          condition: offer.condition || "",
+          listingDate: offer.listing?.publishedDate || null,
         };
       })
     );
