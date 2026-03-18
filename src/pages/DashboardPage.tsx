@@ -67,6 +67,7 @@ type SortField =
   | "listingDate"
   | "status";
 type SortDir = "asc" | "desc";
+type AnalyticsDays = 7 | 30 | 90;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -461,6 +462,9 @@ export default function DashboardPage() {
   const [meltAlertOpen, setMeltAlertOpen] = useState(true);
   const [ebayToken, setEbayToken] = useState<string>("");
 
+  // Analytics timeframe
+  const [analyticsDays, setAnalyticsDays] = useState<AnalyticsDays>(30);
+
   // Sorting & filtering
   const [sortField, setSortField] = useState<SortField>("listingDate");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -468,6 +472,12 @@ export default function DashboardPage() {
   const [filterStatus, setFilterStatus] = useState<"all" | "active" | "inactive">("all");
   const [filterMinPrice, setFilterMinPrice] = useState("");
   const [filterMaxPrice, setFilterMaxPrice] = useState("");
+  // Stat filters
+  const [filterMinViews, setFilterMinViews] = useState("");
+  const [filterMaxViews, setFilterMaxViews] = useState("");
+  const [filterMinWatchers, setFilterMinWatchers] = useState("");
+  const [filterMinImpressions, setFilterMinImpressions] = useState("");
+  const [filterHasSales, setFilterHasSales] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
   // Selection & bulk edit
@@ -486,7 +496,7 @@ export default function DashboardPage() {
       .catch(() => {});
   }, [drafts, spotPrices]);
 
-  const fetchListings = useCallback(async () => {
+  const fetchListings = useCallback(async (days: AnalyticsDays = analyticsDays) => {
     let token: string | null = null;
     if (user?.id) {
       try {
@@ -520,7 +530,7 @@ export default function DashboardPage() {
 
     try {
       const { data, error: fnError } = await supabase.functions.invoke("ebay-listings", {
-        body: { userToken: token },
+        body: { userToken: token, analyticsDays: days },
       });
 
       if (fnError || data?.needsAuth) {
@@ -599,7 +609,7 @@ export default function DashboardPage() {
     }
   }, [user?.id]);
 
-  useEffect(() => { fetchListings(); }, [fetchListings]);
+  useEffect(() => { fetchListings(analyticsDays); }, [fetchListings, analyticsDays]);
 
   // ── Sort handler ──────────────────────────────────────────────────────────────
   const handleSort = (field: SortField) => {
@@ -632,6 +642,20 @@ export default function DashboardPage() {
     if (!isNaN(minP)) list = list.filter((l) => l.price >= minP);
     if (!isNaN(maxP)) list = list.filter((l) => l.price <= maxP);
 
+    // Stat filters
+    const minV = parseFloat(filterMinViews);
+    const maxV = parseFloat(filterMaxViews);
+    if (!isNaN(minV)) list = list.filter((l) => l.views >= minV);
+    if (!isNaN(maxV)) list = list.filter((l) => l.views <= maxV);
+
+    const minW = parseFloat(filterMinWatchers);
+    if (!isNaN(minW)) list = list.filter((l) => l.watchCount >= minW);
+
+    const minI = parseFloat(filterMinImpressions);
+    if (!isNaN(minI)) list = list.filter((l) => l.impressions >= minI);
+
+    if (filterHasSales) list = list.filter((l) => l.transactions > 0);
+
     list.sort((a, b) => {
       let cmp = 0;
       if (sortField === "price") cmp = a.price - b.price;
@@ -651,7 +675,9 @@ export default function DashboardPage() {
     });
 
     return list;
-  }, [listings, searchQuery, filterStatus, filterMinPrice, filterMaxPrice, sortField, sortDir]);
+  }, [listings, searchQuery, filterStatus, filterMinPrice, filterMaxPrice,
+      filterMinViews, filterMaxViews, filterMinWatchers, filterMinImpressions,
+      filterHasSales, sortField, sortDir]);
 
   // ── Selection helpers ─────────────────────────────────────────────────────────
   const listingKey = (l: EbayListing) => l.offerId || l.listingId || l.sku;
@@ -720,7 +746,8 @@ export default function DashboardPage() {
       })
     : [];
 
-  const hasActiveFilters = searchQuery || filterStatus !== "all" || filterMinPrice || filterMaxPrice;
+  const hasActiveFilters = searchQuery || filterStatus !== "all" || filterMinPrice || filterMaxPrice
+    || filterMinViews || filterMaxViews || filterMinWatchers || filterMinImpressions || filterHasSales;
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
@@ -804,12 +831,30 @@ export default function DashboardPage() {
           </div>
 
           <div className="bg-card border border-border rounded-xl p-4 space-y-1">
-            <div className="flex items-center gap-1.5 text-muted-foreground">
-              <Eye className="w-3.5 h-3.5" />
-              <span className="text-[10px] font-medium uppercase tracking-wide">Total Views</span>
+            <div className="flex items-center justify-between gap-1">
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <Eye className="w-3.5 h-3.5" />
+                <span className="text-[10px] font-medium uppercase tracking-wide">Total Views</span>
+              </div>
+              {/* Timeframe toggle */}
+              <div className="flex border border-border rounded-md overflow-hidden">
+                {([7, 30, 90] as AnalyticsDays[]).map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => setAnalyticsDays(d)}
+                    className={`px-1.5 py-0.5 text-[9px] font-medium transition-colors ${
+                      analyticsDays === d
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-secondary"
+                    }`}
+                  >
+                    {d}d
+                  </button>
+                ))}
+              </div>
             </div>
             <p className="text-xl font-bold text-foreground">{totalViews.toLocaleString()}</p>
-            <p className="text-[10px] text-muted-foreground">Last 30 days</p>
+            <p className="text-[10px] text-muted-foreground">Last {analyticsDays} days</p>
           </div>
 
           <div className="bg-card border border-border rounded-xl p-4 space-y-1">
@@ -827,7 +872,7 @@ export default function DashboardPage() {
               <span className="text-[10px] font-medium uppercase tracking-wide">Transactions</span>
             </div>
             <p className="text-xl font-bold text-foreground">{totalTransactions.toLocaleString()}</p>
-            <p className="text-[10px] text-muted-foreground">Last 30 days</p>
+            <p className="text-[10px] text-muted-foreground">Last {analyticsDays} days</p>
           </div>
 
           <div className="bg-card border border-border rounded-xl p-4 space-y-1">
@@ -1013,6 +1058,91 @@ export default function DashboardPage() {
                 </div>
               </div>
 
+              {/* Stat filters */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Engagement filters</p>
+
+                {/* Quick preset buttons */}
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    onClick={() => { setFilterMinViews(""); setFilterMaxViews("1"); }}
+                    className={`px-2.5 py-1 text-[10px] font-medium rounded-lg border transition-colors ${
+                      filterMaxViews === "1" && filterMinViews === ""
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    }`}
+                  >
+                    Zero views
+                  </button>
+                  <button
+                    onClick={() => { setFilterMinViews(filterMinViews === "1" && filterMaxViews === "" ? "" : "1"); setFilterMaxViews(""); }}
+                    className={`px-2.5 py-1 text-[10px] font-medium rounded-lg border transition-colors ${
+                      filterMinViews === "1" && filterMaxViews === ""
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    }`}
+                  >
+                    Has views
+                  </button>
+                  <button
+                    onClick={() => setFilterMinWatchers(filterMinWatchers === "1" ? "" : "1")}
+                    className={`px-2.5 py-1 text-[10px] font-medium rounded-lg border transition-colors ${
+                      filterMinWatchers === "1"
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    }`}
+                  >
+                    Has watchers
+                  </button>
+                  <button
+                    onClick={() => setFilterHasSales(!filterHasSales)}
+                    className={`px-2.5 py-1 text-[10px] font-medium rounded-lg border transition-colors ${
+                      filterHasSales
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    }`}
+                  >
+                    Has sales
+                  </button>
+                </div>
+
+                {/* Custom stat range inputs */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Min views</label>
+                    <input
+                      type="number" min="0" placeholder="0"
+                      value={filterMinViews} onChange={(e) => setFilterMinViews(e.target.value)}
+                      className="w-full text-xs border border-border rounded-lg px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Max views</label>
+                    <input
+                      type="number" min="0" placeholder="∞"
+                      value={filterMaxViews} onChange={(e) => setFilterMaxViews(e.target.value)}
+                      className="w-full text-xs border border-border rounded-lg px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Min watchers</label>
+                    <input
+                      type="number" min="0" placeholder="0"
+                      value={filterMinWatchers} onChange={(e) => setFilterMinWatchers(e.target.value)}
+                      className="w-full text-xs border border-border rounded-lg px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Min impressions</label>
+                    <input
+                      type="number" min="0" placeholder="0"
+                      value={filterMinImpressions} onChange={(e) => setFilterMinImpressions(e.target.value)}
+                      className="w-full text-xs border border-border rounded-lg px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* Sort — 2 rows */}
               <div>
                 <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Sort by</p>
@@ -1032,7 +1162,13 @@ export default function DashboardPage() {
               {/* Clear filters */}
               {hasActiveFilters && (
                 <button
-                  onClick={() => { setSearchQuery(""); setFilterStatus("all"); setFilterMinPrice(""); setFilterMaxPrice(""); }}
+                  onClick={() => {
+                    setSearchQuery(""); setFilterStatus("all");
+                    setFilterMinPrice(""); setFilterMaxPrice("");
+                    setFilterMinViews(""); setFilterMaxViews("");
+                    setFilterMinWatchers(""); setFilterMinImpressions("");
+                    setFilterHasSales(false);
+                  }}
                   className="text-xs text-muted-foreground hover:text-foreground underline"
                 >
                   Clear all filters
@@ -1072,7 +1208,13 @@ export default function DashboardPage() {
               </p>
               {hasActiveFilters && (
                 <button
-                  onClick={() => { setSearchQuery(""); setFilterStatus("all"); setFilterMinPrice(""); setFilterMaxPrice(""); }}
+                  onClick={() => {
+                    setSearchQuery(""); setFilterStatus("all");
+                    setFilterMinPrice(""); setFilterMaxPrice("");
+                    setFilterMinViews(""); setFilterMaxViews("");
+                    setFilterMinWatchers(""); setFilterMinImpressions("");
+                    setFilterHasSales(false);
+                  }}
                   className="text-xs text-primary hover:underline"
                 >
                   Clear filters
@@ -1142,7 +1284,7 @@ export default function DashboardPage() {
                         <StatPill
                           icon={Eye}
                           value={listing.views.toLocaleString()}
-                          label="Views (last 30d)"
+                          label={`Views (last ${analyticsDays}d)`}
                           highlight={listing.views > 0}
                         />
                         {/* Impressions */}
@@ -1151,7 +1293,7 @@ export default function DashboardPage() {
                           value={listing.impressions > 999
                             ? `${(listing.impressions / 1000).toFixed(1)}k`
                             : listing.impressions.toLocaleString()}
-                          label="Impressions (last 30d)"
+                          label={`Impressions (last ${analyticsDays}d)`}
                         />
                         {/* Watchers */}
                         <StatPill

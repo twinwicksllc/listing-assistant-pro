@@ -25,7 +25,8 @@ const ANALYTICS_METRICS = [
 // ─── Fetch multi-metric traffic data from Sell Analytics API ─────────────────
 async function fetchAnalyticsData(
   apiBase: string,
-  ebayHeaders: Record<string, string>
+  ebayHeaders: Record<string, string>,
+  days: number = 30
 ): Promise<Record<string, {
   views: number;
   impressions: number;
@@ -43,9 +44,9 @@ async function fetchAnalyticsData(
 
   try {
     const today = new Date();
-    const thirtyDaysAgo = new Date(today);
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const dateRange = `${thirtyDaysAgo.toISOString().split("T")[0]}..${today.toISOString().split("T")[0]}`;
+    const startDate = new Date(today);
+    startDate.setDate(startDate.getDate() - days);
+    const dateRange = `${startDate.toISOString().split("T")[0]}..${today.toISOString().split("T")[0]}`;
 
     const trafficResp = await fetch(
       `${apiBase}/sell/analytics/v1/traffic_report?dimension=LISTING&filter=date_range:[${dateRange}]&metric=${ANALYTICS_METRICS}`,
@@ -160,7 +161,8 @@ async function fetchListingsViaTradingAPI(
   apiBase: string,
   userToken: string,
   _ebayHeaders: Record<string, string>,
-  corsHeaders: Record<string, string>
+  corsHeaders: Record<string, string>,
+  analyticsDays: number = 30
 ): Promise<Response> {
   const tradingUrl = apiBase.includes("sandbox")
     ? "https://api.sandbox.ebay.com/ws/api.dll"
@@ -312,7 +314,7 @@ async function fetchListingsViaTradingAPI(
       "Content-Type": "application/json",
       "Accept-Language": "en-US",
     };
-    const analyticsMap = await fetchAnalyticsData(apiBase, ebayHeaders);
+    const analyticsMap = await fetchAnalyticsData(apiBase, ebayHeaders, analyticsDays ?? 30);
 
     // Merge analytics into listings
     const enriched = listings.map((l) => {
@@ -365,7 +367,7 @@ serve(async (req) => {
   }
 
   try {
-    const { userToken } = await req.json();
+    const { userToken, analyticsDays } = await req.json();
 
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
     console.log("ebay-listings: env =", ebayEnv, "token prefix =", userToken ? userToken.substring(0, 20) + "..." : "NONE");
@@ -414,7 +416,7 @@ serve(async (req) => {
 
       if (offersResp.status === 400 && errText.includes("SKU")) {
         console.warn("eBay Inventory API /offer rejected with SKU error — falling back to Trading API.");
-        return await fetchListingsViaTradingAPI(apiBase, userToken, ebayHeaders, corsHeaders);
+        return await fetchListingsViaTradingAPI(apiBase, userToken, ebayHeaders, corsHeaders, analyticsDays ?? 30);
       }
 
       return new Response(
@@ -483,7 +485,7 @@ serve(async (req) => {
     const watchMap = await fetchWatchDataForListings(listingIds, tradingUrl, userToken);
 
     // Fetch multi-metric analytics
-    const analyticsMap = await fetchAnalyticsData(apiBase, ebayHeaders);
+    const analyticsMap = await fetchAnalyticsData(apiBase, ebayHeaders, analyticsDays ?? 30);
 
     // Build EPN affiliate link helper
     const epnCampaignId = Deno.env.get("EPN_CAMPAIGN_ID") || "";
