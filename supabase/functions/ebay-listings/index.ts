@@ -57,10 +57,23 @@ async function fetchAnalyticsForWindow(
     }
 
     const trafficData = await trafficResp.json();
+    
+    // Debug: log the raw metricHeaders structure
+    console.log(`Analytics API (${days}d): Raw trafficData keys: ${Object.keys(trafficData).join(", ")}`);
+    console.log(`Analytics API (${days}d): metricHeaders is: ${Array.isArray(trafficData.metricHeaders) ? "array" : typeof trafficData.metricHeaders}`);
+    if (trafficData.metricHeaders) {
+      console.log(`Analytics API (${days}d): First metricHeader: ${JSON.stringify(trafficData.metricHeaders[0]).substring(0, 200)}`);
+    }
+    
     const metricHeaders: string[] = (trafficData.metricHeaders || []).map((h: any) => h.name);
     const records = trafficData.records || [];
 
     console.log(`Analytics API (${days}d): Got ${records.length} records, headers: ${metricHeaders.join(", ")}`);
+    
+    // Log first record structure for debugging
+    if (records.length > 0) {
+      console.log(`Analytics API (${days}d): First record structure:`, JSON.stringify(records[0]).substring(0, 300));
+    }
     
     for (const record of records) {
       const listingKey = record.dimensionValues?.[0]?.value || "";
@@ -73,14 +86,25 @@ async function fetchAnalyticsForWindow(
         const idx = metricHeaders.indexOf(name);
         if (idx < 0 || idx >= metricValues.length) return 0;
         const val = metricValues[idx]?.value;
-        return val ? parseFloat(val) : 0;
+        const parsed = val ? parseFloat(val) : 0;
+        // Log individual metric parsing for first record
+        if (listingKey === records[0]?.dimensionValues?.[0]?.value) {
+          console.log(`Analytics API (${days}d): Metric ${name} (idx ${idx}): raw="${val}" parsed=${parsed}`);
+        }
+        return parsed;
       };
+      const views = Math.round(getMetric("LISTING_VIEWS_TOTAL"));
+      const impressions = Math.round(getMetric("LISTING_IMPRESSION_TOTAL"));
+      const ctr = getMetric("CLICK_THROUGH_RATE");
+      const conversionRate = getMetric("SALES_CONVERSION_RATE");
+      const transactions = Math.round(getMetric("TRANSACTION"));
+      
       result[listingKey] = {
-        views: Math.round(getMetric("LISTING_VIEWS_TOTAL")),
-        impressions: Math.round(getMetric("LISTING_IMPRESSION_TOTAL")),
-        clickThroughRate: getMetric("CLICK_THROUGH_RATE"),
-        salesConversionRate: getMetric("SALES_CONVERSION_RATE"),
-        transactions: Math.round(getMetric("TRANSACTION")),
+        views,
+        impressions,
+        clickThroughRate: ctr,
+        salesConversionRate: conversionRate,
+        transactions,
       };
     }
     console.log(`Analytics API (${days}d): Loaded metrics for ${Object.keys(result).length} listings`);
