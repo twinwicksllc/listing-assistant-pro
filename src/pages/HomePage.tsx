@@ -27,8 +27,8 @@ const TOUR_STEPS: TourStep[] = [
   },
   {
     target: "image-optimizer",
-    title: "✨ Image Optimizer",
-    description: "Once you've added photos, use the optimizer to auto-crop backgrounds, center items, and normalize brightness for professional-looking listings.",
+    title: "✨ Auto Optimizer",
+    description: "Photos are automatically optimized when added—backgrounds are auto-cropped, items centered, and brightness normalized for professional listings.",
     placement: "top",
   },
   {
@@ -66,6 +66,7 @@ export default function HomePage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoOptimizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!localStorage.getItem(TOUR_KEY)) {
@@ -73,6 +74,41 @@ export default function HomePage() {
       return () => clearTimeout(timer);
     }
   }, []);
+
+  // Auto-optimize images when new ones are added
+  useEffect(() => {
+    if (stagedImages.length === 0 || imagesOptimized || optimizing) return;
+
+    // Clear previous timer
+    if (autoOptimizeTimerRef.current) {
+      clearTimeout(autoOptimizeTimerRef.current);
+    }
+
+    // Set a debounce timer to wait for more files to be added
+    autoOptimizeTimerRef.current = setTimeout(async () => {
+      setOptimizing(true);
+      setOptimizeProgress({ done: 0, total: stagedImages.length });
+      try {
+        const optimized = await optimizeImages(stagedImages, (done, total) => {
+          setOptimizeProgress({ done, total });
+        });
+        setStagedImages(optimized);
+        setImagesOptimized(true);
+        await recordUsage("optimize");
+      } catch (err) {
+        console.error("Auto-optimize error:", err);
+        toast.error("Failed to optimize images.");
+      } finally {
+        setOptimizing(false);
+      }
+    }, 500); // 500ms debounce to batch multiple uploads
+
+    return () => {
+      if (autoOptimizeTimerRef.current) {
+        clearTimeout(autoOptimizeTimerRef.current);
+      }
+    };
+  }, [stagedImages, imagesOptimized, optimizing, recordUsage]);
 
   const handleTourFinish = () => {
     setShowTour(false);
@@ -376,44 +412,28 @@ export default function HomePage() {
               <div data-tour="image-optimizer" className="bg-card border border-border rounded-xl p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
-                    <Wand2 className="w-3.5 h-3.5 text-primary" />
-                    <span className="text-xs font-medium text-foreground">Image Optimizer</span>
+                    <Sparkles className="w-3.5 h-3.5 text-primary" />
+                    <span className="text-xs font-medium text-foreground">Auto-Optimizer</span>
                   </div>
                   {imagesOptimized && (
                     <span className="text-[10px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                      ✓ Optimized
+                      ✓ Complete
+                    </span>
+                  )}
+                  {optimizing && (
+                    <span className="text-[10px] font-medium text-amber-600 bg-amber-50 dark:bg-amber-950 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                      Processing...
                     </span>
                   )}
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Auto-crops excess background, centers the item, and normalizes brightness & contrast for uniform listing photos.
+                  {optimizing
+                    ? `Optimizing ${optimizeProgress.done}/${optimizeProgress.total} photo${optimizeProgress.total !== 1 ? "s" : ""}... Auto-crops backgrounds, centers items, and normalizes brightness.`
+                    : imagesOptimized
+                      ? "✓ Photos optimized and ready for analysis."
+                      : "Photos will be automatically optimized when added—auto-crops, centers items, and normalizes brightness for better AI analysis."}
                 </p>
-                <button
-                  onClick={handleOptimize}
-                  disabled={optimizing || imagesOptimized}
-                  className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-semibold transition-all active:scale-[0.98] disabled:opacity-60 ${
-                    imagesOptimized
-                      ? "bg-primary/10 text-primary"
-                      : "bg-secondary text-foreground hover:bg-secondary/80"
-                  }`}
-                >
-                  {optimizing ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      Optimizing {optimizeProgress.done}/{optimizeProgress.total}...
-                    </>
-                  ) : imagesOptimized ? (
-                    <>
-                      <Wand2 className="w-3.5 h-3.5" />
-                      Photos Optimized
-                    </>
-                  ) : (
-                    <>
-                      <Wand2 className="w-3.5 h-3.5" />
-                      Optimize All Photos
-                    </>
-                  )}
-                </button>
               </div>
 
               {/* Voice Note Section */}
