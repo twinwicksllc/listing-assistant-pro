@@ -148,7 +148,7 @@ export default function AnalyzePage() {
       setListingPrice(parseFloat(aiMid.toFixed(2)) || 0);
       setAuctionStartPrice(parseFloat((data.priceMin || 0).toFixed(2)) || 0);
       setGenerated(true);
-      await recordUsage("ai_analysis");
+      // OQ-12: recordUsage removed — analyze-item edge function inserts server-side usage row
     } catch (err: any) {
       console.error("Analysis error:", err);
       toast.error(err.message || "Failed to analyze item. Please try again.");
