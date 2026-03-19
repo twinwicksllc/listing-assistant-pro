@@ -54,6 +54,14 @@ export default function AnalyzePage() {
   const [customCategoryInput, setCustomCategoryInput] = useState<string>("");
   const [isCustomCategoryMode, setIsCustomCategoryMode] = useState(false);
 
+  // Phase 2: Credit tracking metadata from analyze-item response
+  const [analysisMeta, setAnalysisMeta] = useState<{
+    tier: string;
+    creditsUsed: number;
+    creditsRemaining: number;
+    creditsResetAt: string;
+  } | null>(null);
+
   // eBay business policies — selected by the user on this page
   const [ebayTokenForPolicies, setEbayTokenForPolicies] = useState<string | null>(null);
   const [selectedPolicies, setSelectedPolicies] = useState<SelectedPolicies>({
@@ -116,6 +124,18 @@ export default function AnalyzePage() {
       }
       
       if (data?.error) {
+        // Starter tier without eBay account connected
+        if (data.error === "ebay_account_required") {
+          toast.error("Connect an eBay account to start generating listings", {
+            description: "The free tier requires an active eBay connection.",
+            action: {
+              label: "Connect",
+              onClick: () => navigate("/settings"),
+            },
+          });
+          setGenerating(false);
+          return;
+        }
         if (data.error.includes("limit")) {
           toast.error(data.error);
           navigate("/settings?tab=billing");
@@ -123,6 +143,11 @@ export default function AnalyzePage() {
           return;
         }
         throw new Error(data.error);
+      }
+
+      // Extract metadata if available
+      if (data._meta) {
+        setAnalysisMeta(data._meta);
       }
 
       setTitle((data.title || "").slice(0, 80));
@@ -441,6 +466,33 @@ export default function AnalyzePage() {
           </div>
         ) : (
           <div className="space-y-4">
+            {/* Credit tracking info for free tier */}
+            {analysisMeta && currentPlan === "starter" && (
+              <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-blue-900 dark:text-blue-100">Free Tier Credits</p>
+                    <p className="text-sm font-bold text-blue-900 dark:text-blue-100 mt-0.5">
+                      {analysisMeta.creditsRemaining} / {analysisMeta.creditsUsed + analysisMeta.creditsRemaining}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-blue-700 dark:text-blue-300">
+                      {analysisMeta.creditsRemaining === 0 ? "Limit reached" : `${analysisMeta.creditsRemaining} remaining`}
+                    </p>
+                    <p className="text-[10px] text-blue-600 dark:text-blue-400 mt-1">
+                      Resets {new Date(analysisMeta.creditsResetAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+                {analysisMeta.creditsRemaining <= 2 && analysisMeta.creditsRemaining > 0 && (
+                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                    💡 Running low on credits — upgrade to Pro for unlimited analyses
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">eBay Title</label>
