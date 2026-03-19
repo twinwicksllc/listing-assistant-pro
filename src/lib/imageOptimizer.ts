@@ -4,9 +4,13 @@
  *  1. Auto-crop: trims uniform background edges to center the subject
  *  2. Brightness / contrast / saturation normalization
  *  3. Output as a clean, uniform data-URL
+ *
+ * Optimized for Gemini AI analysis: 786px reduces token usage by ~50% while
+ * preserving sufficient detail for coin/collectible identification (mint marks,
+ * condition, wear patterns). eBay publishing uses separate 1600px pipeline.
  */
 
-const TARGET_SIZE = 1600; // max output dimension
+const TARGET_SIZE = 786; // max output dimension (optimized for Gemini AI)
 
 /** Load a data-URL into an HTMLImageElement */
 function loadImage(src: string): Promise<HTMLImageElement> {
