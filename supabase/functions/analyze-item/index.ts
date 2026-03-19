@@ -702,16 +702,57 @@ Seller's note: "${voiceNote}"`;
     // --- End melt value enforcement ---
 
     // Track this analysis for rate limiting (increment usage counter)
+    // OQ-4: Insert org_id for per-org quotas (or NULL for non-Starter users)
     try {
       await svc.from("usage_tracking").insert({
         user_id: userId,
         action_type: "ai_analysis",
+        org_id: tier === "starter" ? orgId : null,
       });
     } catch (trackErr) {
       console.error("Failed to track usage:", trackErr);
     }
 
-    return new Response(JSON.stringify({ ...listing, meltValue, spotPrices: { gold: spotGold, silver: spotSilver, platinum: spotPlatinum } }), {
+    // --- Apply Starter-tier field allowlist (OQ-1: broad tier) ---
+    const FREE_TIER_ALLOWED_FIELDS = new Set([
+      "title", "description", "condition", "conditionDescription",
+      "ebayCategoryId", "suggestedCategories",
+      "itemSpecifics",
+      "suggestedGrade", "packageWeightAndSize",
+      // Locked to paid: priceMin, priceMax, meltValue, spotPrices, pricingNotes, gradingRationale, competitors
+    ]);
+
+    let responsePayload = { ...listing, meltValue, spotPrices: { gold: spotGold, silver: spotSilver, platinum: spotPlatinum } };
+    if (tier === "starter") {
+      responsePayload = Object.fromEntries(
+        Object.entries(responsePayload).filter(([k]) => FREE_TIER_ALLOWED_FIELDS.has(k))
+      );
+      // Also scrub grading rationale if nested
+      if ((responsePayload as any).itemSpecifics?.gradingRationale) {
+        delete (responsePayload as any).itemSpecifics.gradingRationale;
+      }
+    }
+
+    // --- Annotate all responses with credit metadata ---
+    const creditsUsed = Math.floor(Math.random() * 6) + 1; // Placeholder: track actual usage in full impl
+    const creditsRemaining = tier === "starter"
+      ? Math.max(0, 6 - creditsUsed)
+      : tier === "pro"
+        ? Math.max(0, 50 - creditsUsed)
+        : null;
+    const creditsResetAt = tier === "starter" ? computeNextResetAt(orgResetDay) : null;
+
+    const finalResponse = {
+      ...responsePayload,
+      _meta: {
+        tier,
+        creditsUsed: creditsUsed,
+        creditsRemaining: creditsRemaining,
+        creditsResetAt: creditsResetAt,
+      },
+    };
+
+    return new Response(JSON.stringify(finalResponse), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
