@@ -37,7 +37,7 @@ serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gemini-2.5-flash",
+          model: "gemini-flash-latest",
           messages: [
             {
               role: "system",
@@ -102,7 +102,7 @@ serve(async (req) => {
       await svc.from("gemini_usage").insert({
         user_id: userId,
         function_name: "transcribe-voice",
-        model: "gemini-2.5-flash",
+        model: "gemini-flash-latest",
         prompt_tokens: usage?.prompt_tokens || 0,
         completion_tokens: usage?.completion_tokens || 0,
         total_tokens: usage?.total_tokens || 0,

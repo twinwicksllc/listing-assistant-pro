@@ -256,6 +256,48 @@ serve(async (req: Request) => {
     }
     // --- End spot prices ---
 
+    // --- Fetch competitor prices (actual sold listings) for market analysis ---
+    let competitorData: any = null;
+    const title: string = body.title || "";
+    const yourPrice: number = body.yourPrice || 0;
+    
+    if (title && userId) {
+      try {
+        console.log("analyze-item: fetching competitor prices for item analysis...");
+        const competitorResp = await fetch(
+          `${Deno.env.get("SUPABASE_URL")}/functions/v1/ebay-competitor-search`,
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              userId,
+              title,
+              yourPrice,
+            }),
+          }
+        );
+
+        if (competitorResp.ok) {
+          competitorData = await competitorResp.json();
+          console.log("analyze-item: competitor data retrieved", {
+            competitorCount: competitorData?.competitorCount,
+            avgPrice: competitorData?.avgPrice,
+            minPrice: competitorData?.minPrice,
+            maxPrice: competitorData?.maxPrice,
+            fromCache: competitorData?.fromCache,
+          });
+        } else {
+          console.warn("analyze-item: competitor search failed:", competitorResp.status);
+        }
+      } catch (compErr) {
+        console.warn("analyze-item: competitor fetch error (non-blocking):", compErr);
+      }
+    }
+    // --- End competitor prices ---
+
     // Support both single image (legacy) and multiple images
     const imageList: string[] = body.images ?? (body.imageBase64 ? [body.imageBase64] : []);
     const voiceNote: string = body.voiceNote || "";
@@ -272,222 +314,49 @@ serve(async (req: Request) => {
       throw new Error("GEMINI_API_KEY is not configured");
     }
 
-    const systemPrompt = `You are an expert eBay listing analyst, professional numismatist, and collectibles grader specializing in coins, bullion, precious metals, and general collectibles.
+    const systemPrompt = `You are a professional Numismatist and eBay Listing Expert. Your task is to analyze coin/bullion photos and generate a listing via the \`create_listing\` tool.
 
-You will receive one or more photos of the SAME item from different angles. Analyze ALL images holistically as a single listing subject.
+### CORE OPERATING RULES
+1. HOLISTIC ANALYSIS: Treat all uploaded images as a single item.
+2. ZERO SPECULATION: Use ONLY visible evidence + factual numismatic data. If a mint mark or date is not visible, state "uncertain" or "not visible."
+3. NO NUMERICAL GRADING: For uncertified coins, use ONLY descriptive terms (e.g., "Circulated," "Excellent Luster"). Numerical grades (MS-65, etc.) are strictly forbidden unless the coin is in a PCGS, NGC, ANACS, ICG, CAC, or ICCS slab.
+4. EBAY COMPLIANCE: Title must be ≤ 80 chars. Do not use hype words like "L@@K."
 
-CRITICAL: Use ONLY what is visible in the photos plus reasonable, factual item identification inferences. Do NOT invent, guess, or assume details (e.g., mint marks, weight, purity, denomination, certification numbers, or edition size) that are not visibly supported by the images or standard for that exact identified item. If key details are not visible, state "not visible" or "uncertain."
+### IDENTIFICATION & DESCRIPTION
+- Identify: Year, Series, Denomination, Mint Mark, Metal, Weight (Troy Oz), and Producer.
+- Key Dates: Highlight rarity (e.g., 1893-S Morgan, 1916-D Mercury).
+- Condition Mapping:
+  - MS-60+ or Slabbed -> NEW
+  - AU/XF -> USED_EXCELLENT
+  - VF -> USED_VERY_GOOD
+  - F/VG -> USED_GOOD
+  - G -> USED_ACCEPTABLE
+  - Damaged/Holed -> FOR_PARTS_OR_NOT_WORKING
 
-1. ITEM IDENTIFICATION
-Identify the item as precisely as possible. Determine the item type, series, year, denomination, metal content, purity/fineness, mint/manufacturer, country, variety/edition, and certification details (if slabbed).
+### DATA FORMATTING (STRICT)
+- Fineness: Decimal only (e.g., "0.999").
+- Grade: Space-separated (e.g., "MS 65"). Omit Grade field if uncertified.
+- Denomination: "50C" or "$1" only.
+- Item Specifics: Use bare keys (e.g., "Year", not "C:Year").
 
-2. EBAY TITLE (Strictly ≤ 80 characters)
-Create ONE SEO-optimized title. Include when applicable: Year, key dates (scarce years), mint mark, denomination/weight, metal, purity, coin/bar/round type, condition words, and key series name. Exclude filler words, hype (e.g., "L@@K"), and unnecessary punctuation. Use standard eBay abbreviations where necessary to save space.
+### CATEGORY ROUTING (Priority IDs)
+- Morgan Dollars: 39464 | Peace Dollars: 11980 | Silver Bars/Rounds: 39489
+- Barber Half: 11971 | Liberty Walking Half: 41099 | Eisenhower: 11981
+- Gold Bars: 178906 | Silver Eagle: 41111 | Wheat Penny: 39455
+- World Coins: 45243 (Required: Materials sourced from = Issuing Country).
+- VERIFICATION: If confidence <95% or not listed above, use \`google_search\` for "eBay leaf category ID [Item Name]".
 
-For coins: **Emphasize key dates and key mint marks** (e.g., "1893-S Morgan", "1916-D Mercury Dime", "1909-S VDB Penny") — these attract collectors and command premiums.
-For bullion: **Emphasize key producers** where known (e.g., Perth Mint, Royal Canadian Mint).
+### PRICING LOGIC
+- Floor: (Melt Value * 1.19) to cover eBay fees (approx 16%).
+- Premium: 1.05-1.15x for generic bullion; 1.5x+ for themes/key dates.
+- metalWeightOz: Express in TROY OUNCES only.
+- Current spot prices: Gold $${spotGold.toFixed(2)}/oz | Silver $${spotSilver.toFixed(2)}/oz | Platinum $${spotPlatinum.toFixed(2)}/oz
+${competitorData && !competitorData.error
+  ? `- MARKET DATA (${competitorData.competitorCount || 0} similar sold): avg $${(competitorData.avgPrice || 0).toFixed(2)}, range $${(competitorData.minPrice || 0).toFixed(2)}-$${(competitorData.maxPrice || 0).toFixed(2)}, median $${(competitorData.medianPrice || 0).toFixed(2)}. USE AS PRIMARY PRICING REFERENCE.`
+  : `- No recent sold comps available. Use melt floor and category premiums.`}
 
-⚠️ CRITICAL: Do NOT include numerical grades (MS-65, AU-55, VF-30) for uncertified coins. eBay prohibits this. Only include numerical grades if the coin is certified by an official grading company (NGC, PCGS, ANACS, ICG, CAC, ICCS). For uncertified coins, use descriptive condition words only: "Circulated", "Uncirculated", "Excellent condition", etc.
+Use the \`create_listing\` tool to return the final structured data.`;
 
-3. ITEM DESCRIPTION
-Write a concise, professional, factual description covering:
-- Exact item identification (year, series, denomination, type).
-- **KEY DATES**: Always note if the item is a scarce or key date (e.g., 1893-S Morgan rare, 1916-D Mercury Dime, 1909-S VDB penny, 1895 proof, etc.)
-- **MINT MARKS & VARIETIES**: Clearly identify mint mark (P, D, S, W, CC, O, None) and any notable die varieties (e.g., VAM numbers for Morgans).
-- **KEY PRODUCERS** (for bullion): Brand name, country of production (e.g., Perth Mint, Royal Canadian Mint, New Zealand Mint, Scottsdale Mint, APMEX, etc.). Note if it's a scarce or limited-mintage producer.
-- Physical condition based strictly on visible evidence (obverse, reverse, edge, holder/packaging).
-- Metal content, purity, weight, and dimensions (if visible or reliably inferable).
-- Notable features, authentication notes, packaging/capsule condition.
-
-⚠️ For uncertified coins: Use ONLY descriptive condition language. Do NOT use numerical grades (AU-55, MS-65, VF-30) unless the coin is certified by an official grading company. Instead describe condition as "shows light wear on high points", "excellent original luster", "minimal contact marks", etc.
-
-4. CONDITION ASSESSMENT & GRADING
-
-A. Slabbed Coins (Certified)
-Set isSlabbed to true ONLY if the item is visibly in a certified grading holder (e.g., PCGS, NGC). Extract the exact grade shown on the holder label. Condition: NEW.
-
-B. Unslabbed Coins/Collectibles (Visual Condition Assessment)
-Set isSlabbed to false. DO NOT assign a numerical Sheldon-scale grade. Instead:
-- Visually assess wear on high points, luster presence/breaks, strike sharpness, contact marks/scratches, cleaning/environmental damage
-- Document these observations in the description using descriptive language only ("light wear", "strong luster", "minimal contact marks", etc.)
-- These observations will inform the condition code mapping (see below), but DO NOT expose them as a numerical grade (MS-65, AU-55, etc.)
-- Omit the Grade field entirely from itemSpecifics for uncertified coins
-
-KEY DATES & MINT MARKS: Always examine and document:
-- Year of issue — note if it's a scarce or key date (e.g., 1893-S Morgan, 1895 proof, 1916-D dime, 1909-S VDB penny, etc.)
-- Mint mark location and clarity (P, D, S, W, CC, O, None, etc.)  
-- Key varieties or die variations (e.g., VAM numbers for Morgans)
-- For bullion: producer/brand name, mintage if known, whether it's a scarce producer
-
-This key-date and mint-mark analysis informs pricing and rarity assessment.
-
-⚠️ CRITICAL GRADING RULE FOR UNCERTIFIED COINS ⚠️
-eBay STRICTLY PROHIBITS numerical grades (MS-65, AU-58, VF-30, etc.) in titles, descriptions, or item specifics UNLESS the coin has been graded by an official certifier:
-- Approved certifiers: NGC, PCGS, ANACS, ICG, CAC, ICCS
-- If Certification = 'Uncertified' or coin is NOT in a certified slab → DO NOT output ANY numerical grade anywhere
-- Instead: Use ONLY descriptive language in title/description (e.g., "Circulated", "Uncirculated", "Light wear", "Excellent condition")
-- If Certification = one of the official grading companies → numerical grades ARE allowed in Grade field and may appear in title if space permits
-
-Condition Code Mapping (output as the "condition" field):
-
-For COIN categories (Morgan, Peace, Barber, Liberty Walking, Eisenhower, Silver Eagle, etc.):
-eBay's Coins & Paper Money category tree uses the USED_* condition family — NOT *_REFURBISHED.
-- MS-60 to MS-70 (Uncirculated) → NEW
-- Slabbed/Certified coins (any grade) → NEW
-- AU-50 to AU-58, XF-40 to XF-45 → USED_EXCELLENT
-- VF-20 to VF-35 → USED_VERY_GOOD
-- F-12 to F-15, VG-8 to VG-10 → USED_GOOD
-- G-4 to G-6 → USED_ACCEPTABLE  (worn but identifiable — NOT "for parts")
-- FR-2 or lower, damaged/holed/bent/corroded → FOR_PARTS_OR_NOT_WORKING
-
-NEVER use *_REFURBISHED, LIKE_NEW, or PRE_OWNED_* for coin categories — eBay rejects these.
-
-For NON-COIN items (electronics, general collectibles, etc.):
-- Unused/sealed → NEW
-- Open but unused → LIKE_NEW
-- Light use → USED_EXCELLENT
-- Moderate use → USED_VERY_GOOD
-- Heavy use → USED_GOOD
-- Poor condition → USED_ACCEPTABLE
-- Non-functional → FOR_PARTS_OR_NOT_WORKING
-
-IMPORTANT — OMIT UNKNOWN FIELDS: If a value cannot be determined from the images, OMIT the field entirely. Do NOT output placeholder values like "Unknown", "N/A", "Not Specified", "Not Applicable", "None", or "Other". An absent field is always better than a placeholder.
-
-5. STRUCTURED ITEM SPECIFICS — BARE KEYS (NO C: PREFIX)
-ALL aspect keys in itemSpecifics must use BARE key names — no "C:" prefix. The eBay Inventory API expects plain keys like Fineness, Grade, Year, Certification. The C: prefix only exists in eBay's internal Category Tree taxonomy and must NEVER appear in listing payloads.
-
-🚨 SPECIAL RULE: If Certification = 'Uncertified', DO NOT include the Grade field in itemSpecifics at all. Omit it entirely. Only include the Grade field when the coin is certified by an official grading company (NGC, PCGS, ANACS, ICG, CAC, ICCS).
-
-ASPECT VALUE FORMATS (strictly enforced):
-- Fineness: decimal format ONLY → "0.999", "0.9999", "0.925", "0.900" (NOT "999 fine", "99.9%", "999/1000")
-- Grade: space-separated format → "MS 65", "AU 55", "VF 30" (NOT "MS-65", "MS65"). ⚠️ CRITICAL: Only include Grade field if Certification is NOT "Uncertified". If uncertified, omit Grade field entirely.
-- Denomination (half dollar series): exactly "50C" (NOT "Half Dollar", "50 Cents", "$0.50")
-- Denomination (dollar series): exactly "$1" (NOT "One Dollar", "1 Dollar", "$1.00")
-- Circulated/Uncirculated: exactly "Circulated", "Uncirculated", or "Unknown"
-- Certification: exactly one of "Uncertified", "PCGS", "NGC", "ANACS", "ICG", "CAC"
-- Strike Type: exactly one of "Business", "Proof", "Proof-Like", "Deep Mirror Proof-Like", "Satin", "Matte"
-- Shape (bullion): exactly "Bar" or "Round"
-- Composition: exactly one of "Gold", "Silver", "Platinum", "Palladium", "Bronze", "Copper", "Nickel", "Steel", "Zinc", "Brass", "Aluminum", "Bimetallic", "Copper-Nickel", "Copper Clad", "Zinc Plated Steel"
-- Color (world coins): RD/RB/BN for copper/bronze coins, BM for bi-metallic coins. Always include for category 45243.
-
-For bullion (bars, rounds, ingots): Type, Shape, Metal, Fineness, Precious Metal Content per Unit, Year, Country of Origin, Brand/Mint, Denomination, Modified Item.
-For coins: Type, Year, Denomination, Grade, Circulated/Uncirculated, Mint Location, Country of Origin, Composition, Certification, Strike Type, Fineness, Precious Metal Content per Unit.
-For non-coin collectibles: Type, Brand, Material, Color, Size, Country of Origin, Year.
-Omit fields that cannot be confidently determined.
-
-6. CATEGORY ROUTING
-Primary Rule: Precious metal content ALWAYS overrides theme/brand (e.g., a Disney silver bar goes to Bullion, not Toys).
-Shape Rules for Bullion:
-- Bar/Ingot/Round (non-legal-tender) → Bars & Rounds subcategory.
-- Legal tender coin → Bullion Coins subcategory.
-- Named US coinage series → Specific US Coins subcategory.
-
-CORRECT eBay Category IDs — use EXACTLY these values:
-
-⚠️ **CRITICAL CATEGORY VERIFICATION REQUIREMENT** ⚠️
-For ANY coin you're unsure about, you MUST use the google_search tool to verify the leaf category ID on eBay BEFORE outputting the listing. This prevents publishing to non-leaf categories which causes failures.
-
-VERIFICATION RULE:
-- If you have high confidence (>95%) that your identified coin matches one of the hard-coded categories below → use that ID directly
-- If you have lower confidence (<95%), or the coin is not in the hard-coded list below → use google_search to verify the correct leaf category ID on eBay
-- Always search with format: "eBay leaf category ID <coin name> <year range>"
-- Example: "eBay leaf category ID wheat penny 1909-1958" or "eBay 39455 category"
-- Store the verified mapping for future reference by including it in ebaySearchQuery field
-
-PRIORITY CATEGORIES (seller's primary inventory — match these first):
-  Gold Bars & Rounds:          178906
-  Silver Bars & Rounds:         39489
-  Other Silver Bullion:          3361
-  Ancient Coins:                  532
-  Medieval Coins:              173685
-  Eisenhower Dollars (1971-78): 11981
-  Morgan Dollars (1878-1921):   39464
-  Peace Dollars (1921-35):      11980
-  Barber Half Dollars (1892-1915): 11971
-  Liberty Walking Half Dollars (1916-47): 41099
-
-FIXED ASPECTS for priority coin categories (do NOT override these — they are enforced server-side):
-  Morgan Dollars (39464):          Composition="Silver", Fineness="0.900", Denomination="$1"
-  Peace Dollars (11980):           Composition="Silver", Fineness="0.900", Denomination="$1"
-  Barber Half Dollars (11971):     Composition="Silver", Fineness="0.900", Denomination="50C"
-  Liberty Walking Half (41099):    Composition="Silver", Fineness="0.900", Denomination="50C"
-  Gold Bars & Rounds (178906):     Composition="Gold"
-  Silver Bars & Rounds (39489):    Composition="Silver"
-  Other Silver Bullion (3361):     Composition="Silver"
-
-REQUIRED ASPECTS for priority coin categories (always include these):
-  Eisenhower, Morgan, Peace, Barber, Liberty Walking → Certification, Circulated/Uncirculated
-  Other Silver Bullion (3361)                        → Certification (default: "Uncertified")
-
-OTHER US COINS (use when no priority category matches):
-  Kennedy Half Dollar (1964-present): 41102
-  Franklin Half Dollar (1948-1963):   11973
-  American Silver Eagle:              41111
-  Copper Rounds (non-legal-tenant):   166679 (Coins & Paper Money > Bullion > Other Bullion)
-  Wheat Penny (1909-1958):            39455
-  Indian Head Cent:                   41084
-  Braided Hair Large Cent:            41085
-  Flying Eagle Cent:                  40156
-  State Quarters:                     164743
-  American Gold Eagle:                40166
-  American Gold Buffalo:              40167
-  Susan B. Anthony:                   40160
-  Sacagawea/Native American Dollar:   40158
-  Presidential Dollar:                40159
-  Mercury Dime:                       40151
-  Roosevelt Dime:                     40150
-  Buffalo Nickel:                     40153
-  Jefferson Nickel:                   40152
-  Washington Quarter:                 40149
-  $20 Double Eagle:      40161
-  $10 Eagle:             40162
-  $5 Half Eagle:         40163
-  $2.50 Quarter Eagle:   40164
-  $1 Gold:               40165
-  US Coin Proof Sets:      41109
-  US Coin Mint Sets:         526
-  US Coins General:          253
-
-WORLD COINS: 45243
-  Use for any non-US coin that doesn't fit a more specific category.
-  REQUIRED aspects: Year, Denomination, Composition, Circulated/Uncirculated, Country of Origin
-  PREFERRED aspects: Certification, Grade, KM Number, Materials sourced from, Color (copper/bronze only), Fineness (precious metal coins), Strike Type
-  KEY RULES for 45243:
-  - "Materials sourced from" = the country that ISSUED the coin (e.g., "Mexico", "Germany", "Japan") — NOT the seller's country
-  - "Country of Origin" = seller's country (usually "United States" for US-based sellers)
-  - "Color" = RD/RB/BN for copper/bronze coins, BM for bi-metallic coins (always include for category 45243)
-  - "KM Number" = Krause-Mishler catalog number (e.g., "KM# 64") — include if visible or identifiable
-  - "Denomination" = face value as shown on coin (e.g., "1 Peso", "50 Centavos", "1 Mark", "5 Francs")
-  - "Composition" = use expanded values: Copper-Nickel, Brass, Bimetallic, Aluminum, etc. (not just Gold/Silver)
-  - Default Certification = "Uncertified" unless slab is visible
-
-BULLION — Coins // Bars & Rounds:
-  Silver:   261068 // 261069
-  Gold:     261064 // 261071
-  Platinum: 261070 // 261072
-  Palladium: 261073
-
-7. PRICING GUIDANCE
-Price the EXACT item first using this hierarchy: 1. Exact sold comps 2. Same series/mint 3. Key date/rarity premium 4. Grade-adjusted melt floor.
-
-Melt Value Floor: priceMin must NEVER fall below the melt value PLUS eBay fees.
-eBay charges ~13.25% final value fee + ~2.9% payment processing = ~16% total. Use 1.19x melt as the minimum floor so listings at priceMin still cover melt after fees.
-Current live spot prices: Gold $${spotGold.toFixed(2)}/oz | Silver $${spotSilver.toFixed(2)}/oz | Platinum $${spotPlatinum.toFixed(2)}/oz
-
-Fee-adjusted melt floor = meltValue × 1.19
-
-Premium multipliers (applied ON TOP of fee-adjusted floor):
-- Generic bullion (plain bar/round, no theme) → 1.05x–1.15x melt (plus fees)
-- Popular themes (Disney, Star Wars, sports teams) → 1.5x–4x melt
-- Key dates / high-grade certified coins → significant numismatic premium
-
-Return pricingNotes explaining exactly which comparables or logic you used.
-
-metalWeightOz: Always express in TROY OUNCES (not grams, not avoirdupois ounces).
-Common conversions: 1 troy oz = 31.1035g | 5g = 0.1607 oz | 10g = 0.3215 oz | 1/2 oz = 0.5 | 1/4 oz = 0.25 | 1/10 oz = 0.1
-Set to 0 for non-precious-metal items.
-
-Return your analysis using the provided tool.`;
 
     // Build content array with all images + text prompt
     const contentParts: any[] = imageList.map((img) => {
@@ -526,7 +395,7 @@ Seller's note: "${voiceNote}"`;
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gemini-2.5-flash",
+          model: "gemini-flash-latest",
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: contentParts },
@@ -536,143 +405,59 @@ Seller's note: "${voiceNote}"`;
               type: "function",
               function: {
                 name: "create_listing",
-                description:
-                  "Create an eBay listing with title, description, item specifics, category, and price range",
+                description: "Generates a structured eBay listing payload for coins and collectibles.",
                 parameters: {
                   type: "object",
                   properties: {
                     title: {
                       type: "string",
-                      description:
-                        "eBay listing title, max 80 characters, SEO-optimized",
+                      description: "SEO-optimized eBay title, max 80 chars. Format: [Year] [Country] [Denomination] [Series/Design] [Metal] [Weight] [Condition/Grade]",
                     },
-                    description: {
+                    categoryId: {
                       type: "string",
-                      description:
-                        "Professional item description with condition, details, and metal content if applicable",
-                    },
-                    priceMin: {
-                      type: "number",
-                      description:
-                        "Minimum suggested price in USD. For precious metals: never below melt value. Based on lowest recent sold comp for this specific item or series.",
-                    },
-                    priceMax: {
-                      type: "number",
-                      description:
-                        "Maximum suggested price in USD. Based on highest recent sold comp for this specific item in this condition. Factor in key date, rarity, theme, and grade premiums.",
-                    },
-                    pricingNotes: {
-                      type: "string",
-                      description:
-                        "Brief explanation of how you priced this item: what specific comparables or logic you used (e.g., 'Recent eBay solds for 2025 Niue Disney series bars averaged $145-$180. Limited mintage of 250 supports upper range. Melt floor: $89.')",
-                    },
-                    metalType: {
-                      type: "string",
-                      enum: ["gold", "silver", "platinum", "none"],
-                      description:
-                        "Primary precious metal type if the item contains precious metals, or 'none'",
-                    },
-                    metalWeightOz: {
-                      type: "number",
-                      description:
-                        "Total precious metal weight in troy ounces. Set to 0 if not a precious metal item.",
-                    },
-                    ebayCategoryId: {
-                      type: "string",
-                      description:
-                        "The most specific eBay category ID. Priority categories: Gold Bars/Rounds=178906, Silver Bars/Rounds=39489, Other Silver Bullion=3361, Ancient Coins=532, Medieval Coins=173685, Eisenhower Dollars=11981, Morgan Dollars=39464, Peace Dollars=11980, Barber Half Dollars=11971, Liberty Walking Half=41099. Secondary: Kennedy Half=41102, Franklin Half=11973, Silver Eagle=41111, Wheat Penny=39455, Copper Rounds=166679, Gold Eagle=40166, Gold Buffalo=40167, US Proof Sets=41109, US Mint Sets=526, World Coins=45243. IMPORTANT: Only use web search (GoogleSearch tool) if you're UNCERTAIN about a coin's correct eBay category ID. Always verify category IDs against eBay's actual category hierarchy to avoid invalid/non-leaf categories. For any uncertain coins, use GoogleSearch to find the correct category.",
-                    },
-                    ebaySearchQuery: {
-                      type: "string",
-                      description:
-                        "Optional: If you used GoogleSearch to verify the ebayCategoryId, include the search query and result here for audit trail. Format: 'Query: <search query>; Result: <verified category>'. Leave empty if you didn't need to search.",
-                    },
-                    suggestedCategories: {
-                      type: "array",
-                      description: "Top 3 most relevant eBay category suggestions for this item, ordered by best match first. The first entry should match ebayCategoryId.",
-                      items: {
-                        type: "object",
-                        properties: {
-                          categoryId: { type: "string", description: "eBay category ID" },
-                          categoryName: { type: "string", description: "Human-readable full category path (e.g., 'Coins & Paper Money > Bullion > Silver > Rounds & Medallions')" },
-                          reason: { type: "string", description: "One-sentence reason why this category fits (e.g., 'Best match for silver rounds from foreign mints')" },
-                        },
-                        required: ["categoryId", "categoryName", "reason"],
-                      },
-                      minItems: 1,
-                      maxItems: 3,
-                    },
-                    itemSpecifics: {
-                      type: "object",
-                      description: "Key-value pairs of eBay item specifics. ALL keys must use BARE key names — NO 'C:' prefix ever. Use plain keys like 'Fineness', 'Grade', 'Year', 'Certification', 'Color', 'Materials sourced from'. The C: prefix is internal to eBay's taxonomy and must never appear in payloads.",
-                      properties: {
-                        // --- Metadata fields (not sent as eBay aspects, used for listing context) ---
-                        Type: { type: "string", description: "Product type (e.g., 'Bullion Coin', 'Bar', 'Round', 'Medal', 'Coin')" },
-                        Series: { type: "string", description: "Series or theme name (e.g., 'Disney', 'Star Wars')" },
-                        "Modified Item": { type: "string", description: "Whether item has been modified — almost always 'No'" },
-                        Mintage: { type: "string", description: "Total mintage/edition size if known (e.g., '250', '5000')" },
-                        "Mint Mark": { type: "string", description: "Mint mark on the coin (e.g., 'P', 'D', 'S', 'W', 'CC', 'O', 'None')" },
-                        Brand: { type: "string", description: "Brand name for non-coin items" },
-                        Material: { type: "string", description: "Material for non-coin items" },
-
-                        // --- eBay aspect fields — BARE keys, NO C: prefix ---
-                        Year: { type: "string", description: "Year of manufacture/minting (e.g., '2025')" },
-                        Metal: { type: "string", description: "Primary precious metal (e.g., 'Silver', 'Gold', 'Platinum', 'Palladium')" },
-                        Fineness: { type: "string", description: "Fineness as decimal ONLY: '0.999', '0.9999', '0.9675', '0.925', '0.900' — never '999 fine' or '99.9%'" },
-                        Composition: { type: "string", enum: ["Gold", "Silver", "Platinum", "Palladium", "Bronze", "Copper", "Nickel", "Steel", "Zinc", "Brass", "Aluminum", "Bimetallic", "Copper-Nickel", "Copper Clad", "Zinc Plated Steel"], description: "Metal composition — must match allowed values exactly" },
-                        "Precious Metal Content per Unit": { type: "string", description: "Metal weight per piece (e.g., '1 Troy oz', '1/2 Troy oz', '1/4 Troy oz', '1 g')" },
-                        "Country of Origin": { type: "string", description: "Short country name only (e.g. 'United States', 'Canada', 'China'). Maximum 65 characters. Must be a real country name — never a description, sentence, or explanation. If unknown, omit this field entirely." },
-                        Grade: { type: "string", description: "Coin grade with SPACE separator: 'MS 65', 'AU 55', 'VF 30' — never 'MS-65' or 'MS65'. 🚨 CRITICAL: Only include this field if Certification is NOT 'Uncertified'. If Certification='Uncertified', omit this field entirely per eBay policy prohibiting numerical grades for uncertified coins." },
-                        Denomination: { type: "string", description: "Face value: half-dollar series use '50C'; dollar series use '$1'; other denominations as shown on coin" },
-                        "Circulated/Uncirculated": { type: "string", enum: ["Circulated", "Uncirculated", "Unknown"], description: "Circulation status — must be exactly one of the three allowed values" },
-                        Certification: { type: "string", enum: ["Uncertified", "PCGS", "NGC", "ANACS", "ICG", "CAC"], description: "Grading certification — default to 'Uncertified' if no slab visible" },
-                        "Strike Type": { type: "string", enum: ["Business", "Proof", "Proof-Like", "Deep Mirror Proof-Like", "Satin", "Matte"], description: "Type of strike — use 'Business' for standard circulation strikes" },
-                        Shape: { type: "string", enum: ["Bar", "Round"], description: "Bullion physical form — must be exactly 'Bar' or 'Round'" },
-                        "Mint Location": { type: "string", description: "Mint facility (e.g., 'Philadelphia', 'Denver', 'San Francisco', 'West Point', 'Carson City', 'New Orleans')" },
-                        "Brand/Mint": { type: "string", description: "Who made/minted bullion (e.g., 'New Zealand Mint', 'Perth Mint', 'APMEX', 'Scottsdale Mint')" },
-                        "KM Number": { type: "string", description: "Krause-Mishler catalog number for ancient/medieval/world coins (e.g., 'KM# 64', 'KM# 169')" },
-                        Era: { type: "string", description: "Historical era for ancient/medieval coins (e.g., 'Byzantine', 'Roman Imperial', 'Medieval')" },
-                        "Cleaned/Uncleaned": { type: "string", description: "Whether ancient/medieval coin has been cleaned" },
-                        Provenance: { type: "string", description: "Known provenance or collection history for ancient/medieval coins" },
-                        Variety: { type: "string", description: "Die variety or VAM designation if known" },
-                        Color: { type: "string", enum: ["RD", "RB", "BN", "BM"], description: "Coin color designation for world coins category 45243: RD=Red (90%+ red copper), RB=Red-Brown (mixed copper), BN=Brown (mostly brown copper), BM=Bi-Metallic. Always include this aspect for category 45243." },
-                        "Materials sourced from": { type: "string", description: "For world coins (45243): the issuing country of the coin — i.e., which country produced/issued it. Different from Country of Origin (seller's country). E.g., 'Mexico', 'Germany', 'Japan'." },
-                      },
-                      additionalProperties: true,
+                      description: "Key IDs: Gold Bars/Rounds=178906, Silver Bars/Rounds=39489, Other Silver Bullion=3361, Ancient Coins=532, Medieval Coins=173685, Eisenhower Dollars=11981, Morgan Dollars=39464, Peace Dollars=11980, Barber Half=11971, Liberty Walking Half=41099, Kennedy Half=41102, Franklin Half=11973, Silver Eagle=41111, Wheat Penny=39455, Copper Rounds=166679, Gold Eagle=40166, Gold Buffalo=40167, US Proof Sets=41109, US Mint Sets=526, World Coins=45243.",
                     },
                     condition: {
                       type: "string",
-                      enum: ["NEW", "LIKE_NEW", "NEW_OTHER", "NEW_WITH_DEFECTS", "CERTIFIED_REFURBISHED", "SELLER_REFURBISHED", "USED_EXCELLENT", "USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE", "FOR_PARTS_OR_NOT_WORKING"],
-                      description: "eBay item condition. For COIN categories: NEW (MS/uncirculated or slabbed), USED_EXCELLENT (AU/XF), USED_VERY_GOOD (VF), USED_GOOD (F/VG), USED_ACCEPTABLE (G), FOR_PARTS_OR_NOT_WORKING (damaged/holed only). NEVER use *_REFURBISHED or PRE_OWNED_* for coins. For non-coin items: use any value that accurately reflects the item state.",
+                      enum: ["NEW", "USED_EXCELLENT", "USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE", "FOR_PARTS_OR_NOT_WORKING"],
                     },
-                    suggestedGrade: {
-                      type: "string",
-                      description: "DO NOT POPULATE FOR UNCERTIFIED COINS. Grade should ONLY be used when coin is certified by NGC/PCGS/ANACS/ICG/CAC/ICCS. For CERTIFIED coins: Sheldon scale grade (e.g., 'MS-63', 'AU-55', 'VF-30'). For UNCERTIFIED coins: leave empty string or null. Do NOT assign numerical grades to unslabbed coins.",
+                    description: { type: "string" },
+                    price: {
+                      type: "object",
+                      properties: {
+                        amount: { type: "number" },
+                        currency: { type: "string", default: "USD" },
+                      },
+                      required: ["amount"],
                     },
-                    gradingRationale: {
-                      type: "string",
-                      description: "DO NOT POPULATE FOR UNCERTIFIED COINS. This field is ONLY for slabbed/certified coins to explain the grade shown on the holder. For uncertified coins, leave empty. Visual condition observations go in the description field using descriptive language only (wear patterns, luster, strike sharpness, etc.), NOT as a numerical grade justification.",
+                    itemSpecifics: {
+                      type: "object",
+                      properties: {
+                        Certification: { type: "string", enum: ["Uncertified", "PCGS", "NGC", "ANACS", "ICG", "CAC", "ICCS"] },
+                        Grade: { type: "string", description: "Only if NOT Uncertified. Format: 'MS 65'" },
+                        Year: { type: "string" },
+                        "Mint Location": { type: "string" },
+                        Denomination: { type: "string" },
+                        Composition: { type: "string", enum: ["Gold", "Silver", "Platinum", "Palladium", "Copper", "Nickel", "Steel", "Zinc", "Brass", "Aluminum", "Bimetallic", "Copper-Nickel", "Bronze"] },
+                        Fineness: { type: "string" },
+                        "Strike Type": { type: "string", enum: ["Business", "Proof", "Proof-Like", "Satin"] },
+                        Variety: { type: "string", description: "VAM number (e.g., 'VAM-1A')" },
+                        "Circulated/Uncirculated": { type: "string", enum: ["Circulated", "Uncirculated", "Unknown"] },
+                        "Mint Mark": { type: "string" },
+                        "Brand/Mint": { type: "string" },
+                        "Country of Origin": { type: "string" },
+                        "Materials sourced from": { type: "string" },
+                        "Precious Metal Content per Unit": { type: "string" },
+                      },
+                      required: ["Certification", "Year", "Composition"],
+                      additionalProperties: true,
                     },
-                    isSlabbed: {
-                      type: "boolean",
-                      description: "True if the coin is already in a certified grading slab (PCGS, NGC, etc.)",
-                    },
-                    listingFormat: {
-                      type: "string",
-                      enum: ["FIXED_PRICE", "AUCTION"],
-                      description: "Suggested listing format. Use FIXED_PRICE for most items. Use AUCTION only for rare/key-date coins (CC mint mark Morgan, 1893-S, 1895 proof, etc.) or items where competitive bidding would likely drive price above fixed price.",
-                    },
-                    confidence: {
-                      type: "number",
-                      description: "Identification confidence score 0.0-1.0. Below 0.7 = suggest user verify. Below 0.5 = suggest better photos needed.",
-                    },
-                    photoSuggestions: {
-                      type: "array",
-                      items: { "type": "string" },
-                      description: "Suggestions for additional photos that would improve identification accuracy (e.g., 'Close-up of mint mark area', 'Photo of edge/reeding', 'Reverse side needed'). Empty array if photos are sufficient.",
-                    },
+                    pricingNotes: { type: "string" },
+                    isSlabbed: { type: "boolean" },
+                    metalType: { type: "string", enum: ["gold", "silver", "platinum", "none"] },
+                    metalWeightOz: { type: "number" },
                   },
-                  required: ["title", "description", "priceMin", "priceMax", "pricingNotes", "metalType", "metalWeightOz", "ebayCategoryId", "ebaySearchQuery", "suggestedCategories", "itemSpecifics", "condition", "suggestedGrade", "gradingRationale", "isSlabbed", "listingFormat", "confidence", "photoSuggestions"],
+                  required: ["title", "categoryId", "condition", "description", "price", "itemSpecifics", "isSlabbed"],
                   additionalProperties: false,
                 },
               },
@@ -681,15 +466,13 @@ Seller's note: "${voiceNote}"`;
               type: "function",
               function: {
                 name: "google_search",
-                description:
-                  "Search Google for information about eBay category IDs, coin specifications, or other research. Use this when you're uncertain about a coin's correct eBay category ID.",
+                description: "Search Google for eBay category IDs, coin specifications, or other research. Use when uncertain about a coin's correct eBay category ID.",
                 parameters: {
                   type: "object",
                   properties: {
                     query: {
                       type: "string",
-                      description:
-                        "Search query (e.g., 'eBay category ID Kennedy Half Dollar 1964', 'copper round eBay category bullion')",
+                      description: "Search query (e.g., 'eBay category ID Kennedy Half Dollar 1964', 'copper round eBay category bullion')",
                     },
                   },
                   required: ["query"],
@@ -732,7 +515,7 @@ Seller's note: "${voiceNote}"`;
       await svc.from("gemini_usage").insert({
         user_id: userId,
         function_name: "analyze-item",
-        model: "gemini-2.5-flash",
+        model: "gemini-flash-latest",
         prompt_tokens: usage?.prompt_tokens || 0,
         completion_tokens: usage?.completion_tokens || 0,
         total_tokens: usage?.total_tokens || 0,
@@ -746,6 +529,15 @@ Seller's note: "${voiceNote}"`;
     }
 
     const listing = JSON.parse(toolCall.function.arguments);
+
+    // Normalize new schema field names to legacy equivalents for frontend compatibility
+    if (listing.categoryId && !listing.ebayCategoryId) {
+      listing.ebayCategoryId = listing.categoryId;
+    }
+    if (listing.price?.amount !== undefined && listing.priceMin === undefined) {
+      listing.priceMin = listing.price.amount;
+      listing.priceMax = listing.price.amount;
+    }
 
     if (listing.title && listing.title.length > 80) {
       // Truncate at last complete word within 80 chars to avoid cutting mid-word
