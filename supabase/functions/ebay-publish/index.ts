@@ -1045,6 +1045,7 @@ serve(async (req) => {
         "https://api.ebay.com/oauth/api_scope/sell.inventory",
         "https://api.ebay.com/oauth/api_scope/sell.account",
         "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
+        "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly", // Required for dashboard views/analytics
         "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly", // OQ-5: required for Identity API username/accountType lookup
       ].join(" ");
 
@@ -1292,6 +1293,7 @@ serve(async (req) => {
             "https://api.ebay.com/oauth/api_scope/sell.inventory",
             "https://api.ebay.com/oauth/api_scope/sell.account",
             "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
+            "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly",
           ].join(" "),
         }).toString(),
       });
@@ -1414,6 +1416,7 @@ serve(async (req) => {
                 "https://api.ebay.com/oauth/api_scope/sell.inventory",
                 "https://api.ebay.com/oauth/api_scope/sell.account",
                 "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
+                "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly",
               ].join(" "),
             }).toString(),
           });
