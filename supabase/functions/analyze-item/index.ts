@@ -22,6 +22,24 @@ function parseImageDataUrl(dataUrl: string) {
   return { base64Data, mimeType };
 }
 
+function computeNextResetAt(resetDay: number | null): string | null {
+  if (!resetDay) return null;
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const daysInThisMonth = new Date(year, month + 1, 0).getDate();
+  const clampedDay = Math.min(resetDay, daysInThisMonth);
+  const thisMonthDate = new Date(year, month, clampedDay);
+
+  if (thisMonthDate > now) return thisMonthDate.toISOString();
+
+  const nextMonth = month + 1;
+  const nextYear = nextMonth > 11 ? year + 1 : year;
+  const nm = nextMonth % 12;
+  const daysInNextMonth = new Date(nextYear, nm + 1, 0).getDate();
+  return new Date(nextYear, nm, Math.min(resetDay, daysInNextMonth)).toISOString();
+}
+
 serve(async (req: Request) => {
   // IMPORTANT: Handle OPTIONS preflight first, before anything else
   if (req.method === "OPTIONS") {
@@ -69,26 +87,14 @@ serve(async (req: Request) => {
       });
     }
 
-    // Admin emails always get full Shop-level access
+    // Admin emails always get unlimited access
     const ADMIN_EMAILS = ["twinwicksllc@gmail.com"];
     const isAdmin = userEmail ? ADMIN_EMAILS.includes(userEmail) : false;
     console.log("analyze-item: user email =", userEmail, "isAdmin =", isAdmin);
 
-    // ── 4-Tier plan detection via Stripe ────────────────────────────────────
-    // Tiers: free (6/mo) → starter $19 (25/mo) → pro $49 (200/mo) → shop $99 (1200/mo soft)
-    const PRODUCT_MAP: Record<string, "starter" | "pro" | "shop"> = {
-      "prod_U6zUiC1SYuPrGU": "starter",   // Starter $19/mo  TODO: confirm
-      "prod_U70aT1KvuI2uDx": "pro",       // Pro $49/mo      TODO: confirm
-      "prod_SHOP_PLACEHOLDER": "shop",     // Shop $99/mo     TODO: replace
-    };
-    const TIER_LIMITS: Record<string, number> = {
-      free: 6,
-      starter: 25,
-      pro: 200,
-      shop: 1200,
-    };
-
-    let tier: "free" | "starter" | "pro" | "shop" = isAdmin ? "shop" : "free";
+    // --- eBay Account Gate for Free Users (OQ-1: require eBay for Starter) ---
+    // Check subscription status via Stripe to determine tier (skip for admins)
+    let tier: "starter" | "pro" | "unlimited" = isAdmin ? "unlimited" : "starter";
     const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
     if (!isAdmin && STRIPE_SECRET_KEY && userEmail) {
       try {
@@ -99,7 +105,11 @@ serve(async (req: Request) => {
           const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: "active", limit: 1 });
           if (subs.data.length > 0) {
             const productId = subs.data[0].items.data[0].price.product;
-            tier = PRODUCT_MAP[productId as string] ?? "free";
+            if (productId === "prod_U70aT1KvuI2uDx") {
+              tier = "unlimited";
+            } else if (productId === "prod_U6zUiC1SYuPrGU") {
+              tier = "pro";
+            }
           }
         }
       } catch (stripeErr) {
@@ -107,39 +117,98 @@ serve(async (req: Request) => {
       }
     }
 
-    // Count this month's AI analyses from usage_tracking
-    // Shop tier uses a soft threshold — warn but still allow (for now)
-    const ANALYSIS_LIMIT = TIER_LIMITS[tier];
-    {
+    // eBay account gate for Starter users
+    if (tier === "starter") {
+      const { data: profile } = await svc
+        .from("profiles")
+        .select("ebay_access_token")
+        .eq("id", userId)
+        .single();
+
+      if (!profile?.ebay_access_token) {
+        return new Response(
+          JSON.stringify({
+            error: "ebay_account_required",
+            message: "Connect an eBay account to start generating listings.",
+          }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // --- Per-Org Rolling-Window Quota (OQ-4, OQ-2: anchor at account creation) ---
+    let orgId: string | null = null;
+    let orgResetDay: number | null = null;
+    let currentUsageCount = 0;
+
+    if (tier === "starter") {
+      const { data: orgMember } = await svc
+        .from("org_members")
+        .select("org_id, organizations(free_tier_reset_day)")
+        .eq("user_id", userId)
+        .limit(1);
+
+      if (orgMember && orgMember.length > 0) {
+        orgId = orgMember[0].org_id;
+        orgResetDay = (orgMember[0].organizations as any)?.free_tier_reset_day ?? null;
+      }
+    }
+
+    // Compute rolling-window start for Starter; calendar month for Pro/Unlimited
+    let windowStart: string;
+    if (tier === "starter") {
+      if (orgResetDay) {
+        const { data: wsData, error: wsErr } = await svc
+          .rpc("get_free_tier_window_start", { p_reset_day: orgResetDay });
+        windowStart = wsData ? new Date(wsData).toISOString() : new Date().toISOString();
+      } else {
+        // Fresh start for NULL reset_day (existing users pre-migration)
+        windowStart = new Date().toISOString();
+      }
+    } else {
+      // Pro/Unlimited: calendar month
       const startOfMonth = new Date();
       startOfMonth.setDate(1);
       startOfMonth.setHours(0, 0, 0, 0);
+      windowStart = startOfMonth.toISOString();
+    }
 
-      const { count, error: countErr } = await svc
+    // Count per-org usage for Starter; per-user for Pro/Unlimited
+    if (tier !== "unlimited") {
+      let countQuery = svc
         .from("usage_tracking")
         .select("*", { count: "exact", head: true })
-        .eq("user_id", userId)
         .eq("action_type", "ai_analysis")
-        .gte("created_at", startOfMonth.toISOString());
+        .gte("created_at", windowStart);
 
-      const currentCount = count ?? 0;
+      if (tier === "starter" && orgId) {
+        countQuery = countQuery.eq("org_id", orgId);
+      } else if (tier === "pro") {
+        countQuery = countQuery.eq("user_id", userId);
+      }
+
+      const { count, error: countErr } = await countQuery;
+
+      const ANALYSIS_LIMIT = tier === "pro" ? 50 : 6; // OQ-10: 6 not 5
+      currentUsageCount = count ?? 0;
 
       if (countErr) {
         console.error("Usage count query failed:", countErr);
-      } else if (tier !== "shop" && currentCount >= ANALYSIS_LIMIT) {
-        // Hard limit for free, starter, pro — suggest next tier up
-        const upgradeHints: Record<string, string> = {
-          free: "Upgrade to Starter ($19/mo) for 25 listings, or Pro for even more.",
-          starter: "Upgrade to Pro ($49/mo) for 200 listings with voice notes & analytics.",
-          pro: "Upgrade to Shop ($99/mo) for ~1,200 listings and team features.",
-        };
+      } else if (currentUsageCount >= ANALYSIS_LIMIT) {
+        const upgradeMsg = tier === "pro"
+          ? `Monthly analysis limit reached (${ANALYSIS_LIMIT}). Upgrade to Unlimited for no limits.`
+          : `Monthly analysis limit reached (${ANALYSIS_LIMIT}). Upgrade to Pro or Unlimited for more.`;
+        const resetAt = tier === "starter" ? computeNextResetAt(orgResetDay) : null;
         return new Response(
-          JSON.stringify({ error: `Monthly limit reached (${ANALYSIS_LIMIT}). ${upgradeHints[tier]}` }),
+          JSON.stringify({
+            error: upgradeMsg,
+            creditsUsed: currentUsageCount,
+            creditsRemaining: 0,
+            creditsResetAt: resetAt,
+            tier,
+          }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
-      } else if (tier === "shop" && currentCount >= ANALYSIS_LIMIT) {
-        // Soft threshold for Shop — log warning but allow
-        console.warn(`Shop user ${userId} exceeded soft threshold: ${currentCount}/${ANALYSIS_LIMIT}`);
       }
     }
 
@@ -357,7 +426,7 @@ OTHER US COINS (use when no priority category matches):
   Copper Rounds (non-legal-tenant):   166679 (Coins & Paper Money > Bullion > Other Bullion)
   Wheat Penny (1909-1958):            39455
   Indian Head Cent:                   41084
-  Braided Hair Large Cent:            11950
+  Braided Hair Large Cent:            41085
   Flying Eagle Cent:                  40156
   State Quarters:                     164743
   American Gold Eagle:                40166
@@ -718,16 +787,57 @@ Seller's note: "${voiceNote}"`;
     // --- End melt value enforcement ---
 
     // Track this analysis for rate limiting (increment usage counter)
+    // OQ-4: Insert org_id for per-org quotas (or NULL for non-Starter users)
     try {
       await svc.from("usage_tracking").insert({
         user_id: userId,
         action_type: "ai_analysis",
+        org_id: tier === "starter" ? orgId : null,
       });
     } catch (trackErr) {
       console.error("Failed to track usage:", trackErr);
     }
 
-    return new Response(JSON.stringify({ ...listing, meltValue, spotPrices: { gold: spotGold, silver: spotSilver, platinum: spotPlatinum } }), {
+    // --- Apply Starter-tier field allowlist (OQ-1: broad tier) ---
+    const FREE_TIER_ALLOWED_FIELDS = new Set([
+      "title", "description", "condition", "conditionDescription",
+      "ebayCategoryId", "suggestedCategories",
+      "itemSpecifics",
+      "suggestedGrade", "packageWeightAndSize",
+      // Locked to paid: priceMin, priceMax, meltValue, spotPrices, pricingNotes, gradingRationale, competitors
+    ]);
+
+    let responsePayload = { ...listing, meltValue, spotPrices: { gold: spotGold, silver: spotSilver, platinum: spotPlatinum } };
+    if (tier === "starter") {
+      responsePayload = Object.fromEntries(
+        Object.entries(responsePayload).filter(([k]) => FREE_TIER_ALLOWED_FIELDS.has(k))
+      );
+      // Also scrub grading rationale if nested
+      if ((responsePayload as any).itemSpecifics?.gradingRationale) {
+        delete (responsePayload as any).itemSpecifics.gradingRationale;
+      }
+    }
+
+    // --- Annotate all responses with credit metadata ---
+    const creditsUsed = currentUsageCount + 1;
+    const creditsRemaining = tier === "starter"
+      ? Math.max(0, 6 - creditsUsed)
+      : tier === "pro"
+        ? Math.max(0, 50 - creditsUsed)
+        : null;
+    const creditsResetAt = tier === "starter" ? computeNextResetAt(orgResetDay) : null;
+
+    const finalResponse = {
+      ...responsePayload,
+      _meta: {
+        tier,
+        creditsUsed: creditsUsed,
+        creditsRemaining: creditsRemaining,
+        creditsResetAt: creditsResetAt,
+      },
+    };
+
+    return new Response(JSON.stringify(finalResponse), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

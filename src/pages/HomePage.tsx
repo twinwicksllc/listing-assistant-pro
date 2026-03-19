@@ -46,7 +46,7 @@ const TOUR_STEPS: TourStep[] = [
 ];
 
 export default function HomePage() {
-  const { signOut, recordUsage, planFeatures } = useAuth();
+  const { signOut, recordUsage } = useAuth();
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
