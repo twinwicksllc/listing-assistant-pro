@@ -207,6 +207,49 @@ serve(async (req) => {
       );
     }
 
+    // Check database cache before hitting eBay API (cache valid for 23 hours)
+    if (userId && listingId) {
+      try {
+        const supabaseCheck = createClient(
+          Deno.env.get("SUPABASE_URL") ?? "",
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+          { auth: { persistSession: false } }
+        );
+        const cutoff = new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString();
+        const { data: cached } = await supabaseCheck
+          .from("competitor_prices")
+          .select("*")
+          .eq("user_id", userId)
+          .eq("ebay_listing_id", listingId)
+          .gte("fetched_at", cutoff)
+          .order("fetched_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (cached) {
+          console.log("[ebay-competitor-search] Returning cached result from", cached.fetched_at);
+          return new Response(
+            JSON.stringify({
+              searchQuery: cached.search_query,
+              avgPrice: cached.avg_price,
+              minPrice: cached.min_price,
+              maxPrice: cached.max_price,
+              medianPrice: cached.median_price,
+              priceDelta: cached.price_delta,
+              competitorCount: cached.competitor_count,
+              priceDistribution: cached.price_distribution ?? [],
+              noData: false,
+              fromCache: true,
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        console.log("[ebay-competitor-search] No recent cache found, fetching from eBay...");
+      } catch (cacheErr) {
+        console.warn("[ebay-competitor-search] Cache check failed, proceeding to eBay:", cacheErr);
+      }
+    }
+
     console.log("[ebay-competitor-search] Deriving search query...");
     const searchQuery = deriveSearchQuery(title);
     console.log("[ebay-competitor-search] Search query:", searchQuery);
