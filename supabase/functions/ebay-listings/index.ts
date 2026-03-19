@@ -38,8 +38,9 @@ async function fetchAnalyticsForWindow(
     const today = new Date();
     const startDate = new Date(today);
     startDate.setDate(startDate.getDate() - days);
-    const startDateStr = startDate.toISOString().split("T")[0];
-    const endDateStr = today.toISOString().split("T")[0];
+    // eBay Analytics API requires yyyymmdd format (no hyphens), not yyyy-mm-dd
+    const startDateStr = startDate.toISOString().split("T")[0].replace(/-/g, "");
+    const endDateStr = today.toISOString().split("T")[0].replace(/-/g, "");
     // Build URL with properly encoded filter parameter
     const url = new URL(`${apiBase}/sell/analytics/v1/traffic_report`);
     url.searchParams.set("dimension", "LISTING");
