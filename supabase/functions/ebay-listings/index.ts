@@ -57,6 +57,14 @@ async function fetchAnalyticsForWindow(
     }
 
     const trafficData = await trafficResp.json();
+    
+    // Debug: log the raw metricHeaders structure
+    console.log(`Analytics API (${days}d): Raw trafficData keys: ${Object.keys(trafficData).join(", ")}`);
+    console.log(`Analytics API (${days}d): metricHeaders is: ${Array.isArray(trafficData.metricHeaders) ? "array" : typeof trafficData.metricHeaders}`);
+    if (trafficData.metricHeaders) {
+      console.log(`Analytics API (${days}d): First metricHeader: ${JSON.stringify(trafficData.metricHeaders[0]).substring(0, 200)}`);
+    }
+    
     const metricHeaders: string[] = (trafficData.metricHeaders || []).map((h: any) => h.name);
     const records = trafficData.records || [];
 
