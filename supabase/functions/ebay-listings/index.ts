@@ -38,15 +38,20 @@ async function fetchAnalyticsForWindow(
     const today = new Date();
     const startDate = new Date(today);
     startDate.setDate(startDate.getDate() - days);
-    const dateRange = `${startDate.toISOString().split("T")[0]}..${today.toISOString().split("T")[0]}`;
+    const startDateStr = startDate.toISOString().split("T")[0];
+    const endDateStr = today.toISOString().split("T")[0];
+    // Build URL with properly encoded filter parameter
+    const url = new URL(`${apiBase}/sell/analytics/v1/traffic_report`);
+    url.searchParams.set("dimension", "LISTING");
+    url.searchParams.set("filter", `date_range:[${startDateStr}..${endDateStr}]`);
+    url.searchParams.set("metric", ANALYTICS_METRICS);
 
-    const trafficResp = await fetch(
-      `${apiBase}/sell/analytics/v1/traffic_report?dimension=LISTING&filter=date_range:[${dateRange}]&metric=${ANALYTICS_METRICS}`,
-      { headers: ebayHeaders }
-    );
+    console.log(`Analytics API (${days}d): Fetching from ${url.toString()}`);
+    const trafficResp = await fetch(url.toString(), { headers: ebayHeaders });
 
     if (!trafficResp.ok) {
-      console.warn(`Analytics API error (${days}d):`, trafficResp.status);
+      const errText = await trafficResp.text();
+      console.warn(`Analytics API error (${days}d): ${trafficResp.status} - ${errText.substring(0, 200)}`);
       return result;
     }
 
@@ -54,9 +59,14 @@ async function fetchAnalyticsForWindow(
     const metricHeaders: string[] = (trafficData.metricHeaders || []).map((h: any) => h.name);
     const records = trafficData.records || [];
 
+    console.log(`Analytics API (${days}d): Got ${records.length} records, headers: ${metricHeaders.join(", ")}`);
+    
     for (const record of records) {
       const listingKey = record.dimensionValues?.[0]?.value || "";
-      if (!listingKey) continue;
+      if (!listingKey) {
+        console.warn(`Analytics API (${days}d): Record has no dimensionValues[0].value`, record);
+        continue;
+      }
       const metricValues = record.metricValues || [];
       const getMetric = (name: string): number => {
         const idx = metricHeaders.indexOf(name);
@@ -72,7 +82,7 @@ async function fetchAnalyticsForWindow(
         transactions: Math.round(getMetric("TRANSACTION")),
       };
     }
-    console.log(`Analytics API (${days}d): loaded metrics for ${Object.keys(result).length} listings`);
+    console.log(`Analytics API (${days}d): Loaded metrics for ${Object.keys(result).length} listings`);
   } catch (e) {
     console.error(`Analytics API error (${days}d, non-fatal):`, e);
   }
@@ -104,6 +114,20 @@ function mergeAnalytics(
   const s7 = a7[key] || a7[listingId || ""] || a7[sku] || null;
   const s30 = a30[key] || a30[listingId || ""] || a30[sku] || null;
   const s90 = a90[key] || a90[listingId || ""] || a90[sku] || null;
+  
+  // Debug logging - once per merge
+  if (s7 || s30 || s90) {
+    console.log(`mergeAnalytics: Found analytics for ${listingId || sku}`, {
+      views7d: s7?.views, views30d: s30?.views, views90d: s90?.views
+    });
+  } else if (!listingId && sku) {
+    console.warn(`mergeAnalytics: No analytics found for SKU "${sku}"`, {
+      a7Keys: Object.keys(a7).slice(0, 3),
+      a30Keys: Object.keys(a30).slice(0, 3),
+      a90Keys: Object.keys(a90).slice(0, 3),
+    });
+  }
+  
   return {
     // 30d is the "primary" for backward compat fields
     views: s30?.views ?? 0,
@@ -398,6 +422,7 @@ serve(async (req) => {
 
     const offersData = await offersResp.json();
     const offers = offersData.offers || [];
+    console.log(`ebay-listings: Fetched ${offers.length} offers from eBay Inventory API`);
 
     // Fetch inventory item details for each offer
     const listings = await Promise.all(
@@ -449,10 +474,14 @@ serve(async (req) => {
 
     // Fetch watch data and all three analytics windows in parallel
     const listingIds = listings.map((l: any) => l.listingId).filter(Boolean) as string[];
+    console.log(`ebay-listings: Found ${listingIds.length} listings with IDs for analytics lookup: ${listingIds.slice(0, 3).join(", ")}${listingIds.length > 3 ? "..." : ""}`);
+    
     const [watchMap, { a7, a30, a90 }] = await Promise.all([
       fetchWatchDataForListings(listingIds, tradingUrl, userToken),
       fetchAllAnalytics(apiBase, ebayHeaders),
     ]);
+    
+    console.log(`ebay-listings: Analytics merge - a7 ${Object.keys(a7).length} items, a30 ${Object.keys(a30).length} items, a90 ${Object.keys(a90).length} items`);
 
     const epnCampaignId = Deno.env.get("EPN_CAMPAIGN_ID") || "";
     const buildEbayUrl = (listingId: string | null) => {
