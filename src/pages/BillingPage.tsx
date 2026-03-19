@@ -99,16 +99,25 @@ export default function BillingPage() {
 
         {/* Current usage */}
         <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-foreground">This Month's Usage</h2>
+          <h2 className="text-sm font-semibold text-foreground">
+            {currentPlan === "free" ? "Rolling Window Credits" : "This Month's Usage"}
+          </h2>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">AI Analyses</p>
+              <p className="text-xs text-muted-foreground">
+                {currentPlan === "free" ? "AI Analyses (Rolling)" : "AI Analyses"}
+              </p>
               <p className="text-lg font-bold text-foreground">
                 {usage.aiAnalysis}
                 <span className="text-xs font-normal text-muted-foreground">
                   {" "}/ {currentPlanLimits.analysisLimit === Infinity ? "∞" : currentPlanLimits.analysisLimit}
                 </span>
               </p>
+              {currentPlan === "free" && (
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Resets monthly (rolling window)
+                </p>
+              )}
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">eBay Publishes</p>
@@ -120,7 +129,39 @@ export default function BillingPage() {
               </p>
             </div>
           </div>
+          {currentPlan === "free" && usage.aiAnalysis >= currentPlanLimits.analysisLimit && (
+            <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+              <p className="text-xs font-medium text-amber-900 dark:text-amber-100">
+                🔄 Rolling window credits exhausted. They will reset on the 1st of each month.
+              </p>
+            </div>
+          )}
         </div>
+
+        {/* Free tier requirements info */}
+        {currentPlan === "free" && (
+          <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-xl p-4 space-y-2">
+            <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100">Free Tier Requirements</h3>
+            <ul className="text-xs text-blue-800 dark:text-blue-200 space-y-1.5">
+              <li className="flex items-start gap-2">
+                <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                <span><strong>eBay Account Required:</strong> You must connect an active eBay account to generate listings</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                <span><strong>Rolling Window:</strong> 6 analyses per month, resets on the same day each month</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
+                <span><strong>One Account Per Org:</strong> You can only link one eBay account to your organization</span>
+              </li>
+            </ul>
+            <Link to="/settings" className="inline-flex items-center gap-2 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 mt-2">
+              Go to Settings
+              <span>→</span>
+            </Link>
+          </div>
+        )}
 
         {/* Plans Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
