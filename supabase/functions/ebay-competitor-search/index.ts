@@ -173,41 +173,55 @@ function median(nums: number[]): number {
 // Main handler
 // ----------------------------------------------------------------
 serve(async (req) => {
+  console.log("[ebay-competitor-search] Request received:", req.method);
+  
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    console.log("[ebay-competitor-search] Parsing request body...");
     const body = await req.json();
+    console.log("[ebay-competitor-search] Body parsed:", Object.keys(body));
     const { listingId, title, categoryId, yourPrice, userId } = body;
 
+    console.log("[ebay-competitor-search] Validation step - checking title...");
     if (!title) {
+      console.error("[ebay-competitor-search] Missing title");
       return new Response(
         JSON.stringify({ error: "title is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    console.log("[ebay-competitor-search] Loading environment variables...");
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
     const appId = Deno.env.get("EBAY_CLIENT_ID");
+    console.log("[ebay-competitor-search] ebayEnv:", ebayEnv, "appId exists:", !!appId);
 
     if (!appId) {
+      console.error("[ebay-competitor-search] EBAY_CLIENT_ID not configured");
       return new Response(
         JSON.stringify({ error: "EBAY_CLIENT_ID not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    console.log("[ebay-competitor-search] Deriving search query...");
     const searchQuery = deriveSearchQuery(title);
+    console.log("[ebay-competitor-search] Search query:", searchQuery);
 
+    console.log("[ebay-competitor-search] Fetching eBay competitors...");
     const { prices, count } = await fetchEbayCompetitors({
       appId,
       searchQuery,
       categoryId,
       ebayEnv,
     });
+    console.log("[ebay-competitor-search] Fetched", prices.length, "prices from", count, "competitors");
 
     if (prices.length === 0) {
+      console.log("[ebay-competitor-search] No prices found, returning empty response");
       return new Response(
         JSON.stringify({
           searchQuery,
@@ -224,6 +238,7 @@ serve(async (req) => {
       );
     }
 
+    console.log("[ebay-competitor-search] Computing statistics...");
     const avgPrice = prices.reduce((s, p) => s + p, 0) / prices.length;
     const minPrice = Math.min(...prices);
     const maxPrice = Math.max(...prices);
@@ -232,8 +247,11 @@ serve(async (req) => {
       yourPrice != null ? Math.round((yourPrice - avgPrice) * 100) / 100 : null;
     const priceDistribution = buildDistribution(prices);
 
+    console.log("[ebay-competitor-search] Stats: avg=$" + avgPrice.toFixed(2) + ", median=$" + medianPrice.toFixed(2));
+
     // Persist to competitor_prices table if we have the context
     if (userId && listingId) {
+      console.log("[ebay-competitor-search] Persisting to database...");
       try {
         const supabase = createClient(
           Deno.env.get("SUPABASE_URL") ?? "",
@@ -241,6 +259,7 @@ serve(async (req) => {
           { auth: { persistSession: false } }
         );
 
+        console.log("[ebay-competitor-search] Deleting existing records...");
         // Upsert by user_id + ebay_listing_id — replace stale snapshot
         // Delete any existing rows for this listing first (simplest upsert strategy)
         await supabase
@@ -249,6 +268,7 @@ serve(async (req) => {
           .eq("user_id", userId)
           .eq("ebay_listing_id", listingId);
 
+        console.log("[ebay-competitor-search] Inserting new record...");
         await supabase.from("competitor_prices").insert({
           user_id: userId,
           ebay_listing_id: listingId,
@@ -270,8 +290,11 @@ serve(async (req) => {
         // Non-fatal — still return the data to the caller
         console.warn("[ebay-competitor-search] Failed to persist snapshot:", dbErr);
       }
+    } else {
+      console.log("[ebay-competitor-search] Skipping database persistence (no userId or listingId)");
     }
 
+    console.log("[ebay-competitor-search] Returning response...");
     return new Response(
       JSON.stringify({
         searchQuery,
@@ -288,7 +311,7 @@ serve(async (req) => {
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error("[ebay-competitor-search] error:", msg);
+    console.error("[ebay-competitor-search] Caught error:", msg, "Stack:", err instanceof Error ? err.stack : "N/A");
     return new Response(
       JSON.stringify({ error: msg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
