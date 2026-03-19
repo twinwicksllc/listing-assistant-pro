@@ -22,6 +22,24 @@ function parseImageDataUrl(dataUrl: string) {
   return { base64Data, mimeType };
 }
 
+function computeNextResetAt(resetDay: number | null): string | null {
+  if (!resetDay) return null;
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const daysInThisMonth = new Date(year, month + 1, 0).getDate();
+  const clampedDay = Math.min(resetDay, daysInThisMonth);
+  const thisMonthDate = new Date(year, month, clampedDay);
+
+  if (thisMonthDate > now) return thisMonthDate.toISOString();
+
+  const nextMonth = month + 1;
+  const nextYear = nextMonth > 11 ? year + 1 : year;
+  const nm = nextMonth % 12;
+  const daysInNextMonth = new Date(nextYear, nm + 1, 0).getDate();
+  return new Date(nextYear, nm, Math.min(resetDay, daysInNextMonth)).toISOString();
+}
+
 serve(async (req: Request) => {
   // IMPORTANT: Handle OPTIONS preflight first, before anything else
   if (req.method === "OPTIONS") {
@@ -74,6 +92,7 @@ serve(async (req: Request) => {
     const isAdmin = userEmail ? ADMIN_EMAILS.includes(userEmail) : false;
     console.log("analyze-item: user email =", userEmail, "isAdmin =", isAdmin);
 
+    // --- eBay Account Gate for Free Users (OQ-1: require eBay for Starter) ---
     // Check subscription status via Stripe to determine tier (skip for admins)
     let tier: "starter" | "pro" | "unlimited" = isAdmin ? "unlimited" : "starter";
     const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
@@ -98,30 +117,96 @@ serve(async (req: Request) => {
       }
     }
 
-    // Count this month's AI analyses from usage_tracking
-    if (tier !== "unlimited") {
+    // eBay account gate for Starter users
+    if (tier === "starter") {
+      const { data: profile } = await svc
+        .from("profiles")
+        .select("ebay_access_token")
+        .eq("id", userId)
+        .single();
+
+      if (!profile?.ebay_access_token) {
+        return new Response(
+          JSON.stringify({
+            error: "ebay_account_required",
+            message: "Connect an eBay account to start generating listings.",
+          }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // --- Per-Org Rolling-Window Quota (OQ-4, OQ-2: anchor at account creation) ---
+    let orgId: string | null = null;
+    let orgResetDay: number | null = null;
+    let currentUsageCount = 0;
+
+    if (tier === "starter") {
+      const { data: orgMember } = await svc
+        .from("org_members")
+        .select("org_id, organizations(free_tier_reset_day)")
+        .eq("user_id", userId)
+        .limit(1);
+
+      if (orgMember && orgMember.length > 0) {
+        orgId = orgMember[0].org_id;
+        orgResetDay = (orgMember[0].organizations as any)?.free_tier_reset_day ?? null;
+      }
+    }
+
+    // Compute rolling-window start for Starter; calendar month for Pro/Unlimited
+    let windowStart: string;
+    if (tier === "starter") {
+      if (orgResetDay) {
+        const { data: wsData, error: wsErr } = await svc
+          .rpc("get_free_tier_window_start", { p_reset_day: orgResetDay });
+        windowStart = wsData ? new Date(wsData).toISOString() : new Date().toISOString();
+      } else {
+        // Fresh start for NULL reset_day (existing users pre-migration)
+        windowStart = new Date().toISOString();
+      }
+    } else {
+      // Pro/Unlimited: calendar month
       const startOfMonth = new Date();
       startOfMonth.setDate(1);
       startOfMonth.setHours(0, 0, 0, 0);
+      windowStart = startOfMonth.toISOString();
+    }
 
-      const { count, error: countErr } = await svc
+    // Count per-org usage for Starter; per-user for Pro/Unlimited
+    if (tier !== "unlimited") {
+      let countQuery = svc
         .from("usage_tracking")
         .select("*", { count: "exact", head: true })
-        .eq("user_id", userId)
         .eq("action_type", "ai_analysis")
-        .gte("created_at", startOfMonth.toISOString());
+        .gte("created_at", windowStart);
 
-      const ANALYSIS_LIMIT = tier === "pro" ? 50 : 5;
-      const currentCount = count ?? 0;
+      if (tier === "starter" && orgId) {
+        countQuery = countQuery.eq("org_id", orgId);
+      } else if (tier === "pro") {
+        countQuery = countQuery.eq("user_id", userId);
+      }
+
+      const { count, error: countErr } = await countQuery;
+
+      const ANALYSIS_LIMIT = tier === "pro" ? 50 : 6; // OQ-10: 6 not 5
+      currentUsageCount = count ?? 0;
 
       if (countErr) {
         console.error("Usage count query failed:", countErr);
-      } else if (currentCount >= ANALYSIS_LIMIT) {
+      } else if (currentUsageCount >= ANALYSIS_LIMIT) {
         const upgradeMsg = tier === "pro"
           ? `Monthly analysis limit reached (${ANALYSIS_LIMIT}). Upgrade to Unlimited for no limits.`
           : `Monthly analysis limit reached (${ANALYSIS_LIMIT}). Upgrade to Pro or Unlimited for more.`;
+        const resetAt = tier === "starter" ? computeNextResetAt(orgResetDay) : null;
         return new Response(
-          JSON.stringify({ error: upgradeMsg }),
+          JSON.stringify({
+            error: upgradeMsg,
+            creditsUsed: currentUsageCount,
+            creditsRemaining: 0,
+            creditsResetAt: resetAt,
+            tier,
+          }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -734,7 +819,7 @@ Seller's note: "${voiceNote}"`;
     }
 
     // --- Annotate all responses with credit metadata ---
-    const creditsUsed = Math.floor(Math.random() * 6) + 1; // Placeholder: track actual usage in full impl
+    const creditsUsed = currentUsageCount + 1;
     const creditsRemaining = tier === "starter"
       ? Math.max(0, 6 - creditsUsed)
       : tier === "pro"

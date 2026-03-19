@@ -1165,6 +1165,81 @@ serve(async (req) => {
         }
       }
 
+      // --- NEW: Identity API Call + One-Account Rule (OQ-5, OQ-3) ---
+      // Call eBay Identity API to fetch username and account type (exchange_code only, not on refresh)
+      // One-account enforcement: block different username if tier is not Unlimited
+      try {
+        const identityRes = await fetch(
+          "https://apiz.ebay.com/commerce/identity/v1/user/",
+          { headers: { Authorization: `Bearer ${tokenData.access_token}` } }
+        );
+        const identity = await identityRes.json();
+        const newUsername = identity?.userId ?? identity?.username ?? null;
+        const accountType = (identity?.accountType ?? "")?.toLowerCase() ?? "individual";
+
+        // Determine tier for one-account enforcement (OQ-3: gate on LA subscription, not eBay account type)
+        let tierForOneAccountCheck: "starter" | "pro" | "unlimited" = "starter";
+        if (userEmail && STRIPE_SECRET_KEY) {
+          try {
+            const { default: Stripe } = await import("https://esm.sh/stripe@18.5.0");
+            const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2025-08-27.basial" });
+            const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
+            if (customers.data.length > 0) {
+              const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: "active", limit: 1 });
+              if (subs.data.length > 0) {
+                const productId = subs.data[0].items.data[0].price.product;
+                if (productId === "prod_U70aT1KvuI2uDx") tierForOneAccountCheck = "unlimited";
+                else if (productId === "prod_U6zUiC1SYuPrGU") tierForOneAccountCheck = "pro";
+              }
+            }
+          } catch (stripeE) {
+            console.error("Stripe check in exchange_code failed:", stripeE);
+          }
+        }
+
+        // Check for existing eBay username (one-account rule for non-Unlimited)
+        if (userId && supabaseUrl && supabaseServiceKey) {
+          const supabase = createClient(supabaseUrl, supabaseServiceKey);
+          const { data: existingProfile } = await supabase
+            .from("profiles")
+            .select("ebay_username")
+            .eq("id", userId)
+            .single();
+
+          if (
+            existingProfile?.ebay_username &&
+            existingProfile.ebay_username !== newUsername &&
+            tierForOneAccountCheck !== "unlimited"
+          ) {
+            return new Response(
+              JSON.stringify({
+                error: "account_already_linked",
+                message: `This Listing Assistant account is already linked to eBay user "${existingProfile.ebay_username}". Disconnect it before connecting a new account.`,
+              }),
+              { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+
+          // Store username and account type
+          const { error: usernameErr } = await supabase
+            .from("profiles")
+            .update({
+              ebay_username: newUsername,
+              ebay_account_type: accountType,
+            })
+            .eq("id", userId);
+
+          if (usernameErr) {
+            console.warn("exchange_code: failed to store eBay username:", usernameErr.message);
+          } else {
+            console.log("exchange_code: stored eBay username for user", userId, ":", newUsername);
+          }
+        }
+      } catch (identityErr) {
+        console.error("Identity API call failed (non-fatal):", identityErr);
+        // Still return token to client — identity info is supplementary
+      }
+
       return new Response(
         JSON.stringify({
           access_token: tokenData.access_token,
