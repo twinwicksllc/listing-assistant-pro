@@ -9,13 +9,14 @@ const corsHeaders = {
 };
 
 // ─── Analytics metrics we want per listing ───────────────────────────────────
-const ANALYTICS_METRICS = [
+const ANALYTICS_METRICS_ARRAY = [
   "LISTING_VIEWS_TOTAL",
   "LISTING_IMPRESSION_TOTAL",
   "CLICK_THROUGH_RATE",
   "SALES_CONVERSION_RATE",
   "TRANSACTION",
-].join(",");
+];
+const ANALYTICS_METRICS = ANALYTICS_METRICS_ARRAY.join(",");
 
 interface AnalyticsSnapshot {
   views: number;
@@ -65,10 +66,15 @@ async function fetchAnalyticsForWindow(
       console.log(`Analytics API (${days}d): First metricHeader: ${JSON.stringify(trafficData.metricHeaders[0]).substring(0, 200)}`);
     }
     
-    const metricHeaders: string[] = (trafficData.metricHeaders || []).map((h: any) => h.name);
+    // Use eBay's metricHeaders if provided, otherwise use our hardcoded order
+    // (eBay returns metric values in the same order as requested)
+    const metricHeaders: string[] = trafficData.metricHeaders && trafficData.metricHeaders.length > 0
+      ? (trafficData.metricHeaders as any[]).map((h: any) => h.name)
+      : ANALYTICS_METRICS_ARRAY;
+    
     const records = trafficData.records || [];
 
-    console.log(`Analytics API (${days}d): Got ${records.length} records, headers: ${metricHeaders.join(", ")}`);
+    console.log(`Analytics API (${days}d): Got ${records.length} records with ${metricHeaders.length} metric headers`);
     
     // Log first record structure for debugging
     if (records.length > 0) {
