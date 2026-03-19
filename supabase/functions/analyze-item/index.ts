@@ -256,6 +256,48 @@ serve(async (req: Request) => {
     }
     // --- End spot prices ---
 
+    // --- Fetch competitor prices (actual sold listings) for market analysis ---
+    let competitorData: any = null;
+    const title: string = body.title || "";
+    const yourPrice: number = body.yourPrice || 0;
+    
+    if (title && userId) {
+      try {
+        console.log("analyze-item: fetching competitor prices for item analysis...");
+        const competitorResp = await fetch(
+          `${Deno.env.get("SUPABASE_URL")}/functions/v1/ebay-competitor-search`,
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              userId,
+              title,
+              yourPrice,
+            }),
+          }
+        );
+
+        if (competitorResp.ok) {
+          competitorData = await competitorResp.json();
+          console.log("analyze-item: competitor data retrieved", {
+            competitorCount: competitorData?.competitorCount,
+            avgPrice: competitorData?.avgPrice,
+            minPrice: competitorData?.minPrice,
+            maxPrice: competitorData?.maxPrice,
+            fromCache: competitorData?.fromCache,
+          });
+        } else {
+          console.warn("analyze-item: competitor search failed:", competitorResp.status);
+        }
+      } catch (compErr) {
+        console.warn("analyze-item: competitor fetch error (non-blocking):", compErr);
+      }
+    }
+    // --- End competitor prices ---
+
     // Support both single image (legacy) and multiple images
     const imageList: string[] = body.images ?? (body.imageBase64 ? [body.imageBase64] : []);
     const voiceNote: string = body.voiceNote || "";
@@ -472,6 +514,19 @@ Price the EXACT item first using this hierarchy: 1. Exact sold comps 2. Same ser
 
 Melt Value Floor: priceMin must NEVER fall below the melt value PLUS eBay fees.
 eBay charges ~13.25% final value fee + ~2.9% payment processing = ~16% total. Use 1.19x melt as the minimum floor so listings at priceMin still cover melt after fees.
+
+MARKET DATA (ACTUAL SOLD LISTINGS):
+${
+  competitorData && !competitorData.error
+    ? `Found ${competitorData.competitorCount || 0} similar items sold recently:
+- Average price: $${(competitorData.avgPrice || 0).toFixed(2)}
+- Price range: $${(competitorData.minPrice || 0).toFixed(2)} - $${(competitorData.maxPrice || 0).toFixed(2)}
+- Median price: $${(competitorData.medianPrice || 0).toFixed(2)}
+- Price distribution: ${competitorData.priceDistribution ? JSON.stringify(competitorData.priceDistribution) : "Not available"}
+USE THIS DATA AS YOUR PRIMARY PRICING REFERENCE — these are real sold prices, the most reliable indicator of market value.`
+    : `No competitor data available yet. Use spot prices and category logic to establish floor. Competitor data will populate after initial analysis.`
+}
+
 Current live spot prices: Gold $${spotGold.toFixed(2)}/oz | Silver $${spotSilver.toFixed(2)}/oz | Platinum $${spotPlatinum.toFixed(2)}/oz
 
 Fee-adjusted melt floor = meltValue × 1.19
