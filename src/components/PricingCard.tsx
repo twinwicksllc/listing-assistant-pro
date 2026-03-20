@@ -25,9 +25,17 @@ interface PricingCardProps {
   initialMeltValue?: number | null;
   initialSpotPrices?: { gold: number; silver: number; platinum: number } | null;
   pricingNotes?: string;
+  competitorData?: {
+    competitorCount: number;
+    avgPrice: number;
+    minPrice: number;
+    maxPrice: number;
+    medianPrice: number;
+    fromCache: boolean;
+  } | null;
 }
 
-export default function PricingCard({ priceMin, priceMax, searchQuery, metalType = "none", metalWeightOz = 0, initialMeltValue = null, initialSpotPrices = null, pricingNotes = "" }: PricingCardProps) {
+export default function PricingCard({ priceMin, priceMax, searchQuery, metalType = "none", metalWeightOz = 0, initialMeltValue = null, initialSpotPrices = null, pricingNotes = "", competitorData = null }: PricingCardProps) {
   const [loading, setLoading] = useState(false);
   const [soldItems, setSoldItems] = useState<SoldItem[]>([]);
   const [ebayAvg, setEbayAvg] = useState<number | null>(null);
@@ -146,6 +154,34 @@ export default function PricingCard({ priceMin, priceMax, searchQuery, metalType
         <div className="bg-muted/50 rounded-lg px-3 py-2.5">
           <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">AI Pricing Rationale</p>
           <p className="text-xs text-foreground leading-relaxed">{pricingNotes}</p>
+        </div>
+      )}
+
+      {/* Market Analysis - Competitor Data */}
+      {competitorData && competitorData.competitorCount > 0 && (
+        <div className="bg-primary/5 rounded-lg px-3 py-2.5 border border-primary/20">
+          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-2">Market Analysis</p>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div>
+              <p className="text-muted-foreground">Similar Sold</p>
+              <p className="font-semibold text-foreground">{competitorData.competitorCount}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Avg Price</p>
+              <p className="font-semibold text-foreground">${competitorData.avgPrice.toFixed(2)}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Price Range</p>
+              <p className="font-semibold text-foreground">${competitorData.minPrice.toFixed(2)} - ${competitorData.maxPrice.toFixed(2)}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Median Price</p>
+              <p className="font-semibold text-foreground">${competitorData.medianPrice.toFixed(2)}</p>
+            </div>
+          </div>
+          {competitorData.fromCache && (
+            <p className="text-[10px] text-muted-foreground mt-2">Cached data</p>
+          )}
         </div>
       )}
 
