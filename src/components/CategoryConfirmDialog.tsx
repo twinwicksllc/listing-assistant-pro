@@ -7,6 +7,7 @@ interface CategoryConfirmDialogProps {
   categoryId: string;
   onConfirm: (categoryId: string) => void;
   onCancel: () => void;
+  suggestedCategories?: Array<{ categoryId: string; categoryName: string; reason: string }>;
 }
 
 type LookupState = "known" | "unknown" | "empty";
@@ -26,6 +27,7 @@ export default function CategoryConfirmDialog({
   categoryId,
   onConfirm,
   onCancel,
+  suggestedCategories = [],
 }: CategoryConfirmDialogProps) {
   const [loading, setLoading] = useState(true);
   const [categoryName, setCategoryName] = useState<string | null>(null);
@@ -85,8 +87,12 @@ export default function CategoryConfirmDialog({
 
   if (!open) return null;
 
-  // Confirm allowed when known or remote-validated as valid; disallow when invalid or empty
-  const canConfirm = lookupState === "known" || remoteState === "valid" || remoteState === "checking";
+  // Confirm allowed when:
+  // - Known (in our local map)
+  // - Remote check passed as valid
+  // - Unknown but remote check failed/timed out (user can still use if they verified it)
+  // Disallow only when: empty OR (unknown AND explicitly invalid on eBay)
+  const canConfirm = lookupState !== "empty" && !(lookupState === "unknown" && remoteState === "invalid");
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -172,6 +178,26 @@ export default function CategoryConfirmDialog({
                   </>
                 )}
               </p>
+
+              {/* Show AI-suggested categories as alternatives */}
+              {suggestedCategories && suggestedCategories.length > 0 && (
+                <div className="space-y-2 pt-2 border-t border-amber-500/20">
+                  <p className="text-xs font-medium text-amber-600 dark:text-amber-400">AI-Recommended Categories</p>
+                  <div className="space-y-1.5">
+                    {suggestedCategories.map((cat) => (
+                      <button
+                        key={cat.categoryId}
+                        onClick={() => onConfirm(cat.categoryId)}
+                        className="w-full text-left p-2 text-xs rounded-lg hover:bg-primary/10 border border-transparent hover:border-primary/30 transition-colors cursor-pointer"
+                      >
+                        <p className="font-semibold text-foreground">#{cat.categoryId}</p>
+                        <p className="text-muted-foreground text-[11px]">{cat.categoryName}</p>
+                        <p className="text-[10px] text-primary/70 italic">{cat.reason}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             <div className="flex items-start gap-3">
