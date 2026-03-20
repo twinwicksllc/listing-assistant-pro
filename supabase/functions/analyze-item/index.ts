@@ -567,7 +567,7 @@ Seller's note: "${voiceNote}"`;
 
     // --- Build suggestedCategories (dedupe, backfill names via exact DB lookup) ---
     try {
-      const { buildSuggestedCategories } = await import("./_helpers/suggestedCategories.ts");
+      const { buildSuggestedCategories } = await import("../_helpers/suggestedCategories.ts");
       listing.suggestedCategories = await buildSuggestedCategories(listing, svc);
     } catch (suggestErr) {
       console.warn("Failed to build suggestedCategories:", suggestErr);
