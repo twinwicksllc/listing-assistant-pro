@@ -345,6 +345,10 @@ serve(async (req: Request) => {
 - Gold Bars: 178906 | Silver Eagle: 41111 | Wheat Penny: 39455
 - World Coins: 45243 (Required: Materials sourced from = Issuing Country).
 - VERIFICATION: If confidence <95% or not listed above, use \`google_search\` for "eBay leaf category ID [Item Name]".
+- **ALWAYS provide 1-2 alternative category IDs** (alternativeCategoryIds) that would also be valid, even if less specific. For example:
+  - Primary: 39464 (Morgan Dollars) | Alternative: 39489 (Silver Bars/Rounds) if it's generic bullion
+  - Primary: 41111 (Silver Eagle) | Alternative: 39489 (Silver Bars/Rounds)
+  - Always have alternatives unless it's extremely category-specific.
 
 ### PRICING LOGIC
 - Floor: (Melt Value * 1.19) to cover eBay fees (approx 16%).
@@ -416,6 +420,12 @@ Seller's note: "${voiceNote}"`;
                     categoryId: {
                       type: "string",
                       description: "Key IDs: Gold Bars/Rounds=178906, Silver Bars/Rounds=39489, Other Silver Bullion=3361, Ancient Coins=532, Medieval Coins=173685, Eisenhower Dollars=11981, Morgan Dollars=39464, Peace Dollars=11980, Barber Half=11971, Liberty Walking Half=41099, Kennedy Half=41102, Franklin Half=11973, Silver Eagle=41111, Wheat Penny=39455, Copper Rounds=166679, Gold Eagle=40166, Gold Buffalo=40167, US Proof Sets=41109, US Mint Sets=526, World Coins=45243.",
+                    },
+                    alternativeCategoryIds: {
+                      type: "array",
+                      description: "Up to 2 alternative eBay category IDs that would also be appropriate. Provide different but valid categories.",
+                      items: { type: "string" },
+                      maxItems: 2,
                     },
                     condition: {
                       type: "string",

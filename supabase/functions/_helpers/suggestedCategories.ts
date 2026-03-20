@@ -7,10 +7,23 @@ export async function buildSuggestedCategories(listing: any, svc: any) {
   if (listing.ebayCategoryId) {
     const cid = normalizeId(listing.ebayCategoryId);
     seen.add(cid);
-    finalSuggestions.push({ categoryId: cid, categoryName: listing.suggestedCategories?.[0]?.categoryName || null, reason: "Primary category from AI" });
+    finalSuggestions.push({ categoryId: cid, categoryName: null, reason: "Primary category from AI" });
   }
 
-  // Add AI suggestions while deduping
+  // Add AI-provided alternative categories (from Gemini's alternativeCategoryIds)
+  if (Array.isArray(listing.alternativeCategoryIds)) {
+    for (const altId of listing.alternativeCategoryIds) {
+      const cid = normalizeId(altId);
+      if (!cid) continue;
+      if (!seen.has(cid)) {
+        seen.add(cid);
+        finalSuggestions.push({ categoryId: cid, categoryName: null, reason: "Alternative from AI" });
+      }
+      if (finalSuggestions.length >= 3) break;
+    }
+  }
+
+  // Add any existing suggestions (legacy support)
   if (Array.isArray(listing.suggestedCategories)) {
     for (const s of listing.suggestedCategories) {
       const cid = normalizeId(s?.categoryId);
@@ -23,18 +36,23 @@ export async function buildSuggestedCategories(listing: any, svc: any) {
     }
   }
 
-  // If we still have fewer than 3 suggestions, do NOT perform fuzzy lookup (by design)
-  // but try to backfill missing categoryName for the first suggestion via exact lookup
-  if (finalSuggestions.length > 0 && finalSuggestions[0].categoryName === null && svc) {
-    try {
-      const { data: exact } = await svc
-        .from("category_mappings")
-        .select("category_name")
-        .eq("ebay_category_id", finalSuggestions[0].categoryId)
-        .single();
-      if (exact && exact.category_name) finalSuggestions[0].categoryName = exact.category_name;
-    } catch (e) {
-      // ignore lookup failures
+  // Backfill missing category names via exact DB lookup for all suggestions
+  if (svc) {
+    for (let i = 0; i < finalSuggestions.length; i++) {
+      if (!finalSuggestions[i].categoryName) {
+        try {
+          const { data: exact } = await svc
+            .from("category_mappings")
+            .select("category_name")
+            .eq("ebay_category_id", finalSuggestions[i].categoryId)
+            .single();
+          if (exact && exact.category_name) {
+            finalSuggestions[i].categoryName = exact.category_name;
+          }
+        } catch (e) {
+          // ignore lookup failures - keep null
+        }
+      }
     }
   }
 

@@ -983,6 +983,7 @@ export default function AnalyzePage() {
       <CategoryConfirmDialog
         open={showCategoryConfirm}
         categoryId={pendingCategoryId}
+        suggestedCategories={suggestedCategories}
         onConfirm={(categoryId) => {
           setEbayCategoryId(categoryId);
           setCustomCategoryInput("");
