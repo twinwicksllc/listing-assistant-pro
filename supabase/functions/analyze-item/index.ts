@@ -260,6 +260,9 @@ serve(async (req: Request) => {
     const imageList: string[] = body.images ?? (body.imageBase64 ? [body.imageBase64] : []);
     const voiceNote: string = body.voiceNote || "";
 
+    // Initialize competitorData early (will be populated after AI analysis)
+    let competitorData: any = null;
+
     if (imageList.length === 0) {
       return new Response(JSON.stringify({ error: "No images provided" }), {
         status: 400,
@@ -523,7 +526,6 @@ Seller's note: "${voiceNote}"`;
     // --- end suggestedCategories processing ---
 
     // --- Fetch competitor prices now that AI has generated the title ---
-    let competitorData: any = null;
     if (listing.title && userId) {
       try {
         console.log("analyze-item: fetching competitor prices with AI-generated title...", { title: listing.title });
