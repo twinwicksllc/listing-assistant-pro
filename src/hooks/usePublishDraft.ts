@@ -243,8 +243,8 @@ export function usePublishDraft() {
 
       const publishPayload = {
         action: "create_draft",
+        userId: user?.id,
         userToken: ebayToken,
-        sku: `LA-${draft.id.replace(/-/g, "").slice(0, 16).toUpperCase()}`,
         postalCode: postalCode || undefined,
         city: city || undefined,
         _debug_postalCode: postalCode,
