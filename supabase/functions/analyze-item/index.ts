@@ -256,19 +256,26 @@ serve(async (req: Request) => {
     }
     // --- End spot prices ---
 
+    // Support both single image (legacy) and multiple images
+    const imageList: string[] = body.images ?? (body.imageBase64 ? [body.imageBase64] : []);
+    const voiceNote: string = body.voiceNote || "";
+
     // --- Fetch competitor prices (actual sold listings) for market analysis ---
     let competitorData: any = null;
     const title: string = body.title || "";
     const yourPrice: number = body.yourPrice || 0;
     
-    console.log("analyze-item: competitor search params check", { title, yourPrice, userId, hasTitle: !!title, hasUserId: !!userId });
+    // Use title if provided, fallback to first 50 chars of voiceNote (if available) for competitor search
+    const competitorSearchQuery: string = title || voiceNote.substring(0, 50);
     
-    if (title && userId) {
+    console.log("analyze-item: competitor search params check", { title, voiceNote: voiceNote.substring(0, 30), competitorSearchQuery: competitorSearchQuery.substring(0, 30), userId, hasTitle: !!title, hasVoiceNote: !!voiceNote, hasSearchQuery: !!competitorSearchQuery });
+    
+    if (competitorSearchQuery && userId) {
       try {
         console.log("analyze-item: fetching competitor prices for item analysis...");
         const competitorUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ebay-competitor-search`;
         console.log("analyze-item: competitor URL:", competitorUrl);
-        console.log("analyze-item: competitor request body:", { userId, title, yourPrice });
+        console.log("analyze-item: competitor request body:", { userId, title: competitorSearchQuery, yourPrice });
         
         const competitorResp = await fetch(
           competitorUrl,
@@ -280,7 +287,7 @@ serve(async (req: Request) => {
             },
             body: JSON.stringify({
               userId,
-              title,
+              title: competitorSearchQuery,
               yourPrice,
             }),
           }
@@ -305,13 +312,9 @@ serve(async (req: Request) => {
         console.warn("analyze-item: competitor fetch error (non-blocking):", compErr);
       }
     } else {
-      console.log("analyze-item: skipping competitor search - missing title or userId");
+      console.log("analyze-item: skipping competitor search - missing search query or userId");
     }
     // --- End competitor prices ---
-
-    // Support both single image (legacy) and multiple images
-    const imageList: string[] = body.images ?? (body.imageBase64 ? [body.imageBase64] : []);
-    const voiceNote: string = body.voiceNote || "";
 
     if (imageList.length === 0) {
       return new Response(JSON.stringify({ error: "No images provided" }), {
