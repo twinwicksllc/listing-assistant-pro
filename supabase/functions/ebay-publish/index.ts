@@ -8,7 +8,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Force redeploy v19: fix inventory location update — when location exists, PATCH to update city/postal_code instead of reusing stale address
+// Force redeploy v20: fix inventory location address — eBay PATCH ignores address fields; use DELETE+re-create to update postal code (v19 PATCH was silently ignored)
 // Force redeploy v17: fix errorId 25002 for category 45243 (World Coins) - Brand removed from NON_ASPECT_KEYS, Color updated to include BM (Bi-Metallic) for non-copper coins
 // Force redeploy v15: shipping location from profile — city+postalCode passed to ensureInventoryLocation; fallback NYC→Chicago
 // Force redeploy v14: fix errorId 25002 "Country of Origin value too long" — drop Country of Origin if value > 65 chars or contains sentence punctuation (AI hallucination guard)
@@ -854,9 +854,10 @@ async function uploadDataUrlToStorage(dataUrl: string): Promise<string> {
 
 // ----------------------------------------------------------------
 // Ensure an eBay inventory location exists for the seller.
-// POST creates or updates the location.
-// If location exists: PATCH updates it with new address.
-// 204 = created, 409 = already exists (both fine).
+// POST creates it; if it already exists (409/errorId 25803), DELETE and re-create
+// to guarantee the address (postalCode/city) is current — eBay PATCH silently ignores
+// address fields so DELETE+re-create is the only reliable way to update them.
+// If DELETE is blocked (location has active items), fall back to a postal-code-keyed location.
 // Returns the merchantLocationKey on success.
 // ----------------------------------------------------------------
 async function ensureInventoryLocation(
@@ -905,8 +906,7 @@ async function ensureInventoryLocation(
     }
   );
 
-  // 204 = created. If location already exists, POST returns error with errorId 25803.
-  // In that case, PATCH the location to update the address.
+  // 204 = created successfully.
   if (resp.ok) {
     console.log(
       `ensureInventoryLocation: location "${merchantLocationKey}" created successfully (status ${resp.status})`
@@ -914,10 +914,12 @@ async function ensureInventoryLocation(
     return merchantLocationKey;
   }
 
-  // Location already exists — update it with PATCH
+  // Location already exists — eBay PATCH does NOT update address fields (postalCode/city are
+  // immutable via PATCH; only metadata like name/phone/hours can change).
+  // The correct approach is DELETE then re-create so the address is definitely current.
   const errText = await resp.text();
   let alreadyExists = false;
-  
+
   try {
     const errJson = JSON.parse(errText);
     alreadyExists = Array.isArray(errJson.errors) &&
@@ -926,14 +928,68 @@ async function ensureInventoryLocation(
 
   if (resp.status === 409 || alreadyExists) {
     console.log(
-      `ensureInventoryLocation: location "${merchantLocationKey}" already exists — updating with PATCH to new address`
+      `ensureInventoryLocation: location "${merchantLocationKey}" already exists — attempting DELETE + re-create to update address (PATCH silently ignores address fields)`
     );
 
-    // PATCH the existing location to update the address
-    const patchResp = await fetchWithTimeout(
+    // Step 1: DELETE the existing location so we can re-create it with the correct address.
+    const deleteResp = await fetchWithTimeout(
       `${apiBase}/sell/inventory/v1/location/${merchantLocationKey}`,
       {
-        method: "PATCH",
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+          "Accept-Language": "en-US",
+        },
+        timeout: 15000,
+      }
+    );
+
+    if (deleteResp.ok || deleteResp.status === 204) {
+      console.log(
+        `ensureInventoryLocation: deleted "${merchantLocationKey}" — re-creating with postal code ${postalCode}`
+      );
+      const reCreateResp = await fetchWithTimeout(
+        `${apiBase}/sell/inventory/v1/location/${merchantLocationKey}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${userToken}`,
+            "Content-Type": "application/json",
+            "Content-Language": "en-US",
+            "Accept-Language": "en-US",
+          },
+          body: JSON.stringify(locationBody),
+          timeout: 15000,
+        }
+      );
+      if (reCreateResp.ok) {
+        console.log(
+          `ensureInventoryLocation: location "${merchantLocationKey}" re-created with postal code ${postalCode} successfully`
+        );
+        return merchantLocationKey;
+      }
+      const reCreateErrText = await reCreateResp.text();
+      console.error(
+        `ensureInventoryLocation: re-create failed after DELETE (${reCreateResp.status}): ${reCreateErrText}`
+      );
+      // Fall through to postal-code-based fallback key.
+    } else {
+      const deleteErrText = await deleteResp.text();
+      console.warn(
+        `ensureInventoryLocation: DELETE failed (${deleteResp.status}): ${deleteErrText}. Location may have active items assigned. Falling back to postal-code-keyed location.`
+      );
+    }
+
+    // Step 2 (fallback): Use a location key derived from the postal code so new listings
+    // always get a location with the correct address even if the default key can't be updated.
+    const fallbackKey = `loc-${postalCode.replace(/[^a-zA-Z0-9]/g, "")}`;
+    console.log(
+      `ensureInventoryLocation: creating postal-code-keyed location "${fallbackKey}" as fallback`
+    );
+    const fallbackResp = await fetchWithTimeout(
+      `${apiBase}/sell/inventory/v1/location/${fallbackKey}`,
+      {
+        method: "POST",
         headers: {
           Authorization: `Bearer ${userToken}`,
           "Content-Type": "application/json",
@@ -945,22 +1001,37 @@ async function ensureInventoryLocation(
       }
     );
 
-    if (!patchResp.ok) {
-      const patchErrText = await patchResp.text();
-      console.warn(
-        `ensureInventoryLocation: PATCH update failed with status ${patchResp.status}: ${patchErrText}. Proceeding with existing location.`
+    if (fallbackResp.ok) {
+      console.log(
+        `ensureInventoryLocation: fallback location "${fallbackKey}" created with postal code ${postalCode}`
       );
-      // Don't throw — the location exists, even if we couldn't update it.
-      return merchantLocationKey;
+      return fallbackKey;
     }
 
-    console.log(
-      `ensureInventoryLocation: location "${merchantLocationKey}" updated successfully (status ${patchResp.status})`
+    const fallbackErrText = await fallbackResp.text();
+    let fallbackAlreadyExists = false;
+    try {
+      const fallbackErrJson = JSON.parse(fallbackErrText);
+      fallbackAlreadyExists = Array.isArray(fallbackErrJson.errors) &&
+        fallbackErrJson.errors.some((e: { errorId: number }) => e.errorId === 25803);
+    } catch { /* not JSON */ }
+
+    if (fallbackResp.status === 409 || fallbackAlreadyExists) {
+      // This postal code was used before — the location already exists with the right address.
+      console.log(
+        `ensureInventoryLocation: fallback location "${fallbackKey}" already exists with correct postal code — using it`
+      );
+      return fallbackKey;
+    }
+
+    // All attempts exhausted — proceed with whatever key eBay has on file.
+    console.error(
+      `ensureInventoryLocation: all location update attempts failed. Using "${merchantLocationKey}" with potentially stale address. Last error: ${fallbackResp.status}: ${fallbackErrText}`
     );
     return merchantLocationKey;
   }
 
-  // Genuine error — not a "already exists" case
+  // Genuine error — not an "already exists" case.
   console.error(
     `ensureInventoryLocation: unexpected error ${resp.status}: ${errText}`
   );
@@ -970,7 +1041,7 @@ async function ensureInventoryLocation(
 }
 
 serve(async (req) => {
-  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v19 - fix inventory location update: PATCH existing location when city/zip changes) ***");
+  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v20 - fix location address: DELETE+re-create instead of PATCH, which silently ignores address fields) ***");
   
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
