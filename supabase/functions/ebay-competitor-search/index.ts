@@ -172,16 +172,36 @@ function median(nums: number[]): number {
 // ----------------------------------------------------------------
 // Main handler
 // ----------------------------------------------------------------
+console.log("[ebay-competitor-search] Module loaded, serve() initializing...");
+
 serve(async (req) => {
-  console.log("[ebay-competitor-search] Request received:", req.method);
+  console.log("[ebay-competitor-search] *** REQUEST RECEIVED ***", {
+    method: req.method,
+    url: req.url,
+    headers: {
+      "content-type": req.headers.get("content-type"),
+      "authorization": req.headers.get("authorization") ? "present" : "missing",
+    },
+  });
   
   if (req.method === "OPTIONS") {
+    console.log("[ebay-competitor-search] Handling OPTIONS preflight");
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    console.log("[ebay-competitor-search] Parsing request body...");
-    const body = await req.json();
+    console.log("[ebay-competitor-search] Attempting to parse request body...");
+    let body;
+    try {
+      body = await req.json();
+      console.log("[ebay-competitor-search] Successfully parsed JSON body, keys:", Object.keys(body));
+    } catch (parseErr) {
+      console.error("[ebay-competitor-search] JSON parse failed:", parseErr);
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON in request body", detail: String(parseErr) }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     console.log("[ebay-competitor-search] Body parsed:", Object.keys(body));
     const { listingId, title, categoryId, yourPrice, userId } = body;
 
@@ -354,10 +374,22 @@ serve(async (req) => {
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error("[ebay-competitor-search] Caught error:", msg, "Stack:", err instanceof Error ? err.stack : "N/A");
+    const stack = err instanceof Error ? err.stack : "no stack";
+    console.error("[ebay-competitor-search] *** OUTER ERROR HANDLER ***", {
+      message: msg,
+      errorType: err?.constructor?.name,
+      stack: stack,
+    });
     return new Response(
-      JSON.stringify({ error: msg }),
+      JSON.stringify({ 
+        error: msg,
+        errorType: err?.constructor?.name,
+        timestamp: new Date().toISOString(),
+      }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
+
+// Add a final log after serve is set up
+console.log("[ebay-competitor-search] *** FUNCTION READY ***");
