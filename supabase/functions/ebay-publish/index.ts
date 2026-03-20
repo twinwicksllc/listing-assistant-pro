@@ -8,7 +8,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Force redeploy v21: sequential SKU generation — LA01000, LA01001, etc. — one counter per user starting at 1000
+// Force redeploy v22: SKU generation backwards-compatible — gracefully fallback to random SKU if userId not provided (old frontend before browser refresh)
 // Force redeploy v17: fix errorId 25002 for category 45243 (World Coins) - Brand removed from NON_ASPECT_KEYS, Color updated to include BM (Bi-Metallic) for non-copper coins
 // Force redeploy v15: shipping location from profile — city+postalCode passed to ensureInventoryLocation; fallback NYC→Chicago
 // Force redeploy v14: fix errorId 25002 "Country of Origin value too long" — drop Country of Origin if value > 65 chars or contains sentence punctuation (AI hallucination guard)
@@ -1041,7 +1041,7 @@ async function ensureInventoryLocation(
 }
 
 serve(async (req) => {
-  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v21 - sequential SKU generation: LA01000, LA01001, etc.) ***");
+  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v22 - SKU generation backwards-compatible: sequential if userId present, random fallback if not) ***");
   
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -1568,7 +1568,6 @@ serve(async (req) => {
       } = payload;
 
       if (!userToken) throw new Error("No eBay user token provided");
-      if (!userId) throw new Error("No userId provided");
 
       console.log(`create_draft: starting publish - title="${title}", format=${listingFormat}, env=${ebayEnv}`);
       console.log(`create_draft: received condition from payload: ${condition}`);
@@ -1579,35 +1578,50 @@ serve(async (req) => {
 
       // Generate sequential SKU using atomic database counter.
       // If client provided a SKU, use it (for backwards compatibility on retry).
-      // Otherwise, atomically increment the user's next_sku_sequence counter.
+      // Otherwise, atomically increment the user's next_sku_sequence counter if userId is available.
+      // If userId is missing (old frontend code before refresh), fall back to random SKU.
       let sku = incomingSku;
       if (!sku) {
-        const supabaseUrl = Deno.env.get("SUPABASE_URL");
-        const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-        if (!supabaseUrl || !supabaseServiceKey) {
-          throw new Error("Supabase credentials not configured for SKU generation");
+        // Attempt sequential SKU generation if userId is provided
+        if (userId) {
+          const supabaseUrl = Deno.env.get("SUPABASE_URL");
+          const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+          if (!supabaseUrl || !supabaseServiceKey) {
+            console.warn("create_draft: Supabase credentials not configured, falling back to random SKU");
+          } else {
+            try {
+              const supabase = createClient(supabaseUrl, supabaseServiceKey);
+              
+              // Atomically increment next_sku_sequence and get the new value
+              const { data: seqData, error: seqError } = await supabase
+                .from("profiles")
+                .update({ next_sku_sequence: { increment: 1 } })
+                .eq("id", userId)
+                .select("next_sku_sequence")
+                .single();
+
+              if (seqError || !seqData) {
+                console.error("create_draft: failed to increment SKU sequence:", seqError?.message || "no data returned");
+                // Fall through to random SKU fallback
+              } else {
+                // Format as LA + zero-padded 5-digit sequence number (e.g., LA01000, LA01001, ...)
+                const seqNum = seqData.next_sku_sequence;
+                sku = `LA${String(seqNum).padStart(5, "0")}`;
+                console.log(`create_draft: generated sequential SKU: ${sku} (sequence #${seqNum})`);
+              }
+            } catch (skuErr) {
+              console.error("create_draft: SKU generation error:", skuErr);
+              // Fall through to random SKU fallback
+            }
+          }
+        } else {
+          console.log("create_draft: userId not provided (old frontend code) — will use random SKU fallback");
         }
 
-        const supabase = createClient(supabaseUrl, supabaseServiceKey);
-        
-        // Atomically increment next_sku_sequence and get the new value
-        const { data: seqData, error: seqError } = await supabase
-          .from("profiles")
-          .update({ next_sku_sequence: { increment: 1 } })
-          .eq("id", userId)
-          .select("next_sku_sequence")
-          .single();
-
-        if (seqError || !seqData) {
-          console.error("create_draft: failed to increment SKU sequence:", seqError?.message || "no data returned");
-          // Fallback to random SKU if database counter fails
+        // Fallback to random SKU if sequential generation didn't work or userId was missing
+        if (!sku) {
           sku = `LA-${crypto.randomUUID().replace(/-/g, "").slice(0, 16).toUpperCase()}`;
-          console.warn(`create_draft: using fallback random SKU: ${sku}`);
-        } else {
-          // Format as LA + zero-padded 5-digit sequence number (e.g., LA01000, LA01001, ...)
-          const seqNum = seqData.next_sku_sequence;
-          sku = `LA${String(seqNum).padStart(5, "0")}`;
-          console.log(`create_draft: generated sequential SKU: ${sku} (sequence #${seqNum})`);
+          console.log(`create_draft: using fallback random SKU: ${sku}`);
         }
       }
 
@@ -1997,7 +2011,6 @@ serve(async (req) => {
     if (action === "bulk_create_draft") {
       const { userId, userToken, drafts, postalCode } = payload;
       if (!userToken) throw new Error("No eBay user token provided");
-      if (!userId) throw new Error("No userId provided");
       if (!Array.isArray(drafts) || drafts.length === 0) {
         throw new Error("No drafts provided for bulk publish");
       }
@@ -2022,7 +2035,7 @@ serve(async (req) => {
             },
             body: JSON.stringify({
               action: "create_draft",
-              userId,
+              ...(userId ? { userId } : {}),
               userToken,
               postalCode,
               ...draft,
