@@ -261,11 +261,17 @@ serve(async (req: Request) => {
     const title: string = body.title || "";
     const yourPrice: number = body.yourPrice || 0;
     
+    console.log("analyze-item: competitor search params check", { title, yourPrice, userId, hasTitle: !!title, hasUserId: !!userId });
+    
     if (title && userId) {
       try {
         console.log("analyze-item: fetching competitor prices for item analysis...");
+        const competitorUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ebay-competitor-search`;
+        console.log("analyze-item: competitor URL:", competitorUrl);
+        console.log("analyze-item: competitor request body:", { userId, title, yourPrice });
+        
         const competitorResp = await fetch(
-          `${Deno.env.get("SUPABASE_URL")}/functions/v1/ebay-competitor-search`,
+          competitorUrl,
           {
             method: "POST",
             headers: {
@@ -280,6 +286,8 @@ serve(async (req: Request) => {
           }
         );
 
+        console.log("analyze-item: competitor response status:", competitorResp.status);
+        
         if (competitorResp.ok) {
           competitorData = await competitorResp.json();
           console.log("analyze-item: competitor data retrieved", {
@@ -290,11 +298,14 @@ serve(async (req: Request) => {
             fromCache: competitorData?.fromCache,
           });
         } else {
-          console.warn("analyze-item: competitor search failed:", competitorResp.status);
+          const errText = await competitorResp.text();
+          console.warn("analyze-item: competitor search failed:", { status: competitorResp.status, error: errText });
         }
       } catch (compErr) {
         console.warn("analyze-item: competitor fetch error (non-blocking):", compErr);
       }
+    } else {
+      console.log("analyze-item: skipping competitor search - missing title or userId");
     }
     // --- End competitor prices ---
 
