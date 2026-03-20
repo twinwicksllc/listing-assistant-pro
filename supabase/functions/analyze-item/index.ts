@@ -260,62 +260,6 @@ serve(async (req: Request) => {
     const imageList: string[] = body.images ?? (body.imageBase64 ? [body.imageBase64] : []);
     const voiceNote: string = body.voiceNote || "";
 
-    // --- Fetch competitor prices (actual sold listings) for market analysis ---
-    let competitorData: any = null;
-    const title: string = body.title || "";
-    const yourPrice: number = body.yourPrice || 0;
-    
-    // Use title if provided, fallback to first 50 chars of voiceNote (if available) for competitor search
-    const competitorSearchQuery: string = title || voiceNote.substring(0, 50);
-    
-    console.log("analyze-item: competitor search params check", { title, voiceNote: voiceNote.substring(0, 30), competitorSearchQuery: competitorSearchQuery.substring(0, 30), userId, hasTitle: !!title, hasVoiceNote: !!voiceNote, hasSearchQuery: !!competitorSearchQuery });
-    
-    if (competitorSearchQuery && userId) {
-      try {
-        console.log("analyze-item: fetching competitor prices for item analysis...");
-        const competitorUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ebay-competitor-search`;
-        console.log("analyze-item: competitor URL:", competitorUrl);
-        console.log("analyze-item: competitor request body:", { userId, title: competitorSearchQuery, yourPrice });
-        
-        const competitorResp = await fetch(
-          competitorUrl,
-          {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              userId,
-              title: competitorSearchQuery,
-              yourPrice,
-            }),
-          }
-        );
-
-        console.log("analyze-item: competitor response status:", competitorResp.status);
-        
-        if (competitorResp.ok) {
-          competitorData = await competitorResp.json();
-          console.log("analyze-item: competitor data retrieved", {
-            competitorCount: competitorData?.competitorCount,
-            avgPrice: competitorData?.avgPrice,
-            minPrice: competitorData?.minPrice,
-            maxPrice: competitorData?.maxPrice,
-            fromCache: competitorData?.fromCache,
-          });
-        } else {
-          const errText = await competitorResp.text();
-          console.warn("analyze-item: competitor search failed:", { status: competitorResp.status, error: errText });
-        }
-      } catch (compErr) {
-        console.warn("analyze-item: competitor fetch error (non-blocking):", compErr);
-      }
-    } else {
-      console.log("analyze-item: skipping competitor search - missing search query or userId");
-    }
-    // --- End competitor prices ---
-
     if (imageList.length === 0) {
       return new Response(JSON.stringify({ error: "No images provided" }), {
         status: 400,
@@ -578,6 +522,78 @@ Seller's note: "${voiceNote}"`;
     }
     // --- end suggestedCategories processing ---
 
+    // --- Fetch competitor prices now that AI has generated the title ---
+    let competitorData: any = null;
+    if (listing.title && userId) {
+      try {
+        console.log("analyze-item: fetching competitor prices with AI-generated title...", { title: listing.title });
+        const competitorUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ebay-competitor-search`;
+        
+        const competitorResp = await fetch(
+          competitorUrl,
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              userId,
+              title: listing.title,
+              yourPrice: listing.priceMin || listing.price?.amount || 0,
+            }),
+          }
+        );
+
+        console.log("analyze-item: competitor response status:", competitorResp.status);
+        
+        if (competitorResp.ok) {
+          competitorData = await competitorResp.json();
+          console.log("analyze-item: competitor data retrieved", {
+            competitorCount: competitorData?.competitorCount,
+            avgPrice: competitorData?.avgPrice,
+            minPrice: competitorData?.minPrice,
+            maxPrice: competitorData?.maxPrice,
+            fromCache: competitorData?.fromCache,
+          });
+
+          // Post-process pricing based on market data (if not a precious metal with melt floor)
+          if (competitorData && competitorData.competitorCount > 0 && (!listing.metalType || listing.metalType === "none")) {
+            const aiMid = (listing.priceMin + listing.priceMax) / 2;
+            const marketMid = competitorData.medianPrice || competitorData.avgPrice;
+            
+            if (marketMid && aiMid > 0) {
+              // If AI price is way above market (>30%), trust market data instead
+              if (aiMid / marketMid > 1.3) {
+                const adjustedPrice = parseFloat((marketMid * 0.95).toFixed(2));
+                listing.priceMin = adjustedPrice;
+                listing.priceMax = parseFloat((marketMid * 1.05).toFixed(2));
+                console.log(`analyze-item: AI price adjusted based on market data (${aiMid} → ${adjustedPrice})`);
+              }
+            }
+          }
+
+          // Always include competitor data in response
+          listing.competitorData = {
+            competitorCount: competitorData.competitorCount || 0,
+            avgPrice: competitorData.avgPrice || 0,
+            minPrice: competitorData.minPrice || 0,
+            maxPrice: competitorData.maxPrice || 0,
+            medianPrice: competitorData.medianPrice || 0,
+            fromCache: competitorData.fromCache || false,
+          };
+        } else {
+          const errText = await competitorResp.text();
+          console.warn("analyze-item: competitor search failed:", { status: competitorResp.status, error: errText });
+        }
+      } catch (compErr) {
+        console.warn("analyze-item: competitor fetch error (non-blocking):", compErr);
+      }
+    } else {
+      console.log("analyze-item: skipping competitor search - missing title or userId");
+    }
+    // --- End competitor prices ---
+
     // --- Server-side melt value enforcement ---
     let meltValue: number | null = null;
     if (listing.metalType && listing.metalType !== "none" && listing.metalWeightOz > 0) {
@@ -620,7 +636,7 @@ Seller's note: "${voiceNote}"`;
       "ebayCategoryId", "suggestedCategories",
       "itemSpecifics",
       "suggestedGrade", "packageWeightAndSize",
-      // Locked to paid: priceMin, priceMax, meltValue, spotPrices, pricingNotes, gradingRationale, competitors
+      // Locked to paid: priceMin, priceMax, meltValue, spotPrices, pricingNotes, gradingRationale, competitorData
     ]);
 
     let responsePayload = { ...listing, meltValue, spotPrices: { gold: spotGold, silver: spotSilver, platinum: spotPlatinum } };

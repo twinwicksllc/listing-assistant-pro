@@ -47,6 +47,14 @@ export default function AnalyzePage() {
   const [meltValue, setMeltValue] = useState<number | null>(null);
   const [pricingNotes, setPricingNotes] = useState<string>("");
   const [spotPrices, setSpotPrices] = useState<{ gold: number; silver: number; platinum: number } | null>(null);
+  const [competitorData, setCompetitorData] = useState<{
+    competitorCount: number;
+    avgPrice: number;
+    minPrice: number;
+    maxPrice: number;
+    medianPrice: number;
+    fromCache: boolean;
+  } | null>(null);
   const [consignor, setConsignor] = useState("");
   const [includeAiFooter, setIncludeAiFooter] = useState(true);
   const [showCategoryConfirm, setShowCategoryConfirm] = useState(false);
@@ -166,6 +174,7 @@ export default function AnalyzePage() {
       setIsSlabbed(data.isSlabbed ?? false);
       setMeltValue(data.meltValue ?? null);
       setSpotPrices(data.spotPrices ?? null);
+      setCompetitorData(data.competitorData ?? null);
       setPricingNotes(data.pricingNotes || "");
       setGradeConfirmed(false);
       // Pre-fill listing price with AI midpoint as a starting suggestion
@@ -765,6 +774,7 @@ export default function AnalyzePage() {
               initialMeltValue={planFeatures.hasMeltProtection ? meltValue : null}
               initialSpotPrices={planFeatures.hasMeltProtection ? spotPrices : undefined}
               pricingNotes={pricingNotes}
+              competitorData={competitorData}
             />
 
             {/* Listing Format + Price */}
