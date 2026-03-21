@@ -86,6 +86,11 @@ export default function AnalyzePage() {
   const [auctionBuyItNowEnabled, setAuctionBuyItNowEnabled] = useState(false);
   const [auctionBuyItNow, setAuctionBuyItNow] = useState(0);
 
+  // Best Offer (Fixed Price only)
+  const [bestOfferEnabled, setBestOfferEnabled] = useState(false);
+  const [bestOfferAutoAcceptPrice, setBestOfferAutoAcceptPrice] = useState<number>(0);
+  const [bestOfferAutoDeclinePrice, setBestOfferAutoDeclinePrice] = useState<number>(0);
+
   // Fetch the stored eBay token once when analysis results are shown
   // so the EbayPolicySelector can load policies without waiting for publish
   useEffect(() => {
@@ -228,6 +233,9 @@ export default function AnalyzePage() {
       returnPolicyId: selectedPolicies.returnPolicyId ?? undefined,
       metalType: metalType !== "none" ? metalType : undefined,
       metalWeightOz: metalWeightOz > 0 ? metalWeightOz : undefined,
+      bestOfferEnabled: bestOfferEnabled || undefined,
+      bestOfferAutoAcceptPrice: bestOfferEnabled && bestOfferAutoAcceptPrice > 0 ? bestOfferAutoAcceptPrice : undefined,
+      bestOfferAutoDeclinePrice: bestOfferEnabled && bestOfferAutoDeclinePrice > 0 ? bestOfferAutoDeclinePrice : undefined,
     });
     if (success) {
       toast.success("Draft saved!");
@@ -306,6 +314,9 @@ export default function AnalyzePage() {
           fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId,
           paymentPolicyId: selectedPolicies.paymentPolicyId,
           returnPolicyId: selectedPolicies.returnPolicyId,
+          bestOfferEnabled: bestOfferEnabled || undefined,
+          bestOfferAutoAcceptPrice: bestOfferEnabled && bestOfferAutoAcceptPrice > 0 ? bestOfferAutoAcceptPrice : undefined,
+          bestOfferAutoDeclinePrice: bestOfferEnabled && bestOfferAutoDeclinePrice > 0 ? bestOfferAutoDeclinePrice : undefined,
         }));
         window.location.href = data.authUrl;
         return;
@@ -331,6 +342,9 @@ export default function AnalyzePage() {
           fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId || undefined,
           paymentPolicyId: selectedPolicies.paymentPolicyId || undefined,
           returnPolicyId: selectedPolicies.returnPolicyId || undefined,
+          bestOfferEnabled: bestOfferEnabled || undefined,
+          bestOfferAutoAcceptPrice: bestOfferEnabled && bestOfferAutoAcceptPrice > 0 ? bestOfferAutoAcceptPrice : undefined,
+          bestOfferAutoDeclinePrice: bestOfferEnabled && bestOfferAutoDeclinePrice > 0 ? bestOfferAutoDeclinePrice : undefined,
         },
       });
 
@@ -810,19 +824,68 @@ export default function AnalyzePage() {
                 </button>
               </div>
 
-              {/* Buy It Now — single price */}
+              {/* Buy It Now — single price + Best Offer */}
               {listingFormat === "FIXED_PRICE" && (
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Listing Price ($)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={listingPrice || ""}
-                    placeholder="0.00"
-                    onChange={(e) => setListingPrice(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Listing Price ($)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={listingPrice || ""}
+                      placeholder="0.00"
+                      onChange={(e) => setListingPrice(parseFloat(e.target.value) || 0)}
+                      className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+
+                  {/* Best Offer toggle */}
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={bestOfferEnabled}
+                      onChange={(e) => setBestOfferEnabled(e.target.checked)}
+                      className="h-4 w-4 rounded border-border accent-primary"
+                    />
+                    <span className="text-xs text-muted-foreground">Accept Best Offers from buyers</span>
+                  </label>
+
+                  {/* Best Offer threshold prices — optional */}
+                  {bestOfferEnabled && (
+                    <div className="space-y-2 pl-6 border-l-2 border-primary/20">
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">
+                          Auto-Accept Price ($)
+                          <span className="ml-1 text-muted-foreground/60 italic">optional — auto-accept offers at or above this</span>
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={bestOfferAutoAcceptPrice || ""}
+                          placeholder="Leave blank to review manually"
+                          onChange={(e) => setBestOfferAutoAcceptPrice(parseFloat(e.target.value) || 0)}
+                          className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">
+                          Auto-Decline Price ($)
+                          <span className="ml-1 text-muted-foreground/60 italic">optional — auto-decline offers at or below this</span>
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={bestOfferAutoDeclinePrice || ""}
+                          placeholder="Leave blank to review manually"
+                          onChange={(e) => setBestOfferAutoDeclinePrice(parseFloat(e.target.value) || 0)}
+                          className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

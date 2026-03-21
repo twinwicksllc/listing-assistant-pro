@@ -90,6 +90,11 @@ export interface ListingDraft {
   returnPolicyId?: string;
   auctionDuration?: AuctionDuration; // Only for AUCTION format
 
+  // Best Offer settings (FIXED_PRICE only)
+  bestOfferEnabled?: boolean;
+  bestOfferAutoAcceptPrice?: number;   // Optional: auto-accept offers >= this price
+  bestOfferAutoDeclinePrice?: number;  // Optional: auto-decline offers <= this price
+
   // Precious metal content (used for melt-value floor alerts)
   metalType?: string;        // "gold" | "silver" | "platinum" | "none"
   metalWeightOz?: number;    // troy oz of precious metal content

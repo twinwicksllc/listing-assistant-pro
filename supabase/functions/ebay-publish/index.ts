@@ -695,14 +695,37 @@ function buildFixedPriceOffer(params: {
   fulfillmentPolicyId: string;
   paymentPolicyId?: string | null;  // Optional: managed payments sellers don't need this
   returnPolicyId: string;
+  bestOfferEnabled?: boolean;
+  bestOfferAutoAcceptPrice?: number;
+  bestOfferAutoDeclinePrice?: number;
 }): Record<string, unknown> {
   // Build listingPolicies — paymentPolicyId is omitted for managed payments sellers
-  const listingPolicies: Record<string, string> = {
+  const listingPolicies: Record<string, unknown> = {
     fulfillmentPolicyId: params.fulfillmentPolicyId,
     returnPolicyId: params.returnPolicyId,
   };
   if (params.paymentPolicyId) {
     listingPolicies.paymentPolicyId = params.paymentPolicyId;
+  }
+
+  // Best Offer — only added for fixed-price listings when enabled
+  if (params.bestOfferEnabled) {
+    const bestOfferTerms: Record<string, unknown> = {
+      bestOfferEnabled: true,
+    };
+    if (params.bestOfferAutoAcceptPrice && params.bestOfferAutoAcceptPrice > 0) {
+      bestOfferTerms.autoAcceptPrice = {
+        value: params.bestOfferAutoAcceptPrice.toFixed(2),
+        currency: "USD",
+      };
+    }
+    if (params.bestOfferAutoDeclinePrice && params.bestOfferAutoDeclinePrice > 0) {
+      bestOfferTerms.autoDeclinePrice = {
+        value: params.bestOfferAutoDeclinePrice.toFixed(2),
+        currency: "USD",
+      };
+    }
+    listingPolicies.bestOfferTerms = bestOfferTerms;
   }
 
   const offer: Record<string, unknown> = {
@@ -1565,6 +1588,9 @@ serve(async (req) => {
         fulfillmentPolicyId: draftFulfillmentPolicyId,
         paymentPolicyId: draftPaymentPolicyId,
         returnPolicyId: draftReturnPolicyId,
+        bestOfferEnabled,
+        bestOfferAutoAcceptPrice,
+        bestOfferAutoDeclinePrice,
       } = payload;
 
       if (!userToken) throw new Error("No eBay user token provided");
@@ -1883,6 +1909,9 @@ serve(async (req) => {
         fulfillmentPolicyId,
         paymentPolicyId,
         returnPolicyId,
+        bestOfferEnabled: bestOfferEnabled === true,
+        bestOfferAutoAcceptPrice: Number(bestOfferAutoAcceptPrice) || undefined,
+        bestOfferAutoDeclinePrice: Number(bestOfferAutoDeclinePrice) || undefined,
       });
 
       console.log(`create_draft: built offer for sku=${sku}, price=${listingPrice}, category=${ebayCategoryId || "NONE"}`);
