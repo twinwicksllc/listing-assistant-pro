@@ -35,7 +35,7 @@ export default function AnalyzePage() {
   const [metalType, setMetalType] = useState<string>("none");
   const [metalWeightOz, setMetalWeightOz] = useState<number>(0);
   const [ebayCategoryId, setEbayCategoryId] = useState<string>("");
-  const [suggestedCategories, setSuggestedCategories] = useState<Array<{ categoryId: string; categoryName: string; reason: string }>>([]);
+  const [suggestedCategories, setSuggestedCategories] = useState<Array<{ categoryId: string; categoryName: string; reason: string; breadcrumb?: string }>>([]);
   const [itemSpecifics, setItemSpecifics] = useState<ItemSpecifics>({});
   const [condition, setCondition] = useState<string>("PRE_OWNED_GOOD");
   const [exportPlatform, setExportPlatform] = useState<ExportPlatform>("ebay_file_exchange");
@@ -567,7 +567,7 @@ export default function AnalyzePage() {
                         {suggestedCategories.length > 0 ? (
                           suggestedCategories.map((cat) => (
                             <option key={cat.categoryId} value={cat.categoryId}>
-                              #{cat.categoryId} — {cat.categoryName}
+                              #{cat.categoryId} — {cat.breadcrumb || cat.categoryName || getEbayCategoryBreadcrumb(cat.categoryId)}
                             </option>
                           ))
                         ) : (

@@ -15,6 +15,87 @@ async function ensureTableExists() {
   return;
 }
 
+// ── Helper: Get eBay app token (client credentials) ────────────────────
+async function getEbayAppToken(): Promise<{ token: string; base: string } | null> {
+  const clientId = Deno.env.get("EBAY_CLIENT_ID");
+  const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
+  const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
+  if (!clientId || !clientSecret) return null;
+
+  const credentials = btoa(`${clientId}:${clientSecret}`);
+  const tokenUrl = ebayEnv === "production"
+    ? "https://api.ebay.com/identity/v1/oauth2/token"
+    : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
+
+  const tokenResp = await fetch(tokenUrl, {
+    method: "POST",
+    headers: { "Authorization": `Basic ${credentials}`, "Content-Type": "application/x-www-form-urlencoded" },
+    body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
+  });
+
+  if (!tokenResp.ok) {
+    const txt = await tokenResp.text();
+    console.error("category-lookup: failed to get eBay app token", tokenResp.status, txt);
+    return null;
+  }
+
+  const tokenJson = await tokenResp.json();
+  const base = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
+  return { token: tokenJson.access_token, base };
+}
+
+// ── Helper: Build breadcrumb by walking up parent nodes ────────────────
+// Uses getCategorySubtree for the initial node, then follows parentCategoryTreeNodeHref
+// to collect ancestor names up to the root (max 8 levels to avoid runaway loops).
+async function fetchBreadcrumb(
+  categoryId: string,
+  appToken: string,
+  base: string,
+): Promise<{ breadcrumb: string; categoryName: string; valid: boolean }> {
+  const MAX_DEPTH = 8;
+  const parts: string[] = [];
+  let currentId = categoryId;
+
+  for (let depth = 0; depth < MAX_DEPTH; depth++) {
+    const url = `${base}/commerce/taxonomy/v1/category_tree/0/get_category_subtree?category_id=${encodeURIComponent(currentId)}`;
+    const resp = await fetch(url, {
+      method: "GET",
+      headers: { "Authorization": `Bearer ${appToken}`, "Content-Type": "application/json" },
+    });
+
+    if (resp.status === 404) {
+      if (depth === 0) return { breadcrumb: "", categoryName: "", valid: false };
+      break; // root reached (shouldn't normally happen, but safe guard)
+    }
+    if (!resp.ok) {
+      console.error(`category-lookup: taxonomy API error at depth ${depth}`, resp.status);
+      break;
+    }
+
+    const json = await resp.json();
+    const node = json.categorySubtreeNode || json.categoryNode;
+    if (!node?.category) break;
+
+    parts.unshift(node.category.categoryName);
+
+    // Extract parent category ID from parentCategoryTreeNodeHref
+    const parentHref = node.parentCategoryTreeNodeHref;
+    if (!parentHref) break; // reached root
+
+    const parentIdMatch = parentHref.match(/category_id=(\d+)/);
+    if (!parentIdMatch) break;
+
+    const parentId = parentIdMatch[1];
+    // If parent ID equals current ID, we've hit the top-level self-reference
+    if (parentId === currentId) break;
+    currentId = parentId;
+  }
+
+  const categoryName = parts.length > 0 ? parts[parts.length - 1] : "";
+  const breadcrumb = parts.join(" > ");
+  return { breadcrumb, categoryName, valid: parts.length > 0 };
+}
+
 export async function handleRequest(req: Request): Promise<Response> {
   // IMPORTANT: Handle OPTIONS preflight first, before anything else
   if (req.method === "OPTIONS") {
@@ -88,10 +169,10 @@ export async function handleRequest(req: Request): Promise<Response> {
       }
     }
 
-    if (action === "verify") {
-      // Verify whether a given eBay category ID is valid.
+    if (action === "verify" || action === "breadcrumb") {
+      // Verify whether a given eBay category ID is valid AND return full breadcrumb.
       const cid = (categoryId || "").toString().trim();
-      if (!cid) throw new Error("categoryId required for verify action");
+      if (!cid) throw new Error("categoryId required for verify/breadcrumb action");
 
       // First check local mappings for a quick positive
       try {
@@ -100,9 +181,14 @@ export async function handleRequest(req: Request): Promise<Response> {
           .select("ebay_category_id, category_name")
           .eq("ebay_category_id", cid)
           .single();
-        if (local && local.ebay_category_id) {
+        if (local && local.ebay_category_id && local.category_name) {
           return new Response(
-            JSON.stringify({ valid: true, source: "db", categoryName: local.category_name || null }),
+            JSON.stringify({
+              valid: true,
+              source: "db",
+              categoryName: local.category_name,
+              breadcrumb: local.category_name, // DB names are already breadcrumb-style
+            }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
@@ -112,60 +198,40 @@ export async function handleRequest(req: Request): Promise<Response> {
       }
 
       // Remote verification via eBay Taxonomy API using app credentials
-      const clientId = Deno.env.get("EBAY_CLIENT_ID");
-      const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
-      const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-      if (!clientId || !clientSecret) {
+      const ebayAuth = await getEbayAppToken();
+      if (!ebayAuth) {
         // Cannot verify remotely without app credentials — report unknown
-        return new Response(JSON.stringify({ valid: null, source: "none", message: "No eBay app credentials configured" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        return new Response(
+          JSON.stringify({ valid: null, source: "none", message: "No eBay app credentials configured" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       try {
-        const credentials = btoa(`${clientId}:${clientSecret}`);
-        const tokenUrl = ebayEnv === "production"
-          ? "https://api.ebay.com/identity/v1/oauth2/token"
-          : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
+        const result = await fetchBreadcrumb(cid, ebayAuth.token, ebayAuth.base);
 
-        const tokenResp = await fetch(tokenUrl, {
-          method: "POST",
-          headers: { "Authorization": `Basic ${credentials}`, "Content-Type": "application/x-www-form-urlencoded" },
-          body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
-        });
-
-        if (!tokenResp.ok) {
-          const txt = await tokenResp.text();
-          console.error("category-lookup: failed to get eBay app token", tokenResp.status, txt);
-          return new Response(JSON.stringify({ valid: null, source: "remote", error: `Token error ${tokenResp.status}` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        if (!result.valid) {
+          return new Response(
+            JSON.stringify({ valid: false, source: "remote", breadcrumb: null, categoryName: null }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
 
-        const tokenJson = await tokenResp.json();
-        const appToken = tokenJson.access_token;
-        const base = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
-
-        // Use Taxonomy API get_category_subtree as a means to validate category existence
-        const subtreeUrl = `${base}/commerce/taxonomy/v1/category_tree/0/get_category_subtree?category_id=${encodeURIComponent(cid)}`;
-        const subtreeResp = await fetch(subtreeUrl, {
-          method: "GET",
-          headers: { "Authorization": `Bearer ${appToken}`, "Content-Type": "application/json" },
-        });
-
-        if (subtreeResp.status === 404) {
-          return new Response(JSON.stringify({ valid: false, source: "remote" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        }
-
-        if (!subtreeResp.ok) {
-          const txt = await subtreeResp.text();
-          console.error("category-lookup: taxonomy API error", subtreeResp.status, txt);
-          return new Response(JSON.stringify({ valid: null, source: "remote", error: `Taxonomy API error ${subtreeResp.status}` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        }
-
-        const subtreeJson = await subtreeResp.json();
-        // Attempt to extract a category name if present
-        const categoryName = subtreeJson?.categorySubtree?.category?.categoryName || subtreeJson?.category?.categoryName || null;
-        return new Response(JSON.stringify({ valid: true, source: "remote", categoryName }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        return new Response(
+          JSON.stringify({
+            valid: true,
+            source: "remote",
+            categoryName: result.categoryName,
+            breadcrumb: result.breadcrumb,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       } catch (err) {
         console.error("category-lookup: remote verify exception", err);
-        return new Response(JSON.stringify({ valid: null, source: "remote", error: String(err) }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        return new Response(
+          JSON.stringify({ valid: null, source: "remote", error: String(err) }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
     }
 

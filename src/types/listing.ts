@@ -81,7 +81,7 @@ export interface ListingDraft {
   createdAt: Date;
   ebayCategoryId?: string;
   ebayCategoryBreadcrumb?: string; // e.g. "Coins > US > Dollars > Morgan"
-  suggestedCategories?: Array<{ categoryId: string; categoryName: string; reason: string }>;
+  suggestedCategories?: Array<{ categoryId: string; categoryName: string; reason: string; breadcrumb?: string }>;
   itemSpecifics?: ItemSpecifics;
   condition?: string;              // Internal enum: NEW, PRE_OWNED_GOOD, PRE_OWNED_FAIR, etc.
   consignor?: string;

@@ -33,6 +33,9 @@ verify_jwt = false
 [functions.ebay-competitor-search]
 verify_jwt = false
 
+[functions.category-lookup]
+verify_jwt = false
+
 [functions.competitor-prices-cron]
 verify_jwt = false
 
