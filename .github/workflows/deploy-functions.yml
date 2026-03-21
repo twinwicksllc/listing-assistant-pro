@@ -30,8 +30,8 @@ jobs:
           
           supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
           
-          # Then push migrations
-          supabase db push --yes
+          # Then push migrations (include-all handles missing historical migrations)
+          supabase db push --yes --include-all
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
