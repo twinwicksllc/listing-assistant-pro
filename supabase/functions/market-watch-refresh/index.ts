@@ -8,111 +8,110 @@ const corsHeaders = {
 };
 
 // ----------------------------------------------------------------
-// Sleep helper
+// Get OAuth App Token for Browse API
 // ----------------------------------------------------------------
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+async function getEbayAppToken(): Promise<string> {
+  const clientId = Deno.env.get("EBAY_CLIENT_ID");
+  const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
+
+  if (!clientId || !clientSecret) {
+    throw new Error("eBay API credentials not configured");
+  }
+
+  const credentials = btoa(`${clientId}:${clientSecret}`);
+  const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
+  const tokenUrl =
+    ebayEnv === "production"
+      ? "https://api.ebay.com/identity/v1/oauth2/token"
+      : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
+
+  console.log(`[market-watch-refresh] Fetching OAuth token from ${tokenUrl}`);
+
+  const resp = await fetch(tokenUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
+  });
+
+  if (!resp.ok) {
+    const txt = await resp.text();
+    console.error(`[market-watch-refresh] Token error: ${resp.status} - ${txt}`);
+    throw new Error(`Failed to get eBay token: ${resp.status}`);
+  }
+
+  const data = await resp.json();
+  return data.access_token;
 }
 
 // ----------------------------------------------------------------
-// eBay Finding API helpers — with retry on rate-limit (error 10001)
+// Search using Browse API
 // ----------------------------------------------------------------
-async function fetchEbayListings(params: {
-  appId: string;
-  searchQuery: string;
-  categoryId?: string | null;
+async function browseSearch(params: {
+  query: string;
+  token: string;
   ebayEnv: string;
-  completed: boolean;
-  maxRetries?: number;
+  categoryId?: string | null;
+  limit?: number;
 }): Promise<{ prices: number[]; count: number }> {
-  const { appId, searchQuery, categoryId, ebayEnv, completed, maxRetries = 3 } = params;
+  const { query, token, ebayEnv, categoryId, limit = 50 } = params;
 
-  const baseUrl =
+  const apiBase =
     ebayEnv === "production"
-      ? "https://svcs.ebay.com/services/search/FindingService/v1"
-      : "https://svcs.sandbox.ebay.com/services/search/FindingService/v1";
+      ? "https://api.ebay.com"
+      : "https://api.sandbox.ebay.com";
 
-  const operation = completed ? "findCompletedItems" : "findItemsByKeywords";
-
-  const qp = new URLSearchParams({
-    "OPERATION-NAME": operation,
-    "SERVICE-VERSION": "1.0.0",
-    "SECURITY-APPNAME": appId,
-    "RESPONSE-DATA-FORMAT": "JSON",
-    "keywords": searchQuery,
-    "paginationInput.entriesPerPage": "50",
-    "paginationInput.pageNumber": "1",
-    "sortOrder": "EndTimeSoonest",
+  const searchParams = new URLSearchParams({
+    q: query,
+    limit: String(Math.min(limit, 50)),
+    sort: "-price",
   });
 
-  if (completed) {
-    qp.set("itemFilter(0).name", "SoldItemsOnly");
-    qp.set("itemFilter(0).value", "true");
-  } else {
-    qp.set("itemFilter(0).name", "ListingType");
-    qp.set("itemFilter(0).value", "FixedPrice");
+  if (categoryId) {
+    searchParams.set("category_ids", categoryId);
   }
 
-  if (categoryId) qp.set("categoryId", categoryId);
+  const url = `${apiBase}/buy/browse/v1/item_summary/search?${searchParams.toString()}`;
+  console.log(`[market-watch-refresh] Browse API search: "${query}"`);
 
-  const url = `${baseUrl}?${qp.toString()}`;
+  const resp = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+    },
+  });
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    console.log(
-      `[market-watch-refresh] Attempt ${attempt}/${maxRetries} — ${completed ? "sold" : "active"}: "${searchQuery}"`
-    );
+  if (!resp.ok) {
+    const txt = await resp.text();
+    console.error(`[market-watch-refresh] Browse API error ${resp.status}: ${txt.slice(0, 200)}`);
+    return { prices: [], count: 0 };
+  }
 
-    const resp = await fetch(url, { headers: { "Accept": "application/json" } });
+  const json = await resp.json();
+  const items = json?.itemSummaries ?? [];
 
-    if (resp.status === 500) {
-      const body = await resp.text();
-      const isRateLimit = body.includes("10001") || body.includes("RateLimiter");
-      console.error(`[market-watch-refresh] eBay API 500 (attempt ${attempt}): ${body.slice(0, 200)}`);
+  if (!items || items.length === 0) {
+    console.log(`[market-watch-refresh] No items found for "${query}"`);
+    return { prices: [], count: 0 };
+  }
 
-      if (isRateLimit && attempt < maxRetries) {
-        const waitMs = attempt * 2000;
-        console.log(`[market-watch-refresh] Rate limited — waiting ${waitMs}ms...`);
-        await sleep(waitMs);
-        continue;
+  const prices: number[] = [];
+
+  for (const item of items) {
+    try {
+      const price = parseFloat(item?.price?.value ?? "0");
+      if (!isNaN(price) && price > 0) {
+        prices.push(price);
       }
-      return { prices: [], count: 0 };
-    }
-
-    if (!resp.ok) {
-      console.error(`[market-watch-refresh] eBay API error: ${resp.status}`);
-      return { prices: [], count: 0 };
-    }
-
-    const json = await resp.json();
-    const key = completed ? "findCompletedItemsResponse" : "findItemsByKeywordsResponse";
-    const searchResult = json?.[key]?.[0]?.searchResult?.[0];
-
-    if (!searchResult || searchResult["@count"] === "0") {
-      return { prices: [], count: 0 };
-    }
-
-    const items: unknown[] = searchResult.item ?? [];
-    const prices: number[] = [];
-
-    for (const item of items) {
-      try {
-        const rec = item as Record<string, Record<string, unknown>[]>;
-        const sellingStatus = rec?.sellingStatus;
-        const priceStr =
-          sellingStatus?.[0]?.currentPrice &&
-          (sellingStatus[0].currentPrice as Record<string, string>[])?.[0]?.__value__;
-        const price = parseFloat(priceStr as string);
-        if (!isNaN(price) && price > 0) prices.push(price);
-      } catch { /* skip malformed */ }
-    }
-
-    console.log(
-      `[market-watch-refresh] Got ${prices.length} prices (${completed ? "sold" : "active"})`
-    );
-    return { prices, count: prices.length };
+    } catch { /* skip malformed */ }
   }
 
-  return { prices: [], count: 0 };
+  console.log(`[market-watch-refresh] Got ${prices.length} items for "${query}"`);
+  return { prices, count: prices.length };
 }
 
 function median(nums: number[]): number {
@@ -172,44 +171,32 @@ serve(async (req) => {
     }
 
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-    const appId = Deno.env.get("EBAY_CLIENT_ID");
 
-    if (!appId) {
-      return new Response(
-        JSON.stringify({ error: "EBAY_CLIENT_ID not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    // Get OAuth token for Browse API
+    const token = await getEbayAppToken();
+    console.log(`[market-watch-refresh] Obtained OAuth token`);
 
-    // Sequential calls with a gap to avoid eBay Finding API rate limits
-    const activeResult = await fetchEbayListings({
-      appId,
-      searchQuery: watch.search_query,
-      categoryId: watch.category_id,
+    // Search active listings using Browse API
+    const activeResult = await browseSearch({
+      query: watch.search_query,
+      token,
       ebayEnv,
-      completed: false,
+      categoryId: watch.category_id,
+      limit: 50,
     });
 
-    await sleep(800);
-
-    const soldResult = await fetchEbayListings({
-      appId,
-      searchQuery: watch.search_query,
-      categoryId: watch.category_id,
-      ebayEnv,
-      completed: true,
-    });
-
-    const allPrices = [...activeResult.prices, ...soldResult.prices];
+    // Browse API doesn't support sold items search
+    // We'll track only active listings for now
+    const soldCount = 0;
     const activeCount = activeResult.count;
-    const soldCount = soldResult.count;
     const total = activeCount + soldCount;
-    const sellThroughRate = total > 0 ? round2((soldCount / total) * 100) : 0;
+    const sellThroughRate = 0;
 
-    const avgPrice = allPrices.length > 0 ? round2(avg(allPrices)) : null;
-    const minPrice = allPrices.length > 0 ? Math.min(...allPrices) : null;
-    const maxPrice = allPrices.length > 0 ? Math.max(...allPrices) : null;
-    const medianPrice = allPrices.length > 0 ? round2(median(allPrices)) : null;
+    const prices = activeResult.prices;
+    const avgPrice = prices.length > 0 ? round2(avg(prices)) : null;
+    const minPrice = prices.length > 0 ? Math.min(...prices) : null;
+    const maxPrice = prices.length > 0 ? Math.max(...prices) : null;
+    const medianPrice = prices.length > 0 ? round2(median(prices)) : null;
 
     const now = new Date().toISOString();
 
@@ -243,7 +230,7 @@ serve(async (req) => {
     });
 
     console.log(
-      `[market-watch-refresh] Refreshed watch ${watchId}: avg=$${avgPrice}, active=${activeCount}, sold=${soldCount}, STR=${sellThroughRate}%`
+      `[market-watch-refresh] Refreshed watch ${watchId}: avg=$${avgPrice}, active=${activeCount}`
     );
 
     return new Response(

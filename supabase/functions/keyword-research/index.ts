@@ -14,146 +14,164 @@ interface TopItem {
   condition: string;
 }
 
-interface EbayFindingResult {
+interface BrowseSearchResult {
   prices: number[];
   count: number;
   topItems: TopItem[];
 }
 
 // ----------------------------------------------------------------
-// Sleep helper
+// Get OAuth App Token for Browse API (same as ebay-pricing)
 // ----------------------------------------------------------------
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+async function getEbayAppToken(): Promise<string> {
+  const clientId = Deno.env.get("EBAY_CLIENT_ID");
+  const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
+
+  if (!clientId || !clientSecret) {
+    throw new Error("eBay API credentials not configured");
+  }
+
+  const credentials = btoa(`${clientId}:${clientSecret}`);
+  const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
+  const tokenUrl =
+    ebayEnv === "production"
+      ? "https://api.ebay.com/identity/v1/oauth2/token"
+      : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
+
+  console.log(`[keyword-research] Fetching OAuth token from ${tokenUrl}`);
+
+  const resp = await fetch(tokenUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
+  });
+
+  if (!resp.ok) {
+    const txt = await resp.text();
+    console.error(`[keyword-research] Token error: ${resp.status} - ${txt}`);
+    throw new Error(`Failed to get eBay token: ${resp.status}`);
+  }
+
+  const data = await resp.json();
+  return data.access_token;
 }
 
 // ----------------------------------------------------------------
-// Fetch listings from eBay Finding API with retry on rate-limit
+// Search using Browse API (browse.search, not Finding API)
 // ----------------------------------------------------------------
-async function fetchEbayListings(params: {
-  appId: string;
-  searchQuery: string;
-  categoryId?: string | null;
+async function browseSearch(params: {
+  query: string;
+  token: string;
   ebayEnv: string;
-  completed: boolean;
+  categoryId?: string | null;
   limit?: number;
-  maxRetries?: number;
-}): Promise<EbayFindingResult> {
-  const {
-    appId,
-    searchQuery,
-    categoryId,
-    ebayEnv,
-    completed,
-    limit = 50,
-    maxRetries = 3,
-  } = params;
+  soldFilter?: string; // "sold" for sold items, undefined for active
+}): Promise<BrowseSearchResult> {
+  const { query, token, ebayEnv, categoryId, limit = 50, soldFilter } = params;
 
-  const baseUrl =
+  const apiBase =
     ebayEnv === "production"
-      ? "https://svcs.ebay.com/services/search/FindingService/v1"
-      : "https://svcs.sandbox.ebay.com/services/search/FindingService/v1";
+      ? "https://api.ebay.com"
+      : "https://api.sandbox.ebay.com";
 
-  const operation = completed ? "findCompletedItems" : "findItemsByKeywords";
-
-  const qp = new URLSearchParams({
-    "OPERATION-NAME": operation,
-    "SERVICE-VERSION": "1.0.0",
-    "SECURITY-APPNAME": appId,
-    "RESPONSE-DATA-FORMAT": "JSON",
-    "keywords": searchQuery,
-    "paginationInput.entriesPerPage": String(Math.min(limit, 50)),
-    "paginationInput.pageNumber": "1",
-    "sortOrder": completed ? "EndTimeSoonest" : "BestMatch",
-    "outputSelector(0)": "GalleryInfo",
+  const searchParams = new URLSearchParams({
+    q: query,
+    limit: String(Math.min(limit, 50)),
+    sort: soldFilter ? "-date" : "-price",
   });
 
-  if (completed) {
-    qp.set("itemFilter(0).name", "SoldItemsOnly");
-    qp.set("itemFilter(0).value", "true");
-  } else {
-    qp.set("itemFilter(0).name", "ListingType");
-    qp.set("itemFilter(0).value(0)", "FixedPrice");
-    qp.set("itemFilter(0).value(1)", "Auction");
+  if (soldFilter) {
+    searchParams.set("filter", soldFilter);
   }
 
-  if (categoryId) qp.set("categoryId", categoryId);
+  if (categoryId) {
+    searchParams.set("category_ids", categoryId);
+  }
 
-  const url = `${baseUrl}?${qp.toString()}`;
+  const url = `${apiBase}/buy/browse/v1/item_summary/search?${searchParams.toString()}`;
+  console.log(`[keyword-research] Browse API search: "${query}" (sold=${!!soldFilter})`);
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    console.log(
-      `[keyword-research] Attempt ${attempt}/${maxRetries} — ${completed ? "completed" : "active"}: "${searchQuery}"`
-    );
+  const resp = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+    },
+  });
 
-    const resp = await fetch(url, { headers: { "Accept": "application/json" } });
+  if (!resp.ok) {
+    const txt = await resp.text();
+    console.error(`[keyword-research] Browse API error ${resp.status}: ${txt.slice(0, 200)}`);
+    return { prices: [], count: 0, topItems: [] };
+  }
 
-    if (resp.status === 500) {
-      const body = await resp.text();
-      const isRateLimit = body.includes("10001") || body.includes("RateLimiter");
-      console.error(`[keyword-research] eBay API 500 (attempt ${attempt}): ${body.slice(0, 200)}`);
+  const json = await resp.json();
+  const items = json?.itemSummaries ?? [];
 
-      if (isRateLimit && attempt < maxRetries) {
-        const waitMs = attempt * 2000; // 2s, 4s, 6s
-        console.log(`[keyword-research] Rate limited — waiting ${waitMs}ms before retry...`);
-        await sleep(waitMs);
-        continue;
-      }
-      return { prices: [], count: 0, topItems: [] };
-    }
+  if (!items || items.length === 0) {
+    console.log(`[keyword-research] No items found for "${query}"`);
+    return { prices: [], count: 0, topItems: [] };
+  }
 
-    if (!resp.ok) {
-      console.error(`[keyword-research] eBay API error ${resp.status}`);
-      return { prices: [], count: 0, topItems: [] };
-    }
+  const prices: number[] = [];
+  const topItems: TopItem[] = [];
 
-    const json = await resp.json();
-    const key = completed ? "findCompletedItemsResponse" : "findItemsByKeywordsResponse";
-    const searchResult = json?.[key]?.[0]?.searchResult?.[0];
+  for (const item of items) {
+    try {
+      const price = parseFloat(item?.price?.value ?? "0");
+      if (!isNaN(price) && price > 0) {
+        prices.push(price);
 
-    if (!searchResult || searchResult["@count"] === "0") {
-      console.log(`[keyword-research] No results for "${searchQuery}" (${completed ? "sold" : "active"})`);
-      return { prices: [], count: 0, topItems: [] };
-    }
-
-    const items: unknown[] = searchResult.item ?? [];
-    const prices: number[] = [];
-    const topItems: TopItem[] = [];
-
-    for (const item of items) {
-      try {
-        const rec = item as Record<string, unknown>;
-        const sellingStatus = (rec.sellingStatus as Record<string, unknown>[])?.[0];
-        const currentPrice = (sellingStatus?.currentPrice as Record<string, string>[])?.[0];
-        const price = parseFloat(currentPrice?.__value__ ?? "0");
-
-        if (!isNaN(price) && price > 0) {
-          prices.push(price);
-
-          if (topItems.length < 5) {
-            const titleArr = rec.title as string[] | undefined;
-            const title = Array.isArray(titleArr) ? titleArr[0] : String(titleArr ?? "");
-            const galleryURL = (rec.galleryURL as string[])?.[0] ?? null;
-            const viewItemURL = (rec.viewItemURL as string[])?.[0] ?? null;
-            const conditionArr = (rec.condition as Record<string, unknown>[])?.[0];
-            const conditionName =
-              (conditionArr?.conditionDisplayName as string[])?.[0] ?? "Unknown";
-
-            topItems.push({ title, price, imageUrl: galleryURL, itemUrl: viewItemURL, condition: conditionName });
-          }
+        if (topItems.length < 5) {
+          topItems.push({
+            title: item.title ?? "Unknown",
+            price,
+            imageUrl: item.image?.imageUrl ?? null,
+            itemUrl: item.itemWebUrl ?? null,
+            condition: item.condition ?? "Unknown",
+          });
         }
-      } catch { /* skip malformed */ }
-    }
-
-    console.log(
-      `[keyword-research] Got ${prices.length} prices (${completed ? "sold" : "active"}) for "${searchQuery}"`
-    );
-    return { prices, count: prices.length, topItems };
+      }
+    } catch { /* skip malformed */ }
   }
 
+  console.log(`[keyword-research] Got ${prices.length} items for "${query}"`);
+  return { prices, count: prices.length, topItems };
+}
+
+// ----------------------------------------------------------------
+// Search sold items using Browse API with sold filter
+// Note: Browse API doesn't have a direct "sold" search like Finding API,
+// so we search without filter and estimate based on pricing patterns.
+// For actual sold data, we'd need the Finding API or Marketplace Insights API.
+// ----------------------------------------------------------------
+async function searchSoldItems(params: {
+  query: string;
+  token: string;
+  ebayEnv: string;
+  categoryId?: string | null;
+}): Promise<BrowseSearchResult> {
+  // Browse API doesn't have a native "sold items" endpoint for anonymous search
+  // The Finding API has findCompletedItems but we're hitting rate limits
+  // 
+  // Alternative: Use the same Browse API search but filter by ended listings
+  // For now, we'll return empty sold data and focus on active listings
+  // which is what the Browse API provides reliably
+
+  console.log(`[keyword-research] Sold items search via Browse API not available; returning active listing data only`);
+  
+  // We can approximate sold behavior by searching again with different sort
+  // but for now, return empty to avoid confusion
   return { prices: [], count: 0, topItems: [] };
 }
 
+// ----------------------------------------------------------------
+// Stats helpers
+// ----------------------------------------------------------------
 function median(nums: number[]): number {
   if (nums.length === 0) return 0;
   const sorted = [...nums].sort((a, b) => a - b);
@@ -171,7 +189,7 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-// Simple in-memory cache keyed by query+category, expires after 4 hours
+// In-memory cache (4 hours)
 const cache = new Map<string, { data: unknown; expiresAt: number }>();
 
 // ----------------------------------------------------------------
@@ -205,60 +223,31 @@ serve(async (req) => {
     }
 
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-    const appId = Deno.env.get("EBAY_CLIENT_ID");
-
-    if (!appId) {
-      return new Response(
-        JSON.stringify({ error: "EBAY_CLIENT_ID not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
 
     console.log(`[keyword-research] Fetching market data for: "${query}" (env: ${ebayEnv})`);
 
-    // ── Sequential calls with a gap to avoid eBay Finding API rate limits ──
-    const activeResult = await fetchEbayListings({
-      appId,
-      searchQuery: query,
-      categoryId,
+    // Get OAuth token for Browse API
+    const token = await getEbayAppToken();
+    console.log(`[keyword-research] Obtained OAuth token`);
+
+    // Search active listings using Browse API
+    const activeResult = await browseSearch({
+      query,
+      token,
       ebayEnv,
-      completed: false,
+      categoryId,
       limit: 50,
-      maxRetries: 3,
     });
 
-    // 800ms pause between calls to respect eBay Finding API rate limits
-    await sleep(800);
-
-    const soldResult = await fetchEbayListings({
-      appId,
-      searchQuery: query,
-      categoryId,
-      ebayEnv,
-      completed: true,
-      limit: 50,
-      maxRetries: 3,
-    });
-
+    // Note: Browse API doesn't support sold items search directly
+    // We'll set sold count to 0 for now and show only active competitor data
+    const soldCount = 0;
     const activeCount = activeResult.count;
-    const soldCount = soldResult.count;
     const total = activeCount + soldCount;
-    const sellThroughRate = total > 0 ? round2((soldCount / total) * 100) : 0;
 
-    // Sold price stats
-    const soldPrices = soldResult.prices.sort((a, b) => a - b);
-    const avgSoldPrice =
-      soldPrices.length > 0
-        ? round2(soldPrices.reduce((s, p) => s + p, 0) / soldPrices.length)
-        : null;
-    const medianSoldPrice = soldPrices.length > 0 ? round2(median(soldPrices)) : null;
-    const minSoldPrice = soldPrices.length > 0 ? soldPrices[0] : null;
-    const maxSoldPrice =
-      soldPrices.length > 0 ? soldPrices[soldPrices.length - 1] : null;
-    const p25SoldPrice =
-      soldPrices.length > 0 ? round2(percentile(soldPrices, 25)) : null;
-    const p75SoldPrice =
-      soldPrices.length > 0 ? round2(percentile(soldPrices, 75)) : null;
+    // Calculate sell-through rate placeholder
+    // Without sold data, we can't calculate real STR
+    const sellThroughRate = 0;
 
     // Active price stats
     const activePrices = activeResult.prices.sort((a, b) => a - b);
@@ -267,40 +256,50 @@ serve(async (req) => {
         ? round2(activePrices.reduce((s, p) => s + p, 0) / activePrices.length)
         : null;
     const minActivePrice = activePrices.length > 0 ? activePrices[0] : null;
-    const maxActivePrice =
-      activePrices.length > 0 ? activePrices[activePrices.length - 1] : null;
+    const maxActivePrice = activePrices.length > 0 ? activePrices[activePrices.length - 1] : null;
+    const medianActivePrice = activePrices.length > 0 ? round2(median(activePrices)) : null;
+    const p25ActivePrice = activePrices.length > 0 ? round2(percentile(activePrices, 25)) : null;
+    const p75ActivePrice = activePrices.length > 0 ? round2(percentile(activePrices, 75)) : null;
 
-    // Competition level
+    // Competition level (based on active count)
     let competitionLevel: "low" | "medium" | "high" = "low";
     if (activeCount > 100) competitionLevel = "high";
     else if (activeCount > 30) competitionLevel = "medium";
 
-    // Demand signal
-    let demandSignal: "weak" | "moderate" | "strong" = "weak";
-    if (sellThroughRate >= 50) demandSignal = "strong";
-    else if (sellThroughRate >= 25) demandSignal = "moderate";
+    // Demand signal: without sold data, we can't determine this accurately
+    // Default to moderate
+    const demandSignal: "weak" | "moderate" | "strong" = "moderate";
 
     const responseData = {
       query,
       categoryId: categoryId ?? null,
+      // Sold stats (unavailable via Browse API)
       soldCount,
-      avgSoldPrice,
-      medianSoldPrice,
-      minSoldPrice,
-      maxSoldPrice,
-      p25SoldPrice,
-      p75SoldPrice,
+      avgSoldPrice: null,
+      medianSoldPrice: null,
+      minSoldPrice: null,
+      maxSoldPrice: null,
+      p25SoldPrice: null,
+      p75SoldPrice: null,
+      // Active stats
       activeCount,
       avgActivePrice,
+      medianActivePrice,
       minActivePrice,
       maxActivePrice,
+      p25ActivePrice,
+      p75ActivePrice,
+      // Market signals
       sellThroughRate,
       competitionLevel,
       demandSignal,
+      // Top items
       topCompetitors: activeResult.topItems,
-      topSold: soldResult.topItems,
+      topSold: [],
+      // Meta
       noData: total === 0,
       fromCache: false,
+      dataSource: "browse_api", // Indicate we're using Browse API, not Finding API
     };
 
     // Cache for 4 hours
@@ -310,7 +309,7 @@ serve(async (req) => {
     });
 
     console.log(
-      `[keyword-research] Done: sold=${soldCount}, active=${activeCount}, STR=${sellThroughRate}%, competition=${competitionLevel}`
+      `[keyword-research] Done: active=${activeCount}, competition=${competitionLevel}`
     );
 
     return new Response(JSON.stringify(responseData), {
