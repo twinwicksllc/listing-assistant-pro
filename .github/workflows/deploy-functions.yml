@@ -40,4 +40,13 @@ jobs:
           supabase functions deploy --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Schedule Cost Alert Cron Job
+        run: |
+          # Schedule cost-alert-cron to run daily at midnight UTC
+          supabase functions schedule cost-alert-cron \
+            --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} \
+            --cron-expression "0 0 * * *"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 # Migration auto-apply enabled
