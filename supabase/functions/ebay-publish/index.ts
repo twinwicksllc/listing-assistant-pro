@@ -1648,6 +1648,24 @@ serve(async (req) => {
 
       console.log(`create_draft: sku=${sku}`);
 
+      // ----------------------------------------------------------------
+      // GRAIN BAR CATEGORY OVERRIDE
+      // eBay policy (errorId 25019) requires all grain bars to be listed in
+      // category 3360 (Coins & Paper Money > Bullion > Gold > Other).
+      // Detect grain bars by checking title/description for "grain" keywords.
+      // ----------------------------------------------------------------
+      function isGrainBar(title: string, description?: string): boolean {
+        const combinedText = (title + " " + (description || "")).toLowerCase();
+        const grainPatterns = /\b(grain|grains)\b/;
+        return grainPatterns.test(combinedText);
+      }
+
+      let finalCategoryId = ebayCategoryId;
+      if (isGrainBar(title, description)) {
+        finalCategoryId = "3360"; // Coins & Paper Money > Bullion > Gold > Other
+        console.log(`create_draft: GRAIN BAR DETECTED - overriding category ${ebayCategoryId} -> ${finalCategoryId}`);
+      }
+
       // eBay Partner Network campaign ID for affiliate revenue tracking
       const epnCampaignId = Deno.env.get("EPN_CAMPAIGN_ID") || "";
 
@@ -1674,9 +1692,9 @@ serve(async (req) => {
       //   - Fixed values for known categories (Composition, Fineness for silver dollars, etc.)
       //   - Drops placeholder values (none / unknown / n/a / other / etc.)
       
-      // Fallback: if ebayCategoryId is not in CATEGORY_ASPECT_RULES, use US Coins General (253)
+      // Fallback: if finalCategoryId is not in CATEGORY_ASPECT_RULES, use US Coins General (253)
       // This handles edge cases where AI assigns an invalid/unsupported category ID
-      let categoryForAspects = ebayCategoryId ?? "";
+      let categoryForAspects = finalCategoryId ?? "";
       if (!CATEGORY_ASPECT_RULES[categoryForAspects]) {
         console.warn(`create_draft: category ${categoryForAspects} not in CATEGORY_ASPECT_RULES, falling back to US Coins General (253)`);
         categoryForAspects = "253"; // US Coins General
@@ -1689,7 +1707,7 @@ serve(async (req) => {
         categoryForAspects
       );
 
-      console.log(`create_draft: aspects built for category ${ebayCategoryId}:`, JSON.stringify(aspects, null, 2));
+      console.log(`create_draft: aspects built for category ${finalCategoryId}:`, JSON.stringify(aspects, null, 2));
 
       // Extract the item Type (e.g., "Coin", "Round", "Bar") from itemSpecifics
       // This is used to disambiguate coins from bullion when validating conditions
@@ -1705,7 +1723,7 @@ serve(async (req) => {
       const rawCondition = condition || "USED_EXCELLENT";
       const { condition: normalizedCondition, corrected } = normalizeConditionForCategory(
         rawCondition,
-        ebayCategoryId,
+        finalCategoryId,
         itemType
       );
       const conditionEnum = normalizedCondition;
@@ -1714,11 +1732,11 @@ serve(async (req) => {
         ?? conditionEnum.replace(/_/g, " ").toLowerCase()
              .replace(/\b\w/g, (c: string) => c.toUpperCase());
 
-      console.log(`create_draft: condition normalization - rawCondition=${rawCondition}, normalized=${normalizedCondition}, conditionId=${conditionId}, categoryId=${ebayCategoryId}, corrected=${corrected}`);
+      console.log(`create_draft: condition normalization - rawCondition=${rawCondition}, normalized=${normalizedCondition}, conditionId=${conditionId}, categoryId=${finalCategoryId}, corrected=${corrected}`);
 
       if (corrected) {
         console.log(
-          `create_draft: condition auto-corrected from ${rawCondition} to ${normalizedCondition} for category ${ebayCategoryId}`
+          `create_draft: condition auto-corrected from ${rawCondition} to ${normalizedCondition} for category ${finalCategoryId}`
         );
       }
 
@@ -1899,7 +1917,7 @@ serve(async (req) => {
         listingPrice: Number(listingPrice ?? 0),
         condition: conditionEnum,
         conditionDescription: conditionDesc,
-        ebayCategoryId: ebayCategoryId || undefined,
+        ebayCategoryId: finalCategoryId || undefined,
         merchantLocationKey,
         fulfillmentPolicyId,
         paymentPolicyId,
@@ -1909,7 +1927,7 @@ serve(async (req) => {
         bestOfferAutoDeclinePrice: Number(bestOfferAutoDeclinePrice) || undefined,
       });
 
-      console.log(`create_draft: built offer for sku=${sku}, price=${listingPrice}, category=${ebayCategoryId || "NONE"}`);
+      console.log(`create_draft: built offer for sku=${sku}, price=${listingPrice}, category=${finalCategoryId || "NONE"}`);
       console.log(`create_draft: offer body categories - categoryId in offer=${(offerBody as Record<string, unknown>).categoryId || "MISSING"}`);
       console.log(`create_draft: offer body:`, JSON.stringify(offerBody, null, 2));
 
@@ -1998,7 +2016,7 @@ serve(async (req) => {
         const errText = await publishResp.text();
         console.error("create_draft: eBay publish error:", publishResp.status, errText);
         console.error("create_draft: failing to publish offer", offerId, "for sku", sku);
-        console.error(`create_draft: publish failed with condition=${conditionEnum} (id=${conditionId}), category=${ebayCategoryId}, format=${listingFormat}`);
+        console.error(`create_draft: publish failed with condition=${conditionEnum} (id=${conditionId}), category=${finalCategoryId}, format=${listingFormat}`);
         return new Response(
           JSON.stringify({
             error: `Offer created (ID: ${offerId}) but publish failed: ${publishResp.status} - ${errText}`,

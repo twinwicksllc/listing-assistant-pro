@@ -54,6 +54,7 @@ export const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
   "40167":  "Coins & Paper Money > Coins: US > Gold Coins > American Gold Buffalo",
 
   // --- Bullion (other) ---
+  "3360": "Coins & Paper Money > Bullion > Gold > Other",  // For grain bars, flakes, nuggets
   "261064": "Coins & Paper Money > Bullion > Gold > Coins",
   "261068": "Coins & Paper Money > Bullion > Silver > Coins",
   "261069": "Coins & Paper Money > Bullion > Silver > Bars & Rounds",
