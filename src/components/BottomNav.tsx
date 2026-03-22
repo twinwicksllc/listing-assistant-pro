@@ -1,4 +1,4 @@
-import { Camera, FileText, LayoutDashboard, Users, Settings, Layers } from "lucide-react";
+import { Camera, FileText, LayoutDashboard, Users, Settings, Layers, TrendingUp } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -11,6 +11,7 @@ export default function BottomNav() {
     { path: "/home", icon: Camera, label: "Capture", show: true, tourId: undefined },
     { path: "/drafts", icon: FileText, label: "Drafts", show: true, tourId: "analyze-tab" },
     { path: "/bulk", icon: Layers, label: "Bulk List", show: true, tourId: undefined },
+    { path: "/market", icon: TrendingUp, label: "Market", show: true, tourId: undefined },
     { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard", show: isOwner, tourId: undefined },
     { path: "/team", icon: Users, label: "Team", show: true, tourId: undefined },
     { path: "/settings", icon: Settings, label: "Settings", show: true, tourId: undefined },
