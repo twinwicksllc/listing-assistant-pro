@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, Send, Tag, Crown, Download, FileSpreadsheet, Sheet, ShieldCheck, AlertTriangle, Check, X as XIcon, Lock, UserCircle, DollarSign, Gavel, ShoppingCart } from "lucide-react";
 import PricingCard from "@/components/PricingCard";
+import PriceRecommenderCard from "@/components/PriceRecommenderCard";
 import CategoryConfirmDialog from "@/components/CategoryConfirmDialog";
 import { useDrafts } from "@/hooks/useDrafts";
 import { toast } from "sonner";
@@ -778,17 +779,19 @@ export default function AnalyzePage() {
               />
             </div>
 
-            {/* Pricing — melt protection gated to Pro/Shop */}
-            <PricingCard
+            {/* Smart Price Recommender */}
+            <PriceRecommenderCard
+              title={title}
+              condition={condition}
               priceMin={priceMin}
               priceMax={priceMax}
-              searchQuery={title}
               metalType={planFeatures.hasMeltProtection ? metalType : undefined}
               metalWeightOz={planFeatures.hasMeltProtection ? metalWeightOz : undefined}
-              initialMeltValue={planFeatures.hasMeltProtection ? meltValue : null}
-              initialSpotPrices={planFeatures.hasMeltProtection ? spotPrices : undefined}
-              pricingNotes={pricingNotes}
-              competitorData={competitorData}
+              meltValue={planFeatures.hasMeltProtection ? meltValue : null}
+              onApplyPrice={(price) => {
+                setListingPrice(price);
+                setAuctionStartPrice(price);
+              }}
             />
 
             {/* Listing Format + Price */}

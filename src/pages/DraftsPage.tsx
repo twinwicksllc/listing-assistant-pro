@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Trash2, FileText, ShoppingCart, Gavel, Tag, Pencil, Send, Loader2, CheckSquare, Square, AlertTriangle } from "lucide-react";
+import DraftPriceAdvisor from "@/components/DraftPriceAdvisor";
 import { useDrafts } from "@/hooks/useDrafts";
 import { usePublishDraft } from "@/hooks/usePublishDraft";
 import { useAuth } from "@/contexts/AuthContext";
@@ -276,6 +277,24 @@ export default function DraftsPage() {
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {draft.createdAt.toLocaleDateString()}
                 </p>
+
+                {/* Price Advisor */}
+                <div className="mt-2">
+                  <DraftPriceAdvisor
+                    title={draft.title}
+                    condition={draft.condition}
+                    currentPrice={displayPrice}
+                    priceMin={draft.priceMin}
+                    priceMax={draft.priceMax}
+                    metalType={draft.metalType}
+                    metalWeightOz={draft.metalWeightOz}
+                    meltValue={liveMelt}
+                    onApplyPrice={(price) => {
+                      updateDraft(draft.id, { listingPrice: price });
+                      toast.success(`Price updated to $${price.toFixed(2)}`);
+                    }}
+                  />
+                </div>
               </div>
 
               {/* Action buttons */}
