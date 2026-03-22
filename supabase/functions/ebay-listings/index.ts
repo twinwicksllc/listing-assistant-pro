@@ -37,11 +37,14 @@ async function fetchAnalyticsForWindow(
   const result: AnalyticsMap = {};
   try {
     const today = new Date();
-    const startDate = new Date(today);
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const startDate = new Date(yesterday);
     startDate.setDate(startDate.getDate() - days);
     // eBay Analytics API requires yyyymmdd format (no hyphens), not yyyy-mm-dd
+    // Use yesterday as end date - eBay doesn't accept today as end date
     const startDateStr = startDate.toISOString().split("T")[0].replace(/-/g, "");
-    const endDateStr = today.toISOString().split("T")[0].replace(/-/g, "");
+    const endDateStr = yesterday.toISOString().split("T")[0].replace(/-/g, "");
     // Build URL with properly encoded filter parameter
     const url = new URL(`${apiBase}/sell/analytics/v1/traffic_report`);
     url.searchParams.set("dimension", "LISTING");
