@@ -481,6 +481,9 @@ export default function DashboardPage() {
   const navigate = useNavigate();
 
   const [listings, setListings] = useState<EbayListing[]>([]);
+  const [orderCount7d, setOrderCount7d] = useState(0);
+  const [orderCount30d, setOrderCount30d] = useState(0);
+  const [orderCount90d, setOrderCount90d] = useState(0);
   const [loading, setLoading] = useState(false);
   const [needsAuth, setNeedsAuth] = useState(false);
   const [error, setError] = useState("");
@@ -565,6 +568,10 @@ export default function DashboardPage() {
       }
 
       const rawListings: EbayListing[] = data.listings || [];
+      // Capture real order counts from Fulfillment API
+      if (typeof data.orderCount30d === "number") setOrderCount30d(data.orderCount30d);
+      if (typeof data.orderCount7d === "number") setOrderCount7d(data.orderCount7d);
+      if (typeof data.orderCount90d === "number") setOrderCount90d(data.orderCount90d);
 
       // Fetch competitor prices
       let competitorMap: Record<string, CompetitorPriceSnapshot> = {};
@@ -712,7 +719,9 @@ export default function DashboardPage() {
   const totalViews7d = listings.reduce((sum, l) => sum + (l.views7d || 0), 0);
   const totalViews90d = listings.reduce((sum, l) => sum + (l.views90d || 0), 0);
   const totalWatches = listings.reduce((sum, l) => sum + (l.watchCount || 0), 0);
-  const totalTransactions30d = listings.reduce((sum, l) => sum + (l.transactions30d || 0), 0);
+  // Use real order counts from Fulfillment API (not the Analytics API per-listing TRANSACTION metric
+  // which only counts active listings and misses sold/completed items)
+  const totalTransactions30d = orderCount30d;
   const liveValue = listings.reduce((sum, l) => sum + l.price, 0);
   const draftValue = drafts.reduce((sum, d) => sum + (d.priceMin + d.priceMax) / 2, 0);
 
@@ -849,7 +858,11 @@ export default function DashboardPage() {
               <span className="text-[10px] font-medium uppercase tracking-wide">Transactions</span>
             </div>
             <p className="text-xl font-bold text-foreground">{totalTransactions30d.toLocaleString()}</p>
-            <p className="text-[10px] text-muted-foreground">Last 30 days</p>
+            <div className="flex gap-2 text-[10px] text-muted-foreground flex-wrap">
+              <span className="flex items-center gap-0.5"><span className="opacity-60">7d</span> <span className="font-medium text-foreground">{orderCount7d.toLocaleString()}</span></span>
+              <span className="text-muted-foreground/40">·</span>
+              <span className="flex items-center gap-0.5"><span className="opacity-60">90d</span> <span className="font-medium text-foreground">{orderCount90d.toLocaleString()}</span></span>
+            </div>
           </div>
 
           {/* Active listings */}

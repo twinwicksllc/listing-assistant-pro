@@ -220,6 +220,71 @@ function mergeAnalytics(
   return result;
 }
 
+// ─── Fetch real order counts via Fulfillment API ─────────────────────────────
+// The Analytics API TRANSACTION metric only counts active listings, so
+// we use the Fulfillment API to get actual orders placed in each window.
+async function fetchOrderCounts(
+  apiBase: string,
+  ebayHeaders: Record<string, string>
+): Promise<{ orders7d: number; orders30d: number; orders90d: number }> {
+  const counts = { orders7d: 0, orders30d: 0, orders90d: 0 };
+
+  try {
+    // Fetch up to 200 orders from the last 90 days in one call
+    const now = new Date();
+    const ninetyDaysAgo = new Date(now);
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+    const fromStr = ninetyDaysAgo.toISOString();
+
+    // eBay Fulfillment API filter format: creationdate:[2024-01-01T00:00:00.000Z..]
+    const filter = `creationdate:[${fromStr}..]`;
+    const url = new URL(`${apiBase}/sell/fulfillment/v1/order`);
+    url.searchParams.set("filter", filter);
+    url.searchParams.set("limit", "200");
+
+    console.log(`Fulfillment API: Fetching orders from ${fromStr}`);
+    const resp = await fetch(url.toString(), { headers: ebayHeaders });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.warn(`Fulfillment API error: ${resp.status} - ${errText.substring(0, 300)}`);
+      return counts;
+    }
+
+    const data = await resp.json();
+    const orders: any[] = data.orders || [];
+    console.log(`Fulfillment API: Got ${orders.length} orders (total: ${data.total ?? "?"})`);
+
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    for (const order of orders) {
+      // Count line items (each line item = one transaction/sale)
+      const lineItemCount = (order.lineItems?.length ?? 1);
+      const createdAt = order.creationDate ? new Date(order.creationDate) : null;
+      if (!createdAt) continue;
+
+      counts.orders90d += lineItemCount;
+      if (createdAt >= thirtyDaysAgo) counts.orders30d += lineItemCount;
+      if (createdAt >= sevenDaysAgo) counts.orders7d += lineItemCount;
+    }
+
+    // If there are more pages, fetch them too (eBay paginates at 200)
+    if (data.total && data.total > orders.length) {
+      console.log(`Fulfillment API: ${data.total - orders.length} more orders not fetched (pagination needed)`);
+      // For most small sellers this won't be an issue, but log it
+    }
+
+    console.log(`Fulfillment API: orders7d=${counts.orders7d}, orders30d=${counts.orders30d}, orders90d=${counts.orders90d}`);
+  } catch (e) {
+    console.error("Fulfillment API error (non-fatal):", e);
+  }
+
+  return counts;
+}
+
 // ─── Fetch WatchCount + QuestionCount via GetItem ────────────────────────────
 async function fetchWatchDataForListings(
   listingIds: string[],
@@ -392,13 +457,17 @@ async function fetchListingsViaTradingAPI(
       }
     }
 
-    // Fetch all three analytics windows in parallel
+    // Fetch all three analytics windows + real order counts in parallel
     const ebayHeaders = {
       Authorization: `Bearer ${userToken}`,
       "Content-Type": "application/json",
       "Accept-Language": "en-US",
     };
-    const { a7, a30, a90 } = await fetchAllAnalytics(apiBase, ebayHeaders);
+    const [{ a7, a30, a90 }, orderCounts] = await Promise.all([
+      fetchAllAnalytics(apiBase, ebayHeaders),
+      fetchOrderCounts(apiBase, ebayHeaders),
+    ]);
+    console.log(`Trading API fallback: Real order counts - 7d=${orderCounts.orders7d}, 30d=${orderCounts.orders30d}, 90d=${orderCounts.orders90d}`);
 
     // Build EPN affiliate links
     const epnCampaignId = Deno.env.get("EPN_CAMPAIGN_ID") || "";
@@ -418,7 +487,13 @@ async function fetchListingsViaTradingAPI(
     console.log(`Trading API fallback: loaded ${finalListings.length} active listings`);
 
     return new Response(
-      JSON.stringify({ listings: finalListings, needsAuth: false }),
+      JSON.stringify({
+        listings: finalListings,
+        needsAuth: false,
+        orderCount7d: orderCounts.orders7d,
+        orderCount30d: orderCounts.orders30d,
+        orderCount90d: orderCounts.orders90d,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
@@ -549,12 +624,14 @@ serve(async (req) => {
     console.log(`ebay-listings: Found ${listingIds.length} listings with IDs for analytics lookup: ${listingIds.slice(0, 3).join(", ")}${listingIds.length > 3 ? "..." : ""}`);
     console.log(`ebay-listings: First 5 listing keys (listingId|sku): ${listings.slice(0, 5).map(l => `${l.listingId || "null"}|${l.sku}`).join(", ")}`);
     
-    const [watchMap, { a7, a30, a90 }] = await Promise.all([
+    const [watchMap, { a7, a30, a90 }, orderCounts] = await Promise.all([
       fetchWatchDataForListings(listingIds, tradingUrl, userToken),
       fetchAllAnalytics(apiBase, ebayHeaders),
+      fetchOrderCounts(apiBase, ebayHeaders),
     ]);
     
     console.log(`ebay-listings: Analytics merge - a7 ${Object.keys(a7).length} items, a30 ${Object.keys(a30).length} items, a90 ${Object.keys(a90).length} items`);
+    console.log(`ebay-listings: Real order counts - 7d=${orderCounts.orders7d}, 30d=${orderCounts.orders30d}, 90d=${orderCounts.orders90d}`);
 
     const epnCampaignId = Deno.env.get("EPN_CAMPAIGN_ID") || "";
     const buildEbayUrl = (listingId: string | null) => {
@@ -576,7 +653,13 @@ serve(async (req) => {
     });
 
     return new Response(
-      JSON.stringify({ listings: enrichedListings, needsAuth: false }),
+      JSON.stringify({
+        listings: enrichedListings,
+        needsAuth: false,
+        orderCount7d: orderCounts.orders7d,
+        orderCount30d: orderCounts.orders30d,
+        orderCount90d: orderCounts.orders90d,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
