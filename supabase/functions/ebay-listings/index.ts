@@ -220,23 +220,45 @@ function mergeAnalytics(
   return result;
 }
 
-// ─── Fetch real order counts via Fulfillment API ─────────────────────────────
+// ─── Financial summary shape ──────────────────────────────────────────────────
+interface FinancialWindow {
+  orders: number;
+  revenue: number;           // item sale prices (excl. tax)
+  shippingCollected: number; // delivery cost buyer paid
+  ebayFees: number;          // totalMarketplaceFee (FVF + ad fees)
+  shippingLabels: number;    // eBay shipping label costs charged to seller
+  netProfit: number;         // revenue + shippingCollected - ebayFees - shippingLabels
+}
+interface FinancialSummary {
+  w7: FinancialWindow;
+  w30: FinancialWindow;
+  w90: FinancialWindow;
+}
+function emptyWindow(): FinancialWindow {
+  return { orders: 0, revenue: 0, shippingCollected: 0, ebayFees: 0, shippingLabels: 0, netProfit: 0 };
+}
+function amt(obj: any): number {
+  if (!obj) return 0;
+  const v = parseFloat(obj.value ?? "0");
+  return isNaN(v) ? 0 : v;
+}
+
+// ─── Fetch real order counts + financial data via Fulfillment API ─────────────
 // The Analytics API TRANSACTION metric only counts active listings, so
-// we use the Fulfillment API to get actual orders placed in each window.
+// we use the Fulfillment API to get actual orders + revenue + fees.
 async function fetchOrderCounts(
   apiBase: string,
   ebayHeaders: Record<string, string>
-): Promise<{ orders7d: number; orders30d: number; orders90d: number }> {
+): Promise<{ orders7d: number; orders30d: number; orders90d: number; financial: FinancialSummary }> {
   const counts = { orders7d: 0, orders30d: 0, orders90d: 0 };
+  const financial: FinancialSummary = { w7: emptyWindow(), w30: emptyWindow(), w90: emptyWindow() };
 
   try {
-    // Fetch up to 200 orders from the last 90 days in one call
     const now = new Date();
     const ninetyDaysAgo = new Date(now);
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
     const fromStr = ninetyDaysAgo.toISOString();
 
-    // eBay Fulfillment API filter format: creationdate:[2024-01-01T00:00:00.000Z..]
     const filter = `creationdate:[${fromStr}..]`;
     const url = new URL(`${apiBase}/sell/fulfillment/v1/order`);
     url.searchParams.set("filter", filter);
@@ -248,7 +270,7 @@ async function fetchOrderCounts(
     if (!resp.ok) {
       const errText = await resp.text();
       console.warn(`Fulfillment API error: ${resp.status} - ${errText.substring(0, 300)}`);
-      return counts;
+      return { ...counts, financial };
     }
 
     const data = await resp.json();
@@ -261,28 +283,62 @@ async function fetchOrderCounts(
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     for (const order of orders) {
-      // Count line items (each line item = one transaction/sale)
+      // Skip cancelled orders
+      if (order.cancelStatus?.cancelState === "CANCELED") continue;
+      // Only count paid orders
+      if (order.orderPaymentStatus && order.orderPaymentStatus !== "PAID") continue;
+
       const lineItemCount = (order.lineItems?.length ?? 1);
       const createdAt = order.creationDate ? new Date(order.creationDate) : null;
       if (!createdAt) continue;
 
+      // ── Financial extraction ──────────────────────────────────────────────
+      const ps = order.pricingSummary ?? {};
+      const revenue = amt(ps.priceSubtotal);
+      const shippingCollected = Math.max(0, amt(ps.deliveryCost) - amt(ps.deliveryDiscount));
+      const ebayFees = amt(order.totalMarketplaceFee);
+
+      // eBay shipping label costs - summed across line items
+      let shippingLabels = 0;
+      for (const li of order.lineItems ?? []) {
+        shippingLabels += amt(li.ebayCollectedCharges?.ebayShipping);
+      }
+
+      const netProfit = revenue + shippingCollected - ebayFees - shippingLabels;
+
+      const addToWindow = (w: FinancialWindow) => {
+        w.orders += lineItemCount;
+        w.revenue += revenue;
+        w.shippingCollected += shippingCollected;
+        w.ebayFees += ebayFees;
+        w.shippingLabels += shippingLabels;
+        w.netProfit += netProfit;
+      };
+
+      addToWindow(financial.w90);
       counts.orders90d += lineItemCount;
-      if (createdAt >= thirtyDaysAgo) counts.orders30d += lineItemCount;
-      if (createdAt >= sevenDaysAgo) counts.orders7d += lineItemCount;
+
+      if (createdAt >= thirtyDaysAgo) {
+        addToWindow(financial.w30);
+        counts.orders30d += lineItemCount;
+      }
+      if (createdAt >= sevenDaysAgo) {
+        addToWindow(financial.w7);
+        counts.orders7d += lineItemCount;
+      }
     }
 
-    // If there are more pages, fetch them too (eBay paginates at 200)
     if (data.total && data.total > orders.length) {
       console.log(`Fulfillment API: ${data.total - orders.length} more orders not fetched (pagination needed)`);
-      // For most small sellers this won't be an issue, but log it
     }
 
     console.log(`Fulfillment API: orders7d=${counts.orders7d}, orders30d=${counts.orders30d}, orders90d=${counts.orders90d}`);
+    console.log(`Fulfillment API (30d): revenue=$${financial.w30.revenue.toFixed(2)}, fees=$${financial.w30.ebayFees.toFixed(2)}, labels=$${financial.w30.shippingLabels.toFixed(2)}, net=$${financial.w30.netProfit.toFixed(2)}`);
   } catch (e) {
     console.error("Fulfillment API error (non-fatal):", e);
   }
 
-  return counts;
+  return { ...counts, financial };
 }
 
 // ─── Fetch WatchCount + QuestionCount via GetItem ────────────────────────────
@@ -493,6 +549,7 @@ async function fetchListingsViaTradingAPI(
         orderCount7d: orderCounts.orders7d,
         orderCount30d: orderCounts.orders30d,
         orderCount90d: orderCounts.orders90d,
+        financial: orderCounts.financial,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -659,6 +716,7 @@ serve(async (req) => {
         orderCount7d: orderCounts.orders7d,
         orderCount30d: orderCounts.orders30d,
         orderCount90d: orderCounts.orders90d,
+        financial: orderCounts.financial,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

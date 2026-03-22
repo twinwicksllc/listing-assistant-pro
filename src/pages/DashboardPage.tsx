@@ -5,6 +5,7 @@ import {
   Search, SlidersHorizontal, ArrowUpDown, ArrowUp, ArrowDown, Pencil,
   Check, CheckSquare, Square, Tag, Clock, Hash, Heart,
   BarChart2, MousePointerClick, ShoppingCart, MessageSquare, Flame, TrendingDown, Minus,
+  TrendingUp, Receipt, Truck, CircleDollarSign,
 } from "lucide-react";
 import { CompetitorPriceCard } from "@/components/CompetitorPriceCard";
 import { useAuth } from "@/contexts/AuthContext";
@@ -149,6 +150,18 @@ function statusColor(status: string): string {
 function fmtPct(val: number): string {
   if (!val) return "0%";
   return `${(val * 100).toFixed(1)}%`;
+}
+
+function fmtMoney(val: number): string {
+  if (val === 0) return "$0.00";
+  return `${val < 0 ? "-" : ""}$${Math.abs(val).toFixed(2)}`;
+}
+
+function fmtMoneyShort(val: number): string {
+  const abs = Math.abs(val);
+  const sign = val < 0 ? "-" : "";
+  if (abs >= 1000) return `${sign}$${(abs / 1000).toFixed(1)}k`;
+  return `${sign}$${abs.toFixed(0)}`;
 }
 
 // ─── Trend Badge ──────────────────────────────────────────────────────────────
@@ -484,6 +497,21 @@ export default function DashboardPage() {
   const [orderCount7d, setOrderCount7d] = useState(0);
   const [orderCount30d, setOrderCount30d] = useState(0);
   const [orderCount90d, setOrderCount90d] = useState(0);
+
+  // Financial summaries from Fulfillment API
+  interface FinancialWindow {
+    orders: number;
+    revenue: number;
+    shippingCollected: number;
+    ebayFees: number;
+    shippingLabels: number;
+    netProfit: number;
+  }
+  const emptyFin = (): FinancialWindow => ({ orders: 0, revenue: 0, shippingCollected: 0, ebayFees: 0, shippingLabels: 0, netProfit: 0 });
+  const [fin7, setFin7] = useState<FinancialWindow>(emptyFin());
+  const [fin30, setFin30] = useState<FinancialWindow>(emptyFin());
+  const [fin90, setFin90] = useState<FinancialWindow>(emptyFin());
+  const [salesProfitWindow, setSalesProfitWindow] = useState<"7d"|"30d"|"90d">("30d");
   const [loading, setLoading] = useState(false);
   const [needsAuth, setNeedsAuth] = useState(false);
   const [error, setError] = useState("");
@@ -568,10 +596,13 @@ export default function DashboardPage() {
       }
 
       const rawListings: EbayListing[] = data.listings || [];
-      // Capture real order counts from Fulfillment API
+      // Capture real order counts + financial data from Fulfillment API
       if (typeof data.orderCount30d === "number") setOrderCount30d(data.orderCount30d);
       if (typeof data.orderCount7d === "number") setOrderCount7d(data.orderCount7d);
       if (typeof data.orderCount90d === "number") setOrderCount90d(data.orderCount90d);
+      if (data.financial?.w7) setFin7(data.financial.w7);
+      if (data.financial?.w30) setFin30(data.financial.w30);
+      if (data.financial?.w90) setFin90(data.financial.w90);
 
       // Fetch competitor prices
       let competitorMap: Record<string, CompetitorPriceSnapshot> = {};
@@ -885,6 +916,136 @@ export default function DashboardPage() {
             <p className="text-[10px] text-muted-foreground">Ready to publish</p>
           </div>
         </div>
+
+        {/* ── Sales & Profit Card ─────────────────────────────────────────── */}
+        {(fin30.revenue > 0 || fin90.revenue > 0 || loading) && (
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          {/* Header row */}
+          <div className="flex items-center justify-between px-4 pt-4 pb-2">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <TrendingUp className="w-3.5 h-3.5" />
+              <span className="text-[10px] font-medium uppercase tracking-wide">Sales & Profit</span>
+            </div>
+            {/* Window tabs */}
+            <div className="flex items-center gap-1 text-[10px]">
+              {([
+                { label: "7d",  fin: fin7  },
+                { label: "30d", fin: fin30 },
+                { label: "90d", fin: fin90 },
+              ] as const).map(({ label }) => (
+                <button
+                  key={label}
+                  onClick={() => setSalesProfitWindow(label as "7d"|"30d"|"90d")}
+                  className={`px-2 py-0.5 rounded-md transition-colors font-medium ${
+                    salesProfitWindow === label
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-secondary"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Active window data */}
+          {(() => {
+            const fin = salesProfitWindow === "7d" ? fin7 : salesProfitWindow === "90d" ? fin90 : fin30;
+            const profitColor = fin.netProfit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400";
+            const profitBg   = fin.netProfit >= 0 ? "bg-emerald-500/10" : "bg-red-500/10";
+            return (
+              <>
+                {/* Big profit number */}
+                <div className="px-4 pb-3">
+                  <p className={`text-2xl font-bold ${profitColor}`}>{fmtMoney(fin.netProfit)}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    Net profit ({salesProfitWindow}) · {fin.orders} sale{fin.orders !== 1 ? "s" : ""}
+                  </p>
+                </div>
+
+                {/* Breakdown rows */}
+                <div className="border-t border-border divide-y divide-border">
+                  {/* Sales Revenue */}
+                  <div className="flex items-center justify-between px-4 py-2.5">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <CircleDollarSign className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                      <span>Sales revenue</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs font-semibold text-foreground">{fmtMoney(fin.revenue)}</span>
+                      {fin.shippingCollected > 0 && (
+                        <span className="text-[10px] text-muted-foreground ml-1.5">
+                          +{fmtMoney(fin.shippingCollected)} shipping
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* eBay Fees */}
+                  <div className="flex items-center justify-between px-4 py-2.5">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Receipt className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                      <span>eBay fees</span>
+                    </div>
+                    <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
+                      {fin.ebayFees > 0 ? `–${fmtMoney(fin.ebayFees)}` : fmtMoney(0)}
+                    </span>
+                  </div>
+
+                  {/* Shipping Labels */}
+                  {fin.shippingLabels > 0 && (
+                  <div className="flex items-center justify-between px-4 py-2.5">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Truck className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                      <span>Shipping labels</span>
+                    </div>
+                    <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
+                      –{fmtMoney(fin.shippingLabels)}
+                    </span>
+                  </div>
+                  )}
+
+                  {/* Net Profit summary row */}
+                  <div className={`flex items-center justify-between px-4 py-2.5 ${profitBg}`}>
+                    <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                      <TrendingUp className={`w-3.5 h-3.5 flex-shrink-0 ${profitColor}`} />
+                      <span>Net profit</span>
+                      <span className="text-[10px] font-normal text-muted-foreground">(excl. COGS)</span>
+                    </div>
+                    <div className="text-right">
+                      <span className={`text-xs font-bold ${profitColor}`}>{fmtMoney(fin.netProfit)}</span>
+                      {(fin.revenue + fin.shippingCollected) > 0 && (
+                        <span className="text-[10px] text-muted-foreground ml-1.5">
+                          {(fin.netProfit / (fin.revenue + fin.shippingCollected) * 100).toFixed(1)}% margin
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Mini sparkline-style 7d/30d/90d comparison */}
+                <div className="px-4 py-2.5 bg-secondary/30 flex items-center gap-3 flex-wrap">
+                  <span className="text-[10px] text-muted-foreground font-medium shrink-0">Net profit:</span>
+                  {[
+                    { label: "7d",  val: fin7.netProfit  },
+                    { label: "30d", val: fin30.netProfit },
+                    { label: "90d", val: fin90.netProfit },
+                  ].map(({ label, val }) => (
+                    <span key={label} className="flex items-center gap-0.5 text-[10px]">
+                      <span className="text-muted-foreground opacity-60">{label}</span>
+                      <span className={`font-semibold ml-0.5 ${val >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`}>
+                        {fmtMoneyShort(val)}
+                      </span>
+                    </span>
+                  ))}
+                  <span className="text-muted-foreground/40">·</span>
+                  <span className="text-[10px] text-muted-foreground italic">excl. cost of goods</span>
+                </div>
+              </>
+            );
+          })()}
+        </div>
+        )}
 
         {/* Melt Floor Alerts */}
         {atRiskListings.length > 0 && (
