@@ -120,6 +120,7 @@ async function fetchAnalyticsForWindow(
     }
     const totalTransactions = Object.values(result).reduce((sum, r) => sum + r.transactions, 0);
     console.log(`Analytics API (${days}d): Loaded metrics for ${Object.keys(result).length} listings, total transactions: ${totalTransactions}`);
+    console.log(`Analytics API (${days}d): All listing keys returned: ${Object.keys(result).slice(0, 10).join(", ")}${Object.keys(result).length > 10 ? "..." : ""}`);
   } catch (e) {
     console.error(`Analytics API error (${days}d, non-fatal):`, e);
   }
@@ -152,7 +153,19 @@ function mergeAnalytics(
   const s30 = a30[key] || a30[listingId || ""] || a30[sku] || null;
   const s90 = a90[key] || a90[listingId || ""] || a90[sku] || null;
   
-  // Debug logging - once per merge
+  // Debug logging - show matching process for first few listings
+  const shouldLog = Math.random() < 0.1; // Log 10% of merges to avoid spam
+  if (shouldLog) {
+    console.log(`mergeAnalytics: Matching for listingId="${listingId}" sku="${sku}"`, {
+      key,
+      s7Found: !!s7,
+      s30Found: !!s30,
+      s90Found: !!s90,
+      a30SampleKeys: Object.keys(a30).slice(0, 5)
+    });
+  }
+  
+  // Debug logging - once per merge when data found
   if (s7 || s30 || s90) {
     console.log(`mergeAnalytics: Found analytics for ${listingId || sku}`, {
       views7d: s7?.views, views30d: s30?.views, views90d: s90?.views
@@ -519,6 +532,7 @@ serve(async (req) => {
     // Fetch watch data and all three analytics windows in parallel
     const listingIds = listings.map((l: any) => l.listingId).filter(Boolean) as string[];
     console.log(`ebay-listings: Found ${listingIds.length} listings with IDs for analytics lookup: ${listingIds.slice(0, 3).join(", ")}${listingIds.length > 3 ? "..." : ""}`);
+    console.log(`ebay-listings: First 5 listing keys (listingId|sku): ${listings.slice(0, 5).map(l => `${l.listingId || "null"}|${l.sku}`).join(", ")}`);
     
     const [watchMap, { a7, a30, a90 }] = await Promise.all([
       fetchWatchDataForListings(listingIds, tradingUrl, userToken),
