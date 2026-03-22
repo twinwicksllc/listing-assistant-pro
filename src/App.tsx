@@ -20,6 +20,7 @@ import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
+import BulkListingPage from "./pages/BulkListingPage";
 import NotFound from "./pages/NotFound";
 import AdminPage from "./pages/AdminPage";
 import TermsPage from "./pages/TermsPage";
@@ -76,6 +77,7 @@ const App = () => (
               <Route path="/billing" element={<ProtectedRoute ownerOnly><BillingPage /></ProtectedRoute>} />
               <Route path="/team" element={<ProtectedRoute><TeamPage /></ProtectedRoute>} />
               <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
+              <Route path="/bulk" element={<ProtectedRoute><BulkListingPage /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
             <CookieConsent />

@@ -1,0 +1,208 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Max-Age": "86400",
+};
+
+interface DescriptionRow {
+  rowIndex: number;
+  title: string;
+  condition?: string;
+  categoryId?: string;
+  itemSpecifics?: Record<string, string>;
+  imageUrl?: string;
+}
+
+interface DescriptionResult {
+  rowIndex: number;
+  description: string;
+  error?: string;
+}
+
+// Row cap per tier
+const ROW_CAPS: Record<string, number> = {
+  starter: 5,
+  pro: 25,
+  unlimited: 1000,
+  admin: 1000,
+};
+
+serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
+  try {
+    const svc = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      { auth: { persistSession: false } }
+    );
+
+    // Auth
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Authentication required" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const { data: ud } = await svc.auth.getUser(authHeader.replace("Bearer ", ""));
+    const userId = ud?.user?.id;
+    const userEmail = ud?.user?.email;
+    if (!userId) {
+      return new Response(JSON.stringify({ error: "Authentication required" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Determine tier
+    const ADMIN_EMAILS = ["twinwicksllc@gmail.com"];
+    const isAdmin = userEmail ? ADMIN_EMAILS.includes(userEmail) : false;
+    let tier: "starter" | "pro" | "unlimited" | "admin" = isAdmin ? "admin" : "starter";
+
+    if (!isAdmin) {
+      const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
+      if (STRIPE_SECRET_KEY && userEmail) {
+        try {
+          const { default: Stripe } = await import("https://esm.sh/stripe@18.5.0");
+          const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2025-08-27.basil" });
+          const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
+          if (customers.data.length > 0) {
+            const subs = await stripe.subscriptions.list({
+              customer: customers.data[0].id,
+              status: "active",
+              limit: 1,
+            });
+            if (subs.data.length > 0) {
+              const productId = subs.data[0].items.data[0].price.product;
+              if (productId === "prod_U70aT1KvuI2uDx") tier = "unlimited";
+              else if (productId === "prod_U6zUiC1SYuPrGU") tier = "pro";
+            }
+          }
+        } catch (e) {
+          console.warn("Stripe check failed:", e);
+        }
+      }
+    }
+
+    const body = await req.json();
+    const rows: DescriptionRow[] = body.rows ?? [];
+
+    const cap = ROW_CAPS[tier] ?? 5;
+    if (rows.length > cap) {
+      return new Response(
+        JSON.stringify({
+          error: `Your plan allows AI descriptions for up to ${cap} rows at a time. You submitted ${rows.length}.`,
+          cap,
+          tier,
+        }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const openAiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!openAiKey) {
+      return new Response(JSON.stringify({ error: "OpenAI API not configured" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const results: DescriptionResult[] = [];
+
+    for (const row of rows) {
+      try {
+        // Build a concise prompt from the row data
+        const specificsText =
+          row.itemSpecifics && Object.keys(row.itemSpecifics).length > 0
+            ? Object.entries(row.itemSpecifics)
+                .map(([k, v]) => `${k}: ${v}`)
+                .join(", ")
+            : "N/A";
+
+        const conditionLabel =
+          (row.condition ?? "PRE_OWNED_GOOD")
+            .replace(/_/g, " ")
+            .toLowerCase()
+            .replace(/\b\w/g, (c) => c.toUpperCase());
+
+        const prompt = `Write a compelling eBay listing description for this item.
+
+Title: ${row.title}
+Condition: ${conditionLabel}
+Item Specifics: ${specificsText}
+
+Requirements:
+- 3–5 short paragraphs, plain text only (no HTML, no bullet lists)
+- Lead with the most compelling feature or value
+- Mention condition honestly
+- Include relevant details from the item specifics
+- End with a brief buyer confidence statement (fast shipping, returns accepted, etc.)
+- Max 500 words
+- Do NOT include the title as a heading
+- Do NOT make up facts not provided above`;
+
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${openAiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: [
+              {
+                role: "system",
+                content:
+                  "You are an expert eBay listing copywriter. Write clear, honest, persuasive descriptions that help items sell.",
+              },
+              { role: "user", content: prompt },
+            ],
+            max_tokens: 600,
+            temperature: 0.7,
+          }),
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`OpenAI error ${response.status}: ${errText.slice(0, 200)}`);
+        }
+
+        const data = await response.json();
+        const description = data.choices?.[0]?.message?.content?.trim() ?? "";
+
+        results.push({ rowIndex: row.rowIndex, description });
+
+        // Small delay between rows to stay within OpenAI rate limits
+        if (rows.length > 1) {
+          await new Promise((r) => setTimeout(r, 300));
+        }
+      } catch (err: any) {
+        console.error(`Row ${row.rowIndex} description error:`, err.message);
+        results.push({
+          rowIndex: row.rowIndex,
+          description: "",
+          error: err.message || "Failed to generate description",
+        });
+      }
+    }
+
+    return new Response(JSON.stringify({ results, tier, cap }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (err: any) {
+    console.error("bulk-generate-descriptions error:", err);
+    return new Response(JSON.stringify({ error: err.message || "Internal error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
