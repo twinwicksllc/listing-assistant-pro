@@ -105,6 +105,11 @@ async function fetchAnalyticsForWindow(
       const conversionRate = getMetric("SALES_CONVERSION_RATE");
       const transactions = Math.round(getMetric("TRANSACTION"));
       
+      // Enhanced logging for transactions
+      if (transactions > 0) {
+        console.log(`Analytics API (${days}d): Listing ${listingKey} has ${transactions} transaction(s)`);
+      }
+      
       result[listingKey] = {
         views,
         impressions,
@@ -113,7 +118,8 @@ async function fetchAnalyticsForWindow(
         transactions,
       };
     }
-    console.log(`Analytics API (${days}d): Loaded metrics for ${Object.keys(result).length} listings`);
+    const totalTransactions = Object.values(result).reduce((sum, r) => sum + r.transactions, 0);
+    console.log(`Analytics API (${days}d): Loaded metrics for ${Object.keys(result).length} listings, total transactions: ${totalTransactions}`);
   } catch (e) {
     console.error(`Analytics API error (${days}d, non-fatal):`, e);
   }
@@ -159,7 +165,7 @@ function mergeAnalytics(
     });
   }
   
-  return {
+  const result = {
     // 30d is the "primary" for backward compat fields
     views: s30?.views ?? 0,
     impressions: s30?.impressions ?? 0,
@@ -177,6 +183,13 @@ function mergeAnalytics(
     transactions30d: s30?.transactions ?? 0,
     transactions90d: s90?.transactions ?? 0,
   };
+  
+  // Log if any transactions are found
+  if (result.transactions > 0 || result.transactions7d > 0 || result.transactions30d > 0 || result.transactions90d > 0) {
+    console.log(`mergeAnalytics: ${listingId || sku} - transactions7d=${result.transactions7d}, transactions30d=${result.transactions30d}, transactions90d=${result.transactions90d}`);
+  }
+  
+  return result;
 }
 
 // ─── Fetch WatchCount + QuestionCount via GetItem ────────────────────────────
