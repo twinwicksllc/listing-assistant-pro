@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, ArrowRight, Layers, Sparkles, Send, Download,
-  CheckCircle, AlertCircle, Crown, Loader2, RefreshCw, Info,
+  CheckCircle, AlertCircle, Crown, Loader2, RefreshCw, Info, HelpCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,6 +13,7 @@ import BulkTemplateCard from "@/components/BulkTemplateCard";
 import BulkColumnMapper from "@/components/BulkColumnMapper";
 import BulkDataTable from "@/components/BulkDataTable";
 import BulkProgressBar from "@/components/BulkProgressBar";
+import BulkInstructionsModal from "@/components/BulkInstructionsModal";
 import { EbayPolicySelector } from "@/components/EbayPolicySelector";
 import type { SelectedPolicies } from "@/types/ebay-policies";
 import type { BulkRow, BulkRowState, BulkPublishResult, ColumnMapping } from "@/types/bulk-listing";
@@ -60,6 +61,9 @@ export default function BulkListingPage() {
   const [publishResults, setPublishResults] = useState<BulkPublishResult[]>([]);
   const [publishSummary, setPublishSummary] = useState({ published: 0, failed: 0, total: 0 });
   const [publishDone, setPublishDone] = useState(false);
+
+  // Instructions modal
+  const [showInstructions, setShowInstructions] = useState(false);
 
   // Plan gating
   const canBulkPublish = isPro || isShop || isUnlimited;
@@ -368,9 +372,13 @@ export default function BulkListingPage() {
           <Layers className="w-5 h-5 text-primary" />
           <h1 className="font-semibold text-foreground">Bulk Listing Generator</h1>
         </div>
-        {rows.length > 0 && (
-          <span className="ml-auto text-xs text-muted-foreground">{rows.length} rows</span>
-        )}
+        <button
+          onClick={() => setShowInstructions(true)}
+          className="ml-auto text-primary hover:text-primary/80 text-sm font-medium flex items-center gap-1.5 transition-colors"
+        >
+          <HelpCircle className="w-4 h-4" />
+          How It Works
+        </button>
       </header>
 
       {/* Step indicator */}
@@ -709,6 +717,9 @@ export default function BulkListingPage() {
       </div>
 
       <BottomNav />
+      
+      {/* Instructions Modal */}
+      <BulkInstructionsModal open={showInstructions} onOpenChange={setShowInstructions} />
     </div>
   );
 }
