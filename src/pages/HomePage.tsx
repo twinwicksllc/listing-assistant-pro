@@ -1,4 +1,4 @@
-import { Camera, Upload, Sparkles, X, ArrowRight, ImagePlus, Mic, MicOff, Loader2, LogOut, Wand2, HelpCircle } from "lucide-react";
+import { Camera, Upload, Sparkles, X, ArrowRight, ImagePlus, Mic, MicOff, Loader2, LogOut, Wand2, HelpCircle, Layers } from "lucide-react";
 import teckstartLogo from "@/assets/teckstart-logo.png";
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -350,6 +350,15 @@ export default function HomePage() {
               >
                 <Upload className="w-4 h-4" />
                 {isMobile ? "Upload from Gallery" : "Browse Files"}
+              </button>
+
+              {/* Bulk Listing shortcut */}
+              <button
+                onClick={() => navigate("/bulk")}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-primary/30 bg-primary/5 text-primary text-sm font-medium transition-colors hover:bg-primary/10"
+              >
+                <Layers className="w-4 h-4" />
+                Bulk List (CSV/Excel)
               </button>
             </div>
           ) : (
