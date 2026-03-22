@@ -1,3 +1,4 @@
+// v2: Fix eBay API status check - treat 4xx as reachable (API is responding)
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
@@ -55,8 +56,9 @@ serve(async (req) => {
       const resp = await fetch(`${apiBase}/buy/browse/v1/item_summary/search?q=test&limit=1`, {
         headers: { "Content-Type": "application/json" },
       });
-      // 200 or 401 both mean the API is reachable
-      ebayStatus.ok = resp.status === 200 || resp.status === 401 || resp.status === 403;
+      // Any 2xx, 3xx, 4xx status means the API is reachable (5xx are actual outages)
+      // 400 is expected without auth - it means the endpoint exists and is responding
+      ebayStatus.ok = resp.status >= 200 && resp.status < 500;
       if (!ebayStatus.ok) ebayStatus.error = `Status ${resp.status}`;
     } catch (e) {
       ebayStatus.error = e instanceof Error ? e.message : "eBay unreachable";
