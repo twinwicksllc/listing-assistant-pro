@@ -82,6 +82,13 @@ async function fetchAnalyticsForWindow(
     // Log first record structure for debugging
     if (records.length > 0) {
       console.log(`Analytics API (${days}d): First record structure:`, JSON.stringify(records[0]).substring(0, 300));
+      // Log TRANSACTION metric specifically
+      const transactionIdx = metricHeaders.indexOf("TRANSACTION");
+      if (transactionIdx >= 0 && records[0].metricValues) {
+        console.log(`Analytics API (${days}d): TRANSACTION metric - idx=${transactionIdx}, value=${records[0].metricValues[transactionIdx]?.value}`);
+      } else {
+        console.log(`Analytics API (${days}d): TRANSACTION metric not found in response! metricHeaders: ${metricHeaders.join(", ")}`);
+      }
     }
     
     for (const record of records) {
@@ -107,6 +114,11 @@ async function fetchAnalyticsForWindow(
       const ctr = getMetric("CLICK_THROUGH_RATE");
       const conversionRate = getMetric("SALES_CONVERSION_RATE");
       const transactions = Math.round(getMetric("TRANSACTION"));
+      
+      // Enhanced logging for transactions - log ALL records for first few listings
+      if (Object.keys(result).length < 5) {
+        console.log(`Analytics API (${days}d): Listing ${listingKey} - views=${views}, impressions=${impressions}, transactions=${transactions}`);
+      }
       
       // Enhanced logging for transactions
       if (transactions > 0) {
