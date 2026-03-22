@@ -165,7 +165,7 @@ serve(async (req) => {
       console.log(`[ebay-pricing] All prices: [${soldItems.map(i => i.price).join(", ")}]`);
     }
 
-    const prices = soldItems.map((i: any) => i.price);
+    const prices = soldItems.map((i: any) => i.price).sort((a: number, b: number) => a - b);
     const averagePrice =
       prices.length > 0
         ? parseFloat((prices.reduce((a: number, b: number) => a + b, 0) / prices.length).toFixed(2))
@@ -174,7 +174,46 @@ serve(async (req) => {
     const lowPrice = prices.length > 0 ? Math.min(...prices) : 0;
     const highPrice = prices.length > 0 ? Math.max(...prices) : 0;
 
-    console.log(`[ebay-pricing] Computed prices: avg=${averagePrice}, low=${lowPrice}, high=${highPrice}, count=${prices.length}`);
+    // Median price
+    const medianPrice = (() => {
+      if (prices.length === 0) return 0;
+      const mid = Math.floor(prices.length / 2);
+      return prices.length % 2 === 0
+        ? parseFloat(((prices[mid - 1] + prices[mid]) / 2).toFixed(2))
+        : prices[mid];
+    })();
+
+    // Percentile stats (p25, p75) for IQR-based pricing
+    const p25 = (() => {
+      if (prices.length === 0) return 0;
+      const idx = Math.max(0, Math.ceil(0.25 * prices.length) - 1);
+      return prices[idx];
+    })();
+
+    const p75 = (() => {
+      if (prices.length === 0) return 0;
+      const idx = Math.max(0, Math.ceil(0.75 * prices.length) - 1);
+      return prices[idx];
+    })();
+
+    // Price histogram buckets (5 buckets for mini chart)
+    const histogram: { bucket: string; count: number; min: number; max: number }[] = [];
+    if (prices.length > 0) {
+      const bucketSize = (highPrice - lowPrice) / 5 || 1;
+      for (let i = 0; i < 5; i++) {
+        const bucketMin = lowPrice + i * bucketSize;
+        const bucketMax = bucketMin + bucketSize;
+        const count = prices.filter((p: number) => p >= bucketMin && (i === 4 ? p <= bucketMax : p < bucketMax)).length;
+        histogram.push({
+          bucket: `$${bucketMin.toFixed(0)}–$${bucketMax.toFixed(0)}`,
+          count,
+          min: bucketMin,
+          max: bucketMax,
+        });
+      }
+    }
+
+    console.log(`[ebay-pricing] Computed prices: avg=${averagePrice}, low=${lowPrice}, high=${highPrice}, median=${medianPrice}, count=${prices.length}`);
 
     return new Response(
       JSON.stringify({
@@ -182,6 +221,10 @@ serve(async (req) => {
         averagePrice,
         lowPrice,
         highPrice,
+        medianPrice,
+        p25,
+        p75,
+        histogram,
         totalFound: items.length,
         query,
       }),
