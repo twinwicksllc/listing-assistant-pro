@@ -10,6 +10,12 @@ import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContai
 
 const ADMIN_EMAIL = "twinwicksllc@gmail.com";
 
+// Helper function to format tokens in millions with 3 decimals
+const formatTokensInMillions = (tokens: number): string => {
+  const millions = tokens / 1_000_000;
+  return millions.toFixed(3) + "M";
+};
+
 interface SystemData {
   stripe: { mode: string; activeSubscriptions: number; error: string };
   ebay: { ok: boolean; error: string };
@@ -193,7 +199,7 @@ export default function AdminPage() {
                     <div>
                       <p className="text-sm font-medium text-foreground">Gemini AI</p>
                       <p className="text-xs text-muted-foreground">
-                        {data.gemini.totalCalls} calls · {(data.gemini.totalTokens ?? 0).toLocaleString()} tokens (30d)
+                        {data.gemini.totalCalls} calls · {formatTokensInMillions(data.gemini.totalTokens ?? 0)} tokens (30d)
                       </p>
                     </div>
                   </div>
@@ -234,7 +240,7 @@ export default function AdminPage() {
                   <span className="text-[10px] font-medium uppercase tracking-wide">Est. AI Cost</span>
                 </div>
                 <p className="text-2xl font-bold text-foreground">${(data.gemini.estimatedCost ?? 0).toFixed(4)}</p>
-                <p className="text-[10px] text-muted-foreground">{(data.gemini.totalTokens ?? 0).toLocaleString()} tokens</p>
+                <p className="text-[10px] text-muted-foreground">{formatTokensInMillions(data.gemini.totalTokens ?? 0)} tokens</p>
               </div>
             </div>
 
@@ -337,7 +343,7 @@ export default function AdminPage() {
                   <Code className="w-3.5 h-3.5" />
                   <span className="text-[10px] font-medium uppercase tracking-wide">Input Tokens</span>
                 </div>
-                <p className="text-2xl font-bold text-foreground">{(data.gemini.inputTokens ?? 0).toLocaleString()}</p>
+                <p className="text-2xl font-bold text-foreground">{formatTokensInMillions(data.gemini.inputTokens ?? 0)}</p>
                 <p className="text-[10px] text-muted-foreground">${((data.gemini.inputTokens ?? 0) * 0.00000125).toFixed(4)}</p>
               </div>
 
@@ -346,7 +352,7 @@ export default function AdminPage() {
                   <Code className="w-3.5 h-3.5" />
                   <span className="text-[10px] font-medium uppercase tracking-wide">Output Tokens</span>
                 </div>
-                <p className="text-2xl font-bold text-foreground">{(data.gemini.outputTokens ?? 0).toLocaleString()}</p>
+                <p className="text-2xl font-bold text-foreground">{formatTokensInMillions(data.gemini.outputTokens ?? 0)}</p>
                 <p className="text-[10px] text-muted-foreground">${((data.gemini.outputTokens ?? 0) * 0.000005).toFixed(4)}</p>
               </div>
 
@@ -387,8 +393,8 @@ export default function AdminPage() {
                           <tr key={funcName} className="hover:bg-secondary/50 transition-colors">
                             <td className="px-4 py-2 text-foreground font-medium">{funcName}</td>
                             <td className="px-4 py-2 text-right text-muted-foreground">{stats.calls}</td>
-                            <td className="px-4 py-2 text-right text-muted-foreground">{(stats.inputTokens ?? 0).toLocaleString()}</td>
-                            <td className="px-4 py-2 text-right text-muted-foreground">{(stats.outputTokens ?? 0).toLocaleString()}</td>
+                            <td className="px-4 py-2 text-right text-muted-foreground">{formatTokensInMillions(stats.inputTokens ?? 0)}</td>
+                            <td className="px-4 py-2 text-right text-muted-foreground">{formatTokensInMillions(stats.outputTokens ?? 0)}</td>
                             <td className="px-4 py-2 text-right font-semibold text-foreground">
                               ${stats.cost.toFixed(4)}
                               <div className="text-[10px] text-muted-foreground">
