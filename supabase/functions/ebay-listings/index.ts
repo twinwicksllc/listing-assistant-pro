@@ -591,7 +591,7 @@ serve(async (req) => {
     };
 
     const offersResp = await fetch(
-      `${apiBase}/sell/inventory/v1/offer?limit=100`,
+      `${apiBase}/sell/inventory/v1/offer?limit=500`,
       { headers: ebayHeaders }
     );
 
