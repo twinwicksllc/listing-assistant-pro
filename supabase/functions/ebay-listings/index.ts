@@ -397,14 +397,16 @@ async function fetchListingsViaTradingAPI(
     ? "https://api.sandbox.ebay.com/ws/api.dll"
     : "https://api.ebay.com/ws/api.dll";
 
-  const xml = `<?xml version="1.0" encoding="utf-8"?>
+  // Helper to fetch one page from Trading API
+  const fetchTradingPage = async (pageNumber: number): Promise<string | null> => {
+    const xml = `<?xml version="1.0" encoding="utf-8"?>
 <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <ActiveList>
     <Include>true</Include>
     <Sort>TimeLeft</Sort>
     <Pagination>
       <EntriesPerPage>100</EntriesPerPage>
-      <PageNumber>1</PageNumber>
+      <PageNumber>${pageNumber}</PageNumber>
     </Pagination>
   </ActiveList>
   <SoldList><Include>false</Include></SoldList>
@@ -413,7 +415,6 @@ async function fetchListingsViaTradingAPI(
   <IncludeWatchCount>true</IncludeWatchCount>
 </GetMyeBaySellingRequest>`;
 
-  try {
     const resp = await fetch(tradingUrl, {
       method: "POST",
       headers: {
@@ -426,19 +427,28 @@ async function fetchListingsViaTradingAPI(
       body: xml,
     });
 
-    const xmlText = await resp.text();
-    console.log("Trading API response status:", resp.status, "— first 800 chars:", xmlText.substring(0, 800));
-
     if (!resp.ok) {
+      console.error(`Trading API page ${pageNumber} error: ${resp.status}`);
+      return null;
+    }
+    return await resp.text();
+  };
+
+  try {
+    // Fetch page 1 first to determine total pages
+    const firstPageXml = await fetchTradingPage(1);
+    if (!firstPageXml) {
       return new Response(
-        JSON.stringify({ listings: [], error: `Trading API error ${resp.status}` }),
+        JSON.stringify({ listings: [], error: "Trading API error on page 1" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (xmlText.includes("<Ack>Failure</Ack>") || xmlText.includes("<Ack>PartialFailure</Ack>")) {
-      const errMsg = xmlText.match(/<LongMessage>([\s\S]*?)<\/LongMessage>/)?.[1] ||
-                     xmlText.match(/<ShortMessage>([\s\S]*?)<\/ShortMessage>/)?.[1] ||
+    console.log("Trading API page 1 status: 200 — first 800 chars:", firstPageXml.substring(0, 800));
+
+    if (firstPageXml.includes("<Ack>Failure</Ack>") || firstPageXml.includes("<Ack>PartialFailure</Ack>")) {
+      const errMsg = firstPageXml.match(/<LongMessage>([\s\S]*?)<\/LongMessage>/)?.[1] ||
+                     firstPageXml.match(/<ShortMessage>([\s\S]*?)<\/ShortMessage>/)?.[1] ||
                      "Unknown Trading API error";
       return new Response(
         JSON.stringify({ listings: [], error: `eBay Trading API error: ${errMsg}` }),
@@ -446,17 +456,33 @@ async function fetchListingsViaTradingAPI(
       );
     }
 
-    const activeListMatch = xmlText.match(/<ActiveList[^>]*>([\s\S]*?)<\/ActiveList>/);
-    if (!activeListMatch) {
-      return new Response(
-        JSON.stringify({ listings: [] }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // Extract total pages from pagination info
+    const totalPages = parseInt(firstPageXml.match(/<TotalNumberOfPages>(\d+)<\/TotalNumberOfPages>/)?.[1] || "1", 10);
+    const totalEntries = parseInt(firstPageXml.match(/<TotalNumberOfEntries>(\d+)<\/TotalNumberOfEntries>/)?.[1] || "0", 10);
+    console.log(`Trading API: totalPages=${totalPages}, totalEntries=${totalEntries}`);
+
+    // Collect all XML pages
+    const allXmlPages: string[] = [firstPageXml];
+    if (totalPages > 1) {
+      const pagePromises = [];
+      for (let p = 2; p <= totalPages; p++) {
+        pagePromises.push(fetchTradingPage(p));
+      }
+      const extraPages = await Promise.all(pagePromises);
+      for (const pg of extraPages) {
+        if (pg) allXmlPages.push(pg);
+      }
     }
+    console.log(`Trading API: fetched ${allXmlPages.length} pages`);
 
     const listings: any[] = [];
-    const activeListContent = activeListMatch[1];
-    const itemMatches = activeListContent.matchAll(/<Item>([\s\S]*?)<\/Item>/g);
+
+    for (const xmlText of allXmlPages) {
+      const activeListMatch = xmlText.match(/<ActiveList[^>]*>([\s\S]*?)<\/ActiveList>/);
+      if (!activeListMatch) continue;
+
+      const activeListContent = activeListMatch[1];
+      const itemMatches = activeListContent.matchAll(/<Item>([\s\S]*?)<\/Item>/g);
 
     for (const match of itemMatches) {
       const item = match[1];
@@ -511,7 +537,10 @@ async function fetchListingsViaTradingAPI(
           transactions: 0, transactions7d: 0, transactions30d: 0, transactions90d: 0,
         });
       }
-    }
+    } // end for itemMatches
+    } // end for allXmlPages
+
+    console.log(`Trading API fallback: collected ${listings.length} active listings across all pages`);
 
     // Fetch all three analytics windows + real order counts in parallel
     const ebayHeaders = {
