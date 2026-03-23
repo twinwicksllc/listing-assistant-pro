@@ -18,6 +18,7 @@ export default function PriceRecommenderCard({
   metalType = "none",
   metalWeightOz = 0,
   meltValue = null,
+  spotPrices = null,
   onApplyPrice,
   compact = false,
 }: PriceRecommenderProps) {
@@ -250,10 +251,28 @@ export default function PriceRecommenderCard({
           {recommendation.meltFloor && recommendation.meltFloor > 0 && (
             <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
               <Shield className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-amber-800 dark:text-amber-200">
-                <span className="font-medium">Melt floor: ${recommendation.meltFloor.toFixed(2)}</span>
-                {" "}— Don't list below this to avoid selling at a loss
-              </p>
+              <div className="flex-1">
+                <p className="text-xs text-amber-800 dark:text-amber-200">
+                  <span className="font-semibold">Melt floor: ${recommendation.meltFloor.toFixed(2)}</span>
+                  {" "}— Don't list below this to avoid selling at a loss
+                </p>
+                {spotPrices && metalWeightOz > 0 && metalType && metalType !== "none" && (() => {
+                  const spotPrice =
+                    metalType === "gold" ? spotPrices.gold :
+                    metalType === "silver" ? spotPrices.silver :
+                    metalType === "platinum" ? spotPrices.platinum : 0;
+                  const metalLabel =
+                    metalType === "gold" ? "Gold" :
+                    metalType === "silver" ? "Silver" :
+                    metalType === "platinum" ? "Platinum" : "";
+                  if (!spotPrice) return null;
+                  return (
+                    <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-0.5 font-mono">
+                      {metalLabel} @ ${spotPrice.toFixed(2)}/oz × {metalWeightOz} oz = ${(spotPrice * metalWeightOz).toFixed(2)} melt
+                    </p>
+                  );
+                })()}
+              </div>
             </div>
           )}
 

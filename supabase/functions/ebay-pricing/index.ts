@@ -16,42 +16,182 @@ interface SoldItem {
   itemUrl?: string | null;
 }
 
-// Helper function to get OAuth app token for Browse API
-async function getEbayAppToken(): Promise<string> {
-  const clientId = Deno.env.get("EBAY_CLIENT_ID");
-  const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
-  if (!clientId || !clientSecret) {
-    throw new Error("eBay API credentials not configured");
-  }
+// ----------------------------------------------------------------
+// Scrape eBay completed/sold listings via Jina AI reader.
+// Jina converts the page to clean markdown, bypassing bot detection.
+// ----------------------------------------------------------------
+async function scrapeEbaySoldListings(query: string): Promise<SoldItem[]> {
+  const encoded = encodeURIComponent(query);
+  // LH_Complete=1&LH_Sold=1 → completed AND sold listings only
+  // _sop=13 → sort by most recently ended
+  // _ipg=50 → 50 results per page
+  const ebayUrl = `https://www.ebay.com/sch/i.html?_nkw=${encoded}&LH_Complete=1&LH_Sold=1&_ipg=50&_sop=13`;
+  const jinaUrl = `https://r.jina.ai/${ebayUrl}`;
 
-  const credentials = btoa(`${clientId}:${clientSecret}`);
-  const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-  const tokenUrl =
-    ebayEnv === "production"
-      ? "https://api.ebay.com/identity/v1/oauth2/token"
-      : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
+  console.log(`[ebay-pricing] Fetching via Jina: ${jinaUrl.substring(0, 100)}...`);
 
-  console.log(`[ebay-pricing] Fetching OAuth token from ${tokenUrl}`);
-
-  const resp = await fetch(tokenUrl, {
-    method: "POST",
+  const resp = await fetch(jinaUrl, {
     headers: {
-      Authorization: `Basic ${credentials}`,
-      "Content-Type": "application/x-www-form-urlencoded",
+      "Accept": "text/plain,text/markdown,*/*",
+      "User-Agent": "Mozilla/5.0 (compatible; ListingAssistantBot/1.0)",
     },
-    body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
+    signal: AbortSignal.timeout(20000),
   });
 
   if (!resp.ok) {
-    const txt = await resp.text();
-    console.error(`[ebay-pricing] Token error: ${resp.status} - ${txt}`);
-    throw new Error(`Failed to get eBay token: ${resp.status}`);
+    console.error(`[ebay-pricing] Jina fetch failed: ${resp.status}`);
+    return [];
   }
 
-  const data = await resp.json();
-  return data.access_token;
+  const content = await resp.text();
+  console.log(`[ebay-pricing] Jina content length: ${content.length} chars`);
+
+  if (content.length < 200) {
+    console.warn(`[ebay-pricing] Jina returned suspiciously short content`);
+    return [];
+  }
+
+  return parseSoldItemsFromMarkdown(content, query);
 }
 
+// ----------------------------------------------------------------
+// Parse sold items from Jina markdown output.
+// eBay's Jina output contains lines like:
+//   ## [Title](https://www.ebay.com/itm/...)
+//   Sold  · $XX.XX
+// or price patterns like:
+//   **$XX.XX**
+// ----------------------------------------------------------------
+function parseSoldItemsFromMarkdown(content: string, query: string): SoldItem[] {
+  const items: SoldItem[] = [];
+  const lines = content.split("\n");
+
+  // Strategy 1: Look for price patterns near "Sold" markers
+  // eBay sold listings in Jina markdown typically have dollar amounts
+  // Pattern: lines containing $ amounts that look like item prices
+  const priceLineRegex = /\$\s*([\d,]+(?:\.\d{1,2})?)/g;
+
+  // Extract all price occurrences from content
+  // Filter to realistic coin/bullion price range ($1 - $50,000)
+  const allPrices: number[] = [];
+  const priceMatches = content.matchAll(/(?:sold|price|bid)[^\n$]*\$\s*([\d,]+(?:\.\d{2})?)/gi);
+  for (const match of priceMatches) {
+    const price = parseFloat(match[1].replace(/,/g, ""));
+    if (price >= 1 && price <= 50000) {
+      allPrices.push(price);
+    }
+  }
+
+  // Strategy 2: Extract structured listing blocks
+  // Jina outputs eBay listings as markdown sections with title links + price
+  const listingBlocks = content.split(/\n(?=\[|\!\[|##\s|\*\*)/);
+
+  for (const block of listingBlocks) {
+    // Look for a price in this block
+    const priceMatch = block.match(/\$\s*([\d,]+(?:\.\d{1,2})?)/);
+    if (!priceMatch) continue;
+
+    const price = parseFloat(priceMatch[1].replace(/,/g, ""));
+    if (price < 1 || price > 50000) continue;
+
+    // Skip shipping cost lines (usually small amounts like $5.99)
+    // but keep if it's the only price in the block
+    const titleMatch = block.match(/\[([^\]]{10,120})\]\(https?:\/\/www\.ebay\.com\/itm\/[^)]+\)/);
+    const urlMatch = block.match(/\((https?:\/\/www\.ebay\.com\/itm\/[^)]+)\)/);
+    const imageMatch = block.match(/!\[[^\]]*\]\((https?:\/\/[^)]+)\)/);
+
+    // Determine condition from block text
+    let condition = "Pre-Owned";
+    const blockLower = block.toLowerCase();
+    if (blockLower.includes("new in") || blockLower.includes("brand new") || blockLower.includes("sealed")) {
+      condition = "New";
+    } else if (blockLower.includes("uncirculated") || blockLower.includes("ms-") || blockLower.includes(" ms ")) {
+      condition = "Uncirculated";
+    } else if (blockLower.includes("circulated")) {
+      condition = "Circulated";
+    }
+
+    const title = titleMatch ? titleMatch[1].trim() : query;
+    const itemUrl = urlMatch ? urlMatch[1] : null;
+    const imageUrl = imageMatch ? imageMatch[1] : null;
+
+    items.push({
+      title,
+      price,
+      currency: "USD",
+      condition,
+      itemUrl,
+      imageUrl,
+    });
+  }
+
+  // If structured parsing yielded results, return them (deduplicated by price+title)
+  if (items.length >= 2) {
+    console.log(`[ebay-pricing] Parsed ${items.length} structured items from Jina`);
+    // Deduplicate: remove items with exact same price AND near-same title
+    const seen = new Set<string>();
+    const deduped = items.filter((item) => {
+      const key = `${item.price}-${item.title.substring(0, 30)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return deduped.slice(0, 15);
+  }
+
+  // Fallback: use raw price extraction if structured parsing failed
+  if (allPrices.length >= 2) {
+    console.log(`[ebay-pricing] Falling back to raw price extraction: ${allPrices.length} prices`);
+    return allPrices.slice(0, 15).map((price) => ({
+      title: query,
+      price,
+      currency: "USD",
+      condition: "Pre-Owned",
+      itemUrl: null,
+      imageUrl: null,
+    }));
+  }
+
+  console.log(`[ebay-pricing] No sold items parsed from Jina content`);
+  return [];
+}
+
+// ----------------------------------------------------------------
+// Narrow the title to 4-6 meaningful search tokens
+// Same logic as ebay-competitor-search to stay consistent
+// ----------------------------------------------------------------
+function deriveSearchQuery(title: string): string {
+  const stopWords = new Set([
+    "a", "an", "the", "and", "or", "of", "in", "for", "to", "with",
+    "lot", "set", "collection", "item", "listing", "ebay",
+    "certified", "uncirculated", "beautiful", "stunning", "rare",
+    "vintage", "antique", "original", "authentic",
+  ]);
+
+  const tokens = title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((t) => t.length > 1 && !stopWords.has(t));
+
+  return tokens.slice(0, 6).join(" ");
+}
+
+// ----------------------------------------------------------------
+// Compute median
+// ----------------------------------------------------------------
+function median(nums: number[]): number {
+  if (nums.length === 0) return 0;
+  const sorted = [...nums].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 !== 0
+    ? sorted[mid]
+    : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+// ----------------------------------------------------------------
+// Main handler
+// ----------------------------------------------------------------
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -66,144 +206,53 @@ serve(async (req) => {
       });
     }
 
-    const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-    const apiBase =
-      ebayEnv === "production"
-        ? "https://api.ebay.com"
-        : "https://api.sandbox.ebay.com";
+    // Derive a focused search query from the full title
+    const searchQuery = deriveSearchQuery(query);
+    console.log(`[ebay-pricing] Title: "${query}" → Search: "${searchQuery}"`);
 
-    console.log(`[ebay-pricing] Starting search: query="${query}", env=${ebayEnv}`);
+    // Scrape sold listings via Jina
+    let soldItems = await scrapeEbaySoldListings(searchQuery);
 
-    // Get OAuth token for Browse API
-    let token: string;
-    try {
-      token = await getEbayAppToken();
-      console.log(`[ebay-pricing] Successfully obtained OAuth token`);
-    } catch (tokenErr) {
-      console.error(`[ebay-pricing] Failed to get token:`, tokenErr);
-      throw tokenErr;
-    }
-
-    // Helper function to perform search with date filter on Browse API
-    const performSearch = async (daysAgo: number): Promise<any[]> => {
-      const now = new Date();
-      const startDate = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
-      const endDate = now;
-
-      // Format dates for eBay API (ISO 8601)
-      const startDateStr = startDate.toISOString();
-      const endDateStr = endDate.toISOString();
-
-      const searchParams = new URLSearchParams({
-        q: query,
-        limit: "20",
-        sort: "-price",
-        filter: `buyingOptions:{FIXED_PRICE|AUCTION},soldDate:[${startDateStr}..${endDateStr}]`,
-      });
-
-      const searchUrl = `${apiBase}/buy/browse/v1/item_summary/search?${searchParams.toString()}`;
-      console.log(`[ebay-pricing] Browse API search URL (${daysAgo}d): ${searchUrl.substring(0, 80)}...`);
-
-      const searchResp = await fetch(searchUrl, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
-          "Content-Type": "application/json",
-        },
-      });
-
-      console.log(`[ebay-pricing] Browse API response status: ${searchResp.status}`);
-
-      if (!searchResp.ok) {
-        const errorText = await searchResp.text();
-        console.error(`[ebay-pricing] Browse API error (${daysAgo}d): ${searchResp.status} - ${errorText}`);
-        return [];
+    // If not enough results with derived query, try with full query
+    if (soldItems.length < 3 && searchQuery !== query.toLowerCase()) {
+      console.log(`[ebay-pricing] Only ${soldItems.length} results with derived query, trying fuller query...`);
+      const fullerQuery = query
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .split(/\s+/)
+        .filter((t: string) => t.length > 1)
+        .slice(0, 8)
+        .join(" ");
+      const moreItems = await scrapeEbaySoldListings(fullerQuery);
+      if (moreItems.length > soldItems.length) {
+        soldItems = moreItems;
       }
-
-      const searchData = await searchResp.json();
-      const itemSummaries = searchData.itemSummaries || [];
-      
-      console.log(`[ebay-pricing] Browse API items count (${daysAgo}d): ${itemSummaries.length}`);
-      if (itemSummaries.length > 0) {
-        console.log(`[ebay-pricing] First item sample (${daysAgo}d):`, {
-          title: itemSummaries[0].title,
-          price: itemSummaries[0].price?.value,
-          condition: itemSummaries[0].condition,
-        });
-      }
-      return itemSummaries;
-    };
-
-    // Search last 30 days first
-    let items = await performSearch(30);
-
-    // If fewer than 3 results, expand to 90 days
-    if (items.length < 3) {
-      console.log(`[ebay-pricing] Only ${items.length} results in 30 days, expanding to 90 days`);
-      items = await performSearch(90);
     }
 
-    // Extract prices from Browse API results
-    console.log(`[ebay-pricing] Total items from Browse API: ${items.length}`);
-    
-    const soldItems = items
-      .filter((item: any) => item.price?.value && parseFloat(item.price.value) > 0)
-      .map((item: any) => ({
-        title: item.title,
-        price: parseFloat(item.price.value),
-        currency: item.price.currency || "USD",
-        condition: item.condition || "Not specified",
-        itemId: item.itemId,
-        imageUrl: item.image?.imageUrl || null,
-        itemUrl: item.itemWebUrl || null,
-      }))
-      .slice(0, 10);
+    console.log(`[ebay-pricing] Total sold items found: ${soldItems.length}`);
 
-    console.log(`[ebay-pricing] Valid sold items after filtering: ${soldItems.length}`);
-    if (soldItems.length > 0) {
-      console.log(`[ebay-pricing] First item: price=${soldItems[0].price}, title=${soldItems[0].title}`);
-      console.log(`[ebay-pricing] All prices: [${soldItems.map(i => i.price).join(", ")}]`);
-    }
-
-    const prices = soldItems.map((i: any) => i.price).sort((a: number, b: number) => a - b);
+    const prices = soldItems.map((i) => i.price).sort((a, b) => a - b);
     const averagePrice =
       prices.length > 0
-        ? parseFloat((prices.reduce((a: number, b: number) => a + b, 0) / prices.length).toFixed(2))
+        ? parseFloat((prices.reduce((a, b) => a + b, 0) / prices.length).toFixed(2))
         : 0;
 
     const lowPrice = prices.length > 0 ? Math.min(...prices) : 0;
     const highPrice = prices.length > 0 ? Math.max(...prices) : 0;
-
-    // Median price
-    const medianPrice = (() => {
-      if (prices.length === 0) return 0;
-      const mid = Math.floor(prices.length / 2);
-      return prices.length % 2 === 0
-        ? parseFloat(((prices[mid - 1] + prices[mid]) / 2).toFixed(2))
-        : prices[mid];
-    })();
+    const medianPrice = parseFloat(median(prices).toFixed(2));
 
     // Percentile stats (p25, p75) for IQR-based pricing
-    const p25 = (() => {
-      if (prices.length === 0) return 0;
-      const idx = Math.max(0, Math.ceil(0.25 * prices.length) - 1);
-      return prices[idx];
-    })();
-
-    const p75 = (() => {
-      if (prices.length === 0) return 0;
-      const idx = Math.max(0, Math.ceil(0.75 * prices.length) - 1);
-      return prices[idx];
-    })();
+    const p25 = prices.length > 0 ? prices[Math.max(0, Math.ceil(0.25 * prices.length) - 1)] : 0;
+    const p75 = prices.length > 0 ? prices[Math.max(0, Math.ceil(0.75 * prices.length) - 1)] : 0;
 
     // Price histogram buckets (5 buckets for mini chart)
     const histogram: { bucket: string; count: number; min: number; max: number }[] = [];
-    if (prices.length > 0) {
+    if (prices.length > 0 && highPrice > lowPrice) {
       const bucketSize = (highPrice - lowPrice) / 5 || 1;
       for (let i = 0; i < 5; i++) {
         const bucketMin = lowPrice + i * bucketSize;
         const bucketMax = bucketMin + bucketSize;
-        const count = prices.filter((p: number) => p >= bucketMin && (i === 4 ? p <= bucketMax : p < bucketMax)).length;
+        const count = prices.filter((p) => p >= bucketMin && (i === 4 ? p <= bucketMax : p < bucketMax)).length;
         histogram.push({
           bucket: `$${bucketMin.toFixed(0)}–$${bucketMax.toFixed(0)}`,
           count,
@@ -213,7 +262,7 @@ serve(async (req) => {
       }
     }
 
-    console.log(`[ebay-pricing] Computed prices: avg=${averagePrice}, low=${lowPrice}, high=${highPrice}, median=${medianPrice}, count=${prices.length}`);
+    console.log(`[ebay-pricing] Stats: avg=${averagePrice}, low=${lowPrice}, high=${highPrice}, median=${medianPrice}, n=${prices.length}`);
 
     return new Response(
       JSON.stringify({
@@ -225,8 +274,9 @@ serve(async (req) => {
         p25,
         p75,
         histogram,
-        totalFound: items.length,
-        query,
+        totalFound: soldItems.length,
+        query: searchQuery,
+        originalQuery: query,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

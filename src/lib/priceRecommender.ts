@@ -135,12 +135,12 @@ function buildSuggestions(
 
   // Melt floor: only for precious metals
   if (meltFloor && meltFloor > 0) {
-    const floorPrice = round2(meltFloor * 1.05); // 5% above melt
+    const floorPrice = round2(meltFloor * 1.25); // 25% above melt to cover eBay fees + margin
     suggestions.push({
       strategy: "floor",
       price: floorPrice,
       label: "Melt Floor",
-      description: "5% above melt value — protect your investment",
+      description: "25% above melt value — covers eBay fees & protects profit",
       badge: "Metal Floor",
       badgeColor: "text-amber-700 dark:text-amber-400",
       badgeBg: "bg-amber-50 dark:bg-amber-950/40",
@@ -198,13 +198,10 @@ export function buildPriceRecommendation(
     suggestions.find((s) => s.strategy === "match") ??
     suggestions[0];
 
-  // If melt floor is above the match price, recommend floor instead
-  if (
-    meltFloor &&
-    meltFloor > 0 &&
-    recommended.price < meltFloor
-  ) {
-    recommended = suggestions.find((s) => s.strategy === "floor") ?? recommended;
+  // If melt floor strategy price is above the match price, recommend floor instead
+  const floorSuggestion = suggestions.find((s) => s.strategy === "floor");
+  if (floorSuggestion && recommended.price < floorSuggestion.price) {
+    recommended = floorSuggestion;
   }
 
   return {

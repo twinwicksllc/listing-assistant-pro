@@ -67,6 +67,7 @@ export interface PriceRecommenderProps {
   metalType?: string;
   metalWeightOz?: number;
   meltValue?: number | null;
+  spotPrices?: { gold: number; silver: number; platinum: number } | null;
   onApplyPrice?: (price: number) => void;  // Callback when user clicks "Apply"
   compact?: boolean;              // Compact mode for draft cards
 }

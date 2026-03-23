@@ -788,6 +788,7 @@ export default function AnalyzePage() {
               metalType={planFeatures.hasMeltProtection ? metalType : undefined}
               metalWeightOz={planFeatures.hasMeltProtection ? metalWeightOz : undefined}
               meltValue={planFeatures.hasMeltProtection ? meltValue : null}
+              spotPrices={planFeatures.hasMeltProtection ? spotPrices : null}
               onApplyPrice={(price) => {
                 setListingPrice(price);
                 setAuctionStartPrice(price);
