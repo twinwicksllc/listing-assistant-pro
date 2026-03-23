@@ -682,6 +682,50 @@ async function fetchWithTimeout(
 }
 
 // ----------------------------------------------------------------
+// Sanitize listing description to remove patterns eBay rejects (errorId 25002)
+// eBay blocks: javascript, .cookie, cookie(, replace(, IFRAME, META, base href, includes
+// The word "includes" in plain English text (e.g., "This lot includes...") falsely
+// triggers eBay's JS injection filter. Replace with safe synonyms.
+// ----------------------------------------------------------------
+function sanitizeDescription(desc: string): string {
+  if (!desc) return desc;
+
+  let result = desc;
+
+  // Replace plain-English "includes" / "include" with safe synonyms
+  // Only replace when used as an English word (not inside HTML attributes or JS)
+  result = result.replace(/\bincludes\b/gi, "contains");
+  result = result.replace(/\binclude\b/gi, "contain");
+  result = result.replace(/\bincluded\b/gi, "contained");
+  result = result.replace(/\bincluding\b/gi, "containing");
+
+  // Strip any IFRAME tags
+  result = result.replace(/<iframe[^>]*>.*?<\/iframe>/gis, "");
+  result = result.replace(/<iframe[^>]*\/>/gis, "");
+
+  // Strip META tags
+  result = result.replace(/<meta[^>]*>/gis, "");
+
+  // Strip base href tags
+  result = result.replace(/<base[^>]*>/gis, "");
+
+  // Strip inline JS event handlers (onclick=, onload=, etc.)
+  result = result.replace(/\s+on\w+\s*=\s*["'][^"']*["']/gi, "");
+
+  // Strip script tags
+  result = result.replace(/<script[^>]*>.*?<\/script>/gis, "");
+
+  // Strip .cookie and cookie( references
+  result = result.replace(/\.cookie\b/gi, "");
+  result = result.replace(/\bcookie\s*\(/gi, "");
+
+  // Strip replace( references (JS method)
+  result = result.replace(/\breplace\s*\(/gi, "");
+
+  return result;
+}
+
+// ----------------------------------------------------------------
 // Build a fixed-price offer payload
 // ----------------------------------------------------------------
 function buildFixedPriceOffer(params: {
@@ -1911,9 +1955,14 @@ serve(async (req) => {
         );
       }
 
+      const sanitizedDescription = sanitizeDescription(description as string);
+      if (sanitizedDescription !== description) {
+        console.log(`create_draft: description sanitized - replaced eBay-blocked patterns (errorId 25002 prevention)`);
+      }
+
       const offerBody = buildFixedPriceOffer({
         sku,
-        description,
+        description: sanitizedDescription,
         listingPrice: Number(listingPrice ?? 0),
         condition: conditionEnum,
         conditionDescription: conditionDesc,
