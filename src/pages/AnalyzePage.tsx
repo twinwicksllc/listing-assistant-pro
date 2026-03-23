@@ -389,8 +389,12 @@ export default function AnalyzePage() {
         action: data.affiliateUrl
           ? { label: "Copy Link", onClick: () => navigator.clipboard.writeText(data.affiliateUrl) }
           : undefined,
+        duration: 5000,
       });
       await recordUsage("ebay_publish");
+
+      // Success — navigate back to capture page for the next item
+      navigate("/home");
     } catch (err: any) {
       console.error("Publish error:", err);
       toast.error(err.message || "Failed to publish to eBay.");
