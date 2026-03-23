@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { optimizeImages } from "@/lib/imageOptimizer";
 import WelcomeTour, { type TourStep } from "@/components/WelcomeTour";
+import CameraSheetModal from "@/components/CameraSheetModal";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/gif", "video/mp4", "video/quicktime", "video/webm"];
 const ACCEPT_STRING = "image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif,video/mp4,video/quicktime,video/webm";
@@ -57,6 +58,7 @@ export default function HomePage() {
   const [optimizeProgress, setOptimizeProgress] = useState({ done: 0, total: 0 });
   const [imagesOptimized, setImagesOptimized] = useState(false);
   const [showTour, setShowTour] = useState(false);
+  const [showCameraModal, setShowCameraModal] = useState(false);
 
   // Voice note state
   const [recording, setRecording] = useState(false);
@@ -171,11 +173,19 @@ export default function HomePage() {
 
   const handleCapture = () => {
     if (isMobile) {
-      cameraInputRef.current?.click();
+      // Open in-app camera for multi-shot capture
+      setShowCameraModal(true);
     } else {
       galleryInputRef.current?.click();
     }
   };
+
+  const handleCameraModalDone = useCallback((photos: string[]) => {
+    if (photos.length === 0) return;
+    setStagedImages((prev) => [...prev, ...photos]);
+    setImagesOptimized(false);
+    toast.success(`${photos.length} photo${photos.length !== 1 ? "s" : ""} added`);
+  }, []);
 
   const handleGalleryUpload = () => {
     galleryInputRef.current?.click();
@@ -528,11 +538,11 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* Camera input kept as fallback (unused on mobile now) */}
       <input
         ref={cameraInputRef}
         type="file"
         accept="image/*"
-        capture="environment"
         className="hidden"
         onChange={handleFileInputChange}
       />
@@ -543,6 +553,13 @@ export default function HomePage() {
         multiple
         className="hidden"
         onChange={handleFileInputChange}
+      />
+
+      {/* Multi-shot in-app camera modal (mobile) */}
+      <CameraSheetModal
+        open={showCameraModal}
+        onClose={() => setShowCameraModal(false)}
+        onDone={handleCameraModalDone}
       />
 
       <BottomNav />
