@@ -25,8 +25,6 @@ async function getEbayAppToken(): Promise<string> {
       ? "https://api.ebay.com/identity/v1/oauth2/token"
       : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
 
-  console.log(`[market-watch-refresh] Fetching OAuth token from ${tokenUrl}`);
-
   const resp = await fetch(tokenUrl, {
     method: "POST",
     headers: {
@@ -38,8 +36,7 @@ async function getEbayAppToken(): Promise<string> {
 
   if (!resp.ok) {
     const txt = await resp.text();
-    console.error(`[market-watch-refresh] Token error: ${resp.status} - ${txt}`);
-    throw new Error(`Failed to get eBay token: ${resp.status}`);
+    throw new Error(`Failed to get eBay token: ${resp.status} - ${txt.slice(0, 100)}`);
   }
 
   const data = await resp.json();
@@ -47,7 +44,7 @@ async function getEbayAppToken(): Promise<string> {
 }
 
 // ----------------------------------------------------------------
-// Search using Browse API
+// Search active listings using Browse API
 // ----------------------------------------------------------------
 async function browseSearch(params: {
   query: string;
@@ -55,7 +52,7 @@ async function browseSearch(params: {
   ebayEnv: string;
   categoryId?: string | null;
   limit?: number;
-}): Promise<{ prices: number[]; count: number }> {
+}): Promise<{ prices: number[]; count: number; total: number }> {
   const { query, token, ebayEnv, categoryId, limit = 50 } = params;
 
   const apiBase =
@@ -74,7 +71,6 @@ async function browseSearch(params: {
   }
 
   const url = `${apiBase}/buy/browse/v1/item_summary/search?${searchParams.toString()}`;
-  console.log(`[market-watch-refresh] Browse API search: "${query}"`);
 
   const resp = await fetch(url, {
     method: "GET",
@@ -86,32 +82,121 @@ async function browseSearch(params: {
   });
 
   if (!resp.ok) {
-    const txt = await resp.text();
-    console.error(`[market-watch-refresh] Browse API error ${resp.status}: ${txt.slice(0, 200)}`);
-    return { prices: [], count: 0 };
+    console.error(`[market-watch-refresh] Browse API error ${resp.status}`);
+    return { prices: [], count: 0, total: 0 };
   }
 
   const json = await resp.json();
   const items = json?.itemSummaries ?? [];
-
-  if (!items || items.length === 0) {
-    console.log(`[market-watch-refresh] No items found for "${query}"`);
-    return { prices: [], count: 0 };
-  }
+  const total = json?.total ?? items.length;
 
   const prices: number[] = [];
-
   for (const item of items) {
     try {
       const price = parseFloat(item?.price?.value ?? "0");
-      if (!isNaN(price) && price > 0) {
-        prices.push(price);
-      }
-    } catch { /* skip malformed */ }
+      if (!isNaN(price) && price > 0) prices.push(price);
+    } catch { /* skip */ }
   }
 
-  console.log(`[market-watch-refresh] Got ${prices.length} items for "${query}"`);
-  return { prices, count: prices.length };
+  return { prices, count: prices.length, total };
+}
+
+// ----------------------------------------------------------------
+// Scrape eBay sold/completed listings via Jina reader
+// Returns sold count and price range estimates from filter sidebar
+// ----------------------------------------------------------------
+async function scrapeEbaySoldData(query: string, categoryId?: string | null): Promise<{
+  soldCount: number;
+  avgSoldPrice: number | null;
+  minSoldPrice: number | null;
+  maxSoldPrice: number | null;
+  medianSoldPrice: number | null;
+}> {
+  const encoded = encodeURIComponent(query);
+  let ebayUrl = `https://www.ebay.com/sch/i.html?_nkw=${encoded}&LH_Complete=1&LH_Sold=1&_ipg=50&_sop=13`;
+  if (categoryId) {
+    ebayUrl += `&_sacat=${categoryId}`;
+  }
+
+  const jinaUrl = `https://r.jina.ai/${ebayUrl}`;
+  console.log(`[market-watch-refresh] Fetching sold data via Jina for: "${query}"`);
+
+  let content = "";
+  try {
+    const resp = await fetch(jinaUrl, {
+      method: "GET",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; ListingAssistant/1.0)",
+        "Accept": "text/plain",
+      },
+      signal: AbortSignal.timeout(20000),
+    });
+
+    if (!resp.ok) {
+      console.warn(`[market-watch-refresh] Jina fetch failed: ${resp.status}`);
+      return { soldCount: 0, avgSoldPrice: null, minSoldPrice: null, maxSoldPrice: null, medianSoldPrice: null };
+    }
+    content = await resp.text();
+  } catch (e) {
+    console.warn(`[market-watch-refresh] Jina fetch error: ${e}`);
+    return { soldCount: 0, avgSoldPrice: null, minSoldPrice: null, maxSoldPrice: null, medianSoldPrice: null };
+  }
+
+  // Extract sold count from "All Listings (X) Filter Applied"
+  const allListingsMatch = content.match(/All Listings \(([\d,]+)\)\s+Filter Applied/);
+  let soldCount = allListingsMatch ? parseInt(allListingsMatch[1].replace(/,/g, ""), 10) : 0;
+
+  // Fallback: "X results for"
+  if (!soldCount) {
+    const resultsMatch = content.match(/([\d,]+)\+?\s+results?\s+for/i);
+    soldCount = resultsMatch ? parseInt(resultsMatch[1].replace(/,/g, ""), 10) : 0;
+  }
+
+  // Extract price range buckets from filter sidebar
+  const underMatch = content.match(/Under \$([\d,]+\.?\d*)/);
+  const rangeMatch = content.match(/\$([\d,]+\.?\d*) to \$([\d,]+\.?\d*)/);
+  const overMatch = content.match(/Over \$([\d,]+\.?\d*)/);
+
+  let avgSoldPrice: number | null = null;
+  let minSoldPrice: number | null = null;
+  let maxSoldPrice: number | null = null;
+  let medianSoldPrice: number | null = null;
+
+  if (underMatch && overMatch) {
+    const lowThreshold = parseFloat(underMatch[1].replace(/,/g, ""));
+    const highThreshold = parseFloat(overMatch[1].replace(/,/g, ""));
+    minSoldPrice = Math.round(lowThreshold * 0.5 * 100) / 100;
+    maxSoldPrice = Math.round(highThreshold * 1.5 * 100) / 100;
+    avgSoldPrice = Math.round((lowThreshold + highThreshold) / 2 * 100) / 100;
+    medianSoldPrice = avgSoldPrice;
+  } else if (rangeMatch) {
+    const rLow = parseFloat(rangeMatch[1].replace(/,/g, ""));
+    const rHigh = parseFloat(rangeMatch[2].replace(/,/g, ""));
+    avgSoldPrice = Math.round((rLow + rHigh) / 2 * 100) / 100;
+    medianSoldPrice = avgSoldPrice;
+    minSoldPrice = Math.round(rLow * 0.7 * 100) / 100;
+    maxSoldPrice = Math.round(rHigh * 1.3 * 100) / 100;
+  } else if (underMatch) {
+    const threshold = parseFloat(underMatch[1].replace(/,/g, ""));
+    avgSoldPrice = Math.round(threshold * 0.6 * 100) / 100;
+    medianSoldPrice = avgSoldPrice;
+    minSoldPrice = Math.round(threshold * 0.1 * 100) / 100;
+    maxSoldPrice = threshold;
+  } else if (overMatch) {
+    const threshold = parseFloat(overMatch[1].replace(/,/g, ""));
+    avgSoldPrice = Math.round(threshold * 1.5 * 100) / 100;
+    medianSoldPrice = avgSoldPrice;
+    minSoldPrice = threshold;
+    maxSoldPrice = Math.round(threshold * 3 * 100) / 100;
+  }
+
+  console.log(`[market-watch-refresh] Sold data: count=${soldCount}, avg=$${avgSoldPrice}`);
+  return { soldCount, avgSoldPrice, minSoldPrice, maxSoldPrice, medianSoldPrice };
+}
+
+function avg(nums: number[]): number {
+  if (nums.length === 0) return 0;
+  return nums.reduce((s, n) => s + n, 0) / nums.length;
 }
 
 function median(nums: number[]): number {
@@ -119,11 +204,6 @@ function median(nums: number[]): number {
   const sorted = [...nums].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
-function avg(nums: number[]): number {
-  if (nums.length === 0) return 0;
-  return nums.reduce((s, n) => s + n, 0) / nums.length;
 }
 
 function round2(n: number): number {
@@ -172,26 +252,29 @@ serve(async (req) => {
 
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
 
-    // Get OAuth token for Browse API
+    // Run both requests in parallel: Browse API (active) + Jina (sold)
     const token = await getEbayAppToken();
-    console.log(`[market-watch-refresh] Obtained OAuth token`);
 
-    // Search active listings using Browse API
-    const activeResult = await browseSearch({
-      query: watch.search_query,
-      token,
-      ebayEnv,
-      categoryId: watch.category_id,
-      limit: 50,
-    });
+    const [activeResult, soldData] = await Promise.all([
+      browseSearch({
+        query: watch.search_query,
+        token,
+        ebayEnv,
+        categoryId: watch.category_id,
+        limit: 50,
+      }),
+      scrapeEbaySoldData(watch.search_query, watch.category_id),
+    ]);
 
-    // Browse API doesn't support sold items search
-    // We'll track only active listings for now
-    const soldCount = 0;
-    const activeCount = activeResult.count;
-    const total = activeCount + soldCount;
-    const sellThroughRate = 0;
+    const soldCount = soldData.soldCount;
+    // Use Browse API `total` for the real active count (not just the 50 fetched)
+    const activeCount = activeResult.total > 0 ? activeResult.total : activeResult.count;
+    const total = soldCount + activeCount;
 
+    // Sell-through rate: sold / (sold + active)
+    const sellThroughRate = total > 0 ? round2(soldCount / total) : 0;
+
+    // Active price stats from Browse API page results
     const prices = activeResult.prices;
     const avgPrice = prices.length > 0 ? round2(avg(prices)) : null;
     const minPrice = prices.length > 0 ? Math.min(...prices) : null;
@@ -200,7 +283,7 @@ serve(async (req) => {
 
     const now = new Date().toISOString();
 
-    // Update the watch record
+    // Update the watch record with sold data + active data
     await supabase
       .from("market_watches")
       .update({
@@ -230,19 +313,24 @@ serve(async (req) => {
     });
 
     console.log(
-      `[market-watch-refresh] Refreshed watch ${watchId}: avg=$${avgPrice}, active=${activeCount}`
+      `[market-watch-refresh] Refreshed watch ${watchId}: avg=$${avgPrice}, active=${activeCount}, sold=${soldCount}, STR=${sellThroughRate}`
     );
 
     return new Response(
       JSON.stringify({
         success: true,
         watchId,
+        // Active pricing (from Browse API)
         avgPrice,
         minPrice,
         maxPrice,
         medianPrice,
         activeCount,
+        // Sold data (from Jina eBay scrape)
         soldCount,
+        avgSoldPrice: soldData.avgSoldPrice,
+        minSoldPrice: soldData.minSoldPrice,
+        maxSoldPrice: soldData.maxSoldPrice,
         sellThroughRate,
         lastCheckedAt: now,
       }),

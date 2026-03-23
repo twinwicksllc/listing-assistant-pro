@@ -17,11 +17,20 @@ interface TopItem {
 interface BrowseSearchResult {
   prices: number[];
   count: number;
+  total: number; // total matching items (from API, not just page)
   topItems: TopItem[];
 }
 
+interface SoldDataResult {
+  soldCount: number;
+  avgSoldPrice: number | null;
+  minSoldPrice: number | null;
+  maxSoldPrice: number | null;
+  medianSoldPrice: number | null;
+}
+
 // ----------------------------------------------------------------
-// Get OAuth App Token for Browse API (same as ebay-pricing)
+// Get OAuth App Token for Browse API
 // ----------------------------------------------------------------
 async function getEbayAppToken(): Promise<string> {
   const clientId = Deno.env.get("EBAY_CLIENT_ID");
@@ -60,7 +69,7 @@ async function getEbayAppToken(): Promise<string> {
 }
 
 // ----------------------------------------------------------------
-// Search using Browse API (browse.search, not Finding API)
+// Search active listings using Browse API
 // ----------------------------------------------------------------
 async function browseSearch(params: {
   query: string;
@@ -68,9 +77,8 @@ async function browseSearch(params: {
   ebayEnv: string;
   categoryId?: string | null;
   limit?: number;
-  soldFilter?: string; // "sold" for sold items, undefined for active
 }): Promise<BrowseSearchResult> {
-  const { query, token, ebayEnv, categoryId, limit = 50, soldFilter } = params;
+  const { query, token, ebayEnv, categoryId, limit = 50 } = params;
 
   const apiBase =
     ebayEnv === "production"
@@ -80,19 +88,15 @@ async function browseSearch(params: {
   const searchParams = new URLSearchParams({
     q: query,
     limit: String(Math.min(limit, 50)),
-    sort: soldFilter ? "-date" : "-price",
+    sort: "-price",
   });
-
-  if (soldFilter) {
-    searchParams.set("filter", soldFilter);
-  }
 
   if (categoryId) {
     searchParams.set("category_ids", categoryId);
   }
 
   const url = `${apiBase}/buy/browse/v1/item_summary/search?${searchParams.toString()}`;
-  console.log(`[keyword-research] Browse API search: "${query}" (sold=${!!soldFilter})`);
+  console.log(`[keyword-research] Browse API search: "${query}"`);
 
   const resp = await fetch(url, {
     method: "GET",
@@ -106,15 +110,17 @@ async function browseSearch(params: {
   if (!resp.ok) {
     const txt = await resp.text();
     console.error(`[keyword-research] Browse API error ${resp.status}: ${txt.slice(0, 200)}`);
-    return { prices: [], count: 0, topItems: [] };
+    return { prices: [], count: 0, total: 0, topItems: [] };
   }
 
   const json = await resp.json();
   const items = json?.itemSummaries ?? [];
+  // `total` is the overall count across all pages, not just this page
+  const total = json?.total ?? items.length;
 
   if (!items || items.length === 0) {
     console.log(`[keyword-research] No items found for "${query}"`);
-    return { prices: [], count: 0, topItems: [] };
+    return { prices: [], count: 0, total: 0, topItems: [] };
   }
 
   const prices: number[] = [];
@@ -139,34 +145,103 @@ async function browseSearch(params: {
     } catch { /* skip malformed */ }
   }
 
-  console.log(`[keyword-research] Got ${prices.length} items for "${query}"`);
-  return { prices, count: prices.length, topItems };
+  console.log(`[keyword-research] Got ${prices.length} items (total=${total}) for "${query}"`);
+  return { prices, count: prices.length, total, topItems };
 }
 
 // ----------------------------------------------------------------
-// Search sold items using Browse API with sold filter
-// Note: Browse API doesn't have a direct "sold" search like Finding API,
-// so we search without filter and estimate based on pricing patterns.
-// For actual sold data, we'd need the Finding API or Marketplace Insights API.
+// Scrape eBay sold/completed listings via Jina reader
+// Returns sold count and price range estimates from filter sidebar
+// This bypasses eBay's bot detection and doesn't require API access
 // ----------------------------------------------------------------
-async function searchSoldItems(params: {
-  query: string;
-  token: string;
-  ebayEnv: string;
-  categoryId?: string | null;
-}): Promise<BrowseSearchResult> {
-  // Browse API doesn't have a native "sold items" endpoint for anonymous search
-  // The Finding API has findCompletedItems but we're hitting rate limits
-  // 
-  // Alternative: Use the same Browse API search but filter by ended listings
-  // For now, we'll return empty sold data and focus on active listings
-  // which is what the Browse API provides reliably
+async function scrapeEbaySoldData(query: string, categoryId?: string | null): Promise<SoldDataResult> {
+  const encoded = encodeURIComponent(query);
+  let ebayUrl = `https://www.ebay.com/sch/i.html?_nkw=${encoded}&LH_Complete=1&LH_Sold=1&_ipg=50&_sop=13`;
+  if (categoryId) {
+    ebayUrl += `&_sacat=${categoryId}`;
+  }
 
-  console.log(`[keyword-research] Sold items search via Browse API not available; returning active listing data only`);
-  
-  // We can approximate sold behavior by searching again with different sort
-  // but for now, return empty to avoid confusion
-  return { prices: [], count: 0, topItems: [] };
+  const jinaUrl = `https://r.jina.ai/${ebayUrl}`;
+  console.log(`[keyword-research] Fetching sold data via Jina for: "${query}"`);
+
+  let content = "";
+  try {
+    const resp = await fetch(jinaUrl, {
+      method: "GET",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; ListingAssistant/1.0)",
+        "Accept": "text/plain",
+      },
+      signal: AbortSignal.timeout(20000),
+    });
+
+    if (!resp.ok) {
+      console.warn(`[keyword-research] Jina fetch failed: ${resp.status}`);
+      return { soldCount: 0, avgSoldPrice: null, minSoldPrice: null, maxSoldPrice: null, medianSoldPrice: null };
+    }
+    content = await resp.text();
+  } catch (e) {
+    console.warn(`[keyword-research] Jina fetch error: ${e}`);
+    return { soldCount: 0, avgSoldPrice: null, minSoldPrice: null, maxSoldPrice: null, medianSoldPrice: null };
+  }
+
+  // Extract sold count from "All Listings (X) Filter Applied" in sidebar
+  const allListingsMatch = content.match(/All Listings \(([\d,]+)\)\s+Filter Applied/);
+  let soldCount = allListingsMatch ? parseInt(allListingsMatch[1].replace(/,/g, ""), 10) : 0;
+
+  // Fallback: "X results for" or "X+ results for"
+  if (!soldCount) {
+    const resultsMatch = content.match(/([\d,]+)\+?\s+results?\s+for/i);
+    soldCount = resultsMatch ? parseInt(resultsMatch[1].replace(/,/g, ""), 10) : 0;
+  }
+
+  // Extract price range buckets from the filter sidebar
+  // These appear as: "Under $XX.XX", "$XX.XX to $YY.YY", "Over $ZZ.ZZ"
+  const underMatch = content.match(/Under \$([\d,]+\.?\d*)/);
+  const rangeMatch = content.match(/\$([\d,]+\.?\d*) to \$([\d,]+\.?\d*)/);
+  const overMatch = content.match(/Over \$([\d,]+\.?\d*)/);
+
+  let avgSoldPrice: number | null = null;
+  let minSoldPrice: number | null = null;
+  let maxSoldPrice: number | null = null;
+  let medianSoldPrice: number | null = null;
+
+  if (underMatch && overMatch) {
+    // Three-bucket price range: Under X ... Range ... Over Y
+    const lowThreshold = parseFloat(underMatch[1].replace(/,/g, ""));
+    const highThreshold = parseFloat(overMatch[1].replace(/,/g, ""));
+    // Estimate: min is ~50% of lower bucket threshold, max is ~150% of upper threshold
+    minSoldPrice = Math.round(lowThreshold * 0.5 * 100) / 100;
+    maxSoldPrice = Math.round(highThreshold * 1.5 * 100) / 100;
+    avgSoldPrice = Math.round((lowThreshold + highThreshold) / 2 * 100) / 100;
+    medianSoldPrice = avgSoldPrice;
+  } else if (rangeMatch) {
+    // Only a range bucket visible
+    const rLow = parseFloat(rangeMatch[1].replace(/,/g, ""));
+    const rHigh = parseFloat(rangeMatch[2].replace(/,/g, ""));
+    avgSoldPrice = Math.round((rLow + rHigh) / 2 * 100) / 100;
+    medianSoldPrice = avgSoldPrice;
+    minSoldPrice = Math.round(rLow * 0.7 * 100) / 100;
+    maxSoldPrice = Math.round(rHigh * 1.3 * 100) / 100;
+  } else if (underMatch) {
+    // Only "Under X" visible
+    const threshold = parseFloat(underMatch[1].replace(/,/g, ""));
+    avgSoldPrice = Math.round(threshold * 0.6 * 100) / 100;
+    medianSoldPrice = avgSoldPrice;
+    minSoldPrice = Math.round(threshold * 0.1 * 100) / 100;
+    maxSoldPrice = threshold;
+  } else if (overMatch) {
+    // Only "Over X" visible
+    const threshold = parseFloat(overMatch[1].replace(/,/g, ""));
+    avgSoldPrice = Math.round(threshold * 1.5 * 100) / 100;
+    medianSoldPrice = avgSoldPrice;
+    minSoldPrice = threshold;
+    maxSoldPrice = Math.round(threshold * 3 * 100) / 100;
+  }
+
+  console.log(`[keyword-research] Sold data: count=${soldCount}, avg=$${avgSoldPrice}, range=$${minSoldPrice}-$${maxSoldPrice}`);
+
+  return { soldCount, avgSoldPrice, minSoldPrice, maxSoldPrice, medianSoldPrice };
 }
 
 // ----------------------------------------------------------------
@@ -223,33 +298,31 @@ serve(async (req) => {
     }
 
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-
     console.log(`[keyword-research] Fetching market data for: "${query}" (env: ${ebayEnv})`);
 
-    // Get OAuth token for Browse API
+    // Run both requests in parallel: Browse API (active) + Jina scrape (sold)
     const token = await getEbayAppToken();
     console.log(`[keyword-research] Obtained OAuth token`);
 
-    // Search active listings using Browse API
-    const activeResult = await browseSearch({
-      query,
-      token,
-      ebayEnv,
-      categoryId,
-      limit: 50,
-    });
+    const [activeResult, soldData] = await Promise.all([
+      browseSearch({ query, token, ebayEnv, categoryId, limit: 50 }),
+      scrapeEbaySoldData(query, categoryId),
+    ]);
 
-    // Note: Browse API doesn't support sold items search directly
-    // We'll set sold count to 0 for now and show only active competitor data
-    const soldCount = 0;
-    const activeCount = activeResult.count;
-    const total = activeCount + soldCount;
+    const soldCount = soldData.soldCount;
+    // Use Browse API `total` field for the active count (more accurate than page count)
+    const activeCount = activeResult.total > 0 ? activeResult.total : activeResult.count;
+    const total = soldCount + activeCount;
 
-    // Calculate sell-through rate placeholder
-    // Without sold data, we can't calculate real STR
-    const sellThroughRate = 0;
+    // Sell-through rate: sold / (sold + active)
+    const sellThroughRate = total > 0 ? round2(soldCount / total) : 0;
 
-    // Active price stats
+    // Demand signal based on STR
+    let demandSignal: "weak" | "moderate" | "strong" = "moderate";
+    if (sellThroughRate > 0.5) demandSignal = "strong";
+    else if (sellThroughRate < 0.2 && total > 10) demandSignal = "weak";
+
+    // Active price stats from Browse API results
     const activePrices = activeResult.prices.sort((a, b) => a - b);
     const avgActivePrice =
       activePrices.length > 0
@@ -261,27 +334,23 @@ serve(async (req) => {
     const p25ActivePrice = activePrices.length > 0 ? round2(percentile(activePrices, 25)) : null;
     const p75ActivePrice = activePrices.length > 0 ? round2(percentile(activePrices, 75)) : null;
 
-    // Competition level (based on active count)
+    // Competition level (based on active count from API total)
     let competitionLevel: "low" | "medium" | "high" = "low";
-    if (activeCount > 100) competitionLevel = "high";
-    else if (activeCount > 30) competitionLevel = "medium";
-
-    // Demand signal: without sold data, we can't determine this accurately
-    // Default to moderate
-    const demandSignal: "weak" | "moderate" | "strong" = "moderate";
+    if (activeCount > 200) competitionLevel = "high";
+    else if (activeCount > 50) competitionLevel = "medium";
 
     const responseData = {
       query,
       categoryId: categoryId ?? null,
-      // Sold stats (unavailable via Browse API)
+      // Sold stats (from Jina eBay scrape)
       soldCount,
-      avgSoldPrice: null,
-      medianSoldPrice: null,
-      minSoldPrice: null,
-      maxSoldPrice: null,
-      p25SoldPrice: null,
+      avgSoldPrice: soldData.avgSoldPrice,
+      medianSoldPrice: soldData.medianSoldPrice,
+      minSoldPrice: soldData.minSoldPrice,
+      maxSoldPrice: soldData.maxSoldPrice,
+      p25SoldPrice: null, // not available from bucket data
       p75SoldPrice: null,
-      // Active stats
+      // Active stats (from Browse API)
       activeCount,
       avgActivePrice,
       medianActivePrice,
@@ -295,11 +364,11 @@ serve(async (req) => {
       demandSignal,
       // Top items
       topCompetitors: activeResult.topItems,
-      topSold: [],
+      topSold: [], // individual sold item details not available without Marketplace Insights API
       // Meta
       noData: total === 0,
       fromCache: false,
-      dataSource: "browse_api", // Indicate we're using Browse API, not Finding API
+      dataSource: "browse_api_plus_jina",
     };
 
     // Cache for 4 hours
@@ -309,7 +378,7 @@ serve(async (req) => {
     });
 
     console.log(
-      `[keyword-research] Done: active=${activeCount}, competition=${competitionLevel}`
+      `[keyword-research] Done: active=${activeCount}, sold=${soldCount}, STR=${sellThroughRate}, competition=${competitionLevel}, demand=${demandSignal}`
     );
 
     return new Response(JSON.stringify(responseData), {
