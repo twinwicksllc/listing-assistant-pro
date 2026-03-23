@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from "react";
-import { X, Camera, CheckCircle, RotateCcw, Trash2, Zap, ZapOff, FlipHorizontal } from "lucide-react";
+import { X, Camera, CheckCircle, RotateCcw, Trash2, Zap, ZapOff, FlipHorizontal, ZoomIn } from "lucide-react";
 
 interface CameraSheetModalProps {
   open: boolean;
@@ -17,6 +17,9 @@ export default function CameraSheetModal({ open, onClose, onDone }: CameraSheetM
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
   const [capturing, setCapturing] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [maxZoom, setMaxZoom] = useState(1);
+  const [zoomSupported, setZoomSupported] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [flashEffect, setFlashEffect] = useState(false);
 
@@ -47,10 +50,21 @@ export default function CameraSheetModal({ open, onClose, onDone }: CameraSheetM
         await videoRef.current.play();
       }
 
-      // Check torch support
+      // Check torch and zoom support
       const track = stream.getVideoTracks()[0];
       const capabilities = track.getCapabilities?.() as any;
       setTorchSupported(!!(capabilities?.torch));
+      
+      // Check zoom support
+      if (capabilities?.zoom) {
+        setZoomSupported(true);
+        setMaxZoom(capabilities.zoom.max || 1);
+        setZoom(capabilities.zoom.min || 1);
+      } else {
+        setZoomSupported(false);
+        setMaxZoom(1);
+        setZoom(1);
+      }
       setTorchOn(false);
     } catch (err: any) {
       console.error("Camera error:", err);
@@ -80,11 +94,15 @@ export default function CameraSheetModal({ open, onClose, onDone }: CameraSheetM
     if (open) {
       setQueue([]);
       setFacingMode("environment");
+      setZoom(1);
+      setMaxZoom(1);
       startCamera("environment");
     } else {
       stopCamera();
       setQueue([]);
       setTorchOn(false);
+      setZoom(1);
+      setMaxZoom(1);
     }
   }, [open, startCamera, stopCamera]);
 
@@ -102,6 +120,18 @@ export default function CameraSheetModal({ open, onClose, onDone }: CameraSheetM
       setTorchOn(!torchOn);
     } catch (e) {
       console.warn("Torch toggle failed:", e);
+    }
+  };
+
+  // Apply zoom
+  const handleZoomChange = async (value: number) => {
+    if (!streamRef.current || !zoomSupported) return;
+    const track = streamRef.current.getVideoTracks()[0];
+    try {
+      await (track as any).applyConstraints({ advanced: [{ zoom: value }] });
+      setZoom(value);
+    } catch (e) {
+      console.warn("Zoom change failed:", e);
     }
   };
 
@@ -230,6 +260,27 @@ export default function CameraSheetModal({ open, onClose, onDone }: CameraSheetM
           <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-white/60 rounded-bl-sm" />
           <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-white/60 rounded-br-sm" />
         </div>
+
+        {/* Zoom slider */}
+        {zoomSupported && maxZoom > 1 && (
+          <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col items-center gap-2">
+            <div className="flex flex-col items-center gap-1 bg-black/50 backdrop-blur-sm rounded-full px-3 py-2">
+              <ZoomIn className="w-4 h-4 text-white/80" />
+              <input
+                type="range"
+                min="1"
+                max={maxZoom}
+                step={maxZoom > 10 ? 0.5 : 0.1}
+                value={zoom}
+                onChange={(e) => handleZoomChange(parseFloat(e.target.value))}
+                className="w-32 h-1.5 bg-white/20 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-lg"
+              />
+              <span className="text-white text-xs font-mono">
+                {zoom === 1 ? "1x" : `${zoom.toFixed(1)}x`}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Thumbnail queue strip */}
