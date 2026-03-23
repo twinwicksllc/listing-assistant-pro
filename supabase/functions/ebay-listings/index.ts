@@ -590,43 +590,61 @@ serve(async (req) => {
       "Accept-Language": "en-US",
     };
 
-    const offersResp = await fetch(
-      `${apiBase}/sell/inventory/v1/offer?limit=500`,
-      { headers: ebayHeaders }
-    );
+    // eBay Inventory API max limit per page is 100 — paginate to get all offers
+    const offers: any[] = [];
+    let offset = 0;
+    const PAGE_SIZE = 100;
+    let totalOffers = 0;
 
-    if (offersResp.status === 401) {
-      return new Response(
-        JSON.stringify({ listings: [], needsAuth: true }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    while (true) {
+      const offersResp = await fetch(
+        `${apiBase}/sell/inventory/v1/offer?limit=${PAGE_SIZE}&offset=${offset}`,
+        { headers: ebayHeaders }
       );
-    }
 
-    if (!offersResp.ok) {
-      const errText = await offersResp.text();
-      console.error("eBay offers error:", offersResp.status, errText);
-
-      if (offersResp.status === 401 || offersResp.status === 403) {
+      if (offersResp.status === 401) {
         return new Response(
-          JSON.stringify({ listings: [], needsAuth: true, debug: `eBay API ${offersResp.status}: ${errText}` }),
+          JSON.stringify({ listings: [], needsAuth: true }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      if (offersResp.status === 400 && errText.includes("SKU")) {
-        console.warn("eBay Inventory API /offer rejected with SKU error — falling back to Trading API.");
-        return await fetchListingsViaTradingAPI(apiBase, userToken, corsHeaders);
+      if (!offersResp.ok) {
+        const errText = await offersResp.text();
+        console.error("eBay offers error:", offersResp.status, errText);
+
+        if (offersResp.status === 401 || offersResp.status === 403) {
+          return new Response(
+            JSON.stringify({ listings: [], needsAuth: true, debug: `eBay API ${offersResp.status}: ${errText}` }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        if (offersResp.status === 400 && errText.includes("SKU")) {
+          console.warn("eBay Inventory API /offer rejected with SKU error — falling back to Trading API.");
+          return await fetchListingsViaTradingAPI(apiBase, userToken, corsHeaders);
+        }
+
+        return new Response(
+          JSON.stringify({ listings: [], error: `eBay API error ${offersResp.status}: ${errText}` }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
-      return new Response(
-        JSON.stringify({ listings: [], error: `eBay API error ${offersResp.status}: ${errText}` }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      const offersData = await offersResp.json();
+      const page = offersData.offers || [];
+      totalOffers = offersData.total ?? page.length;
+      offers.push(...page);
+
+      console.log(`ebay-listings: Fetched page offset=${offset}, got ${page.length} offers (total=${totalOffers}, accumulated=${offers.length})`);
+
+      // Stop if we've fetched all offers or got an empty page
+      if (page.length < PAGE_SIZE || offers.length >= totalOffers) break;
+
+      offset += PAGE_SIZE;
     }
 
-    const offersData = await offersResp.json();
-    const offers = offersData.offers || [];
-    console.log(`ebay-listings: Fetched ${offers.length} offers from eBay Inventory API`);
+    console.log(`ebay-listings: Fetched ${offers.length} total offers from eBay Inventory API (reported total: ${totalOffers})`);
 
     // Fetch inventory item details for each offer
     const listings = await Promise.all(
