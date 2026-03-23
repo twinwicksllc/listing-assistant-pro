@@ -13,7 +13,7 @@ const CACHE_TTL_MINUTES = 15;
 // Last updated: March 2026
 const FALLBACK = { gold: 2650, silver: 89, platinum: 1040 };
 
-async function getSpotPrices(svc: ReturnType<typeof createClient>): Promise<{
+async function getSpotPrices(svc: ReturnType<typeof createClient>, forceRefresh = false): Promise<{
   gold: number;
   silver: number;
   platinum: number;
@@ -38,8 +38,8 @@ async function getSpotPrices(svc: ReturnType<typeof createClient>): Promise<{
     ? (now.getTime() - fetchedAt.getTime()) / 60000
     : Infinity;
 
-  // 2. If cache is fresh (< 15 min), return it immediately
-  if (cached && ageMinutes < CACHE_TTL_MINUTES) {
+  // 2. If cache is fresh (< 15 min) and not forced to refresh, return it immediately
+  if (cached && ageMinutes < CACHE_TTL_MINUTES && !forceRefresh) {
     return {
       gold: Number(cached.gold),
       silver: Number(cached.silver),
@@ -50,42 +50,43 @@ async function getSpotPrices(svc: ReturnType<typeof createClient>): Promise<{
     };
   }
 
-  // 3. Cache is stale — fetch fresh prices from metals.live
+  // 3. Cache is stale — fetch fresh prices from Kitco (reliable fallback)
   let fresh: { gold: number; silver: number; platinum: number } | null = null;
   let source = "fallback";
 
   try {
-    const resp = await fetch("https://api.metals.live/v1/spot", {
-      headers: { "Accept": "application/json" },
+    const resp = await fetch("https://www.kitco.com/price/precious-metals", {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; ListingAssistant/1.0)" },
     });
     if (resp.ok) {
-      const data = await resp.json();
-      console.log("metals.live response:", JSON.stringify(data).substring(0, 500));
+      const html = await resp.text();
       
-      // metals.live returns nested objects: { gold: { bid, ask }, silver: { bid, ask }, ... }
-      // We'll use the 'bid' price as the spot price
-      const spot = Array.isArray(data) ? data[0] : data;
+      // Parse prices from Kitco HTML using regex
+      // Looking for patterns like: Silver</a></span><span>67.56</span>
+      const goldMatch = html.match(/Gold<\/a>.*?<span>([\d,]+\.?\d*)<\/span>/s);
+      const silverMatch = html.match(/Silver<\/a>.*?<span>([\d,]+\.?\d*)<\/span>/s);
+      const platinumMatch = html.match(/Platinum<\/a>.*?<span>([\d,]+\.?\d*)<\/span>/s);
+      
       const prices = {
-        // Handle both flat format (legacy) and nested bid/ask format (current)
-        gold: parseFloat(spot.gold?.bid || spot.gold?.price || spot.gold || 0) || 0,
-        silver: parseFloat(spot.silver?.bid || spot.silver?.price || spot.silver || 0) || 0,
-        platinum: parseFloat(spot.platinum?.bid || spot.platinum?.price || spot.platinum || 0) || 0,
+        gold: goldMatch ? parseFloat(goldMatch[1].replace(/,/g, '')) : 0,
+        silver: silverMatch ? parseFloat(silverMatch[1].replace(/,/g, '')) : 0,
+        platinum: platinumMatch ? parseFloat(platinumMatch[1].replace(/,/g, '')) : 0,
       };
       
-      console.log("Parsed prices:", prices);
+      console.log("Kitco parsed prices:", prices);
       
       if (prices.gold > 0 && prices.silver > 0) {
         fresh = prices;
-        source = "metals.live";
-        console.log("Successfully fetched fresh prices from metals.live");
+        source = "kitco.com";
+        console.log("Successfully fetched fresh prices from Kitco");
       } else {
-        console.warn("Parsed prices invalid (likely wrong API response structure):", { prices });
+        console.warn("Kitco parsed prices invalid:", { prices });
       }
     } else {
-      console.warn(`metals.live API returned status ${resp.status}`);
+      console.warn(`Kitco returned status ${resp.status}`);
     }
   } catch (e) {
-    console.error("metals.live fetch failed:", e);
+    console.error("Kitco fetch failed:", e);
   }
 
   // 4. If live fetch failed, use existing cached values or hardcoded fallback
@@ -134,8 +135,12 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
+    // Check for force_refresh query parameter to bypass cache
+    const url = new URL(req.url);
+    const forceRefresh = url.searchParams.get("force_refresh") === "true";
+
     const { gold, silver, platinum, fetched_at, source, refreshed } =
-      await getSpotPrices(svc);
+      await getSpotPrices(svc, forceRefresh);
 
     // If body has metalType & weightOz, also calculate melt value
     let meltValue: number | null = null;
