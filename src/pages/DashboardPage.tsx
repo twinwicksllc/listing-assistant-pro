@@ -5,9 +5,10 @@ import {
   Search, SlidersHorizontal, ArrowUpDown, ArrowUp, ArrowDown, Pencil,
   Check, CheckSquare, Square, Tag, Clock, Hash, Heart,
   BarChart2, MousePointerClick, ShoppingCart, MessageSquare, Flame, TrendingDown, Minus,
-  TrendingUp, Receipt, Truck, CircleDollarSign,
+  TrendingUp, Receipt, Truck, CircleDollarSign, Zap,
 } from "lucide-react";
 import { CompetitorPriceCard } from "@/components/CompetitorPriceCard";
+import OptimizationQueueWidget from "@/components/OptimizationQueueWidget";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDrafts } from "@/hooks/useDrafts";
 import { useNavigate } from "react-router-dom";
@@ -1093,6 +1094,30 @@ export default function DashboardPage() {
             <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
             <p className="text-sm text-destructive">{error}</p>
           </div>
+        )}
+
+        {/* ── Auto-Optimize Widget ─────────────────────────────────── */}
+        {listings.length > 0 && (
+          <OptimizationQueueWidget
+            listings={listings.map((l) => ({
+              listingId: l.listingId,
+              offerId: l.offerId,
+              sku: l.sku,
+              title: l.title,
+              price: l.price,
+              imageUrl: l.imageUrl,
+              categoryId: l.categoryId ?? null,
+              listingDate: l.listingDate ?? null,
+              ebayUrl: l.ebayUrl ?? null,
+            }))}
+            onPriceApplied={(listingId, newPrice) => {
+              setListings((prev) =>
+                prev.map((l) =>
+                  l.listingId === listingId ? { ...l, price: newPrice } : l
+                )
+              );
+            }}
+          />
         )}
 
         {/* ── Listings Section ─────────────────────────────────────────────── */}
