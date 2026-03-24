@@ -1015,9 +1015,9 @@ export default function DashboardPage() {
                     </div>
                     <div className="text-right">
                       <span className={`text-xs font-bold ${profitColor}`}>{fmtMoney(fin.netProfit)}</span>
-                      {fin.revenue > 0 && (
+                      {(fin.revenue + fin.shippingCollected) > 0 && (
                         <span className="text-[10px] text-muted-foreground ml-1.5">
-                          {(fin.netProfit / fin.revenue * 100).toFixed(1)}% margin
+                          {(fin.netProfit / (fin.revenue + fin.shippingCollected) * 100).toFixed(1)}% margin
                         </span>
                       )}
                     </div>

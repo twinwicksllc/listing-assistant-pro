@@ -363,16 +363,16 @@ async function fetchOrderCounts(
       // ── Financial extraction ──────────────────────────────────────────────
       const ps = order.pricingSummary ?? {};
       const revenue = amt(ps.priceSubtotal);
-      // shippingCollected is tracked for display but excluded from net profit:
-      // it's a pass-through — buyer pays it, seller pays it to carrier via label.
+      // shippingCollected = what the buyer paid for shipping (included as income).
+      // Offset by real label costs from Finances API applied below at window level.
+      // Both must be included together for a correct wash calculation.
       const shippingCollected = Math.max(0, amt(ps.deliveryCost) - amt(ps.deliveryDiscount));
       const ebayFees = amt(order.totalMarketplaceFee);
-      // shippingLabels per-order is now $0 here; real costs come from Finances API below
+      // shippingLabels per-order is $0 here; real costs applied at window level below
       const shippingLabels = 0;
 
-      // Net profit = item revenue only - eBay fees (shipping is a wash)
-      // Real label costs are applied at the window level from Finances API data
-      const netProfit = revenue - ebayFees;
+      // Net profit includes shipping collected as income (offset by label costs applied below)
+      const netProfit = revenue + shippingCollected - ebayFees;
 
       const addToWindow = (w: FinancialWindow) => {
         w.orders += lineItemCount;
