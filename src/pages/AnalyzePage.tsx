@@ -350,10 +350,21 @@ export default function AnalyzePage() {
       });
 
       if (error || data?.error) {
-        if (data?.error?.includes("401") || data?.error?.includes("expired")) {
+        // Only treat as session expired if it's a real auth failure (not a publish policy error).
+        // publishFailed=true means the offer was created but eBay rejected it for policy reasons
+        // (e.g. errorId 25019 grade policy) — those errors can contain "401" in the error body text
+        // but are NOT token expiry issues. We only clear the token for true 401 auth failures.
+        const isPublishPolicyError = data?.publishFailed === true;
+        const isTokenExpiry = !isPublishPolicyError && (
+          data?.error?.includes("401 ") ||
+          data?.error === "401" ||
+          (data?.error?.includes("expired") && !data?.error?.includes("code has expired")) ||
+          error?.message?.includes("401")
+        );
+        if (isTokenExpiry) {
           // Clear stale token from both storage locations
           localStorage.removeItem("ebay-user-token");
-          toast.error("eBay session expired. Please connect again.");
+          toast.error("eBay session expired. Please reconnect eBay in Settings.");
           return;
         }
         // Missing business policies — guide user to Seller Hub
@@ -368,11 +379,26 @@ export default function AnalyzePage() {
           });
           return;
         }
-        // Offer created but publish step failed — show offerId for debugging
+        // Offer created but publish step failed — extract clean eBay error message
         if (data?.publishFailed) {
-          toast.error("Offer created but couldn't go live", {
-            description: data.error,
-            duration: 8000,
+          // Try to extract a clean human-readable message from the raw eBay error JSON
+          let publishErrMsg = data.error as string;
+          try {
+            // Error format: "Offer created (ID: X) but publish failed: 400 {\"errors\":[{\"message\":\"...\"}]}"
+            const jsonStart = publishErrMsg.indexOf("{");
+            if (jsonStart !== -1) {
+              const errJson = JSON.parse(publishErrMsg.slice(jsonStart));
+              const firstErr = errJson?.errors?.[0];
+              if (firstErr?.message) {
+                // eBay error messages can be very long HTML — truncate to first sentence
+                const cleanMsg = firstErr.message.replace(/<[^>]+>/g, "").split(".")[0].trim();
+                publishErrMsg = cleanMsg || publishErrMsg;
+              }
+            }
+          } catch { /* keep raw error */ }
+          toast.error("eBay rejected the listing", {
+            description: publishErrMsg,
+            duration: 10000,
           });
           return;
         }

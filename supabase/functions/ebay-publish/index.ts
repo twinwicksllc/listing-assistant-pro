@@ -508,8 +508,24 @@ function buildAndNormalizeAspects(
   // If Certification is "Uncertified" (or absent), drop the Grade aspect entirely.
   // Sending any grade value on an uncertified coin triggers a policy violation.
   const certValue = aspects["Certification"]?.[0];
-  const CERTIFIED_GRADERS = new Set(["PCGS", "NGC", "ANACS", "ICG", "CAC", "PCGS & CAC", "NGC & CAC"]);
-  if (aspects["Grade"] && (!certValue || !CERTIFIED_GRADERS.has(certValue))) {
+
+  // Normalize cert values that include the grader name plus extra text.
+  // e.g. "ICG Genuine" -> "ICG", "NGC MS 65" -> "NGC", "PCGS AU-58" -> "PCGS"
+  const CERTIFIED_GRADERS = new Set(["PCGS", "NGC", "ANACS", "ICG", "CAC", "ICCS", "PCGS & CAC", "NGC & CAC"]);
+  let normalizedCert = certValue;
+  if (certValue && !CERTIFIED_GRADERS.has(certValue)) {
+    // Try to extract a known grader name from the beginning of the value
+    for (const grader of CERTIFIED_GRADERS) {
+      if (certValue.toUpperCase().startsWith(grader)) {
+        normalizedCert = grader;
+        console.log(`buildAndNormalizeAspects: normalizing Certification "${certValue}" -> "${grader}"`);
+        aspects["Certification"] = [grader];
+        break;
+      }
+    }
+  }
+
+  if (aspects["Grade"] && (!normalizedCert || !CERTIFIED_GRADERS.has(normalizedCert))) {
     console.warn(
       `buildAndNormalizeAspects: dropping Grade="${aspects["Grade"][0]}" for category ${categoryId} ` +
       `because Certification="${certValue ?? "not set"}" is not a recognized grading service (eBay errorId 25019)`
@@ -723,6 +739,27 @@ function sanitizeDescription(desc: string): string {
   result = result.replace(/\breplace\s*\(/gi, "");
 
   return result;
+}
+
+// ----------------------------------------------------------------
+// Strip numerical coin grades (e.g. MS-65, AU-58, VF-30) from text
+// when the coin is NOT certified by an approved grading service.
+// eBay errorId 25019: grades in title/description of uncertified coins
+// trigger a policy violation even if the Grade aspect was already dropped.
+// ----------------------------------------------------------------
+const GRADE_PATTERN = /\b(MS|PR|PF|AU|XF|EF|VF|F|VG|G|AG|FA|PO|P)-?\s*(\d{1,2})\b/gi;
+const CERTIFIED_GRADERS_SET = new Set(["PCGS", "NGC", "ANACS", "ICG", "CAC", "ICCS", "PCGS & CAC", "NGC & CAC"]);
+
+function stripGradesIfUncertified(text: string, certificationValue: string | undefined): string {
+  if (!text) return text;
+  // If certified by an approved grader, grades are allowed — don't strip
+  if (certificationValue && CERTIFIED_GRADERS_SET.has(certificationValue)) return text;
+  // Strip grade patterns from text (replace with empty string)
+  const stripped = text.replace(GRADE_PATTERN, "").replace(/\s{2,}/g, " ").trim();
+  if (stripped !== text) {
+    console.log(`stripGradesIfUncertified: removed grade pattern(s) from text (cert="${certificationValue ?? "none"}")`);
+  }
+  return stripped;
 }
 
 // ----------------------------------------------------------------
@@ -1846,7 +1883,7 @@ serve(async (req) => {
       // Reference: https://developer.ebay.com/api-docs/sell/inventory/resources/inventory_item/methods/createOrReplaceInventoryItem
       const inventoryBody: Record<string, unknown> = {
         product: {
-          title,
+          title: finalTitle,
           imageUrls: resolvedImageUrls,
         },
         condition: conditionEnum,
@@ -1955,14 +1992,29 @@ serve(async (req) => {
         );
       }
 
+      // Get the final normalized certification value from aspects (already normalized above)
+      const finalCertValue = aspects["Certification"]?.[0];
+
+      // Sanitize description: fix JS-blocked words (errorId 25002)
       const sanitizedDescription = sanitizeDescription(description as string);
       if (sanitizedDescription !== description) {
         console.log(`create_draft: description sanitized - replaced eBay-blocked patterns (errorId 25002 prevention)`);
       }
 
+      // Strip grade patterns from title & description if coin is not certified (errorId 25019)
+      // eBay scans title and description text for grade patterns even when Grade aspect is dropped
+      const finalTitle = stripGradesIfUncertified(title as string, finalCertValue);
+      const finalDescription = stripGradesIfUncertified(sanitizedDescription, finalCertValue);
+      if (finalTitle !== title) {
+        console.log(`create_draft: grade stripped from title (cert="${finalCertValue ?? "none"}"): "${title}" -> "${finalTitle}"`);
+      }
+      if (finalDescription !== sanitizedDescription) {
+        console.log(`create_draft: grade stripped from description (cert="${finalCertValue ?? "none"}")`);
+      }
+
       const offerBody = buildFixedPriceOffer({
         sku,
-        description: sanitizedDescription,
+        description: finalDescription,
         listingPrice: Number(listingPrice ?? 0),
         condition: conditionEnum,
         conditionDescription: conditionDesc,
