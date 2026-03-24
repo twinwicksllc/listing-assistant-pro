@@ -1790,6 +1790,26 @@ serve(async (req) => {
 
       console.log(`create_draft: aspects built for category ${finalCategoryId}:`, JSON.stringify(aspects, null, 2));
 
+      // Get the final normalized certification value from aspects (already normalized above)
+      const finalCertValue = aspects["Certification"]?.[0];
+
+      // Sanitize description: fix JS-blocked words (errorId 25002)
+      const sanitizedDescription = sanitizeDescription(description as string);
+      if (sanitizedDescription !== description) {
+        console.log(`create_draft: description sanitized - replaced eBay-blocked patterns (errorId 25002 prevention)`);
+      }
+
+      // Strip grade patterns from title & description if coin is not certified (errorId 25019)
+      // eBay scans title and description text for grade patterns even when Grade aspect is dropped
+      const finalTitle = stripGradesIfUncertified(title as string, finalCertValue);
+      const finalDescription = stripGradesIfUncertified(sanitizedDescription, finalCertValue);
+      if (finalTitle !== title) {
+        console.log(`create_draft: grade stripped from title (cert="${finalCertValue ?? "none"}"): "${title}" -> "${finalTitle}"`);
+      }
+      if (finalDescription !== sanitizedDescription) {
+        console.log(`create_draft: grade stripped from description (cert="${finalCertValue ?? "none"}")`);
+      }
+
       // Extract the item Type (e.g., "Coin", "Round", "Bar") from itemSpecifics
       // This is used to disambiguate coins from bullion when validating conditions
       const itemType = itemSpecifics && typeof itemSpecifics === "object" 
@@ -1990,26 +2010,6 @@ serve(async (req) => {
           }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
-      }
-
-      // Get the final normalized certification value from aspects (already normalized above)
-      const finalCertValue = aspects["Certification"]?.[0];
-
-      // Sanitize description: fix JS-blocked words (errorId 25002)
-      const sanitizedDescription = sanitizeDescription(description as string);
-      if (sanitizedDescription !== description) {
-        console.log(`create_draft: description sanitized - replaced eBay-blocked patterns (errorId 25002 prevention)`);
-      }
-
-      // Strip grade patterns from title & description if coin is not certified (errorId 25019)
-      // eBay scans title and description text for grade patterns even when Grade aspect is dropped
-      const finalTitle = stripGradesIfUncertified(title as string, finalCertValue);
-      const finalDescription = stripGradesIfUncertified(sanitizedDescription, finalCertValue);
-      if (finalTitle !== title) {
-        console.log(`create_draft: grade stripped from title (cert="${finalCertValue ?? "none"}"): "${title}" -> "${finalTitle}"`);
-      }
-      if (finalDescription !== sanitizedDescription) {
-        console.log(`create_draft: grade stripped from description (cert="${finalCertValue ?? "none"}")`);
       }
 
       const offerBody = buildFixedPriceOffer({
