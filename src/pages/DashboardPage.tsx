@@ -6,6 +6,7 @@ import {
   Check, CheckSquare, Square, Tag, Clock, Hash, Heart,
   BarChart2, MousePointerClick, ShoppingCart, MessageSquare, Flame, TrendingDown, Minus,
   TrendingUp, Receipt, Truck, CircleDollarSign, Zap,
+  RotateCcw, Store, ShieldAlert, BadgeCheck,
 } from "lucide-react";
 import { CompetitorPriceCard } from "@/components/CompetitorPriceCard";
 import OptimizationQueueWidget from "@/components/OptimizationQueueWidget";
@@ -506,9 +507,13 @@ export default function DashboardPage() {
     shippingCollected: number;
     ebayFees: number;
     shippingLabels: number;
+    refunds: number;
+    nonSaleCharges: number;
+    disputes: number;
+    credits: number;
     netProfit: number;
   }
-  const emptyFin = (): FinancialWindow => ({ orders: 0, revenue: 0, shippingCollected: 0, ebayFees: 0, shippingLabels: 0, netProfit: 0 });
+  const emptyFin = (): FinancialWindow => ({ orders: 0, revenue: 0, shippingCollected: 0, ebayFees: 0, shippingLabels: 0, refunds: 0, nonSaleCharges: 0, disputes: 0, credits: 0, netProfit: 0 });
   const [fin7, setFin7] = useState<FinancialWindow>(emptyFin());
   const [fin30, setFin30] = useState<FinancialWindow>(emptyFin());
   const [fin90, setFin90] = useState<FinancialWindow>(emptyFin());
@@ -1002,6 +1007,58 @@ export default function DashboardPage() {
                     </div>
                     <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
                       –{fmtMoney(fin.shippingLabels)}
+                    </span>
+                  </div>
+                  )}
+
+                  {/* Refunds */}
+                  {fin.refunds > 0 && (
+                  <div className="flex items-center justify-between px-4 py-2.5">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <RotateCcw className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />
+                      <span>Refunds</span>
+                    </div>
+                    <span className="text-xs font-semibold text-orange-600 dark:text-orange-400">
+                      –{fmtMoney(fin.refunds)}
+                    </span>
+                  </div>
+                  )}
+
+                  {/* Non-sale charges (store sub, listing fees, promoted offsite) */}
+                  {fin.nonSaleCharges > 0 && (
+                  <div className="flex items-center justify-between px-4 py-2.5">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Store className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" />
+                      <span>Store & listing fees</span>
+                    </div>
+                    <span className="text-xs font-semibold text-purple-600 dark:text-purple-400">
+                      –{fmtMoney(fin.nonSaleCharges)}
+                    </span>
+                  </div>
+                  )}
+
+                  {/* Disputes */}
+                  {fin.disputes > 0 && (
+                  <div className="flex items-center justify-between px-4 py-2.5">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <ShieldAlert className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
+                      <span>Disputes lost</span>
+                    </div>
+                    <span className="text-xs font-semibold text-red-600 dark:text-red-400">
+                      –{fmtMoney(fin.disputes)}
+                    </span>
+                  </div>
+                  )}
+
+                  {/* eBay Credits */}
+                  {fin.credits > 0 && (
+                  <div className="flex items-center justify-between px-4 py-2.5">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <BadgeCheck className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                      <span>eBay credits</span>
+                    </div>
+                    <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                      +{fmtMoney(fin.credits)}
                     </span>
                   </div>
                   )}
