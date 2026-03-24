@@ -244,6 +244,69 @@ function amt(obj: any): number {
 }
 
 // ─── Fetch real order counts + financial data via Fulfillment API ─────────────
+// ─── Fetch shipping label costs via Finances API ─────────────────────────────
+// The Fulfillment API order objects don't contain the seller's label costs.
+// Label purchases appear as SHIPPING_LABEL debit transactions in the Finances API.
+async function fetchShippingLabelCosts(
+  apiBase: string,
+  ebayHeaders: Record<string, string>,
+  ninetyDaysAgo: Date
+): Promise<{ labels7d: number; labels30d: number; labels90d: number }> {
+  const result = { labels7d: 0, labels30d: 0, labels90d: 0 };
+  try {
+    const now = new Date();
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const fromStr = ninetyDaysAgo.toISOString();
+    const toStr = now.toISOString();
+
+    // Finances API uses apiz subdomain
+    const financesBase = apiBase.replace("api.ebay.com", "apiz.ebay.com");
+    const url = new URL(`${financesBase}/sell/finances/v1/transaction`);
+    url.searchParams.set("filter", `transactionType:{SHIPPING_LABEL},transactionDate:[${fromStr}..${toStr}]`);
+    url.searchParams.set("limit", "200");
+
+    console.log(`Finances API: Fetching SHIPPING_LABEL transactions from ${fromStr}`);
+    const resp = await fetch(url.toString(), { headers: ebayHeaders });
+
+    if (!resp.ok) {
+      const txt = await resp.text();
+      console.warn(`Finances API: SHIPPING_LABEL fetch failed (${resp.status}) - label costs will be 0:`, txt);
+      return result;
+    }
+
+    if (resp.status === 204) {
+      console.log("Finances API: No SHIPPING_LABEL transactions found");
+      return result;
+    }
+
+    const data = await resp.json();
+    const transactions: any[] = data.transactions || [];
+    console.log(`Finances API: Got ${transactions.length} SHIPPING_LABEL transactions`);
+
+    for (const tx of transactions) {
+      // SHIPPING_LABEL are DEBIT transactions — amount.value is the cost (positive number)
+      const cost = parseFloat(tx.amount?.value ?? "0") || 0;
+      if (cost <= 0) continue;
+
+      const txDate = tx.transactionDate ? new Date(tx.transactionDate) : null;
+      if (!txDate) continue;
+
+      result.labels90d += cost;
+      if (txDate >= thirtyDaysAgo) result.labels30d += cost;
+      if (txDate >= sevenDaysAgo) result.labels7d += cost;
+    }
+
+    console.log(`Finances API: label costs - 7d=$${result.labels7d.toFixed(2)}, 30d=$${result.labels30d.toFixed(2)}, 90d=$${result.labels90d.toFixed(2)}`);
+  } catch (e) {
+    console.warn("Finances API: SHIPPING_LABEL fetch error (non-fatal, label costs will be 0):", e);
+  }
+  return result;
+}
+
 // The Analytics API TRANSACTION metric only counts active listings, so
 // we use the Fulfillment API to get actual orders + revenue + fees.
 async function fetchOrderCounts(
@@ -258,6 +321,11 @@ async function fetchOrderCounts(
     const ninetyDaysAgo = new Date(now);
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
     const fromStr = ninetyDaysAgo.toISOString();
+
+    // Fetch Fulfillment orders + real shipping label costs (from Finances API) in parallel
+    const [labelCosts] = await Promise.all([
+      fetchShippingLabelCosts(apiBase, ebayHeaders, ninetyDaysAgo),
+    ]);
 
     const filter = `creationdate:[${fromStr}..]`;
     const url = new URL(`${apiBase}/sell/fulfillment/v1/order`);
@@ -295,16 +363,16 @@ async function fetchOrderCounts(
       // ── Financial extraction ──────────────────────────────────────────────
       const ps = order.pricingSummary ?? {};
       const revenue = amt(ps.priceSubtotal);
+      // shippingCollected is tracked for display but excluded from net profit:
+      // it's a pass-through — buyer pays it, seller pays it to carrier via label.
       const shippingCollected = Math.max(0, amt(ps.deliveryCost) - amt(ps.deliveryDiscount));
       const ebayFees = amt(order.totalMarketplaceFee);
+      // shippingLabels per-order is now $0 here; real costs come from Finances API below
+      const shippingLabels = 0;
 
-      // eBay shipping label costs - summed across line items
-      let shippingLabels = 0;
-      for (const li of order.lineItems ?? []) {
-        shippingLabels += amt(li.ebayCollectedCharges?.ebayShipping);
-      }
-
-      const netProfit = revenue + shippingCollected - ebayFees - shippingLabels;
+      // Net profit = item revenue only - eBay fees (shipping is a wash)
+      // Real label costs are applied at the window level from Finances API data
+      const netProfit = revenue - ebayFees;
 
       const addToWindow = (w: FinancialWindow) => {
         w.orders += lineItemCount;
@@ -327,6 +395,14 @@ async function fetchOrderCounts(
         counts.orders7d += lineItemCount;
       }
     }
+
+    // Apply real shipping label costs from Finances API and subtract from net profit
+    financial.w7.shippingLabels  = labelCosts.labels7d;
+    financial.w30.shippingLabels = labelCosts.labels30d;
+    financial.w90.shippingLabels = labelCosts.labels90d;
+    financial.w7.netProfit  -= labelCosts.labels7d;
+    financial.w30.netProfit -= labelCosts.labels30d;
+    financial.w90.netProfit -= labelCosts.labels90d;
 
     if (data.total && data.total > orders.length) {
       console.log(`Fulfillment API: ${data.total - orders.length} more orders not fetched (pagination needed)`);
