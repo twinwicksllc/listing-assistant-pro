@@ -23,6 +23,7 @@ import ResetPasswordPage from "./pages/ResetPasswordPage";
 import BulkListingPage from "./pages/BulkListingPage";
 import MarketResearchPage from "./pages/MarketResearchPage";
 import RepriceRulesPage from "./pages/RepriceRulesPage";
+import ProfitReportPage from "./pages/ProfitReportPage";
 import NotFound from "./pages/NotFound";
 import AdminPage from "./pages/AdminPage";
 import TermsPage from "./pages/TermsPage";
@@ -82,6 +83,7 @@ const App = () => (
               <Route path="/bulk" element={<ProtectedRoute><BulkListingPage /></ProtectedRoute>} />
               <Route path="/market" element={<ProtectedRoute><MarketResearchPage /></ProtectedRoute>} />
               <Route path="/reprice-rules" element={<ProtectedRoute ownerOnly><RepriceRulesPage /></ProtectedRoute>} />
+              <Route path="/profit-report" element={<ProtectedRoute ownerOnly><ProfitReportPage /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
             <CookieConsent />

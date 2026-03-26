@@ -95,6 +95,11 @@ export interface ListingDraft {
   bestOfferAutoAcceptPrice?: number;   // Optional: auto-accept offers >= this price
   bestOfferAutoDeclinePrice?: number;  // Optional: auto-decline offers <= this price
 
+  // Cost of Goods Sold — what the seller paid to acquire this item
+  cogs?: number;             // purchase cost in USD
+  cogsSource?: string;       // 'manual' | 'import' | 'consignor_split'
+  cogsAcquiredAt?: Date;     // date item was acquired (for aged-inventory reporting)
+
   // Precious metal content (used for melt-value floor alerts)
   metalType?: string;        // "gold" | "silver" | "platinum" | "none"
   metalWeightOz?: number;    // troy oz of precious metal content

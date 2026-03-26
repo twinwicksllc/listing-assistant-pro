@@ -221,6 +221,7 @@ export default function BillingPage() {
               "Melt value protection",
               "Listing analytics",
               "eBay sold comps",
+              "True profit tracking (COGS)",
             ]}
             currentPlan={currentPlan}
             planKey="pro"
@@ -246,6 +247,7 @@ export default function BillingPage() {
               "Voice notes",
               "Melt value protection",
               "Team / multi-user org",
+              "True profit tracking (COGS) + P&L report",
               "Priority support",
             ]}
             currentPlan={currentPlan}

@@ -7,6 +7,7 @@ import { ListingDraft, ListingFormat, AuctionDuration } from "@/types/listing";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import CogsInput from "@/components/CogsInput";
 
 interface EditDraftModalProps {
   draft: ListingDraft;
@@ -56,7 +57,7 @@ const AUCTION_DURATIONS: { value: AuctionDuration; label: string }[] = [
 ];
 
 export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }: EditDraftModalProps) {
-  const { user } = useAuth();
+  const { user, planFeatures } = useAuth();
 
   const [title, setTitle]               = useState(draft.title);
   const [description, setDescription]   = useState(draft.description);
@@ -73,6 +74,7 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
   );
   const [condition, setCondition]       = useState(draft.condition ?? "PRE_OWNED_GOOD");
   const [consignor, setConsignor]       = useState(draft.consignor ?? "");
+  const [cogs, setCogs]                 = useState<number | undefined>(draft.cogs);
   const [ebayCategoryId, setEbayCategoryId] = useState(draft.ebayCategoryId ?? "");
   // Track whether the user has changed the category ID so we can clear the stale breadcrumb
   const [categoryChanged, setCategoryChanged] = useState(false);
@@ -227,6 +229,8 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
       auctionDuration: listingFormat === "AUCTION" ? auctionDuration : undefined,
       condition,
       consignor,
+      cogs: cogs ?? undefined,
+      cogsSource: cogs != null ? (draft.cogsSource ?? "manual") : undefined,
       ebayCategoryId:        newCategoryId,
       ebayCategoryBreadcrumb: newBreadcrumb,
       itemSpecifics,
@@ -496,6 +500,14 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
               className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
+
+          {/* Item Cost (COGS) */}
+          <CogsInput
+            cogs={cogs}
+            listingPrice={draft.listingPrice ?? draft.priceMin ?? 0}
+            onChange={setCogs}
+            disabled={!planFeatures.hasCogsTracking}
+          />
 
           {/* eBay Business Policies */}
           <div className="space-y-3">
