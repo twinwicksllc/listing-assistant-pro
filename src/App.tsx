@@ -24,6 +24,7 @@ import BulkListingPage from "./pages/BulkListingPage";
 import MarketResearchPage from "./pages/MarketResearchPage";
 import RepriceRulesPage from "./pages/RepriceRulesPage";
 import ProfitReportPage from "./pages/ProfitReportPage";
+import BulkCogsPage from "./pages/BulkCogsPage";
 import NotFound from "./pages/NotFound";
 import AdminPage from "./pages/AdminPage";
 import TermsPage from "./pages/TermsPage";
@@ -84,6 +85,7 @@ const App = () => (
               <Route path="/market" element={<ProtectedRoute><MarketResearchPage /></ProtectedRoute>} />
               <Route path="/reprice-rules" element={<ProtectedRoute ownerOnly><RepriceRulesPage /></ProtectedRoute>} />
               <Route path="/profit-report" element={<ProtectedRoute ownerOnly><ProfitReportPage /></ProtectedRoute>} />
+              <Route path="/cogs-editor" element={<ProtectedRoute ownerOnly><BulkCogsPage /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
             <CookieConsent />
