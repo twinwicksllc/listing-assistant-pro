@@ -5,7 +5,7 @@
 CREATE TABLE IF NOT EXISTS public.listing_cogs (
   id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id          UUID        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  org_id           UUID        REFERENCES public.orgs(id) ON DELETE SET NULL,
+  org_id           UUID        REFERENCES public.organizations(id) ON DELETE SET NULL,
   ebay_sku         TEXT,
   ebay_listing_id  TEXT,
   title            TEXT        NOT NULL DEFAULT '',
