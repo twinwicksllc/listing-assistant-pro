@@ -355,6 +355,28 @@ export function usePublishDraft() {
         listingId: data.listingId,
       });
 
+      // Auto-write COGS to listing_cogs table so Profit Report can match
+      // sold orders even after the draft is deleted.
+      if (draft.cogs != null && user?.id) {
+        try {
+          await supabase.from("listing_cogs").upsert(
+            {
+              user_id: user.id,
+              ebay_sku: data.sku ?? null,
+              ebay_listing_id: data.listingId ?? null,
+              title: draft.title,
+              cogs: draft.cogs,
+              cogs_source: draft.cogsSource ?? "manual",
+              acquired_at: draft.cogsAcquiredAt?.toISOString() ?? null,
+            },
+            { onConflict: "ebay_sku" }
+          );
+        } catch (cogsErr) {
+          // Non-fatal — log but don't block the success flow
+          console.warn("Failed to write COGS to listing_cogs:", cogsErr);
+        }
+      }
+
       const successMsg = data.listingId
         ? `"${draft.title}" is live on eBay! (ID: ${data.listingId})`
         : `"${draft.title}" created on eBay (Offer ID: ${data.offerId})`;

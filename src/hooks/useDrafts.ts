@@ -54,6 +54,10 @@ export function useDrafts() {
           ebayOfferId: d.ebay_offer_id || undefined,
           ebayListingId: d.ebay_listing_id || undefined,
           lastPublishError: d.last_publish_error || undefined,
+          // Cost of Goods Sold
+          cogs: d.cogs != null ? Number(d.cogs) : undefined,
+          cogsSource: d.cogs_source || undefined,
+          cogsAcquiredAt: d.cogs_acquired_at ? new Date(d.cogs_acquired_at) : undefined,
           // Precious metal content
           metalType: d.metal_type || 'none',
           metalWeightOz: Number(d.metal_weight_oz) || 0,
@@ -97,6 +101,10 @@ export function useDrafts() {
       // Precious metal content
       metal_type: draft.metalType || 'none',
       metal_weight_oz: draft.metalWeightOz ?? 0,
+      // Cost of Goods Sold
+      cogs: draft.cogs ?? null,
+      cogs_source: draft.cogsSource ?? null,
+      cogs_acquired_at: draft.cogsAcquiredAt?.toISOString() ?? null,
     });
 
     if (error) {
@@ -153,6 +161,10 @@ export function useDrafts() {
     if (updates.lastPublishError !== undefined)       patch.last_publish_error = updates.lastPublishError || null;
     if (updates.metalType !== undefined)               patch.metal_type = updates.metalType;
     if (updates.metalWeightOz !== undefined)           patch.metal_weight_oz = updates.metalWeightOz;
+    // Cost of Goods Sold
+    if (updates.cogs !== undefined)                    patch.cogs = updates.cogs ?? null;
+    if (updates.cogsSource !== undefined)              patch.cogs_source = updates.cogsSource ?? null;
+    if (updates.cogsAcquiredAt !== undefined)          patch.cogs_acquired_at = updates.cogsAcquiredAt?.toISOString() ?? null;
 
     const { error } = await supabase.from("drafts").update(patch).eq("id", id);
 

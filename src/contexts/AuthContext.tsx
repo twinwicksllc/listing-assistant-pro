@@ -16,6 +16,7 @@ export const PLANS = {
     hasMeltProtection: false,
     hasListingAnalytics: false,
     hasOrgFeature: false,
+    hasCogsTracking: false,
   },
   starter: {
     name: "Starter",
@@ -29,6 +30,7 @@ export const PLANS = {
     hasMeltProtection: false,
     hasListingAnalytics: false,
     hasOrgFeature: false,
+    hasCogsTracking: false,
   },
   pro: {
     name: "Pro",
@@ -42,6 +44,7 @@ export const PLANS = {
     hasMeltProtection: true,
     hasListingAnalytics: true,
     hasOrgFeature: false,
+    hasCogsTracking: true,    // COGS tracking + Profit Report
   },
   shop: {
     name: "Shop",
@@ -55,6 +58,7 @@ export const PLANS = {
     hasMeltProtection: true,
     hasListingAnalytics: true,
     hasOrgFeature: true,
+    hasCogsTracking: true,    // COGS tracking + Profit Report
   },
 } as const;
 
@@ -92,6 +96,7 @@ interface PlanFeatures {
   hasMeltProtection: boolean;
   hasListingAnalytics: boolean;
   hasOrgFeature: boolean;
+  hasCogsTracking: boolean;  // True profit / COGS tracking + Profit Report page
 }
 
 interface AuthContextType {
@@ -132,6 +137,7 @@ const defaultFeatures: PlanFeatures = {
   hasMeltProtection: false,
   hasListingAnalytics: false,
   hasOrgFeature: false,
+  hasCogsTracking: false,
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -316,6 +322,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     hasMeltProtection: PLANS[resolvedPlan].hasMeltProtection,
     hasListingAnalytics: PLANS[resolvedPlan].hasListingAnalytics,
     hasOrgFeature: PLANS[resolvedPlan].hasOrgFeature,
+    hasCogsTracking: PLANS[resolvedPlan].hasCogsTracking,
   };
 
   // Limits for current plan

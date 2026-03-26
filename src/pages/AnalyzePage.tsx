@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, Send, Tag, Crown, Download, FileSpreadsheet, Sheet, ShieldCheck, AlertTriangle, Check, X as XIcon, Lock, UserCircle, DollarSign, Gavel, ShoppingCart } from "lucide-react";
 import PricingCard from "@/components/PricingCard";
 import PriceRecommenderCard from "@/components/PriceRecommenderCard";
+import CogsInput from "@/components/CogsInput";
 import CategoryConfirmDialog from "@/components/CategoryConfirmDialog";
 import { useDrafts } from "@/hooks/useDrafts";
 import { toast } from "sonner";
@@ -57,6 +58,7 @@ export default function AnalyzePage() {
     fromCache: boolean;
   } | null>(null);
   const [consignor, setConsignor] = useState("");
+  const [cogs, setCogs] = useState<number | undefined>(undefined);
   const [includeAiFooter, setIncludeAiFooter] = useState(true);
   const [showCategoryConfirm, setShowCategoryConfirm] = useState(false);
   const [pendingCategoryId, setPendingCategoryId] = useState<string>("");
@@ -229,6 +231,8 @@ export default function AnalyzePage() {
       itemSpecifics,
       condition,
       consignor,
+      cogs: cogs ?? undefined,
+      cogsSource: cogs != null ? "manual" : undefined,
       fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId ?? undefined,
       paymentPolicyId: selectedPolicies.paymentPolicyId ?? undefined,
       returnPolicyId: selectedPolicies.returnPolicyId ?? undefined,
@@ -808,6 +812,14 @@ export default function AnalyzePage() {
                 className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
+
+            {/* Item Cost (COGS) */}
+            <CogsInput
+              cogs={cogs}
+              listingPrice={listingPrice > 0 ? listingPrice : auctionStartPrice > 0 ? auctionStartPrice : (priceMin + priceMax) / 2}
+              onChange={setCogs}
+              disabled={!planFeatures.hasCogsTracking}
+            />
 
             {/* Smart Price Recommender */}
             <PriceRecommenderCard

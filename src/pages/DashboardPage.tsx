@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { CompetitorPriceCard } from "@/components/CompetitorPriceCard";
 import OptimizationQueueWidget from "@/components/OptimizationQueueWidget";
+import ProfitBadge from "@/components/ProfitBadge";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDrafts } from "@/hooks/useDrafts";
 import { useNavigate } from "react-router-dom";
@@ -500,7 +501,7 @@ export default function DashboardPage() {
   const [orderCount30d, setOrderCount30d] = useState(0);
   const [orderCount90d, setOrderCount90d] = useState(0);
 
-  // Financial summaries from Fulfillment API
+  // Financial summaries from Fulfillment API + COGS from Supabase
   interface FinancialWindow {
     orders: number;
     revenue: number;
@@ -511,9 +512,10 @@ export default function DashboardPage() {
     nonSaleCharges: number;
     disputes: number;
     credits: number;
+    cogsTotal: number;   // sum of item costs (COGS) for sold items in this window
     netProfit: number;
   }
-  const emptyFin = (): FinancialWindow => ({ orders: 0, revenue: 0, shippingCollected: 0, ebayFees: 0, shippingLabels: 0, refunds: 0, nonSaleCharges: 0, disputes: 0, credits: 0, netProfit: 0 });
+  const emptyFin = (): FinancialWindow => ({ orders: 0, revenue: 0, shippingCollected: 0, ebayFees: 0, shippingLabels: 0, refunds: 0, nonSaleCharges: 0, disputes: 0, credits: 0, cogsTotal: 0, netProfit: 0 });
   const [fin7, setFin7] = useState<FinancialWindow>(emptyFin());
   const [fin30, setFin30] = useState<FinancialWindow>(emptyFin());
   const [fin90, setFin90] = useState<FinancialWindow>(emptyFin());
@@ -609,6 +611,65 @@ export default function DashboardPage() {
       if (data.financial?.w7) setFin7(data.financial.w7);
       if (data.financial?.w30) setFin30(data.financial.w30);
       if (data.financial?.w90) setFin90(data.financial.w90);
+
+      // Fetch COGS records from Supabase and apply to financial windows by window period.
+      // We match sold orders to listing_cogs by ebay_sku or ebay_listing_id using the
+      // soldAt timestamps provided by the Fulfillment API on each order.
+      if (user?.id && data.financial) {
+        try {
+          // The edge function returns soldOrders as an optional array for COGS matching
+          const soldOrders: Array<{ sku: string | null; listingId: string | null; soldAt: string }> =
+            data.financial.soldOrders ?? [];
+
+          if (soldOrders.length > 0) {
+            const skus = soldOrders.map((o) => o.sku).filter(Boolean) as string[];
+            const listingIds = soldOrders.map((o) => o.listingId).filter(Boolean) as string[];
+
+            const orParts: string[] = [];
+            if (skus.length > 0)       orParts.push(`ebay_sku.in.(${skus.join(",")})`);
+            if (listingIds.length > 0) orParts.push(`ebay_listing_id.in.(${listingIds.join(",")})`);
+
+            const { data: cogsRows } = await supabase
+              .from("listing_cogs")
+              .select("ebay_sku, ebay_listing_id, cogs")
+              .eq("user_id", user.id)
+              .or(orParts.join(","));
+
+            // Build a fast lookup map: sku/listingId -> cogs value
+            const cogsMap: Record<string, number> = {};
+            for (const row of cogsRows ?? []) {
+              if (row.ebay_sku)        cogsMap[row.ebay_sku]        = Number(row.cogs);
+              if (row.ebay_listing_id) cogsMap[row.ebay_listing_id] = Number(row.cogs);
+            }
+
+            // Window cutoffs (same logic as edge function)
+            const now = Date.now();
+            const ms7  = 7  * 24 * 60 * 60 * 1000;
+            const ms30 = 30 * 24 * 60 * 60 * 1000;
+            const ms90 = 90 * 24 * 60 * 60 * 1000;
+
+            let cogs7 = 0, cogs30 = 0, cogs90 = 0;
+            for (const order of soldOrders) {
+              const cogsVal =
+                (order.sku ? cogsMap[order.sku] : 0) ||
+                (order.listingId ? cogsMap[order.listingId] : 0) ||
+                0;
+              if (cogsVal === 0) continue;
+              const age = now - new Date(order.soldAt).getTime();
+              if (age <= ms90) { cogs90 += cogsVal; }
+              if (age <= ms30) { cogs30 += cogsVal; }
+              if (age <= ms7)  { cogs7  += cogsVal; }
+            }
+
+            // Apply COGS to each window, deducting from netProfit
+            setFin7((prev)  => ({ ...prev, cogsTotal: cogs7,  netProfit: prev.netProfit - cogs7  }));
+            setFin30((prev) => ({ ...prev, cogsTotal: cogs30, netProfit: prev.netProfit - cogs30 }));
+            setFin90((prev) => ({ ...prev, cogsTotal: cogs90, netProfit: prev.netProfit - cogs90 }));
+          }
+        } catch (cogsErr) {
+          console.warn("COGS lookup non-fatal:", cogsErr);
+        }
+      }
 
       // Fetch competitor prices
       let competitorMap: Record<string, CompetitorPriceSnapshot> = {};
@@ -761,6 +822,17 @@ export default function DashboardPage() {
   const totalTransactions30d = orderCount30d;
   const liveValue = listings.reduce((sum, l) => sum + l.price, 0);
   const draftValue = drafts.reduce((sum, d) => sum + (d.priceMin + d.priceMax) / 2, 0);
+
+  // COGS lookup map: ebayListingId or ebaySku → {cogs, listingPrice} for ProfitBadge
+  const cogsByListing = useMemo(() => {
+    const map: Record<string, { cogs: number | undefined; listingPrice: number }> = {};
+    for (const d of drafts) {
+      const entry = { cogs: d.cogs, listingPrice: d.listingPrice ?? 0 };
+      if (d.ebayListingId) map[d.ebayListingId] = entry;
+      if (d.ebaySku)       map[d.ebaySku]       = entry;
+    }
+    return map;
+  }, [drafts]);
 
   // Melt floor alerts
   const atRiskListings = spotPrices
@@ -1063,12 +1135,27 @@ export default function DashboardPage() {
                   </div>
                   )}
 
+                  {/* COGS (item costs) */}
+                  {fin.cogsTotal > 0 && (
+                  <div className="flex items-center justify-between px-4 py-2.5">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <ShoppingCart className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />
+                      <span>Item costs (COGS)</span>
+                    </div>
+                    <span className="text-xs font-semibold text-red-500 dark:text-red-400">
+                      &minus;{fmtMoney(fin.cogsTotal)}
+                    </span>
+                  </div>
+                  )}
+
                   {/* Net Profit summary row */}
                   <div className={`flex items-center justify-between px-4 py-2.5 ${profitBg}`}>
                     <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
                       <TrendingUp className={`w-3.5 h-3.5 flex-shrink-0 ${profitColor}`} />
-                      <span>Net profit</span>
-                      <span className="text-[10px] font-normal text-muted-foreground">(excl. COGS)</span>
+                      <span>True net profit</span>
+                      {fin.cogsTotal === 0 && (
+                        <span className="text-[10px] font-normal text-muted-foreground">(excl. COGS)</span>
+                      )}
                     </div>
                     <div className="text-right">
                       <span className={`text-xs font-bold ${profitColor}`}>{fmtMoney(fin.netProfit)}</span>
@@ -1387,6 +1474,21 @@ export default function DashboardPage() {
                         <p className="text-sm font-medium text-foreground line-clamp-1 flex-1">{listing.title}</p>
                         <div className="flex items-center gap-1 flex-shrink-0">
                           {planFeatures.hasListingAnalytics && <TrendBadge listing={listing} />}
+                          {/* Profit margin badge — only when COGS is recorded for this listing */}
+                          {planFeatures.hasCogsTracking && (() => {
+                            const cogsEntry = listing.listingId
+                              ? cogsByListing[listing.listingId]
+                              : listing.sku
+                              ? cogsByListing[listing.sku]
+                              : undefined;
+                            return cogsEntry?.cogs != null ? (
+                              <ProfitBadge
+                                listingPrice={cogsEntry.listingPrice || listing.price}
+                                cogs={cogsEntry.cogs}
+                                size="sm"
+                              />
+                            ) : null;
+                          })()}
                           <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${statusColor(listing.status)}`}>
                             {statusLabel(listing.status)}
                           </span>
