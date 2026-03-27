@@ -275,52 +275,104 @@ serve(async (req: Request) => {
       throw new Error("GEMINI_API_KEY is not configured");
     }
 
-    const systemPrompt = `You are a professional Numismatist and eBay Listing Expert. Your task is to analyze coin/bullion photos and generate a listing via the \`create_listing\` tool.
+    // ── Pre-lookup: check category_mappings DB before calling Gemini ──────────
+    // Scan the voice note + any context words against the DB for a quick hint
+    let dbCategoryHint = "";
+    try {
+      const voiceNoteWords = (voiceNote || "").toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
+      if (voiceNoteWords.length > 0) {
+        // Try each meaningful word (up to 5) as a fuzzy match in category_mappings
+        for (const word of voiceNoteWords.slice(0, 5)) {
+          const { data: catRow } = await svc
+            .from("category_mappings")
+            .select("ebay_category_id, category_name, item_type, coin_type")
+            .or(`item_type.ilike.%${word}%,coin_type.ilike.%${word}%`)
+            .order("confidence", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (catRow?.ebay_category_id) {
+            const matchedType = catRow.item_type || catRow.coin_type || "";
+            dbCategoryHint = `\n- DB CATEGORY MATCH: For items matching "${matchedType}", the verified eBay category ID is ${catRow.ebay_category_id} (${catRow.category_name || "see eBay"}). Use this as your primary category unless the item clearly belongs elsewhere.`;
+            console.log(`analyze-item: DB category pre-hint found for word "${word}":`, catRow.ebay_category_id, catRow.category_name);
+            break;
+          }
+        }
+      }
+    } catch (dbHintErr) {
+      console.warn("analyze-item: DB category pre-lookup failed (non-blocking):", dbHintErr);
+    }
+    // ── End pre-lookup ─────────────────────────────────────────────────────────
+
+    const systemPrompt = `You are a professional eBay Listing Expert and item identifier. Your task is to analyze item photos and generate a complete listing via the \`create_listing\` tool.
+
+### WHAT YOU SELL
+You handle ALL types of items: coins, bullion, precious metals, collectibles, toys, plushies, stuffed animals, trading cards, sports memorabilia, Funko Pops, action figures, LEGO, jewelry, electronics, clothing, books, tools, art, and anything else. Always identify the item TYPE first, then apply the appropriate eBay category.
 
 ### CORE OPERATING RULES
 1. HOLISTIC ANALYSIS: Treat all uploaded images as a single item.
-2. ZERO SPECULATION: Use ONLY visible evidence + factual numismatic data. If a mint mark or date is not visible, state "uncertain" or "not visible."
-3. NO NUMERICAL GRADING: For uncertified coins, use ONLY descriptive terms (e.g., "Circulated," "Excellent Luster"). Numerical grades (MS-65, etc.) are strictly forbidden unless the coin is in a PCGS, NGC, ANACS, ICG, CAC, or ICCS slab.
-4. EBAY COMPLIANCE: Title must be ≤ 80 chars. Do not use hype words like "L@@K."
+2. ZERO SPECULATION: Use ONLY visible evidence + factual data. If details are not visible, state "uncertain" or "not visible."
+3. NO NUMERICAL GRADING for coins unless in a certified slab (PCGS, NGC, ANACS, ICG, CAC, ICCS).
+4. EBAY COMPLIANCE: Title must be \u2264 80 chars. No hype words like "L@@K."
+5. SELLER VOICE NOTE: If provided, treat as authoritative \u2014 override visual assessment where applicable.
+
+### CATEGORY ROUTING \u2014 ALL ITEM TYPES
+**Collectibles / Toys / Plush:**
+- Beanie Babies / Ty Plush: **19203**
+- Stuffed Animals (general): **19209**
+- Funko Pop Vinyl Figures: **261068**
+- Action Figures: **246**
+- LEGO Sets: **182**
+- Pok\u00e9mon Cards: **183454**
+- Sports Trading Cards: **261328** (Basketball), **213** (Baseball), **64482** (general)
+- Board Games: **19016**
+- Dolls: **222** | Bears (collectible): **238**
+
+**Coins & Bullion:**
+- Morgan Dollars: **39464** | Peace Dollars: **11980** | Eisenhower: **11981**
+- Silver Bars/Rounds: **39489** | Gold Bars/Rounds: **178906**
+- Silver Eagle: **41111** | Gold Eagle: **40166** | Gold Buffalo: **40167**
+- Barber Half: **11971** | Liberty Walking Half: **41099** | Kennedy Half: **41102**
+- Wheat Penny: **39455** | World Coins: **45243**
+- Proof Sets: **41109** | Mint Sets: **526**
+
+**Jewelry & Watches:**
+- Fine Jewelry Necklaces: **10986** | Rings: **14324** | Bracelets: **10985** | Earrings: **10987**
+- Watches: **14327** | Fashion Jewelry: **31387**
+
+**Electronics:**
+- Smartphones: **9355** | Video Games: **1249** | Consoles: **139971**
+- Cameras: **58058** | Headphones: **112529** | Consumer Electronics: **293**
+
+**Clothing & Accessories:** **11450**
+**Books:** **267** | **Tools:** **631** | **Art:** **550** | **General Collectibles:** **1**
+${dbCategoryHint}
+
+**VERIFICATION:** If confidence <95% or item not listed above, use \`google_search\` for "eBay leaf category ID [Item Name]".
+**ALWAYS provide 1-2 alternative category IDs** (alternativeCategoryIds) for fallback options.
 
 ### IDENTIFICATION & DESCRIPTION
-- Identify: Year, Series, Denomination, Mint Mark, Metal, Weight (Troy Oz), and Producer.
-- Key Dates: Highlight rarity (e.g., 1893-S Morgan, 1916-D Mercury).
+- Identify: Item type, brand/maker, year (if applicable), condition, materials, notable features.
+- For coins: Year, Series, Denomination, Mint Mark, Metal, Weight (Troy Oz), Producer.
+- Key items: Highlight rarity, limited editions, special variants.
 - Condition Mapping:
-  - MS-60+ or Slabbed -> NEW
-  - AU/XF -> USED_EXCELLENT
-  - VF -> USED_VERY_GOOD
-  - F/VG -> USED_GOOD
-  - G -> USED_ACCEPTABLE
-  - Damaged/Holed -> FOR_PARTS_OR_NOT_WORKING
-
-### DATA FORMATTING (STRICT)
-- Fineness: Decimal only (e.g., "0.999").
-- Grade: Space-separated (e.g., "MS 65"). Omit Grade field if uncertified.
-- Denomination: "50C" or "$1" only.
-- Item Specifics: Use bare keys (e.g., "Year", not "C:Year").
-
-### CATEGORY ROUTING (Priority IDs)
-- Morgan Dollars: 39464 | Peace Dollars: 11980 | Silver Bars/Rounds: 39489
-- Barber Half: 11971 | Liberty Walking Half: 41099 | Eisenhower: 11981
-- Gold Bars: 178906 | Silver Eagle: 41111 | Wheat Penny: 39455
-- World Coins: 45243 (Required: Materials sourced from = Issuing Country).
-- VERIFICATION: If confidence <95% or not listed above, use \`google_search\` for "eBay leaf category ID [Item Name]".
-- **ALWAYS provide 1-2 alternative category IDs** (alternativeCategoryIds) that would also be valid, even if less specific. For example:
-  - Primary: 39464 (Morgan Dollars) | Alternative: 39489 (Silver Bars/Rounds) if it's generic bullion
-  - Primary: 41111 (Silver Eagle) | Alternative: 39489 (Silver Bars/Rounds)
-  - Always have alternatives unless it's extremely category-specific.
+  - Mint/New in box -> NEW
+  - Excellent, like new -> USED_EXCELLENT
+  - Good, light wear -> USED_VERY_GOOD
+  - Noticeable wear, functional -> USED_GOOD
+  - Heavy wear, still functional -> USED_ACCEPTABLE
+  - Damaged/non-functional -> FOR_PARTS_OR_NOT_WORKING
 
 ### PRICING LOGIC
-- Floor: (Melt Value * 1.19) to cover eBay fees (approx 16%).
-- Premium: 1.05-1.15x for generic bullion; 1.5x+ for themes/key dates.
-- metalWeightOz: Express in TROY OUNCES only.
+- Research recent sold comps on eBay for this item type.
+- For precious metals: Floor = (Melt Value * 1.19) to cover eBay fees (~16%).
+- For collectibles/toys: Use market demand, rarity, and condition.
+- metalWeightOz: Express in TROY OUNCES only (for precious metals).
 - Current spot prices: Gold $${spotGold.toFixed(2)}/oz | Silver $${spotSilver.toFixed(2)}/oz | Platinum $${spotPlatinum.toFixed(2)}/oz
 ${competitorData && !competitorData.error
   ? `- MARKET DATA (${competitorData.competitorCount || 0} similar sold): avg $${(competitorData.avgPrice || 0).toFixed(2)}, range $${(competitorData.minPrice || 0).toFixed(2)}-$${(competitorData.maxPrice || 0).toFixed(2)}, median $${(competitorData.medianPrice || 0).toFixed(2)}. USE AS PRIMARY PRICING REFERENCE.`
-  : `- No recent sold comps available. Use melt floor and category premiums.`}
+  : `- No recent sold comps available. Use category knowledge and condition to price appropriately.`}
 
-Use the \`create_listing\` tool to return the final structured data.`;
+Use the \`create_listing\` tool to return the final structured data.`
 
 
     // Build content array with all images + text prompt
@@ -437,7 +489,7 @@ Seller's note: "${voiceNote}"`;
               type: "function",
               function: {
                 name: "google_search",
-                description: "Search Google for eBay category IDs, coin specifications, or other research. Use when uncertain about a coin's correct eBay category ID.",
+                description: "Search Google for eBay category IDs, item specifications, or current market data. Use when uncertain about the correct eBay category ID for any item type.",
                 parameters: {
                   type: "object",
                   properties: {
@@ -524,6 +576,54 @@ Seller's note: "${voiceNote}"`;
       // keep whatever AI returned
     }
     // --- end suggestedCategories processing ---
+
+    // --- Auto-persist new category to DB for future lookups (self-learning) ---
+    // If the AI returned a category ID that isn't already in our DB, save it now
+    try {
+      if (listing.ebayCategoryId && userId) {
+        // Build a normalized item descriptor from title + voice note keywords
+        const titleWords = (listing.title || "").toLowerCase()
+          .replace(/[^a-z0-9\s]/g, " ")
+          .split(/\s+/)
+          .filter((w: string) => w.length > 3)
+          .slice(0, 4)
+          .join(" ");
+
+        if (titleWords) {
+          // Check if this category+title combo is already in the DB
+          const { data: existingCat } = await svc
+            .from("category_mappings")
+            .select("id")
+            .eq("ebay_category_id", listing.ebayCategoryId)
+            .ilike("item_type", `%${titleWords.split(" ")[0]}%`)
+            .maybeSingle();
+
+          if (!existingCat) {
+            // Get category name from suggestedCategories if available
+            const catName = listing.suggestedCategories?.[0]?.categoryName
+              || listing.suggestedCategories?.[0]?.breadcrumb?.split(" > ").pop()
+              || null;
+
+            await svc.from("category_mappings").upsert(
+              {
+                coin_type:           titleWords,
+                item_type:           titleWords,
+                ebay_category_id:    listing.ebayCategoryId,
+                category_name:       catName,
+                verification_source: "ai_auto",
+                confidence:          75,
+                updated_at:          new Date().toISOString(),
+              },
+              { onConflict: "coin_type" }
+            );
+            console.log(`analyze-item: auto-persisted category ${listing.ebayCategoryId} for "${titleWords}"`);
+          }
+        }
+      }
+    } catch (persistErr) {
+      console.warn("analyze-item: category auto-persist failed (non-blocking):", persistErr);
+    }
+    // --- end auto-persist ---
 
     // --- Fetch competitor prices now that AI has generated the title ---
     if (listing.title && userId) {
