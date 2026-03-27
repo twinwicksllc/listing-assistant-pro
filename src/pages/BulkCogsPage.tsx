@@ -53,7 +53,8 @@ function MarginBadge({ price, cogs }: { price: number; cogs: number | undefined 
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function BulkCogsPage() {
-  const { user, ebayToken, planFeatures, isOwner } = useAuth();
+  const { user, planFeatures, isOwner } = useAuth();
+  const ebayToken = typeof window !== "undefined" ? localStorage.getItem("ebay-user-token") : null;
 
   const [rows,        setRows]        = useState<ListingRow[]>([]);
   const [loading,     setLoading]     = useState(true);

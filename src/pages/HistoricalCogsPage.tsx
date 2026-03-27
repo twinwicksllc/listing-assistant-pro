@@ -84,7 +84,8 @@ function MarginBadge({ salePrice, shipping, fees, cogs }: { salePrice: number; s
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function HistoricalCogsPage() {
-  const { user, ebayToken, planFeatures, isOwner } = useAuth();
+  const { user, planFeatures, isOwner } = useAuth();
+  const ebayToken = typeof window !== "undefined" ? localStorage.getItem("ebay-user-token") : null;
 
   const [orders,     setOrders]     = useState<SoldOrder[]>([]);
   const [loading,    setLoading]    = useState(true);
