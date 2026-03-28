@@ -208,16 +208,25 @@ const ASPECT_SKIP_VALUES = new Set([
 
 function normalizeFineness(value: string): string {
   const v = value.trim();
+  // Already correct format: 0.999, 0.9999, etc.
   if (/^0\.\d{2,5}$/.test(v)) return v;
+  // Leading-dot format: .999, .9999 -> 0.999, 0.9999
+  if (/^\.\d{2,5}$/.test(v)) return "0" + v;
+  // Pure integer: 999, 9999 -> 0.999, 0.9999
   if (/^\d{3,5}$/.test(v)) {
     const n = parseInt(v, 10);
     const decimals = v.length === 3 ? 3 : v.length === 4 ? 4 : 5;
     return (n / Math.pow(10, decimals)).toFixed(decimals);
   }
+  // Percentage: 99.9% -> 0.999
   const pct = v.match(/^(\d+\.?\d*)\s*%$/);
   if (pct) return (parseFloat(pct[1]) / 100).toFixed(3);
+  // Embedded decimal: "fine 0.999 silver" -> 0.999
   const dec = v.match(/\b(0\.\d{2,5})\b/);
   if (dec) return dec[1];
+  // Embedded leading-dot: "fine .999 silver" -> 0.999
+  const leadDot = v.match(/(?<!\d)\.(\d{2,5})\b/);
+  if (leadDot) return "0." + leadDot[1];
   return v;
 }
 
