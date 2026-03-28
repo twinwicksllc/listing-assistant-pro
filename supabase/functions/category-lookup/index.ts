@@ -12,23 +12,59 @@ const corsHeaders = {
 const FUZZY_MIN_SIMILARITY = 0.65;      // Minimum fuzzy match threshold (#1)
 const FUZZY_MIN_TOKEN_OVERLAP = 2;      // Minimum meaningful token overlap (#1)
 const AUTO_PERSIST_MIN_CONFIDENCE = 85;  // Minimum confidence for auto-persist (#2)
-const DETERMINISTIC_LOCK_THRESHOLD = 88; // eBay top-1 score above this = lock (#3)
+const DETERMINISTIC_LOCK_THRESHOLD = 92; // eBay top-1 score above this = lock (#3) [raised from 88 — EA-P2-C]
 const MARKETPLACE_ID = "EBAY_US";
 const CATEGORY_TREE_ID = "0";
 
-// Generic terms that should be penalized in fuzzy matching (#1)
-const GENERIC_TERMS = new Set([
-  "coin", "coins", "card", "cards", "trading", "toy", "toys",
-  "collectible", "collectibles", "item", "items", "vintage",
-  "antique", "rare", "lot", "set", "collection", "piece",
+// Terms that are ALWAYS generic regardless of domain (EA-P1-C)
+const ALWAYS_GENERIC_TERMS = new Set([
+  "item", "items", "thing", "stuff", "misc", "miscellaneous",
+  "other", "general", "various", "mixed", "piece", "pieces",
 ]);
 
-// Stopwords removed during normalization (#6)
+// Domain-specific terms: generic OUTSIDE their domain, meaningful INSIDE it (EA-P1-C)
+// Key = the potentially-generic word; Value = domain keywords that make it meaningful
+const DOMAIN_SPECIFIC_TERMS: Record<string, string[]> = {
+  "card":        ["pokemon", "trading", "baseball", "football", "basketball",
+                  "hockey", "tcg", "mtg", "yugioh", "magic", "topps", "panini",
+                  "bowman", "fleer", "donruss", "upperdeck", "sport", "sports"],
+  "cards":       ["pokemon", "trading", "baseball", "football", "basketball",
+                  "hockey", "tcg", "mtg", "yugioh", "magic", "sport", "sports"],
+  "trading":     ["card", "cards", "pokemon", "tcg", "mtg"],
+  "collectible": ["beanie", "funko", "pop", "figurine", "plush", "vintage",
+                  "antique", "memorabilia", "figure", "action"],
+  "collectibles":["beanie", "funko", "pop", "figurine", "plush", "vintage",
+                  "antique", "memorabilia", "figure", "action"],
+  "toy":         ["beanie", "baby", "plush", "action", "figure", "lego",
+                  "barbie", "hotwheels", "hot", "wheels"],
+  "toys":        ["beanie", "baby", "plush", "action", "figure", "lego"],
+  "coin":        ["penny", "nickel", "dime", "quarter", "dollar", "eagle",
+                  "morgan", "kennedy", "lincoln", "buffalo", "walking", "silver",
+                  "gold", "platinum", "proof", "bullion"],
+  "coins":       ["penny", "nickel", "dime", "quarter", "dollar", "eagle",
+                  "morgan", "kennedy", "lincoln", "buffalo", "silver", "gold"],
+  "lot":         ["coin", "coins", "card", "cards"],
+  "set":         ["coin", "coins", "proof", "mint", "card", "cards", "lego"],
+  "collection":  ["coin", "coins", "card", "cards"],
+  "vintage":     ["coin", "coins", "toy", "toys", "card", "cards"],
+  "antique":     ["coin", "coins", "toy", "toys"],
+  "rare":        ["coin", "coins", "card", "cards", "pokemon"],
+};
+
+// Stopwords removed during normalization (#6) — true English stopwords ONLY (EA-P2-D)
+// NOTE: Do NOT add domain-relevant terms here (baby, new, set, mint, lot, rare, etc.)
 const STOPWORDS = new Set([
-  "a", "an", "the", "and", "or", "in", "on", "at", "to", "for",
-  "of", "with", "by", "from", "is", "it", "this", "that", "was",
-  "are", "be", "has", "had", "have", "will", "can", "do", "does",
-  "new", "used", "mint", "box",
+  "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
+  "of", "with", "by", "from", "is", "it", "this", "that", "was", "were",
+  "are", "be", "been", "being", "has", "had", "have", "will", "would",
+  "could", "should", "may", "might", "shall", "can", "do", "does", "did",
+  "not", "no", "nor", "so", "if", "then", "than", "too", "very", "just",
+  "about", "above", "after", "again", "all", "also", "am", "any",
+  "because", "before", "between", "both", "each", "few", "here", "how",
+  "into", "its", "more", "most", "only", "our", "out", "over", "own",
+  "same", "some", "such", "there", "these", "those", "through", "under",
+  "until", "up", "we", "what", "when", "where", "which", "while", "who",
+  "why", "you", "your",
 ]);
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -117,12 +153,27 @@ function computeTokenOverlap(queryTokens: string[], candidateText: string): numb
 }
 
 // ── Helper: Check if item_type is too generic (#1) ───────────────────────────
-function isGenericItemType(itemType: string): boolean {
-  const tokens = meaningfulTokens(itemType);
-  // If ALL meaningful tokens are generic, it's too broad
+// Context-aware generic check (EA-P1-C):
+// A term is only generic if the query is outside its domain.
+function isGenericItemType(candidateText: string, queryTokens: string[] = []): boolean {
+  const tokens = meaningfulTokens(candidateText);
   if (tokens.length === 0) return true;
-  const genericCount = tokens.filter(t => GENERIC_TERMS.has(t)).length;
-  return genericCount >= tokens.length;
+
+  const queryLower = queryTokens.map(t => t.toLowerCase());
+
+  const isTokenGeneric = (t: string): boolean => {
+    if (ALWAYS_GENERIC_TERMS.has(t)) return true;
+    // Domain-specific: generic only if query is NOT in that domain
+    const domainKeywords = DOMAIN_SPECIFIC_TERMS[t];
+    if (domainKeywords) {
+      const queryInDomain = queryLower.some(q => domainKeywords.includes(q));
+      return !queryInDomain; // Only generic when query is outside this domain
+    }
+    return false; // Unknown term = not generic
+  };
+
+  // Item type is "too generic" only if ALL meaningful tokens are generic
+  return tokens.every(t => isTokenGeneric(t));
 }
 
 // ── Helper: Compute effective score with source weighting (#8) ───────────────
@@ -133,6 +184,7 @@ function computeEffectiveScore(
   totalQueryTokens: number,
   isGeneric: boolean,
   daysSinceUpdate: number,
+  verifiedLeaf: boolean | null = null, // EA-P2-C: non-leaf penalty
 ): number {
   // Source weight
   const sourceWeights: Record<string, number> = {
@@ -162,8 +214,12 @@ function computeEffectiveScore(
   // Ambiguity penalty (low token overlap on fuzzy)
   const ambiguityPenalty = source === "db_fuzzy" && tokenOverlap < FUZZY_MIN_TOKEN_OVERLAP ? 15 : 0;
 
+  // Non-leaf penalty (EA-P2-C): parent categories should not reach lock threshold
+  const nonLeafPenalty = verifiedLeaf === false ? 30 : 0;
+
   return Math.min(100, Math.max(0,
-    rawScore + sourceWeight + similarityBonus + recencyBonus - genericPenalty - ambiguityPenalty
+    rawScore + sourceWeight + similarityBonus + recencyBonus
+    - genericPenalty - ambiguityPenalty - nonLeafPenalty
   ));
 }
 
@@ -197,8 +253,30 @@ async function getEbayAppToken(): Promise<{ token: string; base: string } | null
 
 // ── Helper: eBay getCategorySuggestions ───────────────────────────────────────
 async function fetchCategorySuggestions(
-  query: string, appToken: string, base: string,
+  rawQuery: string, appToken: string, base: string, retryCount = 0,
 ): Promise<CategorySuggestion[]> {
+  // EA-P2-A: Sanitize query — strip special chars and truncate to eBay's limit
+  let query = (rawQuery || "")
+    .replace(/[^\w\s\-\.]/g, " ")   // Keep word chars, spaces, hyphens, dots
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Truncate long queries to the 6 most meaningful terms
+  if (query.length > 180) {
+    const meaningful = query.split(" ")
+      .filter(w => w.length > 2 && !STOPWORDS.has(w.toLowerCase()))
+      .slice(0, 6);
+    query = meaningful.join(" ").trim();
+  }
+
+  // Guard: do not call API with too-short query
+  if (query.length < 3) {
+    console.warn("category-lookup: fetchCategorySuggestions — query too short after sanitization, skipping");
+    return [];
+  }
+
+  console.log(`category-lookup: eBay suggestion query (sanitized, attempt=${retryCount + 1}): "${query}"`);
+
   const url = `${base}/commerce/taxonomy/v1/category_tree/${CATEGORY_TREE_ID}/get_category_suggestions?q=${encodeURIComponent(query)}`;
 
   try {
@@ -209,6 +287,23 @@ async function fetchCategorySuggestions(
         "Content-Type": "application/json",
       },
     });
+
+    // EA-P3-C: Retry on 400 with shortened query (up to 2 retries)
+    if (resp.status === 400 && retryCount < 2) {
+      const words = query.split(" ").filter(w => w.length > 2);
+      const shorter = words.slice(0, Math.max(2, Math.floor(words.length / 2))).join(" ");
+      if (shorter.length >= 3 && shorter !== query) {
+        console.log(`category-lookup: eBay 400 error — retrying with shorter query: "${shorter}"`);
+        return fetchCategorySuggestions(shorter, appToken, base, retryCount + 1);
+      }
+    }
+
+    // EA-P3-C: Retry once on 429 (rate limit) after brief wait
+    if (resp.status === 429 && retryCount < 1) {
+      console.warn("category-lookup: eBay API rate-limited (429) — retrying after 2s");
+      await new Promise(r => setTimeout(r, 2000));
+      return fetchCategorySuggestions(rawQuery, appToken, base, retryCount + 1);
+    }
 
     if (!resp.ok) {
       console.error("category-lookup: getCategorySuggestions error", resp.status, await resp.text());
@@ -298,25 +393,30 @@ async function verifyCategoryLeafActive(
       return { isLeaf: false, isActive: false, categoryName: null };
     }
     if (!resp.ok) {
+      // EA-P1-A: Pessimistic default — unknown API errors should NOT be treated as leaf
       console.warn(`category-lookup: verifyCategoryLeafActive(${categoryId}) error`, resp.status);
-      return { isLeaf: true, isActive: true, categoryName: null }; // Assume valid on API error
+      return { isLeaf: false, isActive: false, categoryName: null };
     }
 
     const json = await resp.json();
-    const node = json.categorySubtreeNode;
-    if (!node?.category) {
+    const node = json?.categorySubtreeNode;
+
+    // EA-P1-A: Require positive confirmation of valid node — missing/null = not leaf
+    if (!node || !node.category) {
+      console.warn(`category-lookup: verifyCategoryLeafActive(${categoryId}) — no valid node in response`);
       return { isLeaf: false, isActive: false, categoryName: null };
     }
 
     // A leaf node has no childCategoryTreeNodes or an empty array
-    const children = node.childCategoryTreeNodes || [];
-    const isLeaf = children.length === 0;
+    const children = node.childCategoryTreeNodes;
+    const isLeaf = !children || children.length === 0;
     const categoryName = node.category.categoryName || null;
 
     return { isLeaf, isActive: true, categoryName };
   } catch (err) {
-    console.warn(`category-lookup: verifyCategoryLeafActive(${categoryId}) exception`, err);
-    return { isLeaf: true, isActive: true, categoryName: null }; // Assume valid on exception
+    // EA-P1-A: Pessimistic default on exception — never assume valid on unknown error
+    console.error(`category-lookup: verifyCategoryLeafActive(${categoryId}) exception`, err);
+    return { isLeaf: false, isActive: false, categoryName: null };
   }
 }
 
@@ -565,10 +665,12 @@ export async function handleRequest(req: Request): Promise<Response> {
 
       // ── Tier 1: DB exact match (approved only) (#2) ──────────────────
       const dbExactStart = Date.now();
+      // EA-P2-B: Also match on item_type_normalized for order-insensitive exact matches
+      const deepNormalizedKey = deepNormalize(normalizedKey);
       const { data: exactRows } = await supabase
         .from("category_mappings")
         .select("ebay_category_id, category_name, confidence, verification_source, item_type, coin_type, breadcrumb, effective_score, updated_at, status")
-        .or(`item_type.eq.${normalizedKey},coin_type.eq.${normalizedKey}`)
+        .or(`item_type.eq.${normalizedKey},coin_type.eq.${normalizedKey},item_type_normalized.eq.${deepNormalizedKey}`)
         .eq("status", "approved")
         .order("effective_score", { ascending: false })
         .limit(3);
@@ -620,18 +722,10 @@ export async function handleRequest(req: Request): Promise<Response> {
           const s = ebaySuggestions[i];
           const tokenOverlap = computeTokenOverlap(queryTokens, `${s.categoryName} ${s.breadcrumb}`);
 
-          // eBay suggestions get high base score (they're from official taxonomy)
-          const rawScore = 90 - (i * 3); // 90, 87, 84, 81, 78
-          const effectiveScore = computeEffectiveScore(
-            "ebay_api",
-            rawScore,
-            tokenOverlap,
-            queryTokens.length,
-            false, // eBay results are never generic
-            0, // Fresh from API
-          );
+          // EA-P2-C: Lower raw scores to leave room for penalties (was 90-3*i)
+          const rawScore = 80 - (i * 4); // 80, 76, 72, 68, 64 for ranks 1-5
 
-          // Verify leaf status for top candidate (#4)
+          // Verify leaf status for top candidate (#4) — needed BEFORE scoring for penalty
           let verifiedLeaf: boolean | null = null;
           let verifiedActive: boolean | null = null;
           if (i === 0 && ebayAuth) {
@@ -639,6 +733,17 @@ export async function handleRequest(req: Request): Promise<Response> {
             verifiedLeaf = verification.isLeaf;
             verifiedActive = verification.isActive;
           }
+
+          // EA-P2-C: Pass verifiedLeaf so non-leaf penalty is applied BEFORE lock check
+          const effectiveScore = computeEffectiveScore(
+            "ebay_api",
+            rawScore,
+            tokenOverlap,
+            queryTokens.length,
+            false, // eBay results are never generic
+            0, // Fresh from API
+            verifiedLeaf, // EA-P2-C: non-leaf penalty in scoring
+          );
 
           allCandidates.push({
             categoryId: s.categoryId,
@@ -691,7 +796,7 @@ export async function handleRequest(req: Request): Promise<Response> {
         const candidateText = row.item_type || row.coin_type || "";
         const tokenOverlap = computeTokenOverlap(queryTokens, candidateText);
         const daysSinceUpdate = (Date.now() - new Date(row.updated_at).getTime()) / (1000 * 60 * 60 * 24);
-        const isGeneric = isGenericItemType(candidateText);
+        const isGeneric = isGenericItemType(candidateText, queryTokens); // EA-P1-C: context-aware
 
         // Apply fuzzy gates (#1)
         if (tokenOverlap < FUZZY_MIN_TOKEN_OVERLAP) {
@@ -739,25 +844,66 @@ export async function handleRequest(req: Request): Promise<Response> {
         geminiLatency = Date.now() - geminiStart;
 
         if (geminiResult) {
-          const effectiveScore = computeEffectiveScore(
-            "gemini",
-            geminiResult.confidence,
-            0, 0, false, 0,
-          );
+          // EA-P1-B: Verify Gemini's suggestion — LLMs hallucinate category IDs
+          let geminiVerifiedLeaf: boolean | null = null;
+          let geminiVerifiedActive: boolean | null = null;
 
-          allCandidates.push({
-            categoryId: geminiResult.categoryId,
-            categoryName: geminiResult.categoryName,
-            breadcrumb: geminiResult.categoryName,
-            source: "gemini",
-            rawScore: geminiResult.confidence,
-            effectiveScore,
-            reason: `Gemini AI suggestion (self-reported confidence=${geminiResult.confidence})`,
-            verifiedLeaf: null,
-            verifiedActive: null,
-            tokenOverlap: 0,
-            rank: 1,
-          });
+          if (ebayAuth) {
+            const geminiVerification = await verifyCategoryLeafActive(
+              geminiResult.categoryId, ebayAuth.token, ebayAuth.base,
+            );
+            geminiVerifiedLeaf = geminiVerification.isLeaf;
+            geminiVerifiedActive = geminiVerification.isActive;
+
+            if (!geminiVerification.isLeaf || !geminiVerification.isActive) {
+              console.warn(
+                `category-lookup: Gemini suggested category ${geminiResult.categoryId} ` +
+                `(${geminiResult.categoryName}) is NOT a valid leaf/active category — discarding`,
+              );
+              // Do NOT add invalid Gemini suggestions to candidates
+            } else {
+              const effectiveScore = computeEffectiveScore(
+                "gemini",
+                geminiResult.confidence,
+                0, 0, false, 0,
+                geminiVerifiedLeaf,
+              );
+              allCandidates.push({
+                categoryId: geminiResult.categoryId,
+                categoryName: geminiResult.categoryName,
+                breadcrumb: geminiResult.categoryName,
+                source: "gemini",
+                rawScore: geminiResult.confidence,
+                effectiveScore,
+                reason: `Gemini AI suggestion (self-reported confidence=${geminiResult.confidence}, verified leaf)`,
+                verifiedLeaf: geminiVerifiedLeaf,
+                verifiedActive: geminiVerifiedActive,
+                tokenOverlap: 0,
+                rank: 1,
+              });
+            }
+          } else {
+            // No eBay auth — add with null verification (lower trust, will not reach lock threshold)
+            const effectiveScore = computeEffectiveScore(
+              "gemini",
+              geminiResult.confidence,
+              0, 0, false, 0,
+              null,
+            );
+            allCandidates.push({
+              categoryId: geminiResult.categoryId,
+              categoryName: geminiResult.categoryName,
+              breadcrumb: geminiResult.categoryName,
+              source: "gemini",
+              rawScore: geminiResult.confidence,
+              effectiveScore,
+              reason: `Gemini AI suggestion (self-reported confidence=${geminiResult.confidence}, unverified — no eBay auth)`,
+              verifiedLeaf: null,
+              verifiedActive: null,
+              tokenOverlap: 0,
+              rank: 1,
+            });
+          }
         }
       }
 
@@ -1165,7 +1311,11 @@ export async function handleRequest(req: Request): Promise<Response> {
 
       const newSuccessCount = ((promoteExisting?.publish_success_count as number) || 0) + 1;
 
-      const { error } = await supabase
+      // EA-P3-A: Filter by item_type_normalized when provided for precise row targeting
+      const promoteNormalized = payload.itemTypeNormalized
+        || (payload.itemType ? deepNormalize(normalizeItemType(payload.itemType)) : null);
+
+      let promoteQuery = supabase
         .from("category_mappings")
         .update({
           status: "approved",
@@ -1174,6 +1324,12 @@ export async function handleRequest(req: Request): Promise<Response> {
           updated_at: new Date().toISOString(),
         })
         .eq("ebay_category_id", cid);
+
+      if (promoteNormalized) {
+        promoteQuery = promoteQuery.eq("item_type_normalized", promoteNormalized);
+      }
+
+      const { error } = await promoteQuery;
 
       return new Response(
         JSON.stringify({ success: !error, categoryId: cid, action: "promote" }),
@@ -1188,11 +1344,20 @@ export async function handleRequest(req: Request): Promise<Response> {
       const cid = (categoryId || "").toString().trim();
       if (!cid) throw new Error("categoryId required for demote action");
 
-      const { data: existing } = await supabase
+      // EA-P3-A: Filter by item_type_normalized when provided
+      const demoteNormalized = payload.itemTypeNormalized
+        || (payload.itemType ? deepNormalize(normalizeItemType(payload.itemType)) : null);
+
+      let demoteSelectQuery = supabase
         .from("category_mappings")
         .select("publish_failure_count, publish_success_count, effective_score")
-        .eq("ebay_category_id", cid)
-        .maybeSingle();
+        .eq("ebay_category_id", cid);
+
+      if (demoteNormalized) {
+        demoteSelectQuery = demoteSelectQuery.eq("item_type_normalized", demoteNormalized);
+      }
+
+      const { data: existing } = await demoteSelectQuery.maybeSingle();
 
       if (existing) {
         const newFailCount = (existing.publish_failure_count || 0) + 1;
@@ -1202,7 +1367,7 @@ export async function handleRequest(req: Request): Promise<Response> {
         // Auto-reject if 3+ failures and no successes
         const newStatus = (newFailCount >= 3 && successCount === 0) ? "rejected" : undefined;
 
-        await supabase
+        let demoteUpdateQuery = supabase
           .from("category_mappings")
           .update({
             publish_failure_count: newFailCount,
@@ -1211,6 +1376,12 @@ export async function handleRequest(req: Request): Promise<Response> {
             updated_at: new Date().toISOString(),
           })
           .eq("ebay_category_id", cid);
+
+        if (demoteNormalized) {
+          demoteUpdateQuery = demoteUpdateQuery.eq("item_type_normalized", demoteNormalized);
+        }
+
+        await demoteUpdateQuery;
       }
 
       return new Response(

@@ -2539,6 +2539,7 @@ serve(async (req) => {
                 action: "demote",
                 categoryId: finalCategoryId,
                 itemType: payload.itemType || "",
+                itemTypeNormalized: payload.itemTypeNormalized || "", // EA-P3-A: precise row targeting
                 reason: `publish_failed_${publishResp.status}`,
               }),
             });
@@ -2582,6 +2583,7 @@ serve(async (req) => {
               action: "promote",
               categoryId: finalCategoryId,
               itemType: payload.itemType || "",
+              itemTypeNormalized: payload.itemTypeNormalized || "", // EA-P3-A: precise row targeting
             }),
           });
           console.log(`create_draft: promoted category mapping for ${finalCategoryId}`);
