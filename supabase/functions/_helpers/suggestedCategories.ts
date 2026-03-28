@@ -149,6 +149,24 @@ function leafName(breadcrumb: string): string {
   return parts[parts.length - 1] || breadcrumb;
 }
 
+// Helper: look up breadcrumb for a category ID — DB first, then hardcoded map
+async function lookupBreadcrumb(cid: string, svc: any): Promise<string | null> {
+  // 1. Try DB (has dynamic breadcrumbs from eBay getCategorySuggestions)
+  if (svc) {
+    try {
+      const { data: row } = await svc
+        .from("category_mappings")
+        .select("breadcrumb, category_name")
+        .eq("ebay_category_id", cid)
+        .maybeSingle();
+      if (row?.breadcrumb) return row.breadcrumb;
+      if (row?.category_name) return row.category_name;
+    } catch (_) { /* ignore */ }
+  }
+  // 2. Fall back to hardcoded map
+  return EBAY_CATEGORY_BREADCRUMBS[cid] || null;
+}
+
 export async function buildSuggestedCategories(listing: any, svc: any) {
   const normalizeId = (id: any) => (id ? String(id).trim() : "");
   const seen = new Set<string>();
@@ -158,7 +176,7 @@ export async function buildSuggestedCategories(listing: any, svc: any) {
   if (listing.ebayCategoryId) {
     const cid = normalizeId(listing.ebayCategoryId);
     seen.add(cid);
-    const breadcrumb = EBAY_CATEGORY_BREADCRUMBS[cid] || null;
+    const breadcrumb = await lookupBreadcrumb(cid, svc);
     finalSuggestions.push({
       categoryId:   cid,
       categoryName: breadcrumb ? leafName(breadcrumb) : null,
@@ -173,7 +191,7 @@ export async function buildSuggestedCategories(listing: any, svc: any) {
       const cid = normalizeId(altId);
       if (!cid || seen.has(cid)) continue;
       seen.add(cid);
-      const breadcrumb = EBAY_CATEGORY_BREADCRUMBS[cid] || null;
+      const breadcrumb = await lookupBreadcrumb(cid, svc);
       finalSuggestions.push({
         categoryId:   cid,
         categoryName: breadcrumb ? leafName(breadcrumb) : null,
@@ -190,7 +208,7 @@ export async function buildSuggestedCategories(listing: any, svc: any) {
       const cid = normalizeId(s?.categoryId);
       if (!cid || seen.has(cid)) continue;
       seen.add(cid);
-      const breadcrumb = EBAY_CATEGORY_BREADCRUMBS[cid] || s.breadcrumb || null;
+      const breadcrumb = await lookupBreadcrumb(cid, svc) || s.breadcrumb || null;
       finalSuggestions.push({
         categoryId:   cid,
         categoryName: breadcrumb ? leafName(breadcrumb) : (s.categoryName || null),
@@ -201,25 +219,10 @@ export async function buildSuggestedCategories(listing: any, svc: any) {
     }
   }
 
-  // Backfill missing category names via DB lookup, then local map
-  if (svc) {
-    for (let i = 0; i < finalSuggestions.length; i++) {
-      if (!finalSuggestions[i].breadcrumb) {
-        try {
-          const { data: exact } = await svc
-            .from("category_mappings")
-            .select("category_name")
-            .or(`ebay_category_id.eq.${finalSuggestions[i].categoryId},item_type.eq.${finalSuggestions[i].categoryId}`)
-            .maybeSingle();
-          if (exact?.category_name) {
-            finalSuggestions[i].breadcrumb   = exact.category_name;
-            finalSuggestions[i].categoryName = leafName(exact.category_name);
-          }
-        } catch (_) { /* ignore */ }
-      }
-      if (!finalSuggestions[i].categoryName) {
-        finalSuggestions[i].categoryName = `Category #${finalSuggestions[i].categoryId}`;
-      }
+  // Backfill: any suggestion still missing a name gets a fallback
+  for (let i = 0; i < finalSuggestions.length; i++) {
+    if (!finalSuggestions[i].categoryName) {
+      finalSuggestions[i].categoryName = `Category #${finalSuggestions[i].categoryId}`;
     }
   }
 

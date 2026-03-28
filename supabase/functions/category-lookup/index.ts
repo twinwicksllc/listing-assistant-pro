@@ -36,7 +36,119 @@ async function getEbayAppToken(): Promise<{ token: string; base: string } | null
   return { token: tokenJson.access_token, base };
 }
 
-// ── Helper: Build breadcrumb by walking up parent nodes ───────────────────
+// ── Helper: eBay getCategorySuggestions ─────────────────────────────────────
+// Takes a free-text query and returns ranked leaf category suggestions
+// with full ancestor breadcrumbs. This is the PRIMARY category lookup mechanism.
+interface CategorySuggestion {
+  categoryId: string;
+  categoryName: string;
+  breadcrumb: string;
+  treeNodeLevel: number;
+}
+
+async function fetchCategorySuggestions(
+  query: string,
+  appToken: string,
+  base: string,
+): Promise<CategorySuggestion[]> {
+  const url = `${base}/commerce/taxonomy/v1/category_tree/0/get_category_suggestions?q=${encodeURIComponent(query)}`;
+  
+  try {
+    const resp = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${appToken}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!resp.ok) {
+      console.error("category-lookup: getCategorySuggestions error", resp.status, await resp.text());
+      return [];
+    }
+
+    const json = await resp.json();
+    const suggestions = json.categorySuggestions || [];
+
+    return suggestions.map((s: any) => {
+      const cat = s.category || {};
+      const ancestors = s.categoryTreeNodeAncestors || [];
+      
+      // Build breadcrumb from ancestors (root → leaf)
+      const ancestorNames = ancestors
+        .sort((a: any, b: any) => (a.categoryTreeNodeLevel || 0) - (b.categoryTreeNodeLevel || 0))
+        .map((a: any) => a.categoryName)
+        .reverse(); // API returns leaf-to-root, we want root-to-leaf
+      ancestorNames.push(cat.categoryName);
+      
+      return {
+        categoryId: cat.categoryId,
+        categoryName: cat.categoryName,
+        breadcrumb: ancestorNames.join(" > "),
+        treeNodeLevel: s.categoryTreeNodeLevel || 0,
+      };
+    });
+  } catch (err) {
+    console.error("category-lookup: getCategorySuggestions exception", err);
+    return [];
+  }
+}
+
+// ── Helper: eBay getItemAspectsForCategory ──────────────────────────────────
+// Returns all aspect metadata for a leaf category — replaces hardcoded CATEGORY_ASPECT_RULES
+interface AspectInfo {
+  name: string;
+  required: boolean;
+  usage: string;      // "RECOMMENDED" | "OPTIONAL"
+  mode: string;       // "FREE_TEXT" | "SELECTION_ONLY"
+  dataType: string;   // "STRING" | "NUMBER" | "DATE" | "STRING_ARRAY"
+  values: string[];   // Allowed values (for SELECTION_ONLY modes)
+}
+
+async function fetchItemAspects(
+  categoryId: string,
+  appToken: string,
+  base: string,
+): Promise<AspectInfo[]> {
+  const url = `${base}/commerce/taxonomy/v1/category_tree/0/get_item_aspects_for_category?category_id=${encodeURIComponent(categoryId)}`;
+
+  try {
+    const resp = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${appToken}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!resp.ok) {
+      console.error(`category-lookup: getItemAspectsForCategory(${categoryId}) error`, resp.status);
+      return [];
+    }
+
+    const json = await resp.json();
+    const aspects = json.aspects || [];
+
+    return aspects.map((a: any) => {
+      const constraint = a.aspectConstraint || {};
+      const values = (a.aspectValues || []).map((v: any) => v.localizedValue).filter(Boolean);
+
+      return {
+        name: a.localizedAspectName,
+        required: constraint.aspectRequired === true,
+        usage: constraint.aspectUsage || "OPTIONAL",
+        mode: constraint.aspectMode || "FREE_TEXT",
+        dataType: constraint.aspectDataType || "STRING",
+        values,
+      };
+    });
+  } catch (err) {
+    console.error(`category-lookup: getItemAspectsForCategory(${categoryId}) exception`, err);
+    return [];
+  }
+}
+
+// ── Helper: Build breadcrumb by walking up parent nodes (legacy fallback) ───
 async function fetchBreadcrumb(
   categoryId: string,
   appToken: string,
@@ -84,7 +196,7 @@ async function fetchBreadcrumb(
   return { breadcrumb, categoryName, valid: parts.length > 0 };
 }
 
-// ── Helper: Ask Gemini for the correct eBay category ID ───────────────────
+// ── Helper: Ask Gemini for the correct eBay category ID (last-resort fallback) ──
 async function askGeminiForCategory(itemDescription: string): Promise<{ categoryId: string; categoryName: string; confidence: number } | null> {
   const geminiKey = Deno.env.get("GEMINI_API_KEY");
   if (!geminiKey) {
@@ -130,7 +242,6 @@ Example response:
     const data = await resp.json();
     const text = data.choices?.[0]?.message?.content ?? "";
 
-    // Extract JSON from response
     const jsonMatch = text.match(/\{[^}]+\}/);
     if (!jsonMatch) {
       console.warn("category-lookup: Gemini returned no JSON", text);
@@ -152,7 +263,7 @@ Example response:
   }
 }
 
-// ── Normalize item description for consistent key matching ────────────────
+// ── Normalize item description for consistent key matching ──────────────────
 function normalizeItemType(input: string): string {
   return (input || "").toLowerCase().trim()
     .replace(/[^a-z0-9\s\-]/g, "")   // strip special chars
@@ -181,6 +292,7 @@ export async function handleRequest(req: Request): Promise<Response> {
     const normalizedKey = normalizeItemType(rawItemType);
 
     // ── ACTION: lookup ─────────────────────────────────────────────────────
+    // 4-tier lookup: DB exact → DB fuzzy → eBay getCategorySuggestions → Gemini fallback
     if (action === "lookup") {
       if (!normalizedKey) {
         return new Response(
@@ -192,7 +304,7 @@ export async function handleRequest(req: Request): Promise<Response> {
       // 1. Try exact match in DB (both item_type and coin_type columns)
       const { data: exact } = await supabase
         .from("category_mappings")
-        .select("ebay_category_id, category_name, confidence, verification_source, item_type, coin_type")
+        .select("ebay_category_id, category_name, confidence, verification_source, item_type, coin_type, breadcrumb")
         .or(`item_type.eq.${normalizedKey},coin_type.eq.${normalizedKey}`)
         .order("confidence", { ascending: false })
         .limit(1)
@@ -206,6 +318,7 @@ export async function handleRequest(req: Request): Promise<Response> {
             itemType:           normalizedKey,
             categoryId:         exact.ebay_category_id,
             categoryName:       exact.category_name,
+            breadcrumb:         exact.breadcrumb || exact.category_name,
             confidence:         exact.confidence,
             verificationSource: exact.verification_source,
             source:             "db",
@@ -215,14 +328,13 @@ export async function handleRequest(req: Request): Promise<Response> {
       }
 
       // 2. Try fuzzy / partial match — find any row where item_type LIKE '%keyword%'
-      //    Split the normalized key into words and try each
       const keywords = normalizedKey.split(" ").filter((w) => w.length > 3);
       let fuzzyMatch: any = null;
 
       for (const kw of keywords) {
         const { data: fuzzy } = await supabase
           .from("category_mappings")
-          .select("ebay_category_id, category_name, confidence, verification_source, item_type, coin_type")
+          .select("ebay_category_id, category_name, confidence, verification_source, item_type, coin_type, breadcrumb")
           .or(`item_type.ilike.%${kw}%,coin_type.ilike.%${kw}%`)
           .order("confidence", { ascending: false })
           .limit(1)
@@ -242,7 +354,8 @@ export async function handleRequest(req: Request): Promise<Response> {
             itemType:           normalizedKey,
             categoryId:         fuzzyMatch.ebay_category_id,
             categoryName:       fuzzyMatch.category_name,
-            confidence:         Math.max(60, (fuzzyMatch.confidence ?? 80) - 15), // slight confidence penalty for fuzzy
+            breadcrumb:         fuzzyMatch.breadcrumb || fuzzyMatch.category_name,
+            confidence:         Math.max(60, (fuzzyMatch.confidence ?? 80) - 15),
             verificationSource: fuzzyMatch.verification_source,
             source:             "db_fuzzy",
           }),
@@ -250,8 +363,61 @@ export async function handleRequest(req: Request): Promise<Response> {
         );
       }
 
-      // 3. Not in DB — ask Gemini, then auto-save the result
-      console.log(`category-lookup: no DB match for "${normalizedKey}", asking Gemini...`);
+      // 3. Not in DB — try eBay getCategorySuggestions API (PRIMARY dynamic lookup)
+      console.log(`category-lookup: no DB match for "${normalizedKey}", trying eBay getCategorySuggestions...`);
+      const ebayAuth = await getEbayAppToken();
+      
+      if (ebayAuth) {
+        const suggestions = await fetchCategorySuggestions(rawItemType, ebayAuth.token, ebayAuth.base);
+        
+        if (suggestions.length > 0) {
+          const best = suggestions[0];
+          console.log(`category-lookup: eBay suggested category for "${rawItemType}":`, best.categoryId, best.categoryName, best.breadcrumb);
+
+          // Auto-save to DB so future lookups are instant
+          try {
+            await supabase.from("category_mappings").upsert(
+              {
+                coin_type:           normalizedKey,
+                item_type:           normalizedKey,
+                ebay_category_id:    best.categoryId,
+                category_name:       best.categoryName,
+                breadcrumb:          best.breadcrumb,
+                verification_source: "ebay_api",
+                confidence:          90,
+                updated_at:          new Date().toISOString(),
+              },
+              { onConflict: "coin_type" }
+            );
+            console.log(`category-lookup: auto-saved eBay API result for "${normalizedKey}":`, best.categoryId);
+          } catch (saveErr) {
+            console.warn("category-lookup: failed to auto-save eBay API result", saveErr);
+          }
+
+          return new Response(
+            JSON.stringify({
+              found:              true,
+              itemType:           normalizedKey,
+              categoryId:         best.categoryId,
+              categoryName:       best.categoryName,
+              breadcrumb:         best.breadcrumb,
+              confidence:         90,
+              verificationSource: "ebay_api",
+              source:             "ebay_api",
+              // Include alternatives for the caller
+              alternatives:       suggestions.slice(1, 4).map(s => ({
+                categoryId:   s.categoryId,
+                categoryName: s.categoryName,
+                breadcrumb:   s.breadcrumb,
+              })),
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+
+      // 4. eBay API unavailable or no results — fall back to Gemini
+      console.log(`category-lookup: eBay API returned no results for "${normalizedKey}", falling back to Gemini...`);
       const geminiResult = await askGeminiForCategory(rawItemType);
 
       if (geminiResult) {
@@ -288,12 +454,157 @@ export async function handleRequest(req: Request): Promise<Response> {
         );
       }
 
-      // 4. Complete miss — nothing found
+      // 5. Complete miss — nothing found
       return new Response(
         JSON.stringify({
           found:    false,
           itemType: normalizedKey,
           message:  "No category found — AI will determine category during analysis",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── ACTION: suggest ────────────────────────────────────────────────────
+    // Direct eBay getCategorySuggestions call — returns top N category suggestions
+    // Used by analyze-item to get dynamic category options for ANY item
+    if (action === "suggest") {
+      const query = payload.query || rawItemType || "";
+      if (!query) {
+        return new Response(
+          JSON.stringify({ suggestions: [], message: "query is required" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const ebayAuth = await getEbayAppToken();
+      if (!ebayAuth) {
+        return new Response(
+          JSON.stringify({ suggestions: [], message: "eBay API credentials not configured" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const suggestions = await fetchCategorySuggestions(query, ebayAuth.token, ebayAuth.base);
+      
+      return new Response(
+        JSON.stringify({
+          suggestions: suggestions.slice(0, 5).map(s => ({
+            categoryId:   s.categoryId,
+            categoryName: s.categoryName,
+            breadcrumb:   s.breadcrumb,
+          })),
+          query,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── ACTION: aspects ────────────────────────────────────────────────────
+    // Fetch + cache aspect rules for a category ID from eBay's getItemAspectsForCategory
+    // This replaces the hardcoded CATEGORY_ASPECT_RULES in ebay-publish
+    if (action === "aspects") {
+      const cid = (categoryId || "").toString().trim();
+      if (!cid) throw new Error("categoryId required for aspects action");
+
+      // 1. Check cache first (valid for 7 days)
+      const { data: cached } = await supabase
+        .from("category_aspects_cache")
+        .select("aspects, category_name, fetched_at, expires_at")
+        .eq("category_id", cid)
+        .maybeSingle();
+
+      if (cached && new Date(cached.expires_at) > new Date()) {
+        console.log(`category-lookup: aspects cache hit for ${cid} (fetched ${cached.fetched_at})`);
+        return new Response(
+          JSON.stringify({
+            categoryId:   cid,
+            categoryName: cached.category_name,
+            aspects:      cached.aspects,
+            source:       "cache",
+            fetchedAt:    cached.fetched_at,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // 2. Cache miss or expired — fetch from eBay API
+      const ebayAuth = await getEbayAppToken();
+      if (!ebayAuth) {
+        // Return cached data even if expired, or empty
+        if (cached) {
+          return new Response(
+            JSON.stringify({
+              categoryId:   cid,
+              categoryName: cached.category_name,
+              aspects:      cached.aspects,
+              source:       "cache_stale",
+              fetchedAt:    cached.fetched_at,
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        return new Response(
+          JSON.stringify({ categoryId: cid, aspects: [], source: "none", message: "No eBay credentials" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const aspects = await fetchItemAspects(cid, ebayAuth.token, ebayAuth.base);
+      
+      if (aspects.length > 0) {
+        // Get category name for display
+        let catName = categoryName || cached?.category_name || null;
+        if (!catName) {
+          // Try to get it from category_mappings
+          const { data: mapping } = await supabase
+            .from("category_mappings")
+            .select("category_name")
+            .eq("ebay_category_id", cid)
+            .maybeSingle();
+          catName = mapping?.category_name || null;
+        }
+
+        // Save to cache
+        const now = new Date();
+        const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days
+        
+        try {
+          await supabase.from("category_aspects_cache").upsert(
+            {
+              category_id:   cid,
+              category_name: catName,
+              aspects:       aspects,
+              fetched_at:    now.toISOString(),
+              expires_at:    expiresAt.toISOString(),
+              updated_at:    now.toISOString(),
+            },
+            { onConflict: "category_id" }
+          );
+          console.log(`category-lookup: cached ${aspects.length} aspects for category ${cid}`);
+        } catch (cacheErr) {
+          console.warn("category-lookup: failed to cache aspects", cacheErr);
+        }
+
+        return new Response(
+          JSON.stringify({
+            categoryId:   cid,
+            categoryName: catName,
+            aspects:      aspects,
+            source:       "ebay_api",
+            fetchedAt:    now.toISOString(),
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // No aspects returned — return empty
+      return new Response(
+        JSON.stringify({
+          categoryId: cid,
+          aspects:    [],
+          source:     "ebay_api",
+          message:    "No aspects found for this category",
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -308,7 +619,7 @@ export async function handleRequest(req: Request): Promise<Response> {
       try {
         const { data: local } = await supabase
           .from("category_mappings")
-          .select("ebay_category_id, category_name")
+          .select("ebay_category_id, category_name, breadcrumb")
           .eq("ebay_category_id", cid)
           .maybeSingle();
         if (local?.category_name) {
@@ -317,7 +628,7 @@ export async function handleRequest(req: Request): Promise<Response> {
               valid:        true,
               source:       "db",
               categoryName: local.category_name,
-              breadcrumb:   local.category_name,
+              breadcrumb:   local.breadcrumb || local.category_name,
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
@@ -350,6 +661,7 @@ export async function handleRequest(req: Request): Promise<Response> {
     // ── ACTION: store (admin or auto-save from analyze-item) ──────────────
     if (action === "store") {
       const rawKey = normalizeItemType(rawItemType || categoryName || "");
+      const breadcrumb = payload.breadcrumb || null;
 
       // If called with an Authorization header, verify admin
       const authHeader = req.headers.get("authorization");
@@ -364,7 +676,6 @@ export async function handleRequest(req: Request): Promise<Response> {
         }
         const userId = userData.user.id;
         const { data: profile } = await supabase.from("profiles").select("is_admin").eq("id", userId).maybeSingle();
-        // Allow any authenticated user to store (self-learning), but mark source appropriately
         const isAdmin = profile?.is_admin === true;
         const source  = isAdmin ? (verificationSource || "user_verified") : "ai_auto";
 
@@ -376,6 +687,7 @@ export async function handleRequest(req: Request): Promise<Response> {
             item_type:           rawKey,
             ebay_category_id:    categoryId,
             category_name:       categoryName || null,
+            breadcrumb:          breadcrumb,
             verification_source: source,
             confidence:          isAdmin ? 100 : 80,
             updated_at:          new Date().toISOString(),
@@ -400,6 +712,7 @@ export async function handleRequest(req: Request): Promise<Response> {
           item_type:           rawKey,
           ebay_category_id:    categoryId,
           category_name:       categoryName || null,
+          breadcrumb:          breadcrumb,
           verification_source: verificationSource || "ai_auto",
           confidence:          75,
           updated_at:          new Date().toISOString(),

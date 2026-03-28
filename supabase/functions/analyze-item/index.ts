@@ -275,25 +275,29 @@ serve(async (req: Request) => {
       throw new Error("GEMINI_API_KEY is not configured");
     }
 
-    // ── Pre-lookup: check category_mappings DB before calling Gemini ──────────
-    // Scan the voice note + any context words against the DB for a quick hint
-    let dbCategoryHint = "";
+    // ── Pre-lookup: Dynamic category suggestions ──────────────────────────
+    // Step 1: Check category_mappings DB for known matches
+    // Step 2: Call eBay getCategorySuggestions API for dynamic category options
+    // Both results are injected into the system prompt to guide Gemini
+    let categoryHints = "";
+    
+    // DB pre-lookup (fast, no API call)
     try {
       const voiceNoteWords = (voiceNote || "").toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
       if (voiceNoteWords.length > 0) {
-        // Try each meaningful word (up to 5) as a fuzzy match in category_mappings
         for (const word of voiceNoteWords.slice(0, 5)) {
           const { data: catRow } = await svc
             .from("category_mappings")
-            .select("ebay_category_id, category_name, item_type, coin_type")
+            .select("ebay_category_id, category_name, breadcrumb, item_type, coin_type")
             .or(`item_type.ilike.%${word}%,coin_type.ilike.%${word}%`)
             .order("confidence", { ascending: false })
             .limit(1)
             .maybeSingle();
           if (catRow?.ebay_category_id) {
             const matchedType = catRow.item_type || catRow.coin_type || "";
-            dbCategoryHint = `\n- DB CATEGORY MATCH: For items matching "${matchedType}", the verified eBay category ID is ${catRow.ebay_category_id} (${catRow.category_name || "see eBay"}). Use this as your primary category unless the item clearly belongs elsewhere.`;
-            console.log(`analyze-item: DB category pre-hint found for word "${word}":`, catRow.ebay_category_id, catRow.category_name);
+            const breadcrumb = catRow.breadcrumb || catRow.category_name || "";
+            categoryHints += `\n- DB MATCH: "${matchedType}" -> category **${catRow.ebay_category_id}** (${breadcrumb}). Use this as primary category unless the item clearly belongs elsewhere.`;
+            console.log(`analyze-item: DB category pre-hint for "${word}":`, catRow.ebay_category_id, breadcrumb);
             break;
           }
         }
@@ -301,7 +305,41 @@ serve(async (req: Request) => {
     } catch (dbHintErr) {
       console.warn("analyze-item: DB category pre-lookup failed (non-blocking):", dbHintErr);
     }
-    // ── End pre-lookup ─────────────────────────────────────────────────────────
+    
+    // eBay getCategorySuggestions API call (if we have a voice note or can derive a query)
+    try {
+      const searchQuery = voiceNote || "";
+      if (searchQuery.trim().length > 2) {
+        const _suggestUrl = Deno.env.get("SUPABASE_URL");
+        const _suggestKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (_suggestUrl && _suggestKey) {
+          const suggestResp = await fetch(
+            `${_suggestUrl}/functions/v1/category-lookup`,
+            {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${_suggestKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ action: "suggest", query: searchQuery }),
+            }
+          );
+          if (suggestResp.ok) {
+            const suggestData = await suggestResp.json();
+            if (suggestData.suggestions && suggestData.suggestions.length > 0) {
+              categoryHints += "\n- EBAY API SUGGESTIONS (from eBay's official taxonomy, use these as primary reference):";
+              for (const s of suggestData.suggestions.slice(0, 3)) {
+                categoryHints += `\n  * **${s.categoryId}** -- ${s.breadcrumb || s.categoryName}`;
+              }
+              console.log(`analyze-item: eBay API returned ${suggestData.suggestions.length} category suggestions for "${searchQuery}"`);
+            }
+          }
+        }
+      }
+    } catch (suggestErr) {
+      console.warn("analyze-item: eBay category suggestion failed (non-blocking):", suggestErr);
+    }
+    // ── End pre-lookup ─────────────────────────────────────────────────────
 
     const systemPrompt = `You are a professional eBay Listing Expert and item identifier. Your task is to analyze item photos and generate a complete listing via the \`create_listing\` tool.
 
@@ -315,41 +353,19 @@ You handle ALL types of items: coins, bullion, precious metals, collectibles, to
 4. EBAY COMPLIANCE: Title must be \u2264 80 chars. No hype words like "L@@K."
 5. SELLER VOICE NOTE: If provided, treat as authoritative \u2014 override visual assessment where applicable.
 
-### CATEGORY ROUTING \u2014 ALL ITEM TYPES
-**Collectibles / Toys / Plush:**
-- Beanie Babies / Ty Plush: **19203**
-- Stuffed Animals (general): **19209**
-- Funko Pop Vinyl Figures: **261068**
-- Action Figures: **246**
-- LEGO Sets: **182**
-- Pok\u00e9mon Cards: **183454**
-- Sports Trading Cards: **261328** or **213** or **64482**
-  → REQUIRED itemSpecifics: Sport (Baseball/Basketball/Football/Hockey/Soccer), Card Manufacturer, Year
-  → Always include Sport — eBay WILL REJECT the listing without it
-- Board Games: **19016**
-- Dolls: **222** | Bears (collectible): **238**
+### CATEGORY SELECTION
+You MUST select the correct eBay **leaf** category ID for every item. Use these resources in order:
 
-**Coins & Bullion:**
-- Morgan Dollars: **39464** | Peace Dollars: **11980** | Eisenhower: **11981**
-- Silver Bars/Rounds: **39489** | Gold Bars/Rounds: **178906**
-- Silver Eagle: **41111** | Gold Eagle: **40166** | Gold Buffalo: **40167**
-- Barber Half: **11971** | Liberty Walking Half: **41099** | Kennedy Half: **41102**
-- Wheat Penny: **39455** | World Coins: **45243**
-- Proof Sets: **41109** | Mint Sets: **526**
+1. **DYNAMIC SUGGESTIONS** (below): If eBay API suggestions or DB matches are provided, use these FIRST \u2014 they come from eBay's official taxonomy and are the most reliable.
+2. **Your knowledge**: You have extensive knowledge of eBay category IDs. Use it when dynamic suggestions are unavailable.
+3. **google_search**: If confidence <90%, search for "eBay leaf category ID [Item Name]" to verify.
+${categoryHints}
 
-**Jewelry & Watches:**
-- Fine Jewelry Necklaces: **10986** | Rings: **14324** | Bracelets: **10985** | Earrings: **10987**
-- Watches: **14327** | Fashion Jewelry: **31387**
+**CRITICAL RULES FOR SPECIFIC CATEGORIES:**
+- Sports Trading Cards: ALWAYS include **Sport** in itemSpecifics (Baseball/Basketball/Football/Hockey/Soccer). eBay WILL REJECT the listing without it.
+- Coins: Include Certification, Year, Denomination, Mint Location, Composition, Fineness where applicable.
+- Bullion: Include Shape, Precious Metal Content per Unit, Brand/Mint, Fineness.
 
-**Electronics:**
-- Smartphones: **9355** | Video Games: **1249** | Consoles: **139971**
-- Cameras: **58058** | Headphones: **112529** | Consumer Electronics: **293**
-
-**Clothing & Accessories:** **11450**
-**Books:** **267** | **Tools:** **631** | **Art:** **550** | **General Collectibles:** **1**
-${dbCategoryHint}
-
-**VERIFICATION:** If confidence <95% or item not listed above, use \`google_search\` for "eBay leaf category ID [Item Name]".
 **ALWAYS provide 1-2 alternative category IDs** (alternativeCategoryIds) for fallback options.
 
 ### IDENTIFICATION & DESCRIPTION
@@ -375,7 +391,6 @@ ${competitorData && !competitorData.error
   : `- No recent sold comps available. Use category knowledge and condition to price appropriately.`}
 
 Use the \`create_listing\` tool to return the final structured data.`
-
 
     // Build content array with all images + text prompt
     const contentParts: any[] = imageList.map((img) => {

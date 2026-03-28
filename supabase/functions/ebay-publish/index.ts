@@ -8,6 +8,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Force redeploy v24: Dynamic category aspects — fetch from eBay Taxonomy API via category_aspects_cache, hardcoded rules as fallback
 // Force redeploy v23: Fix SKU generation — use rpc("increment_sku_sequence") instead of broken { increment: 1 } update syntax
 // Force redeploy v17: fix errorId 25002 for category 45243 (World Coins) - Brand removed from NON_ASPECT_KEYS, Color updated to include BM (Bi-Metallic) for non-copper coins
 // Force redeploy v15: shipping location from profile — city+postalCode passed to ensureInventoryLocation; fallback NYC→Chicago
@@ -18,8 +19,11 @@ const corsHeaders = {
 // ================================================================
 // CATEGORY ASPECT RULES
 // ================================================================
-// Defines required and preferred aspects for the 10 "template" categories.
-// For ANY other category the app falls through to generic normalisation.
+// Hardcoded fallback rules for known categories.
+// The system now FIRST tries to fetch dynamic rules from eBay's
+// getItemAspectsForCategory API (cached in category_aspects_cache table).
+// If the dynamic fetch fails or returns nothing, these hardcoded rules
+// are used as a safety net.
 // ================================================================
 
 interface AspectRule {
@@ -28,6 +32,141 @@ interface AspectRule {
   defaults: Record<string, string>;
   fixedValues?: Record<string, string>;
 }
+
+// ================================================================
+// DYNAMIC ASPECT FETCHER
+// ================================================================
+// Fetches aspect rules from category_aspects_cache (populated by
+// category-lookup's "aspects" action via eBay's getItemAspectsForCategory).
+// Falls back to hardcoded CATEGORY_ASPECT_RULES if cache miss.
+// ================================================================
+
+async function fetchDynamicAspectRule(
+  categoryId: string,
+  supabase: any,
+): Promise<AspectRule | null> {
+  try {
+    // 1. Check the cache table
+    const { data: cached } = await supabase
+      .from("category_aspects_cache")
+      .select("aspects, expires_at")
+      .eq("category_id", categoryId)
+      .maybeSingle();
+
+    if (cached?.aspects && new Date(cached.expires_at) > new Date()) {
+      // Convert eBay API format to our AspectRule format
+      return convertEbayAspectsToRule(cached.aspects);
+    }
+
+    // 2. Cache miss or stale — call category-lookup to fetch + cache
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (supabaseUrl && supabaseServiceKey) {
+      try {
+        const resp = await fetch(
+          `${supabaseUrl}/functions/v1/category-lookup`,
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${supabaseServiceKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ action: "aspects", categoryId }),
+          }
+        );
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.aspects && data.aspects.length > 0) {
+            return convertEbayAspectsToRule(data.aspects);
+          }
+        }
+      } catch (fetchErr) {
+        console.warn(`fetchDynamicAspectRule: category-lookup call failed for ${categoryId}:`, fetchErr);
+      }
+    }
+
+    // 3. If we had stale cache data, use it as fallback
+    if (cached?.aspects) {
+      return convertEbayAspectsToRule(cached.aspects);
+    }
+
+    return null;
+  } catch (err) {
+    console.warn(`fetchDynamicAspectRule: error for ${categoryId}:`, err);
+    return null;
+  }
+}
+
+// Convert eBay getItemAspectsForCategory response into our AspectRule format
+function convertEbayAspectsToRule(aspects: any[]): AspectRule {
+  const required: string[] = [];
+  const preferred: string[] = [];
+  const defaults: Record<string, string> = {};
+
+  for (const aspect of aspects) {
+    const name = aspect.name;
+    if (!name) continue;
+
+    if (aspect.required) {
+      required.push(name);
+    } else if (aspect.usage === "RECOMMENDED") {
+      preferred.push(name);
+    }
+
+    // For SELECTION_ONLY aspects with exactly one value, set it as default
+    if (aspect.mode === "SELECTION_ONLY" && aspect.values?.length === 1) {
+      defaults[name] = aspect.values[0];
+    }
+  }
+
+  return { required, preferred, defaults };
+}
+
+// ================================================================
+// CATEGORY TREE DETECTION (replaces hardcoded ID sets)
+// ================================================================
+// Detects category type from breadcrumb path stored in DB.
+// Falls back to hardcoded ID sets if breadcrumb unavailable.
+// ================================================================
+
+type CategoryTreeType = "coin" | "bullion" | "trading_card" | "collectible" | "other";
+
+async function detectCategoryTree(
+  categoryId: string,
+  supabase: any,
+): Promise<CategoryTreeType> {
+  // First try to get breadcrumb from DB
+  try {
+    const { data: mapping } = await supabase
+      .from("category_mappings")
+      .select("breadcrumb, category_name")
+      .eq("ebay_category_id", categoryId)
+      .maybeSingle();
+
+    const breadcrumb = (mapping?.breadcrumb || mapping?.category_name || "").toLowerCase();
+
+    if (breadcrumb) {
+      if (breadcrumb.includes("bullion")) return "bullion";
+      if (breadcrumb.includes("coins:") || breadcrumb.includes("coins >") || breadcrumb.includes("paper money")) return "coin";
+      if (breadcrumb.includes("trading cards") || breadcrumb.includes("collectible card games")) return "trading_card";
+      if (breadcrumb.includes("collectibles") || breadcrumb.includes("toys &") || breadcrumb.includes("stuffed animal") || breadcrumb.includes("action figure") || breadcrumb.includes("funko") || breadcrumb.includes("lego") || breadcrumb.includes("board game")) return "collectible";
+      return "other";
+    }
+  } catch (_) { /* fall through to hardcoded */ }
+
+  // Fallback to hardcoded sets
+  if (HARDCODED_BULLION_CATEGORY_IDS.has(categoryId)) return "bullion";
+  if (HARDCODED_COIN_CATEGORY_IDS.has(categoryId)) return "coin";
+  if (HARDCODED_TRADING_CARD_CATEGORY_IDS.has(categoryId)) return "trading_card";
+  if (HARDCODED_COLLECTIBLE_CATEGORY_IDS.has(categoryId)) return "collectible";
+  return "other";
+}
+
+// Hardcoded ID sets kept as fallback for detectCategoryTree
+const HARDCODED_COIN_CATEGORY_IDS = new Set(["11981", "39464", "11980", "11971", "41099", "41102", "11973", "39455", "41084", "11950", "41111", "166679", "41109", "526", "253", "45243"]);
+const HARDCODED_BULLION_CATEGORY_IDS = new Set(["178906", "39489", "3361", "532", "173685"]);
+const HARDCODED_TRADING_CARD_CATEGORY_IDS = new Set(["261328", "183454", "2536", "19107", "64482", "213"]);
+const HARDCODED_COLLECTIBLE_CATEGORY_IDS = new Set(["19203", "19209", "261068", "246", "182", "19016"]);
 
 const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
   // Empty rule set for non-coin categories with no specific aspect requirements
@@ -724,52 +863,29 @@ const LEGACY_CONDITION_MAP: Record<string, string> = {
   PRE_OWNED_POOR: "USED_ACCEPTABLE",
 };
 
-// Coin categories that only accept the restricted eBay condition set
-const COIN_CATEGORY_IDS = new Set(["11981", "39464", "11980", "11971", "41099"]);
-const BULLION_CATEGORY_IDS = new Set(["178906", "39489", "3361", "532", "173685"]);
-
-// Trading card categories — only accept LIKE_NEW, VERY_GOOD, GOOD, ACCEPTABLE (no NEW/1000)
-const TRADING_CARD_CATEGORY_IDS = new Set([
-  "261328", // Sports Trading Cards
-  "183454", // Pokémon TCG
-  "2536",   // Magic: The Gathering
-  "19107",  // Non-Sport Trading Cards
-  "64482",  // Baseball Cards
-  "213",    // Sports Cards (parent)
-]);
-
-// Plush/Toy/Collectible categories — only accept NEW, LIKE_NEW, VERY_GOOD, GOOD, ACCEPTABLE
-const COLLECTIBLE_CATEGORY_IDS = new Set([
-  "19203",  // Beanie Babies
-  "19209",  // Stuffed Animals
-  "261068", // Funko Pop Vinyl Figures
-  "246",    // Action Figures
-  "182",    // LEGO Sets
-  "19016",  // Board Games
-]);
+// Condition normalization now uses both hardcoded fallback sets (from top of file)
+// AND the dynamic detectCategoryTree function for breadcrumb-based detection.
+// The sync version below uses hardcoded sets; the async caller can override via categoryTreeType.
 
 function normalizeConditionForCategory(
   rawCondition: string,
   categoryId: string | undefined,
-  itemType: string | undefined = undefined
+  itemType: string | undefined = undefined,
+  categoryTreeType: CategoryTreeType | undefined = undefined,
 ): { condition: string; corrected: boolean } {
   // Apply legacy migration first
   const condition = LEGACY_CONDITION_MAP[rawCondition] ?? rawCondition;
 
-  const isCoin = COIN_CATEGORY_IDS.has(categoryId ?? "") ||
-    (!BULLION_CATEGORY_IDS.has(categoryId ?? "") && itemType?.toLowerCase().includes("coin"));
+  // Use provided tree type or fall back to hardcoded ID sets
+  const treeType = categoryTreeType || detectCategoryTreeSync(categoryId ?? "", itemType);
 
-  const isBullion = BULLION_CATEGORY_IDS.has(categoryId ?? "") ||
-    (!isCoin && !!itemType?.toLowerCase().match(/round|bar|ingot|wafer/i));
-
-  // Also handle the legacy 261xxx range for silver/gold bullion coins/bars
-  const isLegacyBullion = categoryId
-    ? /^261[0-9]{3}$/.test(categoryId) && parseInt(categoryId) >= 261000 && parseInt(categoryId) <= 261076
-    : false;
+  const isCoin = treeType === "coin";
+  const isBullion = treeType === "bullion";
+  const isTradingCard = treeType === "trading_card";
+  const isCollectible = treeType === "collectible";
 
   if (isCoin) {
     // Coins & Paper Money category tree uses USED_* condition family, NOT *_REFURBISHED.
-    // Valid coin conditions per eBay's getItemConditionPolicies for this category tree:
     const validCoinConditions = new Set([
       "NEW",             // MS-60 to MS-70 (uncirculated) and slabbed/certified
       "USED_EXCELLENT",  // AU-50 to XF-45 (lightly circulated)
@@ -783,7 +899,7 @@ function normalizeConditionForCategory(
         LIKE_NEW: "NEW",
         NEW_OTHER: "NEW",
         NEW_WITH_DEFECTS: "USED_GOOD",
-        CERTIFIED_REFURBISHED: "NEW",      // slabbed coins are "new" on eBay
+        CERTIFIED_REFURBISHED: "NEW",
         SELLER_REFURBISHED: "USED_GOOD",
         EXCELLENT_REFURBISHED: "USED_EXCELLENT",
         VERY_GOOD_REFURBISHED: "USED_VERY_GOOD",
@@ -796,13 +912,13 @@ function normalizeConditionForCategory(
       console.log(`normalizeConditionForCategory: coin category ${categoryId} — ${condition} -> ${mapped}`);
       return { condition: mapped, corrected: true };
     }
-  } else if (isBullion || isLegacyBullion) {
+  } else if (isBullion) {
     // Bullion: allow everything except LIKE_NEW
     if (condition === "LIKE_NEW") {
       console.log(`normalizeConditionForCategory: bullion category ${categoryId} — LIKE_NEW -> NEW`);
       return { condition: "NEW", corrected: true };
     }
-  } else if (TRADING_CARD_CATEGORY_IDS.has(categoryId ?? "")) {
+  } else if (isTradingCard) {
     // Trading cards: eBay only allows LIKE_NEW, VERY_GOOD, GOOD, ACCEPTABLE (no NEW/1000)
     const validCardConditions = new Set(["LIKE_NEW", "VERY_GOOD", "GOOD", "ACCEPTABLE"]);
     if (!validCardConditions.has(condition)) {
@@ -824,7 +940,7 @@ function normalizeConditionForCategory(
       console.log(`normalizeConditionForCategory: trading card category ${categoryId} — ${condition} -> ${mapped}`);
       return { condition: mapped, corrected: true };
     }
-  } else if (COLLECTIBLE_CATEGORY_IDS.has(categoryId ?? "")) {
+  } else if (isCollectible) {
     // Collectibles/toys/plush: map any non-standard conditions to valid eBay set
     const validCollectibleConditions = new Set(["NEW", "LIKE_NEW", "VERY_GOOD", "GOOD", "ACCEPTABLE"]);
     if (!validCollectibleConditions.has(condition)) {
@@ -848,6 +964,31 @@ function normalizeConditionForCategory(
   }
 
   return { condition, corrected: false };
+}
+
+// Synchronous category tree detection using hardcoded ID sets + item type hints
+// Used by normalizeConditionForCategory when async breadcrumb detection isn't available
+function detectCategoryTreeSync(categoryId: string, itemType: string | undefined): CategoryTreeType {
+  if (HARDCODED_BULLION_CATEGORY_IDS.has(categoryId)) return "bullion";
+  if (HARDCODED_COIN_CATEGORY_IDS.has(categoryId)) return "coin";
+  if (HARDCODED_TRADING_CARD_CATEGORY_IDS.has(categoryId)) return "trading_card";
+  if (HARDCODED_COLLECTIBLE_CATEGORY_IDS.has(categoryId)) return "collectible";
+
+  // Also handle the legacy 261xxx range for silver/gold bullion coins/bars
+  if (/^261[0-9]{3}$/.test(categoryId) && parseInt(categoryId) >= 261000 && parseInt(categoryId) <= 261076) {
+    return "bullion";
+  }
+
+  // Item type text hints as last resort
+  if (itemType) {
+    const lower = itemType.toLowerCase();
+    if (/coin/i.test(lower)) return "coin";
+    if (/round|bar|ingot|wafer/i.test(lower)) return "bullion";
+    if (/trading.?card|pokemon|baseball.?card|sports.?card/i.test(lower)) return "trading_card";
+    if (/beanie|plush|funko|action.?figure|lego/i.test(lower)) return "collectible";
+  }
+
+  return "other";
 }
 
 // ----------------------------------------------------------------
@@ -1336,7 +1477,7 @@ async function ensureInventoryLocation(
 }
 
 serve(async (req) => {
-  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v23 - SKU generation fix: use rpc increment_sku_sequence instead of broken increment syntax) ***");
+  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v24 - Dynamic category aspects from eBay Taxonomy API, hardcoded rules as fallback) ***");
   
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -1967,22 +2108,53 @@ serve(async (req) => {
       //   - Fixed values for known categories (Composition, Fineness for silver dollars, etc.)
       //   - Drops placeholder values (none / unknown / n/a / other / etc.)
       
-      // Fallback: if finalCategoryId is not in CATEGORY_ASPECT_RULES, use appropriate default
-      // For coin/bullion categories fall back to US Coins General (253)
-      // For everything else use an empty rule set to avoid forcing coin-specific aspects
-      const COIN_FALLBACK_CATEGORIES = new Set([
-        "11981","39464","11980","11971","41099","41102","11973","39455","41084",
-        "11950","41111","166679","41109","526","253","45243","178906","39489","3361","532","173685"
-      ]);
+      // ── DYNAMIC ASPECT RULES ──────────────────────────────────────────
+      // Try to fetch aspect rules from eBay's Taxonomy API (cached in DB).
+      // Falls back to hardcoded CATEGORY_ASPECT_RULES if dynamic fetch fails.
       let categoryForAspects = finalCategoryId ?? "";
-      if (!CATEGORY_ASPECT_RULES[categoryForAspects]) {
-        if (COIN_FALLBACK_CATEGORIES.has(categoryForAspects) || !categoryForAspects) {
-          console.warn(`create_draft: category ${categoryForAspects} not in CATEGORY_ASPECT_RULES, falling back to US Coins General (253)`);
-          categoryForAspects = "253"; // US Coins General
-        } else {
-          // Non-coin category with no aspect rules — use empty rule set to avoid forcing coin aspects
-          console.warn(`create_draft: category ${categoryForAspects} not in CATEGORY_ASPECT_RULES, using empty aspect rule (non-coin category)`);
-          categoryForAspects = "__empty__";
+      let dynamicRuleApplied = false;
+      
+      // Try dynamic aspect rules from eBay API cache
+      try {
+        const _supabaseUrl = Deno.env.get("SUPABASE_URL");
+        const _supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (_supabaseUrl && _supabaseServiceKey && categoryForAspects) {
+          const _supabase = createClient(_supabaseUrl, _supabaseServiceKey);
+          const dynamicRule = await fetchDynamicAspectRule(categoryForAspects, _supabase);
+          if (dynamicRule && (dynamicRule.required.length > 0 || dynamicRule.preferred.length > 0)) {
+            // Merge: dynamic rules provide required/preferred/defaults,
+            // but hardcoded fixedValues still override (they encode known-correct values like Fineness for Morgan Dollars)
+            const hardcodedRule = CATEGORY_ASPECT_RULES[categoryForAspects];
+            if (hardcodedRule?.fixedValues) {
+              dynamicRule.fixedValues = { ...dynamicRule.fixedValues, ...hardcodedRule.fixedValues };
+            }
+            // Also merge hardcoded defaults that are known-good (e.g., Certification: "Uncertified")
+            if (hardcodedRule?.defaults) {
+              dynamicRule.defaults = { ...dynamicRule.defaults, ...hardcodedRule.defaults };
+            }
+            
+            // Temporarily inject into CATEGORY_ASPECT_RULES so buildAndNormalizeAspects can use it
+            CATEGORY_ASPECT_RULES[`__dynamic_${categoryForAspects}`] = dynamicRule;
+            categoryForAspects = `__dynamic_${categoryForAspects}`;
+            dynamicRuleApplied = true;
+            console.log(`create_draft: using DYNAMIC aspect rules for category ${finalCategoryId} (${dynamicRule.required.length} required, ${dynamicRule.preferred.length} preferred)`);
+          }
+        }
+      } catch (dynamicErr) {
+        console.warn(`create_draft: dynamic aspect fetch failed for ${categoryForAspects}, using hardcoded fallback:`, dynamicErr);
+      }
+      
+      // If dynamic didn't work, fall back to hardcoded rules
+      if (!dynamicRuleApplied) {
+        if (!CATEGORY_ASPECT_RULES[categoryForAspects]) {
+          const treeType = detectCategoryTreeSync(categoryForAspects, undefined);
+          if (treeType === "coin" || treeType === "bullion" || !categoryForAspects) {
+            console.warn(`create_draft: category ${categoryForAspects} not in CATEGORY_ASPECT_RULES, falling back to US Coins General (253)`);
+            categoryForAspects = "253"; // US Coins General
+          } else {
+            console.warn(`create_draft: category ${categoryForAspects} not in CATEGORY_ASPECT_RULES, using empty aspect rule (non-coin category)`);
+            categoryForAspects = "__empty__";
+          }
         }
       }
       
@@ -1992,6 +2164,11 @@ serve(async (req) => {
           : {}) as Record<string, unknown>,
         categoryForAspects
       );
+      
+      // Clean up temporary dynamic rule from the map
+      if (dynamicRuleApplied) {
+        delete CATEGORY_ASPECT_RULES[categoryForAspects];
+      }
 
       console.log(`create_draft: aspects built for category ${finalCategoryId}:`, JSON.stringify(aspects, null, 2));
 
