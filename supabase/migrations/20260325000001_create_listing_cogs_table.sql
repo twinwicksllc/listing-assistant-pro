@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS public.listing_cogs (
 
 ALTER TABLE public.listing_cogs ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can manage own listing_cogs" ON public.listing_cogs;
+
 CREATE POLICY "Users can manage own listing_cogs"
   ON public.listing_cogs
   FOR ALL
@@ -43,6 +45,8 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+DROP TRIGGER IF EXISTS trg_listing_cogs_updated_at ON public.listing_cogs;
 
 CREATE TRIGGER trg_listing_cogs_updated_at
   BEFORE UPDATE ON public.listing_cogs
