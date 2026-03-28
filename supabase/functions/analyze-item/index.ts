@@ -775,7 +775,7 @@ Seller's note: "${voiceNote}"`;
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
-    console.error("analyze-item error:", e);
+    console.error("analyze-item error:", e); // Deployed via GitHub Actions
     if (e instanceof Error) {
       console.error("Error message:", e.message);
       console.error("Error stack:", e.stack);
