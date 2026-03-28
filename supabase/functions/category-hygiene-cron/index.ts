@@ -34,7 +34,7 @@ serve(async (req: Request) => {
     const results: Record<string, number> = {};
 
     // ────────────────────────────────────────────────────────────
-    // 1. DEDUP: Find rows with same (category_id, item_type_normalized)
+    // 1. DEDUP: Find rows with same (ebay_category_id, item_type_normalized)
     //    Keep the row with the highest effective_score; reject the rest
     // ────────────────────────────────────────────────────────────
     const { data: dupes, error: dupErr } = await supabase.rpc(
@@ -44,8 +44,8 @@ serve(async (req: Request) => {
       console.warn("category-hygiene: dedup RPC failed:", dupErr.message);
       results.dedup_errors = 1;
     } else if (dupes && dupes.length > 0) {
-      // dupes is an array of { id, category_id, item_type_normalized, effective_score }
-      // grouped by (category_id, item_type_normalized) — the RPC returns losers only
+      // dupes is an array of { id, category_id (ebay_category_id), item_type_normalized, effective_score }
+      // grouped by (ebay_category_id, item_type_normalized) — the RPC returns losers only
       const dupeIds = dupes.map((d: { id: string }) => d.id);
       const { error: rejectErr } = await supabase
         .from("category_mappings")

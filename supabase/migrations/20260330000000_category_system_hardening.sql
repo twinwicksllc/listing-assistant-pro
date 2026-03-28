@@ -219,18 +219,18 @@ AS $$
   WITH ranked AS (
     SELECT
       cm.id,
-      cm.category_id,
+      cm.ebay_category_id,
       cm.item_type_normalized,
       cm.effective_score,
       ROW_NUMBER() OVER (
-        PARTITION BY cm.category_id, cm.item_type_normalized
+        PARTITION BY cm.ebay_category_id, cm.item_type_normalized
         ORDER BY cm.effective_score DESC, cm.updated_at DESC
       ) AS rn
     FROM public.category_mappings cm
     WHERE cm.status IN ('approved', 'quarantine')
       AND cm.item_type_normalized IS NOT NULL
   )
-  SELECT ranked.id, ranked.category_id, ranked.item_type_normalized, ranked.effective_score
+  SELECT ranked.id, ranked.ebay_category_id, ranked.item_type_normalized, ranked.effective_score
   FROM ranked
   WHERE ranked.rn > 1;
 $$;
