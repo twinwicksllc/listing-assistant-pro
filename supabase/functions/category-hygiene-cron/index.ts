@@ -147,9 +147,21 @@ serve(async (req: Request) => {
     }
 
     // ────────────────────────────────────────────────────────────
-    // Summary
+    // Summary - log to database for monitoring
     // ────────────────────────────────────────────────────────────
     console.log("category-hygiene: completed", JSON.stringify(results));
+
+    // Log the run to the database
+    try {
+      await supabase
+        .from("category_hygiene_log")
+        .insert({
+          status: "success",
+          results: results,
+        });
+    } catch (logErr) {
+      console.warn("category-hygiene: failed to log run:", logErr);
+    }
 
     return new Response(
       JSON.stringify({ success: true, results }),
@@ -158,6 +170,24 @@ serve(async (req: Request) => {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("category-hygiene: fatal error:", message);
+
+    // Log the error to the database
+    try {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (supabaseUrl && supabaseServiceKey) {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        await supabase
+          .from("category_hygiene_log")
+          .insert({
+            status: "error",
+            error: message,
+          });
+      }
+    } catch (logErr) {
+      console.warn("category-hygiene: failed to log error:", logErr);
+    }
+
     return new Response(
       JSON.stringify({ error: message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
