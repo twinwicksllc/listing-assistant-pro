@@ -51,6 +51,8 @@ CREATE INDEX IF NOT EXISTS idx_lookup_decisions_candidate_id
 -- RLS: service role only
 ALTER TABLE public.lookup_decisions ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Service role full access on lookup_decisions" ON public.lookup_decisions;
+
 CREATE POLICY "Service role full access on lookup_decisions"
   ON public.lookup_decisions
   FOR ALL
