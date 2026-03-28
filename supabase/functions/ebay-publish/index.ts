@@ -30,6 +30,12 @@ interface AspectRule {
 }
 
 const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
+  // Empty rule set for non-coin categories with no specific aspect requirements
+  "__empty__": {
+    required: [],
+    preferred: [],
+    defaults: {},
+  },
   // Gold Bars & Rounds
   "178906": {
     required: [],
@@ -170,6 +176,79 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
     required: [],
     preferred: ["Year", "Denomination", "Composition", "Circulated/Uncirculated", "Certification", "Grade", "KM Number", "Country of Origin", "Materials sourced from", "Color", "Fineness", "Strike Type"],
     defaults: { "Certification": "Uncertified" },
+  },
+  // ── Collectibles / Toys / Trading Cards ──────────────────────────────────
+  // Sports Trading Cards
+  "261328": {
+    required: [],
+    preferred: ["Player/Athlete", "Sport", "Card Manufacturer", "Year", "Season", "Team", "Features", "Autographed", "Grade", "Professional Grader"],
+    defaults: {},
+  },
+  // Baseball Cards
+  "64482": {
+    required: [],
+    preferred: ["Player/Athlete", "Card Manufacturer", "Year", "Team", "Features", "Grade"],
+    defaults: {},
+  },
+  // Sports Cards General (parent)
+  "213": {
+    required: [],
+    preferred: ["Player/Athlete", "Sport", "Card Manufacturer", "Year", "Team"],
+    defaults: {},
+  },
+  // Pokémon Trading Card Games
+  "183454": {
+    required: [],
+    preferred: ["Card Name", "Card Type", "Set", "Year", "Features", "Grade", "Professional Grader"],
+    defaults: {},
+  },
+  // Magic: The Gathering
+  "2536": {
+    required: [],
+    preferred: ["Card Name", "Set", "Rarity", "Language", "Features"],
+    defaults: {},
+  },
+  // Non-Sport Trading Cards
+  "19107": {
+    required: [],
+    preferred: ["Card Manufacturer", "Year", "Set", "Features"],
+    defaults: {},
+  },
+  // Beanie Babies
+  "19203": {
+    required: [],
+    preferred: ["Character", "Brand", "Year Introduced", "Country/Region of Manufacture", "Features", "Animal"],
+    defaults: { "Brand": "Ty" },
+  },
+  // Stuffed Animals & Plush
+  "19209": {
+    required: [],
+    preferred: ["Character", "Brand", "Material", "Animal", "Features", "Country/Region of Manufacture"],
+    defaults: {},
+  },
+  // Funko Pop Vinyl Figures
+  "261068": {
+    required: [],
+    preferred: ["Character", "Brand", "Franchise", "Year", "Features", "Number in Series"],
+    defaults: { "Brand": "Funko" },
+  },
+  // Action Figures
+  "246": {
+    required: [],
+    preferred: ["Character", "Brand", "Franchise", "Year", "Features", "Material"],
+    defaults: {},
+  },
+  // LEGO Sets
+  "182": {
+    required: [],
+    preferred: ["Set Number", "Theme", "Year", "Brand", "Features", "Number of Pieces"],
+    defaults: { "Brand": "LEGO" },
+  },
+  // Board Games
+  "19016": {
+    required: [],
+    preferred: ["Title", "Brand", "Year", "Number of Players", "Age Range", "Features"],
+    defaults: {},
   },
 };
 
@@ -1856,12 +1935,23 @@ serve(async (req) => {
       //   - Fixed values for known categories (Composition, Fineness for silver dollars, etc.)
       //   - Drops placeholder values (none / unknown / n/a / other / etc.)
       
-      // Fallback: if finalCategoryId is not in CATEGORY_ASPECT_RULES, use US Coins General (253)
-      // This handles edge cases where AI assigns an invalid/unsupported category ID
+      // Fallback: if finalCategoryId is not in CATEGORY_ASPECT_RULES, use appropriate default
+      // For coin/bullion categories fall back to US Coins General (253)
+      // For everything else use an empty rule set to avoid forcing coin-specific aspects
+      const COIN_FALLBACK_CATEGORIES = new Set([
+        "11981","39464","11980","11971","41099","41102","11973","39455","41084",
+        "11950","41111","166679","41109","526","253","45243","178906","39489","3361","532","173685"
+      ]);
       let categoryForAspects = finalCategoryId ?? "";
       if (!CATEGORY_ASPECT_RULES[categoryForAspects]) {
-        console.warn(`create_draft: category ${categoryForAspects} not in CATEGORY_ASPECT_RULES, falling back to US Coins General (253)`);
-        categoryForAspects = "253"; // US Coins General
+        if (COIN_FALLBACK_CATEGORIES.has(categoryForAspects) || !categoryForAspects) {
+          console.warn(`create_draft: category ${categoryForAspects} not in CATEGORY_ASPECT_RULES, falling back to US Coins General (253)`);
+          categoryForAspects = "253"; // US Coins General
+        } else {
+          // Non-coin category with no aspect rules — use empty rule set to avoid forcing coin aspects
+          console.warn(`create_draft: category ${categoryForAspects} not in CATEGORY_ASPECT_RULES, using empty aspect rule (non-coin category)`);
+          categoryForAspects = "__empty__";
+        }
       }
       
       const aspects = buildAndNormalizeAspects(
