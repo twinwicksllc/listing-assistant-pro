@@ -51,21 +51,13 @@ CREATE INDEX IF NOT EXISTS idx_lookup_decisions_candidate_id
 -- RLS: service role only
 ALTER TABLE public.lookup_decisions ENABLE ROW LEVEL SECURITY;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies
-    WHERE schemaname = 'public'
-      AND tablename = 'lookup_decisions'
-      AND policyname = 'Service role full access on lookup_decisions'
-  ) THEN
-    CREATE POLICY "Service role full access on lookup_decisions"
-      ON public.lookup_decisions
-      FOR ALL
-      USING (auth.role() = 'service_role')
-      WITH CHECK (auth.role() = 'service_role');
-  END IF;
-END $$;
+DROP POLICY IF EXISTS "Service role full access on lookup_decisions" ON public.lookup_decisions;
+
+CREATE POLICY "Service role full access on lookup_decisions"
+  ON public.lookup_decisions
+  FOR ALL
+  USING (auth.role() = 'service_role')
+  WITH CHECK (auth.role() = 'service_role');
 
 COMMENT ON TABLE public.lookup_decisions IS
   'Audit trail of every category lookup decision. Used for debugging, metrics, and retraining.';
