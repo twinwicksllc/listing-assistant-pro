@@ -563,6 +563,10 @@ const CONDITION_ID_MAP: Record<string, number> = {
   USED_GOOD: 5000,         // F-12 to VG-10
   USED_ACCEPTABLE: 6000,   // G-4 to G-6
   FOR_PARTS_OR_NOT_WORKING: 7000, // Damaged/holed/bent coins, junk
+  // Trading card / collectible conditions (used by 261328, 183454, 19203, etc.)
+  VERY_GOOD: 3000,    // Trading cards: Very Good
+  GOOD: 4000,         // Trading cards: Good
+  ACCEPTABLE: 5000,   // Trading cards: Acceptable
   // Legacy *_REFURBISHED aliases — mapped to USED_* for coin categories
   EXCELLENT_REFURBISHED: 3000,
   VERY_GOOD_REFURBISHED: 4000,
@@ -586,6 +590,10 @@ const CONDITION_DESCRIPTIONS: Record<string, string> = {
   USED_GOOD: "Heavily circulated. All major features visible but worn.",
   USED_ACCEPTABLE: "Heavily worn but identifiable. Outline and major features visible.",
   FOR_PARTS_OR_NOT_WORKING: "Damaged, holed, bent, or corroded. Not suitable for collecting.",
+  // Trading card / collectible conditions
+  VERY_GOOD: "Item in very good condition with minor wear.",
+  GOOD: "Item in good condition with moderate wear.",
+  ACCEPTABLE: "Item in acceptable condition with heavy wear but still functional.",
   // Legacy aliases kept for backward compatibility
   EXCELLENT_REFURBISHED: "Lightly circulated. Shows minimal wear on high points only.",
   VERY_GOOD_REFURBISHED: "Moderately circulated. Major details clear with moderate wear.",
@@ -608,6 +616,26 @@ const LEGACY_CONDITION_MAP: Record<string, string> = {
 // Coin categories that only accept the restricted eBay condition set
 const COIN_CATEGORY_IDS = new Set(["11981", "39464", "11980", "11971", "41099"]);
 const BULLION_CATEGORY_IDS = new Set(["178906", "39489", "3361", "532", "173685"]);
+
+// Trading card categories — only accept LIKE_NEW, VERY_GOOD, GOOD, ACCEPTABLE (no NEW/1000)
+const TRADING_CARD_CATEGORY_IDS = new Set([
+  "261328", // Sports Trading Cards
+  "183454", // Pokémon TCG
+  "2536",   // Magic: The Gathering
+  "19107",  // Non-Sport Trading Cards
+  "64482",  // Baseball Cards
+  "213",    // Sports Cards (parent)
+]);
+
+// Plush/Toy/Collectible categories — only accept NEW, LIKE_NEW, VERY_GOOD, GOOD, ACCEPTABLE
+const COLLECTIBLE_CATEGORY_IDS = new Set([
+  "19203",  // Beanie Babies
+  "19209",  // Stuffed Animals
+  "261068", // Funko Pop Vinyl Figures
+  "246",    // Action Figures
+  "182",    // LEGO Sets
+  "19016",  // Board Games
+]);
 
 function normalizeConditionForCategory(
   rawCondition: string,
@@ -662,6 +690,49 @@ function normalizeConditionForCategory(
     if (condition === "LIKE_NEW") {
       console.log(`normalizeConditionForCategory: bullion category ${categoryId} — LIKE_NEW -> NEW`);
       return { condition: "NEW", corrected: true };
+    }
+  } else if (TRADING_CARD_CATEGORY_IDS.has(categoryId ?? "")) {
+    // Trading cards: eBay only allows LIKE_NEW, VERY_GOOD, GOOD, ACCEPTABLE (no NEW/1000)
+    const validCardConditions = new Set(["LIKE_NEW", "VERY_GOOD", "GOOD", "ACCEPTABLE"]);
+    if (!validCardConditions.has(condition)) {
+      const fallbackMap: Record<string, string> = {
+        NEW:                   "LIKE_NEW",
+        NEW_OTHER:             "LIKE_NEW",
+        NEW_WITH_DEFECTS:      "GOOD",
+        USED_EXCELLENT:        "LIKE_NEW",
+        USED_VERY_GOOD:        "VERY_GOOD",
+        USED_GOOD:             "GOOD",
+        USED_ACCEPTABLE:       "ACCEPTABLE",
+        PRE_OWNED_GOOD:        "LIKE_NEW",
+        PRE_OWNED_FAIR:        "GOOD",
+        PRE_OWNED_POOR:        "ACCEPTABLE",
+        SELLER_REFURBISHED:    "GOOD",
+        FOR_PARTS_OR_NOT_WORKING: "ACCEPTABLE",
+      };
+      const mapped = fallbackMap[condition] ?? "LIKE_NEW";
+      console.log(`normalizeConditionForCategory: trading card category ${categoryId} — ${condition} -> ${mapped}`);
+      return { condition: mapped, corrected: true };
+    }
+  } else if (COLLECTIBLE_CATEGORY_IDS.has(categoryId ?? "")) {
+    // Collectibles/toys/plush: map any non-standard conditions to valid eBay set
+    const validCollectibleConditions = new Set(["NEW", "LIKE_NEW", "VERY_GOOD", "GOOD", "ACCEPTABLE"]);
+    if (!validCollectibleConditions.has(condition)) {
+      const fallbackMap: Record<string, string> = {
+        NEW_OTHER:             "NEW",
+        NEW_WITH_DEFECTS:      "GOOD",
+        USED_EXCELLENT:        "LIKE_NEW",
+        USED_VERY_GOOD:        "VERY_GOOD",
+        USED_GOOD:             "GOOD",
+        USED_ACCEPTABLE:       "ACCEPTABLE",
+        PRE_OWNED_GOOD:        "LIKE_NEW",
+        PRE_OWNED_FAIR:        "GOOD",
+        PRE_OWNED_POOR:        "ACCEPTABLE",
+        SELLER_REFURBISHED:    "GOOD",
+        FOR_PARTS_OR_NOT_WORKING: "ACCEPTABLE",
+      };
+      const mapped = fallbackMap[condition] ?? "GOOD";
+      console.log(`normalizeConditionForCategory: collectible category ${categoryId} — ${condition} -> ${mapped}`);
+      return { condition: mapped, corrected: true };
     }
   }
 
