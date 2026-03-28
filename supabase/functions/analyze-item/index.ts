@@ -324,8 +324,8 @@ You handle ALL types of items: coins, bullion, precious metals, collectibles, to
 - LEGO Sets: **182**
 - Pok\u00e9mon Cards: **183454**
 - Sports Trading Cards: **261328** or **213** or **64482**
-  → **REQUIRED itemSpecifics**: `Sport` (Baseball/Basketball/Football/Hockey/Soccer), `Card Manufacturer`, `Year`
-  → Always include `Sport` — eBay WILL REJECT the listing without it
+  → REQUIRED itemSpecifics: Sport (Baseball/Basketball/Football/Hockey/Soccer), Card Manufacturer, Year
+  → Always include Sport — eBay WILL REJECT the listing without it
 - Board Games: **19016**
 - Dolls: **222** | Bears (collectible): **238**
 
