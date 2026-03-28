@@ -47,10 +47,13 @@ async function fetchDynamicAspectRule(
 ): Promise<AspectRule | null> {
   try {
     // 1. Check the cache table
+    // Deficiency #7: composite cache key includes marketplace_id
+    const marketplaceId = "EBAY_US"; // default marketplace
     const { data: cached } = await supabase
       .from("category_aspects_cache")
       .select("aspects, expires_at")
       .eq("category_id", categoryId)
+      .eq("marketplace_id", marketplaceId)
       .maybeSingle();
 
     if (cached?.aspects && new Date(cached.expires_at) > new Date()) {
@@ -167,6 +170,20 @@ const HARDCODED_COIN_CATEGORY_IDS = new Set(["11981", "39464", "11980", "11971",
 const HARDCODED_BULLION_CATEGORY_IDS = new Set(["178906", "39489", "3361", "532", "173685"]);
 const HARDCODED_TRADING_CARD_CATEGORY_IDS = new Set(["261328", "183454", "2536", "19107", "64482", "213"]);
 const HARDCODED_COLLECTIBLE_CATEGORY_IDS = new Set(["19203", "19209", "261068", "246", "182", "19016"]);
+
+// ================================================================
+// COIN/BULLION FIXED-VALUES ALLOWLIST (deficiency #5)
+// Only categories in this set may receive hardcoded fixedValues
+// (Composition, Fineness, Denomination, Material).
+// Prevents coin-specific aspects from leaking to non-coin categories.
+// ================================================================
+const COIN_FIXED_VALUES_ALLOWED_IDS = new Set([
+  // Coins
+  "11981", "39464", "11980", "11971", "41099", "41102", "11973",
+  "39455", "41084", "11950", "41111", "41109", "526", "253", "45243",
+  // Bullion
+  "178906", "39489", "3361", "532", "173685", "166679",
+]);
 
 const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
   // Empty rule set for non-coin categories with no specific aspect requirements
@@ -705,11 +722,15 @@ function buildAndNormalizeAspects(
     aspects[key] = [value];
   }
 
-  // Apply fixed values for known categories (override AI output)
-  if (rule?.fixedValues) {
+  // Apply fixed values ONLY for coin/bullion categories (deficiency #5 guard)
+  // Strip "__dynamic_" prefix to get the real category ID for allowlist check
+  const realCatId = categoryId.startsWith("__dynamic_") ? categoryId.slice(10) : categoryId;
+  if (rule?.fixedValues && COIN_FIXED_VALUES_ALLOWED_IDS.has(realCatId)) {
     for (const [k, v] of Object.entries(rule.fixedValues)) {
       aspects[k] = [v];
     }
+  } else if (rule?.fixedValues) {
+    console.warn(`buildAndNormalizeAspects: skipping fixedValues for non-coin category ${realCatId}`);
   }
 
   // ── Sport inference for trading card categories ─────────────────────────
@@ -2125,8 +2146,11 @@ serve(async (req) => {
             // Merge: dynamic rules provide required/preferred/defaults,
             // but hardcoded fixedValues still override (they encode known-correct values like Fineness for Morgan Dollars)
             const hardcodedRule = CATEGORY_ASPECT_RULES[categoryForAspects];
-            if (hardcodedRule?.fixedValues) {
+            // Deficiency #5: Only merge hardcoded fixedValues for coin/bullion categories
+            if (hardcodedRule?.fixedValues && COIN_FIXED_VALUES_ALLOWED_IDS.has(categoryForAspects)) {
               dynamicRule.fixedValues = { ...dynamicRule.fixedValues, ...hardcodedRule.fixedValues };
+            } else if (hardcodedRule?.fixedValues) {
+              console.warn(`create_draft: skipping hardcoded fixedValues merge for non-coin category ${categoryForAspects}`);
             }
             // Also merge hardcoded defaults that are known-good (e.g., Certification: "Uncertified")
             if (hardcodedRule?.defaults) {
@@ -2500,6 +2524,30 @@ serve(async (req) => {
         console.error("create_draft: eBay publish error:", publishResp.status, errText);
         console.error("create_draft: failing to publish offer", offerId, "for sku", sku);
         console.error(`create_draft: publish failed with condition=${conditionEnum} (id=${conditionId}), category=${finalCategoryId}, format=${listingFormat}`);
+        // Deficiency #8: Demote category mapping on publish failure
+        try {
+          const _supabaseUrl = Deno.env.get("SUPABASE_URL");
+          const _serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+          if (_supabaseUrl && _serviceKey && finalCategoryId) {
+            await fetch(`${_supabaseUrl}/functions/v1/category-lookup`, {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${_serviceKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                action: "demote",
+                categoryId: finalCategoryId,
+                itemType: payload.itemType || "",
+                reason: `publish_failed_${publishResp.status}`,
+              }),
+            });
+            console.warn(`create_draft: demoted category mapping for ${finalCategoryId} after publish failure`);
+          }
+        } catch (demoteErr) {
+          console.warn("create_draft: demote call failed (non-fatal):", demoteErr);
+        }
+
         return new Response(
           JSON.stringify({
             error: `Offer created (ID: ${offerId}) but publish failed: ${publishResp.status} - ${errText}`,
@@ -2518,6 +2566,29 @@ serve(async (req) => {
       const affiliateUrl = listingId ? buildAffiliateUrl(listingId) : null;
 
       console.log(`create_draft: Successfully published: listingId=${listingId}, offerId=${offerId}, sku=${sku}, publishData keys: ${Object.keys(publishData).join(", ")}`);
+
+      // Deficiency #8: Promote category mapping on publish success
+      try {
+        const _supabaseUrl = Deno.env.get("SUPABASE_URL");
+        const _serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (_supabaseUrl && _serviceKey && finalCategoryId) {
+          await fetch(`${_supabaseUrl}/functions/v1/category-lookup`, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${_serviceKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              action: "promote",
+              categoryId: finalCategoryId,
+              itemType: payload.itemType || "",
+            }),
+          });
+          console.log(`create_draft: promoted category mapping for ${finalCategoryId}`);
+        }
+      } catch (promoteErr) {
+        console.warn("create_draft: promote call failed (non-fatal):", promoteErr);
+      }
 
       return new Response(
         JSON.stringify({

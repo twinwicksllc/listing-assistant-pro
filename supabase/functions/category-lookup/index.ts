@@ -8,11 +8,170 @@ const corsHeaders = {
   "Access-Control-Max-Age": "86400",
 };
 
-// ── Helper: Get eBay app token (client credentials) ────────────────────────
+// ── Constants ────────────────────────────────────────────────────────────────
+const FUZZY_MIN_SIMILARITY = 0.65;      // Minimum fuzzy match threshold (#1)
+const FUZZY_MIN_TOKEN_OVERLAP = 2;      // Minimum meaningful token overlap (#1)
+const AUTO_PERSIST_MIN_CONFIDENCE = 85;  // Minimum confidence for auto-persist (#2)
+const DETERMINISTIC_LOCK_THRESHOLD = 88; // eBay top-1 score above this = lock (#3)
+const MARKETPLACE_ID = "EBAY_US";
+const CATEGORY_TREE_ID = "0";
+
+// Generic terms that should be penalized in fuzzy matching (#1)
+const GENERIC_TERMS = new Set([
+  "coin", "coins", "card", "cards", "trading", "toy", "toys",
+  "collectible", "collectibles", "item", "items", "vintage",
+  "antique", "rare", "lot", "set", "collection", "piece",
+]);
+
+// Stopwords removed during normalization (#6)
+const STOPWORDS = new Set([
+  "a", "an", "the", "and", "or", "in", "on", "at", "to", "for",
+  "of", "with", "by", "from", "is", "it", "this", "that", "was",
+  "are", "be", "has", "had", "have", "will", "can", "do", "does",
+  "new", "used", "mint", "box",
+]);
+
+// ── Types ────────────────────────────────────────────────────────────────────
+
+interface CategorySuggestion {
+  categoryId: string;
+  categoryName: string;
+  breadcrumb: string;
+  treeNodeLevel: number;
+}
+
+interface AspectInfo {
+  name: string;
+  required: boolean;
+  usage: string;
+  mode: string;
+  dataType: string;
+  values: string[];
+}
+
+interface LookupCandidate {
+  categoryId: string;
+  categoryName: string;
+  breadcrumb: string;
+  source: string;         // db_exact, db_fuzzy, ebay_api, gemini
+  rawScore: number;       // Raw confidence/score from source
+  effectiveScore: number; // Computed score after weighting
+  reason: string;         // Why this score
+  verifiedLeaf: boolean | null;
+  verifiedActive: boolean | null;
+  tokenOverlap: number;   // For fuzzy: how many meaningful tokens matched
+  rank: number;           // Rank within source
+}
+
+interface AuditEntry {
+  request_id: string;
+  query_text: string;
+  candidate_source: string;
+  candidate_id: string | null;
+  candidate_name: string | null;
+  candidate_score: number;
+  candidate_rank: number;
+  was_selected: boolean;
+  reason_selected: string;
+  verified_leaf: boolean | null;
+  verified_active: boolean | null;
+  persisted_to_db: boolean;
+  latency_ms: number;
+}
+
+// ── Helper: Generate request ID ──────────────────────────────────────────────
+function generateRequestId(): string {
+  return crypto.randomUUID();
+}
+
+// ── Helper: Normalize item type for consistent matching ──────────────────────
+function normalizeItemType(input: string): string {
+  return (input || "").toLowerCase().trim()
+    .replace(/[^a-z0-9\s\-]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+// ── Helper: Deep normalization for dedup (#6) ────────────────────────────────
+function deepNormalize(input: string): string {
+  return (input || "").toLowerCase().trim()
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\s+/g, " ")
+    .split(" ")
+    .filter(w => !STOPWORDS.has(w) && w.length > 1)
+    .sort()
+    .join(" ");
+}
+
+// ── Helper: Extract meaningful tokens from a string ──────────────────────────
+function meaningfulTokens(input: string): string[] {
+  return (input || "").toLowerCase()
+    .replace(/[^a-z0-9\s\-]/g, "")
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !STOPWORDS.has(w));
+}
+
+// ── Helper: Compute token overlap between query and candidate ────────────────
+function computeTokenOverlap(queryTokens: string[], candidateText: string): number {
+  const candidateTokens = new Set(meaningfulTokens(candidateText));
+  return queryTokens.filter(t => candidateTokens.has(t)).length;
+}
+
+// ── Helper: Check if item_type is too generic (#1) ───────────────────────────
+function isGenericItemType(itemType: string): boolean {
+  const tokens = meaningfulTokens(itemType);
+  // If ALL meaningful tokens are generic, it's too broad
+  if (tokens.length === 0) return true;
+  const genericCount = tokens.filter(t => GENERIC_TERMS.has(t)).length;
+  return genericCount >= tokens.length;
+}
+
+// ── Helper: Compute effective score with source weighting (#8) ───────────────
+function computeEffectiveScore(
+  source: string,
+  rawScore: number,
+  tokenOverlap: number,
+  totalQueryTokens: number,
+  isGeneric: boolean,
+  daysSinceUpdate: number,
+): number {
+  // Source weight
+  const sourceWeights: Record<string, number> = {
+    db_exact_user_verified: 15,
+    db_exact_ebay_api: 10,
+    db_exact: 8,
+    ebay_api: 12,
+    db_fuzzy: 3,
+    gemini: 5,
+  };
+  const sourceWeight = sourceWeights[source] || 0;
+
+  // Similarity bonus (token overlap as % of query tokens)
+  const similarityBonus = totalQueryTokens > 0
+    ? (tokenOverlap / totalQueryTokens) * 15
+    : 0;
+
+  // Recency bonus (decays over time for non-verified sources)
+  let recencyBonus = 0;
+  if (source.startsWith("db_")) {
+    recencyBonus = Math.max(0, 5 - (daysSinceUpdate / 30)); // Lose 1 point per month
+  }
+
+  // Generic penalty (#1)
+  const genericPenalty = isGeneric ? 20 : 0;
+
+  // Ambiguity penalty (low token overlap on fuzzy)
+  const ambiguityPenalty = source === "db_fuzzy" && tokenOverlap < FUZZY_MIN_TOKEN_OVERLAP ? 15 : 0;
+
+  return Math.min(100, Math.max(0,
+    rawScore + sourceWeight + similarityBonus + recencyBonus - genericPenalty - ambiguityPenalty
+  ));
+}
+
+// ── Helper: Get eBay app token (client credentials) ──────────────────────────
 async function getEbayAppToken(): Promise<{ token: string; base: string } | null> {
   const clientId     = Deno.env.get("EBAY_CLIENT_ID");
   const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
-  const ebayEnv      = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
+  const ebayEnv      = Deno.env.get("EBAY_ENVIRONMENT") || "production";
   if (!clientId || !clientSecret) return null;
 
   const credentials = btoa(`${clientId}:${clientSecret}`);
@@ -36,23 +195,12 @@ async function getEbayAppToken(): Promise<{ token: string; base: string } | null
   return { token: tokenJson.access_token, base };
 }
 
-// ── Helper: eBay getCategorySuggestions ─────────────────────────────────────
-// Takes a free-text query and returns ranked leaf category suggestions
-// with full ancestor breadcrumbs. This is the PRIMARY category lookup mechanism.
-interface CategorySuggestion {
-  categoryId: string;
-  categoryName: string;
-  breadcrumb: string;
-  treeNodeLevel: number;
-}
-
+// ── Helper: eBay getCategorySuggestions ───────────────────────────────────────
 async function fetchCategorySuggestions(
-  query: string,
-  appToken: string,
-  base: string,
+  query: string, appToken: string, base: string,
 ): Promise<CategorySuggestion[]> {
-  const url = `${base}/commerce/taxonomy/v1/category_tree/0/get_category_suggestions?q=${encodeURIComponent(query)}`;
-  
+  const url = `${base}/commerce/taxonomy/v1/category_tree/${CATEGORY_TREE_ID}/get_category_suggestions?q=${encodeURIComponent(query)}`;
+
   try {
     const resp = await fetch(url, {
       method: "GET",
@@ -73,14 +221,13 @@ async function fetchCategorySuggestions(
     return suggestions.map((s: any) => {
       const cat = s.category || {};
       const ancestors = s.categoryTreeNodeAncestors || [];
-      
-      // Build breadcrumb from ancestors (root → leaf)
+
       const ancestorNames = ancestors
         .sort((a: any, b: any) => (a.categoryTreeNodeLevel || 0) - (b.categoryTreeNodeLevel || 0))
         .map((a: any) => a.categoryName)
-        .reverse(); // API returns leaf-to-root, we want root-to-leaf
+        .reverse();
       ancestorNames.push(cat.categoryName);
-      
+
       return {
         categoryId: cat.categoryId,
         categoryName: cat.categoryName,
@@ -94,23 +241,11 @@ async function fetchCategorySuggestions(
   }
 }
 
-// ── Helper: eBay getItemAspectsForCategory ──────────────────────────────────
-// Returns all aspect metadata for a leaf category — replaces hardcoded CATEGORY_ASPECT_RULES
-interface AspectInfo {
-  name: string;
-  required: boolean;
-  usage: string;      // "RECOMMENDED" | "OPTIONAL"
-  mode: string;       // "FREE_TEXT" | "SELECTION_ONLY"
-  dataType: string;   // "STRING" | "NUMBER" | "DATE" | "STRING_ARRAY"
-  values: string[];   // Allowed values (for SELECTION_ONLY modes)
-}
-
+// ── Helper: eBay getItemAspectsForCategory ────────────────────────────────────
 async function fetchItemAspects(
-  categoryId: string,
-  appToken: string,
-  base: string,
+  categoryId: string, appToken: string, base: string,
 ): Promise<AspectInfo[]> {
-  const url = `${base}/commerce/taxonomy/v1/category_tree/0/get_item_aspects_for_category?category_id=${encodeURIComponent(categoryId)}`;
+  const url = `${base}/commerce/taxonomy/v1/category_tree/${CATEGORY_TREE_ID}/get_item_aspects_for_category?category_id=${encodeURIComponent(categoryId)}`;
 
   try {
     const resp = await fetch(url, {
@@ -148,18 +283,53 @@ async function fetchItemAspects(
   }
 }
 
-// ── Helper: Build breadcrumb by walking up parent nodes (legacy fallback) ───
+// ── Helper: Verify category is leaf + active via eBay API (#4) ───────────────
+async function verifyCategoryLeafActive(
+  categoryId: string, appToken: string, base: string,
+): Promise<{ isLeaf: boolean; isActive: boolean; categoryName: string | null }> {
+  try {
+    const url = `${base}/commerce/taxonomy/v1/category_tree/${CATEGORY_TREE_ID}/get_category_subtree?category_id=${encodeURIComponent(categoryId)}`;
+    const resp = await fetch(url, {
+      method: "GET",
+      headers: { "Authorization": `Bearer ${appToken}`, "Content-Type": "application/json" },
+    });
+
+    if (resp.status === 404) {
+      return { isLeaf: false, isActive: false, categoryName: null };
+    }
+    if (!resp.ok) {
+      console.warn(`category-lookup: verifyCategoryLeafActive(${categoryId}) error`, resp.status);
+      return { isLeaf: true, isActive: true, categoryName: null }; // Assume valid on API error
+    }
+
+    const json = await resp.json();
+    const node = json.categorySubtreeNode;
+    if (!node?.category) {
+      return { isLeaf: false, isActive: false, categoryName: null };
+    }
+
+    // A leaf node has no childCategoryTreeNodes or an empty array
+    const children = node.childCategoryTreeNodes || [];
+    const isLeaf = children.length === 0;
+    const categoryName = node.category.categoryName || null;
+
+    return { isLeaf, isActive: true, categoryName };
+  } catch (err) {
+    console.warn(`category-lookup: verifyCategoryLeafActive(${categoryId}) exception`, err);
+    return { isLeaf: true, isActive: true, categoryName: null }; // Assume valid on exception
+  }
+}
+
+// ── Helper: Build breadcrumb by walking up parent nodes (legacy fallback) ────
 async function fetchBreadcrumb(
-  categoryId: string,
-  appToken: string,
-  base: string,
+  categoryId: string, appToken: string, base: string,
 ): Promise<{ breadcrumb: string; categoryName: string; valid: boolean }> {
   const MAX_DEPTH = 8;
   const parts: string[] = [];
   let currentId = categoryId;
 
   for (let depth = 0; depth < MAX_DEPTH; depth++) {
-    const url = `${base}/commerce/taxonomy/v1/category_tree/0/get_category_subtree?category_id=${encodeURIComponent(currentId)}`;
+    const url = `${base}/commerce/taxonomy/v1/category_tree/${CATEGORY_TREE_ID}/get_category_subtree?category_id=${encodeURIComponent(currentId)}`;
     const resp = await fetch(url, {
       method: "GET",
       headers: { "Authorization": `Bearer ${appToken}`, "Content-Type": "application/json" },
@@ -169,10 +339,7 @@ async function fetchBreadcrumb(
       if (depth === 0) return { breadcrumb: "", categoryName: "", valid: false };
       break;
     }
-    if (!resp.ok) {
-      console.error(`category-lookup: taxonomy API error at depth ${depth}`, resp.status);
-      break;
-    }
+    if (!resp.ok) break;
 
     const json = await resp.json();
     const node = json.categorySubtreeNode || json.categoryNode;
@@ -180,7 +347,7 @@ async function fetchBreadcrumb(
 
     parts.unshift(node.category.categoryName);
 
-    const parentHref     = node.parentCategoryTreeNodeHref;
+    const parentHref = node.parentCategoryTreeNodeHref;
     if (!parentHref) break;
 
     const parentIdMatch = parentHref.match(/category_id=(\d+)/);
@@ -196,7 +363,7 @@ async function fetchBreadcrumb(
   return { breadcrumb, categoryName, valid: parts.length > 0 };
 }
 
-// ── Helper: Ask Gemini for the correct eBay category ID (last-resort fallback) ──
+// ── Helper: Ask Gemini for category (last-resort fallback, tier 4) ───────────
 async function askGeminiForCategory(itemDescription: string): Promise<{ categoryId: string; categoryName: string; confidence: number } | null> {
   const geminiKey = Deno.env.get("GEMINI_API_KEY");
   if (!geminiKey) {
@@ -251,7 +418,6 @@ Example response:
     const parsed = JSON.parse(jsonMatch[0]);
     if (!parsed.categoryId || !parsed.categoryName) return null;
 
-    console.log(`category-lookup: Gemini suggested category for "${itemDescription}":`, parsed);
     return {
       categoryId:   String(parsed.categoryId).trim(),
       categoryName: String(parsed.categoryName).trim(),
@@ -263,12 +429,90 @@ Example response:
   }
 }
 
-// ── Normalize item description for consistent key matching ──────────────────
-function normalizeItemType(input: string): string {
-  return (input || "").toLowerCase().trim()
-    .replace(/[^a-z0-9\s\-]/g, "")   // strip special chars
-    .replace(/\s+/g, " ");             // collapse whitespace
+// ── Helper: Persist audit entries to lookup_decisions table (#0, #9) ─────────
+async function persistAuditEntries(supabase: any, entries: AuditEntry[]): Promise<void> {
+  if (entries.length === 0) return;
+  try {
+    await supabase.from("lookup_decisions").insert(entries);
+  } catch (err) {
+    console.warn("category-lookup: failed to persist audit entries", err);
+  }
 }
+
+// ── Helper: Persist to category_mappings with gates (#2) ─────────────────────
+async function safePersistMapping(
+  supabase: any,
+  normalizedKey: string,
+  categoryId: string,
+  categoryName: string | null,
+  breadcrumb: string | null,
+  source: string,
+  confidence: number,
+  ebayAuth: { token: string; base: string } | null,
+): Promise<boolean> {
+  // Gate 1: Minimum confidence (#2)
+  if (confidence < AUTO_PERSIST_MIN_CONFIDENCE) {
+    console.log(`category-lookup: skipping auto-persist for "${normalizedKey}" (confidence ${confidence} < ${AUTO_PERSIST_MIN_CONFIDENCE})`);
+    return false;
+  }
+
+  // Gate 2: Verify leaf + active (#4)
+  let verifiedLeaf = true;
+  let verifiedActive = true;
+  if (ebayAuth) {
+    const verification = await verifyCategoryLeafActive(categoryId, ebayAuth.token, ebayAuth.base);
+    verifiedLeaf = verification.isLeaf;
+    verifiedActive = verification.isActive;
+    if (!verifiedLeaf || !verifiedActive) {
+      console.warn(`category-lookup: blocking persist of non-leaf/inactive category ${categoryId} for "${normalizedKey}"`);
+      return false;
+    }
+  }
+
+  // Gate 3: Determine status based on source (#2)
+  const status = (source === "ebay_api" && confidence >= 85) ? "approved" : "quarantine";
+
+  // Compute effective_score (#8)
+  const sourceWeightMap: Record<string, number> = {
+    "ebay_api": 5,
+    "gemini_ai": 0,
+    "ai_auto": -10,
+  };
+  const effectiveScore = Math.min(100, Math.max(0,
+    confidence + (sourceWeightMap[source] || 0)
+  ));
+
+  // Deep normalize for dedup (#6)
+  const normalized = deepNormalize(normalizedKey);
+
+  try {
+    await supabase.from("category_mappings").upsert(
+      {
+        coin_type:              normalizedKey,
+        item_type:              normalizedKey,
+        item_type_normalized:   normalized,
+        ebay_category_id:       categoryId,
+        category_name:          categoryName,
+        breadcrumb:             breadcrumb,
+        verification_source:    source,
+        confidence:             confidence,
+        effective_score:        effectiveScore,
+        status:                 status,
+        updated_at:             new Date().toISOString(),
+      },
+      { onConflict: "coin_type" }
+    );
+    console.log(`category-lookup: persisted ${categoryId} for "${normalizedKey}" (status=${status}, score=${effectiveScore})`);
+    return true;
+  } catch (saveErr) {
+    console.warn("category-lookup: failed to persist mapping", saveErr);
+    return false;
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MAIN REQUEST HANDLER
+// ════════════════════════════════════════════════════════════════════════════
 
 export async function handleRequest(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") {
@@ -287,12 +531,25 @@ export async function handleRequest(req: Request): Promise<Response> {
     const payload  = await req.json();
     const { action, itemType, coinType, categoryId, categoryName, verificationSource } = payload;
 
-    // Support both old coinType and new itemType fields
     const rawItemType   = itemType || coinType || "";
     const normalizedKey = normalizeItemType(rawItemType);
+    const queryTokens   = meaningfulTokens(rawItemType);
 
-    // ── ACTION: lookup ─────────────────────────────────────────────────────
-    // 4-tier lookup: DB exact → DB fuzzy → eBay getCategorySuggestions → Gemini fallback
+    // ══════════════════════════════════════════════════════════════════════
+    // ACTION: lookup
+    // ══════════════════════════════════════════════════════════════════════
+    // Ranked candidate system with deterministic precedence (#1, #3):
+    //   1. DB exact (approved, user_verified) — highest trust
+    //   2. DB exact (approved, other sources) — high trust
+    //   3. eBay getCategorySuggestions — verified leaf from official API
+    //   4. DB fuzzy (approved, gated) — only if passes similarity threshold
+    //   5. Gemini AI — last resort
+    //
+    // Winner selection: highest effective_score among verified candidates.
+    // If top eBay candidate >= DETERMINISTIC_LOCK_THRESHOLD, lock it (#3).
+    // All candidates logged to lookup_decisions table (#0).
+    // ══════════════════════════════════════════════════════════════════════
+
     if (action === "lookup") {
       if (!normalizedKey) {
         return new Response(
@@ -301,173 +558,339 @@ export async function handleRequest(req: Request): Promise<Response> {
         );
       }
 
-      // 1. Try exact match in DB (both item_type and coin_type columns)
-      const { data: exact } = await supabase
+      const requestId = generateRequestId();
+      const allCandidates: LookupCandidate[] = [];
+      const auditEntries: AuditEntry[] = [];
+      let ebayAuth: { token: string; base: string } | null = null;
+
+      // ── Tier 1: DB exact match (approved only) (#2) ──────────────────
+      const dbExactStart = Date.now();
+      const { data: exactRows } = await supabase
         .from("category_mappings")
-        .select("ebay_category_id, category_name, confidence, verification_source, item_type, coin_type, breadcrumb")
+        .select("ebay_category_id, category_name, confidence, verification_source, item_type, coin_type, breadcrumb, effective_score, updated_at, status")
         .or(`item_type.eq.${normalizedKey},coin_type.eq.${normalizedKey}`)
-        .order("confidence", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .eq("status", "approved")
+        .order("effective_score", { ascending: false })
+        .limit(3);
 
-      if (exact) {
-        console.log(`category-lookup: DB hit for "${normalizedKey}":`, exact.ebay_category_id);
-        return new Response(
-          JSON.stringify({
-            found:              true,
-            itemType:           normalizedKey,
-            categoryId:         exact.ebay_category_id,
-            categoryName:       exact.category_name,
-            breadcrumb:         exact.breadcrumb || exact.category_name,
-            confidence:         exact.confidence,
-            verificationSource: exact.verification_source,
-            source:             "db",
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      const dbExactLatency = Date.now() - dbExactStart;
 
-      // 2. Try fuzzy / partial match — find any row where item_type LIKE '%keyword%'
-      const keywords = normalizedKey.split(" ").filter((w) => w.length > 3);
-      let fuzzyMatch: any = null;
+      if (exactRows && exactRows.length > 0) {
+        for (let i = 0; i < exactRows.length; i++) {
+          const row = exactRows[i];
+          const daysSinceUpdate = (Date.now() - new Date(row.updated_at).getTime()) / (1000 * 60 * 60 * 24);
+          const sourceKey = row.verification_source === "user_verified" ? "db_exact_user_verified"
+            : row.verification_source === "ebay_api" ? "db_exact_ebay_api"
+            : "db_exact";
 
-      for (const kw of keywords) {
-        const { data: fuzzy } = await supabase
-          .from("category_mappings")
-          .select("ebay_category_id, category_name, confidence, verification_source, item_type, coin_type, breadcrumb")
-          .or(`item_type.ilike.%${kw}%,coin_type.ilike.%${kw}%`)
-          .order("confidence", { ascending: false })
-          .limit(1)
-          .maybeSingle();
+          const effectiveScore = computeEffectiveScore(
+            sourceKey,
+            row.confidence ?? 80,
+            queryTokens.length, // exact match = full overlap
+            queryTokens.length,
+            false, // exact match is never generic
+            daysSinceUpdate,
+          );
 
-        if (fuzzy) {
-          fuzzyMatch = fuzzy;
-          break;
+          allCandidates.push({
+            categoryId: row.ebay_category_id,
+            categoryName: row.category_name,
+            breadcrumb: row.breadcrumb || row.category_name,
+            source: sourceKey,
+            rawScore: row.confidence ?? 80,
+            effectiveScore,
+            reason: `DB exact match (${row.verification_source}, confidence=${row.confidence})`,
+            verifiedLeaf: null, // Not re-verified for DB exact
+            verifiedActive: null,
+            tokenOverlap: queryTokens.length,
+            rank: i + 1,
+          });
         }
       }
 
-      if (fuzzyMatch) {
-        console.log(`category-lookup: fuzzy DB hit for "${normalizedKey}" via keyword:`, fuzzyMatch.ebay_category_id);
-        return new Response(
-          JSON.stringify({
-            found:              true,
-            itemType:           normalizedKey,
-            categoryId:         fuzzyMatch.ebay_category_id,
-            categoryName:       fuzzyMatch.category_name,
-            breadcrumb:         fuzzyMatch.breadcrumb || fuzzyMatch.category_name,
-            confidence:         Math.max(60, (fuzzyMatch.confidence ?? 80) - 15),
-            verificationSource: fuzzyMatch.verification_source,
-            source:             "db_fuzzy",
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      // ── Tier 2: eBay getCategorySuggestions (always run for comparison) ─
+      const ebayStart = Date.now();
+      ebayAuth = await getEbayAppToken();
+      let ebaySuggestions: CategorySuggestion[] = [];
 
-      // 3. Not in DB — try eBay getCategorySuggestions API (PRIMARY dynamic lookup)
-      console.log(`category-lookup: no DB match for "${normalizedKey}", trying eBay getCategorySuggestions...`);
-      const ebayAuth = await getEbayAppToken();
-      
       if (ebayAuth) {
-        const suggestions = await fetchCategorySuggestions(rawItemType, ebayAuth.token, ebayAuth.base);
-        
-        if (suggestions.length > 0) {
-          const best = suggestions[0];
-          console.log(`category-lookup: eBay suggested category for "${rawItemType}":`, best.categoryId, best.categoryName, best.breadcrumb);
+        ebaySuggestions = await fetchCategorySuggestions(rawItemType, ebayAuth.token, ebayAuth.base);
 
-          // Auto-save to DB so future lookups are instant
-          try {
-            await supabase.from("category_mappings").upsert(
-              {
-                coin_type:           normalizedKey,
-                item_type:           normalizedKey,
-                ebay_category_id:    best.categoryId,
-                category_name:       best.categoryName,
-                breadcrumb:          best.breadcrumb,
-                verification_source: "ebay_api",
-                confidence:          90,
-                updated_at:          new Date().toISOString(),
-              },
-              { onConflict: "coin_type" }
-            );
-            console.log(`category-lookup: auto-saved eBay API result for "${normalizedKey}":`, best.categoryId);
-          } catch (saveErr) {
-            console.warn("category-lookup: failed to auto-save eBay API result", saveErr);
+        for (let i = 0; i < Math.min(ebaySuggestions.length, 5); i++) {
+          const s = ebaySuggestions[i];
+          const tokenOverlap = computeTokenOverlap(queryTokens, `${s.categoryName} ${s.breadcrumb}`);
+
+          // eBay suggestions get high base score (they're from official taxonomy)
+          const rawScore = 90 - (i * 3); // 90, 87, 84, 81, 78
+          const effectiveScore = computeEffectiveScore(
+            "ebay_api",
+            rawScore,
+            tokenOverlap,
+            queryTokens.length,
+            false, // eBay results are never generic
+            0, // Fresh from API
+          );
+
+          // Verify leaf status for top candidate (#4)
+          let verifiedLeaf: boolean | null = null;
+          let verifiedActive: boolean | null = null;
+          if (i === 0 && ebayAuth) {
+            const verification = await verifyCategoryLeafActive(s.categoryId, ebayAuth.token, ebayAuth.base);
+            verifiedLeaf = verification.isLeaf;
+            verifiedActive = verification.isActive;
           }
 
-          return new Response(
-            JSON.stringify({
-              found:              true,
-              itemType:           normalizedKey,
-              categoryId:         best.categoryId,
-              categoryName:       best.categoryName,
-              breadcrumb:         best.breadcrumb,
-              confidence:         90,
-              verificationSource: "ebay_api",
-              source:             "ebay_api",
-              // Include alternatives for the caller
-              alternatives:       suggestions.slice(1, 4).map(s => ({
-                categoryId:   s.categoryId,
-                categoryName: s.categoryName,
-                breadcrumb:   s.breadcrumb,
-              })),
-            }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          allCandidates.push({
+            categoryId: s.categoryId,
+            categoryName: s.categoryName,
+            breadcrumb: s.breadcrumb,
+            source: "ebay_api",
+            rawScore,
+            effectiveScore,
+            reason: `eBay getCategorySuggestions rank #${i + 1}`,
+            verifiedLeaf,
+            verifiedActive,
+            tokenOverlap,
+            rank: i + 1,
+          });
+        }
+      }
+      const ebayLatency = Date.now() - ebayStart;
+
+      // ── Tier 3: DB fuzzy match (approved only, gated) (#1) ───────────
+      const dbFuzzyStart = Date.now();
+      const keywords = normalizedKey.split(" ").filter((w) => w.length > 3 && !STOPWORDS.has(w));
+      let fuzzyMatches: any[] = [];
+
+      for (const kw of keywords.slice(0, 3)) {
+        const { data: fuzzy } = await supabase
+          .from("category_mappings")
+          .select("ebay_category_id, category_name, confidence, verification_source, item_type, coin_type, breadcrumb, effective_score, updated_at, status")
+          .eq("status", "approved")
+          .or(`item_type.ilike.%${kw}%,coin_type.ilike.%${kw}%`)
+          .order("effective_score", { ascending: false })
+          .limit(3);
+
+        if (fuzzy && fuzzy.length > 0) {
+          fuzzyMatches.push(...fuzzy);
         }
       }
 
-      // 4. eBay API unavailable or no results — fall back to Gemini
-      console.log(`category-lookup: eBay API returned no results for "${normalizedKey}", falling back to Gemini...`);
-      const geminiResult = await askGeminiForCategory(rawItemType);
+      // Deduplicate fuzzy matches by category ID
+      const seenFuzzy = new Set<string>();
+      fuzzyMatches = fuzzyMatches.filter(f => {
+        if (seenFuzzy.has(f.ebay_category_id)) return false;
+        seenFuzzy.add(f.ebay_category_id);
+        return true;
+      });
 
-      if (geminiResult) {
-        // Auto-save to DB so future lookups are instant
-        try {
-          await supabase.from("category_mappings").upsert(
-            {
-              coin_type:           normalizedKey,
-              item_type:           normalizedKey,
-              ebay_category_id:    geminiResult.categoryId,
-              category_name:       geminiResult.categoryName,
-              verification_source: "gemini_ai",
-              confidence:          geminiResult.confidence,
-              updated_at:          new Date().toISOString(),
-            },
-            { onConflict: "coin_type" }
-          );
-          console.log(`category-lookup: auto-saved Gemini result for "${normalizedKey}":`, geminiResult.categoryId);
-        } catch (saveErr) {
-          console.warn("category-lookup: failed to auto-save Gemini result", saveErr);
+      const dbFuzzyLatency = Date.now() - dbFuzzyStart;
+
+      for (let i = 0; i < Math.min(fuzzyMatches.length, 3); i++) {
+        const row = fuzzyMatches[i];
+        const candidateText = row.item_type || row.coin_type || "";
+        const tokenOverlap = computeTokenOverlap(queryTokens, candidateText);
+        const daysSinceUpdate = (Date.now() - new Date(row.updated_at).getTime()) / (1000 * 60 * 60 * 24);
+        const isGeneric = isGenericItemType(candidateText);
+
+        // Apply fuzzy gates (#1)
+        if (tokenOverlap < FUZZY_MIN_TOKEN_OVERLAP) {
+          console.log(`category-lookup: fuzzy candidate "${candidateText}" rejected — token overlap ${tokenOverlap} < ${FUZZY_MIN_TOKEN_OVERLAP}`);
+          continue;
         }
 
+        const effectiveScore = computeEffectiveScore(
+          "db_fuzzy",
+          row.confidence ?? 70,
+          tokenOverlap,
+          queryTokens.length,
+          isGeneric,
+          daysSinceUpdate,
+        );
+
+        // Skip if score too low after penalties
+        if (effectiveScore < FUZZY_MIN_SIMILARITY * 100) {
+          console.log(`category-lookup: fuzzy candidate "${candidateText}" rejected — effective score ${effectiveScore.toFixed(1)} < ${FUZZY_MIN_SIMILARITY * 100}`);
+          continue;
+        }
+
+        allCandidates.push({
+          categoryId: row.ebay_category_id,
+          categoryName: row.category_name,
+          breadcrumb: row.breadcrumb || row.category_name,
+          source: "db_fuzzy",
+          rawScore: row.confidence ?? 70,
+          effectiveScore,
+          reason: `DB fuzzy match "${candidateText}" (overlap=${tokenOverlap}, generic=${isGeneric}, days=${Math.round(daysSinceUpdate)})`,
+          verifiedLeaf: null,
+          verifiedActive: null,
+          tokenOverlap,
+          rank: i + 1,
+        });
+      }
+
+      // ── Tier 4: Gemini fallback (only if no good candidates) ─────────
+      let geminiLatency = 0;
+      const bestSoFar = allCandidates.reduce((best, c) => c.effectiveScore > (best?.effectiveScore ?? 0) ? c : best, null as LookupCandidate | null);
+
+      if (!bestSoFar || bestSoFar.effectiveScore < 70) {
+        const geminiStart = Date.now();
+        const geminiResult = await askGeminiForCategory(rawItemType);
+        geminiLatency = Date.now() - geminiStart;
+
+        if (geminiResult) {
+          const effectiveScore = computeEffectiveScore(
+            "gemini",
+            geminiResult.confidence,
+            0, 0, false, 0,
+          );
+
+          allCandidates.push({
+            categoryId: geminiResult.categoryId,
+            categoryName: geminiResult.categoryName,
+            breadcrumb: geminiResult.categoryName,
+            source: "gemini",
+            rawScore: geminiResult.confidence,
+            effectiveScore,
+            reason: `Gemini AI suggestion (self-reported confidence=${geminiResult.confidence})`,
+            verifiedLeaf: null,
+            verifiedActive: null,
+            tokenOverlap: 0,
+            rank: 1,
+          });
+        }
+      }
+
+      // ── Winner selection ─────────────────────────────────────────────
+      // Sort all candidates by effective score descending
+      allCandidates.sort((a, b) => b.effectiveScore - a.effectiveScore);
+
+      // Check for deterministic lock (#3): if top eBay candidate is strong enough, lock it
+      const topEbay = allCandidates.find(c => c.source === "ebay_api" && c.rank === 1);
+      let winner: LookupCandidate | null = null;
+      let lockReason = "";
+
+      if (topEbay && topEbay.effectiveScore >= DETERMINISTIC_LOCK_THRESHOLD && topEbay.verifiedLeaf !== false) {
+        winner = topEbay;
+        lockReason = `Deterministic lock: eBay top-1 score ${topEbay.effectiveScore.toFixed(1)} >= ${DETERMINISTIC_LOCK_THRESHOLD}`;
+      } else {
+        // Take highest effective score, preferring verified leaf
+        for (const c of allCandidates) {
+          if (c.verifiedLeaf === false) continue; // Skip known non-leaf (#4)
+          winner = c;
+          lockReason = `Highest effective score: ${c.effectiveScore.toFixed(1)} from ${c.source}`;
+          break;
+        }
+        // If all are non-leaf, take the best anyway
+        if (!winner && allCandidates.length > 0) {
+          winner = allCandidates[0];
+          lockReason = `Fallback: best available candidate (no verified leaf)`;
+        }
+      }
+
+      // ── Audit logging (#0, #9) ──────────────────────────────────────
+      for (const c of allCandidates) {
+        auditEntries.push({
+          request_id: requestId,
+          query_text: rawItemType,
+          candidate_source: c.source,
+          candidate_id: c.categoryId,
+          candidate_name: c.categoryName,
+          candidate_score: c.effectiveScore,
+          candidate_rank: c.rank,
+          was_selected: winner !== null && c.categoryId === winner.categoryId && c.source === winner.source,
+          reason_selected: c === winner ? lockReason : c.reason,
+          verified_leaf: c.verifiedLeaf,
+          verified_active: c.verifiedActive,
+          persisted_to_db: false,
+          latency_ms: c.source.startsWith("db_exact") ? dbExactLatency
+            : c.source === "ebay_api" ? ebayLatency
+            : c.source === "db_fuzzy" ? dbFuzzyLatency
+            : geminiLatency,
+        });
+      }
+
+      // ── Auto-persist winner (#2 gates applied) ──────────────────────
+      let persisted = false;
+      if (winner && winner.source === "ebay_api") {
+        persisted = await safePersistMapping(
+          supabase, normalizedKey,
+          winner.categoryId, winner.categoryName, winner.breadcrumb,
+          "ebay_api", winner.rawScore, ebayAuth,
+        );
+      } else if (winner && winner.source === "gemini") {
+        persisted = await safePersistMapping(
+          supabase, normalizedKey,
+          winner.categoryId, winner.categoryName, winner.breadcrumb,
+          "gemini_ai", winner.rawScore, ebayAuth,
+        );
+      }
+
+      // Update audit entries with persist status
+      if (persisted && winner) {
+        const winnerAudit = auditEntries.find(a => a.was_selected);
+        if (winnerAudit) winnerAudit.persisted_to_db = true;
+      }
+
+      // Persist audit (non-blocking)
+      persistAuditEntries(supabase, auditEntries).catch(e => console.warn("audit persist failed:", e));
+
+      // ── Build response ──────────────────────────────────────────────
+      if (winner) {
         return new Response(
           JSON.stringify({
             found:              true,
             itemType:           normalizedKey,
-            categoryId:         geminiResult.categoryId,
-            categoryName:       geminiResult.categoryName,
-            confidence:         geminiResult.confidence,
-            verificationSource: "gemini_ai",
-            source:             "gemini",
+            categoryId:         winner.categoryId,
+            categoryName:       winner.categoryName,
+            breadcrumb:         winner.breadcrumb,
+            confidence:         winner.rawScore,
+            effectiveScore:     Math.round(winner.effectiveScore * 100) / 100,
+            verificationSource: winner.source.replace("db_exact_", ""),
+            source:             winner.source,
+            reasonSelected:     lockReason,
+            verifiedLeaf:       winner.verifiedLeaf,
+            verifiedActive:     winner.verifiedActive,
+            persistedToDb:      persisted,
+            requestId:          requestId,
+            candidateCount:     allCandidates.length,
+            alternatives:       allCandidates
+              .filter(c => c !== winner)
+              .slice(0, 3)
+              .map(c => ({
+                categoryId:   c.categoryId,
+                categoryName: c.categoryName,
+                breadcrumb:   c.breadcrumb,
+                source:       c.source,
+                score:        Math.round(c.effectiveScore * 100) / 100,
+              })),
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      // 5. Complete miss — nothing found
+      // No winner — circuit breaker (#9)
       return new Response(
         JSON.stringify({
           found:    false,
           itemType: normalizedKey,
-          message:  "No category found — AI will determine category during analysis",
+          message:  "No category passed confidence threshold — present top options to user",
+          requestId: requestId,
+          topCandidates: allCandidates.slice(0, 3).map(c => ({
+            categoryId:   c.categoryId,
+            categoryName: c.categoryName,
+            breadcrumb:   c.breadcrumb,
+            source:       c.source,
+            score:        Math.round(c.effectiveScore * 100) / 100,
+          })),
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // ── ACTION: suggest ────────────────────────────────────────────────────
-    // Direct eBay getCategorySuggestions call — returns top N category suggestions
-    // Used by analyze-item to get dynamic category options for ANY item
+    // ══════════════════════════════════════════════════════════════════════
+    // ACTION: suggest
+    // ══════════════════════════════════════════════════════════════════════
     if (action === "suggest") {
       const query = payload.query || rawItemType || "";
       if (!query) {
@@ -486,13 +909,24 @@ export async function handleRequest(req: Request): Promise<Response> {
       }
 
       const suggestions = await fetchCategorySuggestions(query, ebayAuth.token, ebayAuth.base);
-      
+
+      // Verify top suggestion is leaf (#4)
+      if (suggestions.length > 0) {
+        const topVerification = await verifyCategoryLeafActive(
+          suggestions[0].categoryId, ebayAuth.token, ebayAuth.base
+        );
+        if (!topVerification.isLeaf) {
+          console.warn(`category-lookup suggest: top suggestion ${suggestions[0].categoryId} is NOT a leaf category`);
+        }
+      }
+
       return new Response(
         JSON.stringify({
-          suggestions: suggestions.slice(0, 5).map(s => ({
+          suggestions: suggestions.slice(0, 5).map((s, i) => ({
             categoryId:   s.categoryId,
             categoryName: s.categoryName,
             breadcrumb:   s.breadcrumb,
+            rank:         i + 1,
           })),
           query,
         }),
@@ -500,18 +934,20 @@ export async function handleRequest(req: Request): Promise<Response> {
       );
     }
 
-    // ── ACTION: aspects ────────────────────────────────────────────────────
-    // Fetch + cache aspect rules for a category ID from eBay's getItemAspectsForCategory
-    // This replaces the hardcoded CATEGORY_ASPECT_RULES in ebay-publish
+    // ══════════════════════════════════════════════════════════════════════
+    // ACTION: aspects
+    // ══════════════════════════════════════════════════════════════════════
     if (action === "aspects") {
       const cid = (categoryId || "").toString().trim();
       if (!cid) throw new Error("categoryId required for aspects action");
 
-      // 1. Check cache first (valid for 7 days)
+      // 1. Check cache first (composite key with marketplace/tree) (#7)
       const { data: cached } = await supabase
         .from("category_aspects_cache")
         .select("aspects, category_name, fetched_at, expires_at")
         .eq("category_id", cid)
+        .eq("marketplace_id", MARKETPLACE_ID)
+        .eq("category_tree_id", CATEGORY_TREE_ID)
         .maybeSingle();
 
       if (cached && new Date(cached.expires_at) > new Date()) {
@@ -531,15 +967,11 @@ export async function handleRequest(req: Request): Promise<Response> {
       // 2. Cache miss or expired — fetch from eBay API
       const ebayAuth = await getEbayAppToken();
       if (!ebayAuth) {
-        // Return cached data even if expired, or empty
         if (cached) {
           return new Response(
             JSON.stringify({
-              categoryId:   cid,
-              categoryName: cached.category_name,
-              aspects:      cached.aspects,
-              source:       "cache_stale",
-              fetchedAt:    cached.fetched_at,
+              categoryId: cid, categoryName: cached.category_name,
+              aspects: cached.aspects, source: "cache_stale", fetchedAt: cached.fetched_at,
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
@@ -551,12 +983,10 @@ export async function handleRequest(req: Request): Promise<Response> {
       }
 
       const aspects = await fetchItemAspects(cid, ebayAuth.token, ebayAuth.base);
-      
+
       if (aspects.length > 0) {
-        // Get category name for display
         let catName = categoryName || cached?.category_name || null;
         if (!catName) {
-          // Try to get it from category_mappings
           const { data: mapping } = await supabase
             .from("category_mappings")
             .select("category_name")
@@ -565,21 +995,22 @@ export async function handleRequest(req: Request): Promise<Response> {
           catName = mapping?.category_name || null;
         }
 
-        // Save to cache
         const now = new Date();
-        const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days
-        
+        const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
         try {
           await supabase.from("category_aspects_cache").upsert(
             {
-              category_id:   cid,
-              category_name: catName,
-              aspects:       aspects,
-              fetched_at:    now.toISOString(),
-              expires_at:    expiresAt.toISOString(),
-              updated_at:    now.toISOString(),
+              category_id:     cid,
+              marketplace_id:  MARKETPLACE_ID,
+              category_tree_id: CATEGORY_TREE_ID,
+              category_name:   catName,
+              aspects:         aspects,
+              fetched_at:      now.toISOString(),
+              expires_at:      expiresAt.toISOString(),
+              updated_at:      now.toISOString(),
             },
-            { onConflict: "category_id" }
+            { onConflict: "category_id,marketplace_id,category_tree_id" }
           );
           console.log(`category-lookup: cached ${aspects.length} aspects for category ${cid}`);
         } catch (cacheErr) {
@@ -588,34 +1019,27 @@ export async function handleRequest(req: Request): Promise<Response> {
 
         return new Response(
           JSON.stringify({
-            categoryId:   cid,
-            categoryName: catName,
-            aspects:      aspects,
-            source:       "ebay_api",
-            fetchedAt:    now.toISOString(),
+            categoryId: cid, categoryName: catName,
+            aspects: aspects, source: "ebay_api", fetchedAt: now.toISOString(),
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      // No aspects returned — return empty
       return new Response(
-        JSON.stringify({
-          categoryId: cid,
-          aspects:    [],
-          source:     "ebay_api",
-          message:    "No aspects found for this category",
-        }),
+        JSON.stringify({ categoryId: cid, aspects: [], source: "ebay_api", message: "No aspects found" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // ── ACTION: verify / breadcrumb ────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════════
+    // ACTION: verify / breadcrumb
+    // ══════════════════════════════════════════════════════════════════════
     if (action === "verify" || action === "breadcrumb") {
       const cid = (categoryId || "").toString().trim();
       if (!cid) throw new Error("categoryId required for verify/breadcrumb action");
 
-      // Quick local DB check first
+      // Quick DB check
       try {
         const { data: local } = await supabase
           .from("category_mappings")
@@ -625,45 +1049,48 @@ export async function handleRequest(req: Request): Promise<Response> {
         if (local?.category_name) {
           return new Response(
             JSON.stringify({
-              valid:        true,
-              source:       "db",
+              valid: true, source: "db",
               categoryName: local.category_name,
-              breadcrumb:   local.breadcrumb || local.category_name,
+              breadcrumb: local.breadcrumb || local.category_name,
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
-      } catch (_) { /* continue to remote */ }
+      } catch (_) { /* continue */ }
 
-      // Remote eBay Taxonomy API
+      // Remote verification with leaf check (#4)
       const ebayAuth = await getEbayAppToken();
       if (!ebayAuth) {
         return new Response(
-          JSON.stringify({ valid: null, source: "none", message: "No eBay app credentials configured" }),
+          JSON.stringify({ valid: null, source: "none", message: "No eBay credentials" }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const result = await fetchBreadcrumb(cid, ebayAuth.token, ebayAuth.base);
-      if (!result.valid) {
-        return new Response(
-          JSON.stringify({ valid: false, source: "remote", breadcrumb: null, categoryName: null }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      const verification = await verifyCategoryLeafActive(cid, ebayAuth.token, ebayAuth.base);
+      const breadcrumbResult = await fetchBreadcrumb(cid, ebayAuth.token, ebayAuth.base);
 
       return new Response(
-        JSON.stringify({ valid: true, source: "remote", categoryName: result.categoryName, breadcrumb: result.breadcrumb }),
+        JSON.stringify({
+          valid: breadcrumbResult.valid,
+          isLeaf: verification.isLeaf,
+          isActive: verification.isActive,
+          source: "remote",
+          categoryName: breadcrumbResult.categoryName || verification.categoryName,
+          breadcrumb: breadcrumbResult.breadcrumb,
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // ── ACTION: store (admin or auto-save from analyze-item) ──────────────
+    // ══════════════════════════════════════════════════════════════════════
+    // ACTION: store (admin or auto-save)
+    // ══════════════════════════════════════════════════════════════════════
     if (action === "store") {
       const rawKey = normalizeItemType(rawItemType || categoryName || "");
       const breadcrumb = payload.breadcrumb || null;
+      const normalized = deepNormalize(rawKey);
 
-      // If called with an Authorization header, verify admin
       const authHeader = req.headers.get("authorization");
       if (authHeader) {
         const token = authHeader.replace(/^Bearer\s+/i, "");
@@ -677,20 +1104,24 @@ export async function handleRequest(req: Request): Promise<Response> {
         const userId = userData.user.id;
         const { data: profile } = await supabase.from("profiles").select("is_admin").eq("id", userId).maybeSingle();
         const isAdmin = profile?.is_admin === true;
-        const source  = isAdmin ? (verificationSource || "user_verified") : "ai_auto";
+        const source = isAdmin ? (verificationSource || "user_verified") : "ai_auto";
+        const status = isAdmin ? "approved" : "quarantine";
 
         if (!categoryId) throw new Error("categoryId required for store action");
 
         const { error } = await supabase.from("category_mappings").upsert(
           {
-            coin_type:           rawKey,
-            item_type:           rawKey,
-            ebay_category_id:    categoryId,
-            category_name:       categoryName || null,
-            breadcrumb:          breadcrumb,
-            verification_source: source,
-            confidence:          isAdmin ? 100 : 80,
-            updated_at:          new Date().toISOString(),
+            coin_type:              rawKey,
+            item_type:              rawKey,
+            item_type_normalized:   normalized,
+            ebay_category_id:       categoryId,
+            category_name:          categoryName || null,
+            breadcrumb:             breadcrumb,
+            verification_source:    source,
+            confidence:             isAdmin ? 100 : 80,
+            effective_score:        isAdmin ? 100 : 70,
+            status:                 status,
+            updated_at:             new Date().toISOString(),
           },
           { onConflict: "coin_type" }
         );
@@ -698,32 +1129,92 @@ export async function handleRequest(req: Request): Promise<Response> {
         if (error) throw error;
 
         return new Response(
-          JSON.stringify({ success: true, itemType: rawKey, categoryId, stored: true }),
+          JSON.stringify({ success: true, itemType: rawKey, categoryId, stored: true, status }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      // No auth header — internal auto-save call from analyze-item
+      // No auth — internal auto-save (apply gates #2)
       if (!categoryId) throw new Error("categoryId required for store action");
 
-      const { error } = await supabase.from("category_mappings").upsert(
-        {
-          coin_type:           rawKey,
-          item_type:           rawKey,
-          ebay_category_id:    categoryId,
-          category_name:       categoryName || null,
-          breadcrumb:          breadcrumb,
-          verification_source: verificationSource || "ai_auto",
-          confidence:          75,
-          updated_at:          new Date().toISOString(),
-        },
-        { onConflict: "coin_type" }
+      const ebayAuth = await getEbayAppToken();
+      const persisted = await safePersistMapping(
+        supabase, rawKey, categoryId, categoryName || null, breadcrumb,
+        verificationSource || "ai_auto", 75, ebayAuth,
       );
 
-      if (error) throw error;
+      return new Response(
+        JSON.stringify({ success: persisted, itemType: rawKey, categoryId, stored: persisted }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // ACTION: promote (move quarantined row to approved after publish success)
+    // ══════════════════════════════════════════════════════════════════════
+    if (action === "promote") {
+      const cid = (categoryId || "").toString().trim();
+      if (!cid) throw new Error("categoryId required for promote action");
+
+      // Fetch current count first, then update with incremented value
+      const { data: promoteExisting } = await supabase
+        .from("category_mappings")
+        .select("publish_success_count")
+        .eq("ebay_category_id", cid)
+        .maybeSingle();
+
+      const newSuccessCount = ((promoteExisting?.publish_success_count as number) || 0) + 1;
+
+      const { error } = await supabase
+        .from("category_mappings")
+        .update({
+          status: "approved",
+          publish_success_count: newSuccessCount,
+          last_publish_success: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("ebay_category_id", cid);
 
       return new Response(
-        JSON.stringify({ success: true, itemType: rawKey, categoryId, stored: true }),
+        JSON.stringify({ success: !error, categoryId: cid, action: "promote" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // ACTION: demote (record publish failure, potentially reject)
+    // ══════════════════════════════════════════════════════════════════════
+    if (action === "demote") {
+      const cid = (categoryId || "").toString().trim();
+      if (!cid) throw new Error("categoryId required for demote action");
+
+      const { data: existing } = await supabase
+        .from("category_mappings")
+        .select("publish_failure_count, publish_success_count, effective_score")
+        .eq("ebay_category_id", cid)
+        .maybeSingle();
+
+      if (existing) {
+        const newFailCount = (existing.publish_failure_count || 0) + 1;
+        const successCount = existing.publish_success_count || 0;
+        const newScore = Math.max(0, (existing.effective_score || 50) - 10);
+
+        // Auto-reject if 3+ failures and no successes
+        const newStatus = (newFailCount >= 3 && successCount === 0) ? "rejected" : undefined;
+
+        await supabase
+          .from("category_mappings")
+          .update({
+            publish_failure_count: newFailCount,
+            effective_score: newScore,
+            ...(newStatus ? { status: newStatus } : {}),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("ebay_category_id", cid);
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, categoryId: cid, action: "demote" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

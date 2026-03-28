@@ -275,71 +275,86 @@ serve(async (req: Request) => {
       throw new Error("GEMINI_API_KEY is not configured");
     }
 
-    // ── Pre-lookup: Dynamic category suggestions ──────────────────────────
-    // Step 1: Check category_mappings DB for known matches
-    // Step 2: Call eBay getCategorySuggestions API for dynamic category options
-    // Both results are injected into the system prompt to guide Gemini
+    // ── Pre-lookup: Deterministic category resolution ──────────────────────────
+    // Uses category-lookup "lookup" action which implements:
+    //   - 4-tier ranked candidates (DB exact → eBay API → DB fuzzy → Gemini)
+    //   - Deterministic lock when eBay top-1 is high confidence (#3)
+    //   - Only approved rows from DB (#2)
+    //   - Leaf/active verification (#4)
+    //   - Audit logging (#0)
+    //
+    // If a deterministic winner is found, it's locked into the prompt so Gemini
+    // cannot override it. Otherwise, hints are provided for Gemini to choose from.
     let categoryHints = "";
-    
-    // DB pre-lookup (fast, no API call)
-    try {
-      const voiceNoteWords = (voiceNote || "").toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
-      if (voiceNoteWords.length > 0) {
-        for (const word of voiceNoteWords.slice(0, 5)) {
-          const { data: catRow } = await svc
-            .from("category_mappings")
-            .select("ebay_category_id, category_name, breadcrumb, item_type, coin_type")
-            .or(`item_type.ilike.%${word}%,coin_type.ilike.%${word}%`)
-            .order("confidence", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          if (catRow?.ebay_category_id) {
-            const matchedType = catRow.item_type || catRow.coin_type || "";
-            const breadcrumb = catRow.breadcrumb || catRow.category_name || "";
-            categoryHints += `\n- DB MATCH: "${matchedType}" -> category **${catRow.ebay_category_id}** (${breadcrumb}). Use this as primary category unless the item clearly belongs elsewhere.`;
-            console.log(`analyze-item: DB category pre-hint for "${word}":`, catRow.ebay_category_id, breadcrumb);
-            break;
-          }
-        }
-      }
-    } catch (dbHintErr) {
-      console.warn("analyze-item: DB category pre-lookup failed (non-blocking):", dbHintErr);
-    }
-    
-    // eBay getCategorySuggestions API call (if we have a voice note or can derive a query)
+    let lockedCategoryId: string | null = null;
+    let lockedCategoryName: string | null = null;
+    let lockedBreadcrumb: string | null = null;
+    let lookupAlternatives: any[] = [];
+
     try {
       const searchQuery = voiceNote || "";
       if (searchQuery.trim().length > 2) {
-        const _suggestUrl = Deno.env.get("SUPABASE_URL");
-        const _suggestKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-        if (_suggestUrl && _suggestKey) {
-          const suggestResp = await fetch(
-            `${_suggestUrl}/functions/v1/category-lookup`,
+        const _lookupUrl = Deno.env.get("SUPABASE_URL");
+        const _lookupKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (_lookupUrl && _lookupKey) {
+          const lookupResp = await fetch(
+            `${_lookupUrl}/functions/v1/category-lookup`,
             {
               method: "POST",
               headers: {
-                "Authorization": `Bearer ${_suggestKey}`,
+                "Authorization": `Bearer ${_lookupKey}`,
                 "Content-Type": "application/json",
               },
-              body: JSON.stringify({ action: "suggest", query: searchQuery }),
+              body: JSON.stringify({ action: "lookup", itemType: searchQuery }),
             }
           );
-          if (suggestResp.ok) {
-            const suggestData = await suggestResp.json();
-            if (suggestData.suggestions && suggestData.suggestions.length > 0) {
-              categoryHints += "\n- EBAY API SUGGESTIONS (from eBay's official taxonomy, use these as primary reference):";
-              for (const s of suggestData.suggestions.slice(0, 3)) {
-                categoryHints += `\n  * **${s.categoryId}** -- ${s.breadcrumb || s.categoryName}`;
+          if (lookupResp.ok) {
+            const lookupData = await lookupResp.json();
+
+            if (lookupData.found) {
+              const score = lookupData.effectiveScore || lookupData.confidence || 0;
+              const isVerifiedLeaf = lookupData.verifiedLeaf !== false;
+              const source = lookupData.source || "";
+
+              // Deterministic lock: high-confidence verified result (#3)
+              // Lock if: score >= 88 AND (source is eBay API or user-verified DB exact)
+              const isLockable = score >= 88 && isVerifiedLeaf &&
+                (source === "ebay_api" || source.includes("user_verified") || source.includes("db_exact"));
+
+              if (isLockable) {
+                lockedCategoryId = lookupData.categoryId;
+                lockedCategoryName = lookupData.categoryName || "";
+                lockedBreadcrumb = lookupData.breadcrumb || lookupData.categoryName || "";
+                categoryHints += `\n- **LOCKED CATEGORY** (verified, high-confidence): **${lockedCategoryId}** — ${lockedBreadcrumb}. YOU MUST USE THIS CATEGORY ID. Do not override.`;
+                console.log(`analyze-item: DETERMINISTIC LOCK on category ${lockedCategoryId} (score=${score}, source=${source})`);
+              } else {
+                // Not locked — provide as strong hint
+                categoryHints += `\n- BEST MATCH (score=${score}, source=${source}): **${lookupData.categoryId}** — ${lookupData.breadcrumb || lookupData.categoryName}. Use this as primary category unless the item clearly belongs elsewhere.`;
               }
-              console.log(`analyze-item: eBay API returned ${suggestData.suggestions.length} category suggestions for "${searchQuery}"`);
+
+              // Collect alternatives for fallback
+              if (lookupData.alternatives && lookupData.alternatives.length > 0) {
+                lookupAlternatives = lookupData.alternatives;
+                categoryHints += "\n- ALTERNATIVE CATEGORIES:";
+                for (const alt of lookupData.alternatives.slice(0, 3)) {
+                  categoryHints += `\n  * **${alt.categoryId}** — ${alt.breadcrumb || alt.categoryName} (score=${alt.score || "?"})`;
+                }
+              }
+            } else if (lookupData.topCandidates && lookupData.topCandidates.length > 0) {
+              // Circuit breaker fired — no candidate passed threshold (#9)
+              categoryHints += "\n- LOW-CONFIDENCE CANDIDATES (use your best judgment):";
+              for (const c of lookupData.topCandidates) {
+                categoryHints += `\n  * **${c.categoryId}** — ${c.breadcrumb || c.categoryName} (score=${c.score || "?"})`;
+              }
+              lookupAlternatives = lookupData.topCandidates;
             }
           }
         }
       }
-    } catch (suggestErr) {
-      console.warn("analyze-item: eBay category suggestion failed (non-blocking):", suggestErr);
+    } catch (lookupErr) {
+      console.warn("analyze-item: category pre-lookup failed (non-blocking):", lookupErr);
     }
-    // ── End pre-lookup ─────────────────────────────────────────────────────
+    // ── End pre-lookup ─────────────────────────────────────────────────────────
 
     const systemPrompt = `You are a professional eBay Listing Expert and item identifier. Your task is to analyze item photos and generate a complete listing via the \`create_listing\` tool.
 
@@ -354,11 +369,15 @@ You handle ALL types of items: coins, bullion, precious metals, collectibles, to
 5. SELLER VOICE NOTE: If provided, treat as authoritative \u2014 override visual assessment where applicable.
 
 ### CATEGORY SELECTION
-You MUST select the correct eBay **leaf** category ID for every item. Use these resources in order:
+You MUST select the correct eBay **leaf** category ID for every item.
 
-1. **DYNAMIC SUGGESTIONS** (below): If eBay API suggestions or DB matches are provided, use these FIRST \u2014 they come from eBay's official taxonomy and are the most reliable.
-2. **Your knowledge**: You have extensive knowledge of eBay category IDs. Use it when dynamic suggestions are unavailable.
-3. **google_search**: If confidence <90%, search for "eBay leaf category ID [Item Name]" to verify.
+**CRITICAL: If a LOCKED CATEGORY is specified below, you MUST use that exact category ID. Do NOT override it.**
+
+Use these resources in order:
+1. **LOCKED CATEGORY** (below): If present, use this category ID unconditionally. It has been verified as a leaf category from eBay's official taxonomy.
+2. **BEST MATCH / SUGGESTIONS** (below): If no lock, use the highest-scored suggestion as your primary category.
+3. **Your knowledge**: Use when no suggestions are available.
+4. **google_search**: If confidence <90%, search for "eBay leaf category ID [Item Name]" to verify.
 ${categoryHints}
 
 **CRITICAL RULES FOR SPECIFIC CATEGORIES:**
@@ -609,11 +628,79 @@ Seller's note: "${voiceNote}"`;
     }
     // --- end suggestedCategories processing ---
 
-    // --- Auto-persist new category to DB for future lookups (self-learning) ---
-    // If the AI returned a category ID that isn't already in our DB, save it now
+
+    // --- Early leaf/active validation (#4) ---
+    // If the AI returned a category, verify it's a valid leaf before proceeding.
+    // If invalid, try to reselect from alternatives or lookup suggestions.
+    try {
+      if (listing.ebayCategoryId) {
+        // If we had a deterministic lock, the category is already verified
+        if (lockedCategoryId && listing.ebayCategoryId !== lockedCategoryId) {
+          // AI overrode the locked category — force it back (#3)
+          console.warn(`analyze-item: AI overrode locked category ${lockedCategoryId} with ${listing.ebayCategoryId} — forcing lock back`);
+          listing.ebayCategoryId = lockedCategoryId;
+          listing.categoryId = lockedCategoryId;
+        } else if (!lockedCategoryId) {
+          // No lock — verify the AI's choice via category-lookup
+          const _verifyUrl = Deno.env.get("SUPABASE_URL");
+          const _verifyKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+          if (_verifyUrl && _verifyKey) {
+            const verifyResp = await fetch(
+              `${_verifyUrl}/functions/v1/category-lookup`,
+              {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${_verifyKey}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ action: "verify", categoryId: listing.ebayCategoryId }),
+              }
+            );
+            if (verifyResp.ok) {
+              const verifyData = await verifyResp.json();
+              if (verifyData.isLeaf === false || verifyData.valid === false) {
+                console.warn(`analyze-item: AI category ${listing.ebayCategoryId} is NOT a valid leaf — attempting reselect`);
+                
+                // Try alternatives from lookup
+                let reselected = false;
+                if (lookupAlternatives && lookupAlternatives.length > 0) {
+                  for (const alt of lookupAlternatives) {
+                    if (alt.categoryId !== listing.ebayCategoryId) {
+                      console.log(`analyze-item: reselecting to alternative ${alt.categoryId} (${alt.categoryName || alt.breadcrumb})`);
+                      listing.ebayCategoryId = alt.categoryId;
+                      listing.categoryId = alt.categoryId;
+                      reselected = true;
+                      break;
+                    }
+                  }
+                }
+                
+                // Try suggestedCategories if no alternative worked
+                if (!reselected && listing.suggestedCategories?.length > 1) {
+                  const fallback = listing.suggestedCategories[1];
+                  if (fallback?.categoryId) {
+                    console.log(`analyze-item: reselecting to suggested category ${fallback.categoryId}`);
+                    listing.ebayCategoryId = fallback.categoryId;
+                    listing.categoryId = fallback.categoryId;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (validationErr) {
+      console.warn("analyze-item: leaf validation failed (non-blocking):", validationErr);
+    }
+    // --- end leaf validation ---
+
+    // --- Auto-persist new category to DB via category-lookup (gated) (#2) ---
+    // Uses category-lookup "store" action which enforces:
+    //   - Minimum confidence threshold (85)
+    //   - Leaf + active verification
+    //   - Status = quarantine (promoted to approved after publish success)
     try {
       if (listing.ebayCategoryId && userId) {
-        // Build a normalized item descriptor from title + voice note keywords
         const titleWords = (listing.title || "").toLowerCase()
           .replace(/[^a-z0-9\s]/g, " ")
           .split(/\s+/)
@@ -627,28 +714,40 @@ Seller's note: "${voiceNote}"`;
             .from("category_mappings")
             .select("id")
             .eq("ebay_category_id", listing.ebayCategoryId)
+            .eq("status", "approved")
             .ilike("item_type", `%${titleWords.split(" ")[0]}%`)
             .maybeSingle();
 
           if (!existingCat) {
-            // Get category name from suggestedCategories if available
             const catName = listing.suggestedCategories?.[0]?.categoryName
               || listing.suggestedCategories?.[0]?.breadcrumb?.split(" > ").pop()
               || null;
+            const catBreadcrumb = listing.suggestedCategories?.[0]?.breadcrumb || null;
 
-            await svc.from("category_mappings").upsert(
-              {
-                coin_type:           titleWords,
-                item_type:           titleWords,
-                ebay_category_id:    listing.ebayCategoryId,
-                category_name:       catName,
-                verification_source: "ai_auto",
-                confidence:          75,
-                updated_at:          new Date().toISOString(),
-              },
-              { onConflict: "coin_type" }
-            );
-            console.log(`analyze-item: auto-persisted category ${listing.ebayCategoryId} for "${titleWords}"`);
+            // Use category-lookup store action (applies leaf/active gates + quarantine)
+            const _storeUrl = Deno.env.get("SUPABASE_URL");
+            const _storeKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+            if (_storeUrl && _storeKey) {
+              await fetch(
+                `${_storeUrl}/functions/v1/category-lookup`,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${_storeKey}`,
+                  },
+                  body: JSON.stringify({
+                    action: "store",
+                    itemType: titleWords,
+                    categoryId: listing.ebayCategoryId,
+                    categoryName: catName,
+                    breadcrumb: catBreadcrumb,
+                    verificationSource: "ai_auto",
+                  }),
+                }
+              );
+              console.log(`analyze-item: submitted category ${listing.ebayCategoryId} for "${titleWords}" to category-lookup store (gated)`);
+            }
           }
         }
       }
