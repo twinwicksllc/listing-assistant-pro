@@ -180,21 +180,21 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
   // ── Collectibles / Toys / Trading Cards ──────────────────────────────────
   // Sports Trading Cards
   "261328": {
-    required: [],
-    preferred: ["Player/Athlete", "Sport", "Card Manufacturer", "Year", "Season", "Team", "Features", "Autographed", "Grade", "Professional Grader"],
-    defaults: {},
+    required: ["Sport"],
+    preferred: ["Player/Athlete", "Card Manufacturer", "Year", "Season", "Team", "Features", "Autographed", "Grade", "Professional Grader"],
+    defaults: { "Sport": "Baseball" },
   },
   // Baseball Cards
   "64482": {
-    required: [],
+    required: ["Sport"],
     preferred: ["Player/Athlete", "Card Manufacturer", "Year", "Team", "Features", "Grade"],
-    defaults: {},
+    defaults: { "Sport": "Baseball" },
   },
   // Sports Cards General (parent)
   "213": {
-    required: [],
-    preferred: ["Player/Athlete", "Sport", "Card Manufacturer", "Year", "Team"],
-    defaults: {},
+    required: ["Sport"],
+    preferred: ["Player/Athlete", "Card Manufacturer", "Year", "Team"],
+    defaults: { "Sport": "Baseball" },
   },
   // Pokémon Trading Card Games
   "183454": {
@@ -571,6 +571,38 @@ function buildAndNormalizeAspects(
     for (const [k, v] of Object.entries(rule.fixedValues)) {
       aspects[k] = [v];
     }
+  }
+
+  // ── Sport inference for trading card categories ─────────────────────────
+  // If category is a sports card category and Sport is missing, infer from title/description
+  const SPORT_CARD_CATS = new Set(["213", "261328", "64482"]);
+  if (SPORT_CARD_CATS.has(categoryId) && !aspects["Sport"]) {
+    // Try to infer sport from item title or existing aspects
+    const textToSearch = (
+      (aspects["Player/Athlete"]?.[0] || "") + " " +
+      (aspects["Team"]?.[0] || "") + " " +
+      (aspects["Card Manufacturer"]?.[0] || "")
+    ).toLowerCase();
+    
+    if (/football|nfl|quarterback|touchdown|gridiron/i.test(textToSearch)) {
+      aspects["Sport"] = ["Football"];
+    } else if (/basketball|nba|hoops/i.test(textToSearch)) {
+      aspects["Sport"] = ["Basketball"];
+    } else if (/hockey|nhl|puck/i.test(textToSearch)) {
+      aspects["Sport"] = ["Hockey"];
+    } else if (/soccer|mls|fifa/i.test(textToSearch)) {
+      aspects["Sport"] = ["Soccer"];
+    } else if (/golf|pga/i.test(textToSearch)) {
+      aspects["Sport"] = ["Golf"];
+    } else if (/tennis/i.test(textToSearch)) {
+      aspects["Sport"] = ["Tennis"];
+    } else if (/boxing|mma|ufc/i.test(textToSearch)) {
+      aspects["Sport"] = ["Boxing"];
+    } else {
+      // Default to Baseball for sports cards when sport cannot be inferred
+      aspects["Sport"] = ["Baseball"];
+    }
+    console.log(`buildAndNormalizeAspects: inferred Sport="${aspects["Sport"][0]}" for category ${categoryId}`);
   }
 
   // Fill required aspects with defaults if still missing

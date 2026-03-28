@@ -323,7 +323,9 @@ You handle ALL types of items: coins, bullion, precious metals, collectibles, to
 - Action Figures: **246**
 - LEGO Sets: **182**
 - Pok\u00e9mon Cards: **183454**
-- Sports Trading Cards: **261328** (Basketball), **213** (Baseball), **64482** (general)
+- Sports Trading Cards: **261328** or **213** or **64482**
+  → **REQUIRED itemSpecifics**: `Sport` (Baseball/Basketball/Football/Hockey/Soccer), `Card Manufacturer`, `Year`
+  → Always include `Sport` — eBay WILL REJECT the listing without it
 - Board Games: **19016**
 - Dolls: **222** | Bears (collectible): **238**
 
@@ -471,6 +473,21 @@ Seller's note: "${voiceNote}"`;
                         "Country of Origin": { type: "string" },
                         "Materials sourced from": { type: "string" },
                         "Precious Metal Content per Unit": { type: "string" },
+                        // Trading card / collectible fields
+                        "Sport": { type: "string", description: "REQUIRED for sports cards (213, 261328, 64482). E.g. Baseball, Basketball, Football, Hockey, Soccer" },
+                        "Player/Athlete": { type: "string", description: "Player name for sports cards" },
+                        "Card Manufacturer": { type: "string", description: "E.g. Donruss, Topps, Upper Deck, Fleer, Bowman" },
+                        "Season": { type: "string", description: "Season year for sports cards" },
+                        "Team": { type: "string", description: "Team name for sports cards" },
+                        "Features": { type: "string", description: "E.g. Rookie, Autograph, Parallel, Refractor, Hologram" },
+                        "Card Name": { type: "string", description: "Card name for Pokémon/MTG/non-sport cards" },
+                        "Set": { type: "string", description: "Card set name for trading cards" },
+                        // Collectible/toy fields
+                        "Character": { type: "string", description: "Character name for Funko Pop, Beanie Babies, action figures" },
+                        "Brand": { type: "string", description: "Brand name for collectibles (e.g. Ty, Funko, LEGO)" },
+                        "Franchise": { type: "string", description: "Franchise/series for Funko Pop, action figures" },
+                        "Animal": { type: "string", description: "Animal type for Beanie Babies, stuffed animals" },
+                        "Material": { type: "string", description: "Material for jewelry, toys (e.g. Gold, Silver, Plush)" },
                       },
                       required: ["Certification", "Year", "Composition"],
                       additionalProperties: true,
