@@ -540,6 +540,27 @@ async function persistAuditEntries(supabase: any, entries: AuditEntry[]): Promis
 }
 
 // ── Helper: Persist to category_mappings with gates (#2) ─────────────────────
+// RC-6: Known non-leaf parent categories that must NEVER be persisted to DB.
+// These are broad parent nodes in eBay's taxonomy that are not valid for listings.
+const BLOCKED_PARENT_CATEGORIES = new Set([
+  "253",    // Coins & Paper Money > Coins: US (parent)
+  "11118",  // Coins & Paper Money > Coins: US > Half Dollars (parent)
+  "11233",  // Jewelry & Watches (parent)
+  "261076", // Coins & Paper Money > Bullion (parent)
+  "261074", // Coins & Paper Money > Bullion > Silver (parent)
+  "261075", // Coins & Paper Money > Bullion > Gold (parent)
+  "293",    // Consumer Electronics (parent)
+  "1",      // Collectibles (parent)
+  "550",    // Art (parent)
+  "631",    // Tools & Workshop Equipment (parent)
+  "20713",  // Home & Garden (parent)
+  "11450",  // Clothing, Shoes & Accessories (parent)
+  "220",    // Toys & Hobbies > Dolls & Bears (parent)
+  "15032",  // Cell Phones & Accessories (parent)
+  "139971", // Video Games & Consoles (parent)
+  "267",    // Books & Magazines > Books (parent)
+]);
+
 async function safePersistMapping(
   supabase: any,
   normalizedKey: string,
@@ -550,6 +571,12 @@ async function safePersistMapping(
   confidence: number,
   ebayAuth: { token: string; base: string } | null,
 ): Promise<boolean> {
+  // Gate 0: Block known parent categories (RC-6)
+  if (BLOCKED_PARENT_CATEGORIES.has(categoryId)) {
+    console.warn(`category-lookup: BLOCKED auto-persist of known parent category ${categoryId} for "${normalizedKey}"`);
+    return false;
+  }
+
   // Gate 1: Minimum confidence (#2)
   if (confidence < AUTO_PERSIST_MIN_CONFIDENCE) {
     console.log(`category-lookup: skipping auto-persist for "${normalizedKey}" (confidence ${confidence} < ${AUTO_PERSIST_MIN_CONFIDENCE})`);
@@ -1185,7 +1212,12 @@ export async function handleRequest(req: Request): Promise<Response> {
       const cid = (categoryId || "").toString().trim();
       if (!cid) throw new Error("categoryId required for verify/breadcrumb action");
 
-      // Quick DB check
+      // RC-5 FIX: ALWAYS verify leaf status via eBay API, even if category exists in DB.
+      // The DB fast-path previously returned valid:true without isLeaf, allowing
+      // non-leaf parent categories (e.g. 253 "Coins: US") to pass validation.
+      // Now we use DB only for name/breadcrumb enrichment, but always verify remotely.
+      let dbCategoryName: string | null = null;
+      let dbBreadcrumb: string | null = null;
       try {
         const { data: local } = await supabase
           .from("category_mappings")
@@ -1193,22 +1225,22 @@ export async function handleRequest(req: Request): Promise<Response> {
           .eq("ebay_category_id", cid)
           .maybeSingle();
         if (local?.category_name) {
-          return new Response(
-            JSON.stringify({
-              valid: true, source: "db",
-              categoryName: local.category_name,
-              breadcrumb: local.breadcrumb || local.category_name,
-            }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          dbCategoryName = local.category_name;
+          dbBreadcrumb = local.breadcrumb || local.category_name;
         }
       } catch (_) { /* continue */ }
 
-      // Remote verification with leaf check (#4)
+      // Always perform remote verification with leaf check (#4, RC-5)
       const ebayAuth = await getEbayAppToken();
       if (!ebayAuth) {
+        // No eBay credentials — return DB data if available, but isLeaf is unknown
         return new Response(
-          JSON.stringify({ valid: null, source: "none", message: "No eBay credentials" }),
+          JSON.stringify({
+            valid: !!dbCategoryName, source: dbCategoryName ? "db" : "none",
+            isLeaf: null, isActive: null,
+            categoryName: dbCategoryName, breadcrumb: dbBreadcrumb,
+            message: "No eBay credentials — leaf status unknown",
+          }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -1222,8 +1254,8 @@ export async function handleRequest(req: Request): Promise<Response> {
           isLeaf: verification.isLeaf,
           isActive: verification.isActive,
           source: "remote",
-          categoryName: breadcrumbResult.categoryName || verification.categoryName,
-          breadcrumb: breadcrumbResult.breadcrumb,
+          categoryName: breadcrumbResult.categoryName || verification.categoryName || dbCategoryName,
+          breadcrumb: breadcrumbResult.breadcrumb || dbBreadcrumb,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );

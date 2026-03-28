@@ -376,8 +376,7 @@ You MUST select the correct eBay **leaf** category ID for every item.
 Use these resources in order:
 1. **LOCKED CATEGORY** (below): If present, use this category ID unconditionally. It has been verified as a leaf category from eBay's official taxonomy.
 2. **BEST MATCH / SUGGESTIONS** (below): If no lock, use the highest-scored suggestion as your primary category.
-3. **Your knowledge**: Use when no suggestions are available.
-4. **google_search**: If confidence <90%, search for "eBay leaf category ID [Item Name]" to verify.
+3. **Your knowledge + the category IDs in the tool schema**: Use when no suggestions are available.
 ${categoryHints}
 
 **CRITICAL RULES FOR SPECIFIC CATEGORIES:**
@@ -386,6 +385,12 @@ ${categoryHints}
 - Bullion: Include Shape, Precious Metal Content per Unit, Brand/Mint, Fineness.
 
 **ALWAYS provide 1-2 alternative category IDs** (alternativeCategoryIds) for fallback options.
+
+**CRITICAL: NEVER use parent/broad category IDs.** Always drill down to the most specific LEAF category. Examples of PARENT categories you must NEVER use:
+- 253 (Coins: US) — use specific subcategory like 39464 (Morgan Dollars), 41109 (Proof Sets), etc.
+- 11118 (Half Dollars) — use 41102 (Kennedy), 11973 (Franklin), 41099 (Walking Liberty), etc.
+- 64482 (Sports Trading Cards) — use 213 (Baseball Cards), 261328 (Basketball Cards), etc.
+- 1 (Collectibles) — use specific subcategory like 19203 (Beanie Babies), 237 (Decorative), etc.
 
 ### IDENTIFICATION & DESCRIPTION
 - Identify: Item type, brand/maker, year (if applicable), condition, materials, notable features.
@@ -468,7 +473,7 @@ Seller's note: "${voiceNote}"`;
                     },
                     categoryId: {
                       type: "string",
-                      description: "Key IDs: Gold Bars/Rounds=178906, Silver Bars/Rounds=39489, Other Silver Bullion=3361, Ancient Coins=532, Medieval Coins=173685, Eisenhower Dollars=11981, Morgan Dollars=39464, Peace Dollars=11980, Barber Half=11971, Liberty Walking Half=41099, Kennedy Half=41102, Franklin Half=11973, Silver Eagle=41111, Wheat Penny=39455, Copper Rounds=166679, Gold Eagle=40166, Gold Buffalo=40167, US Proof Sets=41109, US Mint Sets=526, World Coins=45243.",
+                      description: "eBay leaf category ID. COINS: Morgan Dollars=39464, Peace Dollars=11980, Eisenhower Dollars=11981, Silver Eagle=41111, Kennedy Half=41102, Franklin Half=11973, Liberty Walking Half=41099, Barber Half=11971, Wheat Penny=39455, Indian Head Penny=40154, Buffalo Nickel=40153, Jefferson Nickel=40152, Mercury Dime=40151, Roosevelt Dime=40150, Washington Quarter=40149, Sacagawea Dollar=40158, US Proof Sets=41109, US Mint Sets=526, Gold Eagle=40166, Gold Buffalo=40167, $20 Double Eagle=40161, $10 Eagle=40162, Ancient Coins=532, Medieval Coins=173685, World Coins=45243. BULLION: Gold Bars/Rounds=178906, Silver Bars/Rounds=39489, Copper Rounds=166679, Other Silver Bullion=3361. TRADING CARDS: Baseball Cards=213, Basketball Cards=261328, Football Cards=261329, Hockey Cards=261330, Soccer Cards=261331, Sports Trading Cards (other)=64482, Pokemon Cards=183454, MTG Cards=19107, Yu-Gi-Oh Cards=183453, Collectible Card Games (other)=2536. TOYS: Beanie Babies=19203, Stuffed Animals=19013, Action Figures=246, LEGO=182, Diecast Vehicles=2562, Board Games=19016, Dolls=222. COLLECTIBLES: General Collectibles=1, Decorative=237, Militaria=870, Animation Art=45, Autographs=40. JEWELRY: Necklaces/Pendants=10986, Rings=14324, Bracelets=10985, Earrings=10987, Fashion Jewelry=31387. ELECTRONICS: Smartphones=9355, Video Games=1249, Cameras=58058, Headphones=112529. ALWAYS use a LEAF category (most specific), never a parent like 253 or 11118.",
                     },
                     alternativeCategoryIds: {
                       type: "array",
@@ -533,23 +538,6 @@ Seller's note: "${voiceNote}"`;
                   },
                   required: ["title", "categoryId", "condition", "description", "price", "itemSpecifics", "isSlabbed"],
                   additionalProperties: false,
-                },
-              },
-            },
-            {
-              type: "function",
-              function: {
-                name: "google_search",
-                description: "Search Google for eBay category IDs, item specifications, or current market data. Use when uncertain about the correct eBay category ID for any item type.",
-                parameters: {
-                  type: "object",
-                  properties: {
-                    query: {
-                      type: "string",
-                      description: "Search query (e.g., 'eBay category ID Kennedy Half Dollar 1964', 'copper round eBay category bullion')",
-                    },
-                  },
-                  required: ["query"],
                 },
               },
             },
@@ -693,6 +681,82 @@ Seller's note: "${voiceNote}"`;
       console.warn("analyze-item: leaf validation failed (non-blocking):", validationErr);
     }
     // --- end leaf validation ---
+
+    // --- Post-lookup: category verification using AI-generated title ---
+    // RC-1 FIX: The pre-lookup only runs with voice notes. When no voice note is
+    // provided, Gemini picks categories blindly from its tool description. This
+    // post-lookup uses the AI-generated title (which is a reliable item description)
+    // to run category-lookup's 4-tier system and override if we find a verified
+    // leaf category with high confidence.
+    try {
+      if (!lockedCategoryId && listing.title) {
+        const _postLookupUrl = Deno.env.get("SUPABASE_URL");
+        const _postLookupKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (_postLookupUrl && _postLookupKey) {
+          const postLookupResp = await fetch(
+            `${_postLookupUrl}/functions/v1/category-lookup`,
+            {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${_postLookupKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ action: "lookup", itemType: listing.title }),
+            }
+          );
+          if (postLookupResp.ok) {
+            const postLookupData = await postLookupResp.json();
+            if (postLookupData.found && postLookupData.verifiedLeaf !== false) {
+              const postScore = postLookupData.effectiveScore || postLookupData.confidence || 0;
+              const postSource = postLookupData.source || "";
+              const postIsLeaf = postLookupData.verifiedLeaf === true;
+
+              // Override AI's category if:
+              // 1. The post-lookup found a verified leaf with high confidence, OR
+              // 2. The AI's current category is a known non-leaf parent
+              const KNOWN_PARENT_CATEGORIES = new Set(["253", "11118", "11233", "261076", "261074", "261075", "293", "1", "550", "631", "20713", "11450", "64482", "220"]);
+              const aiCategoryIsParent = KNOWN_PARENT_CATEGORIES.has(listing.ebayCategoryId);
+              const postLookupIsStrong = postScore >= 80 && postIsLeaf;
+
+              if (aiCategoryIsParent || postLookupIsStrong) {
+                console.log(
+                  `analyze-item: POST-LOOKUP override: AI picked ${listing.ebayCategoryId}, ` +
+                  `post-lookup found ${postLookupData.categoryId} (${postLookupData.categoryName}, ` +
+                  `score=${postScore}, source=${postSource}, leaf=${postIsLeaf}, aiWasParent=${aiCategoryIsParent})`
+                );
+                listing.ebayCategoryId = postLookupData.categoryId;
+                listing.categoryId = postLookupData.categoryId;
+
+                // Update suggestedCategories to put post-lookup winner first
+                if (listing.suggestedCategories) {
+                  listing.suggestedCategories.unshift({
+                    categoryId: postLookupData.categoryId,
+                    categoryName: postLookupData.categoryName,
+                    breadcrumb: postLookupData.breadcrumb || postLookupData.categoryName,
+                    reason: `Post-lookup verified (score=${postScore}, source=${postSource})`,
+                  });
+                  // Dedupe
+                  const seenIds = new Set<string>();
+                  listing.suggestedCategories = listing.suggestedCategories.filter((s: any) => {
+                    if (seenIds.has(s.categoryId)) return false;
+                    seenIds.add(s.categoryId);
+                    return true;
+                  }).slice(0, 3);
+                }
+
+                // Also update alternatives for any future reselection
+                if (postLookupData.alternatives && postLookupData.alternatives.length > 0) {
+                  lookupAlternatives = postLookupData.alternatives;
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (postLookupErr) {
+      console.warn("analyze-item: category post-lookup failed (non-blocking):", postLookupErr);
+    }
+    // --- end post-lookup ---
 
     // --- Auto-persist new category to DB via category-lookup (gated) (#2) ---
     // Uses category-lookup "store" action which enforces:
