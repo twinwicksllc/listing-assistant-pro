@@ -204,13 +204,15 @@ COMMENT ON COLUMN public.category_mappings.publish_failure_count IS
 -- ================================================================
 -- 6. DEDUP RPC for category-hygiene-cron (deficiency #9)
 -- ================================================================
--- Returns the "loser" rows: for each (category_id, item_type_normalized)
+-- Returns the "loser" rows: for each (ebay_category_id, item_type_normalized)
 -- group with >1 approved row, returns all rows except the one with the
 -- highest effective_score. The cron job rejects these.
 
+DROP FUNCTION IF EXISTS public.find_duplicate_mappings();
+
 CREATE OR REPLACE FUNCTION public.find_duplicate_mappings()
 RETURNS TABLE (
-  id            BIGINT,
+  id            UUID,
   category_id   TEXT,
   item_type_normalized TEXT,
   effective_score NUMERIC
@@ -221,18 +223,18 @@ AS $$
   WITH ranked AS (
     SELECT
       cm.id,
-      cm.category_id,
+      cm.ebay_category_id,
       cm.item_type_normalized,
       cm.effective_score,
       ROW_NUMBER() OVER (
-        PARTITION BY cm.category_id, cm.item_type_normalized
+        PARTITION BY cm.ebay_category_id, cm.item_type_normalized
         ORDER BY cm.effective_score DESC, cm.updated_at DESC
       ) AS rn
     FROM public.category_mappings cm
     WHERE cm.status IN ('approved', 'quarantine')
       AND cm.item_type_normalized IS NOT NULL
   )
-  SELECT ranked.id, ranked.category_id, ranked.item_type_normalized, ranked.effective_score
+  SELECT ranked.id, ranked.ebay_category_id, ranked.item_type_normalized, ranked.effective_score
   FROM ranked
   WHERE ranked.rn > 1;
 $$;
