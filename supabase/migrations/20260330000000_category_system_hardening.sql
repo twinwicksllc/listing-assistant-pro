@@ -51,11 +51,21 @@ CREATE INDEX IF NOT EXISTS idx_lookup_decisions_candidate_id
 -- RLS: service role only
 ALTER TABLE public.lookup_decisions ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Service role full access on lookup_decisions"
-  ON public.lookup_decisions
-  FOR ALL
-  USING (auth.role() = 'service_role')
-  WITH CHECK (auth.role() = 'service_role');
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'lookup_decisions'
+      AND policyname = 'Service role full access on lookup_decisions'
+  ) THEN
+    CREATE POLICY "Service role full access on lookup_decisions"
+      ON public.lookup_decisions
+      FOR ALL
+      USING (auth.role() = 'service_role')
+      WITH CHECK (auth.role() = 'service_role');
+  END IF;
+END $$;
 
 COMMENT ON TABLE public.lookup_decisions IS
   'Audit trail of every category lookup decision. Used for debugging, metrics, and retraining.';
@@ -73,24 +83,29 @@ ALTER TABLE public.category_mappings
     CHECK (status IN ('approved', 'quarantine', 'rejected'));
 
 -- Backfill: trusted sources → approved, AI auto → quarantine
-UPDATE public.category_mappings
-  SET status = 'approved'
-  WHERE verification_source IN ('user_verified', 'ebay_api')
-    AND status = 'quarantine';
+-- Only run if status column was just added (check by seeing if any rows have the default)
+DO $$
+BEGIN
+  -- Check if we need to backfill (if most rows still have the default 'quarantine')
+  IF EXISTS (SELECT 1 FROM public.category_mappings WHERE status = 'quarantine' LIMIT 1) THEN
+    UPDATE public.category_mappings
+      SET status = 'approved'
+      WHERE verification_source IN ('user_verified', 'ebay_api')
+        AND status = 'quarantine';
 
--- ebay_api with high confidence also approved
-UPDATE public.category_mappings
-  SET status = 'approved'
-  WHERE verification_source = 'ebay_api'
-    AND confidence >= 85;
+    -- ebay_api with high confidence also approved
+    UPDATE public.category_mappings
+      SET status = 'approved'
+      WHERE verification_source = 'ebay_api'
+        AND confidence >= 85;
 
--- gemini_ai with high confidence → approved (it was verified by the API call)
-UPDATE public.category_mappings
-  SET status = 'approved'
-  WHERE verification_source = 'gemini_ai'
-    AND confidence >= 90;
-
--- Everything else stays quarantine (ai_auto, low-confidence entries)
+    -- gemini_ai with high confidence → approved (it was verified by the API call)
+    UPDATE public.category_mappings
+      SET status = 'approved'
+      WHERE verification_source = 'gemini_ai'
+        AND confidence >= 90;
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_category_mappings_status
   ON public.category_mappings(status)
