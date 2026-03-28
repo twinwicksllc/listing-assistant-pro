@@ -208,7 +208,7 @@ COMMENT ON COLUMN public.category_mappings.publish_failure_count IS
 
 CREATE OR REPLACE FUNCTION public.find_duplicate_mappings()
 RETURNS TABLE (
-  id            BIGINT,
+  id            UUID,
   category_id   TEXT,
   item_type_normalized TEXT,
   effective_score NUMERIC
