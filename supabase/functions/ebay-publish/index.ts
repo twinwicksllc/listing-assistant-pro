@@ -2172,9 +2172,15 @@ serve(async (req) => {
       if (!dynamicRuleApplied) {
         if (!CATEGORY_ASPECT_RULES[categoryForAspects]) {
           const treeType = detectCategoryTreeSync(categoryForAspects, undefined);
-          if (treeType === "coin" || treeType === "bullion" || !categoryForAspects) {
-            console.warn(`create_draft: category ${categoryForAspects} not in CATEGORY_ASPECT_RULES, falling back to US Coins General (253)`);
-            categoryForAspects = "253"; // US Coins General
+          if (!categoryForAspects) {
+            // No category at all — use empty rule (generic normalization only)
+            console.warn(`create_draft: no category ID provided, using empty aspect rule`);
+            categoryForAspects = "__empty__";
+          } else if (treeType === "coin" || treeType === "bullion") {
+            // Known coin/bullion type not in CATEGORY_ASPECT_RULES — use empty rule.
+            // 253 (US Coins General) is a non-leaf parent and causes eBay errorId 25003.
+            console.warn(`create_draft: coin/bullion category ${categoryForAspects} not in CATEGORY_ASPECT_RULES, using generic normalization`);
+            categoryForAspects = "__empty__";
           } else {
             console.warn(`create_draft: category ${categoryForAspects} not in CATEGORY_ASPECT_RULES, using empty aspect rule (non-coin category)`);
             categoryForAspects = "__empty__";

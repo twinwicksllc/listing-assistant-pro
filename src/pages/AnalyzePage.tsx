@@ -65,6 +65,9 @@ export default function AnalyzePage() {
   const [customCategoryInput, setCustomCategoryInput] = useState<string>("");
   const [isCustomCategoryMode, setIsCustomCategoryMode] = useState(false);
 
+  // Domain from Pass 1 AI identification — used to conditionally show domain-specific UI
+  const [domain, setDomain] = useState<string>("general");
+
   // Phase 2: Credit tracking metadata from analyze-item response
   const [analysisMeta, setAnalysisMeta] = useState<{
     tier: string;
@@ -185,6 +188,7 @@ export default function AnalyzePage() {
       setCompetitorData(data.competitorData ?? null);
       setPricingNotes(data.pricingNotes || "");
       setGradeConfirmed(false);
+      setDomain(data.domain || "general");
       // Pre-fill listing price with AI midpoint as a starting suggestion
       const aiMid = ((data.priceMin || 0) + (data.priceMax || data.priceMin || 0)) / 2;
       setListingPrice(parseFloat(aiMid.toFixed(2)) || 0);
@@ -721,8 +725,8 @@ export default function AnalyzePage() {
               </div>
             )}
 
-            {/* AI Suggested Grade */}
-            {suggestedGrade && !isSlabbed && (
+            {/* AI Suggested Grade — only relevant for coin/card domains */}
+            {suggestedGrade && !isSlabbed && (domain === "coins_bullion" || domain === "trading_cards") && (
               <div className="space-y-2">
                 <div className="flex items-center gap-1.5">
                   <ShieldCheck className="w-3.5 h-3.5 text-primary" />
@@ -827,10 +831,10 @@ export default function AnalyzePage() {
               condition={condition}
               priceMin={priceMin}
               priceMax={priceMax}
-              metalType={planFeatures.hasMeltProtection ? metalType : undefined}
-              metalWeightOz={planFeatures.hasMeltProtection ? metalWeightOz : undefined}
-              meltValue={planFeatures.hasMeltProtection ? meltValue : null}
-              spotPrices={planFeatures.hasMeltProtection ? spotPrices : null}
+              metalType={planFeatures.hasMeltProtection && metalType !== "none" ? metalType : undefined}
+              metalWeightOz={planFeatures.hasMeltProtection && metalType !== "none" ? metalWeightOz : undefined}
+              meltValue={planFeatures.hasMeltProtection && metalType !== "none" ? meltValue : null}
+              spotPrices={planFeatures.hasMeltProtection && metalType !== "none" ? spotPrices : null}
               onApplyPrice={(price) => {
                 setListingPrice(price);
                 setAuctionStartPrice(price);

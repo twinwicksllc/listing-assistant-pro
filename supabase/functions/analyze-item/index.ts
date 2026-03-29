@@ -275,6 +275,73 @@ serve(async (req: Request) => {
       throw new Error("GEMINI_API_KEY is not configured");
     }
 
+    // ─── PASS 1: Fast item identification ────────────────────────────────────
+    // Sends ≤2 images to determine domain, item name, and keywords.
+    // Results are used to improve the pre-lookup query and route to the correct
+    // domain-specific prompt for Pass 2.
+    type Domain = "coins_bullion" | "trading_cards" | "jewelry" | "electronics" | "vintage_clothing" | "general";
+    interface Identification {
+      domain: Domain;
+      itemName: string;
+      keywords: string[];
+      isMetal: boolean;
+      metalType: "gold" | "silver" | "platinum" | "none";
+    }
+    let identification: Identification = {
+      domain: "general",
+      itemName: "item",
+      keywords: [],
+      isMetal: false,
+      metalType: "none",
+    };
+    try {
+      const pass1Images = imageList.slice(0, 2).map((img) => {
+        const { base64Data, mimeType } = parseImageDataUrl(img);
+        return { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Data}` } };
+      });
+      const pass1VoiceHint = voiceNote ? `\nSeller note: "${voiceNote.slice(0, 200)}"` : "";
+      const pass1Resp = await fetch(
+        "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "gemini-2.0-flash",
+            response_format: { type: "json_object" },
+            messages: [
+              {
+                role: "system",
+                content: `You are an item identification assistant. Examine the image(s) and return ONLY valid JSON:\n{"domain":"coins_bullion|trading_cards|jewelry|electronics|vintage_clothing|general","itemName":"short name (max 80 chars)","keywords":["kw1","kw2","kw3","kw4","kw5"],"isMetal":true|false,"metalType":"gold|silver|platinum|none"}\nDomain guide: coins_bullion=coins/currency/bullion; trading_cards=sports/TCG/Pokémon/Magic; jewelry=rings/watches/necklaces; electronics=phones/PCs/consoles/cameras; vintage_clothing=clothing/shoes/accessories; general=anything else.`,
+              },
+              {
+                role: "user",
+                content: [...pass1Images, { type: "text", text: `Identify this item.${pass1VoiceHint}` }],
+              },
+            ],
+            max_tokens: 200,
+          }),
+        }
+      );
+      if (pass1Resp.ok) {
+        const pass1Data = await pass1Resp.json();
+        const pass1Text = pass1Data.choices?.[0]?.message?.content ?? "";
+        const parsed = JSON.parse(pass1Text);
+        if (parsed.domain && parsed.itemName) {
+          identification = {
+            domain: parsed.domain as Domain,
+            itemName: String(parsed.itemName).slice(0, 120),
+            keywords: Array.isArray(parsed.keywords) ? parsed.keywords.slice(0, 7).map(String) : [],
+            isMetal: Boolean(parsed.isMetal),
+            metalType: (parsed.metalType ?? "none") as Identification["metalType"],
+          };
+          console.log("analyze-item: Pass 1 identification:", identification);
+        }
+      }
+    } catch (pass1Err) {
+      console.warn("analyze-item: Pass 1 failed, defaulting to general domain:", pass1Err);
+    }
+    // ─── END PASS 1 ──────────────────────────────────────────────────────────
+
     // ── Pre-lookup: Deterministic category resolution ──────────────────────────
     // Uses category-lookup "lookup" action which implements:
     //   - 4-tier ranked candidates (DB exact → eBay API → DB fuzzy → Gemini)
@@ -292,7 +359,11 @@ serve(async (req: Request) => {
     let lookupAlternatives: any[] = [];
 
     try {
-      const searchQuery = voiceNote || "";
+      // Use Pass 1 item name + keywords for a much better category query than raw voice note
+      const pass1Query = identification.keywords.length > 0
+        ? `${identification.itemName} ${identification.keywords.slice(0, 3).join(" ")}`
+        : identification.itemName;
+      const searchQuery = (pass1Query !== "item" ? pass1Query : voiceNote) || "";
       if (searchQuery.trim().length > 2) {
         const _lookupUrl = Deno.env.get("SUPABASE_URL");
         const _lookupKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -356,7 +427,63 @@ serve(async (req: Request) => {
     }
     // ── End pre-lookup ─────────────────────────────────────────────────────────
 
-    const systemPrompt = `You are a professional eBay Listing Expert and item identifier. Your task is to analyze item photos and generate a complete listing via the \`create_listing\` tool.
+    // ─── Pre-AI sold comps (so AI has real pricing context in Pass 2) ────────
+    {
+      const compQuery = identification.keywords.slice(0, 5).join(" ") || identification.itemName;
+      if (compQuery && compQuery !== "item" && userId) {
+        try {
+          const compResp = await fetch(
+            `${Deno.env.get("SUPABASE_URL")}/functions/v1/ebay-competitor-search`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ userId, title: compQuery, yourPrice: 0 }),
+            }
+          );
+          if (compResp.ok) {
+            const compData = await compResp.json();
+            if ((compData.competitorCount ?? 0) > 0) {
+              competitorData = compData;
+              console.log("analyze-item: pre-AI comps:", { count: compData.competitorCount, avg: compData.avgPrice });
+            }
+          }
+        } catch (preCompErr) {
+          console.warn("analyze-item: pre-AI comp fetch failed (non-blocking):", preCompErr);
+        }
+      }
+    }
+    // ─── END pre-AI sold comps ────────────────────────────────────────────────
+
+    // ─── Build domain-specific system prompt ─────────────────────────────────
+    let systemPrompt: string;
+    try {
+      const { buildSystemPrompt } = await import("../_helpers/domainPrompts.ts");
+      systemPrompt = buildSystemPrompt(identification.domain, {
+        itemName: identification.itemName,
+        imageCount: imageList.length,
+        voiceNote: voiceNote || undefined,
+        suggestedCategoryId: lockedCategoryId ?? undefined,
+        suggestedCategoryName: lockedCategoryName ?? undefined,
+        spotPrices: identification.isMetal
+          ? { gold: spotGold, silver: spotSilver, platinum: spotPlatinum }
+          : undefined,
+        metalType: identification.metalType,
+        competitorData:
+          competitorData && (competitorData.competitorCount ?? 0) > 0 ? competitorData : null,
+      });
+      // Inject category hints from pre-lookup into the prompt
+      if (categoryHints) {
+        systemPrompt += `\n\n### CATEGORY SELECTION HINTS (from deterministic pre-lookup)\n${categoryHints}`;
+      }
+    } catch (promptErr) {
+      console.error("analyze-item: failed to load domain prompts, using fallback:", promptErr);
+      systemPrompt = `You are a professional eBay listing expert. Analyze the provided photo(s) and generate a complete, accurate listing via the create_listing tool. Title ≤ 80 chars. Condition must be one of: NEW, USED_EXCELLENT, USED_VERY_GOOD, USED_GOOD, USED_ACCEPTABLE, FOR_PARTS_OR_NOT_WORKING.`;
+    }
+    // DUMMY_PLACEHOLDER — remove this line (keeps template literal parser happy)
+    const _promoteSystemPrompt = `You are a professional eBay Listing Expert and item identifier. Your task is to analyze item photos and generate a complete listing via the \`create_listing\` tool.
 
 ### WHAT YOU SELL
 You handle ALL types of items: coins, bullion, precious metals, collectibles, toys, plushies, stuffed animals, trading cards, sports memorabilia, Funko Pops, action figures, LEGO, jewelry, electronics, clothing, books, tools, art, and anything else. Always identify the item TYPE first, then apply the appropriate eBay category.
@@ -414,7 +541,10 @@ ${competitorData && !competitorData.error
   ? `- MARKET DATA (${competitorData.competitorCount || 0} similar sold): avg $${(competitorData.avgPrice || 0).toFixed(2)}, range $${(competitorData.minPrice || 0).toFixed(2)}-$${(competitorData.maxPrice || 0).toFixed(2)}, median $${(competitorData.medianPrice || 0).toFixed(2)}. USE AS PRIMARY PRICING REFERENCE.`
   : `- No recent sold comps available. Use category knowledge and condition to price appropriately.`}
 
-Use the \`create_listing\` tool to return the final structured data.`
+Use the \`create_listing\` tool to return the final structured data.`;
+    // The _promoteSystemPrompt above is the fallback template — actual systemPrompt is built above.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    void _promoteSystemPrompt;
 
     // Build content array with all images + text prompt
     const contentParts: any[] = imageList.map((img) => {
@@ -425,7 +555,7 @@ Use the \`create_listing\` tool to return the final structured data.`
       };
     });
 
-    let userText = `I've provided ${imageList.length} photo${imageList.length > 1 ? "s" : ""} of the same item from different angles. Analyze all photos together to identify the item precisely, generate a title and description, extract eBay item specifics, determine the correct eBay category ID, and provide pricing based on recent sold comps and melt value (if precious metal).`;
+    let userText = `I've provided ${imageList.length} photo${imageList.length > 1 ? "s" : ""} of: ${identification.itemName}. Analyze all photos together, apply your ${identification.domain.replace("_", " ")} expertise, and produce a complete eBay listing via the create_listing tool — accurate title, full description, correct category ID, all relevant item specifics, condition, and a fair asking price.`;
 
     if (voiceNote) {
       userText += `\n\nSELLER'S VOICE NOTE (treat as authoritative — override visual assessment where applicable):
@@ -453,7 +583,7 @@ Seller's note: "${voiceNote}"`;
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gemini-flash-latest",
+          model: "gemini-2.0-flash",
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: contentParts },
@@ -577,7 +707,7 @@ Seller's note: "${voiceNote}"`;
       await svc.from("gemini_usage").insert({
         user_id: userId,
         function_name: "analyze-item",
-        model: "gemini-flash-latest",
+        model: "gemini-2.0-flash",
         prompt_tokens: usage?.prompt_tokens || 0,
         completion_tokens: usage?.completion_tokens || 0,
         total_tokens: usage?.total_tokens || 0,
@@ -928,11 +1058,15 @@ Seller's note: "${voiceNote}"`;
     }
 
     // --- Apply Starter-tier field allowlist (OQ-1: broad tier) ---
+    // Attach domain to listing for frontend conditional UI
+    listing.domain = identification.domain;
+
     const FREE_TIER_ALLOWED_FIELDS = new Set([
       "title", "description", "condition", "conditionDescription",
       "ebayCategoryId", "suggestedCategories",
       "itemSpecifics",
       "suggestedGrade", "packageWeightAndSize",
+      "domain",
       // Locked to paid: priceMin, priceMax, meltValue, spotPrices, pricingNotes, gradingRationale, competitorData
     ]);
 

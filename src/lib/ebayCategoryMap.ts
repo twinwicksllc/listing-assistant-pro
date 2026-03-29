@@ -20,6 +20,10 @@ export const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
   "11980":  "Coins & Paper Money > Coins: US > Dollars > Peace (1921-35)",     // ★ Peace Dollar
   "11971":  "Coins & Paper Money > Coins: US > Half Dollars > Barber (1892-1915)", // ★ Barber Half
   "41099":  "Coins & Paper Money > Coins: US > Half Dollars > Liberty Walking (1916-47)", // ★ Liberty Walking Half
+  "11973":  "Coins & Paper Money > Coins: US > Half Dollars > Franklin (1948-1963)",      // ★ Franklin Half (primary AI/ASPECT_RULES ID)
+  "41102":  "Coins & Paper Money > Coins: US > Half Dollars > Kennedy (1964-Now)",        // ★ Kennedy Half (primary AI/ASPECT_RULES ID)
+  "39455":  "Coins & Paper Money > Coins: US > Pennies > Lincoln Wheat (1909-1958)",      // ★ Wheat Penny (primary AI/ASPECT_RULES ID)
+  "41084":  "Coins & Paper Money > Coins: US > Pennies > Indian Head (1859-1909)",        // ★ Indian Head Cent (primary AI/ASPECT_RULES ID)
 
   // ★ Proof Sets & Mint Sets — leaf categories
   "41109":  "Coins & Paper Money > Coins: US > Proof Sets",                 // ★ US Coin Proof Sets
@@ -96,6 +100,72 @@ export const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
   "293":    "Consumer Electronics",
   "11233":  "Jewelry & Watches",
   "550":    "Art",
+
+  // ─── Trading Cards ───────────────────────────────────────────────────────
+  "183454": "Toys & Hobbies > Collectible Card Games > Pokémon > Individual Cards",
+  "2536":   "Toys & Hobbies > Collectible Card Games > Magic: The Gathering > Individual Cards",
+  "61793":  "Toys & Hobbies > Collectible Card Games > Yu-Gi-Oh > Individual Cards",
+  "45643":  "Toys & Hobbies > Collectible Card Games > Other CCG Items",
+  "213":    "Sports Trading Cards > Mixed Sports Card Lots",
+  "214":    "Sports Trading Cards > Graded Cards",
+  "261328": "Sports Trading Cards > Baseball Cards",
+  "261329": "Sports Trading Cards > Football Cards",
+  "261330": "Sports Trading Cards > Basketball Cards",
+  "261331": "Sports Trading Cards > Hockey Cards",
+  "261332": "Sports Trading Cards > Soccer Cards",
+  "98716":  "Sports Trading Cards > Graded Cards > BGS",
+
+  // ─── Jewelry & Watches ───────────────────────────────────────────────────
+  "67742":  "Jewelry & Watches > Fine Jewelry > Rings",
+  "10978":  "Jewelry & Watches > Fashion Jewelry > Rings",
+  "164316": "Jewelry & Watches > Fine Jewelry > Necklaces & Pendants",
+  "137835": "Jewelry & Watches > Fashion Jewelry > Necklaces & Pendants",
+  "10979":  "Jewelry & Watches > Fine Jewelry > Bracelets",
+  "10980":  "Jewelry & Watches > Fashion Jewelry > Bracelets",
+  "10968":  "Jewelry & Watches > Fine Jewelry > Earrings",
+  "56168":  "Jewelry & Watches > Fashion Jewelry > Earrings",
+  "9531":   "Jewelry & Watches > Fine Jewelry > Brooches & Pins",
+  "98764":  "Jewelry & Watches > Watches, Parts & Accessories > Wristwatches > Men's",
+  "31387":  "Jewelry & Watches > Watches, Parts & Accessories > Wristwatches > Women's",
+  "14324":  "Jewelry & Watches > Watches, Parts & Accessories > Wristwatches",
+  "3937":   "Jewelry & Watches > Watches, Parts & Accessories > Pocket Watches",
+  "48579":  "Jewelry & Watches > Vintage & Antique Jewelry",
+
+  // ─── Electronics ─────────────────────────────────────────────────────────
+  "9355":   "Cell Phones & Accessories > Cell Phones & Smartphones",
+  "9394":   "Cell Phones & Accessories > Other Cell Phone Accessories",
+  "177":    "Computers/Tablets & Networking > Laptops & Netbooks",
+  "171485": "Computers/Tablets & Networking > iPads, Tablets & eBook Readers",
+  "179":    "Computers/Tablets & Networking > Desktop Computers",
+  "80053":  "Computers/Tablets & Networking > Monitors",
+  "11071":  "Consumer Electronics > TV, Video & Home Audio > TVs",
+  "25321":  "Consumer Electronics > TV, Video & Home Audio > Projectors",
+  "31388":  "Cameras & Photo > Digital Cameras",
+  "3329":   "Cameras & Photo > Lenses & Filters",
+  "112529": "Consumer Electronics > Portable Audio & Headphones > Headphones",
+  "14969":  "Consumer Electronics > Portable Audio & Headphones > Portable Speakers & Docks",
+  "178893": "Consumer Electronics > Smart Watches",
+  "139971": "Video Games & Consoles > Video Game Consoles > Xbox One",
+  "309966": "Video Games & Consoles > Video Game Consoles > PlayStation 5",
+  "117042": "Video Games & Consoles > Video Game Consoles > Nintendo Switch",
+  "139973": "Video Games & Consoles > Video Games",
+
+  // ─── Clothing, Shoes & Accessories ───────────────────────────────────────
+  "57988":  "Clothing, Shoes & Accessories > Vintage > Men's Vintage Clothing > Coats & Jackets",
+  "57989":  "Clothing, Shoes & Accessories > Vintage > Men's Vintage Clothing > Pants",
+  "57990":  "Clothing, Shoes & Accessories > Vintage > Men's Vintage Clothing > Suits",
+  "57991":  "Clothing, Shoes & Accessories > Vintage > Men's Vintage Clothing > Shirts",
+  "63861":  "Clothing, Shoes & Accessories > Vintage > Women's Vintage Clothing > Dresses",
+  "63862":  "Clothing, Shoes & Accessories > Vintage > Women's Vintage Clothing > Tops",
+  "63863":  "Clothing, Shoes & Accessories > Vintage > Women's Vintage Clothing > Coats & Jackets",
+  "11554":  "Clothing, Shoes & Accessories > Vintage > Women's Vintage Clothing > Skirts",
+  "15687":  "Clothing, Shoes & Accessories > Vintage > Unisex Vintage Clothing > T-Shirts",
+  "63852":  "Clothing, Shoes & Accessories > Vintage > Women's Vintage Accessories > Handbags",
+  "52365":  "Clothing, Shoes & Accessories > Vintage > Unisex Vintage Accessories > Hats & Caps",
+  "45238":  "Clothing, Shoes & Accessories > Vintage > Unisex Vintage Accessories > Scarves",
+  "2993":   "Clothing, Shoes & Accessories > Vintage > Unisex Vintage Accessories > Belts",
+  "1059":   "Clothing, Shoes & Accessories > Men's Clothing > Shirts",
+  "185100": "Clothing, Shoes & Accessories > Women's Clothing > Dresses",
 };
 
 /**
