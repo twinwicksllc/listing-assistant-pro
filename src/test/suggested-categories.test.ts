@@ -1,15 +1,24 @@
 import { describe, it, expect } from "vitest";
 import buildSuggestedCategories from "../../supabase/functions/_helpers/suggestedCategories";
 
-// Mock svc that simulates Supabase client .from(...).select(...).eq(...).single()
+// Mock svc that simulates Supabase client .from(...).select(...).eq(...).maybeSingle()
 function makeSvcWithMappings(mappings: Record<string, string>) {
   return {
     from: (table: string) => {
       return {
         select: (_cols: string) => ({
           eq: (col: string, value: string) => ({
-            single: async () => {
+            maybeSingle: async () => {
               // only support lookup by ebay_category_id
+              if (col === "ebay_category_id") {
+                const name = mappings[value];
+                if (name) return { data: { category_name: name } };
+                return { data: null };
+              }
+              return { data: null };
+            },
+            single: async () => {
+              // Fallback for single() if needed
               if (col === "ebay_category_id") {
                 const name = mappings[value];
                 if (name) return { data: { category_name: name } };
