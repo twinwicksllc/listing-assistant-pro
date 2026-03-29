@@ -1488,8 +1488,23 @@ export default function DashboardPage() {
                       yourPrice: listings.find((l) => l.listingId === listingId)?.price,
                     },
                   });
-                  if (error || data?.error) {
-                    toast.error("Could not refresh competitor prices");
+                  if (error) {
+                    // Check for rate limit error
+                    const errorMsg = error.message || String(error);
+                    if (errorMsg.includes("rate limit") || errorMsg.includes("exceeded")) {
+                      toast.error("eBay API rate limit reached. Please try again in a few minutes.", { duration: 5000 });
+                    } else {
+                      toast.error("Could not retrieve competitor prices. Please try again.");
+                    }
+                    return;
+                  }
+                  if (data?.error) {
+                    const errorMsg = data.error || "";
+                    if (errorMsg.includes("rate limit") || errorMsg.includes("exceeded")) {
+                      toast.error("eBay API rate limit reached. Please try again in a few minutes.", { duration: 5000 });
+                    } else {
+                      toast.error("Could not retrieve competitor prices. Please try again.");
+                    }
                     return;
                   }
                   setListings((prev) =>

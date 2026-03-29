@@ -112,28 +112,55 @@ async function fetchEbayCompetitors(params: {
   const url = `${baseUrl}?${queryParams.toString()}`;
   console.log(`[ebay-competitor-search] Searching: "${searchQuery}" (category: ${categoryId ?? "any"})`);
 
-  // Retry once on 5xx server errors with a 1.5s delay
+  // Retry on 5xx server errors with exponential backoff (up to 3 attempts)
+  // Rate limit errors (429/500 with RateLimiter) get longer delays
   let resp: Response | null = null;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    resp = await fetch(url, {
-      headers: { "Accept": "application/json" },
-    });
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      resp = await fetch(url, {
+        headers: { "Accept": "application/json" },
+      });
 
-    if (resp.ok || resp.status < 500) break; // success or client error — don't retry
+      if (resp.ok || (resp.status < 500)) break; // success or client error — don't retry on client errors
 
-    if (attempt === 0) {
-      console.warn(`[ebay-competitor-search] eBay returned ${resp.status} — retrying in 1.5s`);
-      await new Promise(r => setTimeout(r, 1500));
+      // 5xx error — check if it's a rate limit
+      const respText = await resp!.text();
+      const isRateLimited = respText.includes("RateLimiter") || respText.includes("exceeded");
+      
+      if (attempt < 2) {
+        // Exponential backoff: 2s for first retry, 4s for second
+        const delayMs = isRateLimited ? (2000 * Math.pow(2, attempt)) : (1500 * Math.pow(1.5, attempt));
+        console.warn(
+          `[ebay-competitor-search] eBay returned ${resp!.status}${isRateLimited ? " (rate limited)" : ""} — retrying in ${delayMs}ms`
+        );
+        await new Promise(r => setTimeout(r, delayMs));
+      }
+    } catch (fetchErr) {
+      lastError = fetchErr instanceof Error ? fetchErr : new Error(String(fetchErr));
+      if (attempt < 2) {
+        const delayMs = 1500 * Math.pow(1.5, attempt);
+        console.warn(`[ebay-competitor-search] Fetch failed (attempt ${attempt + 1}/3) — retrying in ${delayMs}ms`);
+        await new Promise(r => setTimeout(r, delayMs));
+      }
     }
   }
 
-  if (!resp!.ok) {
-    const errBody = await resp!.text().catch(() => "(could not read body)");
-    throw new Error(`eBay Finding API error: ${resp!.status} ${errBody}`);
+  if (!resp || !resp.ok) {
+    const errBody = await resp?.text?.().catch(() => "(could not read body)") || "(no response)";
+    const isRateLimited = errBody.includes("RateLimiter") || errBody.includes("exceeded");
+    
+    if (isRateLimited) {
+      console.error(`[ebay-competitor-search] eBay rate limit exceeded (10001)`);
+      throw new Error(`eBay API rate limit exceeded. Please try again in a few minutes.`);
+    }
+    
+    throw new Error(`eBay Finding API error: ${resp?.status ?? "unknown"} ${errBody}`);
   }
 
   // Safe JSON parsing — guard against truncated responses
-  const respText = await resp!.text();
+  const respText = await resp.text();
   let json: any;
   try {
     json = JSON.parse(respText);

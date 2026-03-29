@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { RefreshCw, TrendingUp, TrendingDown, Minus, Eye, ExternalLink, ChevronUp, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -39,6 +39,9 @@ export function PricingInsightsTable({
   userId,
   isLoading = false,
 }: PricingInsightsTableProps) {
+  const THROTTLE_DELAY = 500; // milliseconds - minimum time between refresh attempts
+  const lastRefreshRef = useRef<Record<string, number>>({}); // track last refresh time per listing
+
   const [sortField, setSortField] = useState<SortField>("delta");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [searchQuery, setSearchQuery] = useState("");
@@ -271,6 +274,20 @@ export function PricingInsightsTable({
                       <button
                         onClick={() => {
                           if (listing.listingId) {
+                            // Check throttle - prevent rapid clicks on same listing
+                            const now = Date.now();
+                            const lastRefresh = lastRefreshRef.current[listing.listingId] || 0;
+                            const timeSinceLastRefresh = now - lastRefresh;
+
+                            if (timeSinceLastRefresh < THROTTLE_DELAY) {
+                              const remainingMs = THROTTLE_DELAY - timeSinceLastRefresh;
+                              console.log(`Refresh throttled (${remainingMs}ms remaining)`);
+                              return; // silently ignore too-rapid clicks
+                            }
+
+                            // Update last refresh time
+                            lastRefreshRef.current[listing.listingId] = now;
+
                             setRefreshing((prev) => new Set([...prev, listing.listingId!]));
                             onRefreshCompetitor(listing.listingId).finally(() => {
                               setRefreshing((prev) => {
