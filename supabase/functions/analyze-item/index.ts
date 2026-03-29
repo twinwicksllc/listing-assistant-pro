@@ -495,6 +495,60 @@ serve(async (req: Request) => {
     }  // end if (!userCategoryId)
     // ── End pre-lookup ─────────────────────────────────────────────────────────
 
+    // ── Fetch dynamic aspects and conditions for the chosen category ──────────
+    let categoryAspects: any = null;
+    let categoryConditions: any = null;
+
+    {
+      const targetCategoryId = lockedCategoryId || null;
+      if (targetCategoryId) {
+        const _aspectsUrl = Deno.env.get("SUPABASE_URL");
+        const _aspectsKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (_aspectsUrl && _aspectsKey) {
+          try {
+            const aspectsResp = await fetch(
+              `${_aspectsUrl}/functions/v1/category-lookup`,
+              {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${_aspectsKey}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ action: "aspects", categoryId: targetCategoryId }),
+              }
+            );
+            if (aspectsResp.ok) {
+              categoryAspects = await aspectsResp.json();
+              console.log(`[${invocationId}] analyze-item: fetched ${categoryAspects.aspects?.length || 0} aspects for category ${targetCategoryId}`);
+            }
+          } catch (aspectErr) {
+            console.warn(`[${invocationId}] analyze-item: aspects fetch failed (non-blocking):`, aspectErr);
+          }
+
+          try {
+            const conditionsResp = await fetch(
+              `${_aspectsUrl}/functions/v1/category-lookup`,
+              {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${_aspectsKey}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ action: "conditions", categoryId: targetCategoryId }),
+              }
+            );
+            if (conditionsResp.ok) {
+              categoryConditions = await conditionsResp.json();
+              console.log(`[${invocationId}] analyze-item: fetched ${categoryConditions.conditions?.length || 0} conditions for category ${targetCategoryId}`);
+            }
+          } catch (condErr) {
+            console.warn(`[${invocationId}] analyze-item: conditions fetch failed (non-blocking):`, condErr);
+          }
+        }
+      }
+    }
+    // ── End dynamic aspects/conditions fetch ──────────────────────────────────
+
     // ─── Pre-AI sold comps (so AI has real pricing context in Pass 2) ────────
     {
       const compQuery = identification.keywords.slice(0, 5).join(" ") || identification.itemName;
@@ -552,6 +606,29 @@ serve(async (req: Request) => {
       // Inject category hints from pre-lookup into the prompt
       if (categoryHints) {
         systemPrompt += `\n\n### CATEGORY SELECTION HINTS (from deterministic pre-lookup)\n${categoryHints}`;
+      }
+
+      // Inject dynamic aspects guidance from eBay API
+      if (categoryAspects?.aspects && categoryAspects.aspects.length > 0) {
+        const required = categoryAspects.aspects.filter((a: any) => a.required).map((a: any) => a.name);
+        const suggested = categoryAspects.aspects.filter((a: any) => !a.required).map((a: any) => a.name);
+        let aspectsGuidance = `\n\n### REQUIRED ATTRIBUTES FOR THIS CATEGORY (from eBay API)`;
+        if (required.length > 0) {
+          aspectsGuidance += `\nYou MUST provide these attributes:\n${required.map((r: string) => `- ${r}`).join("\n")}`;
+        }
+        if (suggested.length > 0) {
+          aspectsGuidance += `\n\nSuggested attributes (provide if visible or inferable):\n${suggested.slice(0, 10).map((s: string) => `- ${s}`).join("\n")}`;
+        }
+        systemPrompt += aspectsGuidance;
+      }
+
+      // Inject allowed conditions from eBay API
+      if (categoryConditions?.conditions && categoryConditions.conditions.length > 0) {
+        const conditionsGuidance = `\n\n### ALLOWED CONDITIONS FOR THIS CATEGORY (from eBay API)\nOnly use one of these condition values:\n` +
+          categoryConditions.conditions
+            .map((c: any) => `- ${c.conditionDescription || c.conditionId}`)
+            .join("\n");
+        systemPrompt += conditionsGuidance;
       }
     } catch (promptErr) {
       console.error("analyze-item: failed to load domain prompts, using fallback:", promptErr);
@@ -649,6 +726,77 @@ Seller's note: "${voiceNote}"`;
       text: userText,
     });
 
+    // ── Build dynamic tool schema from eBay aspects/conditions ─────────────────
+    // Condition enum: use eBay's actual allowed conditions for this category,
+    // falling back to our generic USED_* set when no category data is available.
+    const conditionEnum: string[] = categoryConditions?.conditions?.length > 0
+      ? categoryConditions.conditions.map((c: any) => c.conditionDescription || String(c.conditionId))
+      : ["NEW", "USED_EXCELLENT", "USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE", "FOR_PARTS_OR_NOT_WORKING"];
+
+    // itemSpecifics schema: use eBay's required/suggested aspects for this category,
+    // falling back to the generic coin/collectible schema when no aspects are available.
+    const itemSpecificsSchema: any = {
+      type: "object",
+      description: "eBay item specifics (attributes) for this category",
+      properties: {},
+      required: [] as string[],
+      additionalProperties: true,
+    };
+
+    if (categoryAspects?.aspects && categoryAspects.aspects.length > 0) {
+      for (const aspect of categoryAspects.aspects) {
+        const propSchema: any = {
+          type: "string",
+          description: aspect.required
+            ? `REQUIRED by eBay: ${aspect.name}`
+            : `Suggested by eBay: ${aspect.name}`,
+        };
+        // If eBay provides a constrained allowed-values list, add as enum
+        if (Array.isArray(aspect.values) && aspect.values.length > 0 && aspect.values.length < 50) {
+          propSchema.enum = aspect.values;
+        }
+        itemSpecificsSchema.properties[aspect.name] = propSchema;
+        if (aspect.required) {
+          itemSpecificsSchema.required.push(aspect.name);
+        }
+      }
+      console.log(`[${invocationId}] Dynamic itemSpecifics schema: ${Object.keys(itemSpecificsSchema.properties).length} props, ${itemSpecificsSchema.required.length} required`);
+    } else {
+      // Fallback: generic coin/collectible/trading-card schema
+      itemSpecificsSchema.properties = {
+        Certification: { type: "string", enum: ["Uncertified", "PCGS", "NGC", "ANACS", "ICG", "CAC", "ICCS"] },
+        Grade: { type: "string", description: "Only if NOT Uncertified. Format: 'MS 65'" },
+        Year: { type: "string" },
+        "Mint Location": { type: "string" },
+        Denomination: { type: "string" },
+        Composition: { type: "string", enum: ["Gold", "Silver", "Platinum", "Palladium", "Copper", "Nickel", "Steel", "Zinc", "Brass", "Aluminum", "Bimetallic", "Copper-Nickel", "Bronze"] },
+        Fineness: { type: "string" },
+        "Strike Type": { type: "string", enum: ["Business", "Proof", "Proof-Like", "Satin"] },
+        Variety: { type: "string", description: "VAM number (e.g., 'VAM-1A')" },
+        "Circulated/Uncirculated": { type: "string", enum: ["Circulated", "Uncirculated", "Unknown"] },
+        "Mint Mark": { type: "string" },
+        "Brand/Mint": { type: "string" },
+        "Country of Origin": { type: "string" },
+        "Materials sourced from": { type: "string" },
+        "Precious Metal Content per Unit": { type: "string" },
+        "Sport": { type: "string", description: "REQUIRED for sports cards. E.g. Baseball, Basketball, Football, Hockey, Soccer" },
+        "Player/Athlete": { type: "string", description: "Player name for sports cards" },
+        "Card Manufacturer": { type: "string", description: "E.g. Donruss, Topps, Upper Deck, Fleer, Bowman" },
+        "Season": { type: "string", description: "Season year for sports cards" },
+        "Team": { type: "string", description: "Team name for sports cards" },
+        "Features": { type: "string", description: "E.g. Rookie, Autograph, Parallel, Refractor, Hologram" },
+        "Card Name": { type: "string", description: "Card name for Pokémon/MTG/non-sport cards" },
+        "Set": { type: "string", description: "Card set name for trading cards" },
+        "Character": { type: "string", description: "Character name for Funko Pop, Beanie Babies, action figures" },
+        "Brand": { type: "string", description: "Brand name for collectibles (e.g. Ty, Funko, LEGO)" },
+        "Franchise": { type: "string", description: "Franchise/series for Funko Pop, action figures" },
+        "Animal": { type: "string", description: "Animal type for Beanie Babies, stuffed animals" },
+        "Material": { type: "string", description: "Material for jewelry, toys (e.g. Gold, Silver, Plush)" },
+      };
+      itemSpecificsSchema.required = ["Certification", "Year", "Composition"];
+    }
+    // ── End dynamic tool schema ───────────────────────────────────────────────
+
     const response = await fetch(
       "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
       {
@@ -688,7 +836,8 @@ Seller's note: "${voiceNote}"`;
                     },
                     condition: {
                       type: "string",
-                      enum: ["NEW", "USED_EXCELLENT", "USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE", "FOR_PARTS_OR_NOT_WORKING"],
+                      enum: conditionEnum,
+                      description: "Item condition from eBay's allowed list for this category",
                     },
                     description: { type: "string", description: "SEO-friendly, sales-oriented eBay description. Highlight key features and benefits that would appeal to buyers. Be concise but compelling to drive buyer interest. Focus on what makes this item desirable." },
                     price: {
@@ -699,43 +848,7 @@ Seller's note: "${voiceNote}"`;
                       },
                       required: ["amount"],
                     },
-                    itemSpecifics: {
-                      type: "object",
-                      properties: {
-                        Certification: { type: "string", enum: ["Uncertified", "PCGS", "NGC", "ANACS", "ICG", "CAC", "ICCS"] },
-                        Grade: { type: "string", description: "Only if NOT Uncertified. Format: 'MS 65'" },
-                        Year: { type: "string" },
-                        "Mint Location": { type: "string" },
-                        Denomination: { type: "string" },
-                        Composition: { type: "string", enum: ["Gold", "Silver", "Platinum", "Palladium", "Copper", "Nickel", "Steel", "Zinc", "Brass", "Aluminum", "Bimetallic", "Copper-Nickel", "Bronze"] },
-                        Fineness: { type: "string" },
-                        "Strike Type": { type: "string", enum: ["Business", "Proof", "Proof-Like", "Satin"] },
-                        Variety: { type: "string", description: "VAM number (e.g., 'VAM-1A')" },
-                        "Circulated/Uncirculated": { type: "string", enum: ["Circulated", "Uncirculated", "Unknown"] },
-                        "Mint Mark": { type: "string" },
-                        "Brand/Mint": { type: "string" },
-                        "Country of Origin": { type: "string" },
-                        "Materials sourced from": { type: "string" },
-                        "Precious Metal Content per Unit": { type: "string" },
-                        // Trading card / collectible fields
-                        "Sport": { type: "string", description: "REQUIRED for sports cards (213, 261328, 64482). E.g. Baseball, Basketball, Football, Hockey, Soccer" },
-                        "Player/Athlete": { type: "string", description: "Player name for sports cards" },
-                        "Card Manufacturer": { type: "string", description: "E.g. Donruss, Topps, Upper Deck, Fleer, Bowman" },
-                        "Season": { type: "string", description: "Season year for sports cards" },
-                        "Team": { type: "string", description: "Team name for sports cards" },
-                        "Features": { type: "string", description: "E.g. Rookie, Autograph, Parallel, Refractor, Hologram" },
-                        "Card Name": { type: "string", description: "Card name for Pokémon/MTG/non-sport cards" },
-                        "Set": { type: "string", description: "Card set name for trading cards" },
-                        // Collectible/toy fields
-                        "Character": { type: "string", description: "Character name for Funko Pop, Beanie Babies, action figures" },
-                        "Brand": { type: "string", description: "Brand name for collectibles (e.g. Ty, Funko, LEGO)" },
-                        "Franchise": { type: "string", description: "Franchise/series for Funko Pop, action figures" },
-                        "Animal": { type: "string", description: "Animal type for Beanie Babies, stuffed animals" },
-                        "Material": { type: "string", description: "Material for jewelry, toys (e.g. Gold, Silver, Plush)" },
-                      },
-                      required: ["Certification", "Year", "Composition"],
-                      additionalProperties: true,
-                    },
+                    itemSpecifics: itemSpecificsSchema,
                     pricingNotes: { type: "string" },
                     isSlabbed: { type: "boolean" },
                     metalType: { type: "string", enum: ["gold", "silver", "platinum", "none"] },
@@ -1215,8 +1328,21 @@ Seller's note: "${voiceNote}"`;
         : null;
     const creditsResetAt = tier === "starter" ? computeNextResetAt(orgResetDay) : null;
 
+    // Build eBay metadata so the frontend can use real aspects/conditions
+    const ebayMetadata = (categoryAspects || categoryConditions) ? {
+      requiredAspects: categoryAspects?.aspects
+        ?.filter((a: any) => a.required)
+        .map((a: any) => a.name) ?? [],
+      suggestedAspects: categoryAspects?.aspects
+        ?.filter((a: any) => !a.required)
+        .map((a: any) => a.name) ?? [],
+      allowedConditions: categoryConditions?.conditions
+        ?.map((c: any) => c.conditionDescription || String(c.conditionId)) ?? [],
+    } : null;
+
     const finalResponse = {
       ...responsePayload,
+      ...(ebayMetadata ? { _ebayMetadata: ebayMetadata } : {}),
       _meta: {
         tier,
         creditsUsed: creditsUsed,

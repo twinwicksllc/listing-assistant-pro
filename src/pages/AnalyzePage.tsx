@@ -69,6 +69,13 @@ export default function AnalyzePage() {
   // Domain from Pass 1 AI identification — used to conditionally show domain-specific UI
   const [domain, setDomain] = useState<string>("general");
 
+  // eBay metadata returned by analyze-item when real aspects/conditions data was fetched
+  const [ebayMetadata, setEbayMetadata] = useState<{
+    requiredAspects: string[];
+    suggestedAspects: string[];
+    allowedConditions: string[];
+  } | null>(null);
+
   // Phase 2: Credit tracking metadata from analyze-item response
   const [analysisMeta, setAnalysisMeta] = useState<{
     tier: string;
@@ -169,6 +176,11 @@ export default function AnalyzePage() {
       if (data._meta) {
         setAnalysisMeta(data._meta);
       }
+      if (data._ebayMetadata) {
+        setEbayMetadata(data._ebayMetadata);
+      } else {
+        setEbayMetadata(null);
+      }
 
       setTitle((data.title || "").slice(0, 80));
       setDescription(data.description || "");
@@ -258,6 +270,19 @@ export default function AnalyzePage() {
       toast.error(`Monthly publish limit reached (${currentPlanLimits.publishLimit}). Upgrade for more listings.`);
       navigate("/billing");
       return;
+    }
+    // Validate required eBay aspects before attempting publish
+    if (ebayMetadata?.requiredAspects && ebayMetadata.requiredAspects.length > 0) {
+      const missingRequired = ebayMetadata.requiredAspects.filter(
+        (aspect) => !itemSpecifics[aspect] || String(itemSpecifics[aspect]).trim() === ""
+      );
+      if (missingRequired.length > 0) {
+        toast.error(`Missing required eBay fields: ${missingRequired.join(", ")}`, {
+          description: "Fill in these fields above before publishing.",
+          duration: 6000,
+        });
+        return;
+      }
     }
     setPublishing(true);
     try {
@@ -689,16 +714,24 @@ export default function AnalyzePage() {
                   )}
                 </div>
                 <div className="bg-card border border-border rounded-lg divide-y divide-border">
-                  {displaySpecifics.map(([key, value]) => (
-                    <div key={key} className="flex items-center justify-between px-3 py-2">
-                      <span className="text-xs font-medium text-muted-foreground">{key}</span>
-                      <input
-                        value={value || ""}
-                        onChange={(e) => setItemSpecifics(prev => ({ ...prev, [key]: e.target.value }))}
-                        className="text-xs text-foreground text-right bg-transparent border-none focus:outline-none focus:ring-0 max-w-[55%]"
-                      />
-                    </div>
-                  ))}
+                  {displaySpecifics.map(([key, value]) => {
+                    const isRequired = ebayMetadata?.requiredAspects?.includes(key);
+                    const isSuggested = ebayMetadata?.suggestedAspects?.includes(key);
+                    return (
+                      <div key={key} className="flex items-center justify-between px-3 py-2">
+                        <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                          {key}
+                          {isRequired && <span className="text-[9px] font-semibold text-red-500 uppercase tracking-wide">req</span>}
+                          {isSuggested && !isRequired && <span className="text-[9px] text-primary/60 uppercase tracking-wide">opt</span>}
+                        </span>
+                        <input
+                          value={value || ""}
+                          onChange={(e) => setItemSpecifics(prev => ({ ...prev, [key]: e.target.value }))}
+                          className="text-xs text-foreground text-right bg-transparent border-none focus:outline-none focus:ring-0 max-w-[55%]"
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
 {/* Condition */}
                 <div className="flex items-center justify-between bg-card border border-border rounded-lg px-3 py-2">
@@ -708,9 +741,14 @@ export default function AnalyzePage() {
                     onChange={(e) => setCondition(e.target.value)}
                     className="text-xs text-foreground bg-transparent border-none focus:outline-none cursor-pointer text-right"
                   >
-                    {getConditionsForCategory(ebayCategoryId || undefined, domain, getEbayCategoryBreadcrumb(ebayCategoryId) || undefined).map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
+                    {ebayMetadata?.allowedConditions && ebayMetadata.allowedConditions.length > 0
+                      ? ebayMetadata.allowedConditions.map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))
+                      : getConditionsForCategory(ebayCategoryId || undefined, domain, getEbayCategoryBreadcrumb(ebayCategoryId) || undefined).map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))
+                    }
                   </select>
                 </div>
               </div>

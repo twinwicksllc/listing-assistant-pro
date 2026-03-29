@@ -5,8 +5,10 @@ import { initSentry, captureException } from "../_helpers/sentry.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Max-Age": "86400",
 };
 
 // Force redeploy v24: Dynamic category aspects — fetch from eBay Taxonomy API via category_aspects_cache, hardcoded rules as fallback
@@ -651,7 +653,7 @@ const ASPECT_KEY_ALIASES: Record<string, string> = {
   "Cleaned/Uncleaned":               "Cleaned/Uncleaned",
   "Provenance":                      "Provenance",
   // These were previously in NON_ASPECT_KEYS; now pass through as real eBay aspects:
-  "Type":                            "Type",       // required by 261068 (Silver Bullion Coins) — errorId 25002
+  "Type":                            "Type",       // required by bullion categories (e.g. 261186 Silver Bullion Coins) — errorId 25002
   "Color":                           "Color",      // used by 45243 (World Coins) for copper/bronze coins
   "Materials sourced from":          "Materials sourced from",
   "Brand":                           "Brand",      // required by 45243 (World Coins) — errorId 25002 when missing
@@ -1706,6 +1708,12 @@ serve(async (req) => {
       // Call eBay Identity API to fetch username and account type (exchange_code only, not on refresh)
       // One-account enforcement: block different username if tier is not Unlimited
       try {
+        // Resolve credentials here — supabaseUrl/supabaseServiceKey declared above are const-scoped
+        // inside the token-storage try block, so we must re-read them from env for this scope.
+        const _identitySupabaseUrl = Deno.env.get("SUPABASE_URL");
+        const _identityServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        const _stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
+
         const identityRes = await fetch(
           "https://apiz.ebay.com/commerce/identity/v1/user/",
           { headers: { Authorization: `Bearer ${tokenData.access_token}` } }
@@ -1715,12 +1723,25 @@ serve(async (req) => {
         const accountType = (identity?.accountType ?? "")?.toLowerCase() ?? "individual";
 
         // Determine tier for one-account enforcement (OQ-3: gate on LA subscription, not eBay account type)
+        // Fetch the eBay user's email from the identity payload (or from the Supabase profile)
         let tierForOneAccountCheck: "starter" | "pro" | "unlimited" = "starter";
-        if (userEmail && STRIPE_SECRET_KEY) {
+        let _userEmailForStripe: string | null = null;
+        if (userId && _identitySupabaseUrl && _identityServiceKey) {
+          try {
+            const _sc = createClient(_identitySupabaseUrl, _identityServiceKey);
+            const { data: profileData } = await _sc
+              .from("profiles")
+              .select("email")
+              .eq("id", userId)
+              .maybeSingle();
+            _userEmailForStripe = profileData?.email ?? null;
+          } catch { /* non-fatal */ }
+        }
+        if (_userEmailForStripe && _stripeSecretKey) {
           try {
             const { default: Stripe } = await import("https://esm.sh/stripe@18.5.0");
-            const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2025-08-27.basial" });
-            const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
+            const stripe = new Stripe(_stripeSecretKey, { apiVersion: "2025-08-27.basil" });
+            const customers = await stripe.customers.list({ email: _userEmailForStripe, limit: 1 });
             if (customers.data.length > 0) {
               const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: "active", limit: 1 });
               if (subs.data.length > 0) {
@@ -1735,8 +1756,8 @@ serve(async (req) => {
         }
 
         // Check for existing eBay username (one-account rule for non-Unlimited)
-        if (userId && supabaseUrl && supabaseServiceKey) {
-          const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        if (userId && _identitySupabaseUrl && _identityServiceKey) {
+          const supabase = createClient(_identitySupabaseUrl, _identityServiceKey);
           const { data: existingProfile } = await supabase
             .from("profiles")
             .select("ebay_username")
@@ -2573,7 +2594,7 @@ serve(async (req) => {
       }
 
       const publishData = await publishResp.json();
-      const listingId = publishData.listingId || offerData.listing?.listingId || null;
+      const listingId = publishData.listingId || (offerData as any)?.listing?.listingId || null;
 
       // Build affiliate URL — non-fatal, wrapped in try/catch
       const affiliateUrl = listingId ? buildAffiliateUrl(listingId) : null;
