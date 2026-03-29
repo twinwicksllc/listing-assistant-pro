@@ -44,6 +44,20 @@ export function PricingInsightsTable({
   const [searchQuery, setSearchQuery] = useState("");
   const [refreshing, setRefreshing] = useState<Set<string>>(new Set());
 
+  // Helper functions (must be defined before useMemo that uses them)
+  const getDelta = (listing: ListingWithCompetitor): number => {
+    if (!listing.competitor?.avgPrice) return 0;
+    return ((listing.price - listing.competitor.avgPrice) / listing.competitor.avgPrice) * 100;
+  };
+
+  const getPositioning = (delta: number): { label: string; color: string; icon: React.ElementType } => {
+    if (delta > 10) return { label: "Over", color: "text-red-500 bg-red-500/10", icon: TrendingUp };
+    if (delta > 5) return { label: "High", color: "text-amber-500 bg-amber-500/10", icon: TrendingUp };
+    if (delta < -10) return { label: "Under", color: "text-blue-500 bg-blue-500/10", icon: TrendingDown };
+    if (delta < -5) return { label: "Low", color: "text-sky-500 bg-sky-500/10", icon: TrendingDown };
+    return { label: "Market", color: "text-green-500 bg-green-500/10", icon: Minus };
+  };
+
   // Filter listings
   const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase();
@@ -78,19 +92,6 @@ export function PricingInsightsTable({
     });
     return copy;
   }, [filtered, sortField, sortDir]);
-
-  const getDelta = (listing: ListingWithCompetitor): number => {
-    if (!listing.competitor?.avgPrice) return 0;
-    return ((listing.price - listing.competitor.avgPrice) / listing.competitor.avgPrice) * 100;
-  };
-
-  const getPositioning = (delta: number): { label: string; color: string; icon: React.ElementType } => {
-    if (delta > 10) return { label: "Over", color: "text-red-500 bg-red-500/10", icon: TrendingUp };
-    if (delta > 5) return { label: "High", color: "text-amber-500 bg-amber-500/10", icon: TrendingUp };
-    if (delta < -10) return { label: "Under", color: "text-blue-500 bg-blue-500/10", icon: TrendingDown };
-    if (delta < -5) return { label: "Low", color: "text-sky-500 bg-sky-500/10", icon: TrendingDown };
-    return { label: "Market", color: "text-green-500 bg-green-500/10", icon: Minus };
-  };
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
