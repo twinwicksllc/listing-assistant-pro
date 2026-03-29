@@ -1192,6 +1192,20 @@ Seller's note: "${voiceNote}"`;
       },
     };
 
+    // ─── FINAL RESPONSE LOGGING (for diagnostics) ──────────────────────────────
+    console.log("analyze-item: FINAL RESPONSE PRICING & METALS:", {
+      title: finalResponse.title?.slice(0, 60),
+      metalType: finalResponse.metalType,
+      metalWeightOz: finalResponse.metalWeightOz,
+      meltValue: finalResponse.meltValue,
+      priceMin: finalResponse.priceMin,
+      priceMax: finalResponse.priceMax,
+      pricingNotes: finalResponse.pricingNotes?.slice(0, 80),
+      competitorCount: finalResponse.competitorData?.competitorCount,
+      competitorAvg: finalResponse.competitorData?.avgPrice,
+    });
+    // ─── END FINAL RESPONSE LOGGING ──────────────────────────────────────────
+
     return new Response(JSON.stringify(finalResponse), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
