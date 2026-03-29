@@ -9,6 +9,7 @@ import { useDrafts } from "@/hooks/useDrafts";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { ItemSpecifics, ListingFormat } from "@/types/listing";
+import { getConditionsForCategory } from "@/types/listing";
 import { useAuth, PLANS } from "@/contexts/AuthContext";
 import { exportListing, type ExportPlatform, type ExportFormat } from "@/lib/exportCSV";
 import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
@@ -39,7 +40,7 @@ export default function AnalyzePage() {
   const [ebayCategoryId, setEbayCategoryId] = useState<string>("");
   const [suggestedCategories, setSuggestedCategories] = useState<Array<{ categoryId: string; categoryName: string; reason: string; breadcrumb?: string }>>([]);
   const [itemSpecifics, setItemSpecifics] = useState<ItemSpecifics>({});
-  const [condition, setCondition] = useState<string>("PRE_OWNED_GOOD");
+  const [condition, setCondition] = useState<string>("USED_EXCELLENT");
   const [exportPlatform, setExportPlatform] = useState<ExportPlatform>("ebay_file_exchange");
   const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
   const [suggestedGrade, setSuggestedGrade] = useState<string>("");
@@ -67,6 +68,13 @@ export default function AnalyzePage() {
 
   // Domain from Pass 1 AI identification — used to conditionally show domain-specific UI
   const [domain, setDomain] = useState<string>("general");
+
+  // eBay metadata returned by analyze-item when real aspects/conditions data was fetched
+  const [ebayMetadata, setEbayMetadata] = useState<{
+    requiredAspects: string[];
+    suggestedAspects: string[];
+    allowedConditions: string[];
+  } | null>(null);
 
   // Phase 2: Credit tracking metadata from analyze-item response
   const [analysisMeta, setAnalysisMeta] = useState<{
@@ -129,7 +137,7 @@ export default function AnalyzePage() {
     setGenerating(true);
     try {
       const { data, error } = await supabase.functions.invoke("analyze-item", {
-        body: { images: imageUrls, voiceNote },
+        body: { images: imageUrls, voiceNote, ...(ebayCategoryId ? { categoryId: ebayCategoryId } : {}) },
       });
 
       if (error) {
@@ -168,6 +176,11 @@ export default function AnalyzePage() {
       if (data._meta) {
         setAnalysisMeta(data._meta);
       }
+      if (data._ebayMetadata) {
+        setEbayMetadata(data._ebayMetadata);
+      } else {
+        setEbayMetadata(null);
+      }
 
       setTitle((data.title || "").slice(0, 80));
       setDescription(data.description || "");
@@ -179,7 +192,7 @@ export default function AnalyzePage() {
       setIsCustomCategoryMode(false);
       setSuggestedCategories(data.suggestedCategories || []);
       setItemSpecifics(data.itemSpecifics || {});
-      setCondition(data.condition || "PRE_OWNED_GOOD");
+      setCondition(data.condition || "USED_EXCELLENT");
       setSuggestedGrade(data.suggestedGrade || "");
       setGradingRationale(data.gradingRationale || "");
       setIsSlabbed(data.isSlabbed ?? false);
@@ -257,6 +270,19 @@ export default function AnalyzePage() {
       toast.error(`Monthly publish limit reached (${currentPlanLimits.publishLimit}). Upgrade for more listings.`);
       navigate("/billing");
       return;
+    }
+    // Validate required eBay aspects before attempting publish
+    if (ebayMetadata?.requiredAspects && ebayMetadata.requiredAspects.length > 0) {
+      const missingRequired = ebayMetadata.requiredAspects.filter(
+        (aspect) => !itemSpecifics[aspect] || String(itemSpecifics[aspect]).trim() === ""
+      );
+      if (missingRequired.length > 0) {
+        toast.error(`Missing required eBay fields: ${missingRequired.join(", ")}`, {
+          description: "Fill in these fields above before publishing.",
+          duration: 6000,
+        });
+        return;
+      }
     }
     setPublishing(true);
     try {
@@ -688,18 +714,26 @@ export default function AnalyzePage() {
                   )}
                 </div>
                 <div className="bg-card border border-border rounded-lg divide-y divide-border">
-                  {displaySpecifics.map(([key, value]) => (
-                    <div key={key} className="flex items-center justify-between px-3 py-2">
-                      <span className="text-xs font-medium text-muted-foreground">{key}</span>
-                      <input
-                        value={value || ""}
-                        onChange={(e) => setItemSpecifics(prev => ({ ...prev, [key]: e.target.value }))}
-                        className="text-xs text-foreground text-right bg-transparent border-none focus:outline-none focus:ring-0 max-w-[55%]"
-                      />
-                    </div>
-                  ))}
+                  {displaySpecifics.map(([key, value]) => {
+                    const isRequired = ebayMetadata?.requiredAspects?.includes(key);
+                    const isSuggested = ebayMetadata?.suggestedAspects?.includes(key);
+                    return (
+                      <div key={key} className="flex items-center justify-between px-3 py-2">
+                        <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                          {key}
+                          {isRequired && <span className="text-[9px] font-semibold text-red-500 uppercase tracking-wide">req</span>}
+                          {isSuggested && !isRequired && <span className="text-[9px] text-primary/60 uppercase tracking-wide">opt</span>}
+                        </span>
+                        <input
+                          value={value || ""}
+                          onChange={(e) => setItemSpecifics(prev => ({ ...prev, [key]: e.target.value }))}
+                          className="text-xs text-foreground text-right bg-transparent border-none focus:outline-none focus:ring-0 max-w-[55%]"
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
-                {/* Condition */}
+{/* Condition */}
                 <div className="flex items-center justify-between bg-card border border-border rounded-lg px-3 py-2">
                   <span className="text-xs font-medium text-muted-foreground">Condition</span>
                   <select
@@ -707,19 +741,14 @@ export default function AnalyzePage() {
                     onChange={(e) => setCondition(e.target.value)}
                     className="text-xs text-foreground bg-transparent border-none focus:outline-none cursor-pointer text-right"
                   >
-                    <option value="NEW">New</option>
-                    <option value="LIKE_NEW">Like New</option>
-                    <option value="NEW_OTHER">New Other (without tags)</option>
-                    <option value="NEW_WITH_DEFECTS">New with Defects</option>
-                    <option value="CERTIFIED_REFURBISHED">Certified Refurbished</option>
-                    <option value="EXCELLENT_REFURBISHED">Excellent – Refurbished</option>
-                    <option value="VERY_GOOD_REFURBISHED">Very Good – Refurbished</option>
-                    <option value="GOOD_REFURBISHED">Good – Refurbished</option>
-                    <option value="SELLER_REFURBISHED">Seller Refurbished</option>
-                    <option value="PRE_OWNED_GOOD">Pre-Owned – Good</option>
-                    <option value="PRE_OWNED_FAIR">Pre-Owned – Fair</option>
-                    <option value="PRE_OWNED_POOR">Pre-Owned – Poor</option>
-                    <option value="FOR_PARTS_OR_NOT_WORKING">For Parts or Not Working</option>
+                    {ebayMetadata?.allowedConditions && ebayMetadata.allowedConditions.length > 0
+                      ? ebayMetadata.allowedConditions.map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))
+                      : getConditionsForCategory(ebayCategoryId || undefined, domain, getEbayCategoryBreadcrumb(ebayCategoryId) || undefined).map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))
+                    }
                   </select>
                 </div>
               </div>

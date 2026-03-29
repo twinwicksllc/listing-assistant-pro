@@ -3,7 +3,7 @@ import {
   X, Save, Loader2, DollarSign, Gavel, ShoppingCart, Tag,
   UserCircle, Truck, CreditCard, RotateCcw, AlertCircle, Clock,
 } from "lucide-react";
-import { ListingDraft, ListingFormat, AuctionDuration } from "@/types/listing";
+import { ListingDraft, ListingFormat, AuctionDuration, getConditionsForCategory } from "@/types/listing";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -28,25 +28,7 @@ interface Policies {
   returns: PolicyOption[];
 }
 
-// eBay-approved conditions (Inventory API)
-// All conditions below are valid for most categories. Some categories (e.g., coins)
-// may have restrictions and auto-correct to valid alternatives on publish.
-// See: https://developer.ebay.com/api-docs/sell/inventory/types/slr:ConditionEnum
-const CONDITIONS = [
-  { value: "NEW",                      label: "New" },
-  { value: "LIKE_NEW",                 label: "Like New" },
-  { value: "NEW_OTHER",                label: "New Other (without tags)" },
-  { value: "NEW_WITH_DEFECTS",         label: "New with Defects" },
-  { value: "CERTIFIED_REFURBISHED",    label: "Certified Refurbished" },
-  { value: "EXCELLENT_REFURBISHED",    label: "Excellent – Refurbished" },
-  { value: "VERY_GOOD_REFURBISHED",    label: "Very Good – Refurbished" },
-  { value: "GOOD_REFURBISHED",         label: "Good – Refurbished" },
-  { value: "SELLER_REFURBISHED",       label: "Seller Refurbished" },
-  { value: "PRE_OWNED_GOOD",           label: "Pre-Owned – Good" },
-  { value: "PRE_OWNED_FAIR",           label: "Pre-Owned – Fair" },
-  { value: "PRE_OWNED_POOR",           label: "Pre-Owned – Poor" },
-  { value: "FOR_PARTS_OR_NOT_WORKING", label: "For Parts or Not Working" },
-];
+// Conditions are now computed dynamically from the draft's category — see getConditionsForCategory()
 
 const AUCTION_DURATIONS: { value: AuctionDuration; label: string }[] = [
   { value: "Days_1",  label: "1 Day" },
@@ -72,7 +54,7 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
   const [auctionDuration, setAuctionDuration] = useState<AuctionDuration>(
     draft.auctionDuration ?? "Days_7"
   );
-  const [condition, setCondition]       = useState(draft.condition ?? "PRE_OWNED_GOOD");
+  const [condition, setCondition]       = useState(draft.condition ?? "USED_EXCELLENT");
   const [consignor, setConsignor]       = useState(draft.consignor ?? "");
   const [cogs, setCogs]                 = useState<number | undefined>(draft.cogs);
   const [ebayCategoryId, setEbayCategoryId] = useState(draft.ebayCategoryId ?? "");
@@ -462,7 +444,7 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
                   onChange={(e) => setCondition(e.target.value)}
                   className="text-xs text-foreground bg-transparent border-none focus:outline-none cursor-pointer text-right"
                 >
-                  {CONDITIONS.map((c) => (
+                  {getConditionsForCategory(ebayCategoryId || undefined, undefined, draft.ebayCategoryBreadcrumb).map((c) => (
                     <option key={c.value} value={c.value}>{c.label}</option>
                   ))}
                 </select>
@@ -479,7 +461,7 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
                 onChange={(e) => setCondition(e.target.value)}
                 className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               >
-                {CONDITIONS.map((c) => (
+                {getConditionsForCategory(ebayCategoryId || undefined, undefined, draft.ebayCategoryBreadcrumb).map((c) => (
                   <option key={c.value} value={c.value}>{c.label}</option>
                 ))}
               </select>

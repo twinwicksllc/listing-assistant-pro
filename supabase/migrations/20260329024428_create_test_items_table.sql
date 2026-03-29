@@ -25,7 +25,20 @@ CREATE TABLE IF NOT EXISTS public.test_items (
   CONSTRAINT valid_domain CHECK (domain IN ('coins_bullion', 'trading_cards', 'jewelry', 'electronics', 'vintage_clothing', 'general'))
 );
 
--- No RLS for test table - it's test data only
+-- Enable RLS for security policy compliance
+ALTER TABLE public.test_items ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Allow authenticated users to read all test data
+-- Test items are public static fixtures for reproducible testing
+CREATE POLICY test_items_read_policy ON public.test_items
+  FOR SELECT
+  USING (auth.role() = 'authenticated');
+
+-- Policy: Allow service role (functions) to manage test data
+CREATE POLICY test_items_manage_policy ON public.test_items
+  FOR ALL
+  USING (auth.role() = 'service_role');
+
 CREATE INDEX idx_test_items_domain ON public.test_items(domain);
 CREATE INDEX idx_test_items_category ON public.test_items(ebay_category_id);
 

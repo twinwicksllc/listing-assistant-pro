@@ -5,8 +5,10 @@ import { initSentry, captureException } from "../_helpers/sentry.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Max-Age": "86400",
 };
 
 // Force redeploy v24: Dynamic category aspects — fetch from eBay Taxonomy API via category_aspects_cache, hardcoded rules as fallback
@@ -167,7 +169,7 @@ async function detectCategoryTree(
 }
 
 // Hardcoded ID sets kept as fallback for detectCategoryTree
-const HARDCODED_COIN_CATEGORY_IDS = new Set(["11981", "39464", "11980", "11971", "41099", "41102", "11973", "39455", "41084", "11950", "41111", "166679", "41109", "526", "253", "45243"]);
+const HARDCODED_COIN_CATEGORY_IDS = new Set(["11981", "39464", "11980", "11971", "41099", "41102", "11973", "39455", "41084", "11950", "41111", "166679", "41109", "526", "253", "45243", "261186", "39471", "39472", "39473", "39474", "39475"]);
 const HARDCODED_BULLION_CATEGORY_IDS = new Set(["178906", "39489", "3361", "532", "173685"]);
 const HARDCODED_TRADING_CARD_CATEGORY_IDS = new Set(["261328", "183454", "2536", "19107", "64482", "213"]);
 const HARDCODED_COLLECTIBLE_CATEGORY_IDS = new Set(["19203", "19209", "261068", "246", "182", "19016"]);
@@ -651,7 +653,7 @@ const ASPECT_KEY_ALIASES: Record<string, string> = {
   "Cleaned/Uncleaned":               "Cleaned/Uncleaned",
   "Provenance":                      "Provenance",
   // These were previously in NON_ASPECT_KEYS; now pass through as real eBay aspects:
-  "Type":                            "Type",       // required by 261068 (Silver Bullion Coins) — errorId 25002
+  "Type":                            "Type",       // required by bullion categories (e.g. 261186 Silver Bullion Coins) — errorId 25002
   "Color":                           "Color",      // used by 45243 (World Coins) for copper/bronze coins
   "Materials sourced from":          "Materials sourced from",
   "Brand":                           "Brand",      // required by 45243 (World Coins) — errorId 25002 when missing
@@ -843,9 +845,10 @@ const CONDITION_ID_MAP: Record<string, number> = {
   EXCELLENT_REFURBISHED: 3000,
   VERY_GOOD_REFURBISHED: 4000,
   GOOD_REFURBISHED: 5000,
-  PRE_OWNED_GOOD: 5000,
-  PRE_OWNED_FAIR: 6000,
-  PRE_OWNED_POOR: 7000,
+  // Legacy PRE_OWNED_* aliases — kept so old DB records can still publish
+  PRE_OWNED_GOOD: 3000,  // same as USED_EXCELLENT
+  PRE_OWNED_FAIR: 5000,  // same as USED_GOOD
+  PRE_OWNED_POOR: 6000,  // same as USED_ACCEPTABLE
 };
 
 const CONDITION_DESCRIPTIONS: Record<string, string> = {
@@ -866,23 +869,24 @@ const CONDITION_DESCRIPTIONS: Record<string, string> = {
   VERY_GOOD: "Item in very good condition with minor wear.",
   GOOD: "Item in good condition with moderate wear.",
   ACCEPTABLE: "Item in acceptable condition with heavy wear but still functional.",
-  // Legacy aliases kept for backward compatibility
+  // Legacy aliases — redirect to their USED_* equivalents
   EXCELLENT_REFURBISHED: "Lightly circulated. Shows minimal wear on high points only.",
   VERY_GOOD_REFURBISHED: "Moderately circulated. Major details clear with moderate wear.",
-  GOOD_REFURBISHED: "Heavily circulated. All major features visible but worn.",
-  PRE_OWNED_GOOD: "Pre-owned item in good condition.",
-  PRE_OWNED_FAIR: "Pre-owned item in fair condition.",
-  PRE_OWNED_POOR: "Pre-owned item in poor condition.",
+  GOOD_REFURBISHED: "Moderately circulated. Major details clear with moderate wear.",
+  PRE_OWNED_GOOD: "Lightly circulated. Shows minimal wear on high points only.",
+  PRE_OWNED_FAIR: "Heavily circulated. All major features visible but worn.",
+  PRE_OWNED_POOR: "Heavily worn but identifiable. Outline and major features visible.",
 };
 
 const LEGACY_CONDITION_MAP: Record<string, string> = {
-  // Map old *_REFURBISHED and PRE_OWNED_* to correct USED_* equivalents
+  // Migrate old *_REFURBISHED and PRE_OWNED_* values from DB to USED_* equivalents.
+  // Users no longer select these from the UI — these only handle old stored records.
   EXCELLENT_REFURBISHED: "USED_EXCELLENT",
   VERY_GOOD_REFURBISHED: "USED_VERY_GOOD",
-  GOOD_REFURBISHED: "USED_GOOD",
-  PRE_OWNED_GOOD: "USED_GOOD",
-  PRE_OWNED_FAIR: "USED_ACCEPTABLE",
-  PRE_OWNED_POOR: "FOR_PARTS_OR_NOT_WORKING",
+  GOOD_REFURBISHED: "USED_VERY_GOOD",
+  PRE_OWNED_GOOD: "USED_EXCELLENT",  // "good quality pre-owned" = lightly used, NOT numismatic "Good" (F-12)
+  PRE_OWNED_FAIR: "USED_GOOD",
+  PRE_OWNED_POOR: "USED_ACCEPTABLE",
 };
 
 // Condition normalization now uses both hardcoded fallback sets (from top of file)
@@ -916,6 +920,7 @@ function normalizeConditionForCategory(
       "USED_ACCEPTABLE", // G-4 to G-6 (heavily worn but identifiable)
       "FOR_PARTS_OR_NOT_WORKING", // Damaged/holed/bent only
     ]);
+
     if (!validCoinConditions.has(condition)) {
       const fallbackMap: Record<string, string> = {
         LIKE_NEW: "NEW",
@@ -925,8 +930,8 @@ function normalizeConditionForCategory(
         SELLER_REFURBISHED: "USED_GOOD",
         EXCELLENT_REFURBISHED: "USED_EXCELLENT",
         VERY_GOOD_REFURBISHED: "USED_VERY_GOOD",
-        GOOD_REFURBISHED: "USED_GOOD",
-        PRE_OWNED_GOOD: "USED_GOOD",
+        GOOD_REFURBISHED: "USED_EXCELLENT",
+        PRE_OWNED_GOOD: "USED_EXCELLENT",
         PRE_OWNED_FAIR: "USED_ACCEPTABLE",
         PRE_OWNED_POOR: "FOR_PARTS_OR_NOT_WORKING",
       };
@@ -1703,6 +1708,12 @@ serve(async (req) => {
       // Call eBay Identity API to fetch username and account type (exchange_code only, not on refresh)
       // One-account enforcement: block different username if tier is not Unlimited
       try {
+        // Resolve credentials here — supabaseUrl/supabaseServiceKey declared above are const-scoped
+        // inside the token-storage try block, so we must re-read them from env for this scope.
+        const _identitySupabaseUrl = Deno.env.get("SUPABASE_URL");
+        const _identityServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        const _stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
+
         const identityRes = await fetch(
           "https://apiz.ebay.com/commerce/identity/v1/user/",
           { headers: { Authorization: `Bearer ${tokenData.access_token}` } }
@@ -1712,12 +1723,25 @@ serve(async (req) => {
         const accountType = (identity?.accountType ?? "")?.toLowerCase() ?? "individual";
 
         // Determine tier for one-account enforcement (OQ-3: gate on LA subscription, not eBay account type)
+        // Fetch the eBay user's email from the identity payload (or from the Supabase profile)
         let tierForOneAccountCheck: "starter" | "pro" | "unlimited" = "starter";
-        if (userEmail && STRIPE_SECRET_KEY) {
+        let _userEmailForStripe: string | null = null;
+        if (userId && _identitySupabaseUrl && _identityServiceKey) {
+          try {
+            const _sc = createClient(_identitySupabaseUrl, _identityServiceKey);
+            const { data: profileData } = await _sc
+              .from("profiles")
+              .select("email")
+              .eq("id", userId)
+              .maybeSingle();
+            _userEmailForStripe = profileData?.email ?? null;
+          } catch { /* non-fatal */ }
+        }
+        if (_userEmailForStripe && _stripeSecretKey) {
           try {
             const { default: Stripe } = await import("https://esm.sh/stripe@18.5.0");
-            const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2025-08-27.basial" });
-            const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
+            const stripe = new Stripe(_stripeSecretKey, { apiVersion: "2025-08-27.basil" });
+            const customers = await stripe.customers.list({ email: _userEmailForStripe, limit: 1 });
             if (customers.data.length > 0) {
               const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: "active", limit: 1 });
               if (subs.data.length > 0) {
@@ -1732,8 +1756,8 @@ serve(async (req) => {
         }
 
         // Check for existing eBay username (one-account rule for non-Unlimited)
-        if (userId && supabaseUrl && supabaseServiceKey) {
-          const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        if (userId && _identitySupabaseUrl && _identityServiceKey) {
+          const supabase = createClient(_identitySupabaseUrl, _identityServiceKey);
           const { data: existingProfile } = await supabase
             .from("profiles")
             .select("ebay_username")
@@ -2570,7 +2594,7 @@ serve(async (req) => {
       }
 
       const publishData = await publishResp.json();
-      const listingId = publishData.listingId || offerData.listing?.listingId || null;
+      const listingId = publishData.listingId || (offerData as any)?.listing?.listingId || null;
 
       // Build affiliate URL — non-fatal, wrapped in try/catch
       const affiliateUrl = listingId ? buildAffiliateUrl(listingId) : null;

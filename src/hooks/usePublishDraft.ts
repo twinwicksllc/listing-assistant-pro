@@ -260,7 +260,7 @@ export function usePublishDraft() {
           : undefined,
         // Include either `imageUrls` (preferred) or legacy `imageUrl`.
         ...(resolvedImageUrls ? { imageUrls: resolvedImageUrls } : { imageUrl: resolvedImageUrl }),
-        condition: draft.condition ?? "PRE_OWNED_GOOD",
+        condition: draft.condition ?? "USED_EXCELLENT",
         ebayCategoryId: draft.ebayCategoryId ?? "",
         itemSpecifics: draft.itemSpecifics ?? {},
         fulfillmentPolicyId: draft.fulfillmentPolicyId ?? null,
