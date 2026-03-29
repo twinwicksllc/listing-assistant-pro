@@ -530,6 +530,7 @@ export default function DashboardPage() {
   const [spotPrices, setSpotPrices] = useState<{ gold: number; silver: number; platinum: number } | null>(null);
   const [meltAlertOpen, setMeltAlertOpen] = useState(true);
   const [ebayToken, setEbayToken] = useState<string>("");
+  const [cogsByListingDb, setCogsByListingDb] = useState<Record<string, number>>({}); // COGS from listing_cogs table
 
   // Sorting & filtering
   const [sortField, setSortField] = useState<SortField>("listingDate");
@@ -723,6 +724,48 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchListings(); }, [fetchListings]);
 
+  // Fetch COGS from listing_cogs table for active listings (Pro/Shop only)
+  useEffect(() => {
+    if (!user?.id || !planFeatures.hasCogsTracking) {
+      setCogsByListingDb({});
+      return;
+    }
+
+    (async () => {
+      try {
+        const skus = listings.map((l) => l.sku).filter(Boolean) as string[];
+        const listingIds = listings.map((l) => l.listingId).filter(Boolean) as string[];
+
+        if (skus.length === 0 && listingIds.length === 0) {
+          setCogsByListingDb({});
+          return;
+        }
+
+        const orParts: string[] = [];
+        if (skus.length > 0) orParts.push(`ebay_sku.in.(${skus.map((s) => `"${s}"`).join(",")})`);
+        if (listingIds.length > 0) orParts.push(`ebay_listing_id.in.(${listingIds.map((id) => `"${id}"`).join(",")})`);
+
+        const query = supabase
+          .from("listing_cogs")
+          .select("ebay_sku, ebay_listing_id, cogs")
+          .eq("user_id", user.id);
+
+        const { data } = orParts.length > 0
+          ? await (query as any).or(orParts.join(","))
+          : { data: [] };
+
+        const map: Record<string, number> = {};
+        for (const row of data ?? []) {
+          if (row.ebay_sku) map[row.ebay_sku] = row.cogs;
+          if (row.ebay_listing_id) map[row.ebay_listing_id] = row.cogs;
+        }
+        setCogsByListingDb(map);
+      } catch (err) {
+        console.warn("Failed to fetch listing COGS:", err);
+      }
+    })();
+  }, [user?.id, listings, planFeatures.hasCogsTracking]);
+
   // ── Sort handler ──────────────────────────────────────────────────────────────
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -829,15 +872,36 @@ export default function DashboardPage() {
   const draftValue = drafts.reduce((sum, d) => sum + (d.priceMin + d.priceMax) / 2, 0);
 
   // COGS lookup map: ebayListingId or ebaySku → {cogs, listingPrice} for ProfitBadge
+  // Combines COGS from drafts (preferred) with COGS from listing_cogs table (for published listings)
   const cogsByListing = useMemo(() => {
     const map: Record<string, { cogs: number | undefined; listingPrice: number }> = {};
+    
+    // First, add from drafts (has authoritative listingPrice)
     for (const d of drafts) {
       const entry = { cogs: d.cogs, listingPrice: d.listingPrice ?? 0 };
       if (d.ebayListingId) map[d.ebayListingId] = entry;
       if (d.ebaySku)       map[d.ebaySku]       = entry;
     }
+
+    // Then, merge from listing_cogs DB (for published listings without draft or to override)
+    for (const listing of listings) {
+      const dbCogs = listing.sku ? cogsByListingDb[listing.sku] : undefined 
+                  || listing.listingId ? cogsByListingDb[listing.listingId] : undefined;
+      
+      if (dbCogs != null) {
+        // Only add if not already in map from drafts, or always use DB version
+        const key = listing.listingId || listing.sku;
+        if (key && !map[key]) {
+          map[key] = { cogs: dbCogs, listingPrice: listing.price };
+        } else if (key && map[key] && !map[key].cogs) {
+          // If draft didn't have COGS but DB does, use DB version
+          map[key] = { cogs: dbCogs, listingPrice: listing.price };
+        }
+      }
+    }
+    
     return map;
-  }, [drafts]);
+  }, [drafts, listings, cogsByListingDb]);
 
   // Melt floor alerts
   const atRiskListings = spotPrices
