@@ -1,13 +1,15 @@
 import { useState, useMemo, useRef } from "react";
-import { RefreshCw, TrendingUp, TrendingDown, Minus, Eye, ExternalLink, ChevronUp, ChevronDown } from "lucide-react";
+import { RefreshCw, TrendingUp, TrendingDown, Minus, Eye, ExternalLink, ChevronUp, ChevronDown, Zap, Loader2, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface ListingWithCompetitor {
   listingId: string | null;
+  offerId: string | null;
   sku: string;
   title: string;
   price: number;
+  currency: string;
   ebayUrl?: string | null;
   competitor?: {
     avgPrice: number | null;
@@ -19,13 +21,14 @@ interface ListingWithCompetitor {
   imageUrl?: string | null;
 }
 
-type SortField = "title" | "price" | "marketAvg" | "delta" | "competitors" | "condition";
+type SortField = "title" | "price" | "marketAvg" | "suggested" | "delta" | "competitors" | "condition";
 type SortDir = "asc" | "desc";
 
 interface PricingInsightsTableProps {
   listings: ListingWithCompetitor[];
   onRefreshCompetitor: (listingId: string) => Promise<void>;
   onPriceChange: (listingId: string | null, newPrice: number) => void;
+  onApplyPrice: (listingId: string, offerId: string | null, sku: string, newPrice: number, currency: string) => Promise<void>;
   userToken: string;
   userId: string;
   isLoading?: boolean;
@@ -35,6 +38,7 @@ export function PricingInsightsTable({
   listings,
   onRefreshCompetitor,
   onPriceChange,
+  onApplyPrice,
   userToken,
   userId,
   isLoading = false,
@@ -46,6 +50,8 @@ export function PricingInsightsTable({
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [searchQuery, setSearchQuery] = useState("");
   const [refreshing, setRefreshing] = useState<Set<string>>(new Set());
+  const [applying, setApplying] = useState<Set<string>>(new Set());
+  const [applied, setApplied] = useState<Set<string>>(new Set());
 
   // Helper functions (must be defined before useMemo that uses them)
   const getDelta = (listing: ListingWithCompetitor): number => {
@@ -59,6 +65,22 @@ export function PricingInsightsTable({
     if (delta < -10) return { label: "Under", color: "text-blue-500 bg-blue-500/10", icon: TrendingDown };
     if (delta < -5) return { label: "Low", color: "text-sky-500 bg-sky-500/10", icon: TrendingDown };
     return { label: "Market", color: "text-green-500 bg-green-500/10", icon: Minus };
+  };
+
+  // Suggested price: 3% below market avg, clamped above minPrice, rounded to X.99 / X.95 / X.49
+  const getSuggestedPrice = (listing: ListingWithCompetitor): number | null => {
+    const avg = listing.competitor?.avgPrice;
+    const min = listing.competitor?.minPrice;
+    if (!avg) return null;
+    const target = avg * 0.97;
+    const clamped = min != null ? Math.max(target, min + 0.01) : target;
+    // Round down to nearest .99 for psychological pricing
+    const rounded = Math.floor(clamped) + 0.99;
+    // If rounding up would exceed clamped, step back one dollar
+    const suggested = rounded > clamped ? rounded - 1 : rounded;
+    // Don't suggest if it's the same as current price (within 1 cent)
+    if (Math.abs(suggested - listing.price) < 0.02) return null;
+    return Math.round(suggested * 100) / 100;
   };
 
   // Filter listings
@@ -83,6 +105,10 @@ export function PricingInsightsTable({
         const aAvg = a.competitor?.avgPrice ?? 0;
         const bAvg = b.competitor?.avgPrice ?? 0;
         cmp = aAvg - bAvg;
+      } else if (sortField === "suggested") {
+        const aSug = getSuggestedPrice(a) ?? a.price;
+        const bSug = getSuggestedPrice(b) ?? b.price;
+        cmp = aSug - bSug;
       } else if (sortField === "delta") {
         const aDelta = getDelta(a);
         const bDelta = getDelta(b);
@@ -173,6 +199,9 @@ export function PricingInsightsTable({
                 <SortHeader field="price" label="Your Price" />
               </th>
               <th className="px-3 py-2 text-right">
+                <SortHeader field="suggested" label="Suggested" />
+              </th>
+              <th className="px-3 py-2 text-right">
                 <SortHeader field="marketAvg" label="Market Avg" />
               </th>
               <th className="px-3 py-2 text-right">Min - Max</th>
@@ -208,6 +237,62 @@ export function PricingInsightsTable({
                   <td className="px-3 py-3 text-right">
                     <p className="font-semibold text-foreground">${listing.price.toFixed(2)}</p>
                   </td>
+
+                  {/* Suggested Price */}
+                  {(() => {
+                    const suggested = getSuggestedPrice(listing);
+                    const rowKey = listing.listingId || listing.sku;
+                    const isApplying = applying.has(rowKey);
+                    const wasApplied = applied.has(rowKey);
+                    const isCheaper = suggested != null && suggested < listing.price;
+                    const isHigher = suggested != null && suggested > listing.price;
+                    return (
+                      <td className="px-3 py-3 text-right">
+                        {suggested != null ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <span className={`text-sm font-semibold ${
+                              wasApplied ? "text-emerald-600 dark:text-emerald-400" :
+                              isCheaper ? "text-amber-600 dark:text-amber-400" :
+                              isHigher ? "text-sky-600 dark:text-sky-400" :
+                              "text-foreground"
+                            }`}>
+                              ${suggested.toFixed(2)}
+                            </span>
+                            <button
+                              onClick={async () => {
+                                if (!listing.listingId || isApplying || wasApplied) return;
+                                setApplying((prev) => new Set([...prev, rowKey]));
+                                try {
+                                  await onApplyPrice(listing.listingId, listing.offerId, listing.sku, suggested, listing.currency);
+                                  setApplied((prev) => new Set([...prev, rowKey]));
+                                  setTimeout(() => setApplied((prev) => { const n = new Set(prev); n.delete(rowKey); return n; }), 3000);
+                                } finally {
+                                  setApplying((prev) => { const n = new Set(prev); n.delete(rowKey); return n; });
+                                }
+                              }}
+                              disabled={isApplying || wasApplied || !listing.listingId}
+                              className={`p-1 rounded transition-colors ${
+                                wasApplied
+                                  ? "text-emerald-600 dark:text-emerald-400 cursor-default"
+                                  : "text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-40"
+                              }`}
+                              title={wasApplied ? "Applied!" : `Apply $${suggested.toFixed(2)} to eBay`}
+                            >
+                              {isApplying ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : wasApplied ? (
+                                <Check className="w-3.5 h-3.5" />
+                              ) : (
+                                <Zap className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground/60">—</p>
+                        )}
+                      </td>
+                    );
+                  })()}
 
                   {/* Market Avg */}
                   <td className="px-3 py-3 text-right">
