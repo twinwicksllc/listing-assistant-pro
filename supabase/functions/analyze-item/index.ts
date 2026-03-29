@@ -302,7 +302,8 @@ serve(async (req: Request) => {
       metalType: "none",
     };
     try {
-      const pass1Images = imageList.slice(0, 2).map((img) => {
+      // OPTIMIZATION: Use only 1st image for Pass 1 to reduce timeout risk
+      const pass1Images = imageList.slice(0, 1).map((img) => {
         const { base64Data, mimeType } = parseImageDataUrl(img);
         return { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Data}` } };
       });
@@ -318,49 +319,55 @@ serve(async (req: Request) => {
             messages: [
               {
                 role: "system",
-                content: `You are an item identification assistant. Examine the image(s) and return ONLY valid JSON:\n{"domain":"coins_bullion|trading_cards|jewelry|electronics|vintage_clothing|general","itemName":"short name (max 80 chars)","keywords":["kw1","kw2","kw3","kw4","kw5"],"isMetal":true|false,"metalType":"gold|silver|platinum|none"}\nDomain guide: coins_bullion=coins/currency/bullion; trading_cards=sports/TCG/Pokémon/Magic; jewelry=rings/watches/necklaces; electronics=phones/PCs/consoles/cameras; vintage_clothing=clothing/shoes/accessories; general=anything else.`,
+                content: `You are an item identification assistant. Examine the image and return ONLY valid JSON (no markdown, no code blocks):\n{"domain":"coins_bullion|trading_cards|jewelry|electronics|vintage_clothing|general","itemName":"short name (max 80 chars)","keywords":["kw1","kw2","kw3","kw4","kw5"],"isMetal":true|false,"metalType":"gold|silver|platinum|none"}\nDomain guide: coins_bullion=coins/currency/bullion; trading_cards=sports/TCG/Pokémon/Magic; jewelry=rings/watches/necklaces; electronics=phones/PCs/consoles/cameras; vintage_clothing=clothing/shoes/accessories; general=anything else.`,
               },
               {
                 role: "user",
                 content: [...pass1Images, { type: "text", text: `Identify this item.${pass1VoiceHint}` }],
               },
             ],
-            max_tokens: 200,
+            max_tokens: 150,
           }),
         }
       );
       if (pass1Resp.ok) {
         const pass1Data = await pass1Resp.json();
         const pass1Text = pass1Data.choices?.[0]?.message?.content ?? "";
-        console.log("analyze-item: Pass 1 raw response (first 300 chars):", pass1Text.slice(0, 300));
+        console.log(`[${invocationId}] PASS 1 raw response (${pass1Text.length} chars):`, pass1Text.slice(0, 500));
         
         if (!pass1Text || pass1Text.trim().length === 0) {
-          console.warn("analyze-item: Pass 1 returned empty response");
+          console.warn(`[${invocationId}] ⚠️  Pass 1 returned empty response`);
         } else {
-          const parsed = JSON.parse(pass1Text);
-          if (parsed.domain && parsed.itemName) {
-            identification = {
-              domain: parsed.domain as Domain,
-              itemName: String(parsed.itemName).slice(0, 120),
-              keywords: Array.isArray(parsed.keywords) ? parsed.keywords.slice(0, 7).map(String) : [],
-              isMetal: Boolean(parsed.isMetal),
-              metalType: (parsed.metalType ?? "none") as Identification["metalType"],
-            };
-            console.log("analyze-item: Pass 1 identification succeeded:", identification);
-          } else {
-            console.warn("analyze-item: Pass 1 JSON missing domain or itemName:", parsed);
+          try {
+            const parsed = JSON.parse(pass1Text);
+            if (parsed.domain && parsed.itemName) {
+              identification = {
+                domain: parsed.domain as Domain,
+                itemName: String(parsed.itemName).slice(0, 120),
+                keywords: Array.isArray(parsed.keywords) ? parsed.keywords.slice(0, 7).map(String) : [],
+                isMetal: Boolean(parsed.isMetal),
+                metalType: (parsed.metalType ?? "none") as Identification["metalType"],
+              };
+              console.log(`[${invocationId}] ✓ Pass 1 identification succeeded:`, identification);
+            } else {
+              console.warn(`[${invocationId}] ⚠️  Pass 1 JSON missing domain or itemName:`, parsed);
+            }
+          } catch (jsonParseErr) {
+            console.error(`[${invocationId}] ❌ Pass 1 JSON parse failed:`, {
+              error: String(jsonParseErr),
+              raw: pass1Text.slice(0, 200),
+            });
           }
         }
       } else {
-        console.warn(`analyze-item: Pass 1 API returned status ${pass1Resp.status}, body: ${await pass1Resp.text()}`);
+        const errBody = await pass1Resp.text();
+        console.warn(`[${invocationId}] ⚠️  Pass 1 API returned status ${pass1Resp.status}:`, errBody.slice(0, 200));
       }
     } catch (pass1Err) {
-      console.warn("analyze-item: Pass 1 failed, defaulting to general domain:", pass1Err);
-      console.warn("analyze-item: Pass 1 error details:", {
-        name: (pass1Err as any)?.name,
-        message: (pass1Err as any)?.message,
-        stack: String((pass1Err as any)?.stack).slice(0, 200),
-      });
+      console.warn(`[${invocationId}] ❌ Pass 1 fetch/parse failed:`, String(pass1Err));
+      if (pass1Err instanceof Error) {
+        console.warn(`[${invocationId}] Error message:`, pass1Err.message);
+      }
     }
     
     // ─── FALLBACK: Detect metal type from voice note if Pass 1 failed ────────
