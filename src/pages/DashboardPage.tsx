@@ -11,6 +11,7 @@ import {
 import { CompetitorPriceCard } from "@/components/CompetitorPriceCard";
 import OptimizationQueueWidget from "@/components/OptimizationQueueWidget";
 import ProfitBadge from "@/components/ProfitBadge";
+import { PricingInsightsTable } from "@/components/PricingInsightsTable";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDrafts } from "@/hooks/useDrafts";
 import { useNavigate } from "react-router-dom";
@@ -547,6 +548,9 @@ export default function DashboardPage() {
   // Selection & bulk edit
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkModal, setShowBulkModal] = useState(false);
+
+  // View mode: "cards" or "pricing"
+  const [listingViewMode, setListingViewMode] = useState<"cards" | "pricing">("cards");
 
   // Fetch spot prices
   useEffect(() => {
@@ -1283,7 +1287,33 @@ export default function DashboardPage() {
               )}
             </div>
             <div className="flex items-center gap-1.5">
-              {selectedIds.size > 0 && (
+              {/* View toggle */}
+              <div className="flex border border-border rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setListingViewMode("cards")}
+                  className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                    listingViewMode === "cards"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-secondary"
+                  }`}
+                  title="Card view"
+                >
+                  Cards
+                </button>
+                <button
+                  onClick={() => setListingViewMode("pricing")}
+                  className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                    listingViewMode === "pricing"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-secondary"
+                  }`}
+                  title="Pricing insights table"
+                >
+                  Pricing
+                </button>
+              </div>
+
+              {selectedIds.size > 0 && listingViewMode === "cards" && (
                 <button onClick={() => setShowBulkModal(true)}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
                   <Tag className="w-3.5 h-3.5" />Edit {selectedIds.size} Price{selectedIds.size !== 1 ? "s" : ""}
@@ -1422,8 +1452,8 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Select all bar */}
-          {filteredListings.length > 0 && (
+          {/* Select all bar — only for card view */}
+          {filteredListings.length > 0 && listingViewMode === "cards" && (
             <div className="flex items-center gap-2 px-1">
               <button onClick={toggleSelectAll} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
                 {selectedIds.size === filteredListings.length && filteredListings.length > 0
@@ -1434,6 +1464,72 @@ export default function DashboardPage() {
             </div>
           )}
 
+          {/* PRICING INSIGHTS TABLE VIEW */}
+          {listingViewMode === "pricing" && listings.length > 0 && (
+            <PricingInsightsTable
+              listings={listings.map((l) => ({
+                listingId: l.listingId,
+                sku: l.sku,
+                title: l.title,
+                price: l.price,
+                ebayUrl: l.ebayUrl,
+                competitor: l.competitor,
+                imageUrl: l.imageUrl,
+              }))}
+              onRefreshCompetitor={async (listingId) => {
+                if (!user?.id) return;
+                try {
+                  const { data, error } = await supabase.functions.invoke("ebay-competitor-search", {
+                    body: {
+                      userId: user.id,
+                      listingId,
+                      title: listings.find((l) => l.listingId === listingId)?.title,
+                      categoryId: listings.find((l) => l.listingId === listingId)?.categoryId,
+                      yourPrice: listings.find((l) => l.listingId === listingId)?.price,
+                    },
+                  });
+                  if (error || data?.error) {
+                    toast.error("Could not refresh competitor prices");
+                    return;
+                  }
+                  setListings((prev) =>
+                    prev.map((l) =>
+                      l.listingId === listingId
+                        ? {
+                            ...l,
+                            competitor: {
+                              avgPrice: data.avgPrice,
+                              minPrice: data.minPrice,
+                              maxPrice: data.maxPrice,
+                              medianPrice: data.medianPrice,
+                              competitorCount: data.competitorCount,
+                              priceDelta: data.priceDelta,
+                              priceDistribution: data.priceDistribution ?? [],
+                              fetchedAt: new Date().toISOString(),
+                            },
+                          }
+                        : l
+                    )
+                  );
+                  toast.success("Competitor prices updated");
+                } catch (err) {
+                  toast.error("Failed to refresh competitor prices");
+                }
+              }}
+              onPriceChange={(listingId, newPrice) => {
+                setListings((prev) =>
+                  prev.map((l) => (l.listingId === listingId ? { ...l, price: newPrice } : l))
+                );
+              }}
+              userToken={ebayToken}
+              userId={user?.id || ""}
+              isLoading={loading}
+            />
+          )}
+
+          {/* CARD VIEW */}
+          {listingViewMode === "cards" && (
+            <>
           {/* Listing cards */}
           {loading && listings.length === 0 ? (
             <div className="text-center py-12">
@@ -1564,6 +1660,8 @@ export default function DashboardPage() {
                 );
               })}
             </div>
+          )}
+            </>
           )}
         </div>
       </div>
