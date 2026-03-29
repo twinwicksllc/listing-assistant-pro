@@ -3,8 +3,7 @@
 -- Previous approach (delete + insert) can have race conditions; upsert is atomic
 
 ALTER TABLE competitor_prices
-  ADD CONSTRAINT uq_competitor_prices_user_listing 
-  UNIQUE (user_id, ebay_listing_id);
+ADD CONSTRAINT uq_competitor_prices_user_listing UNIQUE (user_id, ebay_listing_id);
 
 -- Note: If duplicate rows exist in dev/sandbox, this migration may fail.
 -- If needed, manually delete duplicates first:

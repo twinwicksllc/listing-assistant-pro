@@ -383,19 +383,21 @@ serve(async (req) => {
         console.log("[ebay-competitor-search] Upserting competitor prices snapshot...");
         // Use upsert instead of delete + insert for atomic operation and race condition safety
         // Unique constraint (user_id, ebay_listing_id) ensures only one latest snapshot per listing
-        await supabase.from("competitor_prices").upsert({
-          user_id: userId,
-          ebay_listing_id: listingId,
-          search_query: searchQuery,
-          avg_price: Math.round(avgPrice * 100) / 100,
-          min_price: minPrice,
-          max_price: maxPrice,
-          median_price: Math.round(medianPrice * 100) / 100,
-          price_delta: priceDelta,
-          your_price: yourPrice ?? null,
-          competitor_count: count,
-          price_distribution: priceDistribution,
-        });
+        await supabase
+          .from("competitor_prices")
+          .upsert({
+            user_id: userId,
+            ebay_listing_id: listingId,
+            search_query: searchQuery,
+            avg_price: Math.round(avgPrice * 100) / 100,
+            min_price: minPrice,
+            max_price: maxPrice,
+            median_price: Math.round(medianPrice * 100) / 100,
+            price_delta: priceDelta,
+            your_price: yourPrice ?? null,
+            competitor_count: count,
+            price_distribution: priceDistribution,
+          });
 
         console.log(
           `[ebay-competitor-search] Saved snapshot for listing ${listingId}: avg=$${avgPrice.toFixed(2)}, n=${count}`
