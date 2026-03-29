@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   DollarSign, Save, RefreshCw, Loader2, Search, X,
   TrendingUp, TrendingDown, Minus, CheckCircle2, AlertCircle,
-  ChevronUp, ChevronDown, Lock,
+  ChevronUp, ChevronDown, Lock, ChevronRight,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import BottomNav from "@/components/BottomNav";
+import { CsvCogsImporter } from "@/components/CsvCogsImporter";
 import { toast } from "sonner";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -322,6 +323,21 @@ export default function BulkCogsPage() {
           </div>
         </div>
       </div>
+
+      {/* CSV Import Section */}
+      {!loading && (
+        <div className="max-w-4xl mx-auto px-4 py-4 border-b border-border/50">
+          <details className="group">
+            <summary className="cursor-pointer flex items-center gap-2 font-semibold text-foreground hover:text-primary transition-colors">
+              <ChevronRight className="w-4 h-4 group-open:rotate-90 transition-transform" />
+              Import COGS from CSV
+            </summary>
+            <div className="mt-4 pt-4 border-t border-border/50">
+              <CsvCogsImporter userId={user?.id || ""} onSuccess={load} />
+            </div>
+          </details>
+        </div>
+      )}
 
       {/* Stats bar */}
       {!loading && rows.length > 0 && (
