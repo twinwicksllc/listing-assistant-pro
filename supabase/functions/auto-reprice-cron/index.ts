@@ -96,7 +96,14 @@ async function fetchMarketData(
       signal: AbortSignal.timeout(30000),
     });
     if (!resp.ok) return { avgSoldPrice: null, minActivePrice: null, avgActivePrice: null };
-    const data = await resp.json();
+    let data: any;
+    try {
+      const respText = await resp.text();
+      data = JSON.parse(respText);
+    } catch (e) {
+      console.warn(`[auto-reprice-cron] Failed to parse market data response: ${e}`);
+      return { avgSoldPrice: null, minActivePrice: null, avgActivePrice: null };
+    }
     return {
       avgSoldPrice: data.avgSoldPrice ?? null,
       minActivePrice: data.minActivePrice ?? null,
@@ -135,7 +142,14 @@ async function applyRepriceUpdate(
       signal: AbortSignal.timeout(15000),
     });
     if (!resp.ok) return { success: false, error: `HTTP ${resp.status}` };
-    const data = await resp.json();
+    let data: any;
+    try {
+      const respText = await resp.text();
+      data = JSON.parse(respText);
+    } catch (e) {
+      console.warn(`[auto-reprice-cron] Failed to parse ebay-reprice response: ${e}`);
+      return { success: false, error: String(e) };
+    }
     return { success: data.success ?? false, error: data.error };
   } catch (e) {
     return { success: false, error: String(e) };
@@ -223,7 +237,14 @@ serve(async (req) => {
 
       if (!listingsResp.ok) continue;
 
-      const listingsData = await listingsResp.json();
+      let listingsData: any;
+      try {
+        const respText = await listingsResp.text();
+        listingsData = JSON.parse(respText);
+      } catch (e) {
+        console.warn(`[auto-reprice-cron] Failed to parse listings response for ${uid}: ${e}`);
+        continue;
+      }
       let listings: EbayListing[] = (listingsData.listings ?? []).map((l: {
         listingId?: string | null;
         offerId?: string | null;

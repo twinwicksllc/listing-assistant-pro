@@ -57,7 +57,17 @@ serve(async (req) => {
       );
     }
 
-    const userData = await userResp.json();
+    let userData: any;
+    try {
+      const respText = await userResp.text();
+      userData = JSON.parse(respText);
+    } catch (e) {
+      console.warn(`ebay-user: Failed to parse eBay user API response: ${e}`);
+      return new Response(
+        JSON.stringify({ error: `eBay API parse error: ${e}` }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     const username = userData.username || "";
     const businessName = userData.businessAccount?.name || "";
     const accountType = userData.accountType || "UNKNOWN";

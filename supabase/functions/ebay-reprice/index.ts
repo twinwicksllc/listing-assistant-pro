@@ -127,7 +127,14 @@ async function bulkUpdateInventoryPrices(
         continue;
       }
 
-      const data = await resp.json();
+      let data: any;
+      try {
+        const respText = await resp.text();
+        data = JSON.parse(respText);
+      } catch {
+        console.error(`ebay-reprice: JSON parse error (length=${await resp.text().then(t => t.length)})`);
+        continue;
+      }
       console.log("bulkUpdatePriceQuantity response:", JSON.stringify(data).substring(0, 600));
 
       // Parse per-offer results

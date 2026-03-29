@@ -61,7 +61,16 @@ serve(async (req) => {
         status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const ordersData = await ordersResp.json();
+    let ordersData: any;
+    try {
+      const respText = await ordersResp.text();
+      ordersData = JSON.parse(respText);
+    } catch (e) {
+      console.error("Fulfillment API parse error:", e);
+      return new Response(JSON.stringify({ error: "eBay Fulfillment API parse error", detail: String(e) }), {
+        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const rawOrders: any[] = ordersData.orders ?? [];
 
     // ── Collect all SKUs and listing IDs for the COGS lookup ────────────────

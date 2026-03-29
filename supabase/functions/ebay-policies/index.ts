@@ -35,7 +35,14 @@ serve(async (req) => {
         console.warn(`Could not fetch ${policyType} policies:`, resp.status);
         return [];
       }
-      const data = await resp.json();
+      let data: any;
+      try {
+        const respText = await resp.text();
+        data = JSON.parse(respText);
+      } catch (e) {
+        console.warn(`ebay-policies: Failed to parse ${policyType} policy response: ${e}`);
+        return [];
+      }
       const key = `${policyType}Policies`;
       const policies = data[key] || [];
       return policies.map((p: any) => ({
