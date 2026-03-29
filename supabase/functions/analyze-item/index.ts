@@ -328,21 +328,61 @@ serve(async (req: Request) => {
       if (pass1Resp.ok) {
         const pass1Data = await pass1Resp.json();
         const pass1Text = pass1Data.choices?.[0]?.message?.content ?? "";
-        const parsed = JSON.parse(pass1Text);
-        if (parsed.domain && parsed.itemName) {
-          identification = {
-            domain: parsed.domain as Domain,
-            itemName: String(parsed.itemName).slice(0, 120),
-            keywords: Array.isArray(parsed.keywords) ? parsed.keywords.slice(0, 7).map(String) : [],
-            isMetal: Boolean(parsed.isMetal),
-            metalType: (parsed.metalType ?? "none") as Identification["metalType"],
-          };
-          console.log("analyze-item: Pass 1 identification:", identification);
+        console.log("analyze-item: Pass 1 raw response (first 300 chars):", pass1Text.slice(0, 300));
+        
+        if (!pass1Text || pass1Text.trim().length === 0) {
+          console.warn("analyze-item: Pass 1 returned empty response");
+        } else {
+          const parsed = JSON.parse(pass1Text);
+          if (parsed.domain && parsed.itemName) {
+            identification = {
+              domain: parsed.domain as Domain,
+              itemName: String(parsed.itemName).slice(0, 120),
+              keywords: Array.isArray(parsed.keywords) ? parsed.keywords.slice(0, 7).map(String) : [],
+              isMetal: Boolean(parsed.isMetal),
+              metalType: (parsed.metalType ?? "none") as Identification["metalType"],
+            };
+            console.log("analyze-item: Pass 1 identification succeeded:", identification);
+          } else {
+            console.warn("analyze-item: Pass 1 JSON missing domain or itemName:", parsed);
+          }
         }
+      } else {
+        console.warn(`analyze-item: Pass 1 API returned status ${pass1Resp.status}, body: ${await pass1Resp.text()}`);
       }
     } catch (pass1Err) {
       console.warn("analyze-item: Pass 1 failed, defaulting to general domain:", pass1Err);
+      console.warn("analyze-item: Pass 1 error details:", {
+        name: (pass1Err as any)?.name,
+        message: (pass1Err as any)?.message,
+        stack: String((pass1Err as any)?.stack).slice(0, 200),
+      });
     }
+    
+    // ─── FALLBACK: Detect metal type from voice note if Pass 1 failed ────────
+    // This ensures that if Gemini crashes, we can still detect precious metals
+    // mentioned in the seller's voice description
+    if (identification.metalType === "none" && voiceNote) {
+      const noteText = voiceNote.toLowerCase();
+      const goldKeywords = /\bgold\b|gold\s+(?:coin|bullion|eagle|bar|leaf)|gold\s+\d+/i;
+      const silverKeywords = /\bsilver\b|silver\s+(?:coin|bullion|eagle|bar|oz)|silver\s+\d+/i;
+      const platinumKeywords = /\bplatinum\b|platinum\s+(?:coin|bullion|bar)|platinum\s+\d+/i;
+      
+      if (goldKeywords.test(noteText)) {
+        identification.metalType = "gold";
+        identification.isMetal = true;
+        console.log("analyze-item: FALLBACK detected gold from voice note");
+      } else if (silverKeywords.test(noteText)) {
+        identification.metalType = "silver";
+        identification.isMetal = true;
+        console.log("analyze-item: FALLBACK detected silver from voice note");
+      } else if (platinumKeywords.test(noteText)) {
+        identification.metalType = "platinum";
+        identification.isMetal = true;
+        console.log("analyze-item: FALLBACK detected platinum from voice note");
+      }
+    }
+    // ─── END FALLBACK ────────────────────────────────────────────────────────
     // ─── END PASS 1 ──────────────────────────────────────────────────────────
 
     // ── Pre-lookup: Deterministic category resolution ──────────────────────────
