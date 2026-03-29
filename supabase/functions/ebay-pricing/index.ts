@@ -158,10 +158,18 @@ function parseSoldItemsFromMarkdown(content: string, query: string): SoldItem[] 
 }
 
 // ----------------------------------------------------------------
-// Narrow the title to 4-6 meaningful search tokens
-// Same logic as ebay-competitor-search to stay consistent
+// Narrow the title to meaningful search tokens.
+// Preserves coin grade notation (MS-63 → ms63) so graded coin comps
+// are grade-specific rather than spanning all conditions.
 // ----------------------------------------------------------------
 function deriveSearchQuery(title: string): string {
+  // Pre-process: join grade letter + number before general replacement
+  // "MS-63" → "ms63", "VF-35" → "vf35", "MS 65" → "ms65"
+  const gradeNormalised = title.replace(
+    /\b(MS|VF|EF|XF|AU|PF|PR|SP|AG|G|F|VG)-?\s*(\d{1,2})\b/gi,
+    (_, g, n) => `${g}${n}`
+  );
+
   const stopWords = new Set([
     "a", "an", "the", "and", "or", "of", "in", "for", "to", "with",
     "lot", "set", "collection", "item", "listing", "ebay",
@@ -169,13 +177,37 @@ function deriveSearchQuery(title: string): string {
     "vintage", "antique", "original", "authentic",
   ]);
 
-  const tokens = title
+  const tokens = gradeNormalised
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
     .split(/\s+/)
     .filter((t) => t.length > 1 && !stopWords.has(t));
 
-  return tokens.slice(0, 6).join(" ");
+  // Use up to 8 tokens so grade + grader (e.g. "pcgs ms63") aren't truncated
+  return tokens.slice(0, 8).join(" ");
+}
+
+// ----------------------------------------------------------------
+// Remove statistical outliers using the IQR (Tukey fence) method.
+// Filters soldItems whose prices are below Q1 - 1.5*IQR or above
+// Q3 + 1.5*IQR. Requires ≥ 5 items to activate (smaller sets are
+// returned unchanged to avoid discarding too much data).
+// ----------------------------------------------------------------
+function filterOutliers(items: SoldItem[]): SoldItem[] {
+  if (items.length < 5) return items;
+  const sorted = [...items].sort((a, b) => a.price - b.price);
+  const q1 = sorted[Math.floor(sorted.length * 0.25)].price;
+  const q3 = sorted[Math.floor(sorted.length * 0.75)].price;
+  const iqr = q3 - q1;
+  if (iqr === 0) return items; // all same price, nothing to filter
+  const lo = q1 - 1.5 * iqr;
+  const hi = q3 + 1.5 * iqr;
+  const filtered = items.filter((i) => i.price >= lo && i.price <= hi);
+  if (filtered.length >= 3) {
+    console.log(`[ebay-pricing] Outlier filter: ${items.length} → ${filtered.length} items (fence $${lo.toFixed(2)}–$${hi.toFixed(2)})`);
+    return filtered;
+  }
+  return items; // don't filter if it would leave fewer than 3 results
 }
 
 // ----------------------------------------------------------------
@@ -233,6 +265,9 @@ serve(async (req) => {
     }
 
     console.log(`[ebay-pricing] Total sold items found: ${soldItems.length}`);
+
+    // Remove statistical outliers before computing price stats
+    soldItems = filterOutliers(soldItems);
 
     const prices = soldItems.map((i) => i.price).sort((a, b) => a - b);
     const averagePrice =
