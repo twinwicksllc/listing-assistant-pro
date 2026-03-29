@@ -167,7 +167,7 @@ async function detectCategoryTree(
 }
 
 // Hardcoded ID sets kept as fallback for detectCategoryTree
-const HARDCODED_COIN_CATEGORY_IDS = new Set(["11981", "39464", "11980", "11971", "41099", "41102", "11973", "39455", "41084", "11950", "41111", "166679", "41109", "526", "253", "45243"]);
+const HARDCODED_COIN_CATEGORY_IDS = new Set(["11981", "39464", "11980", "11971", "41099", "41102", "11973", "39455", "41084", "11950", "41111", "166679", "41109", "526", "253", "45243", "261186", "39471", "39472", "39473", "39474", "39475"]);
 const HARDCODED_BULLION_CATEGORY_IDS = new Set(["178906", "39489", "3361", "532", "173685"]);
 const HARDCODED_TRADING_CARD_CATEGORY_IDS = new Set(["261328", "183454", "2536", "19107", "64482", "213"]);
 const HARDCODED_COLLECTIBLE_CATEGORY_IDS = new Set(["19203", "19209", "261068", "246", "182", "19016"]);

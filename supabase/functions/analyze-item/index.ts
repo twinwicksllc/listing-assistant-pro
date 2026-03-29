@@ -266,6 +266,12 @@ serve(async (req: Request) => {
     // Support both single image (legacy) and multiple images
     const imageList: string[] = body.images ?? (body.imageBase64 ? [body.imageBase64] : []);
     const voiceNote: string = body.voiceNote || "";
+    // User-provided category override — if set, this is treated as an absolute lock
+    // and the category-lookup pipeline is skipped entirely.
+    const userCategoryId: string | null = body.categoryId ? String(body.categoryId).trim() || null : null;
+    if (userCategoryId) {
+      console.log(`analyze-item: user-provided categoryId=${userCategoryId} — will lock, skipping AI lookup`);
+    }
 
     // Initialize competitorData early (will be populated after AI analysis)
     let competitorData: any = null;
@@ -397,22 +403,23 @@ serve(async (req: Request) => {
     // ─── END PASS 1 ──────────────────────────────────────────────────────────
 
     // ── Pre-lookup: Deterministic category resolution ──────────────────────────
-    // Uses category-lookup "lookup" action which implements:
-    //   - 4-tier ranked candidates (DB exact → eBay API → DB fuzzy → Gemini)
-    //   - Deterministic lock when eBay top-1 is high confidence (#3)
-    //   - Only approved rows from DB (#2)
-    //   - Leaf/active verification (#4)
-    //   - Audit logging (#0)
-    //
-    // If a deterministic winner is found, it's locked into the prompt so Gemini
-    // cannot override it. Otherwise, hints are provided for Gemini to choose from.
     let categoryHints = "";
     let lockedCategoryId: string | null = null;
     let lockedCategoryName: string | null = null;
     let lockedBreadcrumb: string | null = null;
     let lookupAlternatives: any[] = [];
 
-    try {
+    // If the user explicitly provided a category ID, use it as an absolute lock.
+    // Skip the lookup pipeline entirely — the user's choice always wins.
+    if (userCategoryId) {
+      lockedCategoryId = userCategoryId;
+      lockedCategoryName = "";
+      lockedBreadcrumb = "";
+      categoryHints = `\n- **USER-LOCKED CATEGORY**: **${userCategoryId}**. The seller has explicitly chosen this category. YOU MUST USE THIS EXACT CATEGORY ID. Do not suggest any other.`;
+      console.log(`analyze-item: user category lock applied: ${userCategoryId}`);
+    }
+
+    if (!userCategoryId) try {  // skip lookup if user already provided a category
       // Use Pass 1 item name + keywords for a much better category query than raw voice note
       const pass1Query = identification.keywords.length > 0
         ? `${identification.itemName} ${identification.keywords.slice(0, 3).join(" ")}`
@@ -485,7 +492,7 @@ serve(async (req: Request) => {
       }
     } catch (lookupErr) {
       console.warn("analyze-item: category pre-lookup failed (non-blocking):", lookupErr);
-    }
+    }  // end if (!userCategoryId)
     // ── End pre-lookup ─────────────────────────────────────────────────────────
 
     // ─── Pre-AI sold comps (so AI has real pricing context in Pass 2) ────────
@@ -831,7 +838,8 @@ Seller's note: "${voiceNote}"`;
         // If we had a deterministic lock, the category is already verified
         if (lockedCategoryId && listing.ebayCategoryId !== lockedCategoryId) {
           // AI overrode the locked category — force it back (#3)
-          console.warn(`analyze-item: AI overrode locked category ${lockedCategoryId} with ${listing.ebayCategoryId} — forcing lock back`);
+          const lockSource = userCategoryId ? "user-provided" : "deterministic lookup";
+          console.warn(`analyze-item: AI overrode locked category ${lockedCategoryId} with ${listing.ebayCategoryId} — forcing lock back (source: ${lockSource})`);
           listing.ebayCategoryId = lockedCategoryId;
           listing.categoryId = lockedCategoryId;
         } else if (!lockedCategoryId) {

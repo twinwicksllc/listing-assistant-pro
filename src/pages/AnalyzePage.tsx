@@ -130,7 +130,7 @@ export default function AnalyzePage() {
     setGenerating(true);
     try {
       const { data, error } = await supabase.functions.invoke("analyze-item", {
-        body: { images: imageUrls, voiceNote },
+        body: { images: imageUrls, voiceNote, ...(ebayCategoryId ? { categoryId: ebayCategoryId } : {}) },
       });
 
       if (error) {
