@@ -45,7 +45,7 @@ export default function SupportModal() {
       setDescription("");
       setType("bug");
       setOpen(false);
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast({ title: "Failed to submit", description: err.message, variant: "destructive" });
     } finally {
       setSubmitting(false);

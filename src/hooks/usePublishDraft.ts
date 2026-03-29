@@ -44,7 +44,7 @@ export function usePublishDraft() {
         postalCode: (data as any).postal_code ?? null,
         city: (data as any).city ?? null,
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.warn("fetchProfileLocation: unexpected error", err?.message ?? err);
       return { postalCode: null, city: null };
     }

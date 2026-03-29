@@ -54,7 +54,7 @@ export default function WelcomeTour({ steps, active, onFinish }: WelcomeTourProp
   const placement = step.placement || "bottom";
 
   // Tooltip positioning
-  let tooltipStyle: React.CSSProperties = {
+  const tooltipStyle: React.CSSProperties = {
     position: "fixed",
     zIndex: 10001,
     maxWidth: 300,

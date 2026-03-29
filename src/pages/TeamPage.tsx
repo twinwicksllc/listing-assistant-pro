@@ -146,7 +146,7 @@ export default function TeamPage() {
         setInviteEmail("");
         loadTeam();
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(err.message || "Failed to send invitation");
     } finally {
       setSending(false);
@@ -163,7 +163,7 @@ export default function TeamPage() {
       await refreshOrg();
       setPendingInvites((prev) => prev.filter((i) => i.id !== inviteId));
       loadTeam();
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(err.message || "Failed to accept invitation");
     }
   };

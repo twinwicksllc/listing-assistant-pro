@@ -152,7 +152,7 @@ export default function ProfitReportPage() {
       );
       setItems(filtered);
       setSummary(data.summary ?? null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("cogs-report fetch error:", err);
       setError(err.message || "Failed to load profit report");
       toast.error("Failed to load profit report");

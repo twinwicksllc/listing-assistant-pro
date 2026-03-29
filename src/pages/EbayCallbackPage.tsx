@@ -118,7 +118,7 @@ export default function EbayCallbackPage() {
         // Redirect after a short delay
         setTimeout(() => navigate(postAuthRedirect, { replace: true }), 1800);
       })
-      .catch((err: any) => {
+      .catch((err: unknown) => {
         console.error("EbayCallbackPage: catch error:", err);
         setStatus("error");
         const msg = err?.message || "Failed to connect eBay account. Please try again.";

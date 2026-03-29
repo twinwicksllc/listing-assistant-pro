@@ -68,7 +68,7 @@ export default function PricingCard({ priceMin, priceMax, searchQuery, metalType
         setEbayLow(data.lowPrice || null);
         setEbayHigh(data.highPrice || null);
         setTotalFound(data.totalFound || 0);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Pricing fetch error:", err);
         setError(err.message);
       } finally {
@@ -107,7 +107,7 @@ export default function PricingCard({ priceMin, priceMax, searchQuery, metalType
 
         setSpotPrices(data.spotPrices || null);
         setMeltValue(data.meltValue || null);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Spot price fetch error:", err);
       } finally {
         setSpotLoading(false);

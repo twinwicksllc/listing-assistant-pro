@@ -31,7 +31,7 @@ export default function BulkUploadZone({ onFileParsed, disabled = false }: BulkU
         setParsedFile(result);
         onFileParsed(result);
         toast.success(`Loaded ${result.rowCount} rows from ${result.fileName}`);
-      } catch (err: any) {
+      } catch (err: unknown) {
         toast.error(err.message || "Failed to parse file");
       } finally {
         setParsing(false);

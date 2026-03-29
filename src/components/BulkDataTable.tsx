@@ -81,7 +81,11 @@ export default function BulkDataTable({
   const toggleExpand = (rowIndex: number) => {
     setExpandedRows((prev) => {
       const next = new Set(prev);
-      next.has(rowIndex) ? next.delete(rowIndex) : next.add(rowIndex);
+      if (next.has(rowIndex)) {
+        next.delete(rowIndex);
+      } else {
+        next.add(rowIndex);
+      }
       return next;
     });
   };

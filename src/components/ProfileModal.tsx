@@ -67,7 +67,7 @@ export default function ProfileModal({ open, onClose }: ProfileModalProps) {
       if (error) throw error;
       toast.success("Profile updated!");
       onClose();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Profile save error:", err);
       toast.error(err.message || "Failed to save profile");
     } finally {
@@ -105,7 +105,7 @@ export default function ProfileModal({ open, onClose }: ProfileModalProps) {
 
       setAvatarUrl(urlData.publicUrl);
       toast.success("Avatar uploaded!");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Avatar upload error:", err);
       if (err.message?.includes("Bucket not found") || err.message?.includes("bucket")) {
         toast.error("Avatar storage not configured yet. Display name saved.");
