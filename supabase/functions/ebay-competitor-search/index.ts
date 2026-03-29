@@ -380,17 +380,10 @@ serve(async (req) => {
           { auth: { persistSession: false } }
         );
 
-        console.log("[ebay-competitor-search] Deleting existing records...");
-        // Upsert by user_id + ebay_listing_id — replace stale snapshot
-        // Delete any existing rows for this listing first (simplest upsert strategy)
-        await supabase
-          .from("competitor_prices")
-          .delete()
-          .eq("user_id", userId)
-          .eq("ebay_listing_id", listingId);
-
-        console.log("[ebay-competitor-search] Inserting new record...");
-        await supabase.from("competitor_prices").insert({
+        console.log("[ebay-competitor-search] Upserting competitor prices snapshot...");
+        // Use upsert instead of delete + insert for atomic operation and race condition safety
+        // Unique constraint (user_id, ebay_listing_id) ensures only one latest snapshot per listing
+        await supabase.from("competitor_prices").upsert({
           user_id: userId,
           ebay_listing_id: listingId,
           search_query: searchQuery,
