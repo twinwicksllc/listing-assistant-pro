@@ -18,13 +18,13 @@ export default defineConfig(({ mode }) => ({
     
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'pwa-icon-192.png', 'pwa-icon-512.png'],
+      includeAssets: ['favicon.ico', 'pwa-icon-192.png', 'pwa-icon-192.webp', 'pwa-icon-512.png', 'pwa-icon-512.webp'],
       workbox: {
         // Immediately activate new service worker versions
         skipWaiting: true,
         // Don't cache auth-related routes or OAuth callback routes
         navigateFallbackDenylist: [/^\/~oauth/, /^\/auth\//, /^\/ebay\//],
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2}'],
         // Force service worker to check for updates frequently
         runtimeCaching: [
           {
@@ -76,6 +76,15 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+    },
+  },
+  build: {
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true, // Remove console logs in production
+        drop_debugger: true,
+      },
     },
   },
 }));
