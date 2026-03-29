@@ -9,6 +9,7 @@ import { useDrafts } from "@/hooks/useDrafts";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { ItemSpecifics, ListingFormat } from "@/types/listing";
+import { getConditionsForCategory } from "@/types/listing";
 import { useAuth, PLANS } from "@/contexts/AuthContext";
 import { exportListing, type ExportPlatform, type ExportFormat } from "@/lib/exportCSV";
 import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
@@ -699,7 +700,7 @@ export default function AnalyzePage() {
                     </div>
                   ))}
                 </div>
-                {/* Condition */}
+{/* Condition */}
                 <div className="flex items-center justify-between bg-card border border-border rounded-lg px-3 py-2">
                   <span className="text-xs font-medium text-muted-foreground">Condition</span>
                   <select
@@ -707,17 +708,9 @@ export default function AnalyzePage() {
                     onChange={(e) => setCondition(e.target.value)}
                     className="text-xs text-foreground bg-transparent border-none focus:outline-none cursor-pointer text-right"
                   >
-                    <option value="NEW">New / Uncirculated</option>
-                    <option value="LIKE_NEW">Like New</option>
-                    <option value="NEW_OTHER">New Other (without tags)</option>
-                    <option value="NEW_WITH_DEFECTS">New with Defects</option>
-                    <option value="USED_EXCELLENT">Used – Excellent (lightly used/circulated)</option>
-                    <option value="USED_VERY_GOOD">Used – Very Good (moderate wear)</option>
-                    <option value="USED_GOOD">Used – Good (heavy wear)</option>
-                    <option value="USED_ACCEPTABLE">Used – Acceptable (significant wear)</option>
-                    <option value="CERTIFIED_REFURBISHED">Certified Refurbished</option>
-                    <option value="SELLER_REFURBISHED">Seller Refurbished</option>
-                    <option value="FOR_PARTS_OR_NOT_WORKING">For Parts or Not Working</option>
+                    {getConditionsForCategory(ebayCategoryId || undefined, domain, getEbayCategoryBreadcrumb(ebayCategoryId) || undefined).map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>

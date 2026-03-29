@@ -67,6 +67,68 @@ export const CONDITION_LABELS: Record<string, string> = {
   GOOD_REFURBISHED: "Used – Good (heavy wear)",
 };
 
+export type ConditionOption = { value: string; label: string };
+
+// Category ID sets matching the publish function's detection logic
+const COIN_CATEGORY_IDS = new Set(["11981","39464","11980","11971","41099","41102","11973","39455","41084","11950","41111","166679","41109","526","253","45243"]);
+const BULLION_CATEGORY_IDS = new Set(["178906","39489","3361","532","173685"]);
+const TRADING_CARD_CATEGORY_IDS = new Set(["261328","183454","2536","19107","64482","213"]);
+
+/**
+ * Returns the condition options that make sense for a given category/domain.
+ * Used by condition dropdowns so nonsensical options (e.g. "Certified Refurbished"
+ * on a 19th century coin) never appear.
+ */
+export function getConditionsForCategory(
+  categoryId: string | undefined,
+  domain: string | undefined,
+  breadcrumb: string | undefined,
+): ConditionOption[] {
+  const isCoin = (categoryId && COIN_CATEGORY_IDS.has(categoryId))
+    || domain === "coins_bullion"
+    || (breadcrumb && /coin|paper money|currency|dollar|quarter|dime|nickel|penny|half eagle|double eagle|sovereign|bullion/i.test(breadcrumb));
+  const isBullion = (categoryId && BULLION_CATEGORY_IDS.has(categoryId))
+    || (breadcrumb && /bullion|gold bar|silver bar|ingot/i.test(breadcrumb));
+  const isTradingCard = (categoryId && TRADING_CARD_CATEGORY_IDS.has(categoryId))
+    || domain === "trading_cards"
+    || (breadcrumb && /trading card|sports card|pokemon|magic.*gathering/i.test(breadcrumb));
+
+  if (isCoin || isBullion) {
+    // Coins & precious metals only — no "refurbished", no "defects", no "for parts"
+    return [
+      { value: "NEW",           label: "New / Uncirculated (MS-60 to MS-70)" },
+      { value: "USED_EXCELLENT",label: "Used – Excellent (AU/XF — light wear)" },
+      { value: "USED_VERY_GOOD",label: "Used – Very Good (VF — moderate wear)" },
+      { value: "USED_GOOD",     label: "Used – Good (F — heavy wear)" },
+      { value: "USED_ACCEPTABLE",label: "Used – Acceptable (G — heavily worn)" },
+      { value: "FOR_PARTS_OR_NOT_WORKING", label: "Damaged / Holed / Not Collectible" },
+    ];
+  }
+
+  if (isTradingCard) {
+    return [
+      { value: "LIKE_NEW",      label: "Like New (Near Mint)" },
+      { value: "VERY_GOOD",     label: "Very Good (light play wear)" },
+      { value: "GOOD",          label: "Good (moderate play wear)" },
+      { value: "ACCEPTABLE",    label: "Acceptable (heavy wear)" },
+    ];
+  }
+
+  // General / electronics / clothing / collectibles
+  return [
+    { value: "NEW",                      label: "New" },
+    { value: "LIKE_NEW",                 label: "Like New / Open Box" },
+    { value: "NEW_OTHER",                label: "New Other (without tags)" },
+    { value: "USED_EXCELLENT",           label: "Used – Excellent" },
+    { value: "USED_VERY_GOOD",           label: "Used – Very Good" },
+    { value: "USED_GOOD",                label: "Used – Good" },
+    { value: "USED_ACCEPTABLE",          label: "Used – Acceptable" },
+    { value: "CERTIFIED_REFURBISHED",    label: "Certified Refurbished" },
+    { value: "SELLER_REFURBISHED",       label: "Seller Refurbished" },
+    { value: "FOR_PARTS_OR_NOT_WORKING", label: "For Parts or Not Working" },
+  ];
+}
+
 export interface ListingDraft {
   id: string;
   // Prefer storing multiple images; keep `imageUrl` for backward compatibility
