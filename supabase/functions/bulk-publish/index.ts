@@ -245,7 +245,14 @@ serve(async (req: Request) => {
           { headers: authHeaders, timeout: 10000 }
         );
         if (!resp.ok) return null;
-        const data = await resp.json();
+        let data: any;
+        try {
+          const respText = await resp.text();
+          data = JSON.parse(respText);
+        } catch (e) {
+          console.warn(`bulk-publish: Failed to parse ${policyType} policy response: ${e}`);
+          return null;
+        }
         const policies = data[`${policyType}Policies`] || [];
         return Array.isArray(policies) && policies.length > 0
           ? policies[0][`${policyType}PolicyId`] || null
@@ -388,7 +395,13 @@ serve(async (req: Request) => {
           const errText = await offerResp.text();
           throw new Error(`Offer creation failed (${offerResp.status}): ${errText.slice(0, 300)}`);
         }
-        const offerData = await offerResp.json();
+        let offerData: any;
+        try {
+          const respText = await offerResp.text();
+          offerData = JSON.parse(respText);
+        } catch (e) {
+          throw new Error(`Failed to parse offer creation response: ${e}`);
+        }
         const offerId = offerData.offerId as string;
 
         // Step 4: Publish offer
@@ -399,7 +412,14 @@ serve(async (req: Request) => {
 
         let listingId: string | undefined;
         if (publishResp.ok) {
-          const publishData = await publishResp.json();
+          let publishData: any;
+          try {
+            const respText = await publishResp.text();
+            publishData = JSON.parse(respText);
+          } catch (e) {
+            console.warn(`Row ${row.rowIndex}: Failed to parse publish response: ${e}`);
+            publishData = {};
+          }
           listingId = publishData.listingId;
         } else {
           const errText = await publishResp.text();

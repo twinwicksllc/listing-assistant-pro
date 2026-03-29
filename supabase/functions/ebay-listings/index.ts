@@ -60,7 +60,14 @@ async function fetchAnalyticsForWindow(
       return result;
     }
 
-    const trafficData = await trafficResp.json();
+    let trafficData: any;
+    try {
+      const respText = await trafficResp.text();
+      trafficData = JSON.parse(respText);
+    } catch (e) {
+      console.warn(`Analytics API error (${days}d): Failed to parse response: ${e}`);
+      return result;
+    }
     
     // Debug: log the raw metricHeaders structure
     console.log(`Analytics API (${days}d): Raw trafficData keys: ${Object.keys(trafficData).join(", ")}`);
@@ -291,7 +298,14 @@ async function fetchFinancesTransactions(
         return { type, transactions: [] };
       }
       if (resp.status === 204) return { type, transactions: [] };
-      const data = await resp.json();
+      let data: any;
+      try {
+        const respText = await resp.text();
+        data = JSON.parse(respText);
+      } catch (e) {
+        console.warn(`Finances API: ${type} fetch failed to parse (${resp.status}): ${e}`);
+        return { type, transactions: [] };
+      }
       return { type, transactions: data.transactions || [] };
     }));
 
@@ -372,7 +386,14 @@ async function fetchShippingLabelCosts(
       return result;
     }
 
-    const data = await resp.json();
+    let data: any;
+    try {
+      const respText = await resp.text();
+      data = JSON.parse(respText);
+    } catch (e) {
+      console.warn(`Finances API: Failed to parse SHIPPING_LABEL response: ${e}`);
+      return result;
+    }
     const transactions: any[] = data.transactions || [];
     console.log(`Finances API: Got ${transactions.length} SHIPPING_LABEL transactions`);
 
@@ -431,7 +452,14 @@ async function fetchOrderCounts(
       return { ...counts, financial };
     }
 
-    const data = await resp.json();
+    let data: any;
+    try {
+      const respText = await resp.text();
+      data = JSON.parse(respText);
+    } catch (e) {
+      console.warn(`Fulfillment API: Failed to parse response: ${e}`);
+      return { ...counts, financial };
+    }
     const orders: any[] = data.orders || [];
     console.log(`Fulfillment API: Got ${orders.length} orders (total: ${data.total ?? "?"})`);
 
@@ -845,7 +873,16 @@ serve(async (req) => {
         );
       }
 
-      const offersData = await offersResp.json();
+      let offersData: any;
+      try {
+        const respText = await offersResp.text();
+        offersData = JSON.parse(respText);
+      } catch (e) {
+        console.warn(`ebay-listings: Failed to parse offers response: ${e}`);
+        const page: any[] = [];
+        totalOffers = 0;
+        continue;
+      }
       const page = offersData.offers || [];
       totalOffers = offersData.total ?? page.length;
       offers.push(...page);
@@ -870,7 +907,14 @@ serve(async (req) => {
             { headers: ebayHeaders }
           );
           if (itemResp.ok) {
-            const itemData = await itemResp.json();
+            let itemData: any;
+            try {
+              const respText = await itemResp.text();
+              itemData = JSON.parse(respText);
+            } catch (e) {
+              console.warn(`ebay-listings: Failed to parse inventory item response for SKU "${offer.sku}": ${e}`);
+              itemData = {};
+            }
             product = itemData.product || {};
           } else if (itemResp.status === 400 || itemResp.status === 404) {
             console.warn(`Skipping inventory fetch for SKU "${offer.sku}": ${itemResp.status}`);

@@ -175,7 +175,13 @@ Requirements:
           throw new Error(`OpenAI error ${response.status}: ${errText.slice(0, 200)}`);
         }
 
-        const data = await response.json();
+        let data: any;
+        try {
+          const respText = await response.text();
+          data = JSON.parse(respText);
+        } catch (e) {
+          throw new Error(`Failed to parse OpenAI response: ${e}`);
+        }
         const description = data.choices?.[0]?.message?.content?.trim() ?? "";
 
         results.push({ rowIndex: row.rowIndex, description });

@@ -383,9 +383,16 @@ serve(async (req: Request) => {
             }
           );
           if (lookupResp.ok) {
-            const lookupData = await lookupResp.json();
+            const lookupText = await lookupResp.text();
+            let lookupData: any;
+            try {
+              lookupData = JSON.parse(lookupText);
+            } catch {
+              console.warn(`analyze-item: category pre-lookup returned invalid JSON (length=${lookupText.length})`);
+              lookupData = null;
+            }
 
-            if (lookupData.found) {
+            if (lookupData && lookupData.found) {
               const score = lookupData.effectiveScore || lookupData.confidence || 0;
               const isVerifiedLeaf = lookupData.verifiedLeaf !== false;
               const source = lookupData.source || "";
@@ -414,7 +421,7 @@ serve(async (req: Request) => {
                   categoryHints += `\n  * **${alt.categoryId}** — ${alt.breadcrumb || alt.categoryName} (score=${alt.score || "?"})`;
                 }
               }
-            } else if (lookupData.topCandidates && lookupData.topCandidates.length > 0) {
+            } else if (lookupData && lookupData.topCandidates && lookupData.topCandidates.length > 0) {
               // Circuit breaker fired — no candidate passed threshold (#9)
               categoryHints += "\n- LOW-CONFIDENCE CANDIDATES (use your best judgment):";
               for (const c of lookupData.topCandidates) {
@@ -447,8 +454,15 @@ serve(async (req: Request) => {
             }
           );
           if (compResp.ok) {
-            const compData = await compResp.json();
-            if ((compData.competitorCount ?? 0) > 0) {
+            const compText = await compResp.text();
+            let compData: any;
+            try {
+              compData = JSON.parse(compText);
+            } catch {
+              console.warn(`analyze-item: competitor search returned invalid JSON (length=${compText.length})`);
+              compData = null;
+            }
+            if (compData && (compData.competitorCount ?? 0) > 0) {
               competitorData = compData;
               console.log("analyze-item: pre-AI comps:", { count: compData.competitorCount, avg: compData.avgPrice });
             }
@@ -778,7 +792,14 @@ Seller's note: "${voiceNote}"`;
               }
             );
             if (verifyResp.ok) {
-              const verifyData = await verifyResp.json();
+              let verifyData: any;
+              try {
+                const verifyText = await verifyResp.text();
+                verifyData = JSON.parse(verifyText);
+              } catch {
+                console.warn("analyze-item: category verify returned invalid JSON");
+                verifyData = {};
+              }
               if (verifyData.isLeaf === false || verifyData.valid === false) {
                 console.warn(`analyze-item: AI category ${listing.ebayCategoryId} is NOT a valid leaf — attempting reselect`);
                 
@@ -838,7 +859,14 @@ Seller's note: "${voiceNote}"`;
             }
           );
           if (postLookupResp.ok) {
-            const postLookupData = await postLookupResp.json();
+            let postLookupData: any;
+            try {
+              const postLookupText = await postLookupResp.text();
+              postLookupData = JSON.parse(postLookupText);
+            } catch {
+              console.warn("analyze-item: post-lookup returned invalid JSON");
+              postLookupData = {};
+            }
             if (postLookupData.found && postLookupData.verifiedLeaf !== false) {
               const postScore = postLookupData.effectiveScore || postLookupData.confidence || 0;
               const postSource = postLookupData.source || "";
@@ -978,7 +1006,13 @@ Seller's note: "${voiceNote}"`;
         console.log("analyze-item: competitor response status:", competitorResp.status);
         
         if (competitorResp.ok) {
-          competitorData = await competitorResp.json();
+          try {
+            const compRespText = await competitorResp.text();
+            competitorData = JSON.parse(compRespText);
+          } catch {
+            console.warn("analyze-item: competitor search returned invalid JSON");
+            competitorData = null;
+          }
           console.log("analyze-item: competitor data retrieved", {
             competitorCount: competitorData?.competitorCount,
             avgPrice: competitorData?.avgPrice,

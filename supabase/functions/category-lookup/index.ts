@@ -246,7 +246,14 @@ async function getEbayAppToken(): Promise<{ token: string; base: string } | null
     return null;
   }
 
-  const tokenJson = await tokenResp.json();
+  const tokenText = await tokenResp.text();
+  let tokenJson: any;
+  try {
+    tokenJson = JSON.parse(tokenText);
+  } catch {
+    console.error(`category-lookup: eBay token response JSON parse failed (length=${tokenText.length}):`, tokenText.slice(0, 200));
+    return null;
+  }
   const base = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
   return { token: tokenJson.access_token, base };
 }
@@ -310,7 +317,14 @@ async function fetchCategorySuggestions(
       return [];
     }
 
-    const json = await resp.json();
+    const respText = await resp.text();
+    let json: any;
+    try {
+      json = JSON.parse(respText);
+    } catch {
+      console.error(`category-lookup: getCategorySuggestions JSON parse failed (length=${respText.length}):`, respText.slice(0, 200));
+      return [];
+    }
     const suggestions = json.categorySuggestions || [];
 
     return suggestions.map((s: any) => {
@@ -356,7 +370,14 @@ async function fetchItemAspects(
       return [];
     }
 
-    const json = await resp.json();
+    const respText = await resp.text();
+    let json: any;
+    try {
+      json = JSON.parse(respText);
+    } catch {
+      console.error(`category-lookup: getItemAspectsForCategory(${categoryId}) JSON parse failed (length=${respText.length}):`, respText.slice(0, 200));
+      return [];
+    }
     const aspects = json.aspects || [];
 
     return aspects.map((a: any) => {
@@ -398,7 +419,14 @@ async function verifyCategoryLeafActive(
       return { isLeaf: false, isActive: false, categoryName: null };
     }
 
-    const json = await resp.json();
+    const respText = await resp.text();
+    let json: any;
+    try {
+      json = JSON.parse(respText);
+    } catch {
+      console.error(`category-lookup: verifyCategoryLeafActive(${categoryId}) JSON parse failed (length=${respText.length}):`, respText.slice(0, 200));
+      return { isLeaf: false, isActive: false, categoryName: null };
+    }
     const node = json?.categorySubtreeNode;
 
     // EA-P1-A: Require positive confirmation of valid node — missing/null = not leaf
@@ -441,7 +469,14 @@ async function fetchBreadcrumb(
     }
     if (!resp.ok) break;
 
-    const json = await resp.json();
+    const breadcrumbText = await resp.text();
+    let json: any;
+    try {
+      json = JSON.parse(breadcrumbText);
+    } catch {
+      console.error(`category-lookup: fetchBreadcrumb(${currentId}) JSON parse failed (length=${breadcrumbText.length})`);
+      break;
+    }
     const node = json.categorySubtreeNode || json.categoryNode;
     if (!node?.category) break;
 
@@ -506,7 +541,14 @@ Example response:
       return null;
     }
 
-    const data = await resp.json();
+    const respText = await resp.text();
+    let data: any;
+    try {
+      data = JSON.parse(respText);
+    } catch {
+      console.error(`category-lookup: Gemini JSON parse failed (length=${respText.length}):`, respText.slice(0, 200));
+      return null;
+    }
     const text = data.choices?.[0]?.message?.content ?? "";
 
     const jsonMatch = text.match(/\{[^}]+\}/);
@@ -1473,7 +1515,22 @@ export async function handleRequest(req: Request): Promise<Response> {
           );
         }
 
-        const data = await resp.json();
+        const dataText = await resp.text();
+        let data: any;
+        try {
+          data = JSON.parse(dataText);
+        } catch {
+          console.error(`category-lookup: conditions JSON parse failed (length=${dataText.length}):`, dataText.slice(0, 200));
+          return new Response(
+            JSON.stringify({
+              categoryId: cid,
+              conditions: [],
+              source: "ebay_api",
+              error: `Invalid JSON in eBay response (length=${dataText.length})`,
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
         const policies = data?.itemConditionPolicies || [];
 
         if (policies.length === 0) {

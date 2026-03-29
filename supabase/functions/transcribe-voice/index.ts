@@ -82,7 +82,14 @@ serve(async (req) => {
       throw new Error(`Transcription failed: ${response.status}`);
     }
 
-    const data = await response.json();
+    let data: any;
+    try {
+      const respText = await response.text();
+      data = JSON.parse(respText);
+    } catch (e) {
+      console.error("Transcription parse error:", e);
+      throw new Error(`Transcription response parse failed: ${e}`);
+    }
     const usage = data.usage;
     const transcript = data.choices?.[0]?.message?.content?.trim() || "";
 

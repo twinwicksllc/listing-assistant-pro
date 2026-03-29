@@ -93,7 +93,14 @@ async function fetchMarketData(title: string, categoryId?: string | null): Promi
       return null;
     }
 
-    const data = await resp.json();
+    let data: any;
+    try {
+      const respText = await resp.text();
+      data = JSON.parse(respText);
+    } catch {
+      console.warn(`[optimize-listing] keyword-research JSON parse error`);
+      return null;
+    }
     if (data.error) return null;
 
     return {

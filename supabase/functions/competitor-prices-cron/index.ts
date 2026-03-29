@@ -36,7 +36,14 @@ async function fetchActiveListings(
     return [];
   }
 
-  const profiles = await profileResp.json();
+  let profiles: any;
+  try {
+    const respText = await profileResp.text();
+    profiles = JSON.parse(respText);
+  } catch (e) {
+    console.warn(`[cron] Failed to parse profile response for user ${userId}: ${e}`);
+    return [];
+  }
   const token = profiles?.[0]?.ebay_access_token;
   if (!token) {
     console.log(`[cron] No eBay token for user ${userId}, skipping`);
@@ -65,7 +72,14 @@ async function fetchActiveListings(
     return [];
   }
 
-  const data = await listingsResp.json();
+  let data: any;
+  try {
+    const respText = await listingsResp.text();
+    data = JSON.parse(respText);
+  } catch (e) {
+    console.warn(`[cron] Failed to parse ebay-listings response for user ${userId}: ${e}`);
+    return [];
+  }
   const listings = data?.listings ?? [];
 
   return listings
@@ -108,7 +122,14 @@ async function refreshCompetitorData(
       return false;
     }
 
-    const result = await resp.json();
+    let result: any;
+    try {
+      const respText = await resp.text();
+      result = JSON.parse(respText);
+    } catch (e) {
+      console.warn(`[cron] Failed to parse competitor-search response for listing ${listing.listingId}: ${e}`);
+      return false;
+    }
     if (result.error) {
       console.warn(`[cron] competitor-search error for listing ${listing.listingId}:`, result.error);
       return false;

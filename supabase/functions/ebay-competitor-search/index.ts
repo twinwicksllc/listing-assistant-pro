@@ -112,15 +112,35 @@ async function fetchEbayCompetitors(params: {
   const url = `${baseUrl}?${queryParams.toString()}`;
   console.log(`[ebay-competitor-search] Searching: "${searchQuery}" (category: ${categoryId ?? "any"})`);
 
-  const resp = await fetch(url, {
-    headers: { "Accept": "application/json" },
-  });
+  // Retry once on 5xx server errors with a 1.5s delay
+  let resp: Response | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    resp = await fetch(url, {
+      headers: { "Accept": "application/json" },
+    });
 
-  if (!resp.ok) {
-    throw new Error(`eBay Finding API error: ${resp.status} ${await resp.text()}`);
+    if (resp.ok || resp.status < 500) break; // success or client error — don't retry
+
+    if (attempt === 0) {
+      console.warn(`[ebay-competitor-search] eBay returned ${resp.status} — retrying in 1.5s`);
+      await new Promise(r => setTimeout(r, 1500));
+    }
   }
 
-  const json = await resp.json();
+  if (!resp!.ok) {
+    const errBody = await resp!.text().catch(() => "(could not read body)");
+    throw new Error(`eBay Finding API error: ${resp!.status} ${errBody}`);
+  }
+
+  // Safe JSON parsing — guard against truncated responses
+  const respText = await resp!.text();
+  let json: any;
+  try {
+    json = JSON.parse(respText);
+  } catch (parseErr) {
+    console.error(`[ebay-competitor-search] JSON parse failed (body length=${respText.length}):`, respText.slice(0, 300));
+    throw new Error(`eBay Finding API returned invalid JSON (length=${respText.length})`);
+  }
 
   // Navigate eBay's deeply nested Finding API response structure
   const searchResult =

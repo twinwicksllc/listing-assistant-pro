@@ -843,9 +843,9 @@ const CONDITION_ID_MAP: Record<string, number> = {
   EXCELLENT_REFURBISHED: 3000,
   VERY_GOOD_REFURBISHED: 4000,
   GOOD_REFURBISHED: 5000,
-  PRE_OWNED_GOOD: 3000,
-  PRE_OWNED_FAIR: 5000,
-  PRE_OWNED_POOR: 6000,
+  PRE_OWNED_GOOD: 5000,
+  PRE_OWNED_FAIR: 6000,
+  PRE_OWNED_POOR: 7000,
 };
 
 const CONDITION_DESCRIPTIONS: Record<string, string> = {
@@ -876,13 +876,13 @@ const CONDITION_DESCRIPTIONS: Record<string, string> = {
 };
 
 const LEGACY_CONDITION_MAP: Record<string, string> = {
-  // Map old *_REFURBISHED and PRE_OWNED_* to correct USED_* for coin categories
+  // Map old *_REFURBISHED and PRE_OWNED_* to correct USED_* equivalents
   EXCELLENT_REFURBISHED: "USED_EXCELLENT",
   VERY_GOOD_REFURBISHED: "USED_VERY_GOOD",
   GOOD_REFURBISHED: "USED_GOOD",
-  PRE_OWNED_GOOD: "USED_EXCELLENT",
-  PRE_OWNED_FAIR: "USED_GOOD",
-  PRE_OWNED_POOR: "USED_ACCEPTABLE",
+  PRE_OWNED_GOOD: "USED_GOOD",
+  PRE_OWNED_FAIR: "USED_ACCEPTABLE",
+  PRE_OWNED_POOR: "FOR_PARTS_OR_NOT_WORKING",
 };
 
 // Condition normalization now uses both hardcoded fallback sets (from top of file)
@@ -926,9 +926,9 @@ function normalizeConditionForCategory(
         EXCELLENT_REFURBISHED: "USED_EXCELLENT",
         VERY_GOOD_REFURBISHED: "USED_VERY_GOOD",
         GOOD_REFURBISHED: "USED_GOOD",
-        PRE_OWNED_GOOD: "USED_EXCELLENT",
-        PRE_OWNED_FAIR: "USED_GOOD",
-        PRE_OWNED_POOR: "USED_ACCEPTABLE",
+        PRE_OWNED_GOOD: "USED_GOOD",
+        PRE_OWNED_FAIR: "USED_ACCEPTABLE",
+        PRE_OWNED_POOR: "FOR_PARTS_OR_NOT_WORKING",
       };
       const mapped = fallbackMap[condition] ?? "USED_EXCELLENT";
       console.log(`normalizeConditionForCategory: coin category ${categoryId} — ${condition} -> ${mapped}`);
@@ -952,8 +952,8 @@ function normalizeConditionForCategory(
         USED_VERY_GOOD:        "VERY_GOOD",
         USED_GOOD:             "GOOD",
         USED_ACCEPTABLE:       "ACCEPTABLE",
-        PRE_OWNED_GOOD:        "LIKE_NEW",
-        PRE_OWNED_FAIR:        "GOOD",
+        PRE_OWNED_GOOD:        "GOOD",
+        PRE_OWNED_FAIR:        "ACCEPTABLE",
         PRE_OWNED_POOR:        "ACCEPTABLE",
         SELLER_REFURBISHED:    "GOOD",
         FOR_PARTS_OR_NOT_WORKING: "ACCEPTABLE",
@@ -973,8 +973,8 @@ function normalizeConditionForCategory(
         USED_VERY_GOOD:        "VERY_GOOD",
         USED_GOOD:             "GOOD",
         USED_ACCEPTABLE:       "ACCEPTABLE",
-        PRE_OWNED_GOOD:        "LIKE_NEW",
-        PRE_OWNED_FAIR:        "GOOD",
+        PRE_OWNED_GOOD:        "GOOD",
+        PRE_OWNED_FAIR:        "ACCEPTABLE",
         PRE_OWNED_POOR:        "ACCEPTABLE",
         SELLER_REFURBISHED:    "GOOD",
         FOR_PARTS_OR_NOT_WORKING: "ACCEPTABLE",

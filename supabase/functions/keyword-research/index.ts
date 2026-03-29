@@ -64,7 +64,13 @@ async function getEbayAppToken(): Promise<string> {
     throw new Error(`Failed to get eBay token: ${resp.status}`);
   }
 
-  const data = await resp.json();
+  let data: any;
+  try {
+    const respText = await resp.text();
+    data = JSON.parse(respText);
+  } catch {
+    throw new Error(`Failed to parse eBay token response`);
+  }
   return data.access_token;
 }
 
@@ -113,7 +119,14 @@ async function browseSearch(params: {
     return { prices: [], count: 0, total: 0, topItems: [] };
   }
 
-  const json = await resp.json();
+  let json: any;
+  try {
+    const respText = await resp.text();
+    json = JSON.parse(respText);
+  } catch {
+    console.error(`[keyword-research] Browse API JSON parse error`);
+    return { prices: [], count: 0, total: 0, topItems: [] };
+  }
   const items = json?.itemSummaries ?? [];
   // `total` is the overall count across all pages, not just this page
   const total = json?.total ?? items.length;
