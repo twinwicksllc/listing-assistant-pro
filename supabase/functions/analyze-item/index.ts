@@ -1119,6 +1119,21 @@ Seller's note: "${voiceNote}"`;
           }
         }
       }
+    } else if (listing.metalType && listing.metalType !== "none" && listing.metalWeightOz <= 0) {
+      // SAFETY NET: If metalType is detected but weight is missing/zero, enforce conservative minimum
+      // This prevents Gemini from pricing gold coins at $8 when weight extraction fails
+      const minPrice =
+        listing.metalType === "gold" ? 100 :
+        listing.metalType === "silver" ? 20 :
+        listing.metalType === "platinum" ? 150 : 0;
+      
+      if (minPrice > 0 && listing.priceMin < minPrice) {
+        console.warn(`⚠️ SAFETY NET: ${listing.metalType} detected but metalWeightOz=${listing.metalWeightOz}. Enforcing minimum price $${minPrice} (was $${listing.priceMin})`);
+        listing.priceMin = minPrice;
+        if (listing.priceMax < minPrice) {
+          listing.priceMax = parseFloat((minPrice * 1.5).toFixed(2));
+        }
+      }
     }
     // --- End melt value enforcement ---
 

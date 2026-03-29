@@ -71,7 +71,7 @@ function allowedValuesBlock(ctx: PromptContext): string {
 
 function buildCoinBullionPrompt(ctx: PromptContext): string {
   const spotLine = ctx.spotPrices
-    ? `- Current spot: Gold $${ctx.spotPrices.gold.toFixed(2)}/oz | Silver $${ctx.spotPrices.silver.toFixed(2)}/oz | Platinum $${ctx.spotPrices.platinum.toFixed(2)}/oz\n- Melt floor: (spot × weight_troy_oz × 1.19) — never price below this.`
+    ? `- Current spot: Gold $${ctx.spotPrices.gold.toFixed(2)}/oz | Silver $${ctx.spotPrices.silver.toFixed(2)}/oz | Platinum $${ctx.spotPrices.platinum.toFixed(2)}/oz\n- **CRITICAL WEIGHT RULES**: For any gold/silver/platinum coin or bullion, ALWAYS populate metalWeightOz and metalType. Use these reference weights:\n  • US Gold Eagles: $5=0.1209oz Au | $10=0.2419oz Au | $25=0.6044oz Au | $50=1.209oz Au\n  • US Silver Eagles: 1oz Ag\n  • Gold Sovereigns (British): 0.2354oz Au\n  • Pre-1933 US Gold: $20 Double Eagle=0.9675oz Au (90% = 0.871oz fine)\n  • If coin type is recognizable but weight not visible, use standard weight for that coin. NEVER leave metalWeightOz as 0 for precious metals.\n- Melt floor: (spot × weight_troy_oz × 1.19) — never price below this.`
     : "";
 
   return `You are a professional Numismatist and eBay Listing Expert specializing in coins, currency, and bullion.
