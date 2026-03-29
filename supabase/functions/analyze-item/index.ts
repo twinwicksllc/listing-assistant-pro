@@ -596,7 +596,7 @@ serve(async (req: Request) => {
         voiceNote: voiceNote || undefined,
         suggestedCategoryId: lockedCategoryId ?? undefined,
         suggestedCategoryName: lockedCategoryName ?? undefined,
-        spotPrices: identification.isMetal
+        spotPrices: (identification.isMetal || identification.metalType !== "none")
           ? { gold: spotGold, silver: spotSilver, platinum: spotPlatinum }
           : undefined,
         metalType: identification.metalType,
