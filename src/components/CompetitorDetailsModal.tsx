@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { X, RefreshCw, TrendingUp, TrendingDown, Minus, ExternalLink, Users, DollarSign, BarChart2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { X, RefreshCw, TrendingUp, TrendingDown, Minus, ExternalLink, Users, DollarSign, BarChart2, Lock, Star } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -13,6 +13,25 @@ interface CompetitorPriceSnapshot {
   competitorCount: number;
   priceDistribution: { min: number; max: number; count: number }[];
   fetchedAt: string;
+}
+
+interface ComparableListing {
+  itemId: string;
+  title: string;
+  price: number;
+  sellerInfo: {
+    name: string;
+    rating: number;
+    ratingCount: number;
+  };
+  condition: string;
+  shipping: {
+    cost: number;
+    free: boolean;
+  };
+  url: string;
+  comparabilityScore: number;
+  reason: string;
 }
 
 interface CompetitorDetailsModalProps {
@@ -36,8 +55,20 @@ export function CompetitorDetailsModal({
   onClose,
   onRefreshed,
 }: CompetitorDetailsModalProps) {
-  const { user } = useAuth();
+  const { user, isPro, isShop } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingComparable, setLoadingComparable] = useState(false);
+  const [comparable, setComparable] = useState<ComparableListing[]>([]);
+  const [activeTab, setActiveTab] = useState<"prices" | "comparable">("prices");
+
+  const canSeeComparable = isPro || isShop;
+
+  // Load comparable listings when modal opens (for Pro/Shop users)
+  useEffect(() => {
+    if (canSeeComparable && comparable.length === 0 && !loadingComparable) {
+      loadComparableListings();
+    }
+  }, [canSeeComparable]);
 
   const handleRefresh = async () => {
     if (!user?.id || refreshing) return;
@@ -72,10 +103,42 @@ export function CompetitorDetailsModal({
       });
 
       toast.success("Competitor prices updated");
+
+      // Also load comparable listings for paid users
+      if (canSeeComparable) {
+        await loadComparableListings();
+      }
     } catch {
       toast.error("Failed to refresh competitor prices");
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  const loadComparableListings = async () => {
+    if (!user?.id || !canSeeComparable) return;
+    setLoadingComparable(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "filter-comparable-listings",
+        {
+          body: { userId: user.id, title, categoryId },
+        }
+      );
+
+      if (error || data?.error) {
+        console.warn("Could not load comparable listings:", data?.error);
+        setComparable([]);
+        return;
+      }
+
+      setComparable(data.comparable || []);
+    } catch (err) {
+      console.error("Failed to load comparable listings:", err);
+      setComparable([]);
+    } finally {
+      setLoadingComparable(false);
     }
   };
 
@@ -138,7 +201,40 @@ export function CompetitorDetailsModal({
           </button>
         </div>
 
-        <div className="p-5 space-y-5">
+        {/* Tabs (for Pro/Shop users) */}
+        {canSeeComparable && (
+          <div className="flex border-b border-border bg-secondary/30">
+            <button
+              onClick={() => setActiveTab("prices")}
+              className={`flex-1 py-3 px-4 text-xs font-medium transition-colors ${
+                activeTab === "prices"
+                  ? "text-primary border-b-2 border-primary bg-secondary/50"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <div className="flex items-center justify-center gap-1">
+                <BarChart2 className="w-3.5 h-3.5" />
+                Price Stats
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab("comparable")}
+              className={`flex-1 py-3 px-4 text-xs font-medium transition-colors ${
+                activeTab === "comparable"
+                  ? "text-primary border-b-2 border-primary bg-secondary/50"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <div className="flex items-center justify-center gap-1">
+                <Users className="w-3.5 h-3.5" />
+                Comparable ({comparable.length})
+              </div>
+            </button>
+          </div>
+        )}
+
+        <div className="p-5 space-y-5 max-h-[calc(90vh-180px)] overflow-y-auto">{activeTab === "prices" && (
+          <>
           {/* Your price vs market */}
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-secondary/50 rounded-xl p-3 space-y-0.5">
@@ -266,6 +362,100 @@ export function CompetitorDetailsModal({
               </button>
             </div>
           </div>
+          </>
+        )}
+
+        {activeTab === "comparable" && (
+          <div className="space-y-3">
+            {/* Pro/Shop only badge */}
+            {!canSeeComparable && (
+              <div className="bg-primary/10 border border-primary/30 rounded-lg p-3 text-center">
+                <div className="flex items-center justify-center gap-2 mb-1">
+                  <Lock className="w-3.5 h-3.5 text-primary" />
+                  <p className="text-xs font-medium text-primary">Pro & Shop only</p>
+                </div>
+                <p className="text-[10px] text-primary/70">
+                  Upgrade to see AI-filtered comparable listings that are truly comparable for pricing
+                </p>
+              </div>
+            )}
+
+            {canSeeComparable && (
+              <>
+                {loadingComparable ? (
+                  <div className="text-center py-8">
+                    <RefreshCw className="w-5 h-5 text-muted-foreground animate-spin mx-auto mb-2" />
+                    <p className="text-xs text-muted-foreground">Analyzing comparable listings with AI...</p>
+                  </div>
+                ) : comparable.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Users className="w-5 h-5 text-muted-foreground mx-auto mb-2 opacity-50" />
+                    <p className="text-xs text-muted-foreground">No truly comparable listings found</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                      AI-Filtered Comparable Listings
+                    </p>
+                    {comparable.map((listing) => (
+                      <a
+                        key={listing.itemId}
+                        href={listing.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block bg-secondary/50 hover:bg-secondary border border-border hover:border-primary rounded-lg p-3 transition-colors group"
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-xs font-medium text-foreground line-clamp-2 group-hover:text-primary transition-colors">
+                              {listing.title}
+                            </h3>
+                            <p className="text-[10px] text-muted-foreground mt-1">
+                              Seller: {listing.sellerInfo.name}
+                            </p>
+                          </div>
+                          <ExternalLink className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                        </div>
+
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-sm font-bold text-primary">${listing.price.toFixed(2)}</p>
+                          {listing.shipping.free && (
+                            <span className="text-[10px] bg-green-500/20 text-green-700 px-2 py-1 rounded">
+                              Free shipping
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Comparability score */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1">
+                            <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
+                            <span className="text-[10px] text-muted-foreground">
+                              {listing.comparabilityScore}% match
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-muted-foreground">
+                              {listing.sellerInfo.rating.toFixed(0)}%
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">
+                              ({listing.sellerInfo.ratingCount})
+                            </span>
+                          </div>
+                        </div>
+
+                        <p className="text-[9px] text-muted-foreground italic mt-1.5">
+                          {listing.reason}
+                        </p>
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+        
         </div>
       </div>
     </div>
