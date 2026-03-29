@@ -217,8 +217,7 @@ export default function AnalyzePage() {
   };
 
   // Auto-trigger AI analysis on mount — skip the redundant "Generate Listing" step
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { handleGenerate(); }, []);
+  useEffect(() => { handleGenerate(); }, []); // mount-only intentional
 
   if (imageUrls.length === 0) {
     navigate("/home");
