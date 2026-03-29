@@ -299,12 +299,24 @@ Populate as many relevant aspects as possible — more specifics = better eBay s
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export function buildSystemPrompt(domain: Domain, ctx: PromptContext): string {
+  // Sales-oriented guidance appended to all domain prompts
+  const salesGuidance = `
+
+### DESCRIPTION GUIDELINES (eBay Sales Copy)
+Your description is SALES COPY for an eBay listing. It should:
+- Lead with the most compelling aspect of the item (rarity, condition, desirability)
+- Highlight key features and benefits that appeal to buyers
+- Be concise but persuasive — aim to SELL the item, not just describe it
+- Include relevant details buyers need (condition, included items, provenance)
+- Avoid generic filler; every sentence should add value
+- End with a subtle call-to-action when appropriate (e.g., "Great addition to any collection!")`;
+
   switch (domain) {
-    case "coins_bullion":    return buildCoinBullionPrompt(ctx);
-    case "trading_cards":   return buildTradingCardsPrompt(ctx);
-    case "jewelry":         return buildJewelryPrompt(ctx);
-    case "electronics":     return buildElectronicsPrompt(ctx);
-    case "vintage_clothing": return buildVintageClothingPrompt(ctx);
-    default:                return buildGeneralPrompt(ctx);
+    case "coins_bullion":    return buildCoinBullionPrompt(ctx) + salesGuidance;
+    case "trading_cards":   return buildTradingCardsPrompt(ctx) + salesGuidance;
+    case "jewelry":         return buildJewelryPrompt(ctx) + salesGuidance;
+    case "electronics":     return buildElectronicsPrompt(ctx) + salesGuidance;
+    case "vintage_clothing": return buildVintageClothingPrompt(ctx) + salesGuidance;
+    default:                return buildGeneralPrompt(ctx) + salesGuidance;
   }
 }

@@ -306,7 +306,7 @@ serve(async (req: Request) => {
           method: "POST",
           headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
           body: JSON.stringify({
-            model: "gemini-2.0-flash",
+            model: "gemini-2.5-pro",
             response_format: { type: "json_object" },
             messages: [
               {
@@ -583,7 +583,7 @@ Seller's note: "${voiceNote}"`;
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gemini-2.0-flash",
+          model: "gemini-2.5-pro",
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: contentParts },
@@ -615,7 +615,7 @@ Seller's note: "${voiceNote}"`;
                       type: "string",
                       enum: ["NEW", "USED_EXCELLENT", "USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE", "FOR_PARTS_OR_NOT_WORKING"],
                     },
-                    description: { type: "string" },
+                    description: { type: "string", description: "SEO-friendly, sales-oriented eBay description. Highlight key features and benefits that would appeal to buyers. Be concise but compelling to drive buyer interest. Focus on what makes this item desirable." },
                     price: {
                       type: "object",
                       properties: {
@@ -707,7 +707,7 @@ Seller's note: "${voiceNote}"`;
       await svc.from("gemini_usage").insert({
         user_id: userId,
         function_name: "analyze-item",
-        model: "gemini-2.0-flash",
+        model: "gemini-2.5-pro",
         prompt_tokens: usage?.prompt_tokens || 0,
         completion_tokens: usage?.completion_tokens || 0,
         total_tokens: usage?.total_tokens || 0,
