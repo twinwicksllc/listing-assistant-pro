@@ -12,6 +12,8 @@ export function RepriceManagerPanel({ userId }: RepriceManagerPanelProps) {
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [running, setRunning] = useState(false);
   const [ruleCount, setRuleCount] = useState(0);
+  const [lastRunTime, setLastRunTime] = useState<number>(0);
+  const COOLDOWN_MS = 60_000; // Min 1 minute between manual runs
 
   // Load rule count
   const loadRuleCount = async () => {
@@ -29,6 +31,14 @@ export function RepriceManagerPanel({ userId }: RepriceManagerPanelProps) {
       return;
     }
 
+    const now = Date.now();
+    const timeSinceLastRun = now - lastRunTime;
+    if (timeSinceLastRun < COOLDOWN_MS) {
+      const waitSecs = Math.ceil((COOLDOWN_MS - timeSinceLastRun) / 1000);
+      toast.info(`Please wait ${waitSecs}s before running again`);
+      return;
+    }
+
     setRunning(true);
     try {
       const { data, error } = await supabase.functions.invoke("auto-reprice-trigger", {
@@ -40,8 +50,10 @@ export function RepriceManagerPanel({ userId }: RepriceManagerPanelProps) {
       if (data?.error) {
         toast.error(data.error);
       } else if (data?.updated) {
+        setLastRunTime(Date.now());
         toast.success(`Updated ${data.updated} listings`);
       } else {
+        setLastRunTime(Date.now());
         toast.success("Reprice run triggered");
       }
     } catch (e) {
@@ -76,7 +88,8 @@ export function RepriceManagerPanel({ userId }: RepriceManagerPanelProps) {
 
       <button
         onClick={handleManualRun}
-        disabled={running || ruleCount === 0}
+        disabled={running || ruleCount === 0 || (Date.now() - lastRunTime < COOLDOWN_MS)}
+        title={Date.now() - lastRunTime < COOLDOWN_MS ? `Wait ${Math.ceil((COOLDOWN_MS - (Date.now() - lastRunTime)) / 1000)}s before rerunning` : ""}
         className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium bg-amber-500/10 text-amber-700 rounded-lg hover:bg-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors border border-amber-500/30"
       >
         <RotateCw className={`w-4 h-4 ${running ? "animate-spin" : ""}`} />
