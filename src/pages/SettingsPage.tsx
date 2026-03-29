@@ -72,7 +72,7 @@ export default function SettingsPage() {
       if (data?.url) {
         window.open(data.url, "_blank");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(err.message || "Failed to start checkout");
     } finally {
       setCheckoutLoading(null);
@@ -87,7 +87,7 @@ export default function SettingsPage() {
       if (data?.url) {
         window.open(data.url, "_blank");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(err.message || "Failed to open billing portal");
     } finally {
       setPortalLoading(false);
@@ -109,7 +109,7 @@ export default function SettingsPage() {
       if (!authUrl) throw new Error("No auth URL returned");
 
       window.location.href = authUrl;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("eBay connect error:", err);
       toast.error(err.message || "Failed to start eBay connection");
       setConnectingEbay(false);

@@ -52,7 +52,7 @@ export default function PriceRecommenderCard({
       setRecommendation(rec);
       setSelectedSuggestion(rec.recommended);
       setHistogram(data.histogram || []);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("PriceRecommender fetch error:", err);
       // Fallback: build recommendation from AI estimates
       const fallback = buildPriceRecommendation([], condition, priceMin, priceMax, meltValue ?? undefined);

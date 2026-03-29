@@ -55,7 +55,7 @@ export default function AdminPage() {
       if (fnErr) throw new Error(fnErr.message);
       if (result?.error) throw new Error(result.error);
       setData(result);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError(e.message);
     } finally {
       setLoading(false);

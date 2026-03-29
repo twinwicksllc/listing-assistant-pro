@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { initSentry, captureException } from "../_helpers/sentry.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -193,6 +194,8 @@ function median(nums: number[]): number {
 // Main handler
 // ----------------------------------------------------------------
 serve(async (req) => {
+  initSentry();
+  
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -282,6 +285,7 @@ serve(async (req) => {
     );
   } catch (e) {
     console.error("ebay-pricing error:", e);
+    captureException(e, { function: "ebay-pricing", query });
     return new Response(
       JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

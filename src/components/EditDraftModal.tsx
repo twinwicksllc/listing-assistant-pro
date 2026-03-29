@@ -184,7 +184,7 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
 
     loadPolicies();
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [user?.id]);
 
   // When user types a new category ID, track that it differs from the saved value

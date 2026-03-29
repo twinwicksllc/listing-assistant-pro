@@ -132,7 +132,7 @@ const ALIAS_MAP: Record<string, BulkFieldName> = {
 };
 
 function normalizeKey(header: string): string {
-  return header.toLowerCase().replace(/[\s_\-\.]/g, "");
+  return header.toLowerCase().replace(/[\s_\-.]/g, "");
 }
 
 export function autoDetectMappings(headers: string[]): ColumnMapping[] {

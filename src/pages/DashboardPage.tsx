@@ -289,7 +289,7 @@ function InlinePriceEditor({ listing, onSaved, userToken, userId }: PriceEditorP
         onSaved(listing.offerId, listing.listingId, newPrice);
         setEditing(false);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast.error(`Error: ${e.message}`);
     } finally {
       setSaving(false);
@@ -357,7 +357,7 @@ function BulkPriceModal({ selected, onClose, onSuccess, userToken, userId }: Bul
     for (const l of selected) {
       const k = key(l);
       const base = parseFloat(prices[k] || l.price.toFixed(2));
-      let newVal = adjustMode === "pct" ? base * (1 + adj / 100) : adjustMode === "amount" ? base + adj : adj;
+      const newVal = adjustMode === "pct" ? base * (1 + adj / 100) : adjustMode === "amount" ? base + adj : adj;
       updated[k] = Math.max(0.01, newVal).toFixed(2);
     }
     setPrices(updated);
@@ -387,7 +387,7 @@ function BulkPriceModal({ selected, onClose, onSuccess, userToken, userId }: Bul
       const successfulUpdates = updates.filter((u, i) => results?.[i]?.success !== false);
       onSuccess(successfulUpdates.map((u) => ({ offerId: u.offerId, listingId: u.listingId, newPrice: u.newPrice })));
       if (failCount === 0) onClose();
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast.error(`Error: ${e.message}`);
     } finally {
       setSaving(false);
@@ -672,7 +672,7 @@ export default function DashboardPage() {
       }
 
       // Fetch competitor prices
-      let competitorMap: Record<string, CompetitorPriceSnapshot> = {};
+      const competitorMap: Record<string, CompetitorPriceSnapshot> = {};
       if (user?.id && rawListings.length > 0) {
         try {
           const listingIds = rawListings.map((l) => l.listingId).filter(Boolean) as string[];
@@ -708,7 +708,7 @@ export default function DashboardPage() {
       const { data: userData } = await userPromise;
       if (userData?.username) setEbayAccount({ username: userData.username, businessName: userData.businessName || "" });
       toast.success(`Refreshed! ${enriched.length} listings loaded`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(err.message || "Failed to load listings");
       toast.error("Failed to refresh listings");
     } finally {
