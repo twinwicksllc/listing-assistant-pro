@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { decode as decodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { initSentry, captureException } from "../_helpers/sentry.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1498,6 +1499,8 @@ async function ensureInventoryLocation(
 }
 
 serve(async (req) => {
+  initSentry();
+  
   console.log("*** EBAY-PUBLISH FUNCTION STARTED (v24 - Dynamic category aspects from eBay Taxonomy API, hardcoded rules as fallback) ***");
   
   if (req.method === "OPTIONS") {
@@ -2797,6 +2800,7 @@ serve(async (req) => {
     // (action may be undefined if JSON parsing itself failed)
     const actionLabel = action ?? "unknown";
     console.error(`ebay-publish error [action=${actionLabel}]:`, errorMsg, e instanceof Error ? e.stack : "");
+    captureException(e, { function: "ebay-publish", action: actionLabel });
 
     // Only treat as a 400 client error for explicit configuration/input problems.
     // eBay API error strings (e.g. "Failed to create inventory item: 400 - {...}")

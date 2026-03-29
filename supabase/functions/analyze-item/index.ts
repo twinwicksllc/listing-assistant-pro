@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { initSentry, captureException } from "../_helpers/sentry.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,6 +42,8 @@ function computeNextResetAt(resetDay: number | null): string | null {
 }
 
 serve(async (req: Request) => {
+  initSentry();
+  
   // IMPORTANT: Handle OPTIONS preflight first, before anything else
   if (req.method === "OPTIONS") {
     return new Response(null, {
@@ -1104,7 +1107,8 @@ Seller's note: "${voiceNote}"`;
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
-    console.error("analyze-item error:", e); // Deployed via GitHub Actions
+    console.error("analyze-item error:", e);
+    captureException(e, { function: "analyze-item", userId });
     if (e instanceof Error) {
       console.error("Error message:", e.message);
       console.error("Error stack:", e.stack);
