@@ -843,9 +843,10 @@ const CONDITION_ID_MAP: Record<string, number> = {
   EXCELLENT_REFURBISHED: 3000,
   VERY_GOOD_REFURBISHED: 4000,
   GOOD_REFURBISHED: 5000,
-  PRE_OWNED_GOOD: 5000,
-  PRE_OWNED_FAIR: 6000,
-  PRE_OWNED_POOR: 7000,
+  // Legacy PRE_OWNED_* aliases — kept so old DB records can still publish
+  PRE_OWNED_GOOD: 3000,  // same as USED_EXCELLENT
+  PRE_OWNED_FAIR: 5000,  // same as USED_GOOD
+  PRE_OWNED_POOR: 6000,  // same as USED_ACCEPTABLE
 };
 
 const CONDITION_DESCRIPTIONS: Record<string, string> = {
@@ -866,23 +867,24 @@ const CONDITION_DESCRIPTIONS: Record<string, string> = {
   VERY_GOOD: "Item in very good condition with minor wear.",
   GOOD: "Item in good condition with moderate wear.",
   ACCEPTABLE: "Item in acceptable condition with heavy wear but still functional.",
-  // Legacy aliases kept for backward compatibility
+  // Legacy aliases — redirect to their USED_* equivalents
   EXCELLENT_REFURBISHED: "Lightly circulated. Shows minimal wear on high points only.",
   VERY_GOOD_REFURBISHED: "Moderately circulated. Major details clear with moderate wear.",
-  GOOD_REFURBISHED: "Heavily circulated. All major features visible but worn.",
-  PRE_OWNED_GOOD: "Pre-owned item in good condition.",
-  PRE_OWNED_FAIR: "Pre-owned item in fair condition.",
-  PRE_OWNED_POOR: "Pre-owned item in poor condition.",
+  GOOD_REFURBISHED: "Moderately circulated. Major details clear with moderate wear.",
+  PRE_OWNED_GOOD: "Lightly circulated. Shows minimal wear on high points only.",
+  PRE_OWNED_FAIR: "Heavily circulated. All major features visible but worn.",
+  PRE_OWNED_POOR: "Heavily worn but identifiable. Outline and major features visible.",
 };
 
 const LEGACY_CONDITION_MAP: Record<string, string> = {
-  // Map old *_REFURBISHED and PRE_OWNED_* to correct USED_* equivalents
+  // Migrate old *_REFURBISHED and PRE_OWNED_* values from DB to USED_* equivalents.
+  // Users no longer select these from the UI — these only handle old stored records.
   EXCELLENT_REFURBISHED: "USED_EXCELLENT",
   VERY_GOOD_REFURBISHED: "USED_VERY_GOOD",
-  GOOD_REFURBISHED: "USED_GOOD",
-  PRE_OWNED_GOOD: "USED_GOOD",
-  PRE_OWNED_FAIR: "USED_ACCEPTABLE",
-  PRE_OWNED_POOR: "FOR_PARTS_OR_NOT_WORKING",
+  GOOD_REFURBISHED: "USED_VERY_GOOD",
+  PRE_OWNED_GOOD: "USED_EXCELLENT",  // "good quality pre-owned" = lightly used, NOT numismatic "Good" (F-12)
+  PRE_OWNED_FAIR: "USED_GOOD",
+  PRE_OWNED_POOR: "USED_ACCEPTABLE",
 };
 
 // Condition normalization now uses both hardcoded fallback sets (from top of file)
@@ -916,6 +918,7 @@ function normalizeConditionForCategory(
       "USED_ACCEPTABLE", // G-4 to G-6 (heavily worn but identifiable)
       "FOR_PARTS_OR_NOT_WORKING", // Damaged/holed/bent only
     ]);
+
     if (!validCoinConditions.has(condition)) {
       const fallbackMap: Record<string, string> = {
         LIKE_NEW: "NEW",
@@ -925,8 +928,8 @@ function normalizeConditionForCategory(
         SELLER_REFURBISHED: "USED_GOOD",
         EXCELLENT_REFURBISHED: "USED_EXCELLENT",
         VERY_GOOD_REFURBISHED: "USED_VERY_GOOD",
-        GOOD_REFURBISHED: "USED_GOOD",
-        PRE_OWNED_GOOD: "USED_GOOD",
+        GOOD_REFURBISHED: "USED_EXCELLENT",
+        PRE_OWNED_GOOD: "USED_EXCELLENT",
         PRE_OWNED_FAIR: "USED_ACCEPTABLE",
         PRE_OWNED_POOR: "FOR_PARTS_OR_NOT_WORKING",
       };

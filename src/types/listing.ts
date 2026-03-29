@@ -26,12 +26,9 @@ export type PublishStatus = "draft" | "publishing" | "published" | "failed";
 
 // ----------------------------------------------------------------
 // eBay condition mapping
-// As of 2024, eBay deprecated USED_EXCELLENT/USED_VERY_GOOD/USED_GOOD/USED_ACCEPTABLE.
-// Current valid ConditionEnum values for pre-owned items:
-//   PRE_OWNED_GOOD  -> replaces USED_EXCELLENT and USED_VERY_GOOD
-//   PRE_OWNED_FAIR  -> replaces USED_GOOD
-//   PRE_OWNED_POOR  -> replaces USED_ACCEPTABLE
-// We store the current enum strings internally and map to numeric conditionId at publish time.
+// USED_* is the correct family for coins/paper money and general used items.
+// PRE_OWNED_* was briefly used but proved ambiguous (same names as unrelated grades).
+// We use USED_* internally; all dropdowns expose USED_* directly.
 // Reference: https://developer.ebay.com/api-docs/sell/inventory/types/slr:ConditionEnum
 // ----------------------------------------------------------------
 export const EBAY_CONDITION_ID_MAP: Record<string, number> = {
@@ -40,31 +37,34 @@ export const EBAY_CONDITION_ID_MAP: Record<string, number> = {
   NEW_OTHER: 1500,                  // New Other (without tags)
   NEW_WITH_DEFECTS: 1750,           // New with defects
   CERTIFIED_REFURBISHED: 2000,
-  EXCELLENT_REFURBISHED: 2010,
-  VERY_GOOD_REFURBISHED: 2020,
-  GOOD_REFURBISHED: 2030,
   SELLER_REFURBISHED: 2500,
-  PRE_OWNED_GOOD: 3000,             // replaces USED_EXCELLENT / USED_VERY_GOOD
-  PRE_OWNED_FAIR: 5000,             // replaces USED_GOOD
-  PRE_OWNED_POOR: 6000,             // replaces USED_ACCEPTABLE
+  USED_EXCELLENT: 3000,             // AU-50 to XF-45 (lightly circulated)
+  USED_VERY_GOOD: 4000,             // VF-20 to VF-35 (moderately circulated)
+  USED_GOOD: 5000,                  // F-12 to VG-10 (heavily circulated)
+  USED_ACCEPTABLE: 6000,            // G-4 to G-6 (heavily worn)
   FOR_PARTS_OR_NOT_WORKING: 7000,
 };
 
 // Human-readable labels for condition values
 export const CONDITION_LABELS: Record<string, string> = {
-  NEW: "New",
+  NEW: "New / Uncirculated",
   LIKE_NEW: "Like New",
   NEW_OTHER: "New Other (without tags)",
   NEW_WITH_DEFECTS: "New with Defects",
   CERTIFIED_REFURBISHED: "Certified Refurbished",
-  EXCELLENT_REFURBISHED: "Excellent – Refurbished",
-  VERY_GOOD_REFURBISHED: "Very Good – Refurbished",
-  GOOD_REFURBISHED: "Good – Refurbished",
   SELLER_REFURBISHED: "Seller Refurbished",
-  PRE_OWNED_GOOD: "Pre-Owned – Good",
-  PRE_OWNED_FAIR: "Pre-Owned – Fair",
-  PRE_OWNED_POOR: "Pre-Owned – Poor",
+  USED_EXCELLENT: "Used – Excellent (lightly used/circulated)",
+  USED_VERY_GOOD: "Used – Very Good (moderate wear)",
+  USED_GOOD: "Used – Good (heavy wear)",
+  USED_ACCEPTABLE: "Used – Acceptable (significant wear)",
   FOR_PARTS_OR_NOT_WORKING: "For Parts or Not Working",
+  // Legacy value labels — kept so old DB records still display correctly
+  PRE_OWNED_GOOD: "Used – Excellent (lightly used/circulated)",
+  PRE_OWNED_FAIR: "Used – Acceptable (significant wear)",
+  PRE_OWNED_POOR: "For Parts or Not Working",
+  EXCELLENT_REFURBISHED: "Used – Excellent (lightly used/circulated)",
+  VERY_GOOD_REFURBISHED: "Used – Very Good (moderate wear)",
+  GOOD_REFURBISHED: "Used – Good (heavy wear)",
 };
 
 export interface ListingDraft {

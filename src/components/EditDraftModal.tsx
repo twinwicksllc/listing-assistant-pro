@@ -29,22 +29,19 @@ interface Policies {
 }
 
 // eBay-approved conditions (Inventory API)
-// All conditions below are valid for most categories. Some categories (e.g., coins)
-// may have restrictions and auto-correct to valid alternatives on publish.
+// USED_* is the correct family for coins and general used items.
 // See: https://developer.ebay.com/api-docs/sell/inventory/types/slr:ConditionEnum
 const CONDITIONS = [
-  { value: "NEW",                      label: "New" },
+  { value: "NEW",                      label: "New / Uncirculated" },
   { value: "LIKE_NEW",                 label: "Like New" },
   { value: "NEW_OTHER",                label: "New Other (without tags)" },
   { value: "NEW_WITH_DEFECTS",         label: "New with Defects" },
+  { value: "USED_EXCELLENT",           label: "Used – Excellent (lightly used/circulated)" },
+  { value: "USED_VERY_GOOD",           label: "Used – Very Good (moderate wear)" },
+  { value: "USED_GOOD",                label: "Used – Good (heavy wear)" },
+  { value: "USED_ACCEPTABLE",          label: "Used – Acceptable (significant wear)" },
   { value: "CERTIFIED_REFURBISHED",    label: "Certified Refurbished" },
-  { value: "EXCELLENT_REFURBISHED",    label: "Excellent – Refurbished" },
-  { value: "VERY_GOOD_REFURBISHED",    label: "Very Good – Refurbished" },
-  { value: "GOOD_REFURBISHED",         label: "Good – Refurbished" },
   { value: "SELLER_REFURBISHED",       label: "Seller Refurbished" },
-  { value: "PRE_OWNED_GOOD",           label: "Pre-Owned – Good" },
-  { value: "PRE_OWNED_FAIR",           label: "Pre-Owned – Fair" },
-  { value: "PRE_OWNED_POOR",           label: "Pre-Owned – Poor" },
   { value: "FOR_PARTS_OR_NOT_WORKING", label: "For Parts or Not Working" },
 ];
 
@@ -72,7 +69,7 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
   const [auctionDuration, setAuctionDuration] = useState<AuctionDuration>(
     draft.auctionDuration ?? "Days_7"
   );
-  const [condition, setCondition]       = useState(draft.condition ?? "PRE_OWNED_GOOD");
+  const [condition, setCondition]       = useState(draft.condition ?? "USED_EXCELLENT");
   const [consignor, setConsignor]       = useState(draft.consignor ?? "");
   const [cogs, setCogs]                 = useState<number | undefined>(draft.cogs);
   const [ebayCategoryId, setEbayCategoryId] = useState(draft.ebayCategoryId ?? "");

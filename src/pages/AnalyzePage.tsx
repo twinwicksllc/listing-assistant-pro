@@ -39,7 +39,7 @@ export default function AnalyzePage() {
   const [ebayCategoryId, setEbayCategoryId] = useState<string>("");
   const [suggestedCategories, setSuggestedCategories] = useState<Array<{ categoryId: string; categoryName: string; reason: string; breadcrumb?: string }>>([]);
   const [itemSpecifics, setItemSpecifics] = useState<ItemSpecifics>({});
-  const [condition, setCondition] = useState<string>("PRE_OWNED_GOOD");
+  const [condition, setCondition] = useState<string>("USED_EXCELLENT");
   const [exportPlatform, setExportPlatform] = useState<ExportPlatform>("ebay_file_exchange");
   const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
   const [suggestedGrade, setSuggestedGrade] = useState<string>("");
@@ -179,7 +179,7 @@ export default function AnalyzePage() {
       setIsCustomCategoryMode(false);
       setSuggestedCategories(data.suggestedCategories || []);
       setItemSpecifics(data.itemSpecifics || {});
-      setCondition(data.condition || "PRE_OWNED_GOOD");
+      setCondition(data.condition || "USED_EXCELLENT");
       setSuggestedGrade(data.suggestedGrade || "");
       setGradingRationale(data.gradingRationale || "");
       setIsSlabbed(data.isSlabbed ?? false);
@@ -707,18 +707,16 @@ export default function AnalyzePage() {
                     onChange={(e) => setCondition(e.target.value)}
                     className="text-xs text-foreground bg-transparent border-none focus:outline-none cursor-pointer text-right"
                   >
-                    <option value="NEW">New</option>
+                    <option value="NEW">New / Uncirculated</option>
                     <option value="LIKE_NEW">Like New</option>
                     <option value="NEW_OTHER">New Other (without tags)</option>
                     <option value="NEW_WITH_DEFECTS">New with Defects</option>
+                    <option value="USED_EXCELLENT">Used – Excellent (lightly used/circulated)</option>
+                    <option value="USED_VERY_GOOD">Used – Very Good (moderate wear)</option>
+                    <option value="USED_GOOD">Used – Good (heavy wear)</option>
+                    <option value="USED_ACCEPTABLE">Used – Acceptable (significant wear)</option>
                     <option value="CERTIFIED_REFURBISHED">Certified Refurbished</option>
-                    <option value="EXCELLENT_REFURBISHED">Excellent – Refurbished</option>
-                    <option value="VERY_GOOD_REFURBISHED">Very Good – Refurbished</option>
-                    <option value="GOOD_REFURBISHED">Good – Refurbished</option>
                     <option value="SELLER_REFURBISHED">Seller Refurbished</option>
-                    <option value="PRE_OWNED_GOOD">Pre-Owned – Good</option>
-                    <option value="PRE_OWNED_FAIR">Pre-Owned – Fair</option>
-                    <option value="PRE_OWNED_POOR">Pre-Owned – Poor</option>
                     <option value="FOR_PARTS_OR_NOT_WORKING">For Parts or Not Working</option>
                   </select>
                 </div>

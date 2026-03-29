@@ -71,7 +71,7 @@ export function validateRow(row: BulkRow): BulkRowState {
   } else if (!VALID_CONDITIONS.includes(row.condition.trim().toUpperCase())) {
     errors.push({
       field: "condition",
-      message: `Invalid condition "${row.condition}". Use: NEW, PRE_OWNED_GOOD, PRE_OWNED_FAIR, etc.`,
+      message: `Invalid condition "${row.condition}". Use: NEW, USED_EXCELLENT, USED_VERY_GOOD, USED_GOOD, USED_ACCEPTABLE, etc.`,
       severity: "error",
     });
   }
@@ -161,8 +161,8 @@ export function rawToBulkRow(
   }
 
   // Normalize condition to uppercase
-  const rawCondition = (raw.condition || "PRE_OWNED_GOOD").trim().toUpperCase();
-  const condition = VALID_CONDITIONS.includes(rawCondition) ? rawCondition : "PRE_OWNED_GOOD";
+  const rawCondition = (raw.condition || "USED_EXCELLENT").trim().toUpperCase();
+  const condition = VALID_CONDITIONS.includes(rawCondition) ? rawCondition : "USED_EXCELLENT";
 
   // Normalize format
   const rawFormat = (raw.format || "FIXED_PRICE").trim().toUpperCase();

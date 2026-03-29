@@ -9,7 +9,7 @@ export const BULK_TEMPLATES: Record<BulkTemplateId, BulkTemplate> = {
     icon: "🪙",
     description: "US & world coins, silver/gold bullion, paper currency",
     defaultCategoryId: "11116",
-    defaultCondition: "PRE_OWNED_GOOD",
+    defaultCondition: "USED_EXCELLENT",
     columns: [
       "title", "condition", "price", "quantity", "categoryId",
       "imageUrl1", "imageUrl2",
@@ -18,7 +18,7 @@ export const BULK_TEMPLATES: Record<BulkTemplateId, BulkTemplate> = {
     sampleRows: [
       {
         title: "1921 Morgan Silver Dollar MS-63 Uncirculated",
-        condition: "PRE_OWNED_GOOD",
+        condition: "USED_EXCELLENT",
         price: "89.99",
         quantity: "1",
         categoryId: "39464",
@@ -32,7 +32,7 @@ export const BULK_TEMPLATES: Record<BulkTemplateId, BulkTemplate> = {
       },
       {
         title: "1964 Kennedy Half Dollar BU Roll 20 Coins 90% Silver",
-        condition: "PRE_OWNED_GOOD",
+        condition: "USED_EXCELLENT",
         price: "219.99",
         quantity: "1",
         categoryId: "11116",
@@ -51,7 +51,7 @@ export const BULK_TEMPLATES: Record<BulkTemplateId, BulkTemplate> = {
     icon: "📱",
     description: "Phones, tablets, laptops, accessories, audio equipment",
     defaultCategoryId: "15032",
-    defaultCondition: "PRE_OWNED_GOOD",
+    defaultCondition: "USED_EXCELLENT",
     columns: [
       "title", "condition", "price", "quantity", "categoryId",
       "imageUrl1", "imageUrl2", "imageUrl3",
@@ -60,7 +60,7 @@ export const BULK_TEMPLATES: Record<BulkTemplateId, BulkTemplate> = {
     sampleRows: [
       {
         title: "Apple iPhone 13 128GB Space Gray Unlocked Excellent",
-        condition: "PRE_OWNED_GOOD",
+        condition: "USED_EXCELLENT",
         price: "399.99",
         quantity: "1",
         categoryId: "15032",
@@ -80,7 +80,7 @@ export const BULK_TEMPLATES: Record<BulkTemplateId, BulkTemplate> = {
     icon: "👕",
     description: "Men's, women's, kids clothing, shoes, accessories",
     defaultCategoryId: "11450",
-    defaultCondition: "PRE_OWNED_GOOD",
+    defaultCondition: "USED_EXCELLENT",
     columns: [
       "title", "condition", "price", "quantity", "categoryId",
       "imageUrl1", "imageUrl2",
@@ -89,7 +89,7 @@ export const BULK_TEMPLATES: Record<BulkTemplateId, BulkTemplate> = {
     sampleRows: [
       {
         title: "Nike Air Max 90 White Black Men's Size 10 Running Shoes",
-        condition: "PRE_OWNED_GOOD",
+        condition: "USED_EXCELLENT",
         price: "79.99",
         quantity: "1",
         categoryId: "15709",
@@ -109,7 +109,7 @@ export const BULK_TEMPLATES: Record<BulkTemplateId, BulkTemplate> = {
     icon: "📚",
     description: "Books, magazines, DVDs, vinyl records, video games",
     defaultCategoryId: "267",
-    defaultCondition: "PRE_OWNED_GOOD",
+    defaultCondition: "USED_EXCELLENT",
     columns: [
       "title", "condition", "price", "quantity", "categoryId",
       "imageUrl1",
@@ -118,7 +118,7 @@ export const BULK_TEMPLATES: Record<BulkTemplateId, BulkTemplate> = {
     sampleRows: [
       {
         title: "The Great Gatsby F. Scott Fitzgerald Scribner Paperback",
-        condition: "PRE_OWNED_GOOD",
+        condition: "USED_EXCELLENT",
         price: "8.99",
         quantity: "1",
         categoryId: "267",
@@ -137,7 +137,7 @@ export const BULK_TEMPLATES: Record<BulkTemplateId, BulkTemplate> = {
     icon: "📦",
     description: "Any category — blank template with all fields available",
     defaultCategoryId: "",
-    defaultCondition: "PRE_OWNED_GOOD",
+    defaultCondition: "USED_EXCELLENT",
     columns: [
       "title", "description", "condition", "price", "quantity", "categoryId",
       "format", "imageUrl1", "imageUrl2",
@@ -149,7 +149,7 @@ export const BULK_TEMPLATES: Record<BulkTemplateId, BulkTemplate> = {
       {
         title: "Your Item Title Here (max 80 characters)",
         description: "Optional description — leave blank for AI generation",
-        condition: "PRE_OWNED_GOOD",
+        condition: "USED_EXCELLENT",
         price: "19.99",
         quantity: "1",
         categoryId: "99",

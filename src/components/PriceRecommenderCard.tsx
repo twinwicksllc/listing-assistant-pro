@@ -12,7 +12,7 @@ import type { PriceRecommenderProps } from "@/types/price-recommender";
 
 export default function PriceRecommenderCard({
   title,
-  condition = "PRE_OWNED_GOOD",
+  condition = "USED_EXCELLENT",
   priceMin = 0,
   priceMax = 0,
   metalType = "none",

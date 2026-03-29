@@ -154,7 +154,7 @@ function buildSuggestions(
 
 export function buildPriceRecommendation(
   soldItems: SoldComp[],
-  condition: string = "PRE_OWNED_GOOD",
+  condition: string = "USED_EXCELLENT",
   priceMin: number = 0,
   priceMax: number = 0,
   meltFloor?: number
