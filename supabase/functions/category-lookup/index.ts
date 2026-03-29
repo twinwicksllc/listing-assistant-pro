@@ -1422,6 +1422,111 @@ export async function handleRequest(req: Request): Promise<Response> {
       );
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // ACTION: conditions
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Fetch valid item conditions for a specific category from eBay Metadata API.
+    // Returns array of {conditionId, conditionDescription, conditionHelpText}
+    // Optionally includes condition descriptors for trading card categories.
+    if (action === "conditions") {
+      const cid = (categoryId || "").toString().trim();
+      if (!cid) throw new Error("categoryId required for conditions action");
+
+      const ebayAuth = await getEbayAppToken();
+      if (!ebayAuth) {
+        return new Response(
+          JSON.stringify({
+            categoryId: cid,
+            conditions: [],
+            source: "none",
+            message: "No eBay credentials available"
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      try {
+        // eBay Metadata API: getItemConditionPolicies
+        const filterParam = encodeURIComponent(`categoryIds:{${cid}}`);
+        const url = `${ebayAuth.base}/sell/metadata/v1/marketplace/${MARKETPLACE_ID}/get_item_condition_policies?filter=${filterParam}`;
+
+        console.log(`category-lookup: fetching conditions for category ${cid}`);
+        const resp = await fetch(url, {
+          headers: {
+            "Authorization": `Bearer ${ebayAuth.token}`,
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip",
+          },
+        });
+
+        if (!resp.ok) {
+          const errText = await resp.text();
+          console.error(`category-lookup: conditions API error ${resp.status}: ${errText}`);
+          return new Response(
+            JSON.stringify({
+              categoryId: cid,
+              conditions: [],
+              source: "ebay_api",
+              error: `eBay API error: ${resp.status}`,
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const data = await resp.json();
+        const policies = data?.itemConditionPolicies || [];
+
+        if (policies.length === 0) {
+          return new Response(
+            JSON.stringify({
+              categoryId: cid,
+              conditions: [],
+              source: "ebay_api",
+              message: "No condition policies found for this category"
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Extract the policy for our category
+        const policy = policies.find((p: any) => p.categoryId === cid) || policies[0];
+
+        // Transform conditions into a cleaner format for frontend consumption
+        const conditions = (policy.itemConditions || []).map((cond: any) => ({
+          conditionId: cond.conditionId,
+          conditionDescription: cond.conditionDescription,
+          conditionHelpText: cond.conditionHelpText || null,
+          usage: cond.usage || null,
+          // Include condition descriptors for trading cards if present
+          conditionDescriptors: cond.conditionDescriptors || null,
+        }));
+
+        console.log(`category-lookup: found ${conditions.length} conditions for category ${cid}`);
+
+        return new Response(
+          JSON.stringify({
+            categoryId: cid,
+            categoryName: policy.categoryName || categoryName || null,
+            itemConditionRequired: policy.itemConditionRequired ?? true,
+            conditions: conditions,
+            source: "ebay_api",
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } catch (fetchErr: any) {
+        console.error(`category-lookup: conditions fetch error:`, fetchErr);
+        return new Response(
+          JSON.stringify({
+            categoryId: cid,
+            conditions: [],
+            source: "ebay_api",
+            error: fetchErr.message || "Failed to fetch conditions"
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     throw new Error(`Unknown action: ${action}`);
   } catch (err: any) {
     console.error("category-lookup error:", err);
