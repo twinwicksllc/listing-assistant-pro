@@ -12,6 +12,7 @@ import { CompetitorPriceCard } from "@/components/CompetitorPriceCard";
 import OptimizationQueueWidget from "@/components/OptimizationQueueWidget";
 import ProfitBadge from "@/components/ProfitBadge";
 import { PricingInsightsTable } from "@/components/PricingInsightsTable";
+import { RepriceManagerPanel } from "@/components/RepriceManagerPanel";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDrafts } from "@/hooks/useDrafts";
 import { useNavigate } from "react-router-dom";
@@ -1574,6 +1575,11 @@ export default function DashboardPage() {
               userId={user?.id || ""}
               isLoading={loading}
             />
+          )}
+
+          {/* AUTO-REPRICE MANAGER PANEL */}
+          {listingViewMode === "pricing" && user?.id && (
+            <RepriceManagerPanel userId={user.id} />
           )}
 
           {/* CARD VIEW */}
