@@ -1469,9 +1469,11 @@ export default function DashboardPage() {
             <PricingInsightsTable
               listings={listings.map((l) => ({
                 listingId: l.listingId,
+                offerId: l.offerId,
                 sku: l.sku,
                 title: l.title,
                 price: l.price,
+                currency: l.currency,
                 ebayUrl: l.ebayUrl,
                 competitor: l.competitor,
                 imageUrl: l.imageUrl,
@@ -1540,6 +1542,33 @@ export default function DashboardPage() {
                 setListings((prev) =>
                   prev.map((l) => (l.listingId === listingId ? { ...l, price: newPrice } : l))
                 );
+              }}
+              onApplyPrice={async (listingId, offerId, sku, newPrice, currency) => {
+                if (!ebayToken || !user?.id) {
+                  toast.error("Not connected to eBay");
+                  return;
+                }
+                const listing = listings.find((l) => l.listingId === listingId);
+                const { data, error } = await supabase.functions.invoke("ebay-reprice", {
+                  body: {
+                    action: "single_update",
+                    userToken: ebayToken,
+                    userId: user.id,
+                    offerId,
+                    sku,
+                    listingId,
+                    newPrice,
+                    currency,
+                  },
+                });
+                if (error || !data?.success) {
+                  toast.error(`Could not apply price: ${data?.error || error?.message || "Unknown error"}`);
+                  throw new Error(data?.error || error?.message || "reprice failed");
+                }
+                setListings((prev) =>
+                  prev.map((l) => (l.listingId === listingId ? { ...l, price: newPrice } : l))
+                );
+                toast.success(`Price updated to $${newPrice.toFixed(2)} on eBay`);
               }}
               userToken={ebayToken}
               userId={user?.id || ""}
