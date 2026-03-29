@@ -1507,6 +1507,11 @@ export default function DashboardPage() {
                     }
                     return;
                   }
+                  // Show warning if using stale cache due to rate limiting
+                  if (data?.stale && data?.warning) {
+                    toast.info(data.warning, { duration: 6000 });
+                  }
+                  
                   setListings((prev) =>
                     prev.map((l) =>
                       l.listingId === listingId
