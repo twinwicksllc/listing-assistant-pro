@@ -42,6 +42,10 @@ function computeNextResetAt(resetDay: number | null): string | null {
 }
 
 serve(async (req: Request) => {
+  const startTime = Date.now();
+  const invocationId = crypto.randomUUID().slice(0, 8);
+  console.log(`[${invocationId}] ▶️ analyze-item STARTED`);
+  
   initSentry();
   
   // IMPORTANT: Handle OPTIONS preflight first, before anything else
@@ -53,12 +57,12 @@ serve(async (req: Request) => {
   }
 
   try {
-    console.log("analyze-item: parsing body...");
+    console.log(`[${invocationId}] 📥 Parsing request body...`);
     // Initialize table in background (non-blocking)
-    ensureTableExists().catch((e) => console.warn("Table init error:", e));
+    ensureTableExists().catch((e) => console.warn(`[${invocationId}] Table init error:`, e));
     // Parse body first (can only call req.json() once)
     const body = await req.json();
-    console.log("analyze-item: body parsed, images count =", body.images?.length);
+    console.log(`[${invocationId}] ✓ Body parsed: ${body.images?.length} images, voiceNote=${!!body.voiceNote}`);
 
     // --- Server-side usage limit enforcement ---
     const svc = createClient(
@@ -788,6 +792,14 @@ Seller's note: "${voiceNote}"`;
       listing.priceMax = listing.price.amount;
     }
 
+    console.log(`[${invocationId}] 🎯 Gemini returned:`, {
+      title: listing.title?.slice(0, 60),
+      metalType: listing.metalType,
+      metalWeightOz: listing.metalWeightOz,
+      price: listing.priceMin || listing.price?.amount,
+      condition: listing.condition,
+    });
+
     if (listing.title && listing.title.length > 80) {
       // Truncate at last complete word within 80 chars to avoid cutting mid-word
       listing.title = listing.title.substring(0, 80).replace(/\s+\S*$/, "").trim();
@@ -1100,6 +1112,7 @@ Seller's note: "${voiceNote}"`;
 
     // --- Server-side melt value enforcement ---
     let meltValue: number | null = null;
+    console.log(`[${invocationId}] 💰 Melt check: metalType=${listing.metalType}, weight=${listing.metalWeightOz}, spotGold=${spotGold}`);
     if (listing.metalType && listing.metalType !== "none" && listing.metalWeightOz > 0) {
       const spotPrice =
         listing.metalType === "gold" ? spotGold :
@@ -1110,13 +1123,16 @@ Seller's note: "${voiceNote}"`;
         // Enforce: priceMin must never be below melt value PLUS eBay fees.
         // ~13.25% FVF + ~2.9% payment processing = ~16% total fees. Use 1.19x for margin.
         const feeAdjustedFloor = parseFloat((meltValue * 1.19).toFixed(2));
+        console.log(`[${invocationId}] 🔒 Melt floor: meltValue=$${meltValue}, feeAdjustedFloor=$${feeAdjustedFloor}, priceMin=$${listing.priceMin}`);
         if (listing.priceMin < feeAdjustedFloor) {
-          console.warn(`priceMin ${listing.priceMin} below fee-adjusted melt floor ${feeAdjustedFloor} (melt: ${meltValue}) — correcting`);
+          console.log(`[${invocationId}] ⚠️  Price below melt floor! Correcting: $${listing.priceMin} → $${feeAdjustedFloor}`);
           listing.priceMin = feeAdjustedFloor;
           // Also bump priceMax if it's somehow below the floor
           if (listing.priceMax < feeAdjustedFloor) {
             listing.priceMax = parseFloat((feeAdjustedFloor * 1.1).toFixed(2));
           }
+        } else {
+          console.log(`[${invocationId}] ✓ Price above melt floor, no correction needed`);
         }
       }
     } else if (listing.metalType && listing.metalType !== "none" && listing.metalWeightOz <= 0) {
@@ -1128,12 +1144,14 @@ Seller's note: "${voiceNote}"`;
         listing.metalType === "platinum" ? 150 : 0;
       
       if (minPrice > 0 && listing.priceMin < minPrice) {
-        console.warn(`⚠️ SAFETY NET: ${listing.metalType} detected but metalWeightOz=${listing.metalWeightOz}. Enforcing minimum price $${minPrice} (was $${listing.priceMin})`);
+        console.warn(`[${invocationId}] 🛡️  SAFETY NET activated: ${listing.metalType} detected (weight=${listing.metalWeightOz}). Setting minimum: $${listing.priceMin} → $${minPrice}`);
         listing.priceMin = minPrice;
         if (listing.priceMax < minPrice) {
           listing.priceMax = parseFloat((minPrice * 1.5).toFixed(2));
         }
       }
+    } else {
+      console.log(`[${invocationId}] ℹ️  No melt check: metalType=${listing.metalType}, weight=${listing.metalWeightOz}`);
     }
     // --- End melt value enforcement ---
 
@@ -1193,7 +1211,7 @@ Seller's note: "${voiceNote}"`;
     };
 
     // ─── FINAL RESPONSE LOGGING (for diagnostics) ──────────────────────────────
-    console.log("analyze-item: FINAL RESPONSE PRICING & METALS:", {
+    console.log(`[${invocationId}] 📊 FINAL RESPONSE PRICING & METALS:`, {
       title: finalResponse.title?.slice(0, 60),
       metalType: finalResponse.metalType,
       metalWeightOz: finalResponse.metalWeightOz,
@@ -1206,19 +1224,31 @@ Seller's note: "${voiceNote}"`;
     });
     // ─── END FINAL RESPONSE LOGGING ──────────────────────────────────────────
 
+    console.log(`[${invocationId}] ✅ analyze-item COMPLETE (${Date.now() - startTime}ms)`);
+
     return new Response(JSON.stringify(finalResponse), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
-    console.error("analyze-item error:", e);
-    captureException(e, { function: "analyze-item", userId });
+    const elapsed = Date.now() - startTime;
+    console.error(`[${invocationId}] ❌ analyze-item FAILED after ${elapsed}ms:`, e);
     if (e instanceof Error) {
-      console.error("Error message:", e.message);
-      console.error("Error stack:", e.stack);
+      console.error(`[${invocationId}] Error name: ${e.name}`);
+      console.error(`[${invocationId}] Error message: ${e.message}`);
+      console.error(`[${invocationId}] Error stack:`, e.stack?.split('\n').slice(0, 5).join('\n'));
     }
+    captureException(e, { function: "analyze-item", invocationId });
+    
     const errorMsg = e instanceof Error ? e.message : String(e);
+    const errorResponse = {
+      error: errorMsg,
+      invocationId,
+      timestamp: new Date().toISOString(),
+    };
+    console.error(`[${invocationId}] 📤 Returning error response:`, errorResponse);
+    
     return new Response(
-      JSON.stringify({ error: errorMsg }),
+      JSON.stringify(errorResponse),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
