@@ -36,7 +36,7 @@ export default function BillingPage() {
       if (data?.url) {
         window.open(data.url, "_blank");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(err.message || "Failed to start checkout");
     } finally {
       setCheckoutLoading(null);
@@ -51,7 +51,7 @@ export default function BillingPage() {
       if (data?.url) {
         window.open(data.url, "_blank");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(err.message || "Failed to open billing portal");
     } finally {
       setPortalLoading(false);

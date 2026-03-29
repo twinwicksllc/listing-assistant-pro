@@ -215,7 +215,7 @@ export default function BulkListingPage() {
       } else {
         toast.success(`Generated ${successCount} AI descriptions! ✨`);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(err.message || "Failed to generate descriptions");
       // Reset generating status
       setRowStates((prev) =>
@@ -308,7 +308,7 @@ export default function BulkListingPage() {
       } else {
         toast.warning(`${data.published} published · ${data.failed} failed`);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(err.message || "Bulk publish failed");
       setRowStates((prev) =>
         prev.map((s) =>

@@ -195,7 +195,7 @@ export default function AnalyzePage() {
       setAuctionStartPrice(parseFloat((data.priceMin || 0).toFixed(2)) || 0);
       setGenerated(true);
       // OQ-12: recordUsage removed — analyze-item edge function inserts server-side usage row
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Analysis error:", err);
       toast.error(err.message || "Failed to analyze item. Please try again.");
     } finally {
@@ -429,7 +429,7 @@ export default function AnalyzePage() {
 
       // Success — navigate back to capture page for the next item
       navigate("/home");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Publish error:", err);
       toast.error(err.message || "Failed to publish to eBay.");
     } finally {

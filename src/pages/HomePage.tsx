@@ -241,7 +241,7 @@ export default function HomePage() {
           } else {
             toast.error("Couldn't detect any speech. Try again.");
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
           console.error("Transcription error:", err);
           toast.error(err.message || "Failed to transcribe voice note.");
         } finally {

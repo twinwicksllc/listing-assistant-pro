@@ -197,7 +197,7 @@ export function useEbayPolicies(userToken: string | null) {
         paymentPolicyId: payment[0]?.paymentPolicyId || null,
         returnPolicyId: returnPolicies[0]?.returnPolicyId || null,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Failed to load eBay policies:", err);
 
       let errorType: PolicyFetchError["type"] = "FETCH_ERROR";

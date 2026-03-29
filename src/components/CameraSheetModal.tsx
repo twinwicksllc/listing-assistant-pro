@@ -66,7 +66,7 @@ export default function CameraSheetModal({ open, onClose, onDone }: CameraSheetM
         setZoom(1);
       }
       setTorchOn(false);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Camera error:", err);
       if (err.name === "NotAllowedError") {
         setCameraError("Camera access denied. Please allow camera access in your browser settings.");
