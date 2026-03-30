@@ -1,0 +1,201 @@
+/*
+ * theme.css — V2 Design System
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Brand:    Teckstart Lister
+ * Primary:  #0076B6  (Honolulu Blue)   → hsl(201, 100%, 36%)
+ * Silver:   #B0B7BC  (Metallic Silver) → hsl(207, 6%, 71%)
+ * BG:       #FFFFFF  (Pure White)
+ *
+ * Font stack: system-ui stack — zero downloads, native on Apple/Windows/Android
+ *   -apple-system      → San Francisco (iOS/macOS)
+ *   BlinkMacSystemFont → San Francisco (Chrome on macOS)
+ *   "Segoe UI"         → Windows 10/11
+ *   Roboto             → Android / Chrome OS
+ *   "Helvetica Neue"   → older macOS
+ *   Arial              → universal fallback
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
+.v2 {
+    /* ── Typography ─────────────────────────────────────────── */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      "Helvetica Neue", Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+
+    /* ── Color tokens ───────────────────────────────────────── */
+    --v2-bg:               0 0% 100%;           /* #FFFFFF */
+    --v2-bg-subtle:        210 20% 98%;         /* #F7F9FB — near-white tint */
+    --v2-bg-muted:         210 14% 95%;         /* #EFF2F5 — light grey fill */
+
+    --v2-primary:          201 100% 36%;        /* #0076B6 Honolulu Blue */
+    --v2-primary-hover:    201 100% 30%;        /* slightly darker on hover */
+    --v2-primary-light:    201 100% 95%;        /* very light blue tint */
+    --v2-primary-fg:       0 0% 100%;           /* white text on primary */
+
+    --v2-silver:           207 6% 71%;          /* #B0B7BC Metallic Silver */
+    --v2-silver-light:     207 6% 90%;          /* lighter silver for borders */
+    --v2-silver-dark:      207 6% 45%;          /* darker silver for text */
+
+    --v2-fg:               220 25% 10%;         /* #141820 near-black */
+    --v2-fg-muted:         220 10% 46%;         /* #6E7580 mid-grey */
+    --v2-fg-subtle:        220 10% 65%;         /* #9BA3AD light grey text */
+
+    --v2-border:           220 13% 91%;         /* #E4E7EC soft border */
+    --v2-border-strong:    207 6% 71%;          /* silver border for emphasis */
+
+    --v2-success:          145 63% 42%;         /* green */
+    --v2-success-light:    145 63% 95%;
+    --v2-warning:          38 92% 50%;          /* amber */
+    --v2-warning-light:    38 92% 95%;
+    --v2-danger:           0 84% 60%;           /* red */
+    --v2-danger-light:     0 84% 96%;
+
+    --v2-card:             0 0% 100%;
+    --v2-card-shadow:      0 1px 3px 0 rgb(0 0 0 / 0.07),
+                           0 1px 2px -1px rgb(0 0 0 / 0.05);
+    --v2-card-shadow-md:   0 4px 6px -1px rgb(0 0 0 / 0.08),
+                           0 2px 4px -2px rgb(0 0 0 / 0.05);
+
+    /* ── Sidebar ────────────────────────────────────────────── */
+    --v2-sidebar-w:        240px;
+    --v2-sidebar-w-collapsed: 64px;
+    --v2-sidebar-bg:       201 100% 36%;        /* primary blue sidebar */
+    --v2-sidebar-fg:       0 0% 100%;           /* white text */
+    --v2-sidebar-hover:    201 100% 30%;
+    --v2-sidebar-active:   0 0% 100%;           /* white active item */
+    --v2-sidebar-active-bg: 201 100% 28%;       /* darker blue for active */
+
+    /* ── Spacing & Radius ───────────────────────────────────── */
+    --v2-radius:           0.5rem;
+    --v2-radius-lg:        0.75rem;
+    --v2-radius-xl:        1rem;
+  }
+
+/* ── Global V2 resets (scoped to .v2 root) ────────────────────────────────── */
+.v2 * {
+  box-sizing: border-box;
+}
+
+.v2 body,
+.v2 #root {
+  background-color: hsl(var(--v2-bg));
+  color: hsl(var(--v2-fg));
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+/* ── Utility classes used across v2 components ────────────────────────────── */
+
+/* Cards */
+.v2-card {
+  background: hsl(var(--v2-card));
+  border: 1px solid hsl(var(--v2-border));
+  border-radius: var(--v2-radius-lg);
+  box-shadow: var(--v2-card-shadow);
+}
+
+.v2-card-elevated {
+  background: hsl(var(--v2-card));
+  border: 1px solid hsl(var(--v2-border));
+  border-radius: var(--v2-radius-lg);
+  box-shadow: var(--v2-card-shadow-md);
+}
+
+/* Primary button */
+.v2-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  background: hsl(var(--v2-primary));
+  color: hsl(var(--v2-primary-fg));
+  font-size: 0.9375rem;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--v2-radius);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.v2-btn-primary:hover {
+  background: hsl(var(--v2-primary-hover));
+}
+
+/* Ghost button */
+.v2-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  background: transparent;
+  color: hsl(var(--v2-fg));
+  font-size: 0.9375rem;
+  font-weight: 500;
+  border: 1px solid hsl(var(--v2-border));
+  border-radius: var(--v2-radius);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.v2-btn-ghost:hover {
+  background: hsl(var(--v2-bg-muted));
+  border-color: hsl(var(--v2-border-strong));
+}
+
+/* Badge */
+.v2-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+.v2-badge-blue   { background: hsl(var(--v2-primary-light)); color: hsl(var(--v2-primary)); }
+.v2-badge-silver { background: hsl(var(--v2-bg-muted)); color: hsl(var(--v2-silver-dark)); }
+.v2-badge-green  { background: hsl(var(--v2-success-light)); color: hsl(var(--v2-success)); }
+.v2-badge-amber  { background: hsl(var(--v2-warning-light)); color: hsl(var(--v2-warning)); }
+.v2-badge-red    { background: hsl(var(--v2-danger-light)); color: hsl(var(--v2-danger)); }
+
+/* Section heading */
+.v2-section-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: hsl(var(--v2-fg));
+  letter-spacing: -0.01em;
+}
+
+/* Page title */
+.v2-page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: hsl(var(--v2-fg));
+  letter-spacing: -0.02em;
+}
+
+/* Divider */
+.v2-divider {
+  border: none;
+  border-top: 1px solid hsl(var(--v2-border));
+}
+
+/* Input */
+.v2-input {
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.9375rem;
+  color: hsl(var(--v2-fg));
+  background: hsl(var(--v2-bg));
+  border: 1px solid hsl(var(--v2-border));
+  border-radius: var(--v2-radius);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.v2-input:focus {
+  border-color: hsl(var(--v2-primary));
+  box-shadow: 0 0 0 3px hsl(var(--v2-primary) / 0.12);
+}
