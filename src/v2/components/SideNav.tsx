@@ -1,21 +1,29 @@
-import { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
-import teckstartLogo from "@/assets/teckstart-logo.png";
-import {
-  Camera, FileText, LayoutDashboard, Settings,
-  Layers, TrendingUp, Zap, Receipt, DollarSign,
-  ShoppingCart, Users, ChevronDown, ChevronRight,
-  LogOut, Crown,
-} from "lucide-react";
+/**
+ * SideNav — V2 Sidebar Navigation
+ * 
+ * Features:
+ *   - Consistent Honolulu Blue (#0076B6) background
+ *   - Section-based collapsible navigation with v2-styled buttons
+ *   - Support for owner-only sections (Money section)
+ *   - Active state highlighting
+ *   - All routes now point to v2 pages (no more "2" suffix paths)
+ */
 
-// ── Types ──────────────────────────────────────────────────────────────────
+import { useState } from "react";
+import {
+  Camera, FileText, LayoutDashboard, Layers,
+  TrendingUp, Zap, Receipt, DollarSign,
+  ShoppingCart, Users, Settings,
+  ChevronDown, ChevronUp, LogOut, Heart,
+} from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
+import teckstartLogo from "@/assets/teckstart-logo.png";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface NavItem {
   path: string;
   icon: React.ElementType;
   label: string;
-  v2path?: string; // if set, navigate to v2 route instead
 }
 
 interface NavSection {
@@ -24,49 +32,52 @@ interface NavSection {
   items: NavItem[];
 }
 
-// ── Nav structure ──────────────────────────────────────────────────────────
-
 function useNavSections(isOwner: boolean): NavSection[] {
   return [
     {
       key: "main",
       label: "Main",
       items: [
-        { path: "/home",      v2path: "/home2",      icon: Camera,         label: "Capture" },
-        { path: "/drafts",    v2path: "/drafts2",    icon: FileText,       label: "Drafts" },
-        { path: "/dashboard", v2path: "/dashboard2", icon: LayoutDashboard, label: "Dashboard" },
+        { path: "/home",      icon: Camera,         label: "Capture" },
+        { path: "/drafts",    icon: FileText,       label: "Drafts" },
+        { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
       ],
     },
     {
       key: "manage",
       label: "Manage",
       items: [
-        { path: "/bulk",   v2path: "/bulk2",   icon: Layers,    label: "Bulk List" },
-        { path: "/market", v2path: "/market2", icon: TrendingUp, label: "Market Research" },
-        ...(isOwner ? [{ path: "/reprice-rules", v2path: "/reprice-rules2", icon: Zap, label: "Optimize" }] : []),
+        { path: "/bulk",   icon: Layers,    label: "Bulk List" },
+        { path: "/market", icon: TrendingUp, label: "Market Research" },
+        ...(isOwner ? [{ path: "/reprice-rules", icon: Zap, label: "Optimize" }] : []),
       ],
     },
     ...(isOwner ? [{
       key: "money",
       label: "Money",
       items: [
-        { path: "/profit-report",   v2path: "/profit-report2",   icon: Receipt,      label: "P&L Report" },
-        { path: "/cogs-editor",     v2path: "/cogs-editor2",     icon: DollarSign,   label: "COGS Editor" },
-        { path: "/historical-cogs", v2path: "/historical-cogs2", icon: ShoppingCart, label: "Backfill COGS" },
+        { path: "/profit-report",   icon: Receipt,      label: "P&L Report" },
+        { path: "/cogs-editor",     icon: DollarSign,   label: "COGS Editor" },
+        { path: "/historical-cogs", icon: ShoppingCart, label: "Backfill COGS" },
       ],
     }] : []),
     {
       key: "account",
       label: "Account",
       items: [
-        { path: "/team",     v2path: "/team2",     icon: Users,    label: "Team" },
-        { path: "/settings", v2path: "/settings2", icon: Settings, label: "Settings" },
+        { path: "/team",     icon: Users,    label: "Team" },
+        { path: "/settings", icon: Settings, label: "Settings" },
+        { path: "/billing",  icon: Heart,    label: "Billing" },
       ],
     },
   ];
 }
 
-// ── Component ──────────────────────────────────────────────────────────────
+// ─── Component ─────────────────────────────────────────────────────────
+
+const SIDEBAR_BG = "#0076B6"; // Honolulu Blue
+const ACTIVE_BG = "rgba(255,255,255,0.15)";
+const HOVER_BG = "rgba(255,255,255,0.08)";
 
 export default function SideNav() {
   const location  = useLocation();
@@ -79,13 +90,11 @@ export default function SideNav() {
 
   const isActive = (item: NavItem) => {
     const p = location.pathname;
-    // Match both v1 and v2 paths so the sidebar highlights correctly on either version
-    return p === item.path || (item.v2path ? p === item.v2path : false);
+    return p === item.path;
   };
 
   const handleNav = (item: NavItem) => {
-    // Navigate to v2 path if available, else v1
-    navigate(item.v2path ?? item.path);
+    navigate(item.path);
   };
 
   const toggleSection = (key: string) => {
@@ -98,7 +107,7 @@ export default function SideNav() {
       style={{
         width: "var(--v2-sidebar-w, 240px)",
         minHeight: "100vh",
-        background: "hsl(201 100% 36%)",  /* Honolulu Blue */
+        background: SIDEBAR_BG,
         display: "flex",
         flexDirection: "column",
         position: "fixed",
@@ -110,7 +119,7 @@ export default function SideNav() {
         overflowX: "hidden",
       }}
     >
-      {/* ── Logo ──────────────────────────────────────────────── */}
+      {/* ─── Logo ──────────────────────────────────────────────────────── */}
       <div style={{
         display: "flex",
         alignItems: "center",
@@ -123,22 +132,14 @@ export default function SideNav() {
           alt="Teckstart"
           style={{ height: 32, width: "auto", maxWidth: 120, flexShrink: 0, objectFit: "contain" }}
         />
-        <div>
-          <div style={{ color: "#fff", fontWeight: 700, fontSize: "0.9375rem", lineHeight: 1.2 }}>
-            Teckstart
-          </div>
-          <div style={{ color: "rgba(255,255,255,0.65)", fontSize: "0.75rem", fontWeight: 500 }}>
-            Lister
-          </div>
-        </div>
       </div>
 
-      {/* ── Nav sections ──────────────────────────────────────── */}
-      <nav style={{ flex: 1, padding: "0.75rem 0.625rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-        {sections.map((section) => {
-          const isCollapsed = !!collapsed[section.key];
+      {/* ─── Navigation Sections ─────────────────────────────────────────── */}
+      <div style={{ flex: 1, padding: "0.5rem 0" }}>
+        {sections.map(section => {
+          const isCollapsed = collapsed[section.key];
           return (
-            <div key={section.key} style={{ marginBottom: "0.25rem" }}>
+            <div key={section.key} style={{ marginBottom: "0.5rem" }}>
               {/* Section header */}
               <button
                 onClick={() => toggleSection(section.key)}
@@ -147,33 +148,34 @@ export default function SideNav() {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
-                  padding: "0.375rem 0.625rem",
+                  padding: "0.5rem 0.875rem",
                   background: "transparent",
                   border: "none",
-                  cursor: "pointer",
-                  color: "rgba(255,255,255,0.55)",
+                  color: "rgba(255,255,255,0.7)",
                   fontSize: "0.6875rem",
                   fontWeight: 700,
-                  letterSpacing: "0.07em",
                   textTransform: "uppercase",
-                  borderRadius: 6,
+                  letterSpacing: "0.08em",
+                  cursor: "pointer",
                   transition: "color 0.15s",
                 }}
-                onMouseEnter={e => (e.currentTarget.style.color = "rgba(255,255,255,0.85)")}
-                onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.55)")}
+                onMouseEnter={e => {
+                  e.currentTarget.style.color = "rgba(255,255,255,0.9)";
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.color = "rgba(255,255,255,0.7)";
+                }}
               >
-                <span>{section.label}</span>
-                {isCollapsed
-                  ? <ChevronRight style={{ width: 12, height: 12 }} />
-                  : <ChevronDown  style={{ width: 12, height: 12 }} />
-                }
+                {section.label}
+                {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
               </button>
 
               {/* Section items */}
               {!isCollapsed && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 2 }}>
-                  {section.items.map((item) => {
+                <div>
+                  {section.items.map(item => {
                     const active = isActive(item);
+                    const Icon = item.icon;
                     return (
                       <button
                         key={item.path}
@@ -183,41 +185,42 @@ export default function SideNav() {
                           display: "flex",
                           alignItems: "center",
                           gap: "0.625rem",
-                          padding: "0.5rem 0.75rem",
-                          background: active ? "rgba(255,255,255,0.18)" : "transparent",
+                          padding: "0.625rem 0.875rem",
+                          marginLeft: "0.375rem",
+                          background: active ? ACTIVE_BG : "transparent",
                           border: "none",
-                          borderRadius: 8,
+                          color: "#ffffff",
+                          fontSize: "0.875rem",
+                          fontWeight: active ? 600 : 400,
                           cursor: "pointer",
-                          color: active ? "#fff" : "rgba(255,255,255,0.78)",
-                          fontSize: "0.9375rem",
-                          fontWeight: active ? 600 : 500,
-                          textAlign: "left",
-                          transition: "background 0.15s, color 0.15s",
+                          transition: "background 0.15s",
+                          borderRadius: active ? 8 : 0,
                         }}
                         onMouseEnter={e => {
                           if (!active) {
-                            e.currentTarget.style.background = "rgba(255,255,255,0.1)";
-                            e.currentTarget.style.color = "#fff";
+                            e.currentTarget.style.background = HOVER_BG;
                           }
                         }}
                         onMouseLeave={e => {
                           if (!active) {
                             e.currentTarget.style.background = "transparent";
-                            e.currentTarget.style.color = "rgba(255,255,255,0.78)";
                           }
                         }}
                       >
-                        {/* Active indicator bar */}
-                        <span style={{
-                          width: 3,
-                          height: 18,
-                          borderRadius: 2,
-                          background: active ? "#fff" : "transparent",
-                          flexShrink: 0,
-                          marginLeft: -4,
-                        }} />
-                        <item.icon style={{ width: 18, height: 18, flexShrink: 0 }} />
-                        <span style={{ flex: 1 }}>{item.label}</span>
+                        <Icon size={16} style={{ flexShrink: 0 }} />
+                        <span>{item.label}</span>
+                        {active && (
+                          <span
+                            style={{
+                              width: 3,
+                              height: 3,
+                              borderRadius: "50%",
+                              background: "#ffffff",
+                              marginLeft: "auto",
+                              boxShadow: "0 0 4px rgba(255,255,255,0.5)",
+                            }}
+                          />
+                        )}
                       </button>
                     );
                   })}
@@ -226,68 +229,87 @@ export default function SideNav() {
             </div>
           );
         })}
-      </nav>
+      </div>
 
-      {/* ── User footer ───────────────────────────────────────── */}
+      {/* ─── User & Sign Out ─────────────────────────────────────────────── */}
       <div style={{
+        padding: "0.75rem 0.875rem 1.5rem",
         borderTop: "1px solid rgba(255,255,255,0.12)",
-        padding: "0.875rem 1rem",
-        display: "flex",
-        flexDirection: "column",
-        gap: "0.5rem",
       }}>
-        {/* Plan badge */}
-        {currentPlan && (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.625rem",
+          marginBottom: "0.625rem",
+        }}>
           <div style={{
+            width: 32,
+            height: 32,
+            borderRadius: "50%",
+            background: "rgba(255,255,255,0.2)",
             display: "flex",
             alignItems: "center",
-            gap: "0.375rem",
-            padding: "0.25rem 0.625rem",
-            background: "rgba(255,255,255,0.12)",
-            borderRadius: 20,
-            width: "fit-content",
-          }}>
-            <Crown style={{ width: 12, height: 12, color: "#FFD700" }} />
-            <span style={{ color: "rgba(255,255,255,0.85)", fontSize: "0.75rem", fontWeight: 600, textTransform: "capitalize" }}>
-              {currentPlan}
-            </span>
-          </div>
-        )}
-
-        {/* User email */}
-        {user?.email && (
-          <div style={{
-            color: "rgba(255,255,255,0.6)",
-            fontSize: "0.75rem",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}>
-            {user.email}
-          </div>
-        )}
-
-        {/* Sign out */}
-        <button
-          onClick={() => signOut()}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            background: "transparent",
-            border: "none",
-            cursor: "pointer",
-            color: "rgba(255,255,255,0.65)",
+            justifyContent: "center",
+            color: "#ffffff",
             fontSize: "0.8125rem",
-            fontWeight: 500,
-            padding: "0.25rem 0",
-            transition: "color 0.15s",
+            fontWeight: 600,
+          }}>
+            {user?.email?.[0]?.toUpperCase() || "U"}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              color: "#ffffff",
+              fontSize: "0.8125rem",
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}>
+              {user?.email || "User"}
+            </div>
+            <div style={{
+              color: "rgba(255,255,255,0.6)",
+              fontSize: "0.6875rem",
+              marginTop: "0.125rem",
+            }}>
+              {currentPlan === "free" ? "Free Plan"
+               : currentPlan === "starter" ? "Starter"
+               : currentPlan === "pro" ? "Pro"
+               : currentPlan === "shop" ? "Shop"
+               : "Unlimited"}
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={signOut}
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "0.5rem",
+            padding: "0.5rem 0.75rem",
+            background: "rgba(255,255,255,0.1)",
+            border: "1px solid rgba(255,255,255,0.2)",
+            borderRadius: 8,
+            color: "#ffffff",
+            fontSize: "0.8125rem",
+            fontWeight: 600,
+            cursor: "pointer",
+            transition: "all 0.15s",
           }}
-          onMouseEnter={e => (e.currentTarget.style.color = "#fff")}
-          onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.65)")}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = "rgba(255,255,255,0.15)";
+            e.currentTarget.style.borderColor = "rgba(255,255,255,0.3)";
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = "rgba(255,255,255,0.1)";
+            e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)";
+          }}
         >
-          <LogOut style={{ width: 15, height: 15 }} />
-          Sign out
+          <LogOut size={14} />
+          Sign Out
         </button>
       </div>
     </aside>
