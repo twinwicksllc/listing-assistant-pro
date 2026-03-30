@@ -1,11 +1,12 @@
 /**
- * HomePage2 — V2 redesign of /home (Capture page)
+ * HomePage2 — V2 Sleek redesign of /home (Capture page)
  *
  * All business logic is identical to HomePage.tsx.
  * Only the presentation layer has been updated:
  *   - AppShell (left sidebar on desktop, BottomNav on mobile)
- *   - White background, #0076B6 primary, system font stack
- *   - Larger base font (16px), readable at arm's length
+ *   - Off-white background (#F8F9FA), soft shadows, glass-morphic cards
+ *   - Font weight depth: 800 primary, 600 secondary, 400 body
+ *   - Generous corner radii (12px/16px)
  *   - Desktop: two-column layout (upload panel left, instructions/tips right)
  *   - Mobile: single column, same UX feel as original
  */
@@ -23,6 +24,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { optimizeImages } from "@/lib/imageOptimizer";
 import WelcomeTour, { type TourStep } from "@/components/WelcomeTour";
 import AppShell from "../components/AppShell";
+import UsageSummaryCard from "../components/UsageSummaryCard";
 
 // ── Constants (identical to original) ────────────────────────────────────────
 
@@ -70,7 +72,7 @@ const S = {
   // Page wrapper
   page: {
     minHeight: "100vh",
-    background: "#fff",
+    background: "#F8F9FA",
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
   } as React.CSSProperties,
 
@@ -91,14 +93,12 @@ const S = {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: "1.75rem",
-    paddingBottom: "1.25rem",
-    borderBottom: "1px solid #E4E7EC",
+    marginBottom: "1.5rem",
   } as React.CSSProperties,
 
   pageTitle: {
     fontSize: "1.5rem",
-    fontWeight: 700,
+    fontWeight: 800,
     color: "#141820",
     letterSpacing: "-0.02em",
     margin: 0,
@@ -106,6 +106,7 @@ const S = {
 
   pageSubtitle: {
     fontSize: "0.9375rem",
+    fontWeight: 400,
     color: "#6E7580",
     marginTop: "0.125rem",
   } as React.CSSProperties,
@@ -114,14 +115,20 @@ const S = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    width: 38,
-    height: 38,
-    borderRadius: 8,
-    border: "1px solid #E4E7EC",
-    background: "transparent",
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    border: "none",
+    background: "rgba(255,255,255,0.8)",
     cursor: "pointer",
     color: "#6E7580",
     transition: "all 0.15s",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+  } as React.CSSProperties,
+
+  // Usage summary section
+  usageSection: {
+    marginBottom: "1.5rem",
   } as React.CSSProperties,
 
   // Two-column grid (desktop only)
@@ -132,18 +139,20 @@ const S = {
     alignItems: "start",
   } as React.CSSProperties,
 
-  // Card
+  // Card - glass-morphic
   card: {
-    background: "#fff",
-    border: "1px solid #E4E7EC",
-    borderRadius: 12,
-    boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+    background: "linear-gradient(135deg, rgba(255,255,255,0.82) 0%, rgba(255,255,255,0.72) 100%)",
+    backdropFilter: "blur(12px)",
+    WebkitBackdropFilter: "blur(12px)",
+    border: "1px solid rgba(255,255,255,0.3)",
+    borderRadius: 16,
+    boxShadow: "0 4px 20px rgba(0,0,0,0.05)",
     overflow: "hidden",
   } as React.CSSProperties,
 
   cardHeader: {
     padding: "1rem 1.25rem",
-    borderBottom: "1px solid #E4E7EC",
+    borderBottom: "1px solid rgba(228,231,236,0.5)",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
@@ -151,7 +160,7 @@ const S = {
 
   cardTitle: {
     fontSize: "1rem",
-    fontWeight: 600,
+    fontWeight: 700,
     color: "#141820",
     margin: 0,
   } as React.CSSProperties,
@@ -163,7 +172,7 @@ const S = {
   // Drop zone
   dropZone: (dragging: boolean): React.CSSProperties => ({
     border: `2px dashed ${dragging ? "#0076B6" : "#B0B7BC"}`,
-    borderRadius: 12,
+    borderRadius: 16,
     background: dragging ? "rgba(0,118,182,0.04)" : "#F7F9FB",
     display: "flex",
     flexDirection: "column",
@@ -191,12 +200,13 @@ const S = {
 
   uploadLabel: {
     fontSize: "1rem",
-    fontWeight: 600,
+    fontWeight: 700,
     color: "#0076B6",
   } as React.CSSProperties,
 
   uploadSub: {
     fontSize: "0.875rem",
+    fontWeight: 400,
     color: "#6E7580",
     marginTop: "0.25rem",
   } as React.CSSProperties,
@@ -211,11 +221,11 @@ const S = {
     background: "#0076B6",
     color: "#fff",
     fontSize: "1rem",
-    fontWeight: 600,
+    fontWeight: 700,
     border: "none",
-    borderRadius: 8,
+    borderRadius: 12,
     cursor: "pointer",
-    transition: "background 0.15s",
+    transition: "background 0.15s, transform 0.1s",
     width: "100%",
   } as React.CSSProperties,
 
@@ -226,12 +236,12 @@ const S = {
     justifyContent: "center",
     gap: "0.5rem",
     padding: "0.625rem 1.25rem",
-    background: "#fff",
+    background: "transparent",
     color: "#141820",
     fontSize: "0.9375rem",
     fontWeight: 500,
-    border: "1px solid #E4E7EC",
-    borderRadius: 8,
+    border: "none",
+    borderRadius: 12,
     cursor: "pointer",
     transition: "background 0.15s",
   } as React.CSSProperties,
@@ -240,7 +250,7 @@ const S = {
   badge: (color: "blue" | "green" | "silver"): React.CSSProperties => ({
     display: "inline-flex",
     alignItems: "center",
-    padding: "0.2rem 0.6rem",
+    padding: "0.25rem 0.625rem",
     borderRadius: 20,
     fontSize: "0.75rem",
     fontWeight: 600,
@@ -248,11 +258,11 @@ const S = {
     color: color === "blue" ? "#0076B6" : color === "green" ? "#16a34a" : "#6E7580",
   }),
 
-  // Tip box (right column)
+  // Tip box (right column) - glass-morphic
   tipBox: {
-    background: "rgba(0,118,182,0.04)",
-    border: "1px solid rgba(0,118,182,0.15)",
-    borderRadius: 10,
+    background: "linear-gradient(135deg, rgba(0,118,182,0.06) 0%, rgba(0,118,182,0.02) 100%)",
+    border: "1px solid rgba(0,118,182,0.12)",
+    borderRadius: 12,
     padding: "1rem 1.125rem",
     marginBottom: "0.75rem",
   } as React.CSSProperties,
@@ -269,6 +279,7 @@ const S = {
 
   tipText: {
     fontSize: "0.875rem",
+    fontWeight: 400,
     color: "#4B5563",
     lineHeight: 1.55,
   } as React.CSSProperties,
@@ -277,7 +288,7 @@ const S = {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function HomePage2() {
-  const { signOut, recordUsage, planFeatures } = useAuth();
+  const { signOut, recordUsage, planFeatures, usage, currentPlanLimits, currentPlan } = useAuth();
   const cameraInputRef  = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const navigate        = useNavigate();
@@ -715,6 +726,25 @@ export default function HomePage2() {
             >
               <HelpCircle size={18} />
             </button>
+          </div>
+
+          {/* Usage Summary */}
+          <div style={S.usageSection}>
+            <UsageSummaryCard
+              metrics={[
+                {
+                  label: "AI Analyses",
+                  used: usage.aiAnalysis,
+                  limit: currentPlanLimits.analysisLimit,
+                },
+                {
+                  label: "eBay Publishes",
+                  used: usage.ebayPublish,
+                  limit: currentPlanLimits.publishLimit,
+                },
+              ]}
+              planName={currentPlan === "free" ? "Free" : currentPlan === "starter" ? "Starter" : currentPlan === "pro" ? "Pro" : currentPlan === "shop" ? "Shop" : "Unlimited"}
+            />
           </div>
 
           {/* Content */}

@@ -1,14 +1,14 @@
 /**
- * SettingsPage2 — V2 redesign of /settings
+ * SettingsPage2 — V2 Sleek redesign of /settings
  *
  * All business logic identical to SettingsPage.tsx.
  * Presentation changes:
  *   - AppShell (left sidebar on desktop, BottomNav on mobile)
- *   - White background, #0076B6 primary, system font stack, 16px base
+ *   - Off-white background (#F8F9FA), soft shadows, glass-morphic cards
+ *   - Font weight depth: 800 primary, 700 secondary, 400 body
+ *   - Generous corner radii (12px/16px)
  *   - Desktop: two-column layout — vertical tab list on left, content on right
  *   - Mobile: horizontal tab bar + full-width content (same UX as original)
- *   - Larger, more readable text throughout
- *   - Billing upgrade cards in a proper 3-col grid on desktop
  */
 
 import { useState, useEffect } from "react";
@@ -22,6 +22,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import ProfileModal from "@/components/ProfileModal";
 import AppShell from "../components/AppShell";
+import UsageSummaryCard from "../components/UsageSummaryCard";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -35,7 +36,7 @@ const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica 
 const S = {
   page: {
     minHeight: "100vh",
-    background: "#F7F9FB",
+    background: "#F8F9FA",
     fontFamily: FONT,
   } as React.CSSProperties,
 
@@ -50,14 +51,12 @@ const S = {
   } as React.CSSProperties,
 
   pageHeader: {
-    marginBottom: "1.75rem",
-    paddingBottom: "1.25rem",
-    borderBottom: "1px solid #E4E7EC",
+    marginBottom: "1.5rem",
   } as React.CSSProperties,
 
   pageTitle: {
     fontSize: "1.5rem",
-    fontWeight: 700,
+    fontWeight: 800,
     color: "#141820",
     letterSpacing: "-0.02em",
     margin: 0,
@@ -65,8 +64,14 @@ const S = {
 
   pageSubtitle: {
     fontSize: "0.9375rem",
+    fontWeight: 400,
     color: "#6E7580",
     marginTop: "0.25rem",
+  } as React.CSSProperties,
+
+  // Usage summary section
+  usageSection: {
+    marginBottom: "1.5rem",
   } as React.CSSProperties,
 
   // Desktop two-column shell
@@ -77,13 +82,15 @@ const S = {
     alignItems: "start",
   } as React.CSSProperties,
 
-  // Left sidebar tab list (desktop)
+  // Left sidebar tab list (desktop) - glass-morphic
   tabList: {
-    background: "#fff",
-    border: "1px solid #E4E7EC",
-    borderRadius: 12,
+    background: "linear-gradient(135deg, rgba(255,255,255,0.82) 0%, rgba(255,255,255,0.72) 100%)",
+    backdropFilter: "blur(12px)",
+    WebkitBackdropFilter: "blur(12px)",
+    border: "1px solid rgba(255,255,255,0.3)",
+    borderRadius: 16,
     overflow: "hidden",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+    boxShadow: "0 4px 20px rgba(0,0,0,0.05)",
   } as React.CSSProperties,
 
   tabBtn: (active: boolean): React.CSSProperties => ({
@@ -91,14 +98,14 @@ const S = {
     display: "flex",
     alignItems: "center",
     gap: "0.625rem",
-    padding: "0.75rem 1rem",
-    background: active ? "rgba(0,118,182,0.07)" : "transparent",
+    padding: "0.875rem 1.125rem",
+    background: active ? "rgba(0,118,182,0.08)" : "transparent",
     border: "none",
     borderLeft: active ? "3px solid #0076B6" : "3px solid transparent",
     cursor: "pointer",
     color: active ? "#0076B6" : "#4B5563",
     fontSize: "0.9375rem",
-    fontWeight: active ? 600 : 500,
+    fontWeight: active ? 700 : 500,
     textAlign: "left" as const,
     transition: "all 0.15s",
   }),
@@ -106,10 +113,14 @@ const S = {
   // Mobile horizontal tab bar
   mobileTabBar: {
     display: "flex",
-    borderBottom: "1px solid #E4E7EC",
+    borderBottom: "none",
     marginBottom: "1.25rem",
-    background: "#fff",
+    background: "linear-gradient(135deg, rgba(255,255,255,0.82) 0%, rgba(255,255,255,0.72) 100%)",
+    backdropFilter: "blur(12px)",
+    WebkitBackdropFilter: "blur(12px)",
+    borderRadius: 12,
     overflowX: "auto" as const,
+    boxShadow: "0 2px 10px rgba(0,0,0,0.03)",
   } as React.CSSProperties,
 
   mobileTabBtn: (active: boolean): React.CSSProperties => ({
@@ -117,40 +128,43 @@ const S = {
     alignItems: "center",
     gap: "0.375rem",
     padding: "0.75rem 1rem",
-    background: "transparent",
+    background: active ? "rgba(0,118,182,0.08)" : "transparent",
     border: "none",
-    borderBottom: active ? "2px solid #0076B6" : "2px solid transparent",
+    borderRadius: active ? 8 : 0,
     cursor: "pointer",
     color: active ? "#0076B6" : "#6E7580",
     fontSize: "0.9375rem",
-    fontWeight: active ? 600 : 500,
+    fontWeight: active ? 700 : 500,
     whiteSpace: "nowrap" as const,
     transition: "all 0.15s",
   }),
 
-  // Content card
+  // Content card - glass-morphic
   card: {
-    background: "#fff",
-    border: "1px solid #E4E7EC",
-    borderRadius: 12,
-    boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+    background: "linear-gradient(135deg, rgba(255,255,255,0.82) 0%, rgba(255,255,255,0.72) 100%)",
+    backdropFilter: "blur(12px)",
+    WebkitBackdropFilter: "blur(12px)",
+    border: "1px solid rgba(255,255,255,0.3)",
+    borderRadius: 16,
+    boxShadow: "0 4px 20px rgba(0,0,0,0.05)",
     overflow: "hidden",
   } as React.CSSProperties,
 
   cardHeader: {
     padding: "1.25rem 1.5rem",
-    borderBottom: "1px solid #E4E7EC",
+    borderBottom: "1px solid rgba(228,231,236,0.5)",
   } as React.CSSProperties,
 
   cardTitle: {
     fontSize: "1.0625rem",
-    fontWeight: 700,
+    fontWeight: 800,
     color: "#141820",
     margin: 0,
   } as React.CSSProperties,
 
   cardSubtitle: {
     fontSize: "0.875rem",
+    fontWeight: 400,
     color: "#6E7580",
     marginTop: "0.25rem",
   } as React.CSSProperties,
@@ -710,6 +724,25 @@ export default function SettingsPage2() {
             <p style={S.pageSubtitle}>Manage your profile, billing, and integrations</p>
           </div>
 
+          {/* Usage Summary */}
+          <div style={S.usageSection}>
+            <UsageSummaryCard
+              metrics={[
+                {
+                  label: "AI Analyses",
+                  used: usage.aiAnalysis,
+                  limit: currentPlanLimits.analysisLimit,
+                },
+                {
+                  label: "eBay Publishes",
+                  used: usage.ebayPublish,
+                  limit: currentPlanLimits.publishLimit,
+                },
+              ]}
+              planName={currentPlan === "free" ? "Free" : currentPlan === "starter" ? "Starter" : currentPlan === "pro" ? "Pro" : currentPlan === "shop" ? "Shop" : "Unlimited"}
+            />
+          </div>
+
           {/* Two-column: tab list + content */}
           <div style={S.twoCol}>
             {/* Tab list */}
@@ -740,6 +773,25 @@ export default function SettingsPage2() {
           {/* Page header */}
           <div style={{ marginBottom: "1rem" }}>
             <h1 style={{ ...S.pageTitle, fontSize: "1.25rem" }}>Settings</h1>
+          </div>
+
+          {/* Usage Summary */}
+          <div style={{ ...S.usageSection, marginTop: "0.5rem" }}>
+            <UsageSummaryCard
+              metrics={[
+                {
+                  label: "AI Analyses",
+                  used: usage.aiAnalysis,
+                  limit: currentPlanLimits.analysisLimit,
+                },
+                {
+                  label: "eBay Publishes",
+                  used: usage.ebayPublish,
+                  limit: currentPlanLimits.publishLimit,
+                },
+              ]}
+              planName={currentPlan === "free" ? "Free" : currentPlan === "starter" ? "Starter" : currentPlan === "pro" ? "Pro" : currentPlan === "shop" ? "Shop" : "Unlimited"}
+            />
           </div>
 
           {/* Horizontal tab bar */}
