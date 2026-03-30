@@ -396,7 +396,9 @@ export default function SettingsPage2() {
           const { data } = await supabase.functions.invoke("ebay-publish", { body: { action: "get_stored_token", userId: user.id } });
           if (cancelled) return;
           if (data?.token) { setEbayConnected(true); localStorage.setItem(EBAY_TOKEN_KEY, data.token); return; }
-        } catch {}
+        } catch {
+          // Token fetch failed - will fall back to localStorage check below
+        }
       }
       if (!cancelled) setEbayConnected(!!localStorage.getItem(EBAY_TOKEN_KEY));
     };
@@ -455,7 +457,9 @@ export default function SettingsPage2() {
         await supabase.from("profiles").update({
           ebay_access_token: null, ebay_refresh_token: null, ebay_token_expires_at: null,
         }).eq("id", user.id);
-      } catch {}
+      } catch {
+        // Non-critical: profile update failed, user still disconnected locally
+      }
     }
     toast.success("eBay account disconnected");
   };

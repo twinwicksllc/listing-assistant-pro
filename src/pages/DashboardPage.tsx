@@ -901,8 +901,8 @@ export default function DashboardPage() {
 
     // Then, merge from listing_cogs DB (for published listings without draft or to override)
     for (const listing of listings) {
-      const dbCogs = listing.sku ? cogsByListingDb[listing.sku] : undefined 
-                  || listing.listingId ? cogsByListingDb[listing.listingId] : undefined;
+      const dbCogs = (listing.sku ? cogsByListingDb[listing.sku] : undefined) ||
+                     (listing.listingId ? cogsByListingDb[listing.listingId] : undefined);
       
       if (dbCogs != null) {
         // Only add if not already in map from drafts, or always use DB version

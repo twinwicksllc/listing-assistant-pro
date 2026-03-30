@@ -50,13 +50,13 @@ jobs:
       - name: Setup Deno
         uses: denoland/setup-deno@v1
         with:
-          deno-version: vx.x.x
+          deno-version: v2.x
       
       - name: Format check
         run: deno fmt --check supabase/functions/
       
       - name: Lint functions
-        run: deno lint supabase/functions/
+        run: deno lint --config supabase/functions/deno.json supabase/functions/
 
   # Database: Integration tests with test items
   integration-tests:
@@ -81,8 +81,9 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Setup Supabase CLI
-        run: |
-          npm install --global supabase@latest
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
       
       - name: Start Supabase
         run: |
@@ -96,7 +97,7 @@ jobs:
       - name: Setup Deno
         uses: denoland/setup-deno@v1
         with:
-          deno-version: vx.x.x
+          deno-version: v2.x
       
       - name: Run Edge Function tests
         run: |
