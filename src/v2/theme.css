@@ -1,23 +1,23 @@
 /*
- * theme.css — V2 Design System
+ * theme.css — V2 Sleek Design System
  * ─────────────────────────────────────────────────────────────────────────────
  * Brand:    Teckstart Lister
  * Primary:  #0076B6  (Honolulu Blue)   → hsl(201, 100%, 36%)
  * Silver:   #B0B7BC  (Metallic Silver) → hsl(207, 6%, 71%)
- * BG:       #FFFFFF  (Pure White)
+ * BG:       #F8F9FA  (Off-White)
+ *
+ * Design principles:
+ *   - Glass-morphic cards with subtle blur
+ *   - Font weight depth: 800 primary, 600 secondary, 400 body
+ *   - Soft shadows, no heavy borders
+ *   - Generous corner radii (12px / 16px)
  *
  * Font stack: system-ui stack — zero downloads, native on Apple/Windows/Android
- *   -apple-system      → San Francisco (iOS/macOS)
- *   BlinkMacSystemFont → San Francisco (Chrome on macOS)
- *   "Segoe UI"         → Windows 10/11
- *   Roboto             → Android / Chrome OS
- *   "Helvetica Neue"   → older macOS
- *   Arial              → universal fallback
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
 .v2 {
-    /* ── Typography ─────────────────────────────────────────── */
+    /* ── Typography ─────────────────────────────────────────────────────────── */
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
       "Helvetica Neue", Arial, sans-serif;
     font-size: 16px;
@@ -25,10 +25,11 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 
-    /* ── Color tokens ───────────────────────────────────────── */
-    --v2-bg:               0 0% 100%;           /* #FFFFFF */
-    --v2-bg-subtle:        210 20% 98%;         /* #F7F9FB — near-white tint */
+    /* ── Color tokens ───────────────────────────────────────────────────────── */
+    --v2-bg:               210 20% 98%;         /* #F8F9FA — off-white */
+    --v2-bg-subtle:        210 20% 99%;         /* #FAFBFC — near-white tint */
     --v2-bg-muted:         210 14% 95%;         /* #EFF2F5 — light grey fill */
+    --v2-bg-glass:         0 0% 100% / 0.72;    /* glass overlay */
 
     --v2-primary:          201 100% 36%;        /* #0076B6 Honolulu Blue */
     --v2-primary-hover:    201 100% 30%;        /* slightly darker on hover */
@@ -54,12 +55,17 @@
     --v2-danger-light:     0 84% 96%;
 
     --v2-card:             0 0% 100%;
-    --v2-card-shadow:      0 1px 3px 0 rgb(0 0 0 / 0.07),
-                           0 1px 2px -1px rgb(0 0 0 / 0.05);
-    --v2-card-shadow-md:   0 4px 6px -1px rgb(0 0 0 / 0.08),
-                           0 2px 4px -2px rgb(0 0 0 / 0.05);
+    --v2-card-shadow:      0 1px 3px 0 rgb(0 0 0 / 0.04);
+    --v2-card-shadow-md:   0 4px 20px 0 rgb(0 0 0 / 0.05);
+    --v2-card-shadow-lg:   0 8px 30px 0 rgb(0 0 0 / 0.08);
+    --v2-card-glass-bg:    linear-gradient(
+                              135deg,
+                              hsl(0 0% 100% / 0.82) 0%,
+                              hsl(0 0% 100% / 0.72) 100%
+                           );
+    --v2-card-glass-blur:  blur(12px);
 
-    /* ── Sidebar ────────────────────────────────────────────── */
+    /* ── Sidebar ────────────────────────────────────────────────────────────── */
     --v2-sidebar-w:        240px;
     --v2-sidebar-w-collapsed: 64px;
     --v2-sidebar-bg:       201 100% 36%;        /* primary blue sidebar */
@@ -68,13 +74,13 @@
     --v2-sidebar-active:   0 0% 100%;           /* white active item */
     --v2-sidebar-active-bg: 201 100% 28%;       /* darker blue for active */
 
-    /* ── Spacing & Radius ───────────────────────────────────── */
-    --v2-radius:           0.5rem;
-    --v2-radius-lg:        0.75rem;
-    --v2-radius-xl:        1rem;
+    /* ── Spacing & Radius ───────────────────────────────────────────────────── */
+    --v2-radius:           12px;
+    --v2-radius-lg:        16px;
+    --v2-radius-xl:        24px;
   }
 
-/* ── Global V2 resets (scoped to .v2 root) ────────────────────────────────── */
+/* ── Global V2 resets (scoped to .v2 root) ──────────────────────────────────── */
 .v2 * {
   box-sizing: border-box;
 }
@@ -87,20 +93,30 @@
     "Helvetica Neue", Arial, sans-serif;
 }
 
-/* ── Utility classes used across v2 components ────────────────────────────── */
+/* ── Utility classes used across v2 components ─────────────────────────────── */
 
 /* Cards */
 .v2-card {
   background: hsl(var(--v2-card));
-  border: 1px solid hsl(var(--v2-border));
-  border-radius: var(--v2-radius-lg);
+  border: none;
+  border-radius: var(--v2-radius);
   box-shadow: var(--v2-card-shadow);
 }
 
 .v2-card-elevated {
   background: hsl(var(--v2-card));
-  border: 1px solid hsl(var(--v2-border));
-  border-radius: var(--v2-radius-lg);
+  border: none;
+  border-radius: var(--v2-radius);
+  box-shadow: var(--v2-card-shadow-md);
+}
+
+/* Glass-morphic card */
+.v2-card-glass {
+  background: var(--v2-card-glass-bg);
+  backdrop-filter: var(--v2-card-glass-blur);
+  -webkit-backdrop-filter: var(--v2-card-glass-blur);
+  border: 1px solid hsl(0 0% 100% / 0.3);
+  border-radius: var(--v2-radius);
   box-shadow: var(--v2-card-shadow-md);
 }
 
@@ -114,14 +130,18 @@
   background: hsl(var(--v2-primary));
   color: hsl(var(--v2-primary-fg));
   font-size: 0.9375rem;
-  font-weight: 600;
+  font-weight: 700;
   border: none;
   border-radius: var(--v2-radius);
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, transform 0.1s ease;
 }
 .v2-btn-primary:hover {
   background: hsl(var(--v2-primary-hover));
+  transform: translateY(-1px);
+}
+.v2-btn-primary:active {
+  transform: translateY(0);
 }
 
 /* Ghost button */
@@ -135,21 +155,20 @@
   color: hsl(var(--v2-fg));
   font-size: 0.9375rem;
   font-weight: 500;
-  border: 1px solid hsl(var(--v2-border));
+  border: none;
   border-radius: var(--v2-radius);
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease;
 }
 .v2-btn-ghost:hover {
   background: hsl(var(--v2-bg-muted));
-  border-color: hsl(var(--v2-border-strong));
 }
 
 /* Badge */
 .v2-badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.2rem 0.55rem;
+  padding: 0.25rem 0.625rem;
   font-size: 0.75rem;
   font-weight: 600;
   border-radius: 9999px;
@@ -169,15 +188,29 @@
   letter-spacing: -0.01em;
 }
 
-/* Page title */
+/* Page title — heavy weight for impact */
 .v2-page-title {
   font-size: 1.5rem;
-  font-weight: 700;
+  font-weight: 800;
   color: hsl(var(--v2-fg));
   letter-spacing: -0.02em;
 }
 
-/* Divider */
+/* Text utilities for font weight depth */
+.v2-text-primary {
+  font-weight: 800;
+  color: hsl(var(--v2-fg));
+}
+.v2-text-secondary {
+  font-weight: 400;
+  color: hsl(var(--v2-fg-muted));
+}
+.v2-text-muted {
+  font-weight: 400;
+  color: hsl(var(--v2-fg-subtle));
+}
+
+/* Divider — subtle, no heavy lines */
 .v2-divider {
   border: none;
   border-top: 1px solid hsl(var(--v2-border));
@@ -188,6 +221,7 @@
   width: 100%;
   padding: 0.625rem 0.875rem;
   font-size: 0.9375rem;
+  font-weight: 400;
   color: hsl(var(--v2-fg));
   background: hsl(var(--v2-bg));
   border: 1px solid hsl(var(--v2-border));
@@ -198,4 +232,64 @@
 .v2-input:focus {
   border-color: hsl(var(--v2-primary));
   box-shadow: 0 0 0 3px hsl(var(--v2-primary) / 0.12);
+}
+
+/* ── Usage Summary Card ───────────────────────────────────────────────────── */
+
+.v2-usage-card {
+  background: var(--v2-card-glass-bg);
+  backdrop-filter: var(--v2-card-glass-blur);
+  -webkit-backdrop-filter: var(--v2-card-glass-blur);
+  border: 1px solid hsl(0 0% 100% / 0.3);
+  border-radius: var(--v2-radius);
+  box-shadow: var(--v2-card-shadow-md);
+  padding: 1.25rem;
+}
+
+.v2-usage-card-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: hsl(var(--v2-fg-muted));
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.v2-usage-card-value {
+  font-size: 2rem;
+  font-weight: 800;
+  color: hsl(var(--v2-fg));
+  line-height: 1;
+}
+
+.v2-usage-card-limit {
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: hsl(var(--v2-fg-subtle));
+  margin-top: 0.25rem;
+}
+
+.v2-usage-bar {
+  height: 6px;
+  background: hsl(var(--v2-bg-muted));
+  border-radius: 9999px;
+  margin-top: 0.75rem;
+  overflow: hidden;
+}
+
+.v2-usage-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, hsl(var(--v2-primary)), hsl(201 100% 42%));
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+
+/* Warning state when usage is high */
+.v2-usage-card--warning .v2-usage-bar-fill {
+  background: linear-gradient(90deg, hsl(var(--v2-warning)), hsl(38 92% 56%));
+}
+
+/* Danger state when usage is critical */
+.v2-usage-card--danger .v2-usage-bar-fill {
+  background: linear-gradient(90deg, hsl(var(--v2-danger)), hsl(0 84% 66%));
 }
