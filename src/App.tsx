@@ -34,6 +34,8 @@ import AuthCallbackPage from "./pages/AuthCallbackPage";
 import EbayCallbackPage from "./pages/EbayCallbackPage";
 import CookieConsent from "./components/CookieConsent";
 import { Loader2 } from "lucide-react";
+import HomePage2 from "./v2/pages/HomePage2";
+import SettingsPage2 from "./v2/pages/SettingsPage2";
 
 // Smart root: authenticated → /home, unauthenticated → landing page
 function RootRedirect() {
@@ -88,6 +90,10 @@ const App = () => (
               <Route path="/profit-report" element={<ProtectedRoute ownerOnly><ProfitReportPage /></ProtectedRoute>} />
               <Route path="/cogs-editor" element={<ProtectedRoute ownerOnly><BulkCogsPage /></ProtectedRoute>} />
               <Route path="/historical-cogs" element={<ProtectedRoute ownerOnly><HistoricalCogsPage /></ProtectedRoute>} />
+              {/* V2 preview routes */}
+              <Route path="/home2"     element={<ProtectedRoute><HomePage2 /></ProtectedRoute>} />
+              <Route path="/settings2" element={<ProtectedRoute><SettingsPage2 /></ProtectedRoute>} />
+
               <Route path="*" element={<NotFound />} />
             </Routes>
             <CookieConsent />

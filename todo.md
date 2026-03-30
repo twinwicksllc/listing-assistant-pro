@@ -1,8 +1,21 @@
-# Shipping Label Cost Fix
+# V2 UI Redesign — Todo
 
-## Tasks
-- [x] Add `sell.finances` scope to all 3 OAuth scope arrays in ebay-publish/index.ts
-- [x] Add `fetchShippingLabelCosts()` function to ebay-listings/index.ts using Finances API
-- [x] Fix netProfit: exclude shippingCollected from income (it's a pass-through, not kept money)
-- [x] Wire fetchShippingLabelCosts into fetchOrderCounts and apply to financial windows
-- [x] Push branch and create PR (#168)
+## Phase 1 — Design System & Shared Components
+- [x] Read existing codebase (done in planning)
+- [ ] Fix index.html viewport (remove user-scalable=no)
+- [ ] Create src/v2/theme.css — white bg, #0076B6 primary, #B0B7BC silver, system font stack, base 16px
+- [ ] Create src/v2/components/SideNav.tsx — desktop left sidebar
+- [ ] Create src/v2/components/AppShell.tsx — responsive wrapper (sidebar ≥1024px, bottom nav <1024px)
+
+## Phase 2 — Page: /home2
+- [ ] Create src/v2/pages/HomePage2.tsx — same logic as HomePage, v2 layout
+- [ ] Register /home2 route in App.tsx
+
+## Phase 3 — Page: /settings2
+- [ ] Create src/v2/pages/SettingsPage2.tsx — same logic as SettingsPage, v2 layout
+- [ ] Register /settings2 route in App.tsx
+
+## Phase 4 — Verify & PR
+- [ ] npm run build — confirm 0 errors
+- [ ] Commit to feature/v2-ui-redesign branch
+- [ ] Push and create PR
