@@ -13,7 +13,10 @@ const CACHE_TTL_MINUTES = 15;
 // Last updated: March 2026
 const FALLBACK = { gold: 2650, silver: 89, platinum: 1040 };
 
-async function getSpotPrices(svc: ReturnType<typeof createClient>, forceRefresh = false): Promise<{
+async function getSpotPrices(
+  svc: ReturnType<typeof createClient>,
+  forceRefresh = false,
+): Promise<{
   gold: number;
   silver: number;
   platinum: number;
@@ -56,25 +59,33 @@ async function getSpotPrices(svc: ReturnType<typeof createClient>, forceRefresh 
 
   try {
     const resp = await fetch("https://www.kitco.com/price/precious-metals", {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; ListingAssistant/1.0)" },
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; ListingAssistant/1.0)",
+      },
     });
     if (resp.ok) {
       const html = await resp.text();
-      
+
       // Parse prices from Kitco HTML using regex
       // Looking for patterns like: Silver</a></span><span>67.56</span>
       const goldMatch = html.match(/Gold<\/a>.*?<span>([\d,]+\.?\d*)<\/span>/s);
-      const silverMatch = html.match(/Silver<\/a>.*?<span>([\d,]+\.?\d*)<\/span>/s);
-      const platinumMatch = html.match(/Platinum<\/a>.*?<span>([\d,]+\.?\d*)<\/span>/s);
-      
+      const silverMatch = html.match(
+        /Silver<\/a>.*?<span>([\d,]+\.?\d*)<\/span>/s,
+      );
+      const platinumMatch = html.match(
+        /Platinum<\/a>.*?<span>([\d,]+\.?\d*)<\/span>/s,
+      );
+
       const prices = {
-        gold: goldMatch ? parseFloat(goldMatch[1].replace(/,/g, '')) : 0,
-        silver: silverMatch ? parseFloat(silverMatch[1].replace(/,/g, '')) : 0,
-        platinum: platinumMatch ? parseFloat(platinumMatch[1].replace(/,/g, '')) : 0,
+        gold: goldMatch ? parseFloat(goldMatch[1].replace(/,/g, "")) : 0,
+        silver: silverMatch ? parseFloat(silverMatch[1].replace(/,/g, "")) : 0,
+        platinum: platinumMatch
+          ? parseFloat(platinumMatch[1].replace(/,/g, ""))
+          : 0,
       };
-      
+
       console.log("Kitco parsed prices:", prices);
-      
+
       if (prices.gold > 0 && prices.silver > 0) {
         fresh = prices;
         source = "kitco.com";
@@ -90,9 +101,14 @@ async function getSpotPrices(svc: ReturnType<typeof createClient>, forceRefresh 
   }
 
   // 4. If live fetch failed, use existing cached values or hardcoded fallback
-  const prices = fresh ?? (cached
-    ? { gold: Number(cached.gold), silver: Number(cached.silver), platinum: Number(cached.platinum) }
-    : FALLBACK);
+  const prices = fresh ??
+    (cached
+      ? {
+        gold: Number(cached.gold),
+        silver: Number(cached.silver),
+        platinum: Number(cached.platinum),
+      }
+      : FALLBACK);
 
   if (!fresh) {
     source = cached ? "db-stale" : "fallback";
@@ -132,7 +148,7 @@ serve(async (req) => {
     const svc = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-      { auth: { persistSession: false } }
+      { auth: { persistSession: false } },
     );
 
     // Check for force_refresh query parameter to bypass cache
@@ -156,10 +172,13 @@ serve(async (req) => {
     }
 
     if (metalType && weightOz && weightOz > 0) {
-      const spotPrice =
-        metalType === "gold" ? gold :
-        metalType === "silver" ? silver :
-        metalType === "platinum" ? platinum : 0;
+      const spotPrice = metalType === "gold"
+        ? gold
+        : metalType === "silver"
+        ? silver
+        : metalType === "platinum"
+        ? platinum
+        : 0;
       meltValue = parseFloat((spotPrice * weightOz).toFixed(2));
     }
 
@@ -173,13 +192,18 @@ serve(async (req) => {
         source,
         refreshed,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
     console.error("spot-prices error:", e);
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({
+        error: e instanceof Error ? e.message : "Unknown error",
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 });

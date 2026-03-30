@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { decode as decodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { initSentry, captureException } from "../_helpers/sentry.ts";
+import { captureException, initSentry } from "../_helpers/sentry.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -78,7 +78,7 @@ async function fetchDynamicAspectRule(
               "Content-Type": "application/json",
             },
             body: JSON.stringify({ action: "aspects", categoryId }),
-          }
+          },
         );
         if (resp.ok) {
           const data = await resp.json();
@@ -87,7 +87,10 @@ async function fetchDynamicAspectRule(
           }
         }
       } catch (fetchErr) {
-        console.warn(`fetchDynamicAspectRule: category-lookup call failed for ${categoryId}:`, fetchErr);
+        console.warn(
+          `fetchDynamicAspectRule: category-lookup call failed for ${categoryId}:`,
+          fetchErr,
+        );
       }
     }
 
@@ -135,7 +138,12 @@ function convertEbayAspectsToRule(aspects: any[]): AspectRule {
 // Falls back to hardcoded ID sets if breadcrumb unavailable.
 // ================================================================
 
-type CategoryTreeType = "coin" | "bullion" | "trading_card" | "collectible" | "other";
+type CategoryTreeType =
+  | "coin"
+  | "bullion"
+  | "trading_card"
+  | "collectible"
+  | "other";
 
 async function detectCategoryTree(
   categoryId: string,
@@ -149,13 +157,25 @@ async function detectCategoryTree(
       .eq("ebay_category_id", categoryId)
       .maybeSingle();
 
-    const breadcrumb = (mapping?.breadcrumb || mapping?.category_name || "").toLowerCase();
+    const breadcrumb = (mapping?.breadcrumb || mapping?.category_name || "")
+      .toLowerCase();
 
     if (breadcrumb) {
       if (breadcrumb.includes("bullion")) return "bullion";
-      if (breadcrumb.includes("coins:") || breadcrumb.includes("coins >") || breadcrumb.includes("paper money")) return "coin";
-      if (breadcrumb.includes("trading cards") || breadcrumb.includes("collectible card games")) return "trading_card";
-      if (breadcrumb.includes("collectibles") || breadcrumb.includes("toys &") || breadcrumb.includes("stuffed animal") || breadcrumb.includes("action figure") || breadcrumb.includes("funko") || breadcrumb.includes("lego") || breadcrumb.includes("board game")) return "collectible";
+      if (
+        breadcrumb.includes("coins:") || breadcrumb.includes("coins >") ||
+        breadcrumb.includes("paper money")
+      ) return "coin";
+      if (
+        breadcrumb.includes("trading cards") ||
+        breadcrumb.includes("collectible card games")
+      ) return "trading_card";
+      if (
+        breadcrumb.includes("collectibles") || breadcrumb.includes("toys &") ||
+        breadcrumb.includes("stuffed animal") ||
+        breadcrumb.includes("action figure") || breadcrumb.includes("funko") ||
+        breadcrumb.includes("lego") || breadcrumb.includes("board game")
+      ) return "collectible";
       return "other";
     }
   } catch (_) { /* fall through to hardcoded */ }
@@ -163,16 +183,61 @@ async function detectCategoryTree(
   // Fallback to hardcoded sets
   if (HARDCODED_BULLION_CATEGORY_IDS.has(categoryId)) return "bullion";
   if (HARDCODED_COIN_CATEGORY_IDS.has(categoryId)) return "coin";
-  if (HARDCODED_TRADING_CARD_CATEGORY_IDS.has(categoryId)) return "trading_card";
+  if (HARDCODED_TRADING_CARD_CATEGORY_IDS.has(categoryId)) {
+    return "trading_card";
+  }
   if (HARDCODED_COLLECTIBLE_CATEGORY_IDS.has(categoryId)) return "collectible";
   return "other";
 }
 
 // Hardcoded ID sets kept as fallback for detectCategoryTree
-const HARDCODED_COIN_CATEGORY_IDS = new Set(["11981", "39464", "11980", "11971", "41099", "41102", "11973", "39455", "41084", "11950", "41111", "166679", "41109", "526", "253", "45243", "261186", "39471", "39472", "39473", "39474", "39475"]);
-const HARDCODED_BULLION_CATEGORY_IDS = new Set(["178906", "39489", "3361", "532", "173685"]);
-const HARDCODED_TRADING_CARD_CATEGORY_IDS = new Set(["261328", "183454", "2536", "19107", "64482", "213"]);
-const HARDCODED_COLLECTIBLE_CATEGORY_IDS = new Set(["19203", "19209", "261068", "246", "182", "19016"]);
+const HARDCODED_COIN_CATEGORY_IDS = new Set([
+  "11981",
+  "39464",
+  "11980",
+  "11971",
+  "41099",
+  "41102",
+  "11973",
+  "39455",
+  "41084",
+  "11950",
+  "41111",
+  "166679",
+  "41109",
+  "526",
+  "253",
+  "45243",
+  "261186",
+  "39471",
+  "39472",
+  "39473",
+  "39474",
+  "39475",
+]);
+const HARDCODED_BULLION_CATEGORY_IDS = new Set([
+  "178906",
+  "39489",
+  "3361",
+  "532",
+  "173685",
+]);
+const HARDCODED_TRADING_CARD_CATEGORY_IDS = new Set([
+  "261328",
+  "183454",
+  "2536",
+  "19107",
+  "64482",
+  "213",
+]);
+const HARDCODED_COLLECTIBLE_CATEGORY_IDS = new Set([
+  "19203",
+  "19209",
+  "261068",
+  "246",
+  "182",
+  "19016",
+]);
 
 // ================================================================
 // COIN/BULLION FIXED-VALUES ALLOWLIST (deficiency #5)
@@ -182,10 +247,28 @@ const HARDCODED_COLLECTIBLE_CATEGORY_IDS = new Set(["19203", "19209", "261068", 
 // ================================================================
 const COIN_FIXED_VALUES_ALLOWED_IDS = new Set([
   // Coins
-  "11981", "39464", "11980", "11971", "41099", "41102", "11973",
-  "39455", "41084", "11950", "41111", "41109", "526", "253", "45243",
+  "11981",
+  "39464",
+  "11980",
+  "11971",
+  "41099",
+  "41102",
+  "11973",
+  "39455",
+  "41084",
+  "11950",
+  "41111",
+  "41109",
+  "526",
+  "253",
+  "45243",
   // Bullion
-  "178906", "39489", "3361", "532", "173685", "166679",
+  "178906",
+  "39489",
+  "3361",
+  "532",
+  "173685",
+  "166679",
 ]);
 
 const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
@@ -198,14 +281,24 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
   // Gold Bars & Rounds
   "178906": {
     required: [],
-    preferred: ["Shape", "Precious Metal Content per Unit", "Brand/Mint", "Fineness"],
+    preferred: [
+      "Shape",
+      "Precious Metal Content per Unit",
+      "Brand/Mint",
+      "Fineness",
+    ],
     defaults: {},
     fixedValues: { "Composition": "Gold" },
   },
   // Silver Bars & Rounds
   "39489": {
     required: [],
-    preferred: ["Shape", "Precious Metal Content per Unit", "Brand/Mint", "Fineness"],
+    preferred: [
+      "Shape",
+      "Precious Metal Content per Unit",
+      "Brand/Mint",
+      "Fineness",
+    ],
     defaults: {},
     fixedValues: { "Composition": "Silver" },
   },
@@ -231,122 +324,298 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
   // Eisenhower Dollars 1971-1978
   "11981": {
     required: ["Certification", "Circulated/Uncirculated"],
-    preferred: ["Year", "Strike Type", "Mint Location", "Fineness", "Denomination"],
-    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "$1" },
+    preferred: [
+      "Year",
+      "Strike Type",
+      "Mint Location",
+      "Fineness",
+      "Denomination",
+    ],
+    defaults: {
+      "Certification": "Uncertified",
+      "Circulated/Uncirculated": "Unknown",
+      "Denomination": "$1",
+    },
     fixedValues: { "Denomination": "$1" },
   },
   // Morgan Dollars 1878-1921
   "39464": {
     required: ["Certification", "Circulated/Uncirculated"],
-    preferred: ["Composition", "Year", "Mint Location", "Strike Type", "Fineness", "Denomination"],
-    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "$1" },
-    fixedValues: { "Denomination": "$1", "Composition": "Silver", "Fineness": "0.900" },
+    preferred: [
+      "Composition",
+      "Year",
+      "Mint Location",
+      "Strike Type",
+      "Fineness",
+      "Denomination",
+    ],
+    defaults: {
+      "Certification": "Uncertified",
+      "Circulated/Uncirculated": "Unknown",
+      "Denomination": "$1",
+    },
+    fixedValues: {
+      "Denomination": "$1",
+      "Composition": "Silver",
+      "Fineness": "0.900",
+    },
   },
   // Peace Dollars 1921-1935
   "11980": {
     required: ["Certification", "Circulated/Uncirculated"],
-    preferred: ["Year", "Mint Location", "Strike Type", "Fineness", "Denomination"],
-    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "$1" },
-    fixedValues: { "Denomination": "$1", "Composition": "Silver", "Fineness": "0.900" },
+    preferred: [
+      "Year",
+      "Mint Location",
+      "Strike Type",
+      "Fineness",
+      "Denomination",
+    ],
+    defaults: {
+      "Certification": "Uncertified",
+      "Circulated/Uncirculated": "Unknown",
+      "Denomination": "$1",
+    },
+    fixedValues: {
+      "Denomination": "$1",
+      "Composition": "Silver",
+      "Fineness": "0.900",
+    },
   },
   // Barber Half Dollars 1892-1915
   "11971": {
     required: ["Certification", "Circulated/Uncirculated"],
-    preferred: ["Year", "Mint Location", "Strike Type", "Fineness", "Denomination"],
-    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "50C" },
-    fixedValues: { "Denomination": "50C", "Composition": "Silver", "Fineness": "0.900" },
+    preferred: [
+      "Year",
+      "Mint Location",
+      "Strike Type",
+      "Fineness",
+      "Denomination",
+    ],
+    defaults: {
+      "Certification": "Uncertified",
+      "Circulated/Uncirculated": "Unknown",
+      "Denomination": "50C",
+    },
+    fixedValues: {
+      "Denomination": "50C",
+      "Composition": "Silver",
+      "Fineness": "0.900",
+    },
   },
   // Liberty Walking Half Dollars 1916-1947
   "41099": {
     required: ["Certification", "Circulated/Uncirculated"],
-    preferred: ["Year", "Mint Location", "Strike Type", "Fineness", "Denomination"],
-    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "50C" },
-    fixedValues: { "Denomination": "50C", "Composition": "Silver", "Fineness": "0.900" },
+    preferred: [
+      "Year",
+      "Mint Location",
+      "Strike Type",
+      "Fineness",
+      "Denomination",
+    ],
+    defaults: {
+      "Certification": "Uncertified",
+      "Circulated/Uncirculated": "Unknown",
+      "Denomination": "50C",
+    },
+    fixedValues: {
+      "Denomination": "50C",
+      "Composition": "Silver",
+      "Fineness": "0.900",
+    },
   },
   // Kennedy Half Dollars (1964-present) - Coins & Paper Money > US Coins
   "41102": {
     required: ["Certification", "Circulated/Uncirculated"],
     preferred: ["Year", "Mint Location", "Strike Type", "Denomination"],
-    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "50C" },
+    defaults: {
+      "Certification": "Uncertified",
+      "Circulated/Uncirculated": "Unknown",
+      "Denomination": "50C",
+    },
     fixedValues: { "Denomination": "50C" },
   },
   // Franklin Half Dollars (1948-1963) - Coins & Paper Money > US Coins
   "11973": {
     required: ["Certification", "Circulated/Uncirculated"],
-    preferred: ["Year", "Mint Location", "Strike Type", "Fineness", "Denomination"],
-    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "50C" },
-    fixedValues: { "Denomination": "50C", "Composition": "Silver", "Fineness": "0.900" },
+    preferred: [
+      "Year",
+      "Mint Location",
+      "Strike Type",
+      "Fineness",
+      "Denomination",
+    ],
+    defaults: {
+      "Certification": "Uncertified",
+      "Circulated/Uncirculated": "Unknown",
+      "Denomination": "50C",
+    },
+    fixedValues: {
+      "Denomination": "50C",
+      "Composition": "Silver",
+      "Fineness": "0.900",
+    },
   },
   // Wheat Penny (1909-1958) - Coins & Paper Money > US Coins
   "39455": {
     required: ["Certification", "Circulated/Uncirculated"],
-    preferred: ["Year", "Mint Location", "Strike Type", "Composition", "Denomination"],
-    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "1C" },
+    preferred: [
+      "Year",
+      "Mint Location",
+      "Strike Type",
+      "Composition",
+      "Denomination",
+    ],
+    defaults: {
+      "Certification": "Uncertified",
+      "Circulated/Uncirculated": "Unknown",
+      "Denomination": "1C",
+    },
     fixedValues: { "Denomination": "1C", "Composition": "Copper" },
   },
   // Indian Head Cent
   "41084": {
     required: ["Certification", "Circulated/Uncirculated", "Material"],
     preferred: ["Year", "Mint Location", "Strike Type", "Denomination"],
-    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "1C", "Material": "Copper" },
+    defaults: {
+      "Certification": "Uncertified",
+      "Circulated/Uncirculated": "Unknown",
+      "Denomination": "1C",
+      "Material": "Copper",
+    },
     fixedValues: { "Denomination": "1C", "Material": "Copper" },
   },
   // Braided Hair Large Cent (1793-1857)
   "11950": {
     required: ["Certification", "Circulated/Uncirculated", "Material"],
     preferred: ["Year", "Mint Location", "Strike Type", "Denomination"],
-    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Denomination": "1C", "Material": "Copper" },
+    defaults: {
+      "Certification": "Uncertified",
+      "Circulated/Uncirculated": "Unknown",
+      "Denomination": "1C",
+      "Material": "Copper",
+    },
     fixedValues: { "Denomination": "1C", "Material": "Copper" },
   },
   // American Silver Eagle
   "41111": {
     required: ["Certification", "Circulated/Uncirculated"],
     preferred: ["Year", "Strike Type", "Denomination"],
-    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Uncirculated", "Denomination": "$1" },
-    fixedValues: { "Denomination": "$1", "Composition": "Silver", "Fineness": "0.999" },
+    defaults: {
+      "Certification": "Uncertified",
+      "Circulated/Uncirculated": "Uncirculated",
+      "Denomination": "$1",
+    },
+    fixedValues: {
+      "Denomination": "$1",
+      "Composition": "Silver",
+      "Fineness": "0.999",
+    },
   },
   // Copper Rounds (non-legal-tender) - Coins & Paper Money > Bullion > Other Bullion
   "166679": {
     required: ["Certification", "Circulated/Uncirculated", "Type"],
-    preferred: ["Year", "Composition", "Fineness", "Denomination", "Brand/Mint"],
-    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown", "Type": "Round" },
+    preferred: [
+      "Year",
+      "Composition",
+      "Fineness",
+      "Denomination",
+      "Brand/Mint",
+    ],
+    defaults: {
+      "Certification": "Uncertified",
+      "Circulated/Uncirculated": "Unknown",
+      "Type": "Round",
+    },
     fixedValues: { "Composition": "Copper" },
   },
   // US Coin Proof Sets
   "41109": {
     required: ["Certification", "Circulated/Uncirculated"],
-    preferred: ["Year", "Mint Location", "Strike Type", "Country/Region of Manufacture"],
-    defaults: { "Certification": "U.S. Mint", "Circulated/Uncirculated": "Uncirculated", "Strike Type": "Proof", "Country/Region of Manufacture": "United States" },
+    preferred: [
+      "Year",
+      "Mint Location",
+      "Strike Type",
+      "Country/Region of Manufacture",
+    ],
+    defaults: {
+      "Certification": "U.S. Mint",
+      "Circulated/Uncirculated": "Uncirculated",
+      "Strike Type": "Proof",
+      "Country/Region of Manufacture": "United States",
+    },
   },
   // US Coin Mint Sets (uncirculated)
   "526": {
     required: ["Certification", "Circulated/Uncirculated"],
     preferred: ["Year", "Mint Location", "Country/Region of Manufacture"],
-    defaults: { "Certification": "U.S. Mint", "Circulated/Uncirculated": "Uncirculated", "Country/Region of Manufacture": "United States" },
+    defaults: {
+      "Certification": "U.S. Mint",
+      "Circulated/Uncirculated": "Uncirculated",
+      "Country/Region of Manufacture": "United States",
+    },
   },
   // US Coins General (catch-all fallback for any US coin category)
   "253": {
     required: ["Certification", "Circulated/Uncirculated"],
-    preferred: ["Year", "Mint Location", "Denomination", "Strike Type", "Fineness"],
-    defaults: { "Certification": "Uncertified", "Circulated/Uncirculated": "Unknown" },
+    preferred: [
+      "Year",
+      "Mint Location",
+      "Denomination",
+      "Strike Type",
+      "Fineness",
+    ],
+    defaults: {
+      "Certification": "Uncertified",
+      "Circulated/Uncirculated": "Unknown",
+    },
   },
   // World Coins (general)
   "45243": {
     required: [],
-    preferred: ["Year", "Denomination", "Composition", "Circulated/Uncirculated", "Certification", "Grade", "KM Number", "Country of Origin", "Materials sourced from", "Color", "Fineness", "Strike Type"],
+    preferred: [
+      "Year",
+      "Denomination",
+      "Composition",
+      "Circulated/Uncirculated",
+      "Certification",
+      "Grade",
+      "KM Number",
+      "Country of Origin",
+      "Materials sourced from",
+      "Color",
+      "Fineness",
+      "Strike Type",
+    ],
     defaults: { "Certification": "Uncertified" },
   },
   // ── Collectibles / Toys / Trading Cards ──────────────────────────────────
   // Sports Trading Cards
   "261328": {
     required: ["Sport"],
-    preferred: ["Player/Athlete", "Card Manufacturer", "Year", "Season", "Team", "Features", "Autographed", "Grade", "Professional Grader"],
+    preferred: [
+      "Player/Athlete",
+      "Card Manufacturer",
+      "Year",
+      "Season",
+      "Team",
+      "Features",
+      "Autographed",
+      "Grade",
+      "Professional Grader",
+    ],
     defaults: { "Sport": "Baseball" },
   },
   // Baseball Cards
   "64482": {
     required: ["Sport"],
-    preferred: ["Player/Athlete", "Card Manufacturer", "Year", "Team", "Features", "Grade"],
+    preferred: [
+      "Player/Athlete",
+      "Card Manufacturer",
+      "Year",
+      "Team",
+      "Features",
+      "Grade",
+    ],
     defaults: { "Sport": "Baseball" },
   },
   // Sports Cards General (parent)
@@ -358,7 +627,15 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
   // Pokémon Trading Card Games
   "183454": {
     required: [],
-    preferred: ["Card Name", "Card Type", "Set", "Year", "Features", "Grade", "Professional Grader"],
+    preferred: [
+      "Card Name",
+      "Card Type",
+      "Set",
+      "Year",
+      "Features",
+      "Grade",
+      "Professional Grader",
+    ],
     defaults: {},
   },
   // Magic: The Gathering
@@ -376,37 +653,79 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
   // Beanie Babies
   "19203": {
     required: [],
-    preferred: ["Character", "Brand", "Year Introduced", "Country/Region of Manufacture", "Features", "Animal"],
+    preferred: [
+      "Character",
+      "Brand",
+      "Year Introduced",
+      "Country/Region of Manufacture",
+      "Features",
+      "Animal",
+    ],
     defaults: { "Brand": "Ty" },
   },
   // Stuffed Animals & Plush
   "19209": {
     required: [],
-    preferred: ["Character", "Brand", "Material", "Animal", "Features", "Country/Region of Manufacture"],
+    preferred: [
+      "Character",
+      "Brand",
+      "Material",
+      "Animal",
+      "Features",
+      "Country/Region of Manufacture",
+    ],
     defaults: {},
   },
   // Funko Pop Vinyl Figures
   "261068": {
     required: [],
-    preferred: ["Character", "Brand", "Franchise", "Year", "Features", "Number in Series"],
+    preferred: [
+      "Character",
+      "Brand",
+      "Franchise",
+      "Year",
+      "Features",
+      "Number in Series",
+    ],
     defaults: { "Brand": "Funko" },
   },
   // Action Figures
   "246": {
     required: [],
-    preferred: ["Character", "Brand", "Franchise", "Year", "Features", "Material"],
+    preferred: [
+      "Character",
+      "Brand",
+      "Franchise",
+      "Year",
+      "Features",
+      "Material",
+    ],
     defaults: {},
   },
   // LEGO Sets
   "182": {
     required: [],
-    preferred: ["Set Number", "Theme", "Year", "Brand", "Features", "Number of Pieces"],
+    preferred: [
+      "Set Number",
+      "Theme",
+      "Year",
+      "Brand",
+      "Features",
+      "Number of Pieces",
+    ],
     defaults: { "Brand": "LEGO" },
   },
   // Board Games
   "19016": {
     required: [],
-    preferred: ["Title", "Brand", "Year", "Number of Players", "Age Range", "Features"],
+    preferred: [
+      "Title",
+      "Brand",
+      "Year",
+      "Number of Players",
+      "Age Range",
+      "Features",
+    ],
     defaults: {},
   },
 };
@@ -416,20 +735,46 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
 // ================================================================
 const VALID_ASPECT_VALUES: Record<string, Set<string>> = {
   "Certification": new Set([
-    "Uncertified", "PCGS", "NGC", "PCGS & CAC", "NGC & CAC",
-    "U.S. Mint", "ANACS", "ICG", "CAC", "ICCS",
+    "Uncertified",
+    "PCGS",
+    "NGC",
+    "PCGS & CAC",
+    "NGC & CAC",
+    "U.S. Mint",
+    "ANACS",
+    "ICG",
+    "CAC",
+    "ICCS",
   ]),
   "Circulated/Uncirculated": new Set(["Uncirculated", "Circulated", "Unknown"]),
   "Shape": new Set(["Bar", "Round"]),
   "Strike Type": new Set([
-    "Business", "Proof", "Proof-Like", "Deep Mirror Proof-Like", "Satin", "Matte",
+    "Business",
+    "Proof",
+    "Proof-Like",
+    "Deep Mirror Proof-Like",
+    "Satin",
+    "Matte",
   ]),
   "Composition": new Set([
-    "Gold", "Silver", "Platinum", "Palladium", "Bronze", "Copper", "Nickel", "Steel", "Zinc",
-    "Brass", "Aluminum", "Bimetallic", "Copper-Nickel", "Copper Clad", "Zinc Plated Steel",
+    "Gold",
+    "Silver",
+    "Platinum",
+    "Palladium",
+    "Bronze",
+    "Copper",
+    "Nickel",
+    "Steel",
+    "Zinc",
+    "Brass",
+    "Aluminum",
+    "Bimetallic",
+    "Copper-Nickel",
+    "Copper Clad",
+    "Zinc Plated Steel",
   ]),
   // Copper coin color designations (used in World Coins and US Copper coins)
-  "Color": new Set(["RD", "RB", "BN", "BM"]),  // BM = Bi-Metallic
+  "Color": new Set(["RD", "RB", "BN", "BM"]), // BM = Bi-Metallic
 };
 
 // ================================================================
@@ -437,8 +782,14 @@ const VALID_ASPECT_VALUES: Record<string, Set<string>> = {
 // ================================================================
 
 const ASPECT_SKIP_VALUES = new Set([
-  "none", "unknown", "n/a", "other", "unspecified", "not applicable",
-  "unknown/not applicable", "not specified",
+  "none",
+  "unknown",
+  "n/a",
+  "other",
+  "unspecified",
+  "not applicable",
+  "unknown/not applicable",
+  "not specified",
   // "Ungraded" is not a valid Sheldon-scale grade — eBay treats any grade value on an
   // uncertified coin as a numerical-grade policy violation (errorId 25019).  Drop it.
   "ungraded",
@@ -530,10 +881,27 @@ function normalizePreciousMetalContent(value: string): string {
 
   // Already a valid eBay format -- return as-is
   const validFormats = new Set([
-    "1/20 oz", "1/10 oz", "1/4 oz", "1/2 oz",
-    "1 oz", "2 oz", "5 oz", "10 oz", "1 kilo",
-    "1 g", "2 g", "2.5 g", "5 g", "10 g", "20 g",
-    "25 g", "50 g", "100 g", "250 g", "500 g", "1000 g",
+    "1/20 oz",
+    "1/10 oz",
+    "1/4 oz",
+    "1/2 oz",
+    "1 oz",
+    "2 oz",
+    "5 oz",
+    "10 oz",
+    "1 kilo",
+    "1 g",
+    "2 g",
+    "2.5 g",
+    "5 g",
+    "10 g",
+    "20 g",
+    "25 g",
+    "50 g",
+    "100 g",
+    "250 g",
+    "500 g",
+    "1000 g",
   ]);
   if (validFormats.has(v)) return v;
 
@@ -547,9 +915,18 @@ function normalizePreciousMetalContent(value: string): string {
   if (gramMatch) {
     const grams = parseFloat(gramMatch[1]);
     const gramMap: [number, string][] = [
-      [1, "1 g"], [2, "2 g"], [2.5, "2.5 g"], [5, "5 g"], [10, "10 g"],
-      [20, "20 g"], [25, "25 g"], [50, "50 g"], [100, "100 g"],
-      [250, "250 g"], [500, "500 g"], [1000, "1000 g"],
+      [1, "1 g"],
+      [2, "2 g"],
+      [2.5, "2.5 g"],
+      [5, "5 g"],
+      [10, "10 g"],
+      [20, "20 g"],
+      [25, "25 g"],
+      [50, "50 g"],
+      [100, "100 g"],
+      [250, "250 g"],
+      [500, "500 g"],
+      [1000, "1000 g"],
     ];
     for (const [target, label] of gramMap) {
       if (Math.abs(grams - target) / target < 0.02) return label;
@@ -565,8 +942,13 @@ function normalizePreciousMetalContent(value: string): string {
 
     // Already a fraction string -- normalize
     const fractionMap: Record<string, string> = {
-      "1/20": "1/20 oz", "1/10": "1/10 oz", "1/4": "1/4 oz",
-      "1/2": "1/2 oz", "1": "1 oz", "2": "2 oz", "5": "5 oz",
+      "1/20": "1/20 oz",
+      "1/10": "1/10 oz",
+      "1/4": "1/4 oz",
+      "1/2": "1/2 oz",
+      "1": "1 oz",
+      "2": "2 oz",
+      "5": "5 oz",
       "10": "10 oz",
     };
     if (fractionMap[ozStr]) return fractionMap[ozStr];
@@ -584,9 +966,18 @@ function normalizePreciousMetalContent(value: string): string {
     // convert to grams first (1 troy oz = 31.1035g) and match gram denominations
     const gramsFromOz = ozVal * 31.1035;
     const gramMapOz: [number, string][] = [
-      [1, "1 g"], [2, "2 g"], [2.5, "2.5 g"], [5, "5 g"], [10, "10 g"],
-      [20, "20 g"], [25, "25 g"], [50, "50 g"], [100, "100 g"],
-      [250, "250 g"], [500, "500 g"], [1000, "1000 g"],
+      [1, "1 g"],
+      [2, "2 g"],
+      [2.5, "2.5 g"],
+      [5, "5 g"],
+      [10, "10 g"],
+      [20, "20 g"],
+      [25, "25 g"],
+      [50, "50 g"],
+      [100, "100 g"],
+      [250, "250 g"],
+      [500, "500 g"],
+      [1000, "1000 g"],
     ];
     for (const [target, label] of gramMapOz) {
       if (Math.abs(gramsFromOz - target) / target < 0.03) return label;
@@ -594,14 +985,14 @@ function normalizePreciousMetalContent(value: string): string {
 
     // Map decimal oz values to eBay fraction strings
     const ozFractionMap: [number, string][] = [
-      [0.05,  "1/20 oz"],
-      [0.10,  "1/10 oz"],
-      [0.25,  "1/4 oz"],
-      [0.50,  "1/2 oz"],
-      [1.0,   "1 oz"],
-      [2.0,   "2 oz"],
-      [5.0,   "5 oz"],
-      [10.0,  "10 oz"],
+      [0.05, "1/20 oz"],
+      [0.10, "1/10 oz"],
+      [0.25, "1/4 oz"],
+      [0.50, "1/2 oz"],
+      [1.0, "1 oz"],
+      [2.0, "2 oz"],
+      [5.0, "5 oz"],
+      [10.0, "10 oz"],
       [32.15, "1 kilo"],
     ];
     for (const [target, label] of ozFractionMap) {
@@ -612,7 +1003,10 @@ function normalizePreciousMetalContent(value: string): string {
   }
 
   // Step 4: Handle "1 kilo" variants
-  if (/^1\s*kilo(?:gram)?$/i.test(stripped) || /^1000\s*g(?:rams?)?$/i.test(stripped)) {
+  if (
+    /^1\s*kilo(?:gram)?$/i.test(stripped) ||
+    /^1000\s*g(?:rams?)?$/i.test(stripped)
+  ) {
     return "1 kilo";
   }
 
@@ -621,42 +1015,42 @@ function normalizePreciousMetalContent(value: string): string {
 }
 
 const ASPECT_KEY_ALIASES: Record<string, string> = {
-  "Circulated/Uncirculated":         "Circulated/Uncirculated",
-  "CirculatedUncirculated":          "Circulated/Uncirculated",
-  "Mint Location":                   "Mint Location",
-  "MintLocation":                    "Mint Location",
-  "Strike Type":                     "Strike Type",
-  "StrikeType":                      "Strike Type",
-  "KM Number":                       "KM Number",
-  "KMNumber":                        "KM Number",
+  "Circulated/Uncirculated": "Circulated/Uncirculated",
+  "CirculatedUncirculated": "Circulated/Uncirculated",
+  "Mint Location": "Mint Location",
+  "MintLocation": "Mint Location",
+  "Strike Type": "Strike Type",
+  "StrikeType": "Strike Type",
+  "KM Number": "KM Number",
+  "KMNumber": "KM Number",
   "Precious Metal Content per Unit": "Precious Metal Content per Unit",
-  "PreciousMetalContentperUnit":     "Precious Metal Content per Unit",
-  "Metal Content":                   "Precious Metal Content per Unit",
-  "Brand/Mint":                      "Brand/Mint",
-  "Manufacturer/Mint":               "Brand/Mint",
-  "Fineness":                        "Fineness",
-  "Certification":                   "Certification",
-  "Denomination":                    "Denomination",
-  "Composition":                     "Composition",
-  "Year":                            "Year",
-  "Shape":                           "Shape",
-  "Grade":                           "Grade",
-  "Coin":                            "Coin",
-  "Coin Type":                       "Coin",
-  "Coin/Bullion Type":               "Coin",
-  "Country of Origin":               "Country of Origin",
-  "Country/Region of Manufacture":   "Country of Origin",
-  "Total Precious Metal Content":    "Total Precious Metal Content",
-  "Certification Number":            "Certification Number",
-  "Variety":                         "Variety",
-  "Era":                             "Era",
-  "Cleaned/Uncleaned":               "Cleaned/Uncleaned",
-  "Provenance":                      "Provenance",
+  "PreciousMetalContentperUnit": "Precious Metal Content per Unit",
+  "Metal Content": "Precious Metal Content per Unit",
+  "Brand/Mint": "Brand/Mint",
+  "Manufacturer/Mint": "Brand/Mint",
+  "Fineness": "Fineness",
+  "Certification": "Certification",
+  "Denomination": "Denomination",
+  "Composition": "Composition",
+  "Year": "Year",
+  "Shape": "Shape",
+  "Grade": "Grade",
+  "Coin": "Coin",
+  "Coin Type": "Coin",
+  "Coin/Bullion Type": "Coin",
+  "Country of Origin": "Country of Origin",
+  "Country/Region of Manufacture": "Country of Origin",
+  "Total Precious Metal Content": "Total Precious Metal Content",
+  "Certification Number": "Certification Number",
+  "Variety": "Variety",
+  "Era": "Era",
+  "Cleaned/Uncleaned": "Cleaned/Uncleaned",
+  "Provenance": "Provenance",
   // These were previously in NON_ASPECT_KEYS; now pass through as real eBay aspects:
-  "Type":                            "Type",       // required by bullion categories (e.g. 261186 Silver Bullion Coins) — errorId 25002
-  "Color":                           "Color",      // used by 45243 (World Coins) for copper/bronze coins
-  "Materials sourced from":          "Materials sourced from",
-  "Brand":                           "Brand",      // required by 45243 (World Coins) — errorId 25002 when missing
+  "Type": "Type", // required by bullion categories (e.g. 261186 Silver Bullion Coins) — errorId 25002
+  "Color": "Color", // used by 45243 (World Coins) for copper/bronze coins
+  "Materials sourced from": "Materials sourced from",
+  "Brand": "Brand", // required by 45243 (World Coins) — errorId 25002 when missing
 };
 
 const NON_ASPECT_KEYS = new Set([
@@ -665,8 +1059,12 @@ const NON_ASPECT_KEYS = new Set([
   // Inventory API rather than being silently dropped.
   // "Color" removed — world coins category 45243 uses Color (RD/RB/BN) as a real eBay aspect.
   // "Brand" removed — world coins category 45243 requires Brand as a real eBay aspect (errorId 25002 when missing).
-  "Material", "Size", "Mintage",
-  "Series", "Modified Item", "Mint Mark",
+  "Material",
+  "Size",
+  "Mintage",
+  "Series",
+  "Modified Item",
+  "Mint Mark",
 ]);
 
 function normalizeAspectKey(key: string): string {
@@ -698,9 +1096,11 @@ function buildAndNormalizeAspects(
     let value = trimmed;
     if (key === "Fineness") value = normalizeFineness(trimmed);
     else if (key === "Grade") value = normalizeGrade(trimmed);
-    else if (key === "Denomination") value = normalizeDenomination(trimmed, categoryId);
-    else if (key === "Precious Metal Content per Unit") value = normalizePreciousMetalContent(trimmed);
-    else if (key === "Circulated/Uncirculated") {
+    else if (key === "Denomination") {
+      value = normalizeDenomination(trimmed, categoryId);
+    } else if (key === "Precious Metal Content per Unit") {
+      value = normalizePreciousMetalContent(trimmed);
+    } else if (key === "Circulated/Uncirculated") {
       const gradeHint = (rawSpecifics["Grade"] as string) || undefined;
       value = normalizeCirculatedUncirculated(trimmed, gradeHint);
     }
@@ -710,15 +1110,22 @@ function buildAndNormalizeAspects(
     // drop the value if it exceeds 65 chars OR contains sentence-like punctuation
     // (periods, commas in long strings) that no valid country name would ever contain.
     if (key === "Country of Origin") {
-      const looksLikeSentence = value.length > 65 || /[.!?]/.test(value) || (value.includes(",") && value.length > 40);
+      const looksLikeSentence = value.length > 65 || /[.!?]/.test(value) ||
+        (value.includes(",") && value.length > 40);
       if (looksLikeSentence) {
-        console.warn(`buildAndNormalizeAspects: dropping Country of Origin — value looks like AI-generated text (${value.length} chars): "${value.slice(0, 80)}..."`);
+        console.warn(
+          `buildAndNormalizeAspects: dropping Country of Origin — value looks like AI-generated text (${value.length} chars): "${
+            value.slice(0, 80)
+          }..."`,
+        );
         continue;
       }
     }
 
     if (VALID_ASPECT_VALUES[key] && !VALID_ASPECT_VALUES[key].has(value)) {
-      console.warn(`buildAndNormalizeAspects: invalid value "${value}" for ${key} — skipping`);
+      console.warn(
+        `buildAndNormalizeAspects: invalid value "${value}" for ${key} — skipping`,
+      );
       continue;
     }
 
@@ -727,13 +1134,17 @@ function buildAndNormalizeAspects(
 
   // Apply fixed values ONLY for coin/bullion categories (deficiency #5 guard)
   // Strip "__dynamic_" prefix to get the real category ID for allowlist check
-  const realCatId = categoryId.startsWith("__dynamic_") ? categoryId.slice(10) : categoryId;
+  const realCatId = categoryId.startsWith("__dynamic_")
+    ? categoryId.slice(10)
+    : categoryId;
   if (rule?.fixedValues && COIN_FIXED_VALUES_ALLOWED_IDS.has(realCatId)) {
     for (const [k, v] of Object.entries(rule.fixedValues)) {
       aspects[k] = [v];
     }
   } else if (rule?.fixedValues) {
-    console.warn(`buildAndNormalizeAspects: skipping fixedValues for non-coin category ${realCatId}`);
+    console.warn(
+      `buildAndNormalizeAspects: skipping fixedValues for non-coin category ${realCatId}`,
+    );
   }
 
   // ── Sport inference for trading card categories ─────────────────────────
@@ -746,7 +1157,7 @@ function buildAndNormalizeAspects(
       (aspects["Team"]?.[0] || "") + " " +
       (aspects["Card Manufacturer"]?.[0] || "")
     ).toLowerCase();
-    
+
     if (/football|nfl|quarterback|touchdown|gridiron/i.test(textToSearch)) {
       aspects["Sport"] = ["Football"];
     } else if (/basketball|nba|hoops/i.test(textToSearch)) {
@@ -765,7 +1176,11 @@ function buildAndNormalizeAspects(
       // Default to Baseball for sports cards when sport cannot be inferred
       aspects["Sport"] = ["Baseball"];
     }
-    console.log(`buildAndNormalizeAspects: inferred Sport="${aspects["Sport"][0]}" for category ${categoryId}`);
+    console.log(
+      `buildAndNormalizeAspects: inferred Sport="${
+        aspects["Sport"][0]
+      }" for category ${categoryId}`,
+    );
   }
 
   // Fill required aspects with defaults if still missing
@@ -777,12 +1192,16 @@ function buildAndNormalizeAspects(
       const grade = aspects["Grade"]?.[0];
       const circVal = normalizeCirculatedUncirculated(undefined, grade);
       aspects["Circulated/Uncirculated"] = [circVal];
-      console.log(`buildAndNormalizeAspects: derived Circulated/Uncirculated="${circVal}" from grade="${grade}"`);
+      console.log(
+        `buildAndNormalizeAspects: derived Circulated/Uncirculated="${circVal}" from grade="${grade}"`,
+      );
     }
     for (const [k, v] of Object.entries(rule.defaults)) {
       if (!aspects[k]) {
         aspects[k] = [v];
-        console.log(`buildAndNormalizeAspects: filled default ${k}="${v}" for category ${categoryId}`);
+        console.log(
+          `buildAndNormalizeAspects: filled default ${k}="${v}" for category ${categoryId}`,
+        );
       }
     }
   }
@@ -794,24 +1213,42 @@ function buildAndNormalizeAspects(
 
   // Normalize cert values that include the grader name plus extra text.
   // e.g. "ICG Genuine" -> "ICG", "NGC MS 65" -> "NGC", "PCGS AU-58" -> "PCGS"
-  const CERTIFIED_GRADERS = new Set(["PCGS", "NGC", "ANACS", "ICG", "CAC", "ICCS", "PCGS & CAC", "NGC & CAC"]);
+  const CERTIFIED_GRADERS = new Set([
+    "PCGS",
+    "NGC",
+    "ANACS",
+    "ICG",
+    "CAC",
+    "ICCS",
+    "PCGS & CAC",
+    "NGC & CAC",
+  ]);
   let normalizedCert = certValue;
   if (certValue && !CERTIFIED_GRADERS.has(certValue)) {
     // Try to extract a known grader name from the beginning of the value
     for (const grader of CERTIFIED_GRADERS) {
       if (certValue.toUpperCase().startsWith(grader)) {
         normalizedCert = grader;
-        console.log(`buildAndNormalizeAspects: normalizing Certification "${certValue}" -> "${grader}"`);
+        console.log(
+          `buildAndNormalizeAspects: normalizing Certification "${certValue}" -> "${grader}"`,
+        );
         aspects["Certification"] = [grader];
         break;
       }
     }
   }
 
-  if (aspects["Grade"] && (!normalizedCert || !CERTIFIED_GRADERS.has(normalizedCert))) {
+  if (
+    aspects["Grade"] &&
+    (!normalizedCert || !CERTIFIED_GRADERS.has(normalizedCert))
+  ) {
     console.warn(
-      `buildAndNormalizeAspects: dropping Grade="${aspects["Grade"][0]}" for category ${categoryId} ` +
-      `because Certification="${certValue ?? "not set"}" is not a recognized grading service (eBay errorId 25019)`
+      `buildAndNormalizeAspects: dropping Grade="${
+        aspects["Grade"][0]
+      }" for category ${categoryId} ` +
+        `because Certification="${
+          certValue ?? "not set"
+        }" is not a recognized grading service (eBay errorId 25019)`,
     );
     delete aspects["Grade"];
   }
@@ -832,23 +1269,23 @@ const CONDITION_ID_MAP: Record<string, number> = {
   CERTIFIED_REFURBISHED: 2000,
   SELLER_REFURBISHED: 2500,
   // USED_* family — correct for Coins & Paper Money category tree
-  USED_EXCELLENT: 3000,   // AU-50 to XF-45
-  USED_VERY_GOOD: 4000,   // VF-20 to VF-35
-  USED_GOOD: 5000,         // F-12 to VG-10
-  USED_ACCEPTABLE: 6000,   // G-4 to G-6
+  USED_EXCELLENT: 3000, // AU-50 to XF-45
+  USED_VERY_GOOD: 4000, // VF-20 to VF-35
+  USED_GOOD: 5000, // F-12 to VG-10
+  USED_ACCEPTABLE: 6000, // G-4 to G-6
   FOR_PARTS_OR_NOT_WORKING: 7000, // Damaged/holed/bent coins, junk
   // Trading card / collectible conditions (used by 261328, 183454, 19203, etc.)
-  VERY_GOOD: 3000,    // Trading cards: Very Good
-  GOOD: 4000,         // Trading cards: Good
-  ACCEPTABLE: 5000,   // Trading cards: Acceptable
+  VERY_GOOD: 3000, // Trading cards: Very Good
+  GOOD: 4000, // Trading cards: Good
+  ACCEPTABLE: 5000, // Trading cards: Acceptable
   // Legacy *_REFURBISHED aliases — mapped to USED_* for coin categories
   EXCELLENT_REFURBISHED: 3000,
   VERY_GOOD_REFURBISHED: 4000,
   GOOD_REFURBISHED: 5000,
   // Legacy PRE_OWNED_* aliases — kept so old DB records can still publish
-  PRE_OWNED_GOOD: 3000,  // same as USED_EXCELLENT
-  PRE_OWNED_FAIR: 5000,  // same as USED_GOOD
-  PRE_OWNED_POOR: 6000,  // same as USED_ACCEPTABLE
+  PRE_OWNED_GOOD: 3000, // same as USED_EXCELLENT
+  PRE_OWNED_FAIR: 5000, // same as USED_GOOD
+  PRE_OWNED_POOR: 6000, // same as USED_ACCEPTABLE
 };
 
 const CONDITION_DESCRIPTIONS: Record<string, string> = {
@@ -856,26 +1293,35 @@ const CONDITION_DESCRIPTIONS: Record<string, string> = {
   NEW_OTHER: "New without original packaging or tags.",
   NEW_WITH_DEFECTS: "New item with minor cosmetic defects.",
   LIKE_NEW: "Like new condition.",
-  CERTIFIED_REFURBISHED: "Professionally refurbished and certified to work like new.",
+  CERTIFIED_REFURBISHED:
+    "Professionally refurbished and certified to work like new.",
   SELLER_REFURBISHED: "Seller-refurbished item in good working condition.",
   // USED_* — correct conditions for Coins & Paper Money category tree
   // NOTE: Do NOT include numerical grades (AU-50, MS-65, etc.) in descriptions unless coin is certified by NGC, PCGS, ANACS, ICG, CAC, or ICCS
   USED_EXCELLENT: "Lightly circulated. Shows minimal wear on high points only.",
-  USED_VERY_GOOD: "Moderately circulated. Major details clear with moderate wear.",
+  USED_VERY_GOOD:
+    "Moderately circulated. Major details clear with moderate wear.",
   USED_GOOD: "Heavily circulated. All major features visible but worn.",
-  USED_ACCEPTABLE: "Heavily worn but identifiable. Outline and major features visible.",
-  FOR_PARTS_OR_NOT_WORKING: "Damaged, holed, bent, or corroded. Not suitable for collecting.",
+  USED_ACCEPTABLE:
+    "Heavily worn but identifiable. Outline and major features visible.",
+  FOR_PARTS_OR_NOT_WORKING:
+    "Damaged, holed, bent, or corroded. Not suitable for collecting.",
   // Trading card / collectible conditions
   VERY_GOOD: "Item in very good condition with minor wear.",
   GOOD: "Item in good condition with moderate wear.",
-  ACCEPTABLE: "Item in acceptable condition with heavy wear but still functional.",
+  ACCEPTABLE:
+    "Item in acceptable condition with heavy wear but still functional.",
   // Legacy aliases — redirect to their USED_* equivalents
-  EXCELLENT_REFURBISHED: "Lightly circulated. Shows minimal wear on high points only.",
-  VERY_GOOD_REFURBISHED: "Moderately circulated. Major details clear with moderate wear.",
-  GOOD_REFURBISHED: "Moderately circulated. Major details clear with moderate wear.",
+  EXCELLENT_REFURBISHED:
+    "Lightly circulated. Shows minimal wear on high points only.",
+  VERY_GOOD_REFURBISHED:
+    "Moderately circulated. Major details clear with moderate wear.",
+  GOOD_REFURBISHED:
+    "Moderately circulated. Major details clear with moderate wear.",
   PRE_OWNED_GOOD: "Lightly circulated. Shows minimal wear on high points only.",
   PRE_OWNED_FAIR: "Heavily circulated. All major features visible but worn.",
-  PRE_OWNED_POOR: "Heavily worn but identifiable. Outline and major features visible.",
+  PRE_OWNED_POOR:
+    "Heavily worn but identifiable. Outline and major features visible.",
 };
 
 const LEGACY_CONDITION_MAP: Record<string, string> = {
@@ -884,7 +1330,7 @@ const LEGACY_CONDITION_MAP: Record<string, string> = {
   EXCELLENT_REFURBISHED: "USED_EXCELLENT",
   VERY_GOOD_REFURBISHED: "USED_VERY_GOOD",
   GOOD_REFURBISHED: "USED_VERY_GOOD",
-  PRE_OWNED_GOOD: "USED_EXCELLENT",  // "good quality pre-owned" = lightly used, NOT numismatic "Good" (F-12)
+  PRE_OWNED_GOOD: "USED_EXCELLENT", // "good quality pre-owned" = lightly used, NOT numismatic "Good" (F-12)
   PRE_OWNED_FAIR: "USED_GOOD",
   PRE_OWNED_POOR: "USED_ACCEPTABLE",
 };
@@ -903,7 +1349,8 @@ function normalizeConditionForCategory(
   const condition = LEGACY_CONDITION_MAP[rawCondition] ?? rawCondition;
 
   // Use provided tree type or fall back to hardcoded ID sets
-  const treeType = categoryTreeType || detectCategoryTreeSync(categoryId ?? "", itemType);
+  const treeType = categoryTreeType ||
+    detectCategoryTreeSync(categoryId ?? "", itemType);
 
   const isCoin = treeType === "coin";
   const isBullion = treeType === "bullion";
@@ -913,10 +1360,10 @@ function normalizeConditionForCategory(
   if (isCoin) {
     // Coins & Paper Money category tree uses USED_* condition family, NOT *_REFURBISHED.
     const validCoinConditions = new Set([
-      "NEW",             // MS-60 to MS-70 (uncirculated) and slabbed/certified
-      "USED_EXCELLENT",  // AU-50 to XF-45 (lightly circulated)
-      "USED_VERY_GOOD",  // VF-20 to VF-35 (moderately circulated)
-      "USED_GOOD",       // F-12 to VG-10 (heavily circulated)
+      "NEW", // MS-60 to MS-70 (uncirculated) and slabbed/certified
+      "USED_EXCELLENT", // AU-50 to XF-45 (lightly circulated)
+      "USED_VERY_GOOD", // VF-20 to VF-35 (moderately circulated)
+      "USED_GOOD", // F-12 to VG-10 (heavily circulated)
       "USED_ACCEPTABLE", // G-4 to G-6 (heavily worn but identifiable)
       "FOR_PARTS_OR_NOT_WORKING", // Damaged/holed/bent only
     ]);
@@ -936,56 +1383,75 @@ function normalizeConditionForCategory(
         PRE_OWNED_POOR: "FOR_PARTS_OR_NOT_WORKING",
       };
       const mapped = fallbackMap[condition] ?? "USED_EXCELLENT";
-      console.log(`normalizeConditionForCategory: coin category ${categoryId} — ${condition} -> ${mapped}`);
+      console.log(
+        `normalizeConditionForCategory: coin category ${categoryId} — ${condition} -> ${mapped}`,
+      );
       return { condition: mapped, corrected: true };
     }
   } else if (isBullion) {
     // Bullion: allow everything except LIKE_NEW
     if (condition === "LIKE_NEW") {
-      console.log(`normalizeConditionForCategory: bullion category ${categoryId} — LIKE_NEW -> NEW`);
+      console.log(
+        `normalizeConditionForCategory: bullion category ${categoryId} — LIKE_NEW -> NEW`,
+      );
       return { condition: "NEW", corrected: true };
     }
   } else if (isTradingCard) {
     // Trading cards: eBay only allows LIKE_NEW, VERY_GOOD, GOOD, ACCEPTABLE (no NEW/1000)
-    const validCardConditions = new Set(["LIKE_NEW", "VERY_GOOD", "GOOD", "ACCEPTABLE"]);
+    const validCardConditions = new Set([
+      "LIKE_NEW",
+      "VERY_GOOD",
+      "GOOD",
+      "ACCEPTABLE",
+    ]);
     if (!validCardConditions.has(condition)) {
       const fallbackMap: Record<string, string> = {
-        NEW:                   "LIKE_NEW",
-        NEW_OTHER:             "LIKE_NEW",
-        NEW_WITH_DEFECTS:      "GOOD",
-        USED_EXCELLENT:        "LIKE_NEW",
-        USED_VERY_GOOD:        "VERY_GOOD",
-        USED_GOOD:             "GOOD",
-        USED_ACCEPTABLE:       "ACCEPTABLE",
-        PRE_OWNED_GOOD:        "GOOD",
-        PRE_OWNED_FAIR:        "ACCEPTABLE",
-        PRE_OWNED_POOR:        "ACCEPTABLE",
-        SELLER_REFURBISHED:    "GOOD",
+        NEW: "LIKE_NEW",
+        NEW_OTHER: "LIKE_NEW",
+        NEW_WITH_DEFECTS: "GOOD",
+        USED_EXCELLENT: "LIKE_NEW",
+        USED_VERY_GOOD: "VERY_GOOD",
+        USED_GOOD: "GOOD",
+        USED_ACCEPTABLE: "ACCEPTABLE",
+        PRE_OWNED_GOOD: "GOOD",
+        PRE_OWNED_FAIR: "ACCEPTABLE",
+        PRE_OWNED_POOR: "ACCEPTABLE",
+        SELLER_REFURBISHED: "GOOD",
         FOR_PARTS_OR_NOT_WORKING: "ACCEPTABLE",
       };
       const mapped = fallbackMap[condition] ?? "LIKE_NEW";
-      console.log(`normalizeConditionForCategory: trading card category ${categoryId} — ${condition} -> ${mapped}`);
+      console.log(
+        `normalizeConditionForCategory: trading card category ${categoryId} — ${condition} -> ${mapped}`,
+      );
       return { condition: mapped, corrected: true };
     }
   } else if (isCollectible) {
     // Collectibles/toys/plush: map any non-standard conditions to valid eBay set
-    const validCollectibleConditions = new Set(["NEW", "LIKE_NEW", "VERY_GOOD", "GOOD", "ACCEPTABLE"]);
+    const validCollectibleConditions = new Set([
+      "NEW",
+      "LIKE_NEW",
+      "VERY_GOOD",
+      "GOOD",
+      "ACCEPTABLE",
+    ]);
     if (!validCollectibleConditions.has(condition)) {
       const fallbackMap: Record<string, string> = {
-        NEW_OTHER:             "NEW",
-        NEW_WITH_DEFECTS:      "GOOD",
-        USED_EXCELLENT:        "LIKE_NEW",
-        USED_VERY_GOOD:        "VERY_GOOD",
-        USED_GOOD:             "GOOD",
-        USED_ACCEPTABLE:       "ACCEPTABLE",
-        PRE_OWNED_GOOD:        "GOOD",
-        PRE_OWNED_FAIR:        "ACCEPTABLE",
-        PRE_OWNED_POOR:        "ACCEPTABLE",
-        SELLER_REFURBISHED:    "GOOD",
+        NEW_OTHER: "NEW",
+        NEW_WITH_DEFECTS: "GOOD",
+        USED_EXCELLENT: "LIKE_NEW",
+        USED_VERY_GOOD: "VERY_GOOD",
+        USED_GOOD: "GOOD",
+        USED_ACCEPTABLE: "ACCEPTABLE",
+        PRE_OWNED_GOOD: "GOOD",
+        PRE_OWNED_FAIR: "ACCEPTABLE",
+        PRE_OWNED_POOR: "ACCEPTABLE",
+        SELLER_REFURBISHED: "GOOD",
         FOR_PARTS_OR_NOT_WORKING: "ACCEPTABLE",
       };
       const mapped = fallbackMap[condition] ?? "GOOD";
-      console.log(`normalizeConditionForCategory: collectible category ${categoryId} — ${condition} -> ${mapped}`);
+      console.log(
+        `normalizeConditionForCategory: collectible category ${categoryId} — ${condition} -> ${mapped}`,
+      );
       return { condition: mapped, corrected: true };
     }
   }
@@ -995,14 +1461,22 @@ function normalizeConditionForCategory(
 
 // Synchronous category tree detection using hardcoded ID sets + item type hints
 // Used by normalizeConditionForCategory when async breadcrumb detection isn't available
-function detectCategoryTreeSync(categoryId: string, itemType: string | undefined): CategoryTreeType {
+function detectCategoryTreeSync(
+  categoryId: string,
+  itemType: string | undefined,
+): CategoryTreeType {
   if (HARDCODED_BULLION_CATEGORY_IDS.has(categoryId)) return "bullion";
   if (HARDCODED_COIN_CATEGORY_IDS.has(categoryId)) return "coin";
-  if (HARDCODED_TRADING_CARD_CATEGORY_IDS.has(categoryId)) return "trading_card";
+  if (HARDCODED_TRADING_CARD_CATEGORY_IDS.has(categoryId)) {
+    return "trading_card";
+  }
   if (HARDCODED_COLLECTIBLE_CATEGORY_IDS.has(categoryId)) return "collectible";
 
   // Also handle the legacy 261xxx range for silver/gold bullion coins/bars
-  if (/^261[0-9]{3}$/.test(categoryId) && parseInt(categoryId) >= 261000 && parseInt(categoryId) <= 261076) {
+  if (
+    /^261[0-9]{3}$/.test(categoryId) && parseInt(categoryId) >= 261000 &&
+    parseInt(categoryId) <= 261076
+  ) {
     return "bullion";
   }
 
@@ -1011,8 +1485,12 @@ function detectCategoryTreeSync(categoryId: string, itemType: string | undefined
     const lower = itemType.toLowerCase();
     if (/coin/i.test(lower)) return "coin";
     if (/round|bar|ingot|wafer/i.test(lower)) return "bullion";
-    if (/trading.?card|pokemon|baseball.?card|sports.?card/i.test(lower)) return "trading_card";
-    if (/beanie|plush|funko|action.?figure|lego/i.test(lower)) return "collectible";
+    if (/trading.?card|pokemon|baseball.?card|sports.?card/i.test(lower)) {
+      return "trading_card";
+    }
+    if (/beanie|plush|funko|action.?figure|lego/i.test(lower)) {
+      return "collectible";
+    }
   }
 
   return "other";
@@ -1025,14 +1503,20 @@ function detectCategoryTreeSync(categoryId: string, itemType: string | undefined
 // ----------------------------------------------------------------
 const FIXED_PRICE_DURATION = "GTC";
 const DEFAULT_AUCTION_DURATION = "Days_7";
-const VALID_AUCTION_DURATIONS = ["Days_1", "Days_3", "Days_5", "Days_7", "Days_10"];
+const VALID_AUCTION_DURATIONS = [
+  "Days_1",
+  "Days_3",
+  "Days_5",
+  "Days_7",
+  "Days_10",
+];
 
 // ----------------------------------------------------------------
 // Helper: fetch with timeout to prevent hanging requests
 // ----------------------------------------------------------------
 async function fetchWithTimeout(
   url: string,
-  options: RequestInit & { timeout?: number } = {}
+  options: RequestInit & { timeout?: number } = {},
 ): Promise<Response> {
   const timeout = options.timeout ?? 15000; // 15 second default
   const { timeout: _timeout, ...fetchOptions } = options;
@@ -1106,17 +1590,37 @@ function sanitizeDescription(desc: string): string {
 // eBay errorId 25019: grades in title/description of uncertified coins
 // trigger a policy violation even if the Grade aspect was already dropped.
 // ----------------------------------------------------------------
-const GRADE_PATTERN = /\b(MS|PR|PF|AU|XF|EF|VF|F|VG|G|AG|FA|PO|P)-?\s*(\d{1,2})\b/gi;
-const CERTIFIED_GRADERS_SET = new Set(["PCGS", "NGC", "ANACS", "ICG", "CAC", "ICCS", "PCGS & CAC", "NGC & CAC"]);
+const GRADE_PATTERN =
+  /\b(MS|PR|PF|AU|XF|EF|VF|F|VG|G|AG|FA|PO|P)-?\s*(\d{1,2})\b/gi;
+const CERTIFIED_GRADERS_SET = new Set([
+  "PCGS",
+  "NGC",
+  "ANACS",
+  "ICG",
+  "CAC",
+  "ICCS",
+  "PCGS & CAC",
+  "NGC & CAC",
+]);
 
-function stripGradesIfUncertified(text: string, certificationValue: string | undefined): string {
+function stripGradesIfUncertified(
+  text: string,
+  certificationValue: string | undefined,
+): string {
   if (!text) return text;
   // If certified by an approved grader, grades are allowed — don't strip
-  if (certificationValue && CERTIFIED_GRADERS_SET.has(certificationValue)) return text;
+  if (certificationValue && CERTIFIED_GRADERS_SET.has(certificationValue)) {
+    return text;
+  }
   // Strip grade patterns from text (replace with empty string)
-  const stripped = text.replace(GRADE_PATTERN, "").replace(/\s{2,}/g, " ").trim();
+  const stripped = text.replace(GRADE_PATTERN, "").replace(/\s{2,}/g, " ")
+    .trim();
   if (stripped !== text) {
-    console.log(`stripGradesIfUncertified: removed grade pattern(s) from text (cert="${certificationValue ?? "none"}")`);
+    console.log(
+      `stripGradesIfUncertified: removed grade pattern(s) from text (cert="${
+        certificationValue ?? "none"
+      }")`,
+    );
   }
   return stripped;
 }
@@ -1133,7 +1637,7 @@ function buildFixedPriceOffer(params: {
   ebayCategoryId?: string;
   merchantLocationKey: string;
   fulfillmentPolicyId: string;
-  paymentPolicyId?: string | null;  // Optional: managed payments sellers don't need this
+  paymentPolicyId?: string | null; // Optional: managed payments sellers don't need this
   returnPolicyId: string;
   bestOfferEnabled?: boolean;
   bestOfferAutoAcceptPrice?: number;
@@ -1153,13 +1657,17 @@ function buildFixedPriceOffer(params: {
     const bestOfferTerms: Record<string, unknown> = {
       bestOfferEnabled: true,
     };
-    if (params.bestOfferAutoAcceptPrice && params.bestOfferAutoAcceptPrice > 0) {
+    if (
+      params.bestOfferAutoAcceptPrice && params.bestOfferAutoAcceptPrice > 0
+    ) {
       bestOfferTerms.autoAcceptPrice = {
         value: params.bestOfferAutoAcceptPrice.toFixed(2),
         currency: "USD",
       };
     }
-    if (params.bestOfferAutoDeclinePrice && params.bestOfferAutoDeclinePrice > 0) {
+    if (
+      params.bestOfferAutoDeclinePrice && params.bestOfferAutoDeclinePrice > 0
+    ) {
       bestOfferTerms.autoDeclinePrice = {
         value: params.bestOfferAutoDeclinePrice.toFixed(2),
         currency: "USD",
@@ -1207,7 +1715,7 @@ function buildAuctionOffer(params: {
   ebayCategoryId?: string;
   merchantLocationKey: string;
   fulfillmentPolicyId: string;
-  paymentPolicyId?: string | null;  // Optional: managed payments sellers don't need this
+  paymentPolicyId?: string | null; // Optional: managed payments sellers don't need this
   returnPolicyId: string;
 }): Record<string, unknown> {
   // Validate auction duration
@@ -1232,7 +1740,7 @@ function buildAuctionOffer(params: {
       };
     } else {
       console.warn(
-        `Auction BIN price ${params.auctionBuyItNow} is less than 30% above start price ${params.auctionStartPrice}. Omitting BIN.`
+        `Auction BIN price ${params.auctionBuyItNow} is less than 30% above start price ${params.auctionStartPrice}. Omitting BIN.`,
       );
     }
   }
@@ -1251,7 +1759,9 @@ function buildAuctionOffer(params: {
         fulfillmentPolicyId: params.fulfillmentPolicyId,
         returnPolicyId: params.returnPolicyId,
       };
-      if (params.paymentPolicyId) policies.paymentPolicyId = params.paymentPolicyId;
+      if (params.paymentPolicyId) {
+        policies.paymentPolicyId = params.paymentPolicyId;
+      }
       return policies;
     })(),
     condition: params.condition,
@@ -1273,7 +1783,9 @@ async function uploadDataUrlToStorage(dataUrl: string): Promise<string> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceKey) {
-    console.warn("uploadDataUrlToStorage: missing Supabase env vars — skipping upload");
+    console.warn(
+      "uploadDataUrlToStorage: missing Supabase env vars — skipping upload",
+    );
     return dataUrl;
   }
 
@@ -1290,7 +1802,9 @@ async function uploadDataUrlToStorage(dataUrl: string): Promise<string> {
     // Decode base64 to binary using Deno's base64 decoder
     const bytes = decodeBase64(b64);
 
-    const filename = `server-uploads/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const filename = `server-uploads/${Date.now()}-${
+      Math.random().toString(36).slice(2)
+    }.${ext}`;
 
     // Use supabase-js client so auth headers are handled correctly
     const adminClient = createClient(supabaseUrl, serviceKey);
@@ -1299,7 +1813,10 @@ async function uploadDataUrlToStorage(dataUrl: string): Promise<string> {
       .upload(filename, bytes, { contentType: mime, upsert: false });
 
     if (uploadError) {
-      console.error("uploadDataUrlToStorage: upload failed:", uploadError.message);
+      console.error(
+        "uploadDataUrlToStorage: upload failed:",
+        uploadError.message,
+      );
       return dataUrl;
     }
 
@@ -1328,7 +1845,7 @@ async function ensureInventoryLocation(
   userToken: string,
   postalCode: string,
   city = "",
-  country = "US"
+  country = "US",
 ): Promise<string> {
   const merchantLocationKey = "default-location";
 
@@ -1348,7 +1865,7 @@ async function ensureInventoryLocation(
 
   console.log(
     `ensureInventoryLocation: attempting to create/update location "${merchantLocationKey}" with address:`,
-    locationBody.location.address
+    locationBody.location.address,
   );
 
   const resp = await fetchWithTimeout(
@@ -1366,13 +1883,13 @@ async function ensureInventoryLocation(
       },
       body: JSON.stringify(locationBody),
       timeout: 15000,
-    }
+    },
   );
 
   // 204 = created successfully.
   if (resp.ok) {
     console.log(
-      `ensureInventoryLocation: location "${merchantLocationKey}" created successfully (status ${resp.status})`
+      `ensureInventoryLocation: location "${merchantLocationKey}" created successfully (status ${resp.status})`,
     );
     return merchantLocationKey;
   }
@@ -1391,7 +1908,7 @@ async function ensureInventoryLocation(
 
   if (resp.status === 409 || alreadyExists) {
     console.log(
-      `ensureInventoryLocation: location "${merchantLocationKey}" already exists — attempting DELETE + re-create to update address (PATCH silently ignores address fields)`
+      `ensureInventoryLocation: location "${merchantLocationKey}" already exists — attempting DELETE + re-create to update address (PATCH silently ignores address fields)`,
     );
 
     // Step 1: DELETE the existing location so we can re-create it with the correct address.
@@ -1404,12 +1921,12 @@ async function ensureInventoryLocation(
           "Accept-Language": "en-US",
         },
         timeout: 15000,
-      }
+      },
     );
 
     if (deleteResp.ok || deleteResp.status === 204) {
       console.log(
-        `ensureInventoryLocation: deleted "${merchantLocationKey}" — re-creating with postal code ${postalCode}`
+        `ensureInventoryLocation: deleted "${merchantLocationKey}" — re-creating with postal code ${postalCode}`,
       );
       const reCreateResp = await fetchWithTimeout(
         `${apiBase}/sell/inventory/v1/location/${merchantLocationKey}`,
@@ -1423,23 +1940,23 @@ async function ensureInventoryLocation(
           },
           body: JSON.stringify(locationBody),
           timeout: 15000,
-        }
+        },
       );
       if (reCreateResp.ok) {
         console.log(
-          `ensureInventoryLocation: location "${merchantLocationKey}" re-created with postal code ${postalCode} successfully`
+          `ensureInventoryLocation: location "${merchantLocationKey}" re-created with postal code ${postalCode} successfully`,
         );
         return merchantLocationKey;
       }
       const reCreateErrText = await reCreateResp.text();
       console.error(
-        `ensureInventoryLocation: re-create failed after DELETE (${reCreateResp.status}): ${reCreateErrText}`
+        `ensureInventoryLocation: re-create failed after DELETE (${reCreateResp.status}): ${reCreateErrText}`,
       );
       // Fall through to postal-code-based fallback key.
     } else {
       const deleteErrText = await deleteResp.text();
       console.warn(
-        `ensureInventoryLocation: DELETE failed (${deleteResp.status}): ${deleteErrText}. Location may have active items assigned. Falling back to postal-code-keyed location.`
+        `ensureInventoryLocation: DELETE failed (${deleteResp.status}): ${deleteErrText}. Location may have active items assigned. Falling back to postal-code-keyed location.`,
       );
     }
 
@@ -1447,7 +1964,7 @@ async function ensureInventoryLocation(
     // always get a location with the correct address even if the default key can't be updated.
     const fallbackKey = `loc-${postalCode.replace(/[^a-zA-Z0-9]/g, "")}`;
     console.log(
-      `ensureInventoryLocation: creating postal-code-keyed location "${fallbackKey}" as fallback`
+      `ensureInventoryLocation: creating postal-code-keyed location "${fallbackKey}" as fallback`,
     );
     const fallbackResp = await fetchWithTimeout(
       `${apiBase}/sell/inventory/v1/location/${fallbackKey}`,
@@ -1461,12 +1978,12 @@ async function ensureInventoryLocation(
         },
         body: JSON.stringify(locationBody),
         timeout: 15000,
-      }
+      },
     );
 
     if (fallbackResp.ok) {
       console.log(
-        `ensureInventoryLocation: fallback location "${fallbackKey}" created with postal code ${postalCode}`
+        `ensureInventoryLocation: fallback location "${fallbackKey}" created with postal code ${postalCode}`,
       );
       return fallbackKey;
     }
@@ -1476,38 +1993,42 @@ async function ensureInventoryLocation(
     try {
       const fallbackErrJson = JSON.parse(fallbackErrText);
       fallbackAlreadyExists = Array.isArray(fallbackErrJson.errors) &&
-        fallbackErrJson.errors.some((e: { errorId: number }) => e.errorId === 25803);
+        fallbackErrJson.errors.some((e: { errorId: number }) =>
+          e.errorId === 25803
+        );
     } catch { /* not JSON */ }
 
     if (fallbackResp.status === 409 || fallbackAlreadyExists) {
       // This postal code was used before — the location already exists with the right address.
       console.log(
-        `ensureInventoryLocation: fallback location "${fallbackKey}" already exists with correct postal code — using it`
+        `ensureInventoryLocation: fallback location "${fallbackKey}" already exists with correct postal code — using it`,
       );
       return fallbackKey;
     }
 
     // All attempts exhausted — proceed with whatever key eBay has on file.
     console.error(
-      `ensureInventoryLocation: all location update attempts failed. Using "${merchantLocationKey}" with potentially stale address. Last error: ${fallbackResp.status}: ${fallbackErrText}`
+      `ensureInventoryLocation: all location update attempts failed. Using "${merchantLocationKey}" with potentially stale address. Last error: ${fallbackResp.status}: ${fallbackErrText}`,
     );
     return merchantLocationKey;
   }
 
   // Genuine error — not an "already exists" case.
   console.error(
-    `ensureInventoryLocation: unexpected error ${resp.status}: ${errText}`
+    `ensureInventoryLocation: unexpected error ${resp.status}: ${errText}`,
   );
   throw new Error(
-    `Failed to ensure inventory location: ${resp.status} - ${errText}`
+    `Failed to ensure inventory location: ${resp.status} - ${errText}`,
   );
 }
 
 serve(async (req) => {
   initSentry();
-  
-  console.log("*** EBAY-PUBLISH FUNCTION STARTED (v24 - Dynamic category aspects from eBay Taxonomy API, hardcoded rules as fallback) ***");
-  
+
+  console.log(
+    "*** EBAY-PUBLISH FUNCTION STARTED (v24 - Dynamic category aspects from eBay Taxonomy API, hardcoded rules as fallback) ***",
+  );
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -1517,12 +2038,16 @@ serve(async (req) => {
 
   try {
     console.log(`ebay-publish request: method=${req.method}, url=${req.url}`);
-    
+
     const requestBody = await req.json();
     let payload: Record<string, unknown>;
     ({ action, ...payload } = requestBody);
-    
-    console.log(`ebay-publish action: ${action}, payload keys: ${Object.keys(payload).join(", ")}`);
+
+    console.log(
+      `ebay-publish action: ${action}, payload keys: ${
+        Object.keys(payload).join(", ")
+      }`,
+    );
     if (action === "create_draft") {
       console.log(`create_draft payload:`, {
         hasSku: !!payload.sku,
@@ -1553,27 +2078,26 @@ serve(async (req) => {
     // (exchange_code, refresh_token, get_auth_url, create_draft, bulk_create_draft).
     // get_stored_token and get_policies only need Supabase credentials, so we defer
     // this check to avoid blocking those actions when eBay app credentials are misconfigured.
-    const requiresEbayCredentials = !["get_stored_token", "get_policies"].includes(action);
+    const requiresEbayCredentials = !["get_stored_token", "get_policies"]
+      .includes(action);
     if (requiresEbayCredentials && (!clientId || !clientSecret)) {
       throw new Error("eBay API credentials not configured");
     }
 
-    const apiBase =
-      ebayEnv === "production"
-        ? "https://api.ebay.com"
-        : "https://api.sandbox.ebay.com";
-    const authBase =
-      ebayEnv === "production"
-        ? "https://auth.ebay.com"
-        : "https://auth.sandbox.ebay.com";
-    const tokenUrl =
-      ebayEnv === "production"
-        ? "https://api.ebay.com/identity/v1/oauth2/token"
-        : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
+    const apiBase = ebayEnv === "production"
+      ? "https://api.ebay.com"
+      : "https://api.sandbox.ebay.com";
+    const authBase = ebayEnv === "production"
+      ? "https://auth.ebay.com"
+      : "https://auth.sandbox.ebay.com";
+    const tokenUrl = ebayEnv === "production"
+      ? "https://api.ebay.com/identity/v1/oauth2/token"
+      : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
 
     // --- ACTION: Get OAuth consent URL ---
     if (action === "get_auth_url") {
-      const ruName = Deno.env.get("EBAY_RUNAME") || Deno.env.get("EBAY_REDIRECT_URI");
+      const ruName = Deno.env.get("EBAY_RUNAME") ||
+        Deno.env.get("EBAY_REDIRECT_URI");
       if (!ruName) throw new Error("EBAY_RUNAME not configured");
 
       const scopes = [
@@ -1582,12 +2106,11 @@ serve(async (req) => {
         "https://api.ebay.com/oauth/api_scope/sell.account",
         "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
         "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly", // Required for dashboard views/analytics
-        "https://api.ebay.com/oauth/api_scope/sell.finances",           // Required for shipping label cost data
+        "https://api.ebay.com/oauth/api_scope/sell.finances", // Required for shipping label cost data
         "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly", // OQ-5: required for Identity API username/accountType lookup
       ].join(" ");
 
-      const authUrl =
-        `${authBase}/oauth2/authorize?` +
+      const authUrl = `${authBase}/oauth2/authorize?` +
         `client_id=${encodeURIComponent(clientId)}` +
         `&redirect_uri=${encodeURIComponent(ruName)}` +
         `&response_type=code` +
@@ -1605,12 +2128,20 @@ serve(async (req) => {
       const { code, userId } = payload;
       if (!code) throw new Error("No authorization code provided");
 
-      const ruName = Deno.env.get("EBAY_RUNAME") || Deno.env.get("EBAY_REDIRECT_URI");
+      const ruName = Deno.env.get("EBAY_RUNAME") ||
+        Deno.env.get("EBAY_REDIRECT_URI");
       if (!ruName) {
-        throw new Error("eBay callback URI not configured. Contact admin to set EBAY_RUNAME.");
+        throw new Error(
+          "eBay callback URI not configured. Contact admin to set EBAY_RUNAME.",
+        );
       }
 
-      console.log("exchange_code: code =", code?.substring(0, 20) + "...", "env =", ebayEnv);
+      console.log(
+        "exchange_code: code =",
+        code?.substring(0, 20) + "...",
+        "env =",
+        ebayEnv,
+      );
 
       const credentials = btoa(`${clientId}:${clientSecret}`);
 
@@ -1635,16 +2166,24 @@ serve(async (req) => {
           const json = JSON.parse(txt);
           errorMsg = json.error_description || json.error || txt;
         } catch { /* not JSON */ }
-        throw new Error(`eBay token exchange failed (${resp.status}): ${errorMsg}`);
+        throw new Error(
+          `eBay token exchange failed (${resp.status}): ${errorMsg}`,
+        );
       }
 
       const tokenData = await resp.json();
 
       if (!tokenData.access_token) {
-        throw new Error("eBay returned no access token. Authorization code may have expired or been reused.");
+        throw new Error(
+          "eBay returned no access token. Authorization code may have expired or been reused.",
+        );
       }
 
-      console.log("exchange_code: token obtained, expires in", tokenData.expires_in, "seconds");
+      console.log(
+        "exchange_code: token obtained, expires in",
+        tokenData.expires_in,
+        "seconds",
+      );
 
       // --- Store token server-side in Supabase profiles table ---
       // Avoids exposing the token in localStorage (XSS risk).
@@ -1658,7 +2197,8 @@ serve(async (req) => {
           const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
           if (supabaseUrl && supabaseServiceKey) {
             const supabase = createClient(supabaseUrl, supabaseServiceKey);
-            const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
+            const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000)
+              .toISOString();
 
             // upsert with onConflict: "id" — creates the row if missing, updates if present
             const { error: upsertError } = await supabase
@@ -1670,11 +2210,14 @@ serve(async (req) => {
                   ebay_refresh_token: tokenData.refresh_token ?? null,
                   ebay_token_expires_at: expiresAt,
                 },
-                { onConflict: "id" }
+                { onConflict: "id" },
               );
 
             if (upsertError) {
-              console.warn("exchange_code: failed to upsert token in profiles:", upsertError.message);
+              console.warn(
+                "exchange_code: failed to upsert token in profiles:",
+                upsertError.message,
+              );
             } else {
               // Read-back verification: confirm the token was actually stored
               const { data: verifyData, error: verifyError } = await supabase
@@ -1687,20 +2230,25 @@ serve(async (req) => {
                 console.warn(
                   "exchange_code: upsert succeeded but read-back verification FAILED for user",
                   userId,
-                  "verifyError:", verifyError?.message ?? "token null after upsert"
+                  "verifyError:",
+                  verifyError?.message ?? "token null after upsert",
                 );
               } else {
                 console.log(
                   "exchange_code: token upserted and verified in profiles for user",
                   userId,
-                  "expires_at:", verifyData.ebay_token_expires_at
+                  "expires_at:",
+                  verifyData.ebay_token_expires_at,
                 );
               }
             }
           }
         } catch (storeErr) {
           // Non-fatal — still return the token to the client as fallback
-          console.warn("exchange_code: token storage error (non-fatal):", storeErr);
+          console.warn(
+            "exchange_code: token storage error (non-fatal):",
+            storeErr,
+          );
         }
       }
 
@@ -1716,11 +2264,12 @@ serve(async (req) => {
 
         const identityRes = await fetch(
           "https://apiz.ebay.com/commerce/identity/v1/user/",
-          { headers: { Authorization: `Bearer ${tokenData.access_token}` } }
+          { headers: { Authorization: `Bearer ${tokenData.access_token}` } },
         );
         const identity = await identityRes.json();
         const newUsername = identity?.userId ?? identity?.username ?? null;
-        const accountType = (identity?.accountType ?? "")?.toLowerCase() ?? "individual";
+        const accountType = (identity?.accountType ?? "")?.toLowerCase() ??
+          "individual";
 
         // Determine tier for one-account enforcement (OQ-3: gate on LA subscription, not eBay account type)
         // Fetch the eBay user's email from the identity payload (or from the Supabase profile)
@@ -1739,15 +2288,29 @@ serve(async (req) => {
         }
         if (_userEmailForStripe && _stripeSecretKey) {
           try {
-            const { default: Stripe } = await import("https://esm.sh/stripe@18.5.0");
-            const stripe = new Stripe(_stripeSecretKey, { apiVersion: "2025-08-27.basil" });
-            const customers = await stripe.customers.list({ email: _userEmailForStripe, limit: 1 });
+            const { default: Stripe } = await import(
+              "https://esm.sh/stripe@18.5.0"
+            );
+            const stripe = new Stripe(_stripeSecretKey, {
+              apiVersion: "2025-08-27.basil",
+            });
+            const customers = await stripe.customers.list({
+              email: _userEmailForStripe,
+              limit: 1,
+            });
             if (customers.data.length > 0) {
-              const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: "active", limit: 1 });
+              const subs = await stripe.subscriptions.list({
+                customer: customers.data[0].id,
+                status: "active",
+                limit: 1,
+              });
               if (subs.data.length > 0) {
                 const productId = subs.data[0].items.data[0].price.product;
-                if (productId === "prod_U70aT1KvuI2uDx") tierForOneAccountCheck = "unlimited";
-                else if (productId === "prod_U6zUiC1SYuPrGU") tierForOneAccountCheck = "pro";
+                if (productId === "prod_U70aT1KvuI2uDx") {
+                  tierForOneAccountCheck = "unlimited";
+                } else if (productId === "prod_U6zUiC1SYuPrGU") {
+                  tierForOneAccountCheck = "pro";
+                }
               }
             }
           } catch (stripeE) {
@@ -1757,7 +2320,10 @@ serve(async (req) => {
 
         // Check for existing eBay username (one-account rule for non-Unlimited)
         if (userId && _identitySupabaseUrl && _identityServiceKey) {
-          const supabase = createClient(_identitySupabaseUrl, _identityServiceKey);
+          const supabase = createClient(
+            _identitySupabaseUrl,
+            _identityServiceKey,
+          );
           const { data: existingProfile } = await supabase
             .from("profiles")
             .select("ebay_username")
@@ -1772,9 +2338,13 @@ serve(async (req) => {
             return new Response(
               JSON.stringify({
                 error: "account_already_linked",
-                message: `This Listing Assistant account is already linked to eBay user "${existingProfile.ebay_username}". Disconnect it before connecting a new account.`,
+                message:
+                  `This Listing Assistant account is already linked to eBay user "${existingProfile.ebay_username}". Disconnect it before connecting a new account.`,
               }),
-              { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              {
+                status: 409,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              },
             );
           }
 
@@ -1788,9 +2358,17 @@ serve(async (req) => {
             .eq("id", userId);
 
           if (usernameErr) {
-            console.warn("exchange_code: failed to store eBay username:", usernameErr.message);
+            console.warn(
+              "exchange_code: failed to store eBay username:",
+              usernameErr.message,
+            );
           } else {
-            console.log("exchange_code: stored eBay username for user", userId, ":", newUsername);
+            console.log(
+              "exchange_code: stored eBay username for user",
+              userId,
+              ":",
+              newUsername,
+            );
           }
         }
       } catch (identityErr) {
@@ -1804,7 +2382,7 @@ serve(async (req) => {
           refresh_token: tokenData.refresh_token,
           expires_in: tokenData.expires_in,
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -1828,8 +2406,11 @@ serve(async (req) => {
 
       if (error || !data?.ebay_refresh_token) {
         return new Response(
-          JSON.stringify({ token: null, error: "No refresh token available. Please reconnect eBay." }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({
+            token: null,
+            error: "No refresh token available. Please reconnect eBay.",
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
@@ -1857,23 +2438,35 @@ serve(async (req) => {
 
       if (!refreshResp.ok) {
         const txt = await refreshResp.text();
-        console.error("refresh_token: eBay refresh failed:", refreshResp.status, txt);
+        console.error(
+          "refresh_token: eBay refresh failed:",
+          refreshResp.status,
+          txt,
+        );
         return new Response(
-          JSON.stringify({ token: null, error: `Token refresh failed (${refreshResp.status}). Please reconnect eBay.` }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({
+            token: null,
+            error:
+              `Token refresh failed (${refreshResp.status}). Please reconnect eBay.`,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
       const tokenData = await refreshResp.json();
       if (!tokenData.access_token) {
         return new Response(
-          JSON.stringify({ token: null, error: "eBay returned no access token during refresh." }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({
+            token: null,
+            error: "eBay returned no access token during refresh.",
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
       // Store the new access token (and new refresh token if provided)
-      const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
+      const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000)
+        .toISOString();
       const updatePatch: Record<string, string> = {
         ebay_access_token: tokenData.access_token,
         ebay_token_expires_at: expiresAt,
@@ -1888,9 +2481,17 @@ serve(async (req) => {
         .eq("id", userId);
 
       if (updateError) {
-        console.warn("refresh_token: failed to store refreshed token:", updateError.message);
+        console.warn(
+          "refresh_token: failed to store refreshed token:",
+          updateError.message,
+        );
       } else {
-        console.log("refresh_token: token refreshed and stored for user", userId, "expires at", expiresAt);
+        console.log(
+          "refresh_token: token refreshed and stored for user",
+          userId,
+          "expires at",
+          expiresAt,
+        );
       }
 
       return new Response(
@@ -1898,7 +2499,7 @@ serve(async (req) => {
           token: tokenData.access_token,
           expiresIn: tokenData.expires_in,
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -1916,7 +2517,9 @@ serve(async (req) => {
       const supabase = createClient(supabaseUrl, supabaseServiceKey);
       const { data, error } = await supabase
         .from("profiles")
-        .select("ebay_access_token, ebay_token_expires_at, ebay_refresh_token, postal_code, city")
+        .select(
+          "ebay_access_token, ebay_token_expires_at, ebay_refresh_token, postal_code, city",
+        )
         .eq("id", userId)
         .single();
 
@@ -1930,15 +2533,20 @@ serve(async (req) => {
       });
 
       if (error || !data) {
-        console.warn("get_stored_token: no profile found or query error for user", userId);
+        console.warn(
+          "get_stored_token: no profile found or query error for user",
+          userId,
+        );
         return new Response(
           JSON.stringify({ token: null, postalCode: null, city: null }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
       const now = new Date();
-      const expiresAt = data.ebay_token_expires_at ? new Date(data.ebay_token_expires_at) : null;
+      const expiresAt = data.ebay_token_expires_at
+        ? new Date(data.ebay_token_expires_at)
+        : null;
       // Consider token expired if it expires within 5 minutes (proactive refresh window)
       const REFRESH_BUFFER_MS = 5 * 60 * 1000;
       const isExpiredOrExpiringSoon = expiresAt
@@ -1947,13 +2555,23 @@ serve(async (req) => {
 
       // Proactively refresh if token is expired or expiring within 5 minutes
       if (isExpiredOrExpiringSoon && data.ebay_refresh_token) {
-        console.log("get_stored_token: token expiring soon, attempting proactive refresh for user", userId);
+        console.log(
+          "get_stored_token: token expiring soon, attempting proactive refresh for user",
+          userId,
+        );
         // Skip proactive refresh if eBay app credentials are not configured
         if (!clientId || !clientSecret) {
-          console.warn("get_stored_token: skipping proactive refresh — eBay credentials not configured");
+          console.warn(
+            "get_stored_token: skipping proactive refresh — eBay credentials not configured",
+          );
           return new Response(
-            JSON.stringify({ token: data.ebay_access_token, postalCode: data.postal_code, city: (data as any).city ?? null, isExpired: false }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            JSON.stringify({
+              token: data.ebay_access_token,
+              postalCode: data.postal_code,
+              city: (data as any).city ?? null,
+              isExpired: false,
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
         try {
@@ -1982,7 +2600,9 @@ serve(async (req) => {
           if (refreshResp.ok) {
             const tokenData = await refreshResp.json();
             if (tokenData.access_token) {
-              const newExpiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
+              const newExpiresAt = new Date(
+                Date.now() + tokenData.expires_in * 1000,
+              ).toISOString();
               const updatePatch: Record<string, string> = {
                 ebay_access_token: tokenData.access_token,
                 ebay_token_expires_at: newExpiresAt,
@@ -1990,8 +2610,14 @@ serve(async (req) => {
               if (tokenData.refresh_token) {
                 updatePatch.ebay_refresh_token = tokenData.refresh_token;
               }
-              await supabase.from("profiles").update(updatePatch).eq("id", userId);
-              console.log("get_stored_token: proactive refresh succeeded, new expiry:", newExpiresAt);
+              await supabase.from("profiles").update(updatePatch).eq(
+                "id",
+                userId,
+              );
+              console.log(
+                "get_stored_token: proactive refresh succeeded, new expiry:",
+                newExpiresAt,
+              );
 
               return new Response(
                 JSON.stringify({
@@ -2001,20 +2627,36 @@ serve(async (req) => {
                   isExpired: false,
                   refreshed: true,
                 }),
-                { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                {
+                  headers: {
+                    ...corsHeaders,
+                    "Content-Type": "application/json",
+                  },
+                },
               );
             }
           } else {
-            console.warn("get_stored_token: proactive refresh failed:", refreshResp.status);
+            console.warn(
+              "get_stored_token: proactive refresh failed:",
+              refreshResp.status,
+            );
           }
         } catch (refreshErr) {
-          console.warn("get_stored_token: proactive refresh error (non-fatal):", refreshErr);
+          console.warn(
+            "get_stored_token: proactive refresh error (non-fatal):",
+            refreshErr,
+          );
         }
 
         // Refresh failed — return null so caller triggers re-auth
         return new Response(
-          JSON.stringify({ token: null, postalCode: data.postal_code, city: (data as any).city ?? null, isExpired: true }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({
+            token: null,
+            postalCode: data.postal_code,
+            city: (data as any).city ?? null,
+            isExpired: true,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
@@ -2025,7 +2667,7 @@ serve(async (req) => {
           city: (data as any).city ?? null,
           isExpired: false,
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -2059,12 +2701,33 @@ serve(async (req) => {
 
       if (!userToken) throw new Error("No eBay user token provided");
 
-      console.log(`create_draft: starting publish - title="${title}", format=${listingFormat}, env=${ebayEnv}`);
-      console.log(`create_draft: received condition from payload: ${condition}`);
-      console.log(`create_draft: postalCode from payload:`, postalCode, `city from payload:`, payloadCity);
-      console.log(`create_draft: _debug_postalCode:`, payload._debug_postalCode, `_debug_city:`, payload._debug_city);
-      console.log(`create_draft: received ebayCategoryId=${ebayCategoryId}, condition=${condition}, itemSpecifics=${JSON.stringify(itemSpecifics || {})}`);
-      console.log(`create_draft: itemSpecifics received:`, JSON.stringify(itemSpecifics || {}, null, 2));
+      console.log(
+        `create_draft: starting publish - title="${title}", format=${listingFormat}, env=${ebayEnv}`,
+      );
+      console.log(
+        `create_draft: received condition from payload: ${condition}`,
+      );
+      console.log(
+        `create_draft: postalCode from payload:`,
+        postalCode,
+        `city from payload:`,
+        payloadCity,
+      );
+      console.log(
+        `create_draft: _debug_postalCode:`,
+        payload._debug_postalCode,
+        `_debug_city:`,
+        payload._debug_city,
+      );
+      console.log(
+        `create_draft: received ebayCategoryId=${ebayCategoryId}, condition=${condition}, itemSpecifics=${
+          JSON.stringify(itemSpecifics || {})
+        }`,
+      );
+      console.log(
+        `create_draft: itemSpecifics received:`,
+        JSON.stringify(itemSpecifics || {}, null, 2),
+      );
 
       // Generate sequential SKU using atomic database counter.
       // If client provided a SKU, use it (for backwards compatibility on retry).
@@ -2077,22 +2740,29 @@ serve(async (req) => {
           const supabaseUrl = Deno.env.get("SUPABASE_URL");
           const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
           if (!supabaseUrl || !supabaseServiceKey) {
-            console.warn("create_draft: Supabase credentials not configured, falling back to random SKU");
+            console.warn(
+              "create_draft: Supabase credentials not configured, falling back to random SKU",
+            );
           } else {
             try {
               const supabase = createClient(supabaseUrl, supabaseServiceKey);
-              
+
               // Atomically increment next_sku_sequence via RPC and get the new value
               const { data: seqNum, error: seqError } = await supabase
                 .rpc("increment_sku_sequence", { user_id: userId });
 
               if (seqError || seqNum == null) {
-                console.error("create_draft: failed to increment SKU sequence:", seqError?.message || "no data returned");
+                console.error(
+                  "create_draft: failed to increment SKU sequence:",
+                  seqError?.message || "no data returned",
+                );
                 // Fall through to random SKU fallback
               } else {
                 // Format as LA + zero-padded 5-digit sequence number (e.g., LA01000, LA01001, ...)
                 sku = `LA${String(seqNum).padStart(5, "0")}`;
-                console.log(`create_draft: generated sequential SKU: ${sku} (sequence #${seqNum})`);
+                console.log(
+                  `create_draft: generated sequential SKU: ${sku} (sequence #${seqNum})`,
+                );
               }
             } catch (skuErr) {
               console.error("create_draft: SKU generation error:", skuErr);
@@ -2100,12 +2770,16 @@ serve(async (req) => {
             }
           }
         } else {
-          console.log("create_draft: userId not provided (old frontend code) — will use random SKU fallback");
+          console.log(
+            "create_draft: userId not provided (old frontend code) — will use random SKU fallback",
+          );
         }
 
         // Fallback to random SKU if sequential generation didn't work or userId was missing
         if (!sku) {
-          sku = `LA-${crypto.randomUUID().replace(/-/g, "").slice(0, 16).toUpperCase()}`;
+          sku = `LA-${
+            crypto.randomUUID().replace(/-/g, "").slice(0, 16).toUpperCase()
+          }`;
           console.log(`create_draft: using fallback random SKU: ${sku}`);
         }
       }
@@ -2127,7 +2801,9 @@ serve(async (req) => {
       let finalCategoryId = ebayCategoryId;
       if (isGrainBar(title, description)) {
         finalCategoryId = "3360"; // Coins & Paper Money > Bullion > Gold > Other
-        console.log(`create_draft: GRAIN BAR DETECTED - overriding category ${ebayCategoryId} -> ${finalCategoryId}`);
+        console.log(
+          `create_draft: GRAIN BAR DETECTED - overriding category ${ebayCategoryId} -> ${finalCategoryId}`,
+        );
       }
 
       // eBay Partner Network campaign ID for affiliate revenue tracking
@@ -2139,7 +2815,11 @@ serve(async (req) => {
         try {
           const baseUrl = `https://www.ebay.com/itm/${listingId}`;
           if (!epnCampaignId) return baseUrl;
-          return `https://rover.ebay.com/rover/1/711-53200-19255-0/1?campid=${encodeURIComponent(epnCampaignId)}&toolid=10001&customid=teckstart&mpre=${encodeURIComponent(baseUrl)}`;
+          return `https://rover.ebay.com/rover/1/711-53200-19255-0/1?campid=${
+            encodeURIComponent(epnCampaignId)
+          }&toolid=10001&customid=teckstart&mpre=${
+            encodeURIComponent(baseUrl)
+          }`;
         } catch {
           return null;
         }
@@ -2155,79 +2835,115 @@ serve(async (req) => {
       //   - Required aspect safety-fill (Certification, Circulated/Uncirculated)
       //   - Fixed values for known categories (Composition, Fineness for silver dollars, etc.)
       //   - Drops placeholder values (none / unknown / n/a / other / etc.)
-      
+
       // ── DYNAMIC ASPECT RULES ──────────────────────────────────────────
       // Try to fetch aspect rules from eBay's Taxonomy API (cached in DB).
       // Falls back to hardcoded CATEGORY_ASPECT_RULES if dynamic fetch fails.
       let categoryForAspects = finalCategoryId ?? "";
       let dynamicRuleApplied = false;
-      
+
       // Try dynamic aspect rules from eBay API cache
       try {
         const _supabaseUrl = Deno.env.get("SUPABASE_URL");
         const _supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
         if (_supabaseUrl && _supabaseServiceKey && categoryForAspects) {
           const _supabase = createClient(_supabaseUrl, _supabaseServiceKey);
-          const dynamicRule = await fetchDynamicAspectRule(categoryForAspects, _supabase);
-          if (dynamicRule && (dynamicRule.required.length > 0 || dynamicRule.preferred.length > 0)) {
+          const dynamicRule = await fetchDynamicAspectRule(
+            categoryForAspects,
+            _supabase,
+          );
+          if (
+            dynamicRule &&
+            (dynamicRule.required.length > 0 ||
+              dynamicRule.preferred.length > 0)
+          ) {
             // Merge: dynamic rules provide required/preferred/defaults,
             // but hardcoded fixedValues still override (they encode known-correct values like Fineness for Morgan Dollars)
             const hardcodedRule = CATEGORY_ASPECT_RULES[categoryForAspects];
             // Deficiency #5: Only merge hardcoded fixedValues for coin/bullion categories
-            if (hardcodedRule?.fixedValues && COIN_FIXED_VALUES_ALLOWED_IDS.has(categoryForAspects)) {
-              dynamicRule.fixedValues = { ...dynamicRule.fixedValues, ...hardcodedRule.fixedValues };
+            if (
+              hardcodedRule?.fixedValues &&
+              COIN_FIXED_VALUES_ALLOWED_IDS.has(categoryForAspects)
+            ) {
+              dynamicRule.fixedValues = {
+                ...dynamicRule.fixedValues,
+                ...hardcodedRule.fixedValues,
+              };
             } else if (hardcodedRule?.fixedValues) {
-              console.warn(`create_draft: skipping hardcoded fixedValues merge for non-coin category ${categoryForAspects}`);
+              console.warn(
+                `create_draft: skipping hardcoded fixedValues merge for non-coin category ${categoryForAspects}`,
+              );
             }
             // Also merge hardcoded defaults that are known-good (e.g., Certification: "Uncertified")
             if (hardcodedRule?.defaults) {
-              dynamicRule.defaults = { ...dynamicRule.defaults, ...hardcodedRule.defaults };
+              dynamicRule.defaults = {
+                ...dynamicRule.defaults,
+                ...hardcodedRule.defaults,
+              };
             }
-            
+
             // Temporarily inject into CATEGORY_ASPECT_RULES so buildAndNormalizeAspects can use it
-            CATEGORY_ASPECT_RULES[`__dynamic_${categoryForAspects}`] = dynamicRule;
+            CATEGORY_ASPECT_RULES[`__dynamic_${categoryForAspects}`] =
+              dynamicRule;
             categoryForAspects = `__dynamic_${categoryForAspects}`;
             dynamicRuleApplied = true;
-            console.log(`create_draft: using DYNAMIC aspect rules for category ${finalCategoryId} (${dynamicRule.required.length} required, ${dynamicRule.preferred.length} preferred)`);
+            console.log(
+              `create_draft: using DYNAMIC aspect rules for category ${finalCategoryId} (${dynamicRule.required.length} required, ${dynamicRule.preferred.length} preferred)`,
+            );
           }
         }
       } catch (dynamicErr) {
-        console.warn(`create_draft: dynamic aspect fetch failed for ${categoryForAspects}, using hardcoded fallback:`, dynamicErr);
+        console.warn(
+          `create_draft: dynamic aspect fetch failed for ${categoryForAspects}, using hardcoded fallback:`,
+          dynamicErr,
+        );
       }
-      
+
       // If dynamic didn't work, fall back to hardcoded rules
       if (!dynamicRuleApplied) {
         if (!CATEGORY_ASPECT_RULES[categoryForAspects]) {
-          const treeType = detectCategoryTreeSync(categoryForAspects, undefined);
+          const treeType = detectCategoryTreeSync(
+            categoryForAspects,
+            undefined,
+          );
           if (!categoryForAspects) {
             // No category at all — use empty rule (generic normalization only)
-            console.warn(`create_draft: no category ID provided, using empty aspect rule`);
+            console.warn(
+              `create_draft: no category ID provided, using empty aspect rule`,
+            );
             categoryForAspects = "__empty__";
           } else if (treeType === "coin" || treeType === "bullion") {
             // Known coin/bullion type not in CATEGORY_ASPECT_RULES — use empty rule.
             // 253 (US Coins General) is a non-leaf parent and causes eBay errorId 25003.
-            console.warn(`create_draft: coin/bullion category ${categoryForAspects} not in CATEGORY_ASPECT_RULES, using generic normalization`);
+            console.warn(
+              `create_draft: coin/bullion category ${categoryForAspects} not in CATEGORY_ASPECT_RULES, using generic normalization`,
+            );
             categoryForAspects = "__empty__";
           } else {
-            console.warn(`create_draft: category ${categoryForAspects} not in CATEGORY_ASPECT_RULES, using empty aspect rule (non-coin category)`);
+            console.warn(
+              `create_draft: category ${categoryForAspects} not in CATEGORY_ASPECT_RULES, using empty aspect rule (non-coin category)`,
+            );
             categoryForAspects = "__empty__";
           }
         }
       }
-      
+
       const aspects = buildAndNormalizeAspects(
         (itemSpecifics && typeof itemSpecifics === "object"
           ? itemSpecifics
           : {}) as Record<string, unknown>,
-        categoryForAspects
+        categoryForAspects,
       );
-      
+
       // Clean up temporary dynamic rule from the map
       if (dynamicRuleApplied) {
         delete CATEGORY_ASPECT_RULES[categoryForAspects];
       }
 
-      console.log(`create_draft: aspects built for category ${finalCategoryId}:`, JSON.stringify(aspects, null, 2));
+      console.log(
+        `create_draft: aspects built for category ${finalCategoryId}:`,
+        JSON.stringify(aspects, null, 2),
+      );
 
       // Get the final normalized certification value from aspects (already normalized above)
       const finalCertValue = aspects["Certification"]?.[0];
@@ -2235,23 +2951,39 @@ serve(async (req) => {
       // Sanitize description: fix JS-blocked words (errorId 25002)
       const sanitizedDescription = sanitizeDescription(description as string);
       if (sanitizedDescription !== description) {
-        console.log(`create_draft: description sanitized - replaced eBay-blocked patterns (errorId 25002 prevention)`);
+        console.log(
+          `create_draft: description sanitized - replaced eBay-blocked patterns (errorId 25002 prevention)`,
+        );
       }
 
       // Strip grade patterns from title & description if coin is not certified (errorId 25019)
       // eBay scans title and description text for grade patterns even when Grade aspect is dropped
-      const finalTitle = stripGradesIfUncertified(title as string, finalCertValue);
-      const finalDescription = stripGradesIfUncertified(sanitizedDescription, finalCertValue);
+      const finalTitle = stripGradesIfUncertified(
+        title as string,
+        finalCertValue,
+      );
+      const finalDescription = stripGradesIfUncertified(
+        sanitizedDescription,
+        finalCertValue,
+      );
       if (finalTitle !== title) {
-        console.log(`create_draft: grade stripped from title (cert="${finalCertValue ?? "none"}"): "${title}" -> "${finalTitle}"`);
+        console.log(
+          `create_draft: grade stripped from title (cert="${
+            finalCertValue ?? "none"
+          }"): "${title}" -> "${finalTitle}"`,
+        );
       }
       if (finalDescription !== sanitizedDescription) {
-        console.log(`create_draft: grade stripped from description (cert="${finalCertValue ?? "none"}")`);
+        console.log(
+          `create_draft: grade stripped from description (cert="${
+            finalCertValue ?? "none"
+          }")`,
+        );
       }
 
       // Extract the item Type (e.g., "Coin", "Round", "Bar") from itemSpecifics
       // This is used to disambiguate coins from bullion when validating conditions
-      const itemType = itemSpecifics && typeof itemSpecifics === "object" 
+      const itemType = itemSpecifics && typeof itemSpecifics === "object"
         ? (itemSpecifics as Record<string, unknown>).Type as string | undefined
         : undefined;
 
@@ -2261,22 +2993,25 @@ serve(async (req) => {
       // Migrate any legacy deprecated condition codes to current equivalents,
       // then normalize based on the category and item type (e.g., LIKE_NEW not valid for coins).
       const rawCondition = condition || "USED_EXCELLENT";
-      const { condition: normalizedCondition, corrected } = normalizeConditionForCategory(
-        rawCondition,
-        finalCategoryId,
-        itemType
-      );
+      const { condition: normalizedCondition, corrected } =
+        normalizeConditionForCategory(
+          rawCondition,
+          finalCategoryId,
+          itemType,
+        );
       const conditionEnum = normalizedCondition;
       const conditionId = CONDITION_ID_MAP[conditionEnum] ?? 3000;
-      const conditionDesc = CONDITION_DESCRIPTIONS[conditionEnum]
-        ?? conditionEnum.replace(/_/g, " ").toLowerCase()
-             .replace(/\b\w/g, (c: string) => c.toUpperCase());
+      const conditionDesc = CONDITION_DESCRIPTIONS[conditionEnum] ??
+        conditionEnum.replace(/_/g, " ").toLowerCase()
+          .replace(/\b\w/g, (c: string) => c.toUpperCase());
 
-      console.log(`create_draft: condition normalization - rawCondition=${rawCondition}, normalized=${normalizedCondition}, conditionId=${conditionId}, categoryId=${finalCategoryId}, corrected=${corrected}`);
+      console.log(
+        `create_draft: condition normalization - rawCondition=${rawCondition}, normalized=${normalizedCondition}, conditionId=${conditionId}, categoryId=${finalCategoryId}, corrected=${corrected}`,
+      );
 
       if (corrected) {
         console.log(
-          `create_draft: condition auto-corrected from ${rawCondition} to ${normalizedCondition} for category ${finalCategoryId}`
+          `create_draft: condition auto-corrected from ${rawCondition} to ${normalizedCondition} for category ${finalCategoryId}`,
         );
       }
 
@@ -2307,7 +3042,7 @@ serve(async (req) => {
         apiBase,
         userToken,
         effectivePostalCode,
-        effectiveCity
+        effectiveCity,
       );
 
       // Step 2: Create/update inventory item (PUT is idempotent — safe to retry)
@@ -2318,16 +3053,24 @@ serve(async (req) => {
       // Upload to Supabase Storage if needed to get a public HTTPS URL.
       // Support multiple images: prefer `imageUrls` array if provided, else fall back to singular `imageUrl` for compatibility.
       let resolvedImageUrls: string[] = [];
-      const incomingImageUrls = Array.isArray(imageUrls) && imageUrls.length > 0 ? imageUrls : (imageUrl ? [imageUrl as string] : []);
+      const incomingImageUrls = Array.isArray(imageUrls) && imageUrls.length > 0
+        ? imageUrls
+        : (imageUrl ? [imageUrl as string] : []);
       if (incomingImageUrls.length > 0) {
-        console.log(`create_draft: received ${incomingImageUrls.length} image(s) — resolving to public URLs`);
+        console.log(
+          `create_draft: received ${incomingImageUrls.length} image(s) — resolving to public URLs`,
+        );
         for (const img of incomingImageUrls) {
           let resolved = img as string;
           if (resolved?.startsWith("data:")) {
-            console.log("create_draft: image is base64 data URL — uploading to storage");
+            console.log(
+              "create_draft: image is base64 data URL — uploading to storage",
+            );
             resolved = await uploadDataUrlToStorage(resolved);
             if (resolved.startsWith("data:")) {
-              console.error("create_draft: one image upload failed — skipping this image");
+              console.error(
+                "create_draft: one image upload failed — skipping this image",
+              );
               continue;
             }
           }
@@ -2362,8 +3105,16 @@ serve(async (req) => {
         (inventoryBody.product as Record<string, unknown>).aspects = aspects;
       }
 
-      console.log(`create_draft: creating inventory item for sku=${sku}, condition=${conditionEnum} (raw=${rawCondition}), merchantLocationKey=${merchantLocationKey}`);
-      console.log(`create_draft: inventory body condition:`, JSON.stringify({ condition: conditionEnum, conditionDescription: conditionDesc }));
+      console.log(
+        `create_draft: creating inventory item for sku=${sku}, condition=${conditionEnum} (raw=${rawCondition}), merchantLocationKey=${merchantLocationKey}`,
+      );
+      console.log(
+        `create_draft: inventory body condition:`,
+        JSON.stringify({
+          condition: conditionEnum,
+          conditionDescription: conditionDesc,
+        }),
+      );
 
       const inventoryResp = await fetchWithTimeout(
         `${apiBase}/sell/inventory/v1/inventory_item/${sku}`,
@@ -2372,30 +3123,44 @@ serve(async (req) => {
           timeout: 15000,
           headers: authHeaders,
           body: JSON.stringify(inventoryBody),
-        }
+        },
       );
 
       if (!inventoryResp.ok) {
         const errText = await inventoryResp.text();
-        console.error("create_draft: eBay inventory error:", inventoryResp.status, errText);
-        console.error("create_draft: inventory request body:", JSON.stringify(inventoryBody, null, 2));
-        throw new Error(`Failed to create inventory item: ${inventoryResp.status} - ${errText}`);
+        console.error(
+          "create_draft: eBay inventory error:",
+          inventoryResp.status,
+          errText,
+        );
+        console.error(
+          "create_draft: inventory request body:",
+          JSON.stringify(inventoryBody, null, 2),
+        );
+        throw new Error(
+          `Failed to create inventory item: ${inventoryResp.status} - ${errText}`,
+        );
       }
 
-      console.log(`create_draft: inventory item created successfully for sku=${sku}`);
+      console.log(
+        `create_draft: inventory item created successfully for sku=${sku}`,
+      );
 
       // Step 3: Fetch business policies (use draft-level if set, else auto-fetch first)
-      const fetchDefaultPolicy = async (policyType: string): Promise<string | null> => {
+      const fetchDefaultPolicy = async (
+        policyType: string,
+      ): Promise<string | null> => {
         const resp = await fetchWithTimeout(
           `${apiBase}/sell/account/v1/${policyType}_policy?marketplace_id=EBAY_US`,
-          { headers: authHeaders, timeout: 15000 }
+          { headers: authHeaders, timeout: 15000 },
         );
         if (!resp.ok) {
           console.warn(`Could not fetch ${policyType} policies:`, resp.status);
           return null;
         }
         const data = await resp.json();
-        const policies = data[`${policyType}Policies`] || data[`${policyType}Policy`] || [];
+        const policies = data[`${policyType}Policies`] ||
+          data[`${policyType}Policy`] || [];
         if (Array.isArray(policies) && policies.length > 0) {
           console.log(`Using ${policyType} policy: ${policies[0].name}`);
           return policies[0][`${policyType}PolicyId`] || null;
@@ -2406,11 +3171,18 @@ serve(async (req) => {
       // Fetch policies — paymentPolicyId is optional for managed payments sellers.
       // Most eBay sellers enrolled in managed payments do NOT need a payment policy.
       // We only require fulfillment and return policies.
-      const [fulfillmentPolicyId, paymentPolicyId, returnPolicyId] = await Promise.all([
-        draftFulfillmentPolicyId ? Promise.resolve(draftFulfillmentPolicyId) : fetchDefaultPolicy("fulfillment"),
-        draftPaymentPolicyId     ? Promise.resolve(draftPaymentPolicyId)     : fetchDefaultPolicy("payment"),
-        draftReturnPolicyId      ? Promise.resolve(draftReturnPolicyId)      : fetchDefaultPolicy("return"),
-      ]);
+      const [fulfillmentPolicyId, paymentPolicyId, returnPolicyId] =
+        await Promise.all([
+          draftFulfillmentPolicyId
+            ? Promise.resolve(draftFulfillmentPolicyId)
+            : fetchDefaultPolicy("fulfillment"),
+          draftPaymentPolicyId
+            ? Promise.resolve(draftPaymentPolicyId)
+            : fetchDefaultPolicy("payment"),
+          draftReturnPolicyId
+            ? Promise.resolve(draftReturnPolicyId)
+            : fetchDefaultPolicy("return"),
+        ]);
 
       // Only fulfillment and return policies are required; payment policy is optional
       if (!fulfillmentPolicyId || !returnPolicyId) {
@@ -2419,18 +3191,28 @@ serve(async (req) => {
           !returnPolicyId && "Return",
         ].filter(Boolean).join(", ");
 
-        console.error(`create_draft: missing required policies for sku ${sku}: ${missing}. draftFulfillment=${draftFulfillmentPolicyId}, draftReturn=${draftReturnPolicyId}`);
+        console.error(
+          `create_draft: missing required policies for sku ${sku}: ${missing}. draftFulfillment=${draftFulfillmentPolicyId}, draftReturn=${draftReturnPolicyId}`,
+        );
 
         return new Response(
           JSON.stringify({
-            error: `Missing required eBay business policies: ${missing}. Please create these policies in your eBay Seller Hub (https://www.ebay.com/sh/ovw/policies) before publishing.`,
+            error:
+              `Missing required eBay business policies: ${missing}. Please create these policies in your eBay Seller Hub (https://www.ebay.com/sh/ovw/policies) before publishing.`,
             missingPolicies: true,
           }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
         );
       }
 
-      console.log(`create_draft: policies fetched - fulfillment=${fulfillmentPolicyId}, return=${returnPolicyId}, payment=${paymentPolicyId || "NONE"}`);
+      console.log(
+        `create_draft: policies fetched - fulfillment=${fulfillmentPolicyId}, return=${returnPolicyId}, payment=${
+          paymentPolicyId || "NONE"
+        }`,
+      );
 
       // Step 4: Build offer payload
       // IMPORTANT: The eBay Inventory API (REST) only supports FIXED_PRICE format.
@@ -2439,15 +3221,21 @@ serve(async (req) => {
       // Inventory API will result in a 400 error.
       // See: https://developer.ebay.com/api-docs/sell/inventory/resources/offer/methods/createOffer
       if (listingFormat === "AUCTION") {
-        console.error(`create_draft: auction format requested but not supported by Inventory API for sku=${sku}`);
+        console.error(
+          `create_draft: auction format requested but not supported by Inventory API for sku=${sku}`,
+        );
         return new Response(
           JSON.stringify({
-            error: "Auction format is not supported by the eBay Inventory API. " +
+            error:
+              "Auction format is not supported by the eBay Inventory API. " +
               "Please change the listing format to Fixed Price, or use the eBay " +
               "Seller Hub to create auction listings manually.",
             auctionNotSupported: true,
           }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
         );
       }
 
@@ -2464,27 +3252,49 @@ serve(async (req) => {
         returnPolicyId,
         bestOfferEnabled: bestOfferEnabled === true,
         bestOfferAutoAcceptPrice: Number(bestOfferAutoAcceptPrice) || undefined,
-        bestOfferAutoDeclinePrice: Number(bestOfferAutoDeclinePrice) || undefined,
+        bestOfferAutoDeclinePrice: Number(bestOfferAutoDeclinePrice) ||
+          undefined,
       });
 
-      console.log(`create_draft: built offer for sku=${sku}, price=${listingPrice}, category=${finalCategoryId || "NONE"}`);
-      console.log(`create_draft: offer body categories - categoryId in offer=${(offerBody as Record<string, unknown>).categoryId || "MISSING"}`);
-      console.log(`create_draft: offer body:`, JSON.stringify(offerBody, null, 2));
+      console.log(
+        `create_draft: built offer for sku=${sku}, price=${listingPrice}, category=${
+          finalCategoryId || "NONE"
+        }`,
+      );
+      console.log(
+        `create_draft: offer body categories - categoryId in offer=${
+          (offerBody as Record<string, unknown>).categoryId || "MISSING"
+        }`,
+      );
+      console.log(
+        `create_draft: offer body:`,
+        JSON.stringify(offerBody, null, 2),
+      );
 
-      const offerResp = await fetchWithTimeout(`${apiBase}/sell/inventory/v1/offer`, {
-        method: "POST",
-        timeout: 15000,
-        headers: authHeaders,
-        body: JSON.stringify(offerBody),
-      });
+      const offerResp = await fetchWithTimeout(
+        `${apiBase}/sell/inventory/v1/offer`,
+        {
+          method: "POST",
+          timeout: 15000,
+          headers: authHeaders,
+          body: JSON.stringify(offerBody),
+        },
+      );
 
       let offerId: string | undefined;
       let offerData: Record<string, unknown> | null = null;
 
       if (!offerResp.ok) {
         const errText = await offerResp.text();
-        console.error("create_draft: eBay offer error:", offerResp.status, errText);
-        console.error("create_draft: offer request body:", JSON.stringify(offerBody, null, 2));
+        console.error(
+          "create_draft: eBay offer error:",
+          offerResp.status,
+          errText,
+        );
+        console.error(
+          "create_draft: offer request body:",
+          JSON.stringify(offerBody, null, 2),
+        );
 
         // Check if this is errorId 25002 — offer already exists.
         // This can happen if a previous publish attempt created the offer but failed at publish step.
@@ -2493,15 +3303,17 @@ serve(async (req) => {
         try {
           const errJson = JSON.parse(errText);
           const offerExists = Array.isArray(errJson.errors) &&
-            errJson.errors.some((e: { errorId: number }) => e.errorId === 25002);
+            errJson.errors.some((e: { errorId: number }) =>
+              e.errorId === 25002
+            );
           if (offerExists) {
             const offerIdParam = errJson.errors[0]?.parameters?.find(
-              (p: { name: string; value: string }) => p.name === "offerId"
+              (p: { name: string; value: string }) => p.name === "offerId",
             );
             if (offerIdParam?.value) {
               offerId = offerIdParam.value;
               console.log(
-                `create_draft: offer already exists (errorId 25002), updating existing offerId=${offerId} before publish`
+                `create_draft: offer already exists (errorId 25002), updating existing offerId=${offerId} before publish`,
               );
               // Update the existing offer so our corrected payload takes effect
               const updateResp = await fetchWithTimeout(
@@ -2511,15 +3323,17 @@ serve(async (req) => {
                   timeout: 15000,
                   headers: authHeaders,
                   body: JSON.stringify(offerBody),
-                }
+                },
               );
               if (!updateResp.ok) {
                 const updateErrText = await updateResp.text();
                 console.warn(
-                  `create_draft: offer update failed (non-fatal), will still attempt publish: ${updateResp.status} - ${updateErrText}`
+                  `create_draft: offer update failed (non-fatal), will still attempt publish: ${updateResp.status} - ${updateErrText}`,
                 );
               } else {
-                console.log(`create_draft: existing offer ${offerId} updated successfully`);
+                console.log(
+                  `create_draft: existing offer ${offerId} updated successfully`,
+                );
               }
             }
           }
@@ -2528,12 +3342,16 @@ serve(async (req) => {
         }
 
         if (!offerId) {
-          throw new Error(`Failed to create offer: ${offerResp.status} - ${errText}`);
+          throw new Error(
+            `Failed to create offer: ${offerResp.status} - ${errText}`,
+          );
         }
       } else {
         offerData = await offerResp.json();
         offerId = offerData.offerId;
-        console.log(`create_draft: offer created successfully, offerId=${offerId}, about to publish...`);
+        console.log(
+          `create_draft: offer created successfully, offerId=${offerId}, about to publish...`,
+        );
       }
 
       console.log(`create_draft: proceeding to publish offerId=${offerId}...`);
@@ -2549,14 +3367,25 @@ serve(async (req) => {
           method: "POST",
           timeout: 15000,
           headers: authHeaders,
-        }
+        },
       );
 
       if (!publishResp.ok) {
         const errText = await publishResp.text();
-        console.error("create_draft: eBay publish error:", publishResp.status, errText);
-        console.error("create_draft: failing to publish offer", offerId, "for sku", sku);
-        console.error(`create_draft: publish failed with condition=${conditionEnum} (id=${conditionId}), category=${finalCategoryId}, format=${listingFormat}`);
+        console.error(
+          "create_draft: eBay publish error:",
+          publishResp.status,
+          errText,
+        );
+        console.error(
+          "create_draft: failing to publish offer",
+          offerId,
+          "for sku",
+          sku,
+        );
+        console.error(
+          `create_draft: publish failed with condition=${conditionEnum} (id=${conditionId}), category=${finalCategoryId}, format=${listingFormat}`,
+        );
         // Deficiency #8: Demote category mapping on publish failure
         try {
           const _supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -2576,30 +3405,44 @@ serve(async (req) => {
                 reason: `publish_failed_${publishResp.status}`,
               }),
             });
-            console.warn(`create_draft: demoted category mapping for ${finalCategoryId} after publish failure`);
+            console.warn(
+              `create_draft: demoted category mapping for ${finalCategoryId} after publish failure`,
+            );
           }
         } catch (demoteErr) {
-          console.warn("create_draft: demote call failed (non-fatal):", demoteErr);
+          console.warn(
+            "create_draft: demote call failed (non-fatal):",
+            demoteErr,
+          );
         }
 
         return new Response(
           JSON.stringify({
-            error: `Offer created (ID: ${offerId}) but publish failed: ${publishResp.status} - ${errText}`,
+            error:
+              `Offer created (ID: ${offerId}) but publish failed: ${publishResp.status} - ${errText}`,
             offerId,
             sku,
             publishFailed: true,
           }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
         );
       }
 
       const publishData = await publishResp.json();
-      const listingId = publishData.listingId || (offerData as any)?.listing?.listingId || null;
+      const listingId = publishData.listingId ||
+        (offerData as any)?.listing?.listingId || null;
 
       // Build affiliate URL — non-fatal, wrapped in try/catch
       const affiliateUrl = listingId ? buildAffiliateUrl(listingId) : null;
 
-      console.log(`create_draft: Successfully published: listingId=${listingId}, offerId=${offerId}, sku=${sku}, publishData keys: ${Object.keys(publishData).join(", ")}`);
+      console.log(
+        `create_draft: Successfully published: listingId=${listingId}, offerId=${offerId}, sku=${sku}, publishData keys: ${
+          Object.keys(publishData).join(", ")
+        }`,
+      );
 
       // Deficiency #8: Promote category mapping on publish success
       try {
@@ -2619,10 +3462,15 @@ serve(async (req) => {
               itemTypeNormalized: payload.itemTypeNormalized || "", // EA-P3-A: precise row targeting
             }),
           });
-          console.log(`create_draft: promoted category mapping for ${finalCategoryId}`);
+          console.log(
+            `create_draft: promoted category mapping for ${finalCategoryId}`,
+          );
         }
       } catch (promoteErr) {
-        console.warn("create_draft: promote call failed (non-fatal):", promoteErr);
+        console.warn(
+          "create_draft: promote call failed (non-fatal):",
+          promoteErr,
+        );
       }
 
       return new Response(
@@ -2634,7 +3482,7 @@ serve(async (req) => {
           affiliateUrl,
           message: "Listing published live on eBay!",
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -2708,9 +3556,10 @@ serve(async (req) => {
           results,
           successCount,
           errorCount,
-          message: `${successCount} of ${drafts.length} listings published to eBay`,
+          message:
+            `${successCount} of ${drafts.length} listings published to eBay`,
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -2727,7 +3576,9 @@ serve(async (req) => {
           const supabaseUrl = Deno.env.get("SUPABASE_URL");
           const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
           if (supabaseUrl && supabaseServiceKey) {
-            const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+            const { createClient } = await import(
+              "https://esm.sh/@supabase/supabase-js@2"
+            );
             const supabase = createClient(supabaseUrl, supabaseServiceKey);
             const { data } = await supabase
               .from("profiles")
@@ -2744,8 +3595,13 @@ serve(async (req) => {
       if (!resolvedToken) {
         // Return empty policies rather than throwing — lets the UI show "no policies" gracefully
         return new Response(
-          JSON.stringify({ fulfillment: [], payment: [], returns: [], noToken: true }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({
+            fulfillment: [],
+            payment: [],
+            returns: [],
+            noToken: true,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
@@ -2763,17 +3619,25 @@ serve(async (req) => {
       // Fetch each policy type independently so one failure doesn't kill all three.
       // Returns { policies, error } — error is non-null if the fetch failed.
       const fetchPoliciesSafe = async (
-        policyType: string
-      ): Promise<{ policies: Array<{ id: string; name: string }>; error: string | null }> => {
+        policyType: string,
+      ): Promise<
+        { policies: Array<{ id: string; name: string }>; error: string | null }
+      > => {
         try {
           const resp = await fetchWithTimeout(
             `${apiBase}/sell/account/v1/${policyType}_policy?marketplace_id=EBAY_US`,
-            { headers: authHeaders, timeout: 15000 }
+            { headers: authHeaders, timeout: 15000 },
           );
           if (!resp.ok) {
             const errText = await resp.text();
-            console.warn(`get_policies: ${policyType} policy fetch failed (${resp.status}):`, errText);
-            return { policies: [], error: `${policyType} policies unavailable (HTTP ${resp.status})` };
+            console.warn(
+              `get_policies: ${policyType} policy fetch failed (${resp.status}):`,
+              errText,
+            );
+            return {
+              policies: [],
+              error: `${policyType} policies unavailable (HTTP ${resp.status})`,
+            };
           }
           const data = await resp.json();
           const key = `${policyType}Policies`;
@@ -2782,35 +3646,43 @@ serve(async (req) => {
             id: p[`${policyType}PolicyId`] || p.policyId || "",
             name: p.name || "(unnamed)",
           }));
-          console.log(`get_policies: fetched ${policies.length} ${policyType} policies`);
+          console.log(
+            `get_policies: fetched ${policies.length} ${policyType} policies`,
+          );
           return { policies, error: null };
         } catch (fetchErr) {
-          console.warn(`get_policies: ${policyType} policy fetch threw:`, fetchErr);
+          console.warn(
+            `get_policies: ${policyType} policy fetch threw:`,
+            fetchErr,
+          );
           return { policies: [], error: `${policyType} policies fetch error` };
         }
       };
 
       // Run all three fetches concurrently; each is independently error-isolated
-      const [fulfillmentResult, paymentResult, returnsResult] = await Promise.all([
-        fetchPoliciesSafe("fulfillment"),
-        fetchPoliciesSafe("payment"),
-        fetchPoliciesSafe("return"),
-      ]);
+      const [fulfillmentResult, paymentResult, returnsResult] = await Promise
+        .all([
+          fetchPoliciesSafe("fulfillment"),
+          fetchPoliciesSafe("payment"),
+          fetchPoliciesSafe("return"),
+        ]);
 
       // Collect any per-type errors for the client to display
       const policyErrors: Record<string, string> = {};
-      if (fulfillmentResult.error) policyErrors.fulfillment = fulfillmentResult.error;
-      if (paymentResult.error)     policyErrors.payment     = paymentResult.error;
-      if (returnsResult.error)     policyErrors.returns     = returnsResult.error;
+      if (fulfillmentResult.error) {
+        policyErrors.fulfillment = fulfillmentResult.error;
+      }
+      if (paymentResult.error) policyErrors.payment = paymentResult.error;
+      if (returnsResult.error) policyErrors.returns = returnsResult.error;
 
       return new Response(
         JSON.stringify({
           fulfillment: fulfillmentResult.policies,
-          payment:     paymentResult.policies,
-          returns:     returnsResult.policies,
+          payment: paymentResult.policies,
+          returns: returnsResult.policies,
           ...(Object.keys(policyErrors).length > 0 ? { policyErrors } : {}),
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -2823,15 +3695,18 @@ serve(async (req) => {
     // Include action in error log so we can identify which handler threw
     // (action may be undefined if JSON parsing itself failed)
     const actionLabel = action ?? "unknown";
-    console.error(`ebay-publish error [action=${actionLabel}]:`, errorMsg, e instanceof Error ? e.stack : "");
+    console.error(
+      `ebay-publish error [action=${actionLabel}]:`,
+      errorMsg,
+      e instanceof Error ? e.stack : "",
+    );
     captureException(e, { function: "ebay-publish", action: actionLabel });
 
     // Only treat as a 400 client error for explicit configuration/input problems.
     // eBay API error strings (e.g. "Failed to create inventory item: 400 - {...}")
     // must NOT match here — they should be 500s so the client knows it's a server-side
     // eBay API failure, not a missing-parameter problem on the client side.
-    const isClientError =
-      errorMsg.includes("not configured") ||
+    const isClientError = errorMsg.includes("not configured") ||
       errorMsg.includes("not provided") ||
       errorMsg.includes("No authorization code") ||
       errorMsg.includes("No userId provided") ||
@@ -2843,7 +3718,7 @@ serve(async (req) => {
       {
         status: isClientError ? 400 : 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      },
     );
   }
 });

@@ -17,15 +17,14 @@ serve(async (req) => {
     const { userToken } = await req.json();
 
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-    const apiBase =
-      ebayEnv === "production"
-        ? "https://api.ebay.com"
-        : "https://api.sandbox.ebay.com";
+    const apiBase = ebayEnv === "production"
+      ? "https://api.ebay.com"
+      : "https://api.sandbox.ebay.com";
 
     if (!userToken) {
       return new Response(
         JSON.stringify({ needsAuth: true }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -38,13 +37,13 @@ serve(async (req) => {
           "Content-Type": "application/json",
           "Accept-Language": "en-US",
         },
-      }
+      },
     );
 
     if (userResp.status === 401 || userResp.status === 403) {
       return new Response(
         JSON.stringify({ needsAuth: true }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -52,8 +51,13 @@ serve(async (req) => {
       const errText = await userResp.text();
       console.error("eBay user info error:", userResp.status, errText);
       return new Response(
-        JSON.stringify({ error: `eBay API error ${userResp.status}: ${errText}` }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({
+          error: `eBay API error ${userResp.status}: ${errText}`,
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -65,7 +69,10 @@ serve(async (req) => {
       console.warn(`ebay-user: Failed to parse eBay user API response: ${e}`);
       return new Response(
         JSON.stringify({ error: `eBay API parse error: ${e}` }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
     const username = userData.username || "";
@@ -74,14 +81,14 @@ serve(async (req) => {
     const userId = userData.userId || "";
 
     return new Response(
-      JSON.stringify({ 
-        username, 
+      JSON.stringify({
+        username,
         businessName,
         accountType,
         userId,
-        needsAuth: false 
+        needsAuth: false,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
     const errorMsg = e instanceof Error ? e.message : "Unknown error";
@@ -89,12 +96,15 @@ serve(async (req) => {
     console.error("Full error:", e);
     const isProduction = Deno.env.get("ENVIRONMENT") === "production";
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         error: `Server error: ${errorMsg}`,
         needsAuth: false,
-        debug: !isProduction ? String(e) : undefined
+        debug: !isProduction ? String(e) : undefined,
       }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 });

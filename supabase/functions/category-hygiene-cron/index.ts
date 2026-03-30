@@ -38,7 +38,7 @@ serve(async (req: Request) => {
     //    Keep the row with the highest effective_score; reject the rest
     // ────────────────────────────────────────────────────────────
     const { data: dupes, error: dupErr } = await supabase.rpc(
-      "find_duplicate_mappings"
+      "find_duplicate_mappings",
     );
     if (dupErr) {
       console.warn("category-hygiene: dedup RPC failed:", dupErr.message);
@@ -52,10 +52,15 @@ serve(async (req: Request) => {
         .update({ status: "rejected" })
         .in("id", dupeIds);
       if (rejectErr) {
-        console.warn("category-hygiene: dedup reject failed:", rejectErr.message);
+        console.warn(
+          "category-hygiene: dedup reject failed:",
+          rejectErr.message,
+        );
       }
       results.dedup_rejected = dupeIds.length;
-      console.log(`category-hygiene: rejected ${dupeIds.length} duplicate mappings`);
+      console.log(
+        `category-hygiene: rejected ${dupeIds.length} duplicate mappings`,
+      );
     } else {
       results.dedup_rejected = 0;
     }
@@ -64,12 +69,15 @@ serve(async (req: Request) => {
     // 2. DECAY: Reduce effective_score by 5 for rows not published
     //    in the last 90 days (approved or quarantine only)
     // ────────────────────────────────────────────────────────────
-    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+      .toISOString();
     const { data: staleRows, error: staleErr } = await supabase
       .from("category_mappings")
       .select("id, effective_score")
       .in("status", ["approved", "quarantine"])
-      .or(`last_publish_success.is.null,last_publish_success.lt.${ninetyDaysAgo}`)
+      .or(
+        `last_publish_success.is.null,last_publish_success.lt.${ninetyDaysAgo}`,
+      )
       .gt("effective_score", 0);
 
     if (staleErr) {
@@ -107,13 +115,16 @@ serve(async (req: Request) => {
       results.expire_errors = 1;
     } else {
       results.expired = expiredRows?.length || 0;
-      console.log(`category-hygiene: expired ${results.expired} low-score mappings`);
+      console.log(
+        `category-hygiene: expired ${results.expired} low-score mappings`,
+      );
     }
 
     // ────────────────────────────────────────────────────────────
     // 4. AUDIT CLEANUP: Delete lookup_decisions older than 180 days
     // ────────────────────────────────────────────────────────────
-    const oneEightyDaysAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString();
+    const oneEightyDaysAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000)
+      .toISOString();
     const { data: deletedAudit, error: auditErr } = await supabase
       .from("lookup_decisions")
       .delete()
@@ -125,7 +136,9 @@ serve(async (req: Request) => {
       results.audit_errors = 1;
     } else {
       results.audit_cleaned = deletedAudit?.length || 0;
-      console.log(`category-hygiene: cleaned ${results.audit_cleaned} old audit entries`);
+      console.log(
+        `category-hygiene: cleaned ${results.audit_cleaned} old audit entries`,
+      );
     }
 
     // ────────────────────────────────────────────────────────────
@@ -143,7 +156,9 @@ serve(async (req: Request) => {
       results.cache_errors = 1;
     } else {
       results.cache_cleaned = deletedCache?.length || 0;
-      console.log(`category-hygiene: cleaned ${results.cache_cleaned} expired cache entries`);
+      console.log(
+        `category-hygiene: cleaned ${results.cache_cleaned} expired cache entries`,
+      );
     }
 
     // ────────────────────────────────────────────────────────────
@@ -165,7 +180,7 @@ serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({ success: true, results }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -190,7 +205,10 @@ serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({ error: message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 });

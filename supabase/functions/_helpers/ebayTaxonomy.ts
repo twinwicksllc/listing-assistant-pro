@@ -10,17 +10,16 @@ let _cachedToken: { token: string; expiresAt: number } | null = null;
 export async function getEbayAppToken(
   clientId: string,
   clientSecret: string,
-  ebayEnv: string
+  ebayEnv: string,
 ): Promise<string | null> {
   const now = Date.now();
   if (_cachedToken && _cachedToken.expiresAt > now + 60_000) {
     return _cachedToken.token;
   }
 
-  const tokenUrl =
-    ebayEnv === "production"
-      ? "https://api.ebay.com/identity/v1/oauth2/token"
-      : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
+  const tokenUrl = ebayEnv === "production"
+    ? "https://api.ebay.com/identity/v1/oauth2/token"
+    : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
 
   try {
     const credentials = btoa(`${clientId}:${clientSecret}`);
@@ -30,7 +29,8 @@ export async function getEbayAppToken(
         Authorization: `Basic ${credentials}`,
         "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
+      body:
+        "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
       signal: AbortSignal.timeout(8_000),
     });
     if (!resp.ok) {
@@ -54,23 +54,24 @@ export async function getEbayAppToken(
 export async function getCategorySuggestions(
   query: string,
   appToken: string,
-  ebayEnv: string
+  ebayEnv: string,
 ): Promise<Array<{ categoryId: string; categoryName: string }>> {
-  const base =
-    ebayEnv === "production"
-      ? "https://api.ebay.com"
-      : "https://api.sandbox.ebay.com";
+  const base = ebayEnv === "production"
+    ? "https://api.ebay.com"
+    : "https://api.sandbox.ebay.com";
 
   try {
     const resp = await fetch(
-      `${base}/commerce/taxonomy/v1/category_suggestions?q=${encodeURIComponent(query)}&category_tree_id=0`,
+      `${base}/commerce/taxonomy/v1/category_suggestions?q=${
+        encodeURIComponent(query)
+      }&category_tree_id=0`,
       {
         headers: {
           Authorization: `Bearer ${appToken}`,
           "Content-Type": "application/json",
         },
         signal: AbortSignal.timeout(8_000),
-      }
+      },
     );
     if (!resp.ok) return [];
     const data = await resp.json();
@@ -91,29 +92,30 @@ export async function getCategorySuggestions(
 export async function getCategoryAspects(
   categoryId: string,
   appToken: string,
-  ebayEnv: string
+  ebayEnv: string,
 ): Promise<{
   required: string[];
   recommended: string[];
   allowedValues: Record<string, string[]>;
 }> {
-  const base =
-    ebayEnv === "production"
-      ? "https://api.ebay.com"
-      : "https://api.sandbox.ebay.com";
+  const base = ebayEnv === "production"
+    ? "https://api.ebay.com"
+    : "https://api.sandbox.ebay.com";
 
   const empty = { required: [], recommended: [], allowedValues: {} };
 
   try {
     const resp = await fetch(
-      `${base}/commerce/taxonomy/v1/category_tree/0/get_item_aspects_for_category?category_id=${encodeURIComponent(categoryId)}`,
+      `${base}/commerce/taxonomy/v1/category_tree/0/get_item_aspects_for_category?category_id=${
+        encodeURIComponent(categoryId)
+      }`,
       {
         headers: {
           Authorization: `Bearer ${appToken}`,
           "Content-Type": "application/json",
         },
         signal: AbortSignal.timeout(8_000),
-      }
+      },
     );
     if (!resp.ok) return empty;
     const data = await resp.json();
@@ -131,7 +133,9 @@ export async function getCategoryAspects(
       } else if (constraint.aspectUsage === "RECOMMENDED") {
         recommended.push(name);
       }
-      if (Array.isArray(aspect.aspectValues) && aspect.aspectValues.length > 0) {
+      if (
+        Array.isArray(aspect.aspectValues) && aspect.aspectValues.length > 0
+      ) {
         allowedValues[name] = aspect.aspectValues
           .slice(0, 20)
           .map((v: any) => v.localizedValue)

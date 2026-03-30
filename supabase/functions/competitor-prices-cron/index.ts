@@ -25,16 +25,18 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function fetchActiveListings(
   supabaseUrl: string,
   serviceKey: string,
-  userId: string
-): Promise<{ listingId: string; title: string; price: number; categoryId?: string }[]> {
+  userId: string,
+): Promise<
+  { listingId: string; title: string; price: number; categoryId?: string }[]
+> {
   const profileResp = await fetch(
     `${supabaseUrl}/rest/v1/profiles?id=eq.${userId}&select=ebay_access_token,ebay_token_expires_at`,
     {
       headers: {
-        "apikey":         serviceKey,
-        "Authorization":  `Bearer ${serviceKey}`,
+        "apikey": serviceKey,
+        "Authorization": `Bearer ${serviceKey}`,
       },
-    }
+    },
   );
 
   if (!profileResp.ok) {
@@ -46,7 +48,9 @@ async function fetchActiveListings(
   try {
     profiles = JSON.parse(await profileResp.text());
   } catch (e) {
-    console.warn(`[cron] Failed to parse profile response for user ${userId}: ${e}`);
+    console.warn(
+      `[cron] Failed to parse profile response for user ${userId}: ${e}`,
+    );
     return [];
   }
 
@@ -62,17 +66,22 @@ async function fetchActiveListings(
     return [];
   }
 
-  const listingsResp = await fetch(`${supabaseUrl}/functions/v1/ebay-listings`, {
-    method: "POST",
-    headers: {
-      "Authorization":  `Bearer ${serviceKey}`,
-      "Content-Type":   "application/json",
+  const listingsResp = await fetch(
+    `${supabaseUrl}/functions/v1/ebay-listings`,
+    {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${serviceKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ userToken: token }),
     },
-    body: JSON.stringify({ userToken: token }),
-  });
+  );
 
   if (!listingsResp.ok) {
-    console.warn(`[cron] ebay-listings failed for user ${userId}: ${listingsResp.status}`);
+    console.warn(
+      `[cron] ebay-listings failed for user ${userId}: ${listingsResp.status}`,
+    );
     return [];
   }
 
@@ -80,16 +89,18 @@ async function fetchActiveListings(
   try {
     data = JSON.parse(await listingsResp.text());
   } catch (e) {
-    console.warn(`[cron] Failed to parse ebay-listings response for user ${userId}: ${e}`);
+    console.warn(
+      `[cron] Failed to parse ebay-listings response for user ${userId}: ${e}`,
+    );
     return [];
   }
 
   return (data?.listings ?? [])
     .filter((l: Record<string, unknown>) => l.listingId && l.title)
     .map((l: Record<string, unknown>) => ({
-      listingId:  String(l.listingId),
-      title:      String(l.title),
-      price:      Number(l.price ?? 0),
+      listingId: String(l.listingId),
+      title: String(l.title),
+      price: Number(l.price ?? 0),
       categoryId: l.categoryId ? String(l.categoryId) : undefined,
     }));
 }
@@ -102,7 +113,7 @@ async function fetchActiveListings(
 async function fetchFreshCacheMap(
   supabase: ReturnType<typeof createClient>,
   userId: string,
-  listingIds: string[]
+  listingIds: string[],
 ): Promise<Record<string, string>> {
   if (listingIds.length === 0) return {};
 
@@ -116,7 +127,9 @@ async function fetchFreshCacheMap(
     .gte("fetched_at", freshCutoff);
 
   if (error) {
-    console.warn(`[cron] Cache map query failed for user ${userId}: ${error.message}`);
+    console.warn(
+      `[cron] Cache map query failed for user ${userId}: ${error.message}`,
+    );
     return {};
   }
 
@@ -137,26 +150,36 @@ async function refreshCompetitorData(
   supabaseUrl: string,
   serviceKey: string,
   userId: string,
-  listing: { listingId: string; title: string; price: number; categoryId?: string }
+  listing: {
+    listingId: string;
+    title: string;
+    price: number;
+    categoryId?: string;
+  },
 ): Promise<boolean> {
   try {
-    const resp = await fetch(`${supabaseUrl}/functions/v1/ebay-competitor-search`, {
-      method: "POST",
-      headers: {
-        "Authorization":  `Bearer ${serviceKey}`,
-        "Content-Type":   "application/json",
+    const resp = await fetch(
+      `${supabaseUrl}/functions/v1/ebay-competitor-search`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${serviceKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId,
+          listingId: listing.listingId,
+          title: listing.title,
+          categoryId: listing.categoryId,
+          yourPrice: listing.price,
+        }),
       },
-      body: JSON.stringify({
-        userId,
-        listingId:  listing.listingId,
-        title:      listing.title,
-        categoryId: listing.categoryId,
-        yourPrice:  listing.price,
-      }),
-    });
+    );
 
     if (!resp.ok) {
-      console.warn(`[cron] competitor-search failed for listing ${listing.listingId}: ${resp.status}`);
+      console.warn(
+        `[cron] competitor-search failed for listing ${listing.listingId}: ${resp.status}`,
+      );
       return false;
     }
 
@@ -164,24 +187,34 @@ async function refreshCompetitorData(
     try {
       result = JSON.parse(await resp.text());
     } catch (e) {
-      console.warn(`[cron] Failed to parse competitor-search response for listing ${listing.listingId}: ${e}`);
+      console.warn(
+        `[cron] Failed to parse competitor-search response for listing ${listing.listingId}: ${e}`,
+      );
       return false;
     }
 
     if (result.error) {
-      console.warn(`[cron] competitor-search error for listing ${listing.listingId}:`, result.error);
+      console.warn(
+        `[cron] competitor-search error for listing ${listing.listingId}:`,
+        result.error,
+      );
       return false;
     }
 
     if (result.fromCache) {
       // Function returned cached data — counts as success even though
       // no eBay call was made (cache TTL check inside the function)
-      console.log(`[cron] Listing ${listing.listingId} served from internal cache`);
+      console.log(
+        `[cron] Listing ${listing.listingId} served from internal cache`,
+      );
     }
 
     return true;
   } catch (err) {
-    console.warn(`[cron] competitor-search threw for listing ${listing.listingId}:`, err);
+    console.warn(
+      `[cron] competitor-search threw for listing ${listing.listingId}:`,
+      err,
+    );
     return false;
   }
 }
@@ -197,12 +230,15 @@ serve(async (req) => {
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-  const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
   if (!supabaseUrl || !serviceKey) {
     return new Response(
       JSON.stringify({ error: "Supabase credentials not configured" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 
@@ -210,7 +246,9 @@ serve(async (req) => {
     auth: { persistSession: false },
   });
 
-  console.log("[competitor-prices-cron] Starting competitor price refresh run...");
+  console.log(
+    "[competitor-prices-cron] Starting competitor price refresh run...",
+  );
   const startTime = Date.now();
 
   // Step 1: Clean up expired rows
@@ -220,7 +258,10 @@ serve(async (req) => {
     .lt("expires_at", new Date().toISOString());
 
   if (cleanupErr) {
-    console.warn("[competitor-prices-cron] Cleanup error (non-fatal):", cleanupErr.message);
+    console.warn(
+      "[competitor-prices-cron] Cleanup error (non-fatal):",
+      cleanupErr.message,
+    );
   } else {
     console.log("[competitor-prices-cron] Expired rows cleaned up");
   }
@@ -233,52 +274,70 @@ serve(async (req) => {
     .gt("ebay_token_expires_at", new Date().toISOString());
 
   if (usersErr) {
-    console.error("[competitor-prices-cron] Failed to fetch users:", usersErr.message);
+    console.error(
+      "[competitor-prices-cron] Failed to fetch users:",
+      usersErr.message,
+    );
     return new Response(
       JSON.stringify({ error: usersErr.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 
   const userIds: string[] = (users ?? []).map((u: { id: string }) => u.id);
-  console.log(`[competitor-prices-cron] Processing ${userIds.length} connected user(s)`);
+  console.log(
+    `[competitor-prices-cron] Processing ${userIds.length} connected user(s)`,
+  );
 
-  let totalListings  = 0;
+  let totalListings = 0;
   let totalRefreshed = 0;
-  let totalSkipped   = 0;
-  let totalFresh     = 0;
+  let totalSkipped = 0;
+  let totalFresh = 0;
 
   // Step 3: For each user, fetch their active listings and refresh stale ones
   for (const userId of userIds) {
     const listings = await fetchActiveListings(supabaseUrl, serviceKey, userId);
-    console.log(`[competitor-prices-cron] User ${userId}: ${listings.length} active listing(s)`);
+    console.log(
+      `[competitor-prices-cron] User ${userId}: ${listings.length} active listing(s)`,
+    );
     totalListings += listings.length;
 
     if (listings.length === 0) continue;
 
     // Pre-check which listings already have fresh cache — skip those entirely
-    const listingIds  = listings.map((l) => l.listingId);
-    const freshMap    = await fetchFreshCacheMap(supabase, userId, listingIds);
-    const freshCount  = Object.keys(freshMap).length;
-    const staleCount  = listings.length - freshCount;
+    const listingIds = listings.map((l) => l.listingId);
+    const freshMap = await fetchFreshCacheMap(supabase, userId, listingIds);
+    const freshCount = Object.keys(freshMap).length;
+    const staleCount = listings.length - freshCount;
     totalFresh += freshCount;
 
     console.log(
-      `[competitor-prices-cron] User ${userId}: ${freshCount} fresh (skip), ${staleCount} stale (refresh)`
+      `[competitor-prices-cron] User ${userId}: ${freshCount} fresh (skip), ${staleCount} stale (refresh)`,
     );
 
     for (const listing of listings) {
       // Skip if cache is still fresh
       if (freshMap[listing.listingId]) {
         const ageMin = Math.round(
-          (Date.now() - new Date(freshMap[listing.listingId]).getTime()) / 60000
+          (Date.now() - new Date(freshMap[listing.listingId]).getTime()) /
+            60000,
         );
-        console.log(`[competitor-prices-cron] Skipping listing ${listing.listingId} (cache ${ageMin}min old)`);
+        console.log(
+          `[competitor-prices-cron] Skipping listing ${listing.listingId} (cache ${ageMin}min old)`,
+        );
         totalSkipped++;
         continue;
       }
 
-      const ok = await refreshCompetitorData(supabaseUrl, serviceKey, userId, listing);
+      const ok = await refreshCompetitorData(
+        supabaseUrl,
+        serviceKey,
+        userId,
+        listing,
+      );
       if (ok) {
         totalRefreshed++;
       } else {
@@ -292,11 +351,11 @@ serve(async (req) => {
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
   const summary = {
-    users:          userIds.length,
+    users: userIds.length,
     totalListings,
-    fresh:          totalFresh,
-    refreshed:      totalRefreshed,
-    skipped:        totalSkipped,
+    fresh: totalFresh,
+    refreshed: totalRefreshed,
+    skipped: totalSkipped,
     elapsedSeconds: parseFloat(elapsed),
   };
 
@@ -304,6 +363,6 @@ serve(async (req) => {
 
   return new Response(
     JSON.stringify({ success: true, ...summary }),
-    { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    { headers: { ...corsHeaders, "Content-Type": "application/json" } },
   );
 });

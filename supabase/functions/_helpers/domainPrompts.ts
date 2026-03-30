@@ -34,12 +34,12 @@ export interface PromptContext {
   // ─── Agentic Pre-Pass 0 context (optional — injected when grounding succeeds) ───
   // Contains live Google Search grounding results and vision inspection findings.
   prePassContext?: {
-    marketAnalysis?: string;           // Grounded market narrative (search citations)
-    groundedCategoryId?: string;       // Category ID found via live Google Search
-    agenticInspection?: {              // Think-Act-Observe zoom findings
-      zoomRegionsExamined: string[];   // e.g. ["mint mark", "date digits", "edge reeds"]
-      keyFindings: string;             // Narrative of what was found
-      confidenceBoost: number;         // 0-100 — how much more certain the model is post-inspection
+    marketAnalysis?: string; // Grounded market narrative (search citations)
+    groundedCategoryId?: string; // Category ID found via live Google Search
+    agenticInspection?: { // Think-Act-Observe zoom findings
+      zoomRegionsExamined: string[]; // e.g. ["mint mark", "date digits", "edge reeds"]
+      keyFindings: string; // Narrative of what was found
+      confidenceBoost: number; // 0-100 — how much more certain the model is post-inspection
       identificationCorrection?: string; // Non-null if inspection changed the identification
     };
   } | null;
@@ -50,16 +50,25 @@ export interface PromptContext {
 function pricingBlock(ctx: PromptContext): string {
   if (ctx.competitorData && ctx.competitorData.competitorCount > 0) {
     const d = ctx.competitorData;
-    return `MARKET DATA (${d.competitorCount} recently sold similar items): avg $${d.avgPrice.toFixed(2)}, range $${d.minPrice.toFixed(2)}–$${d.maxPrice.toFixed(2)}, median $${d.medianPrice.toFixed(2)}. Use the median as your target price and adjust ±10% based on condition relative to typical examples.`;
+    return `MARKET DATA (${d.competitorCount} recently sold similar items): avg $${
+      d.avgPrice.toFixed(2)
+    }, range $${d.minPrice.toFixed(2)}–$${d.maxPrice.toFixed(2)}, median $${
+      d.medianPrice.toFixed(2)
+    }. Use the median as your target price and adjust ±10% based on condition relative to typical examples.`;
   }
   return `No recent sold comps available. Estimate fair market value from domain knowledge and item condition.`;
 }
 
 function categoryBlock(ctx: PromptContext): string {
   if (!ctx.suggestedCategoryId) return "";
-  let s = `\n### eBay CATEGORY (from Taxonomy API)\nPrimary: "${ctx.suggestedCategoryName || "Unknown"}" (ID: ${ctx.suggestedCategoryId}). Use this categoryId unless you are confident a more specific leaf category exists for this exact item.`;
+  let s = `\n### eBay CATEGORY (from Taxonomy API)\nPrimary: "${
+    ctx.suggestedCategoryName || "Unknown"
+  }" (ID: ${ctx.suggestedCategoryId}). Use this categoryId unless you are confident a more specific leaf category exists for this exact item.`;
   if (ctx.requiredAspects && ctx.requiredAspects.length > 0) {
-    s += `\nREQUIRED by eBay for this category — MUST populate all in itemSpecifics:\n  ${ctx.requiredAspects.join(", ")}`;
+    s +=
+      `\nREQUIRED by eBay for this category — MUST populate all in itemSpecifics:\n  ${
+        ctx.requiredAspects.join(", ")
+      }`;
   }
   if (ctx.recommendedAspects && ctx.recommendedAspects.length > 0) {
     s += `\nRECOMMENDED: ${ctx.recommendedAspects.slice(0, 12).join(", ")}`;
@@ -68,7 +77,9 @@ function categoryBlock(ctx: PromptContext): string {
 }
 
 function allowedValuesBlock(ctx: PromptContext): string {
-  if (!ctx.allowedValues || Object.keys(ctx.allowedValues).length === 0) return "";
+  if (!ctx.allowedValues || Object.keys(ctx.allowedValues).length === 0) {
+    return "";
+  }
   const lines: string[] = [];
   for (const [key, vals] of Object.entries(ctx.allowedValues)) {
     if (vals.length > 0) {
@@ -76,7 +87,9 @@ function allowedValuesBlock(ctx: PromptContext): string {
     }
   }
   if (lines.length === 0) return "";
-  return `\n### VALID ASPECT VALUES (use EXACTLY these strings for the listed keys)\n${lines.join("\n")}`;
+  return `\n### VALID ASPECT VALUES (use EXACTLY these strings for the listed keys)\n${
+    lines.join("\n")
+  }`;
 }
 
 /**
@@ -89,37 +102,61 @@ function prePassBlock(ctx: PromptContext): string {
   if (!pp) return "";
 
   const parts: string[] = [];
-  parts.push("\n\n### 🔍 AGENTIC PRE-PASS FINDINGS (from live Google Search grounding + visual inspection)");
-  parts.push("The following intelligence was gathered BEFORE your analysis via a separate grounding pass.");
-  parts.push("Treat these findings as authoritative — they are based on live 2026 eBay data and detailed visual inspection.\n");
+  parts.push(
+    "\n\n### 🔍 AGENTIC PRE-PASS FINDINGS (from live Google Search grounding + visual inspection)",
+  );
+  parts.push(
+    "The following intelligence was gathered BEFORE your analysis via a separate grounding pass.",
+  );
+  parts.push(
+    "Treat these findings as authoritative — they are based on live 2026 eBay data and detailed visual inspection.\n",
+  );
 
   // 1. Grounded category override hint
   if (pp.groundedCategoryId) {
-    parts.push(`**GROUNDED CATEGORY ID** (from live Google Search): \`${pp.groundedCategoryId}\``);
-    parts.push("This category was found by searching eBay's current taxonomy. Prefer this over your internal knowledge IF it passes leaf verification (it should — it was verified). Only override if you have strong evidence it is incorrect.\n");
+    parts.push(
+      `**GROUNDED CATEGORY ID** (from live Google Search): \`${pp.groundedCategoryId}\``,
+    );
+    parts.push(
+      "This category was found by searching eBay's current taxonomy. Prefer this over your internal knowledge IF it passes leaf verification (it should — it was verified). Only override if you have strong evidence it is incorrect.\n",
+    );
   }
 
   // 2. Market analysis from Google Search grounding
   if (pp.marketAnalysis && pp.marketAnalysis.trim().length > 10) {
-    parts.push("**LIVE MARKET ANALYSIS** (grounded from eBay sold listings & category searches):");
+    parts.push(
+      "**LIVE MARKET ANALYSIS** (grounded from eBay sold listings & category searches):",
+    );
     parts.push(pp.marketAnalysis.trim());
-    parts.push("\nUse the above market data as your PRIMARY pricing reference. Adjust for your observed condition.\n");
+    parts.push(
+      "\nUse the above market data as your PRIMARY pricing reference. Adjust for your observed condition.\n",
+    );
   }
 
   // 3. Agentic vision inspection findings
   if (pp.agenticInspection) {
     const ins = pp.agenticInspection;
-    parts.push("**VISUAL INSPECTION FINDINGS** (from zoomed agentic inspection pass):");
+    parts.push(
+      "**VISUAL INSPECTION FINDINGS** (from zoomed agentic inspection pass):",
+    );
     if (ins.zoomRegionsExamined.length > 0) {
-      parts.push(`Zoom regions examined: ${ins.zoomRegionsExamined.join(", ")}`);
+      parts.push(
+        `Zoom regions examined: ${ins.zoomRegionsExamined.join(", ")}`,
+      );
     }
     parts.push(`Key findings: ${ins.keyFindings}`);
     if (ins.confidenceBoost > 0) {
-      parts.push(`Confidence boost from inspection: +${ins.confidenceBoost} points`);
+      parts.push(
+        `Confidence boost from inspection: +${ins.confidenceBoost} points`,
+      );
     }
     if (ins.identificationCorrection) {
-      parts.push(`⚠️  IDENTIFICATION CORRECTION: ${ins.identificationCorrection}`);
-      parts.push("The inspection found a discrepancy. Use the CORRECTED identification above — it is more accurate than first impression.");
+      parts.push(
+        `⚠️  IDENTIFICATION CORRECTION: ${ins.identificationCorrection}`,
+      );
+      parts.push(
+        "The inspection found a discrepancy. Use the CORRECTED identification above — it is more accurate than first impression.",
+      );
     }
     parts.push("");
   }
@@ -131,7 +168,11 @@ function prePassBlock(ctx: PromptContext): string {
 
 function buildCoinBullionPrompt(ctx: PromptContext): string {
   const spotLine = ctx.spotPrices
-    ? `- Current spot: Gold $${ctx.spotPrices.gold.toFixed(2)}/oz | Silver $${ctx.spotPrices.silver.toFixed(2)}/oz | Platinum $${ctx.spotPrices.platinum.toFixed(2)}/oz\n- **CRITICAL WEIGHT RULES**: metalWeightOz = fine troy oz of pure metal (not total coin weight). ALWAYS populate for precious metals:\n  • Morgan/Peace Silver Dollar (1878-1935): 0.7734oz Ag (26.73g × 90% silver)\n  • US 90% Silver Halves (Barber/Walking Liberty/Franklin/Kennedy 1964): 0.3618oz Ag\n  • Kennedy Half Dollar 1965-1970 (40% silver): 0.1479oz Ag\n  • US 90% Silver Quarters (pre-1965): 0.1809oz Ag\n  • US 90% Silver Dimes (Mercury/Roosevelt/Barber): 0.0724oz Ag\n  • American Silver Eagle: 1.0000oz Ag\n  • US Gold Eagles: $5=0.1209oz Au | $10=0.2419oz Au | $25=0.6044oz Au | $50=1.0000oz Au\n  • American Gold Buffalo: 1.0000oz Au\n  • Gold Sovereigns (British): 0.2354oz Au\n  • Pre-1933 US Gold: $20 Double Eagle=0.9675oz Au (90% = 0.8709oz fine) | $10 Eagle=0.4838oz Au | $5 Half Eagle=0.2419oz Au\n  • Silver Bars/Rounds: face weight in oz (e.g. "1 oz Silver Round" = 1.0000oz Ag)\n  • If coin type is recognizable but weight not listed above, use known standard weight. NEVER leave metalWeightOz as 0.\n- Melt floor: (spot × metalWeightOz × 1.19) — never price below this.`
+    ? `- Current spot: Gold $${ctx.spotPrices.gold.toFixed(2)}/oz | Silver $${
+      ctx.spotPrices.silver.toFixed(2)
+    }/oz | Platinum $${
+      ctx.spotPrices.platinum.toFixed(2)
+    }/oz\n- **CRITICAL WEIGHT RULES**: metalWeightOz = fine troy oz of pure metal (not total coin weight). ALWAYS populate for precious metals:\n  • Morgan/Peace Silver Dollar (1878-1935): 0.7734oz Ag (26.73g × 90% silver)\n  • US 90% Silver Halves (Barber/Walking Liberty/Franklin/Kennedy 1964): 0.3618oz Ag\n  • Kennedy Half Dollar 1965-1970 (40% silver): 0.1479oz Ag\n  • US 90% Silver Quarters (pre-1965): 0.1809oz Ag\n  • US 90% Silver Dimes (Mercury/Roosevelt/Barber): 0.0724oz Ag\n  • American Silver Eagle: 1.0000oz Ag\n  • US Gold Eagles: $5=0.1209oz Au | $10=0.2419oz Au | $25=0.6044oz Au | $50=1.0000oz Au\n  • American Gold Buffalo: 1.0000oz Au\n  • Gold Sovereigns (British): 0.2354oz Au\n  • Pre-1933 US Gold: $20 Double Eagle=0.9675oz Au (90% = 0.8709oz fine) | $10 Eagle=0.4838oz Au | $5 Half Eagle=0.2419oz Au\n  • Silver Bars/Rounds: face weight in oz (e.g. "1 oz Silver Round" = 1.0000oz Ag)\n  • If coin type is recognizable but weight not listed above, use known standard weight. NEVER leave metalWeightOz as 0.\n- Melt floor: (spot × metalWeightOz × 1.19) — never price below this.`
     : "";
 
   return `You are a professional Numismatist and eBay Listing Expert specializing in coins, currency, and bullion.
@@ -222,7 +263,9 @@ isSlabbed: true when card is in a third-party grading slab (PSA/BGS/CGC/CSG)`;
 
 function buildJewelryPrompt(ctx: PromptContext): string {
   const spotLine = ctx.spotPrices
-    ? `- Spot: Gold $${ctx.spotPrices.gold.toFixed(2)}/oz | Silver $${ctx.spotPrices.silver.toFixed(2)}/oz\n- For fine metal pieces estimate weight and compute: karat_decimal × weight_troy_oz × spot × 1.19 = floor. Set metalType and metalWeightOz.`
+    ? `- Spot: Gold $${ctx.spotPrices.gold.toFixed(2)}/oz | Silver $${
+      ctx.spotPrices.silver.toFixed(2)
+    }/oz\n- For fine metal pieces estimate weight and compute: karat_decimal × weight_troy_oz × spot × 1.19 = floor. Set metalType and metalWeightOz.`
     : "";
 
   return `You are a certified gemologist and luxury jewelry expert with 20+ years reselling fine and fashion jewelry on eBay.
@@ -372,11 +415,17 @@ Your description is SALES COPY for an eBay listing. It should:
 - End with a subtle call-to-action when appropriate (e.g., "Great addition to any collection!")`;
 
   switch (domain) {
-    case "coins_bullion":    return buildCoinBullionPrompt(ctx) + salesGuidance;
-    case "trading_cards":   return buildTradingCardsPrompt(ctx) + salesGuidance;
-    case "jewelry":         return buildJewelryPrompt(ctx) + salesGuidance;
-    case "electronics":     return buildElectronicsPrompt(ctx) + salesGuidance;
-    case "vintage_clothing": return buildVintageClothingPrompt(ctx) + salesGuidance;
-    default:                return buildGeneralPrompt(ctx) + salesGuidance;
+    case "coins_bullion":
+      return buildCoinBullionPrompt(ctx) + salesGuidance;
+    case "trading_cards":
+      return buildTradingCardsPrompt(ctx) + salesGuidance;
+    case "jewelry":
+      return buildJewelryPrompt(ctx) + salesGuidance;
+    case "electronics":
+      return buildElectronicsPrompt(ctx) + salesGuidance;
+    case "vintage_clothing":
+      return buildVintageClothingPrompt(ctx) + salesGuidance;
+    default:
+      return buildGeneralPrompt(ctx) + salesGuidance;
   }
 }

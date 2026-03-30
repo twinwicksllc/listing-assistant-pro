@@ -32,7 +32,11 @@ serve(async (req) => {
 
   let event: Stripe.Event;
   try {
-    event = await stripe.webhooks.constructEventAsync(rawBody, sig, webhookSecret);
+    event = await stripe.webhooks.constructEventAsync(
+      rawBody,
+      sig,
+      webhookSecret,
+    );
   } catch (err: any) {
     logStep("Signature verification failed", { error: err.message });
     return new Response(`Webhook Error: ${err.message}`, { status: 400 });
@@ -43,7 +47,7 @@ serve(async (req) => {
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    { auth: { persistSession: false } }
+    { auth: { persistSession: false } },
   );
 
   try {
@@ -57,7 +61,11 @@ serve(async (req) => {
         const customerId = session.customer as string;
         const subscriptionId = session.subscription as string;
 
-        logStep("checkout.session.completed", { userId, customerId, subscriptionId });
+        logStep("checkout.session.completed", {
+          userId,
+          customerId,
+          subscriptionId,
+        });
 
         if (!userId) {
           logStep("No client_reference_id — cannot link user, skipping");
@@ -106,17 +114,21 @@ serve(async (req) => {
       case "invoice.payment_failed": {
         const invoice = event.data.object as Stripe.Invoice;
         // invoice.subscription can be a string ID or an expanded object
-        const subId =
-          typeof invoice.subscription === "string"
-            ? invoice.subscription
-            : (invoice.subscription as any)?.id;
+        const subId = typeof invoice.subscription === "string"
+          ? invoice.subscription
+          : (invoice.subscription as any)?.id;
         if (subId) {
           logStep("Payment failed, marking past_due", { subId });
           const { error } = await supabase
             .from("subscriptions")
-            .update({ status: "past_due", updated_at: new Date().toISOString() })
+            .update({
+              status: "past_due",
+              updated_at: new Date().toISOString(),
+            })
             .eq("stripe_sub_id", subId);
-          if (error) logStep("Error marking past_due", { error: error.message });
+          if (error) {
+            logStep("Error marking past_due", { error: error.message });
+          }
         }
         break;
       }
@@ -124,10 +136,9 @@ serve(async (req) => {
       case "invoice.payment_succeeded": {
         // Payment recovered after past_due — restore active status
         const invoice = event.data.object as Stripe.Invoice;
-        const subId =
-          typeof invoice.subscription === "string"
-            ? invoice.subscription
-            : (invoice.subscription as any)?.id;
+        const subId = typeof invoice.subscription === "string"
+          ? invoice.subscription
+          : (invoice.subscription as any)?.id;
         if (subId) {
           logStep("Payment recovered, marking active", { subId });
           await supabase
@@ -144,10 +155,13 @@ serve(async (req) => {
   } catch (err: any) {
     logStep("Handler error", { message: err.message });
     // Return 200 so Stripe doesn't retry on logic errors — error is logged above
-    return new Response(JSON.stringify({ received: true, error: err.message }), {
-      headers: { "Content-Type": "application/json" },
-      status: 200,
-    });
+    return new Response(
+      JSON.stringify({ received: true, error: err.message }),
+      {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      },
+    );
   }
 
   return new Response(JSON.stringify({ received: true }), {
@@ -159,7 +173,10 @@ serve(async (req) => {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Look up a Supabase user ID from the stripe_customer_id stored on their profile. */
-async function resolveUserId(supabase: any, customerId: string): Promise<string | null> {
+async function resolveUserId(
+  supabase: any,
+  customerId: string,
+): Promise<string | null> {
   const { data } = await supabase
     .from("profiles")
     .select("id")

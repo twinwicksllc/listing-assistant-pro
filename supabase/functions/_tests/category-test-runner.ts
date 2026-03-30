@@ -1,12 +1,12 @@
 /**
  * Category Lookup Test Runner
- * 
+ *
  * Runs the 60-case test fixture against the category-lookup function
  * and produces a metrics report.
- * 
+ *
  * Usage (local):
  *   deno run --allow-read --allow-net --allow-env category-test-runner.ts
- * 
+ *
  * Requires env vars:
  *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
  */
@@ -42,7 +42,11 @@ interface MetricsSummary {
   failures: TestResult[];
 }
 
-async function runTest(testCase: typeof fixtures.cases[0], baseUrl: string, serviceKey: string): Promise<TestResult> {
+async function runTest(
+  testCase: typeof fixtures.cases[0],
+  baseUrl: string,
+  serviceKey: string,
+): Promise<TestResult> {
   const start = Date.now();
   const result: TestResult = {
     id: testCase.id,
@@ -101,12 +105,17 @@ async function runTest(testCase: typeof fixtures.cases[0], baseUrl: string, serv
 
 function computeMetrics(results: TestResult[]): MetricsSummary {
   const total = results.length;
-  const correct = results.filter(r => r.match).length;
+  const correct = results.filter((r) => r.match).length;
 
   // By group
-  const groups: Record<string, { total: number; correct: number; accuracy: number }> = {};
+  const groups: Record<
+    string,
+    { total: number; correct: number; accuracy: number }
+  > = {};
   for (const r of results) {
-    if (!groups[r.group]) groups[r.group] = { total: 0, correct: 0, accuracy: 0 };
+    if (!groups[r.group]) {
+      groups[r.group] = { total: 0, correct: 0, accuracy: 0 };
+    }
     groups[r.group].total++;
     if (r.match) groups[r.group].correct++;
   }
@@ -122,10 +131,12 @@ function computeMetrics(results: TestResult[]): MetricsSummary {
   }
 
   // Non-leaf rate (where verifiedLeaf is explicitly false)
-  const nonLeafCount = results.filter(r => r.verifiedLeaf === false).length;
+  const nonLeafCount = results.filter((r) => r.verifiedLeaf === false).length;
 
   // Average latency
-  const avgLatency = Math.round(results.reduce((sum, r) => sum + r.latencyMs, 0) / total);
+  const avgLatency = Math.round(
+    results.reduce((sum, r) => sum + r.latencyMs, 0) / total,
+  );
 
   return {
     total,
@@ -134,7 +145,7 @@ function computeMetrics(results: TestResult[]): MetricsSummary {
     byGroup: groups,
     bySource: sources,
     avgLatencyMs: avgLatency,
-    failures: results.filter(r => !r.match),
+    failures: results.filter((r) => !r.match),
   };
 }
 
@@ -150,7 +161,11 @@ function printReport(metrics: MetricsSummary) {
 
   console.log("\n  BY GROUP:");
   for (const [group, data] of Object.entries(metrics.byGroup)) {
-    console.log(`    ${group.padEnd(20)} ${data.correct}/${data.total} (${data.accuracy}%)`);
+    console.log(
+      `    ${
+        group.padEnd(20)
+      } ${data.correct}/${data.total} (${data.accuracy}%)`,
+    );
   }
 
   console.log("\n  BY SOURCE:");
@@ -162,7 +177,11 @@ function printReport(metrics: MetricsSummary) {
     console.log(`\n  FAILURES (${metrics.failures.length}):`);
     for (const f of metrics.failures) {
       console.log(`    [${f.id}] "${f.input}"`);
-      console.log(`      Expected: ${f.expectedCategoryId} | Got: ${f.actualCategoryId || "NONE"} (${f.candidateSource || "?"}) | Error: ${f.error || "none"}`);
+      console.log(
+        `      Expected: ${f.expectedCategoryId} | Got: ${
+          f.actualCategoryId || "NONE"
+        } (${f.candidateSource || "?"}) | Error: ${f.error || "none"}`,
+      );
     }
   }
 
@@ -175,21 +194,30 @@ async function main() {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
   if (!baseUrl || !serviceKey) {
-    console.error("ERROR: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set");
+    console.error(
+      "ERROR: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set",
+    );
     Deno.exit(1);
   }
 
-  console.log(`Running ${fixtures.cases.length} test cases against ${baseUrl}...`);
+  console.log(
+    `Running ${fixtures.cases.length} test cases against ${baseUrl}...`,
+  );
 
   const results: TestResult[] = [];
   for (const testCase of fixtures.cases) {
-    process.stdout?.write?.(`  Testing ${testCase.id}...`) ?? console.log(`  Testing ${testCase.id}...`);
+    process.stdout?.write?.(`  Testing ${testCase.id}...`) ??
+      console.log(`  Testing ${testCase.id}...`);
     const result = await runTest(testCase, baseUrl, serviceKey);
-    console.log(` ${result.match ? "✓" : "✗"} (${result.latencyMs}ms) ${result.candidateSource || "?"}`);
+    console.log(
+      ` ${result.match ? "✓" : "✗"} (${result.latencyMs}ms) ${
+        result.candidateSource || "?"
+      }`,
+    );
     results.push(result);
 
     // Small delay to avoid rate limiting
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
   }
 
   const metrics = computeMetrics(results);

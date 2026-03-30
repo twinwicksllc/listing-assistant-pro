@@ -65,7 +65,7 @@ const CONDITION_ID_MAP: Record<string, number> = {
 
 async function fetchWithTimeout(
   url: string,
-  options: RequestInit & { timeout?: number }
+  options: RequestInit & { timeout?: number },
 ): Promise<Response> {
   const { timeout = 20000, ...fetchOptions } = options;
   const controller = new AbortController();
@@ -86,39 +86,56 @@ serve(async (req: Request) => {
     const svc = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-      { auth: { persistSession: false } }
+      { auth: { persistSession: false } },
     );
 
     // Auth
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Authentication required" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Authentication required" }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
-    const { data: ud } = await svc.auth.getUser(authHeader.replace("Bearer ", ""));
+    const { data: ud } = await svc.auth.getUser(
+      authHeader.replace("Bearer ", ""),
+    );
     const userId = ud?.user?.id;
     const userEmail = ud?.user?.email;
     if (!userId) {
-      return new Response(JSON.stringify({ error: "Authentication required" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Authentication required" }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     // Determine tier
     const ADMIN_EMAILS = ["twinwicksllc@gmail.com"];
     const isAdmin = userEmail ? ADMIN_EMAILS.includes(userEmail) : false;
-    let tier: "starter" | "pro" | "unlimited" | "admin" = isAdmin ? "admin" : "starter";
+    let tier: "starter" | "pro" | "unlimited" | "admin" = isAdmin
+      ? "admin"
+      : "starter";
 
     if (!isAdmin) {
       const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
       if (STRIPE_SECRET_KEY && userEmail) {
         try {
-          const { default: Stripe } = await import("https://esm.sh/stripe@18.5.0");
-          const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2025-08-27.basil" });
-          const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
+          const { default: Stripe } = await import(
+            "https://esm.sh/stripe@18.5.0"
+          );
+          const stripe = new Stripe(STRIPE_SECRET_KEY, {
+            apiVersion: "2025-08-27.basil",
+          });
+          const customers = await stripe.customers.list({
+            email: userEmail,
+            limit: 1,
+          });
           if (customers.data.length > 0) {
             const subs = await stripe.subscriptions.list({
               customer: customers.data[0].id,
@@ -145,21 +162,28 @@ serve(async (req: Request) => {
     };
 
     if (!userToken) {
-      return new Response(JSON.stringify({ error: "eBay user token required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "eBay user token required" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     const cap = ROW_CAPS[tier] ?? 5;
     if (rows.length > cap) {
       return new Response(
         JSON.stringify({
-          error: `Your plan allows bulk publishing up to ${cap} listings at a time. You submitted ${rows.length}.`,
+          error:
+            `Your plan allows bulk publishing up to ${cap} listings at a time. You submitted ${rows.length}.`,
           cap,
           tier,
         }),
-        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -171,17 +195,20 @@ serve(async (req: Request) => {
           rowCount: rows.length,
           tier,
           cap,
-          message: `Dry run successful — ${rows.length} rows validated, ready to publish`,
+          message:
+            `Dry run successful — ${rows.length} rows validated, ready to publish`,
         }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
     const ebayEnv = Deno.env.get("EBAY_ENV") || "production";
-    const apiBase =
-      ebayEnv === "sandbox"
-        ? "https://api.sandbox.ebay.com"
-        : "https://api.ebay.com";
+    const apiBase = ebayEnv === "sandbox"
+      ? "https://api.sandbox.ebay.com"
+      : "https://api.ebay.com";
 
     const authHeaders = {
       Authorization: `Bearer ${userToken}`,
@@ -208,7 +235,7 @@ serve(async (req: Request) => {
     try {
       const checkResp = await fetchWithTimeout(
         `${apiBase}/sell/inventory/v1/location/${merchantLocationKey}`,
-        { headers: authHeaders, timeout: 10000 }
+        { headers: authHeaders, timeout: 10000 },
       );
       if (checkResp.status === 404) {
         // Create the location
@@ -230,7 +257,7 @@ serve(async (req: Request) => {
               name: "Bulk Listing Location",
               merchantLocationStatus: "ENABLED",
             }),
-          }
+          },
         );
       }
     } catch (locErr) {
@@ -238,11 +265,13 @@ serve(async (req: Request) => {
     }
 
     // Fetch default policies once (used as fallback if row doesn't specify)
-    const fetchDefaultPolicy = async (policyType: string): Promise<string | null> => {
+    const fetchDefaultPolicy = async (
+      policyType: string,
+    ): Promise<string | null> => {
       try {
         const resp = await fetchWithTimeout(
           `${apiBase}/sell/account/v1/${policyType}_policy?marketplace_id=EBAY_US`,
-          { headers: authHeaders, timeout: 10000 }
+          { headers: authHeaders, timeout: 10000 },
         );
         if (!resp.ok) return null;
         let data: any;
@@ -250,7 +279,9 @@ serve(async (req: Request) => {
           const respText = await resp.text();
           data = JSON.parse(respText);
         } catch (e) {
-          console.warn(`bulk-publish: Failed to parse ${policyType} policy response: ${e}`);
+          console.warn(
+            `bulk-publish: Failed to parse ${policyType} policy response: ${e}`,
+          );
           return null;
         }
         const policies = data[`${policyType}Policies`] || [];
@@ -277,34 +308,39 @@ serve(async (req: Request) => {
         try {
           const { data: seqNum, error: seqError } = await svc.rpc(
             "increment_sku_sequence",
-            { user_id: userId }
+            { user_id: userId },
           );
           if (seqError || seqNum == null) throw new Error("seq error");
           sku = `BK${String(seqNum).padStart(5, "0")}`;
         } catch {
-          sku = `BK-${crypto.randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`;
+          sku = `BK-${
+            crypto.randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()
+          }`;
         }
 
         // Condition normalization
-        const conditionEnum = Object.keys(CONDITION_ID_MAP).includes(row.condition)
-          ? row.condition
-          : "PRE_OWNED_GOOD";
+        const conditionEnum =
+          Object.keys(CONDITION_ID_MAP).includes(row.condition)
+            ? row.condition
+            : "PRE_OWNED_GOOD";
         const conditionId = CONDITION_ID_MAP[conditionEnum] ?? 3000;
 
         // Build inventory item
-        const imageUrls = (row.imageUrls ?? []).filter((u) => u?.startsWith("http")).slice(0, 8);
+        const imageUrls = (row.imageUrls ?? []).filter((u) =>
+          u?.startsWith("http")
+        ).slice(0, 8);
         const inventoryBody: Record<string, unknown> = {
           product: {
             title: row.title.slice(0, 80),
             ...(imageUrls.length > 0 ? { imageUrls } : {}),
             ...(row.itemSpecifics && Object.keys(row.itemSpecifics).length > 0
               ? {
-                  aspects: Object.fromEntries(
-                    Object.entries(row.itemSpecifics)
-                      .filter(([, v]) => v)
-                      .map(([k, v]) => [k, [v]])
-                  ),
-                }
+                aspects: Object.fromEntries(
+                  Object.entries(row.itemSpecifics)
+                    .filter(([, v]) => v)
+                    .map(([k, v]) => [k, [v]]),
+                ),
+              }
               : {}),
           },
           condition: conditionEnum,
@@ -325,21 +361,26 @@ serve(async (req: Request) => {
             headers: authHeaders,
             timeout: 15000,
             body: JSON.stringify(inventoryBody),
-          }
+          },
         );
         if (!invResp.ok) {
           const errText = await invResp.text();
-          throw new Error(`Inventory item failed (${invResp.status}): ${errText.slice(0, 300)}`);
+          throw new Error(
+            `Inventory item failed (${invResp.status}): ${
+              errText.slice(0, 300)
+            }`,
+          );
         }
 
         // Step 2: Build offer
-        const fulfillmentPolicyId =
-          row.fulfillmentPolicyId || defaultFulfillment;
-        const returnPolicyId =
-          row.returnPolicyId || defaultReturn;
+        const fulfillmentPolicyId = row.fulfillmentPolicyId ||
+          defaultFulfillment;
+        const returnPolicyId = row.returnPolicyId || defaultReturn;
 
         if (!fulfillmentPolicyId) {
-          throw new Error("No fulfillment policy found. Please set one in eBay Seller Hub first.");
+          throw new Error(
+            "No fulfillment policy found. Please set one in eBay Seller Hub first.",
+          );
         }
 
         const offerBody: Record<string, unknown> = {
@@ -348,34 +389,35 @@ serve(async (req: Request) => {
           format: row.format,
           categoryId: row.categoryId,
           listingDescription: row.description || row.title,
-          pricingSummary:
-            row.format === "AUCTION"
-              ? {
-                  auctionStartPrice: {
-                    value: String((row.auctionStartPrice ?? 0.99).toFixed(2)),
+          pricingSummary: row.format === "AUCTION"
+            ? {
+              auctionStartPrice: {
+                value: String((row.auctionStartPrice ?? 0.99).toFixed(2)),
+                currency: "USD",
+              },
+              ...(row.buyItNowPrice
+                ? {
+                  auctionReservePrice: {
+                    value: String(row.buyItNowPrice.toFixed(2)),
                     currency: "USD",
                   },
-                  ...(row.buyItNowPrice
-                    ? {
-                        auctionReservePrice: {
-                          value: String(row.buyItNowPrice.toFixed(2)),
-                          currency: "USD",
-                        },
-                      }
-                    : {}),
                 }
-              : {
-                  price: {
-                    value: String((row.price || 0.99).toFixed(2)),
-                    currency: "USD",
-                  },
-                },
+                : {}),
+            }
+            : {
+              price: {
+                value: String((row.price || 0.99).toFixed(2)),
+                currency: "USD",
+              },
+            },
           quantityLimitPerBuyer: 10,
           includeCatalogProductDetails: false,
           listingPolicies: {
             fulfillmentPolicyId,
             ...(returnPolicyId ? { returnPolicyId } : {}),
-            ...(row.paymentPolicyId ? { paymentPolicyId: row.paymentPolicyId } : {}),
+            ...(row.paymentPolicyId
+              ? { paymentPolicyId: row.paymentPolicyId }
+              : {}),
           },
           merchantLocationKey,
           conditionId,
@@ -389,11 +431,15 @@ serve(async (req: Request) => {
             headers: authHeaders,
             timeout: 15000,
             body: JSON.stringify(offerBody),
-          }
+          },
         );
         if (!offerResp.ok) {
           const errText = await offerResp.text();
-          throw new Error(`Offer creation failed (${offerResp.status}): ${errText.slice(0, 300)}`);
+          throw new Error(
+            `Offer creation failed (${offerResp.status}): ${
+              errText.slice(0, 300)
+            }`,
+          );
         }
         let offerData: any;
         try {
@@ -407,7 +453,7 @@ serve(async (req: Request) => {
         // Step 4: Publish offer
         const publishResp = await fetchWithTimeout(
           `${apiBase}/sell/inventory/v1/offer/${offerId}/publish`,
-          { method: "POST", headers: authHeaders, timeout: 15000 }
+          { method: "POST", headers: authHeaders, timeout: 15000 },
         );
 
         let listingId: string | undefined;
@@ -417,13 +463,19 @@ serve(async (req: Request) => {
             const respText = await publishResp.text();
             publishData = JSON.parse(respText);
           } catch (e) {
-            console.warn(`Row ${row.rowIndex}: Failed to parse publish response: ${e}`);
+            console.warn(
+              `Row ${row.rowIndex}: Failed to parse publish response: ${e}`,
+            );
             publishData = {};
           }
           listingId = publishData.listingId;
         } else {
           const errText = await publishResp.text();
-          console.warn(`Row ${row.rowIndex}: publish failed: ${publishResp.status} - ${errText.slice(0, 200)}`);
+          console.warn(
+            `Row ${row.rowIndex}: publish failed: ${publishResp.status} - ${
+              errText.slice(0, 200)
+            }`,
+          );
           // Offer created but not live — still record partial success
         }
 
@@ -454,7 +506,10 @@ serve(async (req: Request) => {
             metal_weight_oz: 0,
           });
         } catch (dbErr) {
-          console.warn(`Row ${row.rowIndex}: DB save failed (non-fatal):`, dbErr);
+          console.warn(
+            `Row ${row.rowIndex}: DB save failed (non-fatal):`,
+            dbErr,
+          );
         }
 
         results.push({
@@ -482,13 +537,19 @@ serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({ published, failed, total: rows.length, results }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   } catch (err: any) {
     console.error("bulk-publish error:", err);
-    return new Response(JSON.stringify({ error: err.message || "Internal error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ error: err.message || "Internal error" }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 });

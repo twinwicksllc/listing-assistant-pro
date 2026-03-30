@@ -29,7 +29,7 @@ serve(async (req) => {
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    { auth: { persistSession: false } }
+    { auth: { persistSession: false } },
   );
 
   try {
@@ -39,7 +39,9 @@ serve(async (req) => {
     if (!authHeader) throw new Error("No authorization header provided");
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    const { data: { user }, error: userError } = await supabase.auth.getUser(
+      token,
+    );
     if (userError || !user?.email) throw new Error("User not authenticated");
     logStep("User authenticated", { userId: user.id });
 
@@ -69,7 +71,7 @@ serve(async (req) => {
             cancel_at_period_end: cached.cancel_at_period_end,
             source: "cache",
           }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
       logStep("Cache is stale, falling back to Stripe", { ageMs });
@@ -91,7 +93,10 @@ serve(async (req) => {
 
     let customerId: string | null = profile?.stripe_customer_id ?? null;
     if (!customerId) {
-      const customers = await stripe.customers.list({ email: user.email, limit: 1 });
+      const customers = await stripe.customers.list({
+        email: user.email,
+        limit: 1,
+      });
       customerId = customers.data[0]?.id ?? null;
       if (customerId) {
         // Cache it for next time
@@ -106,7 +111,7 @@ serve(async (req) => {
       logStep("No Stripe customer found — returning unsubscribed");
       return new Response(
         JSON.stringify({ subscribed: false, status: null, source: "stripe" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -120,7 +125,8 @@ serve(async (req) => {
     // Prefer active/trialing > past_due > canceled
     const priorityOrder = ["active", "trialing", "past_due", "canceled"];
     const sub = stripeSubscriptions.data.sort(
-      (a, b) => priorityOrder.indexOf(a.status) - priorityOrder.indexOf(b.status)
+      (a, b) =>
+        priorityOrder.indexOf(a.status) - priorityOrder.indexOf(b.status),
     )[0] ?? null;
 
     // Write fresh data back to the DB so the next call can use the cache
@@ -133,16 +139,19 @@ serve(async (req) => {
           product_id: sub.items.data[0]?.price?.product as string ?? null,
           price_id: sub.items.data[0]?.price?.id ?? null,
           status: sub.status,
-          current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
+          current_period_end: new Date(sub.current_period_end * 1000)
+            .toISOString(),
           cancel_at_period_end: sub.cancel_at_period_end,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: "stripe_sub_id" }
+        { onConflict: "stripe_sub_id" },
       );
       logStep("DB cache refreshed from Stripe", { status: sub.status });
     }
 
-    const activeSub = stripeSubscriptions.data.find((s) => ACTIVE_STATUSES.has(s.status));
+    const activeSub = stripeSubscriptions.data.find((s) =>
+      ACTIVE_STATUSES.has(s.status)
+    );
     const hasActive = !!activeSub;
     const status = sub?.status ?? null;
 
@@ -150,12 +159,14 @@ serve(async (req) => {
       JSON.stringify({
         subscribed: hasActive && status !== "past_due",
         product_id: hasActive ? activeSub!.items.data[0]?.price?.product : null,
-        subscription_end: sub ? new Date(sub.current_period_end * 1000).toISOString() : null,
+        subscription_end: sub
+          ? new Date(sub.current_period_end * 1000).toISOString()
+          : null,
         status,
         cancel_at_period_end: sub?.cancel_at_period_end ?? false,
         source: "stripe",
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
     logStep("ERROR", { message: (error as Error).message });

@@ -50,7 +50,9 @@ interface TitleSuggestion {
 async function getEbayAppToken(): Promise<string> {
   const clientId = Deno.env.get("EBAY_CLIENT_ID");
   const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
-  if (!clientId || !clientSecret) throw new Error("eBay API credentials not configured");
+  if (!clientId || !clientSecret) {
+    throw new Error("eBay API credentials not configured");
+  }
 
   const credentials = btoa(`${clientId}:${clientSecret}`);
   const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
@@ -60,8 +62,12 @@ async function getEbayAppToken(): Promise<string> {
 
   const resp = await fetch(tokenUrl, {
     method: "POST",
-    headers: { Authorization: `Basic ${credentials}`, "Content-Type": "application/x-www-form-urlencoded" },
-    body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body:
+      "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
   });
   if (!resp.ok) throw new Error(`Failed to get eBay token: ${resp.status}`);
   const data = await resp.json();
@@ -71,7 +77,10 @@ async function getEbayAppToken(): Promise<string> {
 // ----------------------------------------------------------------
 // Fetch market data for a listing via keyword-research function
 // ----------------------------------------------------------------
-async function fetchMarketData(title: string, categoryId?: string | null): Promise<MarketData | null> {
+async function fetchMarketData(
+  title: string,
+  categoryId?: string | null,
+): Promise<MarketData | null> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceKey) return null;
@@ -125,9 +134,18 @@ async function fetchMarketData(title: string, categoryId?: string | null): Promi
 // ----------------------------------------------------------------
 // Generate price suggestion based on market data
 // ----------------------------------------------------------------
-function buildPriceSuggestion(listing: OptimizeListing, market: MarketData): PriceSuggestion {
+function buildPriceSuggestion(
+  listing: OptimizeListing,
+  market: MarketData,
+): PriceSuggestion {
   const { currentPrice } = listing;
-  const { avgSoldPrice, avgActivePrice, minActivePrice, sellThroughRate, competitionLevel } = market;
+  const {
+    avgSoldPrice,
+    avgActivePrice,
+    minActivePrice,
+    sellThroughRate,
+    competitionLevel,
+  } = market;
 
   // Primary target: avg sold price (most meaningful benchmark)
   // Fallback: avg active price from competitors
@@ -150,7 +168,11 @@ function buildPriceSuggestion(listing: OptimizeListing, market: MarketData): Pri
   if (absPctDiff <= 5) {
     return {
       suggestedPrice: null,
-      reasoning: `Your price ($${currentPrice.toFixed(2)}) is within 5% of the market ${avgSoldPrice ? "avg sold" : "avg active"} price ($${target.toFixed(2)}). No change needed.`,
+      reasoning: `Your price ($${
+        currentPrice.toFixed(2)
+      }) is within 5% of the market ${
+        avgSoldPrice ? "avg sold" : "avg active"
+      } price ($${target.toFixed(2)}). No change needed.`,
       direction: "keep",
       confidence: "high",
       estimatedImpact: "Minimal",
@@ -165,10 +187,22 @@ function buildPriceSuggestion(listing: OptimizeListing, market: MarketData): Pri
 
     return {
       suggestedPrice: suggested,
-      reasoning: `Your price ($${currentPrice.toFixed(2)}) is ${pctDiff.toFixed(0)}% above the ${avgSoldPrice ? "avg sold" : "avg active"} price ($${target.toFixed(2)}). Lowering to $${suggested.toFixed(2)} should ${strBoost} improve sell speed.${competitionLevel === "high" ? " High competition makes pricing competitively critical." : ""}`,
+      reasoning: `Your price ($${currentPrice.toFixed(2)}) is ${
+        pctDiff.toFixed(0)
+      }% above the ${avgSoldPrice ? "avg sold" : "avg active"} price ($${
+        target.toFixed(2)
+      }). Lowering to $${
+        suggested.toFixed(2)
+      } should ${strBoost} improve sell speed.${
+        competitionLevel === "high"
+          ? " High competition makes pricing competitively critical."
+          : ""
+      }`,
       direction: "lower",
       confidence: absPctDiff > 20 ? "high" : "medium",
-      estimatedImpact: absPctDiff > 20 ? "+30–50% sell-through" : "+10–20% sell-through",
+      estimatedImpact: absPctDiff > 20
+        ? "+30–50% sell-through"
+        : "+10–20% sell-through",
     };
   }
 
@@ -176,7 +210,17 @@ function buildPriceSuggestion(listing: OptimizeListing, market: MarketData): Pri
   const suggested = Math.round(target * 0.98 * 100) / 100;
   return {
     suggestedPrice: suggested,
-    reasoning: `Your price ($${currentPrice.toFixed(2)}) is ${Math.abs(pctDiff).toFixed(0)}% below the ${avgSoldPrice ? "avg sold" : "avg active"} price ($${target.toFixed(2)}). You may be leaving money on the table. Consider raising to $${suggested.toFixed(2)}.${market.demandSignal === "strong" ? " Strong demand supports a higher price." : ""}`,
+    reasoning: `Your price ($${currentPrice.toFixed(2)}) is ${
+      Math.abs(pctDiff).toFixed(0)
+    }% below the ${avgSoldPrice ? "avg sold" : "avg active"} price ($${
+      target.toFixed(2)
+    }). You may be leaving money on the table. Consider raising to $${
+      suggested.toFixed(2)
+    }.${
+      market.demandSignal === "strong"
+        ? " Strong demand supports a higher price."
+        : ""
+    }`,
     direction: "raise",
     confidence: absPctDiff > 20 ? "high" : "medium",
     estimatedImpact: `+$${(suggested - currentPrice).toFixed(2)} per sale`,
@@ -186,39 +230,68 @@ function buildPriceSuggestion(listing: OptimizeListing, market: MarketData): Pri
 // ----------------------------------------------------------------
 // Generate title suggestions based on analysis
 // ----------------------------------------------------------------
-function buildTitleSuggestion(title: string, market: MarketData): TitleSuggestion {
+function buildTitleSuggestion(
+  title: string,
+  market: MarketData,
+): TitleSuggestion {
   const issues: string[] = [];
   const words = title.trim().split(/\s+/);
   const titleLen = title.length;
 
   // Check length
   if (titleLen < 30) {
-    issues.push("Title is too short — eBay gives you 80 characters, use them for better search visibility");
+    issues.push(
+      "Title is too short — eBay gives you 80 characters, use them for better search visibility",
+    );
   } else if (titleLen > 80) {
-    issues.push("Title exceeds eBay's 80-character limit — it will be truncated");
+    issues.push(
+      "Title exceeds eBay's 80-character limit — it will be truncated",
+    );
   }
 
   // Check for all caps
   if (title === title.toUpperCase() && titleLen > 10) {
-    issues.push("Avoid ALL CAPS — it looks spammy and may reduce click-through rate");
+    issues.push(
+      "Avoid ALL CAPS — it looks spammy and may reduce click-through rate",
+    );
   }
 
   // Check for excessive punctuation/symbols
-  const symbolCount = (title.match(/[!@#$%^&*()_+=\[\]{};':"\\|,.<>?]/g) || []).length;
+  const symbolCount =
+    (title.match(/[!@#$%^&*()_+=\[\]{};':"\\|,.<>?]/g) || []).length;
   if (symbolCount > 3) {
-    issues.push("Too many special characters — keep punctuation minimal for better readability");
+    issues.push(
+      "Too many special characters — keep punctuation minimal for better readability",
+    );
   }
 
   // Check for filler words
-  const fillerWords = ["lot", "nice", "rare", "vintage", "beautiful", "amazing", "wow", "look"];
-  const foundFillers = fillerWords.filter(w => title.toLowerCase().includes(w));
+  const fillerWords = [
+    "lot",
+    "nice",
+    "rare",
+    "vintage",
+    "beautiful",
+    "amazing",
+    "wow",
+    "look",
+  ];
+  const foundFillers = fillerWords.filter((w) =>
+    title.toLowerCase().includes(w)
+  );
   if (foundFillers.length > 0) {
-    issues.push(`Vague filler words detected ("${foundFillers.join('", "')}"): replace with specific attributes (year, grade, mint mark, color, size, etc.)`);
+    issues.push(
+      `Vague filler words detected ("${
+        foundFillers.join('", "')
+      }"): replace with specific attributes (year, grade, mint mark, color, size, etc.)`,
+    );
   }
 
   // Check for missing key descriptors based on demand
   if (market.competitionLevel === "high" && words.length < 8) {
-    issues.push("In a high-competition category, longer titles with more keywords help you stand out in search");
+    issues.push(
+      "In a high-competition category, longer titles with more keywords help you stand out in search",
+    );
   }
 
   // Build suggestion
@@ -228,27 +301,37 @@ function buildTitleSuggestion(title: string, market: MarketData): TitleSuggestio
   if (issues.length === 0) {
     reasoning = "Your title looks well-optimized. No major changes needed.";
   } else if (issues.length <= 2) {
-    reasoning = `Minor improvements possible: ${issues.length} issue(s) detected.`;
+    reasoning =
+      `Minor improvements possible: ${issues.length} issue(s) detected.`;
     // Provide a cleaned-up version
     let improved = title.trim();
     // Fix excessive caps (convert to title case if all caps)
     if (improved === improved.toUpperCase() && improved.length > 10) {
-      improved = improved.replace(/\b\w+/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+      improved = improved.replace(
+        /\b\w+/g,
+        (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(),
+      );
     }
     // If too short, note what to add
     if (titleLen < 40) {
-      reasoning += ` Consider adding: condition, key specifications, brand, or model number to reach 60–80 characters.`;
+      reasoning +=
+        ` Consider adding: condition, key specifications, brand, or model number to reach 60–80 characters.`;
     }
     suggestedTitle = improved !== title ? improved : null;
   } else {
-    reasoning = `Multiple optimizations needed: ${issues.length} issues detected. Address these to improve search ranking.`;
+    reasoning =
+      `Multiple optimizations needed: ${issues.length} issues detected. Address these to improve search ranking.`;
   }
 
   return {
     suggestedTitle,
     reasoning,
     issuesFound: issues,
-    confidence: issues.length === 0 ? "high" : issues.length <= 2 ? "medium" : "low",
+    confidence: issues.length === 0
+      ? "high"
+      : issues.length <= 2
+      ? "medium"
+      : "low",
   };
 }
 
@@ -258,7 +341,7 @@ function buildTitleSuggestion(title: string, market: MarketData): TitleSuggestio
 function calcOpportunityScore(
   listing: OptimizeListing,
   market: MarketData,
-  titleIssues: number
+  titleIssues: number,
 ): number {
   const { currentPrice } = listing;
   const target = market.avgSoldPrice ?? market.avgActivePrice;
@@ -273,7 +356,10 @@ function calcOpportunityScore(
   // Staleness component (0-30 points)
   let staleScore = 0;
   if (listing.listingDate) {
-    const daysActive = Math.floor((Date.now() - new Date(listing.listingDate).getTime()) / (1000 * 60 * 60 * 24));
+    const daysActive = Math.floor(
+      (Date.now() - new Date(listing.listingDate).getTime()) /
+        (1000 * 60 * 60 * 24),
+    );
     staleScore = Math.min((daysActive / 90) * 30, 30); // 90 days → 30 pts
   }
 
@@ -293,7 +379,7 @@ function buildFlags(
   listing: OptimizeListing,
   market: MarketData,
   priceSuggestion: PriceSuggestion,
-  titleIssues: number
+  titleIssues: number,
 ): string[] {
   const flags: string[] = [];
 
@@ -301,7 +387,10 @@ function buildFlags(
   if (priceSuggestion.direction === "raise") flags.push("underpriced");
 
   if (listing.listingDate) {
-    const daysActive = Math.floor((Date.now() - new Date(listing.listingDate).getTime()) / (1000 * 60 * 60 * 24));
+    const daysActive = Math.floor(
+      (Date.now() - new Date(listing.listingDate).getTime()) /
+        (1000 * 60 * 60 * 24),
+    );
     if (daysActive >= 30) flags.push("stale");
   }
 
@@ -324,12 +413,19 @@ serve(async (req) => {
 
     if (!listing.listingId || !listing.title || listing.currentPrice == null) {
       return new Response(
-        JSON.stringify({ error: "listingId, title, and currentPrice are required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({
+          error: "listingId, title, and currentPrice are required",
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
-    console.log(`[optimize-listing] Analyzing listing ${listing.listingId}: "${listing.title}" @ $${listing.currentPrice}`);
+    console.log(
+      `[optimize-listing] Analyzing listing ${listing.listingId}: "${listing.title}" @ $${listing.currentPrice}`,
+    );
 
     // Fetch market data (calls keyword-research internally)
     const market = await fetchMarketData(listing.title, listing.categoryId);
@@ -343,31 +439,46 @@ serve(async (req) => {
           flags: [],
           priceSuggestion: {
             suggestedPrice: null,
-            reasoning: "Market data temporarily unavailable. Try again in a moment.",
+            reasoning:
+              "Market data temporarily unavailable. Try again in a moment.",
             direction: "keep",
             confidence: "low",
             estimatedImpact: "Unknown",
           },
           titleSuggestion: {
             suggestedTitle: null,
-            reasoning: "Market data unavailable — title analysis requires market context.",
+            reasoning:
+              "Market data unavailable — title analysis requires market context.",
             issuesFound: [],
             confidence: "low",
           },
           market: null,
           noData: true,
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     // Build suggestions
     const priceSuggestion = buildPriceSuggestion(listing, market);
     const titleSuggestion = buildTitleSuggestion(listing.title, market);
-    const opportunityScore = calcOpportunityScore(listing, market, titleSuggestion.issuesFound.length);
-    const flags = buildFlags(listing, market, priceSuggestion, titleSuggestion.issuesFound.length);
+    const opportunityScore = calcOpportunityScore(
+      listing,
+      market,
+      titleSuggestion.issuesFound.length,
+    );
+    const flags = buildFlags(
+      listing,
+      market,
+      priceSuggestion,
+      titleSuggestion.issuesFound.length,
+    );
 
-    console.log(`[optimize-listing] Done: score=${opportunityScore}, flags=[${flags.join(",")}], priceDir=${priceSuggestion.direction}`);
+    console.log(
+      `[optimize-listing] Done: score=${opportunityScore}, flags=[${
+        flags.join(",")
+      }], priceDir=${priceSuggestion.direction}`,
+    );
 
     return new Response(
       JSON.stringify({
@@ -379,14 +490,17 @@ serve(async (req) => {
         market,
         noData: false,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[optimize-listing] Error:", msg);
     return new Response(
       JSON.stringify({ error: msg }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 });

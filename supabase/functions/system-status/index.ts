@@ -19,7 +19,7 @@ serve(async (req) => {
   const supabaseClient = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    { auth: { persistSession: false } }
+    { auth: { persistSession: false } },
   );
 
   try {
@@ -27,7 +27,8 @@ serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("Unauthorized");
     const token = authHeader.replace("Bearer ", "");
-    const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
+    const { data: userData, error: userError } = await supabaseClient.auth
+      .getUser(token);
     if (userError || !userData.user) throw new Error("Unauthorized");
     if (userData.user.email !== ADMIN_EMAIL) {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
@@ -40,9 +41,16 @@ serve(async (req) => {
     let stripeStatus = { mode: "unknown", activeSubscriptions: 0, error: "" };
     try {
       const stripeKey = Deno.env.get("STRIPE_SECRET_KEY") || "";
-      stripeStatus.mode = stripeKey.startsWith("sk_live_") ? "live" : stripeKey.startsWith("sk_test_") ? "test" : "unknown";
+      stripeStatus.mode = stripeKey.startsWith("sk_live_")
+        ? "live"
+        : stripeKey.startsWith("sk_test_")
+        ? "test"
+        : "unknown";
       const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-      const subs = await stripe.subscriptions.list({ status: "active", limit: 100 });
+      const subs = await stripe.subscriptions.list({
+        status: "active",
+        limit: 100,
+      });
       stripeStatus.activeSubscriptions = subs.data.length;
     } catch (e) {
       stripeStatus.error = e instanceof Error ? e.message : "Stripe error";
@@ -52,10 +60,15 @@ serve(async (req) => {
     let ebayStatus = { ok: false, error: "" };
     try {
       const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-      const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
-      const resp = await fetch(`${apiBase}/buy/browse/v1/item_summary/search?q=test&limit=1`, {
-        headers: { "Content-Type": "application/json" },
-      });
+      const apiBase = ebayEnv === "production"
+        ? "https://api.ebay.com"
+        : "https://api.sandbox.ebay.com";
+      const resp = await fetch(
+        `${apiBase}/buy/browse/v1/item_summary/search?q=test&limit=1`,
+        {
+          headers: { "Content-Type": "application/json" },
+        },
+      );
       // Any 2xx, 3xx, 4xx status means the API is reachable (5xx are actual outages)
       // 400 is expected without auth - it means the endpoint exists and is responding
       ebayStatus.ok = resp.status >= 200 && resp.status < 500;
@@ -67,22 +80,33 @@ serve(async (req) => {
     // --- Total Users ---
     let totalUsers = 0;
     try {
-      const { count } = await supabaseClient.from("profiles").select("*", { count: "exact", head: true });
+      const { count } = await supabaseClient.from("profiles").select("*", {
+        count: "exact",
+        head: true,
+      });
       totalUsers = count || 0;
     } catch {
       // skip
     }
 
     // --- Gemini Usage ---
-    let geminiUsage = { 
-      totalTokens: 0, 
-      totalCalls: 0, 
-      last30Days: [] as any[], 
+    let geminiUsage = {
+      totalTokens: 0,
+      totalCalls: 0,
+      last30Days: [] as any[],
       estimatedCost: 0,
       inputTokens: 0,
       outputTokens: 0,
-      byFunction: {} as Record<string, { calls: number; cost: number; inputTokens: number; outputTokens: number }>,
-      last30DaysCost: [] as any[]
+      byFunction: {} as Record<
+        string,
+        {
+          calls: number;
+          cost: number;
+          inputTokens: number;
+          outputTokens: number;
+        }
+      >,
+      last30DaysCost: [] as any[],
     };
     try {
       const thirtyDaysAgo = new Date();
@@ -97,39 +121,80 @@ serve(async (req) => {
 
       geminiUsage.totalCalls = count || 0;
       if (usageData) {
-        const inputTokens = usageData.reduce((sum: number, r: any) => sum + (r.prompt_tokens || 0), 0);
-        const outputTokens = usageData.reduce((sum: number, r: any) => sum + (r.completion_tokens || 0), 0);
+        const inputTokens = usageData.reduce(
+          (sum: number, r: any) => sum + (r.prompt_tokens || 0),
+          0,
+        );
+        const outputTokens = usageData.reduce(
+          (sum: number, r: any) => sum + (r.completion_tokens || 0),
+          0,
+        );
         const inputCost = inputTokens * 0.00000125;
         const outputCost = outputTokens * 0.000005;
-        
+
         geminiUsage.inputTokens = inputTokens;
         geminiUsage.outputTokens = outputTokens;
         geminiUsage.totalTokens = inputTokens + outputTokens;
         geminiUsage.estimatedCost = inputCost + outputCost;
 
         // Group by day for chart (with daily cost)
-        const byDay: Record<string, { calls: number; tokens: number; cost: number; inputTokens: number; outputTokens: number }> = {};
+        const byDay: Record<
+          string,
+          {
+            calls: number;
+            tokens: number;
+            cost: number;
+            inputTokens: number;
+            outputTokens: number;
+          }
+        > = {};
         for (const row of usageData) {
           const day = row.created_at.split("T")[0];
           const dailyInputCost = (row.prompt_tokens || 0) * 0.00000125;
           const dailyOutputCost = (row.completion_tokens || 0) * 0.000005;
-          if (!byDay[day]) byDay[day] = { calls: 0, tokens: 0, cost: 0, inputTokens: 0, outputTokens: 0 };
+          if (!byDay[day]) {
+            byDay[day] = {
+              calls: 0,
+              tokens: 0,
+              cost: 0,
+              inputTokens: 0,
+              outputTokens: 0,
+            };
+          }
           byDay[day].calls++;
           byDay[day].tokens += row.total_tokens || 0;
           byDay[day].cost += dailyInputCost + dailyOutputCost;
           byDay[day].inputTokens += row.prompt_tokens || 0;
           byDay[day].outputTokens += row.completion_tokens || 0;
         }
-        geminiUsage.last30Days = Object.entries(byDay).map(([date, v]) => ({ date, ...v })).sort((a, b) => a.date.localeCompare(b.date));
+        geminiUsage.last30Days = Object.entries(byDay).map(([date, v]) => ({
+          date,
+          ...v,
+        })).sort((a, b) => a.date.localeCompare(b.date));
         geminiUsage.last30DaysCost = geminiUsage.last30Days;
 
         // Group by function for breakdown
-        const byFunction: Record<string, { calls: number; cost: number; inputTokens: number; outputTokens: number }> = {};
+        const byFunction: Record<
+          string,
+          {
+            calls: number;
+            cost: number;
+            inputTokens: number;
+            outputTokens: number;
+          }
+        > = {};
         for (const row of usageData) {
           const func = row.function_name || "unknown";
           const inputCost = (row.prompt_tokens || 0) * 0.00000125;
           const outputCost = (row.completion_tokens || 0) * 0.000005;
-          if (!byFunction[func]) byFunction[func] = { calls: 0, cost: 0, inputTokens: 0, outputTokens: 0 };
+          if (!byFunction[func]) {
+            byFunction[func] = {
+              calls: 0,
+              cost: 0,
+              inputTokens: 0,
+              outputTokens: 0,
+            };
+          }
           byFunction[func].calls++;
           byFunction[func].cost += inputCost + outputCost;
           byFunction[func].inputTokens += row.prompt_tokens || 0;
@@ -142,7 +207,12 @@ serve(async (req) => {
     }
 
     // --- Feature Usage Analytics ---
-    let featureUsage = { ai_analysis: 0, ebay_publish: 0, optimize: 0, export: 0 };
+    let featureUsage = {
+      ai_analysis: 0,
+      ebay_publish: 0,
+      optimize: 0,
+      export: 0,
+    };
     try {
       const thirtyDaysAgo2 = new Date();
       thirtyDaysAgo2.setDate(thirtyDaysAgo2.getDate() - 30);
@@ -161,7 +231,11 @@ serve(async (req) => {
     }
 
     // --- Last Cost Alert ---
-    let lastCostAlert: { sent_at: string; total_cost: number; total_requests: number } | null = null;
+    let lastCostAlert: {
+      sent_at: string;
+      total_cost: number;
+      total_requests: number;
+    } | null = null;
     try {
       const { data: alertData } = await supabaseClient
         .from("cost_alerts")
@@ -183,12 +257,17 @@ serve(async (req) => {
         featureUsage,
         lastCostAlert,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({
+        error: e instanceof Error ? e.message : "Unknown error",
+      }),
+      {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 });

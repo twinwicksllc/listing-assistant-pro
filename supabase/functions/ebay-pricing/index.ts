@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { initSentry, captureException } from "../_helpers/sentry.ts";
+import { captureException, initSentry } from "../_helpers/sentry.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -26,10 +26,13 @@ async function scrapeEbaySoldListings(query: string): Promise<SoldItem[]> {
   // LH_Complete=1&LH_Sold=1 → completed AND sold listings only
   // _sop=13 → sort by most recently ended
   // _ipg=50 → 50 results per page
-  const ebayUrl = `https://www.ebay.com/sch/i.html?_nkw=${encoded}&LH_Complete=1&LH_Sold=1&_ipg=50&_sop=13`;
+  const ebayUrl =
+    `https://www.ebay.com/sch/i.html?_nkw=${encoded}&LH_Complete=1&LH_Sold=1&_ipg=50&_sop=13`;
   const jinaUrl = `https://r.jina.ai/${ebayUrl}`;
 
-  console.log(`[ebay-pricing] Fetching via Jina: ${jinaUrl.substring(0, 100)}...`);
+  console.log(
+    `[ebay-pricing] Fetching via Jina: ${jinaUrl.substring(0, 100)}...`,
+  );
 
   const resp = await fetch(jinaUrl, {
     headers: {
@@ -63,7 +66,10 @@ async function scrapeEbaySoldListings(query: string): Promise<SoldItem[]> {
 // or price patterns like:
 //   **$XX.XX**
 // ----------------------------------------------------------------
-function parseSoldItemsFromMarkdown(content: string, query: string): SoldItem[] {
+function parseSoldItemsFromMarkdown(
+  content: string,
+  query: string,
+): SoldItem[] {
   const items: SoldItem[] = [];
   const lines = content.split("\n");
 
@@ -75,7 +81,9 @@ function parseSoldItemsFromMarkdown(content: string, query: string): SoldItem[] 
   // Extract all price occurrences from content
   // Filter to realistic coin/bullion price range ($1 - $50,000)
   const allPrices: number[] = [];
-  const priceMatches = content.matchAll(/(?:sold|price|bid)[^\n$]*\$\s*([\d,]+(?:\.\d{2})?)/gi);
+  const priceMatches = content.matchAll(
+    /(?:sold|price|bid)[^\n$]*\$\s*([\d,]+(?:\.\d{2})?)/gi,
+  );
   for (const match of priceMatches) {
     const price = parseFloat(match[1].replace(/,/g, ""));
     if (price >= 1 && price <= 50000) {
@@ -97,16 +105,24 @@ function parseSoldItemsFromMarkdown(content: string, query: string): SoldItem[] 
 
     // Skip shipping cost lines (usually small amounts like $5.99)
     // but keep if it's the only price in the block
-    const titleMatch = block.match(/\[([^\]]{10,120})\]\(https?:\/\/www\.ebay\.com\/itm\/[^)]+\)/);
+    const titleMatch = block.match(
+      /\[([^\]]{10,120})\]\(https?:\/\/www\.ebay\.com\/itm\/[^)]+\)/,
+    );
     const urlMatch = block.match(/\((https?:\/\/www\.ebay\.com\/itm\/[^)]+)\)/);
     const imageMatch = block.match(/!\[[^\]]*\]\((https?:\/\/[^)]+)\)/);
 
     // Determine condition from block text
     let condition = "Pre-Owned";
     const blockLower = block.toLowerCase();
-    if (blockLower.includes("new in") || blockLower.includes("brand new") || blockLower.includes("sealed")) {
+    if (
+      blockLower.includes("new in") || blockLower.includes("brand new") ||
+      blockLower.includes("sealed")
+    ) {
       condition = "New";
-    } else if (blockLower.includes("uncirculated") || blockLower.includes("ms-") || blockLower.includes(" ms ")) {
+    } else if (
+      blockLower.includes("uncirculated") || blockLower.includes("ms-") ||
+      blockLower.includes(" ms ")
+    ) {
       condition = "Uncirculated";
     } else if (blockLower.includes("circulated")) {
       condition = "Circulated";
@@ -128,7 +144,9 @@ function parseSoldItemsFromMarkdown(content: string, query: string): SoldItem[] 
 
   // If structured parsing yielded results, return them (deduplicated by price+title)
   if (items.length >= 2) {
-    console.log(`[ebay-pricing] Parsed ${items.length} structured items from Jina`);
+    console.log(
+      `[ebay-pricing] Parsed ${items.length} structured items from Jina`,
+    );
     // Deduplicate: remove items with exact same price AND near-same title
     const seen = new Set<string>();
     const deduped = items.filter((item) => {
@@ -142,7 +160,9 @@ function parseSoldItemsFromMarkdown(content: string, query: string): SoldItem[] 
 
   // Fallback: use raw price extraction if structured parsing failed
   if (allPrices.length >= 2) {
-    console.log(`[ebay-pricing] Falling back to raw price extraction: ${allPrices.length} prices`);
+    console.log(
+      `[ebay-pricing] Falling back to raw price extraction: ${allPrices.length} prices`,
+    );
     return allPrices.slice(0, 15).map((price) => ({
       title: query,
       price,
@@ -167,14 +187,35 @@ function deriveSearchQuery(title: string): string {
   // "MS-63" → "ms63", "VF-35" → "vf35", "MS 65" → "ms65"
   const gradeNormalised = title.replace(
     /\b(MS|VF|EF|XF|AU|PF|PR|SP|AG|G|F|VG)-?\s*(\d{1,2})\b/gi,
-    (_, g, n) => `${g}${n}`
+    (_, g, n) => `${g}${n}`,
   );
 
   const stopWords = new Set([
-    "a", "an", "the", "and", "or", "of", "in", "for", "to", "with",
-    "lot", "set", "collection", "item", "listing", "ebay",
-    "certified", "uncirculated", "beautiful", "stunning", "rare",
-    "vintage", "antique", "original", "authentic",
+    "a",
+    "an",
+    "the",
+    "and",
+    "or",
+    "of",
+    "in",
+    "for",
+    "to",
+    "with",
+    "lot",
+    "set",
+    "collection",
+    "item",
+    "listing",
+    "ebay",
+    "certified",
+    "uncirculated",
+    "beautiful",
+    "stunning",
+    "rare",
+    "vintage",
+    "antique",
+    "original",
+    "authentic",
   ]);
 
   const tokens = gradeNormalised
@@ -204,7 +245,11 @@ function filterOutliers(items: SoldItem[]): SoldItem[] {
   const hi = q3 + 1.5 * iqr;
   const filtered = items.filter((i) => i.price >= lo && i.price <= hi);
   if (filtered.length >= 3) {
-    console.log(`[ebay-pricing] Outlier filter: ${items.length} → ${filtered.length} items (fence $${lo.toFixed(2)}–$${hi.toFixed(2)})`);
+    console.log(
+      `[ebay-pricing] Outlier filter: ${items.length} → ${filtered.length} items (fence $${
+        lo.toFixed(2)
+      }–$${hi.toFixed(2)})`,
+    );
     return filtered;
   }
   return items; // don't filter if it would leave fewer than 3 results
@@ -227,7 +272,7 @@ function median(nums: number[]): number {
 // ----------------------------------------------------------------
 serve(async (req) => {
   initSentry();
-  
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -235,10 +280,13 @@ serve(async (req) => {
   try {
     const { query } = await req.json();
     if (!query) {
-      return new Response(JSON.stringify({ error: "No search query provided" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "No search query provided" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     // Derive a focused search query from the full title
@@ -250,7 +298,9 @@ serve(async (req) => {
 
     // If not enough results with derived query, try with full query
     if (soldItems.length < 3 && searchQuery !== query.toLowerCase()) {
-      console.log(`[ebay-pricing] Only ${soldItems.length} results with derived query, trying fuller query...`);
+      console.log(
+        `[ebay-pricing] Only ${soldItems.length} results with derived query, trying fuller query...`,
+      );
       const fullerQuery = query
         .toLowerCase()
         .replace(/[^a-z0-9\s]/g, " ")
@@ -270,27 +320,39 @@ serve(async (req) => {
     soldItems = filterOutliers(soldItems);
 
     const prices = soldItems.map((i) => i.price).sort((a, b) => a - b);
-    const averagePrice =
-      prices.length > 0
-        ? parseFloat((prices.reduce((a, b) => a + b, 0) / prices.length).toFixed(2))
-        : 0;
+    const averagePrice = prices.length > 0
+      ? parseFloat(
+        (prices.reduce((a, b) => a + b, 0) / prices.length).toFixed(2),
+      )
+      : 0;
 
     const lowPrice = prices.length > 0 ? Math.min(...prices) : 0;
     const highPrice = prices.length > 0 ? Math.max(...prices) : 0;
     const medianPrice = parseFloat(median(prices).toFixed(2));
 
     // Percentile stats (p25, p75) for IQR-based pricing
-    const p25 = prices.length > 0 ? prices[Math.max(0, Math.ceil(0.25 * prices.length) - 1)] : 0;
-    const p75 = prices.length > 0 ? prices[Math.max(0, Math.ceil(0.75 * prices.length) - 1)] : 0;
+    const p25 = prices.length > 0
+      ? prices[Math.max(0, Math.ceil(0.25 * prices.length) - 1)]
+      : 0;
+    const p75 = prices.length > 0
+      ? prices[Math.max(0, Math.ceil(0.75 * prices.length) - 1)]
+      : 0;
 
     // Price histogram buckets (5 buckets for mini chart)
-    const histogram: { bucket: string; count: number; min: number; max: number }[] = [];
+    const histogram: {
+      bucket: string;
+      count: number;
+      min: number;
+      max: number;
+    }[] = [];
     if (prices.length > 0 && highPrice > lowPrice) {
       const bucketSize = (highPrice - lowPrice) / 5 || 1;
       for (let i = 0; i < 5; i++) {
         const bucketMin = lowPrice + i * bucketSize;
         const bucketMax = bucketMin + bucketSize;
-        const count = prices.filter((p) => p >= bucketMin && (i === 4 ? p <= bucketMax : p < bucketMax)).length;
+        const count = prices.filter((p) =>
+          p >= bucketMin && (i === 4 ? p <= bucketMax : p < bucketMax)
+        ).length;
         histogram.push({
           bucket: `$${bucketMin.toFixed(0)}–$${bucketMax.toFixed(0)}`,
           count,
@@ -300,7 +362,9 @@ serve(async (req) => {
       }
     }
 
-    console.log(`[ebay-pricing] Stats: avg=${averagePrice}, low=${lowPrice}, high=${highPrice}, median=${medianPrice}, n=${prices.length}`);
+    console.log(
+      `[ebay-pricing] Stats: avg=${averagePrice}, low=${lowPrice}, high=${highPrice}, median=${medianPrice}, n=${prices.length}`,
+    );
 
     return new Response(
       JSON.stringify({
@@ -316,14 +380,19 @@ serve(async (req) => {
         query: searchQuery,
         originalQuery: query,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
     console.error("ebay-pricing error:", e);
     captureException(e, { function: "ebay-pricing", query });
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({
+        error: e instanceof Error ? e.message : "Unknown error",
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 });

@@ -1,7 +1,10 @@
 // Test: analyze-item function with test database items
 // deno test --allow-net --allow-env supabase/functions/analyze-item/test.ts
 
-import { assertEquals, assert } from "https://deno.land/std@0.208.0/assert/mod.ts";
+import {
+  assert,
+  assertEquals,
+} from "https://deno.land/std@0.208.0/assert/mod.ts";
 import { getTestItemByDomain, TEST_DOMAINS } from "../_test-helpers/test-db.ts";
 
 // Note: These tests expect:
@@ -46,12 +49,15 @@ Deno.test("analyze-item: coins_bullion domain detection", async () => {
     images: item.image_urls || [],
   });
 
-  assert(result.domain === "coins_bullion", `Expected coins_bullion domain, got ${result.domain}`);
+  assert(
+    result.domain === "coins_bullion",
+    `Expected coins_bullion domain, got ${result.domain}`,
+  );
   assert(result.category, "Category should be returned");
   assertEquals(typeof result.category, "number", "Category should be numeric");
   assert(
     result.condition === "Excellent" || result.condition === "Good",
-    "Condition should be detected"
+    "Condition should be detected",
   );
   if (item.item_specifics.Weight && item.metal_type === "silver") {
     assert(result.meltValue > 0, "Melt value should be calculated for silver");
@@ -66,9 +72,16 @@ Deno.test("analyze-item: trading_cards domain detection", async () => {
     images: item.image_urls || [],
   });
 
-  assert(result.domain === "trading_cards", `Expected trading_cards, got ${result.domain}`);
+  assert(
+    result.domain === "trading_cards",
+    `Expected trading_cards, got ${result.domain}`,
+  );
   assert(result.category, "Category should be returned");
-  assertEqual(typeof result.suggestedGrade, "string", "Grade should be suggested for cards");
+  assertEqual(
+    typeof result.suggestedGrade,
+    "string",
+    "Grade should be suggested for cards",
+  );
 });
 
 Deno.test("analyze-item: jewelry domain detection", async () => {
@@ -91,7 +104,10 @@ Deno.test("analyze-item: electronics domain detection", async () => {
     images: item.image_urls || [],
   });
 
-  assert(result.domain === "electronics", `Expected electronics, got ${result.domain}`);
+  assert(
+    result.domain === "electronics",
+    `Expected electronics, got ${result.domain}`,
+  );
   assert(result.category, "Category should be returned");
 });
 
@@ -103,7 +119,10 @@ Deno.test("analyze-item: vintage_clothing domain detection", async () => {
     images: item.image_urls || [],
   });
 
-  assert(result.domain === "vintage_clothing", `Expected vintage_clothing, got ${result.domain}`);
+  assert(
+    result.domain === "vintage_clothing",
+    `Expected vintage_clothing, got ${result.domain}`,
+  );
   assert(result.category, "Category should be returned");
 });
 
@@ -127,7 +146,11 @@ Deno.test("analyze-item: multiple calls with same item should be consistent", as
   const result2 = await callAnalyzeItem({ voiceNote });
 
   assertEquals(result1.domain, result2.domain, "Domain should be consistent");
-  assertEquals(result1.category, result2.category, "Category should be consistent");
+  assertEquals(
+    result1.category,
+    result2.category,
+    "Category should be consistent",
+  );
 });
 
 Deno.test("analyze-item: response has required fields", async () => {
@@ -144,7 +167,10 @@ Deno.test("analyze-item: response has required fields", async () => {
   assert(result.title !== undefined, "Missing: title");
   assert(result.description !== undefined, "Missing: description");
   assert(result.condition !== undefined, "Missing: condition");
-  assert(Array.isArray(result.suggestedCategories), "Missing/invalid: suggestedCategories array");
+  assert(
+    Array.isArray(result.suggestedCategories),
+    "Missing/invalid: suggestedCategories array",
+  );
 });
 
 // Additional helper for test results

@@ -20,14 +20,16 @@ serve(async (req) => {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-      { auth: { persistSession: false } }
+      { auth: { persistSession: false } },
     );
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("No authorization header provided");
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    const { data: { user }, error: userError } = await supabase.auth.getUser(
+      token,
+    );
     if (userError || !user?.email) throw new Error("User not authenticated");
 
     // ── Resolve Stripe customer ID ─────────────────────────────────────────
@@ -43,9 +45,14 @@ serve(async (req) => {
     if (!customerId) {
       // Fall back to email search for legacy accounts
       const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-      const customers = await stripe.customers.list({ email: user.email, limit: 1 });
+      const customers = await stripe.customers.list({
+        email: user.email,
+        limit: 1,
+      });
       if (customers.data.length === 0) {
-        throw new Error("No Stripe customer found. Please upgrade to a paid plan first.");
+        throw new Error(
+          "No Stripe customer found. Please upgrade to a paid plan first.",
+        );
       }
       customerId = customers.data[0].id;
 

@@ -49,7 +49,13 @@ Deno.serve(async (req) => {
         "user_verified",
         100,
       ],
-      ["kennedy half dollar", "41102", "Kennedy Half Dollar", "user_verified", 100],
+      [
+        "kennedy half dollar",
+        "41102",
+        "Kennedy Half Dollar",
+        "user_verified",
+        100,
+      ],
       [
         "franklin half dollar",
         "11973",
@@ -79,13 +85,16 @@ Deno.serve(async (req) => {
     ];
 
     console.log("Inserting verified mappings...");
-    for (const [coin_type, categoryId, categoryName, source, confidence] of mappings) {
+    for (
+      const [coin_type, categoryId, categoryName, source, confidence]
+        of mappings
+    ) {
       try {
         await client.queryArray(
           `INSERT INTO public.category_mappings (coin_type, ebay_category_id, category_name, verification_source, confidence)
            VALUES ($1, $2, $3, $4, $5)
            ON CONFLICT (coin_type) DO NOTHING`,
-          [coin_type, categoryId, categoryName, source, confidence]
+          [coin_type, categoryId, categoryName, source, confidence],
         );
       } catch (e) {
         console.log(`  - ${coin_type}: ${e.message}`);
@@ -108,7 +117,7 @@ Deno.serve(async (req) => {
           "Content-Type": "application/json",
           "Access-Control-Allow-Origin": "*",
         },
-      }
+      },
     );
   } catch (error) {
     console.error("Setup error:", error);
@@ -126,7 +135,7 @@ Deno.serve(async (req) => {
           "Content-Type": "application/json",
           "Access-Control-Allow-Origin": "*",
         },
-      }
+      },
     );
   }
 });

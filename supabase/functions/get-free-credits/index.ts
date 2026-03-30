@@ -4,7 +4,8 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
   "Access-Control-Max-Age": "86400",
 };
 
@@ -17,30 +18,38 @@ serve(async (req: Request) => {
     const svc = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-      { auth: { persistSession: false } }
+      { auth: { persistSession: false } },
     );
 
     // Extract auth user
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Authentication required" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Authentication required" }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
-    const { data: ud } = await svc.auth.getUser(authHeader.replace("Bearer ", ""));
+    const { data: ud } = await svc.auth.getUser(
+      authHeader.replace("Bearer ", ""),
+    );
     const userId = ud?.user?.id;
     if (!userId) {
-      return new Response(JSON.stringify({ error: "Authentication required" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Authentication required" }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     // Determine tier via subscriptions table (cache-first per Phase 2 refactoring)
     let tier: "starter" | "pro" | "unlimited" = "starter";
-    
+
     try {
       const { data: subs, error: subError } = await svc
         .from("subscriptions")
@@ -50,7 +59,8 @@ serve(async (req: Request) => {
         .limit(1);
 
       if (!subError && subs && subs.length > 0) {
-        const productId = subs[0].stripe_product_id || (subs[0] as any).product_id;
+        const productId = subs[0].stripe_product_id ||
+          (subs[0] as any).product_id;
         if (productId === "prod_U70aT1KvuI2uDx") tier = "unlimited";
         else if (productId === "prod_U6zUiC1SYuPrGU") tier = "pro";
       }
@@ -71,7 +81,8 @@ serve(async (req: Request) => {
 
       if (orgMember && orgMember.length > 0) {
         orgId = orgMember[0].org_id;
-        orgResetDay = (orgMember[0].organizations as any)?.free_tier_reset_day ?? null;
+        orgResetDay =
+          (orgMember[0].organizations as any)?.free_tier_reset_day ?? null;
       }
     }
 
@@ -80,10 +91,13 @@ serve(async (req: Request) => {
     if (tier === "starter" && orgResetDay) {
       const { data: wsData, error: wsErr } = await svc
         .rpc("get_free_tier_window_start", { p_reset_day: orgResetDay });
-      windowStart = wsData ? new Date(wsData).toISOString() : new Date().toISOString();
+      windowStart = wsData
+        ? new Date(wsData).toISOString()
+        : new Date().toISOString();
     } else {
       // Pro/Unlimited: calendar month; or fresh start for NULL reset_day
-      windowStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+      windowStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+        .toISOString();
     }
 
     // Count per-org usage for Starter; per-user for Pro/Unlimited
@@ -124,7 +138,10 @@ serve(async (req: Request) => {
           creditsResetAt: computeNextResetAt(orgResetDay),
           tier,
         }),
-        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -132,14 +149,16 @@ serve(async (req: Request) => {
     const creditsRemaining = tier === "starter"
       ? Math.max(0, FREE_LIMIT - usageCount)
       : tier === "pro"
-        ? Math.max(0, PRO_LIMIT - usageCount)
-        : null;
+      ? Math.max(0, PRO_LIMIT - usageCount)
+      : null;
 
     const responseData = {
       tier,
       creditsUsed: usageCount,
       creditsRemaining,
-      creditsResetAt: tier === "starter" ? computeNextResetAt(orgResetDay) : null,
+      creditsResetAt: tier === "starter"
+        ? computeNextResetAt(orgResetDay)
+        : null,
       ebayConnected: false, // Placeholder: check profiles.ebay_access_token in full impl
     };
 
@@ -158,7 +177,9 @@ serve(async (req: Request) => {
 
 function computeNextResetAt(resetDay: number | null): string {
   const now = new Date();
-  if (!resetDay) return new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+  if (!resetDay) {
+    return new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+  }
 
   const year = now.getFullYear();
   const month = now.getMonth();
@@ -172,5 +193,6 @@ function computeNextResetAt(resetDay: number | null): string {
   const nextYear = nextMonth > 11 ? year + 1 : year;
   const nm = nextMonth % 12;
   const daysInNextMonth = new Date(nextYear, nm + 1, 0).getDate();
-  return new Date(nextYear, nm, Math.min(resetDay, daysInNextMonth)).toISOString();
+  return new Date(nextYear, nm, Math.min(resetDay, daysInNextMonth))
+    .toISOString();
 }

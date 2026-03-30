@@ -20,10 +20,9 @@ async function getEbayAppToken(): Promise<string> {
 
   const credentials = btoa(`${clientId}:${clientSecret}`);
   const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-  const tokenUrl =
-    ebayEnv === "production"
-      ? "https://api.ebay.com/identity/v1/oauth2/token"
-      : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
+  const tokenUrl = ebayEnv === "production"
+    ? "https://api.ebay.com/identity/v1/oauth2/token"
+    : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
 
   const resp = await fetch(tokenUrl, {
     method: "POST",
@@ -31,12 +30,15 @@ async function getEbayAppToken(): Promise<string> {
       Authorization: `Basic ${credentials}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
-    body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
+    body:
+      "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
   });
 
   if (!resp.ok) {
     const txt = await resp.text();
-    throw new Error(`Failed to get eBay token: ${resp.status} - ${txt.slice(0, 100)}`);
+    throw new Error(
+      `Failed to get eBay token: ${resp.status} - ${txt.slice(0, 100)}`,
+    );
   }
 
   let data: any;
@@ -61,10 +63,9 @@ async function browseSearch(params: {
 }): Promise<{ prices: number[]; count: number; total: number }> {
   const { query, token, ebayEnv, categoryId, limit = 50 } = params;
 
-  const apiBase =
-    ebayEnv === "production"
-      ? "https://api.ebay.com"
-      : "https://api.sandbox.ebay.com";
+  const apiBase = ebayEnv === "production"
+    ? "https://api.ebay.com"
+    : "https://api.sandbox.ebay.com";
 
   const searchParams = new URLSearchParams({
     q: query,
@@ -76,7 +77,8 @@ async function browseSearch(params: {
     searchParams.set("category_ids", categoryId);
   }
 
-  const url = `${apiBase}/buy/browse/v1/item_summary/search?${searchParams.toString()}`;
+  const url =
+    `${apiBase}/buy/browse/v1/item_summary/search?${searchParams.toString()}`;
 
   const resp = await fetch(url, {
     method: "GET",
@@ -97,7 +99,9 @@ async function browseSearch(params: {
     const respText = await resp.text();
     json = JSON.parse(respText);
   } catch (e) {
-    console.error(`[market-watch-refresh] Failed to parse Browse API response: ${e}`);
+    console.error(
+      `[market-watch-refresh] Failed to parse Browse API response: ${e}`,
+    );
     return { prices: [], count: 0, total: 0 };
   }
   const items = json?.itemSummaries ?? [];
@@ -118,7 +122,10 @@ async function browseSearch(params: {
 // Scrape eBay sold/completed listings via Jina reader
 // Returns sold count and price range estimates from filter sidebar
 // ----------------------------------------------------------------
-async function scrapeEbaySoldData(query: string, categoryId?: string | null): Promise<{
+async function scrapeEbaySoldData(
+  query: string,
+  categoryId?: string | null,
+): Promise<{
   soldCount: number;
   avgSoldPrice: number | null;
   minSoldPrice: number | null;
@@ -126,13 +133,16 @@ async function scrapeEbaySoldData(query: string, categoryId?: string | null): Pr
   medianSoldPrice: number | null;
 }> {
   const encoded = encodeURIComponent(query);
-  let ebayUrl = `https://www.ebay.com/sch/i.html?_nkw=${encoded}&LH_Complete=1&LH_Sold=1&_ipg=50&_sop=13`;
+  let ebayUrl =
+    `https://www.ebay.com/sch/i.html?_nkw=${encoded}&LH_Complete=1&LH_Sold=1&_ipg=50&_sop=13`;
   if (categoryId) {
     ebayUrl += `&_sacat=${categoryId}`;
   }
 
   const jinaUrl = `https://r.jina.ai/${ebayUrl}`;
-  console.log(`[market-watch-refresh] Fetching sold data via Jina for: "${query}"`);
+  console.log(
+    `[market-watch-refresh] Fetching sold data via Jina for: "${query}"`,
+  );
 
   let content = "";
   try {
@@ -147,22 +157,40 @@ async function scrapeEbaySoldData(query: string, categoryId?: string | null): Pr
 
     if (!resp.ok) {
       console.warn(`[market-watch-refresh] Jina fetch failed: ${resp.status}`);
-      return { soldCount: 0, avgSoldPrice: null, minSoldPrice: null, maxSoldPrice: null, medianSoldPrice: null };
+      return {
+        soldCount: 0,
+        avgSoldPrice: null,
+        minSoldPrice: null,
+        maxSoldPrice: null,
+        medianSoldPrice: null,
+      };
     }
     content = await resp.text();
   } catch (e) {
     console.warn(`[market-watch-refresh] Jina fetch error: ${e}`);
-    return { soldCount: 0, avgSoldPrice: null, minSoldPrice: null, maxSoldPrice: null, medianSoldPrice: null };
+    return {
+      soldCount: 0,
+      avgSoldPrice: null,
+      minSoldPrice: null,
+      maxSoldPrice: null,
+      medianSoldPrice: null,
+    };
   }
 
   // Extract sold count from "All Listings (X) Filter Applied"
-  const allListingsMatch = content.match(/All Listings \(([\d,]+)\)\s+Filter Applied/);
-  let soldCount = allListingsMatch ? parseInt(allListingsMatch[1].replace(/,/g, ""), 10) : 0;
+  const allListingsMatch = content.match(
+    /All Listings \(([\d,]+)\)\s+Filter Applied/,
+  );
+  let soldCount = allListingsMatch
+    ? parseInt(allListingsMatch[1].replace(/,/g, ""), 10)
+    : 0;
 
   // Fallback: "X results for"
   if (!soldCount) {
     const resultsMatch = content.match(/([\d,]+)\+?\s+results?\s+for/i);
-    soldCount = resultsMatch ? parseInt(resultsMatch[1].replace(/,/g, ""), 10) : 0;
+    soldCount = resultsMatch
+      ? parseInt(resultsMatch[1].replace(/,/g, ""), 10)
+      : 0;
   }
 
   // Extract price range buckets from filter sidebar
@@ -203,8 +231,16 @@ async function scrapeEbaySoldData(query: string, categoryId?: string | null): Pr
     maxSoldPrice = Math.round(threshold * 3 * 100) / 100;
   }
 
-  console.log(`[market-watch-refresh] Sold data: count=${soldCount}, avg=$${avgSoldPrice}`);
-  return { soldCount, avgSoldPrice, minSoldPrice, maxSoldPrice, medianSoldPrice };
+  console.log(
+    `[market-watch-refresh] Sold data: count=${soldCount}, avg=$${avgSoldPrice}`,
+  );
+  return {
+    soldCount,
+    avgSoldPrice,
+    minSoldPrice,
+    maxSoldPrice,
+    medianSoldPrice,
+  };
 }
 
 function avg(nums: number[]): number {
@@ -216,7 +252,9 @@ function median(nums: number[]): number {
   if (nums.length === 0) return 0;
   const sorted = [...nums].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  return sorted.length % 2 !== 0
+    ? sorted[mid]
+    : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 function round2(n: number): number {
@@ -238,14 +276,17 @@ serve(async (req) => {
     if (!watchId || !userId) {
       return new Response(
         JSON.stringify({ error: "watchId and userId are required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-      { auth: { persistSession: false } }
+      { auth: { persistSession: false } },
     );
 
     // Fetch the watch record
@@ -259,7 +300,10 @@ serve(async (req) => {
     if (watchErr || !watch) {
       return new Response(
         JSON.stringify({ error: "Watch not found or access denied" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -281,7 +325,9 @@ serve(async (req) => {
 
     const soldCount = soldData.soldCount;
     // Use Browse API `total` for the real active count (not just the 50 fetched)
-    const activeCount = activeResult.total > 0 ? activeResult.total : activeResult.count;
+    const activeCount = activeResult.total > 0
+      ? activeResult.total
+      : activeResult.count;
     const total = soldCount + activeCount;
 
     // Sell-through rate: sold / (sold + active)
@@ -326,7 +372,7 @@ serve(async (req) => {
     });
 
     console.log(
-      `[market-watch-refresh] Refreshed watch ${watchId}: avg=$${avgPrice}, active=${activeCount}, sold=${soldCount}, STR=${sellThroughRate}`
+      `[market-watch-refresh] Refreshed watch ${watchId}: avg=$${avgPrice}, active=${activeCount}, sold=${soldCount}, STR=${sellThroughRate}`,
     );
 
     return new Response(
@@ -347,14 +393,17 @@ serve(async (req) => {
         sellThroughRate,
         lastCheckedAt: now,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[market-watch-refresh] Error:", msg);
     return new Response(
       JSON.stringify({ error: msg }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 });

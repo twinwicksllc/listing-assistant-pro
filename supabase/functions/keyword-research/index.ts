@@ -42,10 +42,9 @@ async function getEbayAppToken(): Promise<string> {
 
   const credentials = btoa(`${clientId}:${clientSecret}`);
   const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-  const tokenUrl =
-    ebayEnv === "production"
-      ? "https://api.ebay.com/identity/v1/oauth2/token"
-      : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
+  const tokenUrl = ebayEnv === "production"
+    ? "https://api.ebay.com/identity/v1/oauth2/token"
+    : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
 
   console.log(`[keyword-research] Fetching OAuth token from ${tokenUrl}`);
 
@@ -55,7 +54,8 @@ async function getEbayAppToken(): Promise<string> {
       Authorization: `Basic ${credentials}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
-    body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
+    body:
+      "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
   });
 
   if (!resp.ok) {
@@ -86,10 +86,9 @@ async function browseSearch(params: {
 }): Promise<BrowseSearchResult> {
   const { query, token, ebayEnv, categoryId, limit = 50 } = params;
 
-  const apiBase =
-    ebayEnv === "production"
-      ? "https://api.ebay.com"
-      : "https://api.sandbox.ebay.com";
+  const apiBase = ebayEnv === "production"
+    ? "https://api.ebay.com"
+    : "https://api.sandbox.ebay.com";
 
   const searchParams = new URLSearchParams({
     q: query,
@@ -101,7 +100,8 @@ async function browseSearch(params: {
     searchParams.set("category_ids", categoryId);
   }
 
-  const url = `${apiBase}/buy/browse/v1/item_summary/search?${searchParams.toString()}`;
+  const url =
+    `${apiBase}/buy/browse/v1/item_summary/search?${searchParams.toString()}`;
   console.log(`[keyword-research] Browse API search: "${query}"`);
 
   const resp = await fetch(url, {
@@ -115,7 +115,11 @@ async function browseSearch(params: {
 
   if (!resp.ok) {
     const txt = await resp.text();
-    console.error(`[keyword-research] Browse API error ${resp.status}: ${txt.slice(0, 200)}`);
+    console.error(
+      `[keyword-research] Browse API error ${resp.status}: ${
+        txt.slice(0, 200)
+      }`,
+    );
     return { prices: [], count: 0, total: 0, topItems: [] };
   }
 
@@ -158,7 +162,9 @@ async function browseSearch(params: {
     } catch { /* skip malformed */ }
   }
 
-  console.log(`[keyword-research] Got ${prices.length} items (total=${total}) for "${query}"`);
+  console.log(
+    `[keyword-research] Got ${prices.length} items (total=${total}) for "${query}"`,
+  );
   return { prices, count: prices.length, total, topItems };
 }
 
@@ -167,9 +173,13 @@ async function browseSearch(params: {
 // Returns sold count and price range estimates from filter sidebar
 // This bypasses eBay's bot detection and doesn't require API access
 // ----------------------------------------------------------------
-async function scrapeEbaySoldData(query: string, categoryId?: string | null): Promise<SoldDataResult> {
+async function scrapeEbaySoldData(
+  query: string,
+  categoryId?: string | null,
+): Promise<SoldDataResult> {
   const encoded = encodeURIComponent(query);
-  let ebayUrl = `https://www.ebay.com/sch/i.html?_nkw=${encoded}&LH_Complete=1&LH_Sold=1&_ipg=50&_sop=13`;
+  let ebayUrl =
+    `https://www.ebay.com/sch/i.html?_nkw=${encoded}&LH_Complete=1&LH_Sold=1&_ipg=50&_sop=13`;
   if (categoryId) {
     ebayUrl += `&_sacat=${categoryId}`;
   }
@@ -190,22 +200,40 @@ async function scrapeEbaySoldData(query: string, categoryId?: string | null): Pr
 
     if (!resp.ok) {
       console.warn(`[keyword-research] Jina fetch failed: ${resp.status}`);
-      return { soldCount: 0, avgSoldPrice: null, minSoldPrice: null, maxSoldPrice: null, medianSoldPrice: null };
+      return {
+        soldCount: 0,
+        avgSoldPrice: null,
+        minSoldPrice: null,
+        maxSoldPrice: null,
+        medianSoldPrice: null,
+      };
     }
     content = await resp.text();
   } catch (e) {
     console.warn(`[keyword-research] Jina fetch error: ${e}`);
-    return { soldCount: 0, avgSoldPrice: null, minSoldPrice: null, maxSoldPrice: null, medianSoldPrice: null };
+    return {
+      soldCount: 0,
+      avgSoldPrice: null,
+      minSoldPrice: null,
+      maxSoldPrice: null,
+      medianSoldPrice: null,
+    };
   }
 
   // Extract sold count from "All Listings (X) Filter Applied" in sidebar
-  const allListingsMatch = content.match(/All Listings \(([\d,]+)\)\s+Filter Applied/);
-  let soldCount = allListingsMatch ? parseInt(allListingsMatch[1].replace(/,/g, ""), 10) : 0;
+  const allListingsMatch = content.match(
+    /All Listings \(([\d,]+)\)\s+Filter Applied/,
+  );
+  let soldCount = allListingsMatch
+    ? parseInt(allListingsMatch[1].replace(/,/g, ""), 10)
+    : 0;
 
   // Fallback: "X results for" or "X+ results for"
   if (!soldCount) {
     const resultsMatch = content.match(/([\d,]+)\+?\s+results?\s+for/i);
-    soldCount = resultsMatch ? parseInt(resultsMatch[1].replace(/,/g, ""), 10) : 0;
+    soldCount = resultsMatch
+      ? parseInt(resultsMatch[1].replace(/,/g, ""), 10)
+      : 0;
   }
 
   // Extract price range buckets from the filter sidebar
@@ -252,9 +280,17 @@ async function scrapeEbaySoldData(query: string, categoryId?: string | null): Pr
     maxSoldPrice = Math.round(threshold * 3 * 100) / 100;
   }
 
-  console.log(`[keyword-research] Sold data: count=${soldCount}, avg=$${avgSoldPrice}, range=$${minSoldPrice}-$${maxSoldPrice}`);
+  console.log(
+    `[keyword-research] Sold data: count=${soldCount}, avg=$${avgSoldPrice}, range=$${minSoldPrice}-$${maxSoldPrice}`,
+  );
 
-  return { soldCount, avgSoldPrice, minSoldPrice, maxSoldPrice, medianSoldPrice };
+  return {
+    soldCount,
+    avgSoldPrice,
+    minSoldPrice,
+    maxSoldPrice,
+    medianSoldPrice,
+  };
 }
 
 // ----------------------------------------------------------------
@@ -264,7 +300,9 @@ function median(nums: number[]): number {
   if (nums.length === 0) return 0;
   const sorted = [...nums].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  return sorted.length % 2 !== 0
+    ? sorted[mid]
+    : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 function percentile(sorted: number[], p: number): number {
@@ -290,12 +328,18 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { query, categoryId } = body as { query: string; categoryId?: string };
+    const { query, categoryId } = body as {
+      query: string;
+      categoryId?: string;
+    };
 
     if (!query || query.trim().length < 2) {
       return new Response(
         JSON.stringify({ error: "query must be at least 2 characters" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -306,12 +350,14 @@ serve(async (req) => {
       console.log(`[keyword-research] Cache hit for "${query}"`);
       return new Response(
         JSON.stringify({ ...cached.data, fromCache: true }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-    console.log(`[keyword-research] Fetching market data for: "${query}" (env: ${ebayEnv})`);
+    console.log(
+      `[keyword-research] Fetching market data for: "${query}" (env: ${ebayEnv})`,
+    );
 
     // Run both requests in parallel: Browse API (active) + Jina scrape (sold)
     const token = await getEbayAppToken();
@@ -324,7 +370,9 @@ serve(async (req) => {
 
     const soldCount = soldData.soldCount;
     // Use Browse API `total` field for the active count (more accurate than page count)
-    const activeCount = activeResult.total > 0 ? activeResult.total : activeResult.count;
+    const activeCount = activeResult.total > 0
+      ? activeResult.total
+      : activeResult.count;
     const total = soldCount + activeCount;
 
     // Sell-through rate: sold / (sold + active)
@@ -337,15 +385,22 @@ serve(async (req) => {
 
     // Active price stats from Browse API results
     const activePrices = activeResult.prices.sort((a, b) => a - b);
-    const avgActivePrice =
-      activePrices.length > 0
-        ? round2(activePrices.reduce((s, p) => s + p, 0) / activePrices.length)
-        : null;
+    const avgActivePrice = activePrices.length > 0
+      ? round2(activePrices.reduce((s, p) => s + p, 0) / activePrices.length)
+      : null;
     const minActivePrice = activePrices.length > 0 ? activePrices[0] : null;
-    const maxActivePrice = activePrices.length > 0 ? activePrices[activePrices.length - 1] : null;
-    const medianActivePrice = activePrices.length > 0 ? round2(median(activePrices)) : null;
-    const p25ActivePrice = activePrices.length > 0 ? round2(percentile(activePrices, 25)) : null;
-    const p75ActivePrice = activePrices.length > 0 ? round2(percentile(activePrices, 75)) : null;
+    const maxActivePrice = activePrices.length > 0
+      ? activePrices[activePrices.length - 1]
+      : null;
+    const medianActivePrice = activePrices.length > 0
+      ? round2(median(activePrices))
+      : null;
+    const p25ActivePrice = activePrices.length > 0
+      ? round2(percentile(activePrices, 25))
+      : null;
+    const p75ActivePrice = activePrices.length > 0
+      ? round2(percentile(activePrices, 75))
+      : null;
 
     // Competition level (based on active count from API total)
     let competitionLevel: "low" | "medium" | "high" = "low";
@@ -391,7 +446,7 @@ serve(async (req) => {
     });
 
     console.log(
-      `[keyword-research] Done: active=${activeCount}, sold=${soldCount}, STR=${sellThroughRate}, competition=${competitionLevel}, demand=${demandSignal}`
+      `[keyword-research] Done: active=${activeCount}, sold=${soldCount}, STR=${sellThroughRate}, competition=${competitionLevel}, demand=${demandSignal}`,
     );
 
     return new Response(JSON.stringify(responseData), {

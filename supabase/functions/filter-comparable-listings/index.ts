@@ -32,9 +32,10 @@ interface ComparableListing {
 // ────────────────────────────────────────────────────────────────────────────
 async function extractListingAttributes(
   title: string,
-  geminiKey: string
+  geminiKey: string,
 ): Promise<Record<string, string> | null> {
-  const prompt = `You are a numismatic expert analyzing eBay coin listings. Extract key attributes from this listing title that affect value comparability.
+  const prompt =
+    `You are a numismatic expert analyzing eBay coin listings. Extract key attributes from this listing title that affect value comparability.
 
 Title: "${title}"
 
@@ -72,12 +73,12 @@ Return ONLY the JSON object, nothing else.`;
           messages: [{ role: "user", content: prompt }],
           temperature: 0.1,
         }),
-      }
+      },
     );
 
     if (!resp.ok) {
       console.warn(
-        `[filter-comparable-listings] Gemini extraction failed: ${resp.status}`
+        `[filter-comparable-listings] Gemini extraction failed: ${resp.status}`,
       );
       return null;
     }
@@ -88,7 +89,9 @@ Return ONLY the JSON object, nothing else.`;
     // Extract JSON from response
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      console.warn("[filter-comparable-listings] No JSON found in Gemini response");
+      console.warn(
+        "[filter-comparable-listings] No JSON found in Gemini response",
+      );
       return null;
     }
 
@@ -105,14 +108,17 @@ Return ONLY the JSON object, nothing else.`;
 async function scoreComparability(
   yourAttributes: Record<string, string>,
   competitorTitle: string,
-  geminiKey: string
+  geminiKey: string,
 ): Promise<{ score: number; reason: string } | null> {
-  const prompt = `You are a numismatic expert comparing coin listings for market comparability.
+  const prompt =
+    `You are a numismatic expert comparing coin listings for market comparability.
 
 Your Listing Attributes:
-${Object.entries(yourAttributes)
-  .map(([k, v]) => `- ${k}: ${v || "(not found)"}`)
-  .join("\n")}
+${
+      Object.entries(yourAttributes)
+        .map(([k, v]) => `- ${k}: ${v || "(not found)"}`)
+        .join("\n")
+    }
 
 Competitor Listing Title: "${competitorTitle}"
 
@@ -149,11 +155,13 @@ Return ONLY the JSON object.`;
           messages: [{ role: "user", content: prompt }],
           temperature: 0.2,
         }),
-      }
+      },
     );
 
     if (!resp.ok) {
-      console.warn(`[filter-comparable-listings] Scoring failed: ${resp.status}`);
+      console.warn(
+        `[filter-comparable-listings] Scoring failed: ${resp.status}`,
+      );
       return null;
     }
 
@@ -185,10 +193,9 @@ async function fetchRawCompetitors(params: {
 }): Promise<unknown[]> {
   const { appId, searchQuery, categoryId, ebayEnv } = params;
 
-  const baseUrl =
-    ebayEnv === "production"
-      ? "https://svcs.ebay.com/services/search/FindingService/v1"
-      : "https://svcs.sandbox.ebay.com/services/search/FindingService/v1";
+  const baseUrl = ebayEnv === "production"
+    ? "https://svcs.ebay.com/services/search/FindingService/v1"
+    : "https://svcs.sandbox.ebay.com/services/search/FindingService/v1";
 
   const queryParams = new URLSearchParams({
     "OPERATION-NAME": "findItemsByKeywords",
@@ -214,7 +221,7 @@ async function fetchRawCompetitors(params: {
 
   const url = `${baseUrl}?${queryParams.toString()}`;
   console.log(
-    `[filter-comparable-listings] Fetching raw competitors: "${searchQuery}"`
+    `[filter-comparable-listings] Fetching raw competitors: "${searchQuery}"`,
   );
 
   const resp = await fetch(url, {
@@ -228,8 +235,8 @@ async function fetchRawCompetitors(params: {
   const respText = await resp.text();
   const json = JSON.parse(respText);
 
-  const searchResult =
-    json?.findItemsByKeywordsResponse?.[0]?.searchResult?.[0];
+  const searchResult = json?.findItemsByKeywordsResponse?.[0]?.searchResult
+    ?.[0];
   if (!searchResult || searchResult["@count"] === "0") {
     console.log(`[filter-comparable-listings] No results found`);
     return [];
@@ -245,7 +252,13 @@ interface EbayItem {
   itemId?: string[];
   title?: any[];
   sellingStatus?: Array<{ currentPrice?: Array<{ __value__: string }> }>;
-  sellerInfo?: Array<{ sellerUserName?: string[]; positiveFeedbackPercent?: string[]; feedbackScore?: string[] }>;
+  sellerInfo?: Array<
+    {
+      sellerUserName?: string[];
+      positiveFeedbackPercent?: string[];
+      feedbackScore?: string[];
+    }
+  >;
   condition?: Array<{ conditionId?: string[] }>;
   shippingInfo?: Array<{ shippingServiceCost?: Array<{ __value__: string }> }>;
   viewItemURL?: string[];
@@ -255,17 +268,21 @@ function parseEbayItem(item: EbayItem): ComparableListing | null {
   try {
     const itemId = item.itemId?.[0];
     const titleRaw = item.title?.[0];
-    const title = typeof titleRaw === "string" ? titleRaw : (titleRaw as any)?.toString?.() || String(titleRaw || "");
+    const title = typeof titleRaw === "string"
+      ? titleRaw
+      : (titleRaw as any)?.toString?.() || String(titleRaw || "");
     const price = parseFloat(
-      item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ ?? "0"
+      item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ ?? "0",
     );
     const sellerName = item.sellerInfo?.[0]?.sellerUserName?.[0] ?? "Unknown";
     const ratingStr = item.sellerInfo?.[0]?.positiveFeedbackPercent?.[0] ?? "0";
     const rating = parseFloat(ratingStr);
-    const ratingCount = parseInt(item.sellerInfo?.[0]?.feedbackScore?.[0] ?? "0");
+    const ratingCount = parseInt(
+      item.sellerInfo?.[0]?.feedbackScore?.[0] ?? "0",
+    );
     const condition = item.condition?.[0]?.conditionId?.[0] ?? "Unknown";
     const shippingCost = parseFloat(
-      item.shippingInfo?.[0]?.shippingServiceCost?.[0]?.__value__ ?? "0"
+      item.shippingInfo?.[0]?.shippingServiceCost?.[0]?.__value__ ?? "0",
     );
     const url = item.viewItemURL?.[0] ?? "";
 
@@ -311,7 +328,10 @@ serve(async (req: Request) => {
     if (!title) {
       return new Response(
         JSON.stringify({ error: "title is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -322,11 +342,16 @@ serve(async (req: Request) => {
     if (!geminiKey || !ebayAppId) {
       return new Response(
         JSON.stringify({ error: "Missing API configuration" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
-    console.log("[filter-comparable-listings] 1. Extracting listing attributes...");
+    console.log(
+      "[filter-comparable-listings] 1. Extracting listing attributes...",
+    );
     const yourAttributes = await extractListingAttributes(title, geminiKey);
     if (!yourAttributes) {
       return new Response(
@@ -334,7 +359,7 @@ serve(async (req: Request) => {
           comparable: [],
           reason: "Could not analyze listing attributes",
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -352,12 +377,12 @@ serve(async (req: Request) => {
           comparable: [],
           reason: "No competitor listings found",
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     console.log(
-      `[filter-comparable-listings] 3. Scoring ${rawCompetitors.length} competitors...`
+      `[filter-comparable-listings] 3. Scoring ${rawCompetitors.length} competitors...`,
     );
     const comparable: ComparableListing[] = [];
 
@@ -368,7 +393,7 @@ serve(async (req: Request) => {
       const scoring = await scoreComparability(
         yourAttributes,
         parsed.title,
-        geminiKey
+        geminiKey,
       );
       if (!scoring) continue;
 
@@ -399,7 +424,7 @@ serve(async (req: Request) => {
         const svc = createClient(
           Deno.env.get("SUPABASE_URL") ?? "",
           Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-          { auth: { persistSession: false } }
+          { auth: { persistSession: false } },
         );
 
         await svc.from("gemini_usage").insert({
@@ -419,16 +444,20 @@ serve(async (req: Request) => {
       JSON.stringify({
         comparable: topComparable,
         totalScored: comparable.length,
-        reason: `Analyzed ${topComparable.length} truly comparable listings from ${rawCompetitors.length} candidates`,
+        reason:
+          `Analyzed ${topComparable.length} truly comparable listings from ${rawCompetitors.length} candidates`,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[filter-comparable-listings] Error:", msg);
     return new Response(
       JSON.stringify({ error: msg }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 });

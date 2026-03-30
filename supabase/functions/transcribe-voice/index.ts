@@ -41,7 +41,8 @@ serve(async (req) => {
           messages: [
             {
               role: "system",
-              content: "You are a transcription assistant. Transcribe the audio exactly as spoken. Return ONLY the transcribed text, nothing else. If the audio is unclear or empty, return an empty string.",
+              content:
+                "You are a transcription assistant. Transcribe the audio exactly as spoken. Return ONLY the transcribed text, nothing else. If the audio is unclear or empty, return an empty string.",
             },
             {
               role: "user",
@@ -49,7 +50,9 @@ serve(async (req) => {
                 {
                   type: "input_audio",
                   input_audio: {
-                    data: audioBase64.includes(",") ? audioBase64.split(",")[1] : audioBase64,
+                    data: audioBase64.includes(",")
+                      ? audioBase64.split(",")[1]
+                      : audioBase64,
                     format: "wav",
                   },
                 },
@@ -61,20 +64,28 @@ serve(async (req) => {
             },
           ],
         }),
-      }
+      },
     );
 
     if (!response.ok) {
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ error: "Rate limit exceeded. Please try again." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          {
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
         );
       }
       if (response.status === 402) {
         return new Response(
-          JSON.stringify({ error: "AI usage limit reached. Please add credits." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({
+            error: "AI usage limit reached. Please add credits.",
+          }),
+          {
+            status: 402,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
         );
       }
       const errorText = await response.text();
@@ -98,12 +109,14 @@ serve(async (req) => {
       const svc = createClient(
         Deno.env.get("SUPABASE_URL") ?? "",
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-        { auth: { persistSession: false } }
+        { auth: { persistSession: false } },
       );
       let userId: string | null = null;
       const authHeader = req.headers.get("Authorization");
       if (authHeader) {
-        const { data: ud } = await svc.auth.getUser(authHeader.replace("Bearer ", ""));
+        const { data: ud } = await svc.auth.getUser(
+          authHeader.replace("Bearer ", ""),
+        );
         userId = ud?.user?.id || null;
       }
       await svc.from("gemini_usage").insert({
@@ -120,13 +133,18 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ transcript }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
     console.error("transcribe-voice error:", e);
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({
+        error: e instanceof Error ? e.message : "Unknown error",
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 });

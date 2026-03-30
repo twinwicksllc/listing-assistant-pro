@@ -12,7 +12,7 @@ const corsHeaders = {
 const VALID_PRICES = [
   "price_1T8lVU4bX0d1SiThMDayhDj5", // Starter $19/mo
   "price_1T8mZ84bX0d1SiThFgvRubiN", // Pro $49/mo
-  "price_SHOP_PLACEHOLDER",           // Shop $99/mo  TODO: replace with real ID
+  "price_SHOP_PLACEHOLDER", // Shop $99/mo  TODO: replace with real ID
 ];
 
 serve(async (req) => {
@@ -24,7 +24,7 @@ serve(async (req) => {
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    { auth: { persistSession: false } }
+    { auth: { persistSession: false } },
   );
 
   try {
@@ -32,12 +32,16 @@ serve(async (req) => {
     if (!authHeader) throw new Error("No authorization header");
     const token = authHeader.replace("Bearer ", "");
 
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    const { data: { user }, error: userError } = await supabase.auth.getUser(
+      token,
+    );
     if (userError || !user?.email) throw new Error("User not authenticated");
 
     const body = await req.json().catch(() => ({}));
     const priceId = body.priceId || VALID_PRICES[0];
-    if (!VALID_PRICES.includes(priceId)) throw new Error("Invalid price selected");
+    if (!VALID_PRICES.includes(priceId)) {
+      throw new Error("Invalid price selected");
+    }
 
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
       apiVersion: "2025-08-27.basil",
@@ -55,7 +59,10 @@ serve(async (req) => {
 
     if (!customerId) {
       // Check Stripe by email in case they subscribed before we cached the ID
-      const existing = await stripe.customers.list({ email: user.email, limit: 1 });
+      const existing = await stripe.customers.list({
+        email: user.email,
+        limit: 1,
+      });
 
       if (existing.data.length > 0) {
         customerId = existing.data[0].id;

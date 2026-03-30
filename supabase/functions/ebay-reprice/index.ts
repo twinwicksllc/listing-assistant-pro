@@ -22,7 +22,7 @@ async function reviseFixedPriceItem(
   userToken: string,
   listingId: string,
   newPrice: number,
-  currency: string = "USD"
+  currency: string = "USD",
 ): Promise<{ success: boolean; error?: string }> {
   const tradingUrl = apiBase.includes("sandbox")
     ? "https://api.sandbox.ebay.com/ws/api.dll"
@@ -50,13 +50,19 @@ async function reviseFixedPriceItem(
     });
 
     const xmlText = await resp.text();
-    console.log(`ReviseFixedPriceItem ${listingId}: HTTP ${resp.status}, first 400:`, xmlText.substring(0, 400));
+    console.log(
+      `ReviseFixedPriceItem ${listingId}: HTTP ${resp.status}, first 400:`,
+      xmlText.substring(0, 400),
+    );
 
     if (!resp.ok) {
       return { success: false, error: `Trading API HTTP ${resp.status}` };
     }
 
-    if (xmlText.includes("<Ack>Failure</Ack>") || xmlText.includes("<Ack>PartialFailure</Ack>")) {
+    if (
+      xmlText.includes("<Ack>Failure</Ack>") ||
+      xmlText.includes("<Ack>PartialFailure</Ack>")
+    ) {
       const errMsg =
         xmlText.match(/<LongMessage>([\s\S]*?)<\/LongMessage>/)?.[1] ||
         xmlText.match(/<ShortMessage>([\s\S]*?)<\/ShortMessage>/)?.[1] ||
@@ -77,8 +83,14 @@ async function reviseFixedPriceItem(
 async function bulkUpdateInventoryPrices(
   apiBase: string,
   userToken: string,
-  updates: Array<{ offerId: string; sku: string; newPrice: number; currency?: string }>
-): Promise<Array<{ offerId: string; success: boolean; statusCode?: number; error?: string }>> {
+  updates: Array<
+    { offerId: string; sku: string; newPrice: number; currency?: string }
+  >,
+): Promise<
+  Array<
+    { offerId: string; success: boolean; statusCode?: number; error?: string }
+  >
+> {
   // Group by SKU
   const bySku: Record<string, typeof updates> = {};
   for (const u of updates) {
@@ -99,21 +111,26 @@ async function bulkUpdateInventoryPrices(
 
   // Split into batches of 25 (API limit)
   const BATCH_SIZE = 25;
-  const results: Array<{ offerId: string; success: boolean; statusCode?: number; error?: string }> = [];
+  const results: Array<
+    { offerId: string; success: boolean; statusCode?: number; error?: string }
+  > = [];
 
   for (let i = 0; i < requestItems.length; i += BATCH_SIZE) {
     const batch = requestItems.slice(i, i + BATCH_SIZE);
 
     try {
-      const resp = await fetch(`${apiBase}/sell/inventory/v1/bulk_update_price_quantity`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${userToken}`,
-          "Content-Type": "application/json",
-          "Accept-Language": "en-US",
+      const resp = await fetch(
+        `${apiBase}/sell/inventory/v1/bulk_update_price_quantity`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${userToken}`,
+            "Content-Type": "application/json",
+            "Accept-Language": "en-US",
+          },
+          body: JSON.stringify({ requests: batch }),
         },
-        body: JSON.stringify({ requests: batch }),
-      });
+      );
 
       if (!resp.ok) {
         const errText = await resp.text();
@@ -121,7 +138,11 @@ async function bulkUpdateInventoryPrices(
         // Mark all offers in this batch as failed
         for (const item of batch) {
           for (const offer of item.offers) {
-            results.push({ offerId: offer.offerId, success: false, error: `API ${resp.status}: ${errText}` });
+            results.push({
+              offerId: offer.offerId,
+              success: false,
+              error: `API ${resp.status}: ${errText}`,
+            });
           }
         }
         continue;
@@ -132,15 +153,25 @@ async function bulkUpdateInventoryPrices(
         const respText = await resp.text();
         data = JSON.parse(respText);
       } catch {
-        console.error(`ebay-reprice: JSON parse error (length=${await resp.text().then(t => t.length)})`);
+        console.error(
+          `ebay-reprice: JSON parse error (length=${await resp.text().then(
+            (t) => t.length,
+          )})`,
+        );
         continue;
       }
-      console.log("bulkUpdatePriceQuantity response:", JSON.stringify(data).substring(0, 600));
+      console.log(
+        "bulkUpdatePriceQuantity response:",
+        JSON.stringify(data).substring(0, 600),
+      );
 
       // Parse per-offer results
       // Response: { responses: [ { offerId, statusCode, errors[] } ] }
       const responses = data.responses || [];
-      const responseMap: Record<string, { statusCode: number; errors?: any[] }> = {};
+      const responseMap: Record<
+        string,
+        { statusCode: number; errors?: any[] }
+      > = {};
       for (const r of responses) {
         if (r.offerId) responseMap[r.offerId] = r;
       }
@@ -149,12 +180,26 @@ async function bulkUpdateInventoryPrices(
         for (const offer of item.offers) {
           const r = responseMap[offer.offerId];
           if (!r) {
-            results.push({ offerId: offer.offerId, success: false, error: "No response from eBay" });
+            results.push({
+              offerId: offer.offerId,
+              success: false,
+              error: "No response from eBay",
+            });
           } else if (r.statusCode === 200) {
-            results.push({ offerId: offer.offerId, success: true, statusCode: 200 });
+            results.push({
+              offerId: offer.offerId,
+              success: true,
+              statusCode: 200,
+            });
           } else {
-            const errMsg = r.errors?.[0]?.message || `Status code ${r.statusCode}`;
-            results.push({ offerId: offer.offerId, success: false, statusCode: r.statusCode, error: errMsg });
+            const errMsg = r.errors?.[0]?.message ||
+              `Status code ${r.statusCode}`;
+            results.push({
+              offerId: offer.offerId,
+              success: false,
+              statusCode: r.statusCode,
+              error: errMsg,
+            });
           }
         }
       }
@@ -162,7 +207,11 @@ async function bulkUpdateInventoryPrices(
       console.error("bulkUpdatePriceQuantity exception:", e);
       for (const item of batch) {
         for (const offer of item.offers) {
-          results.push({ offerId: offer.offerId, success: false, error: `Exception: ${e}` });
+          results.push({
+            offerId: offer.offerId,
+            success: false,
+            error: `Exception: ${e}`,
+          });
         }
       }
     }
@@ -182,7 +231,9 @@ serve(async (req) => {
     const { action, userToken, userId } = body;
 
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-    const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
+    const apiBase = ebayEnv === "production"
+      ? "https://api.ebay.com"
+      : "https://api.sandbox.ebay.com";
 
     console.log(`ebay-reprice: action=${action}, env=${ebayEnv}`);
 
@@ -204,8 +255,14 @@ serve(async (req) => {
 
     if (!token) {
       return new Response(
-        JSON.stringify({ success: false, error: "No eBay token available. Please reconnect in Settings." }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({
+          success: false,
+          error: "No eBay token available. Please reconnect in Settings.",
+        }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -215,8 +272,14 @@ serve(async (req) => {
 
       if (!newPrice || newPrice <= 0) {
         return new Response(
-          JSON.stringify({ success: false, error: "Invalid price: must be a positive number" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({
+            success: false,
+            error: "Invalid price: must be a positive number",
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
         );
       }
 
@@ -228,22 +291,34 @@ serve(async (req) => {
         const result = results[0];
         return new Response(
           JSON.stringify({ success: result.success, error: result.error }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
       // Legacy Trading API listing (no offerId, has listingId)
       if (listingId) {
-        const result = await reviseFixedPriceItem(apiBase, token, listingId, newPrice, currency);
+        const result = await reviseFixedPriceItem(
+          apiBase,
+          token,
+          listingId,
+          newPrice,
+          currency,
+        );
         return new Response(
           JSON.stringify(result),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
       return new Response(
-        JSON.stringify({ success: false, error: "Must provide either offerId or listingId" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({
+          success: false,
+          error: "Must provide either offerId or listingId",
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -263,7 +338,10 @@ serve(async (req) => {
       if (!updates || updates.length === 0) {
         return new Response(
           JSON.stringify({ success: false, error: "No updates provided" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
         );
       }
 
@@ -271,8 +349,16 @@ serve(async (req) => {
       for (const u of updates) {
         if (!u.newPrice || u.newPrice <= 0) {
           return new Response(
-            JSON.stringify({ success: false, error: `Invalid price for listing ${u.listingId || u.sku}: must be positive` }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            JSON.stringify({
+              success: false,
+              error: `Invalid price for listing ${
+                u.listingId || u.sku
+              }: must be positive`,
+            }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
           );
         }
       }
@@ -306,7 +392,7 @@ serve(async (req) => {
             sku: u.sku || u.offerId,
             newPrice: u.newPrice,
             currency: u.currency || "USD",
-          }))
+          })),
         );
 
         for (let i = 0; i < inventoryResults.length; i++) {
@@ -329,7 +415,7 @@ serve(async (req) => {
           token,
           u.listingId!,
           u.newPrice,
-          u.currency || "USD"
+          u.currency || "USD",
         );
         allResults.push({
           offerId: null,
@@ -344,7 +430,9 @@ serve(async (req) => {
       const successCount = allResults.filter((r) => r.success).length;
       const failCount = allResults.filter((r) => !r.success).length;
 
-      console.log(`bulk_update: ${successCount} succeeded, ${failCount} failed`);
+      console.log(
+        `bulk_update: ${successCount} succeeded, ${failCount} failed`,
+      );
 
       return new Response(
         JSON.stringify({
@@ -353,20 +441,26 @@ serve(async (req) => {
           failCount,
           results: allResults,
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     return new Response(
       JSON.stringify({ success: false, error: `Unknown action: ${action}` }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   } catch (e) {
     const errorMsg = e instanceof Error ? e.message : "Unknown error";
     console.error("ebay-reprice error:", errorMsg, e);
     return new Response(
       JSON.stringify({ success: false, error: `Server error: ${errorMsg}` }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 });

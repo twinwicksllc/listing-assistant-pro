@@ -86,22 +86,29 @@ async function fetchMarketData(
   supabaseUrl: string,
   serviceKey: string,
   title: string,
-  categoryId?: string | null
+  categoryId?: string | null,
 ): Promise<MarketData> {
   try {
     const resp = await fetch(`${supabaseUrl}/functions/v1/keyword-research`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${serviceKey}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({ query: title, categoryId }),
       signal: AbortSignal.timeout(30000),
     });
-    if (!resp.ok) return { avgSoldPrice: null, minActivePrice: null, avgActivePrice: null };
+    if (!resp.ok) {
+      return { avgSoldPrice: null, minActivePrice: null, avgActivePrice: null };
+    }
     let data: any;
     try {
       const respText = await resp.text();
       data = JSON.parse(respText);
     } catch (e) {
-      console.warn(`[auto-reprice-cron] Failed to parse market data response: ${e}`);
+      console.warn(
+        `[auto-reprice-cron] Failed to parse market data response: ${e}`,
+      );
       return { avgSoldPrice: null, minActivePrice: null, avgActivePrice: null };
     }
     return {
@@ -122,7 +129,7 @@ async function applyRepriceUpdate(
   serviceKey: string,
   ebayToken: string,
   listing: EbayListing,
-  newPrice: number
+  newPrice: number,
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const resp = await fetch(`${supabaseUrl}/functions/v1/ebay-reprice`, {
@@ -147,7 +154,9 @@ async function applyRepriceUpdate(
       const respText = await resp.text();
       data = JSON.parse(respText);
     } catch (e) {
-      console.warn(`[auto-reprice-cron] Failed to parse ebay-reprice response: ${e}`);
+      console.warn(
+        `[auto-reprice-cron] Failed to parse ebay-reprice response: ${e}`,
+      );
       return { success: false, error: String(e) };
     }
     return { success: data.success ?? false, error: data.error };
@@ -189,10 +198,16 @@ serve(async (req) => {
         .from("reprice_rules")
         .select("user_id")
         .eq("is_enabled", true);
-      userIds = [...new Set((ruleUsers ?? []).map((r: { user_id: string }) => r.user_id))];
+      userIds = [
+        ...new Set(
+          (ruleUsers ?? []).map((r: { user_id: string }) => r.user_id),
+        ),
+      ];
     }
 
-    console.log(`[auto-reprice-cron] Processing ${userIds.length} user(s), dryRun=${dryRun}`);
+    console.log(
+      `[auto-reprice-cron] Processing ${userIds.length} user(s), dryRun=${dryRun}`,
+    );
 
     const allResults: object[] = [];
 
@@ -215,23 +230,30 @@ serve(async (req) => {
 
       const ebayToken = profile?.ebay_token;
       if (!ebayToken) {
-        console.warn(`[auto-reprice-cron] No eBay token for user ${uid}, skipping`);
+        console.warn(
+          `[auto-reprice-cron] No eBay token for user ${uid}, skipping`,
+        );
         continue;
       }
 
       // Fetch user's active listings
       let listingsResp;
       try {
-        listingsResp = await fetch(`${supabaseUrl}/functions/v1/ebay-listings`, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${serviceKey}`,
-            "x-supabase-auth-token": ebayToken,
+        listingsResp = await fetch(
+          `${supabaseUrl}/functions/v1/ebay-listings`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${serviceKey}`,
+              "x-supabase-auth-token": ebayToken,
+            },
+            signal: AbortSignal.timeout(30000),
           },
-          signal: AbortSignal.timeout(30000),
-        });
+        );
       } catch (e) {
-        console.warn(`[auto-reprice-cron] Failed to fetch listings for ${uid}: ${e}`);
+        console.warn(
+          `[auto-reprice-cron] Failed to fetch listings for ${uid}: ${e}`,
+        );
         continue;
       }
 
@@ -242,7 +264,9 @@ serve(async (req) => {
         const respText = await listingsResp.text();
         listingsData = JSON.parse(respText);
       } catch (e) {
-        console.warn(`[auto-reprice-cron] Failed to parse listings response for ${uid}: ${e}`);
+        console.warn(
+          `[auto-reprice-cron] Failed to parse listings response for ${uid}: ${e}`,
+        );
         continue;
       }
       let listings: EbayListing[] = (listingsData.listings ?? []).map((l: {
@@ -263,28 +287,39 @@ serve(async (req) => {
 
       // Filter to specific listings if provided
       if (listingIds && listingIds.length > 0) {
-        listings = listings.filter(l => listingIds.includes(l.listingId ?? ""));
+        listings = listings.filter((l) =>
+          listingIds.includes(l.listingId ?? "")
+        );
       }
 
       // Limit to top 20 per run to avoid rate limits
       listings = listings.slice(0, 20);
 
-      console.log(`[auto-reprice-cron] User ${uid}: ${listings.length} listings, ${rules.length} rules`);
+      console.log(
+        `[auto-reprice-cron] User ${uid}: ${listings.length} listings, ${rules.length} rules`,
+      );
 
       for (const listing of listings) {
         if (!listing.title || listing.price <= 0) continue;
 
         // Find matching rule for this listing
-        const matchingRule = (rules as RepriceRule[]).find(rule => {
+        const matchingRule = (rules as RepriceRule[]).find((rule) => {
           if (!rule.is_enabled) return false;
-          if (rule.category_filter && listing.categoryId !== rule.category_filter) return false;
+          if (
+            rule.category_filter && listing.categoryId !== rule.category_filter
+          ) return false;
           return true;
         });
 
         if (!matchingRule) continue;
 
         // Fetch market data (cached in keyword-research for 4h)
-        const market = await fetchMarketData(supabaseUrl, serviceKey, listing.title, listing.categoryId);
+        const market = await fetchMarketData(
+          supabaseUrl,
+          serviceKey,
+          listing.title,
+          listing.categoryId,
+        );
 
         const newPrice = applyRule(matchingRule, market);
         if (!newPrice || newPrice === listing.price) continue;
@@ -307,7 +342,11 @@ serve(async (req) => {
         if (!dryRun) {
           // Apply the price change
           const applyResult = await applyRepriceUpdate(
-            supabaseUrl, serviceKey, ebayToken, listing, newPrice
+            supabaseUrl,
+            serviceKey,
+            ebayToken,
+            listing,
+            newPrice,
           );
           result.applied = applyResult.success;
           result.error = applyResult.error ?? null;
@@ -320,7 +359,8 @@ serve(async (req) => {
             optimization_type: "reprice_rule",
             old_value: String(listing.price),
             new_value: String(newPrice),
-            reasoning: `Rule "${matchingRule.rule_name}" (${matchingRule.rule_type})`,
+            reasoning:
+              `Rule "${matchingRule.rule_name}" (${matchingRule.rule_type})`,
             applied_by: "auto",
             result: applyResult.success ? "accepted" : "pending",
           });
@@ -329,7 +369,11 @@ serve(async (req) => {
         }
 
         allResults.push(result);
-        console.log(`[auto-reprice-cron] ${dryRun ? "[DRY RUN]" : ""} ${listing.title}: $${listing.price} → $${newPrice} (${matchingRule.rule_name})`);
+        console.log(
+          `[auto-reprice-cron] ${
+            dryRun ? "[DRY RUN]" : ""
+          } ${listing.title}: $${listing.price} → $${newPrice} (${matchingRule.rule_name})`,
+        );
       }
     }
 
@@ -340,14 +384,17 @@ serve(async (req) => {
         processed: allResults.length,
         results: allResults,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[auto-reprice-cron] Error:", msg);
     return new Response(
       JSON.stringify({ error: msg }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 });

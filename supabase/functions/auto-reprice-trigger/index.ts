@@ -3,13 +3,13 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.0";
 
 // auto-reprice-trigger: Manual trigger for auto-reprice operations
 // Applies enabled repricing rules to user's active listings
-// 
+//
 // API Quota Awareness:
 // - eBay Inventory API: ~500 bulk operations/day
 // - This function calls ebay-reprice which batches updates (25 per call)
 // - Recommended: Debounce manual triggers to 1x per minute on frontend
 //   to avoid exhausting daily quota from repeated rapid clicks
-// 
+//
 // Front-end should prevent abuse via:
 // 1. Button disabled while running
 // 2. Cooldown period (60s) between consecutive runs
@@ -58,7 +58,9 @@ async function applyRule(
       break;
     case "beat_lowest":
       basePrice = marketData.min_competitor_price;
-      if (basePrice) basePrice += Math.abs(rule.adjustment_pct) * 0.01 * basePrice;
+      if (basePrice) {
+        basePrice += Math.abs(rule.adjustment_pct) * 0.01 * basePrice;
+      }
       break;
     case "match_avg":
       basePrice = marketData.avg_competitor_price;

@@ -16,10 +16,9 @@ serve(async (req) => {
     if (!userToken) throw new Error("No eBay user token provided");
 
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-    const apiBase =
-      ebayEnv === "production"
-        ? "https://api.ebay.com"
-        : "https://api.sandbox.ebay.com";
+    const apiBase = ebayEnv === "production"
+      ? "https://api.ebay.com"
+      : "https://api.sandbox.ebay.com";
 
     const authHeaders = {
       Authorization: `Bearer ${userToken}`,
@@ -29,7 +28,7 @@ serve(async (req) => {
     const fetchPolicies = async (policyType: string) => {
       const resp = await fetch(
         `${apiBase}/sell/account/v1/${policyType}_policy?marketplace_id=EBAY_US`,
-        { headers: authHeaders }
+        { headers: authHeaders },
       );
       if (!resp.ok) {
         console.warn(`Could not fetch ${policyType} policies:`, resp.status);
@@ -40,7 +39,9 @@ serve(async (req) => {
         const respText = await resp.text();
         data = JSON.parse(respText);
       } catch (e) {
-        console.warn(`ebay-policies: Failed to parse ${policyType} policy response: ${e}`);
+        console.warn(
+          `ebay-policies: Failed to parse ${policyType} policy response: ${e}`,
+        );
         return [];
       }
       const key = `${policyType}Policies`;
@@ -59,14 +60,17 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ fulfillment, payment, returns }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     console.error("ebay-policies error:", msg);
     return new Response(
       JSON.stringify({ error: msg }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 });

@@ -44,7 +44,7 @@ export type Domain =
 export interface AgenticInspection {
   zoomRegionsExamined: string[];
   keyFindings: string;
-  confidenceBoost: number;        // 0–100
+  confidenceBoost: number; // 0–100
   identificationCorrection?: string;
 }
 
@@ -63,7 +63,7 @@ const GROUNDING_MODEL = "gemini-2.5-flash";
 //  inspect images — zoom and inspect, visual math, image annotation."
 const VISION_MODEL = "gemini-3-flash-preview";
 
-const STAGE_A_TIMEOUT_MS = 8_000;  // 8 s for search grounding
+const STAGE_A_TIMEOUT_MS = 8_000; // 8 s for search grounding
 const STAGE_B_TIMEOUT_MS = 10_000; // 10 s for vision inspection (more complex)
 
 // ─── Domain-specific search query templates ───────────────────────────────────
@@ -115,44 +115,127 @@ function getZoomTargets(domain: Domain): ZoomTarget[] {
   switch (domain) {
     case "coins_bullion":
       return [
-        { region: "date digits",    rationale: "Critical for correct year — misreading 1964 vs 1965 Kennedy Half Dollar changes silver content from 90% to 40%" },
-        { region: "mint mark",      rationale: "Location above/below date or on reverse; determines rarity and value (e.g., CC, S, D, O, W marks)" },
-        { region: "edge reeds",     rationale: "Helps verify denomination and detect cleaned/altered coins" },
-        { region: "surface fields", rationale: "Detect bag marks, cleaning lines, PVC damage, artificial toning" },
+        {
+          region: "date digits",
+          rationale:
+            "Critical for correct year — misreading 1964 vs 1965 Kennedy Half Dollar changes silver content from 90% to 40%",
+        },
+        {
+          region: "mint mark",
+          rationale:
+            "Location above/below date or on reverse; determines rarity and value (e.g., CC, S, D, O, W marks)",
+        },
+        {
+          region: "edge reeds",
+          rationale:
+            "Helps verify denomination and detect cleaned/altered coins",
+        },
+        {
+          region: "surface fields",
+          rationale:
+            "Detect bag marks, cleaning lines, PVC damage, artificial toning",
+        },
       ];
     case "trading_cards":
       return [
-        { region: "card number and set symbol", rationale: "Identifies exact set and print run; critical for parallel identification" },
-        { region: "corners and edges",           rationale: "Primary condition indicators for raw card grading" },
-        { region: "surface centering",           rationale: "Left/right and top/bottom centering affects grade and value significantly" },
-        { region: "holographic or foil pattern", rationale: "Identifies parallel type (refractor, prizm, etc.) and its value tier" },
+        {
+          region: "card number and set symbol",
+          rationale:
+            "Identifies exact set and print run; critical for parallel identification",
+        },
+        {
+          region: "corners and edges",
+          rationale: "Primary condition indicators for raw card grading",
+        },
+        {
+          region: "surface centering",
+          rationale:
+            "Left/right and top/bottom centering affects grade and value significantly",
+        },
+        {
+          region: "holographic or foil pattern",
+          rationale:
+            "Identifies parallel type (refractor, prizm, etc.) and its value tier",
+        },
       ];
     case "jewelry":
       return [
-        { region: "hallmarks and stamps",   rationale: "Karat, maker's mark, assay office mark — determines metal purity and authenticity" },
-        { region: "clasp and findings",     rationale: "Condition of clasp, prong integrity, stone security" },
-        { region: "stone clarity and color", rationale: "Visible inclusions, chips, or loose stones affect value significantly" },
-        { region: "brand signatures",       rationale: "Hidden signatures (Tiffany, Cartier, etc.) dramatically increase value" },
+        {
+          region: "hallmarks and stamps",
+          rationale:
+            "Karat, maker's mark, assay office mark — determines metal purity and authenticity",
+        },
+        {
+          region: "clasp and findings",
+          rationale: "Condition of clasp, prong integrity, stone security",
+        },
+        {
+          region: "stone clarity and color",
+          rationale:
+            "Visible inclusions, chips, or loose stones affect value significantly",
+        },
+        {
+          region: "brand signatures",
+          rationale:
+            "Hidden signatures (Tiffany, Cartier, etc.) dramatically increase value",
+        },
       ];
     case "electronics":
       return [
-        { region: "model number sticker",  rationale: "Exact model/SKU determines correct eBay category and price point" },
-        { region: "ports and connectors",  rationale: "Damaged ports (bent pins, broken USB-C) are major value detractors" },
-        { region: "screen condition",      rationale: "Dead pixels, scratches, backlight bleed affect condition grade" },
-        { region: "serial/IMEI sticker",   rationale: "Confirms device identity and can indicate carrier lock status" },
+        {
+          region: "model number sticker",
+          rationale:
+            "Exact model/SKU determines correct eBay category and price point",
+        },
+        {
+          region: "ports and connectors",
+          rationale:
+            "Damaged ports (bent pins, broken USB-C) are major value detractors",
+        },
+        {
+          region: "screen condition",
+          rationale:
+            "Dead pixels, scratches, backlight bleed affect condition grade",
+        },
+        {
+          region: "serial/IMEI sticker",
+          rationale:
+            "Confirms device identity and can indicate carrier lock status",
+        },
       ];
     case "vintage_clothing":
       return [
-        { region: "brand and size label",      rationale: "Vintage sizing runs 1–2 sizes smaller; correct size drives search traffic" },
-        { region: "care instruction label",     rationale: "Absence of care label = pre-1971 US; helps date the piece" },
-        { region: "fabric and seam condition",  rationale: "Rips, snags, thin spots, and seam separation are critical disclosures" },
-        { region: "union label if present",     rationale: "ILGWU/ACWA dates item to 1940s–1970s; UNITE = 1995+" },
+        {
+          region: "brand and size label",
+          rationale:
+            "Vintage sizing runs 1–2 sizes smaller; correct size drives search traffic",
+        },
+        {
+          region: "care instruction label",
+          rationale:
+            "Absence of care label = pre-1971 US; helps date the piece",
+        },
+        {
+          region: "fabric and seam condition",
+          rationale:
+            "Rips, snags, thin spots, and seam separation are critical disclosures",
+        },
+        {
+          region: "union label if present",
+          rationale: "ILGWU/ACWA dates item to 1940s–1970s; UNITE = 1995+",
+        },
       ];
     default:
       return [
-        { region: "brand markings",    rationale: "Identifies maker and model" },
-        { region: "condition details", rationale: "Visible wear, damage, or flaws" },
-        { region: "label or sticker",  rationale: "Model number, serial, or spec information" },
+        { region: "brand markings", rationale: "Identifies maker and model" },
+        {
+          region: "condition details",
+          rationale: "Visible wear, damage, or flaws",
+        },
+        {
+          region: "label or sticker",
+          rationale: "Model number, serial, or spec information",
+        },
       ];
   }
 }
@@ -198,10 +281,13 @@ async function runStageA(
   domain: Domain,
   itemName: string,
   label: string,
-): Promise<{ marketAnalysis: string | null; groundedCategoryId: string | null }> {
+): Promise<
+  { marketAnalysis: string | null; groundedCategoryId: string | null }
+> {
   const searchQueries = buildSearchQueries(domain, itemName);
 
-  const systemInstruction = `You are an expert eBay listing analyst. Use the Google Search tool to find:
+  const systemInstruction =
+    `You are an expert eBay listing analyst. Use the Google Search tool to find:
 1. The current 2026 eBay LEAF category ID for: "${itemName}" (domain: ${domain})
 2. Recently sold eBay prices for this item type, including qualitative value factors.
 
@@ -223,7 +309,10 @@ After searching, return ONLY a single valid JSON object (no markdown, no code bl
         role: "user",
         parts: [
           {
-            text: `Find the eBay leaf category ID and recent sold prices for this ${domain.replace("_", " ")} item: "${itemName}".`,
+            text:
+              `Find the eBay leaf category ID and recent sold prices for this ${
+                domain.replace("_", " ")
+              } item: "${itemName}".`,
           },
         ],
       },
@@ -250,7 +339,11 @@ After searching, return ONLY a single valid JSON object (no markdown, no code bl
 
   if (!resp.ok) {
     const errText = await resp.text();
-    console.warn(`${label}[StageA] ${GROUNDING_MODEL} returned ${resp.status}: ${errText.slice(0, 300)}`);
+    console.warn(
+      `${label}[StageA] ${GROUNDING_MODEL} returned ${resp.status}: ${
+        errText.slice(0, 300)
+      }`,
+    );
     return { marketAnalysis: null, groundedCategoryId: null };
   }
 
@@ -270,18 +363,26 @@ After searching, return ONLY a single valid JSON object (no markdown, no code bl
   try {
     parsed = JSON.parse(extractJson(rawText));
   } catch (e) {
-    console.warn(`${label}[StageA] JSON parse failed: ${String(e)}. Raw: ${rawText.slice(0, 200)}`);
+    console.warn(
+      `${label}[StageA] JSON parse failed: ${String(e)}. Raw: ${
+        rawText.slice(0, 200)
+      }`,
+    );
     return { marketAnalysis: null, groundedCategoryId: null };
   }
 
-  const marketAnalysis = typeof parsed.market_analysis === "string" && parsed.market_analysis.trim().length > 5
+  const marketAnalysis = typeof parsed.market_analysis === "string" &&
+      parsed.market_analysis.trim().length > 5
     ? parsed.market_analysis.trim()
     : null;
-  const groundedCategoryId = typeof parsed.grounded_category_id === "string" && /^\d+$/.test(parsed.grounded_category_id.trim())
+  const groundedCategoryId = typeof parsed.grounded_category_id === "string" &&
+      /^\d+$/.test(parsed.grounded_category_id.trim())
     ? parsed.grounded_category_id.trim()
     : null;
 
-  console.log(`${label}[StageA] ✓ model=${GROUNDING_MODEL} categoryId=${groundedCategoryId} hasAnalysis=${!!marketAnalysis}`);
+  console.log(
+    `${label}[StageA] ✓ model=${GROUNDING_MODEL} categoryId=${groundedCategoryId} hasAnalysis=${!!marketAnalysis}`,
+  );
   return { marketAnalysis, groundedCategoryId };
 }
 
@@ -303,7 +404,9 @@ async function runStageB(
   label: string,
 ): Promise<AgenticInspection | null> {
   if (imageBase64List.length === 0) {
-    console.log(`${label}[StageB] No images provided — skipping vision inspection`);
+    console.log(
+      `${label}[StageB] No images provided — skipping vision inspection`,
+    );
     return null;
   }
 
@@ -321,7 +424,10 @@ async function runStageB(
     .map((t, i) => `${i + 1}. **${t.region}**: ${t.rationale}`)
     .join("\n");
 
-  const systemInstruction = `You are an expert visual analyst performing an agentic inspection of a ${domain.replace("_", " ")} item for eBay listing purposes.
+  const systemInstruction =
+    `You are an expert visual analyst performing an agentic inspection of a ${
+      domain.replace("_", " ")
+    } item for eBay listing purposes.
 
 Using the code_execution tool, perform a Think-Act-Observe inspection loop on the provided image(s):
 
@@ -356,7 +462,9 @@ Return ONLY a single valid JSON object (no markdown, no code blocks):
         parts: [
           ...imageParts,
           {
-            text: `Perform agentic visual inspection on this ${domain.replace("_", " ")} item: "${itemName}". Use code execution to zoom into and examine the key regions listed in your instructions.`,
+            text: `Perform agentic visual inspection on this ${
+              domain.replace("_", " ")
+            } item: "${itemName}". Use code execution to zoom into and examine the key regions listed in your instructions.`,
           },
         ],
       },
@@ -383,7 +491,11 @@ Return ONLY a single valid JSON object (no markdown, no code blocks):
 
   if (!resp.ok) {
     const errText = await resp.text();
-    console.warn(`${label}[StageB] ${VISION_MODEL} returned ${resp.status}: ${errText.slice(0, 300)}`);
+    console.warn(
+      `${label}[StageB] ${VISION_MODEL} returned ${resp.status}: ${
+        errText.slice(0, 300)
+      }`,
+    );
     return null;
   }
 
@@ -405,20 +517,28 @@ Return ONLY a single valid JSON object (no markdown, no code blocks):
   try {
     parsed = JSON.parse(extractJson(rawText));
   } catch (e) {
-    console.warn(`${label}[StageB] JSON parse failed: ${String(e)}. Raw: ${rawText.slice(0, 200)}`);
+    console.warn(
+      `${label}[StageB] JSON parse failed: ${String(e)}. Raw: ${
+        rawText.slice(0, 200)
+      }`,
+    );
     return null;
   }
 
   const zoomRegions = Array.isArray(parsed.zoom_regions_examined)
-    ? parsed.zoom_regions_examined.map(String).filter((s: string) => s.length > 0)
+    ? parsed.zoom_regions_examined.map(String).filter((s: string) =>
+      s.length > 0
+    )
     : [];
-  const keyFindings = typeof parsed.key_findings === "string" ? parsed.key_findings.trim() : "";
+  const keyFindings = typeof parsed.key_findings === "string"
+    ? parsed.key_findings.trim()
+    : "";
   const confidenceBoost = typeof parsed.confidence_boost === "number"
     ? Math.min(100, Math.max(0, Math.round(parsed.confidence_boost)))
     : 0;
   const identificationCorrection =
     typeof parsed.identification_correction === "string" &&
-    parsed.identification_correction.trim().length > 5
+      parsed.identification_correction.trim().length > 5
       ? parsed.identification_correction.trim()
       : undefined;
 
@@ -427,7 +547,9 @@ Return ONLY a single valid JSON object (no markdown, no code blocks):
     return null;
   }
 
-  console.log(`${label}[StageB] ✓ model=${VISION_MODEL} regions=${zoomRegions.length} confidenceBoost=${confidenceBoost} hasCorrection=${!!identificationCorrection}`);
+  console.log(
+    `${label}[StageB] ✓ model=${VISION_MODEL} regions=${zoomRegions.length} confidenceBoost=${confidenceBoost} hasCorrection=${!!identificationCorrection}`,
+  );
 
   return {
     zoomRegionsExamined: zoomRegions,
@@ -453,14 +575,18 @@ export async function runAgenticPrePass(
   apiKey: string,
   domain: Domain,
   itemName: string,
-  imageBase64List: string[],   // raw base64 strings (no data: prefix needed)
+  imageBase64List: string[], // raw base64 strings (no data: prefix needed)
   imageMimeTypes: string[],
   invocationId: string,
 ): Promise<PrePassResult | null> {
   const label = `[${invocationId}][PrePass0]`;
 
-  console.log(`${label} Starting two-stage pre-pass for "${itemName}" domain=${domain} images=${imageBase64List.length}`);
-  console.log(`${label} Stage A → ${GROUNDING_MODEL} (googleSearch) | Stage B → ${VISION_MODEL} (codeExecution+vision)`);
+  console.log(
+    `${label} Starting two-stage pre-pass for "${itemName}" domain=${domain} images=${imageBase64List.length}`,
+  );
+  console.log(
+    `${label} Stage A → ${GROUNDING_MODEL} (googleSearch) | Stage B → ${VISION_MODEL} (codeExecution+vision)`,
+  );
 
   try {
     // Run both stages concurrently — neither blocks the other
@@ -472,7 +598,14 @@ export async function runAgenticPrePass(
         console.warn(`${label}[StageA] Failed: ${reason}`);
         return { marketAnalysis: null, groundedCategoryId: null };
       }),
-      runStageB(apiKey, domain, itemName, imageBase64List, imageMimeTypes, label).catch((err) => {
+      runStageB(
+        apiKey,
+        domain,
+        itemName,
+        imageBase64List,
+        imageMimeTypes,
+        label,
+      ).catch((err) => {
         const reason = err instanceof Error && err.name === "AbortError"
           ? `timed out after ${STAGE_B_TIMEOUT_MS}ms`
           : String(err);
@@ -496,8 +629,7 @@ export async function runAgenticPrePass(
     };
 
     // Return null only if both stages produced nothing useful
-    const hasAnyResult =
-      result.marketAnalysis !== null ||
+    const hasAnyResult = result.marketAnalysis !== null ||
       result.groundedCategoryId !== null ||
       result.agenticInspection !== null;
 
@@ -511,14 +643,17 @@ export async function runAgenticPrePass(
       stageB_model: VISION_MODEL,
       hasMarketAnalysis: !!result.marketAnalysis,
       groundedCategoryId: result.groundedCategoryId,
-      inspectionRegions: result.agenticInspection?.zoomRegionsExamined?.length ?? 0,
+      inspectionRegions:
+        result.agenticInspection?.zoomRegionsExamined?.length ?? 0,
       confidenceBoost: result.agenticInspection?.confidenceBoost ?? 0,
       hasCorrection: !!result.agenticInspection?.identificationCorrection,
     });
 
     return result;
   } catch (err) {
-    console.warn(`${label} Pre-Pass 0 unexpected failure (non-blocking): ${String(err)}`);
+    console.warn(
+      `${label} Pre-Pass 0 unexpected failure (non-blocking): ${String(err)}`,
+    );
     return null;
   }
 }

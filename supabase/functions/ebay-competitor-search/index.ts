@@ -19,7 +19,7 @@ const CACHE_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours in milliseconds
 // Generates up to 5 evenly-spaced buckets between min and max.
 // ----------------------------------------------------------------
 function buildDistribution(
-  prices: number[]
+  prices: number[],
 ): { min: number; max: number; count: number }[] {
   if (prices.length === 0) return [];
 
@@ -51,10 +51,31 @@ function buildDistribution(
 // ----------------------------------------------------------------
 function deriveSearchQueryFallback(title: string): string {
   const stopWords = new Set([
-    "a", "an", "the", "and", "or", "of", "in", "for", "to", "with",
-    "lot", "set", "collection", "item", "listing", "ebay",
-    "certified", "uncirculated", "beautiful", "stunning", "rare",
-    "vintage", "antique", "original", "authentic",
+    "a",
+    "an",
+    "the",
+    "and",
+    "or",
+    "of",
+    "in",
+    "for",
+    "to",
+    "with",
+    "lot",
+    "set",
+    "collection",
+    "item",
+    "listing",
+    "ebay",
+    "certified",
+    "uncirculated",
+    "beautiful",
+    "stunning",
+    "rare",
+    "vintage",
+    "antique",
+    "original",
+    "authentic",
   ]);
 
   const tokens = title
@@ -88,7 +109,8 @@ async function geminiSearchQuery(
 ): Promise<string | null> {
   const label = "[ebay-competitor-search][Gemini]";
 
-  const prompt = `You are an eBay search specialist. Given a listing title, produce the shortest, most effective eBay keyword search string (≤8 words) to find comparable active listings.
+  const prompt =
+    `You are an eBay search specialist. Given a listing title, produce the shortest, most effective eBay keyword search string (≤8 words) to find comparable active listings.
 
 Rules:
 - Keep: brand, model, year, mint mark, grade, size, color, key identifiers
@@ -96,7 +118,9 @@ Rules:
 - Do NOT add words not implied by the title
 - Return ONLY the keyword string — no explanation, no quotes, no punctuation
 
-Title: "${title.slice(0, 200)}"${categoryId ? `\neBay Category ID: ${categoryId}` : ""}
+Title: "${title.slice(0, 200)}"${
+      categoryId ? `\neBay Category ID: ${categoryId}` : ""
+    }
 
 eBay search keywords:`;
 
@@ -120,14 +144,16 @@ eBay search keywords:`;
             },
           }),
           signal: controller.signal,
-        }
+        },
       );
     } finally {
       clearTimeout(timeoutId);
     }
 
     if (!resp.ok) {
-      console.warn(`${label} Gemini API ${resp.status} — falling back to heuristic`);
+      console.warn(
+        `${label} Gemini API ${resp.status} — falling back to heuristic`,
+      );
       return null;
     }
 
@@ -154,7 +180,9 @@ eBay search keywords:`;
     if (err instanceof Error && err.name === "AbortError") {
       console.warn(`${label} Timed out after 5s — falling back to heuristic`);
     } else {
-      console.warn(`${label} Error: ${String(err)} — falling back to heuristic`);
+      console.warn(
+        `${label} Error: ${String(err)} — falling back to heuristic`,
+      );
     }
     return null;
   }
@@ -165,7 +193,7 @@ eBay search keywords:`;
 // Uses EBAY_CLIENT_ID + EBAY_CLIENT_SECRET (same as keyword-research).
 // ----------------------------------------------------------------
 async function getEbayAppToken(ebayEnv: string): Promise<string> {
-  const clientId     = Deno.env.get("EBAY_CLIENT_ID");
+  const clientId = Deno.env.get("EBAY_CLIENT_ID");
   const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
 
   if (!clientId || !clientSecret) {
@@ -183,12 +211,15 @@ async function getEbayAppToken(ebayEnv: string): Promise<string> {
       "Authorization": `Basic ${credentials}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
-    body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
+    body:
+      "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
   });
 
   if (!resp.ok) {
     const body = await resp.text();
-    throw new Error(`Failed to get eBay OAuth token: ${resp.status} — ${body.slice(0, 200)}`);
+    throw new Error(
+      `Failed to get eBay OAuth token: ${resp.status} — ${body.slice(0, 200)}`,
+    );
   }
 
   const data = await resp.json();
@@ -212,9 +243,9 @@ async function fetchEbayCompetitors(params: {
     : "https://api.sandbox.ebay.com";
 
   const searchParams = new URLSearchParams({
-    q:      searchQuery,
-    limit:  "50",
-    sort:   "price",
+    q: searchQuery,
+    limit: "50",
+    sort: "price",
     filter: "buyingOptions:{FIXED_PRICE}",
   });
 
@@ -222,8 +253,13 @@ async function fetchEbayCompetitors(params: {
     searchParams.set("category_ids", categoryId);
   }
 
-  const url = `${apiBase}/buy/browse/v1/item_summary/search?${searchParams.toString()}`;
-  console.log(`[ebay-competitor-search] Browse API search: "${searchQuery}" (category: ${categoryId ?? "any"})`);
+  const url =
+    `${apiBase}/buy/browse/v1/item_summary/search?${searchParams.toString()}`;
+  console.log(
+    `[ebay-competitor-search] Browse API search: "${searchQuery}" (category: ${
+      categoryId ?? "any"
+    })`,
+  );
 
   let resp: Response | null = null;
 
@@ -241,22 +277,37 @@ async function fetchEbayCompetitors(params: {
 
       if (attempt < 2) {
         const delayMs = 1500 * Math.pow(1.5, attempt);
-        console.warn(`[ebay-competitor-search] Browse API returned ${resp.status} — retrying in ${delayMs}ms`);
+        console.warn(
+          `[ebay-competitor-search] Browse API returned ${resp.status} — retrying in ${delayMs}ms`,
+        );
         await new Promise((r) => setTimeout(r, delayMs));
       }
     } catch (fetchErr) {
       if (attempt < 2) {
         const delayMs = 1500 * Math.pow(1.5, attempt);
-        console.warn(`[ebay-competitor-search] Fetch error (attempt ${attempt + 1}/3) — retrying in ${delayMs}ms`);
+        console.warn(
+          `[ebay-competitor-search] Fetch error (attempt ${
+            attempt + 1
+          }/3) — retrying in ${delayMs}ms`,
+        );
         await new Promise((r) => setTimeout(r, delayMs));
       }
     }
   }
 
   if (!resp || !resp.ok) {
-    const errBody = await resp?.text?.().catch(() => "(could not read body)") ?? "(no response)";
-    console.error(`[ebay-competitor-search] Browse API failed: ${resp?.status} — ${errBody.slice(0, 300)}`);
-    throw new Error(`eBay Browse API error: ${resp?.status ?? "unknown"} — ${errBody.slice(0, 200)}`);
+    const errBody = await resp?.text?.().catch(() => "(could not read body)") ??
+      "(no response)";
+    console.error(
+      `[ebay-competitor-search] Browse API failed: ${resp?.status} — ${
+        errBody.slice(0, 300)
+      }`,
+    );
+    throw new Error(
+      `eBay Browse API error: ${resp?.status ?? "unknown"} — ${
+        errBody.slice(0, 200)
+      }`,
+    );
   }
 
   const respText = await resp.text();
@@ -283,7 +334,7 @@ async function fetchEbayCompetitors(params: {
   }
 
   console.log(
-    `[ebay-competitor-search] Found ${prices.length} priced items out of ${items.length} Browse API results`
+    `[ebay-competitor-search] Found ${prices.length} priced items out of ${items.length} Browse API results`,
   );
 
   return { prices, count: prices.length, raw: items };
@@ -326,27 +377,41 @@ serve(async (req) => {
       body = await req.json();
     } catch (parseErr) {
       return new Response(
-        JSON.stringify({ error: "Invalid JSON in request body", detail: String(parseErr) }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({
+          error: "Invalid JSON in request body",
+          detail: String(parseErr),
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
     const { title, categoryId, yourPrice } = body;
     listingId = body.listingId;
-    userId    = body.userId;
+    userId = body.userId;
 
     if (!title) {
       return new Response(
         JSON.stringify({ error: "title is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
     console.log("[ebay-competitor-search] Loading environment variables...");
     // Default to "production" — sandbox has its own separate (tiny) quota
-    const ebayEnv   = Deno.env.get("EBAY_ENVIRONMENT") || "production";
+    const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "production";
     const geminiKey = Deno.env.get("GEMINI_API_KEY");
-    console.log("[ebay-competitor-search] ebayEnv:", ebayEnv, "geminiKey exists:", !!geminiKey);
+    console.log(
+      "[ebay-competitor-search] ebayEnv:",
+      ebayEnv,
+      "geminiKey exists:",
+      !!geminiKey,
+    );
 
     // ------------------------------------------------------------------
     // Supabase client (used for cache read + write)
@@ -354,7 +419,7 @@ serve(async (req) => {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-      { auth: { persistSession: false } }
+      { auth: { persistSession: false } },
     );
 
     // ------------------------------------------------------------------
@@ -374,34 +439,43 @@ serve(async (req) => {
           .maybeSingle();
 
         if (cachedFresh) {
-          const cacheAgeMs   = Date.now() - new Date(cachedFresh.fetched_at).getTime();
+          const cacheAgeMs = Date.now() -
+            new Date(cachedFresh.fetched_at).getTime();
           const cacheAgeMins = Math.round(cacheAgeMs / 60000);
           const cacheExpiresAt = new Date(
-            new Date(cachedFresh.fetched_at).getTime() + CACHE_TTL_MS
+            new Date(cachedFresh.fetched_at).getTime() + CACHE_TTL_MS,
           ).toISOString();
-          console.log(`[ebay-competitor-search] Cache hit (${cacheAgeMins}min old) — returning cached data`);
+          console.log(
+            `[ebay-competitor-search] Cache hit (${cacheAgeMins}min old) — returning cached data`,
+          );
           return new Response(
             JSON.stringify({
-              searchQuery:       cachedFresh.gemini_search_query ?? cachedFresh.search_query,
-              avgPrice:          cachedFresh.avg_price,
-              minPrice:          cachedFresh.min_price,
-              maxPrice:          cachedFresh.max_price,
-              medianPrice:       cachedFresh.median_price,
-              priceDelta:        cachedFresh.price_delta,
-              competitorCount:   cachedFresh.competitor_count,
+              searchQuery: cachedFresh.gemini_search_query ??
+                cachedFresh.search_query,
+              avgPrice: cachedFresh.avg_price,
+              minPrice: cachedFresh.min_price,
+              maxPrice: cachedFresh.max_price,
+              medianPrice: cachedFresh.median_price,
+              priceDelta: cachedFresh.price_delta,
+              competitorCount: cachedFresh.competitor_count,
               priceDistribution: cachedFresh.price_distribution ?? [],
-              noData:            false,
-              fromCache:         true,
+              noData: false,
+              fromCache: true,
               cacheAgeMins,
               cacheExpiresAt,
             }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
 
-        console.log("[ebay-competitor-search] Cache miss / stale — fetching live data from eBay...");
+        console.log(
+          "[ebay-competitor-search] Cache miss / stale — fetching live data from eBay...",
+        );
       } catch (cacheErr) {
-        console.warn("[ebay-competitor-search] Cache check failed, proceeding to eBay:", cacheErr);
+        console.warn(
+          "[ebay-competitor-search] Cache check failed, proceeding to eBay:",
+          cacheErr,
+        );
       }
     }
 
@@ -413,12 +487,18 @@ serve(async (req) => {
     if (geminiKey) {
       geminiQuery = await geminiSearchQuery(geminiKey, title, categoryId);
     } else {
-      console.log("[ebay-competitor-search] No GEMINI_API_KEY — skipping Gemini query optimisation");
+      console.log(
+        "[ebay-competitor-search] No GEMINI_API_KEY — skipping Gemini query optimisation",
+      );
     }
 
     const searchQuery = geminiQuery ?? deriveSearchQueryFallback(title);
-    const usedGemini  = !!geminiQuery;
-    console.log(`[ebay-competitor-search] Search query (${usedGemini ? "Gemini" : "heuristic"}): "${searchQuery}"`);
+    const usedGemini = !!geminiQuery;
+    console.log(
+      `[ebay-competitor-search] Search query (${
+        usedGemini ? "Gemini" : "heuristic"
+      }): "${searchQuery}"`,
+    );
 
     // ------------------------------------------------------------------
     // Step 2 — Get eBay OAuth token
@@ -427,10 +507,16 @@ serve(async (req) => {
     try {
       token = await getEbayAppToken(ebayEnv);
     } catch (tokenErr) {
-      console.error("[ebay-competitor-search] Failed to get eBay OAuth token:", tokenErr);
+      console.error(
+        "[ebay-competitor-search] Failed to get eBay OAuth token:",
+        tokenErr,
+      );
       return new Response(
         JSON.stringify({ error: String(tokenErr) }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -445,34 +531,42 @@ serve(async (req) => {
     });
 
     if (prices.length === 0) {
-      console.log("[ebay-competitor-search] No prices found, returning empty response");
+      console.log(
+        "[ebay-competitor-search] No prices found, returning empty response",
+      );
       return new Response(
         JSON.stringify({
           searchQuery,
-          avgPrice:          null,
-          minPrice:          null,
-          maxPrice:          null,
-          medianPrice:       null,
-          priceDelta:        null,
-          competitorCount:   0,
+          avgPrice: null,
+          minPrice: null,
+          maxPrice: null,
+          medianPrice: null,
+          priceDelta: null,
+          competitorCount: 0,
           priceDistribution: [],
-          noData:            true,
+          noData: true,
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     // ------------------------------------------------------------------
     // Step 4 — Compute statistics
     // ------------------------------------------------------------------
-    const avgPrice          = prices.reduce((s, p) => s + p, 0) / prices.length;
-    const minPrice          = Math.min(...prices);
-    const maxPrice          = Math.max(...prices);
-    const medianPrice       = median(prices);
-    const priceDelta        = yourPrice != null ? Math.round((yourPrice - avgPrice) * 100) / 100 : null;
+    const avgPrice = prices.reduce((s, p) => s + p, 0) / prices.length;
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const medianPrice = median(prices);
+    const priceDelta = yourPrice != null
+      ? Math.round((yourPrice - avgPrice) * 100) / 100
+      : null;
     const priceDistribution = buildDistribution(prices);
 
-    console.log(`[ebay-competitor-search] Stats: avg=$${avgPrice.toFixed(2)}, median=$${medianPrice.toFixed(2)}, n=${count}`);
+    console.log(
+      `[ebay-competitor-search] Stats: avg=$${avgPrice.toFixed(2)}, median=$${
+        medianPrice.toFixed(2)
+      }, n=${count}`,
+    );
 
     // ------------------------------------------------------------------
     // Step 5 — Persist to competitor_prices (upsert)
@@ -484,25 +578,32 @@ serve(async (req) => {
         await supabase
           .from("competitor_prices")
           .upsert({
-            user_id:             userId,
-            ebay_listing_id:     listingId,
-            search_query:        searchQuery,
+            user_id: userId,
+            ebay_listing_id: listingId,
+            search_query: searchQuery,
             gemini_search_query: geminiQuery ?? null,
-            avg_price:           Math.round(avgPrice * 100) / 100,
-            min_price:           minPrice,
-            max_price:           maxPrice,
-            median_price:        Math.round(medianPrice * 100) / 100,
-            price_delta:         priceDelta,
-            your_price:          yourPrice ?? null,
-            competitor_count:    count,
-            price_distribution:  priceDistribution,
-            expires_at:          expiresAt,
+            avg_price: Math.round(avgPrice * 100) / 100,
+            min_price: minPrice,
+            max_price: maxPrice,
+            median_price: Math.round(medianPrice * 100) / 100,
+            price_delta: priceDelta,
+            your_price: yourPrice ?? null,
+            competitor_count: count,
+            price_distribution: priceDistribution,
+            expires_at: expiresAt,
           }, { onConflict: "user_id,ebay_listing_id" });
 
-        console.log(`[ebay-competitor-search] Saved snapshot for listing ${listingId}: avg=$${avgPrice.toFixed(2)}, n=${count}`);
+        console.log(
+          `[ebay-competitor-search] Saved snapshot for listing ${listingId}: avg=$${
+            avgPrice.toFixed(2)
+          }, n=${count}`,
+        );
       } catch (dbErr) {
         // Non-fatal — still return data to caller
-        console.warn("[ebay-competitor-search] Failed to persist snapshot:", dbErr);
+        console.warn(
+          "[ebay-competitor-search] Failed to persist snapshot:",
+          dbErr,
+        );
       }
     }
 
@@ -511,25 +612,27 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         searchQuery,
-        geminiSearchQuery:  geminiQuery,
-        avgPrice:           Math.round(avgPrice * 100) / 100,
+        geminiSearchQuery: geminiQuery,
+        avgPrice: Math.round(avgPrice * 100) / 100,
         minPrice,
         maxPrice,
-        medianPrice:        Math.round(medianPrice * 100) / 100,
+        medianPrice: Math.round(medianPrice * 100) / 100,
         priceDelta,
-        competitorCount:    count,
+        competitorCount: count,
         priceDistribution,
-        noData:             false,
-        fromCache:          false,
+        noData: false,
+        fromCache: false,
         cacheExpiresAt,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
-
   } catch (err) {
-    const msg   = err instanceof Error ? err.message : String(err);
-    const stack = err instanceof Error ? err.stack    : "no stack";
-    console.error("[ebay-competitor-search] *** OUTER ERROR HANDLER ***", { message: msg, stack });
+    const msg = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : "no stack";
+    console.error("[ebay-competitor-search] *** OUTER ERROR HANDLER ***", {
+      message: msg,
+      stack,
+    });
 
     // Graceful degradation — serve stale cache if we have any
     if (userId && listingId) {
@@ -537,7 +640,7 @@ serve(async (req) => {
         const supabaseCache = createClient(
           Deno.env.get("SUPABASE_URL") ?? "",
           Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-          { auth: { persistSession: false } }
+          { auth: { persistSession: false } },
         );
 
         const { data: staleCached } = await supabaseCache
@@ -551,40 +654,51 @@ serve(async (req) => {
 
         if (staleCached) {
           const cacheAgeHours = Math.round(
-            (Date.now() - new Date(staleCached.fetched_at).getTime()) / (60 * 60 * 1000)
+            (Date.now() - new Date(staleCached.fetched_at).getTime()) /
+              (60 * 60 * 1000),
           );
-          console.log(`[ebay-competitor-search] Returning stale cache (${cacheAgeHours}h old) as fallback`);
+          console.log(
+            `[ebay-competitor-search] Returning stale cache (${cacheAgeHours}h old) as fallback`,
+          );
           return new Response(
             JSON.stringify({
-              searchQuery:       staleCached.gemini_search_query ?? staleCached.search_query,
-              avgPrice:          staleCached.avg_price,
-              minPrice:          staleCached.min_price,
-              maxPrice:          staleCached.max_price,
-              medianPrice:       staleCached.median_price,
-              priceDelta:        staleCached.price_delta,
-              competitorCount:   staleCached.competitor_count,
+              searchQuery: staleCached.gemini_search_query ??
+                staleCached.search_query,
+              avgPrice: staleCached.avg_price,
+              minPrice: staleCached.min_price,
+              maxPrice: staleCached.max_price,
+              medianPrice: staleCached.median_price,
+              priceDelta: staleCached.price_delta,
+              competitorCount: staleCached.competitor_count,
               priceDistribution: staleCached.price_distribution ?? [],
-              noData:            false,
-              fromCache:         true,
-              stale:             true,
+              noData: false,
+              fromCache: true,
+              stale: true,
               cacheAgeHours,
-              warning:           `eBay API error. Showing data from ${cacheAgeHours}h ago.`,
+              warning:
+                `eBay API error. Showing data from ${cacheAgeHours}h ago.`,
             }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
       } catch (fallbackErr) {
-        console.warn("[ebay-competitor-search] Stale cache fallback failed:", fallbackErr);
+        console.warn(
+          "[ebay-competitor-search] Stale cache fallback failed:",
+          fallbackErr,
+        );
       }
     }
 
     return new Response(
       JSON.stringify({
-        error:     msg,
+        error: msg,
         errorType: err?.constructor?.name,
         timestamp: new Date().toISOString(),
       }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 });

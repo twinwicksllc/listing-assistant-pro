@@ -8,7 +8,9 @@ export function getTestClient() {
   const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
   if (!supabaseUrl || !supabaseKey) {
-    throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY for testing");
+    throw new Error(
+      "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY for testing",
+    );
   }
 
   return createClient(supabaseUrl, supabaseKey);
@@ -61,7 +63,9 @@ export async function getTestItemByDomain(domain: string): Promise<TestItem> {
 /**
  * Get items by title pattern (useful for targeting specific test items)
  */
-export async function getTestItemByTitle(titlePattern: string): Promise<TestItem> {
+export async function getTestItemByTitle(
+  titlePattern: string,
+): Promise<TestItem> {
   const client = getTestClient();
   const { data, error } = await client
     .from("test_items")
