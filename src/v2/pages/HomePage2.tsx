@@ -1,19 +1,18 @@
 /**
- * HomePage2 — V2 Sleek redesign of /home (Capture page)
+ * HomePage2 — V2 Immersive Upload UX
  *
- * All business logic is identical to HomePage.tsx.
- * Only the presentation layer has been updated:
- *   - AppShell (left sidebar on desktop, BottomNav on mobile)
- *   - Off-white background (#F8F9FA), soft shadows, glass-morphic cards
- *   - Font weight depth: 800 primary, 600 secondary, 400 body
- *   - Generous corner radii (12px/16px)
- *   - Desktop: two-column layout (upload panel left, instructions/tips right)
- *   - Mobile: single column, same UX feel as original
+ * Enhancements over previous version:
+ *   - Immersive large drop zone with brand glow on drag
+ *   - High-end thumbnail grid with hover overlays (Delete + Set as Main)
+ *   - Skeleton loaders during optimization
+ *   - Glassmorphism depth: floating shadows, backdrop blur
+ *   - Gradient CTA buttons with glow box-shadow
+ *   - Airy layout: max-width 800px upload card, tighter tips spacing
  */
 
 import {
   Camera, Upload, Sparkles, X, ArrowRight, ImagePlus,
-  Mic, MicOff, Loader2, Wand2, HelpCircle, Layers, Info,
+  Mic, MicOff, Loader2, HelpCircle, Layers, Info, Star, Trash2,
 } from "lucide-react";
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -26,7 +25,7 @@ import WelcomeTour, { type TourStep } from "@/components/WelcomeTour";
 import AppShell from "../components/AppShell";
 import UsageSummaryCard from "../components/UsageSummaryCard";
 
-// ── Constants (identical to original) ────────────────────────────────────────
+// ── Constants ──────────────────────────────────────────────────────────────────
 
 const ACCEPTED_TYPES = [
   "image/jpeg", "image/png", "image/webp", "image/heic",
@@ -66,49 +65,80 @@ const TOUR_STEPS: TourStep[] = [
   },
 ];
 
-// ── Styles (inline, scoped) ───────────────────────────────────────────────────
+// ── CSS keyframes injected once ────────────────────────────────────────────────
+
+const GLOBAL_CSS = `
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes pulse-skeleton {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+@keyframes thumb-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.v2-thumb-wrap:hover .v2-thumb-overlay { opacity: 1; }
+.v2-thumb-wrap:hover .v2-thumb-img     { transform: scale(1.04); }
+`;
+
+// ── Styles ─────────────────────────────────────────────────────────────────────
+
+const BRAND     = "#0076B6";
+const BRAND_DRK = "#005a8a";
+const BRAND_LT  = "#e6f4fb";
+const BG        = "#F8F9FA";
+const FG        = "#141820";
+const MUTED     = "#6E7580";
+const BORDER    = "#E4E7EC";
+const FONT      = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+
+const cardFloat: React.CSSProperties = {
+  background: "linear-gradient(135deg, rgba(255,255,255,0.90) 0%, rgba(255,255,255,0.82) 100%)",
+  backdropFilter: "blur(14px)",
+  WebkitBackdropFilter: "blur(14px)",
+  border: "1px solid rgba(255,255,255,0.4)",
+  borderRadius: 20,
+  boxShadow: "0 10px 40px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.04)",
+};
 
 const S = {
-  // Page wrapper
   page: {
     minHeight: "100vh",
-    background: "#F8F9FA",
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+    background: BG,
+    fontFamily: FONT,
   } as React.CSSProperties,
 
-  // Desktop page inner
   pageInner: {
     maxWidth: 1200,
     margin: "0 auto",
-    padding: "2rem 2rem 2rem",
+    padding: "2rem 2rem 3rem",
   } as React.CSSProperties,
 
-  // Mobile page inner
   pageInnerMobile: {
-    padding: "1.25rem 1rem 1rem",
+    padding: "1.25rem 1rem 1.5rem",
   } as React.CSSProperties,
 
-  // Page header bar
   headerBar: {
     display: "flex",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     marginBottom: "1.5rem",
   } as React.CSSProperties,
 
   pageTitle: {
-    fontSize: "1.5rem",
+    fontSize: "1.75rem",
     fontWeight: 800,
-    color: "#141820",
-    letterSpacing: "-0.02em",
+    color: FG,
+    letterSpacing: "-0.03em",
     margin: 0,
+    lineHeight: 1.2,
   } as React.CSSProperties,
 
   pageSubtitle: {
     fontSize: "0.9375rem",
     fontWeight: 400,
-    color: "#6E7580",
-    marginTop: "0.125rem",
+    color: MUTED,
+    marginTop: "0.3rem",
   } as React.CSSProperties,
 
   helpBtn: {
@@ -119,39 +149,34 @@ const S = {
     height: 40,
     borderRadius: 12,
     border: "none",
-    background: "rgba(255,255,255,0.8)",
+    background: "rgba(255,255,255,0.85)",
     cursor: "pointer",
-    color: "#6E7580",
+    color: MUTED,
+    flexShrink: 0,
+    boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
     transition: "all 0.15s",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
   } as React.CSSProperties,
 
-  // Usage summary section
   usageSection: {
     marginBottom: "1.5rem",
   } as React.CSSProperties,
 
-  // Two-column grid (desktop only)
+  // Desktop two-column: upload card (max 800px) + tips sidebar
   twoCol: {
     display: "grid",
-    gridTemplateColumns: "1fr 340px",
+    gridTemplateColumns: "1fr 300px",
     gap: "1.5rem",
     alignItems: "start",
   } as React.CSSProperties,
 
-  // Card - glass-morphic
-  card: {
-    background: "linear-gradient(135deg, rgba(255,255,255,0.82) 0%, rgba(255,255,255,0.72) 100%)",
-    backdropFilter: "blur(12px)",
-    WebkitBackdropFilter: "blur(12px)",
-    border: "1px solid rgba(255,255,255,0.3)",
-    borderRadius: 16,
-    boxShadow: "0 4px 20px rgba(0,0,0,0.05)",
+  // The floating upload card
+  uploadCard: {
+    ...cardFloat,
     overflow: "hidden",
   } as React.CSSProperties,
 
   cardHeader: {
-    padding: "1rem 1.25rem",
+    padding: "1.125rem 1.5rem",
     borderBottom: "1px solid rgba(228,231,236,0.5)",
     display: "flex",
     alignItems: "center",
@@ -161,92 +186,214 @@ const S = {
   cardTitle: {
     fontSize: "1rem",
     fontWeight: 700,
-    color: "#141820",
+    color: FG,
     margin: 0,
   } as React.CSSProperties,
 
   cardBody: {
-    padding: "1.25rem",
+    padding: "1.5rem",
   } as React.CSSProperties,
 
-  // Drop zone
+  // ── Immersive drop zone ────────────────────────────────────────────
   dropZone: (dragging: boolean): React.CSSProperties => ({
-    border: `2px dashed ${dragging ? "#0076B6" : "#B0B7BC"}`,
-    borderRadius: 16,
-    background: dragging ? "rgba(0,118,182,0.04)" : "#F7F9FB",
+    border: `2px dashed ${dragging ? BRAND : "#C8D0D9"}`,
+    borderRadius: 24,
+    background: dragging
+      ? "rgba(0,118,182,0.06)"
+      : "rgba(0,118,182,0.025)",
+    boxShadow: dragging
+      ? `0 0 0 4px rgba(0,118,182,0.12), inset 0 0 20px rgba(0,118,182,0.04)`
+      : "none",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    gap: "1rem",
-    padding: "3rem 2rem",
+    gap: "1.25rem",
+    padding: "3.5rem 2.5rem",
     textAlign: "center",
-    transition: "all 0.2s",
+    transition: "all 0.25s ease",
     cursor: "pointer",
-    minHeight: 260,
+    minHeight: 300,
+    position: "relative",
   }),
 
-  uploadCircle: {
-    width: 88,
-    height: 88,
+  uploadIconWrap: (dragging: boolean): React.CSSProperties => ({
+    width: 96,
+    height: 96,
     borderRadius: "50%",
-    background: "rgba(0,118,182,0.08)",
-    border: "2px dashed rgba(0,118,182,0.35)",
+    background: dragging
+      ? `rgba(0,118,182,0.15)`
+      : `rgba(0,118,182,0.07)`,
+    border: `2px dashed ${dragging ? BRAND : "rgba(0,118,182,0.3)"}`,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    transition: "all 0.2s",
+    transition: "all 0.25s ease",
+    boxShadow: dragging
+      ? `0 0 20px rgba(0,118,182,0.18)`
+      : "none",
+  }),
+
+  dropZoneCTA: {
+    fontSize: "1.25rem",
+    fontWeight: 800,
+    color: FG,
+    letterSpacing: "-0.01em",
+    margin: 0,
   } as React.CSSProperties,
 
-  uploadLabel: {
-    fontSize: "1rem",
-    fontWeight: 700,
-    color: "#0076B6",
-  } as React.CSSProperties,
-
-  uploadSub: {
-    fontSize: "0.875rem",
+  dropZoneSub: {
+    fontSize: "0.9375rem",
     fontWeight: 400,
-    color: "#6E7580",
+    color: MUTED,
     marginTop: "0.25rem",
   } as React.CSSProperties,
 
-  // Primary button
+  dropZoneHint: {
+    fontSize: "0.8125rem",
+    color: "#9BA3AD",
+    marginTop: "0.125rem",
+  } as React.CSSProperties,
+
+  // ── Gradient CTA button ────────────────────────────────────────────
   btnPrimary: {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
     gap: "0.5rem",
-    padding: "0.75rem 1.75rem",
-    background: "#0076B6",
+    padding: "0.8125rem 2rem",
+    background: `linear-gradient(135deg, #1a8fd1 0%, ${BRAND} 100%)`,
     color: "#fff",
     fontSize: "1rem",
     fontWeight: 700,
     border: "none",
-    borderRadius: 12,
+    borderRadius: 14,
     cursor: "pointer",
-    transition: "background 0.15s, transform 0.1s",
     width: "100%",
+    boxShadow: "0 4px 14px 0 rgba(0,118,182,0.38)",
+    transition: "transform 0.18s ease, box-shadow 0.18s ease",
+    letterSpacing: "-0.01em",
   } as React.CSSProperties,
 
-  // Secondary / ghost button
   btnSecondary: {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
     gap: "0.5rem",
     padding: "0.625rem 1.25rem",
-    background: "transparent",
-    color: "#141820",
+    background: "rgba(255,255,255,0.8)",
+    color: FG,
     fontSize: "0.9375rem",
     fontWeight: 500,
-    border: "none",
+    border: "1px solid rgba(228,231,236,0.8)",
+    borderRadius: 12,
+    cursor: "pointer",
+    transition: "background 0.15s, transform 0.1s",
+    boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
+  } as React.CSSProperties,
+
+  btnBrandOutline: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "0.5rem",
+    padding: "0.5rem 1.125rem",
+    background: "rgba(0,118,182,0.06)",
+    color: BRAND,
+    fontSize: "0.875rem",
+    fontWeight: 600,
+    border: `1px solid rgba(0,118,182,0.25)`,
     borderRadius: 12,
     cursor: "pointer",
     transition: "background 0.15s",
   } as React.CSSProperties,
 
-  // Tag / badge
+  // ── Thumbnail grid ─────────────────────────────────────────────────
+  thumbGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))",
+    gap: "0.75rem",
+  } as React.CSSProperties,
+
+  thumbWrap: {
+    position: "relative",
+    aspectRatio: "1 / 1",
+    borderRadius: 14,
+    overflow: "hidden",
+    background: "#EFF2F5",
+    cursor: "default",
+  } as React.CSSProperties,
+
+  thumbImg: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    display: "block",
+    transition: "transform 0.22s ease",
+  } as React.CSSProperties,
+
+  thumbOverlay: {
+    position: "absolute",
+    inset: 0,
+    background: "rgba(10,20,40,0.48)",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "0.5rem",
+    opacity: 0,
+    transition: "opacity 0.2s ease",
+    borderRadius: 14,
+  } as React.CSSProperties,
+
+  thumbOverlayBtn: (variant: "danger" | "star"): React.CSSProperties => ({
+    display: "flex",
+    alignItems: "center",
+    gap: "0.3rem",
+    padding: "0.35rem 0.7rem",
+    borderRadius: 8,
+    border: "none",
+    fontSize: "0.75rem",
+    fontWeight: 700,
+    cursor: "pointer",
+    background: variant === "danger" ? "rgba(220,38,38,0.85)" : "rgba(255,255,255,0.15)",
+    color: "#fff",
+    backdropFilter: "blur(4px)",
+    WebkitBackdropFilter: "blur(4px)",
+    transition: "background 0.15s",
+  }),
+
+  mainBadge: {
+    position: "absolute",
+    bottom: 6,
+    left: 6,
+    fontSize: "0.6875rem",
+    fontWeight: 700,
+    background: BRAND,
+    color: "#fff",
+    padding: "2px 7px",
+    borderRadius: 6,
+    pointerEvents: "none" as const,
+  } as React.CSSProperties,
+
+  // skeleton
+  skeleton: {
+    width: "100%",
+    height: "100%",
+    background: "linear-gradient(90deg, #EFF2F5 0%, #e0e5ea 50%, #EFF2F5 100%)",
+    backgroundSize: "200% 100%",
+    animation: "pulse-skeleton 1.4s ease-in-out infinite",
+    borderRadius: 14,
+  } as React.CSSProperties,
+
+  // optimizer status bar
+  optimizerBar: {
+    background: "rgba(0,118,182,0.04)",
+    border: "1px solid rgba(0,118,182,0.12)",
+    borderRadius: 14,
+    padding: "0.875rem 1rem",
+  } as React.CSSProperties,
+
   badge: (color: "blue" | "green" | "silver"): React.CSSProperties => ({
     display: "inline-flex",
     alignItems: "center",
@@ -255,47 +402,125 @@ const S = {
     fontSize: "0.75rem",
     fontWeight: 600,
     background: color === "blue" ? "rgba(0,118,182,0.1)" : color === "green" ? "rgba(34,197,94,0.1)" : "#EFF2F5",
-    color: color === "blue" ? "#0076B6" : color === "green" ? "#16a34a" : "#6E7580",
+    color: color === "blue" ? BRAND : color === "green" ? "#16a34a" : MUTED,
   }),
 
-  // Tip box (right column) - glass-morphic
+  // Tips panel
+  tipsPanel: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "0.625rem",
+  } as React.CSSProperties,
+
   tipBox: {
-    background: "linear-gradient(135deg, rgba(0,118,182,0.06) 0%, rgba(0,118,182,0.02) 100%)",
-    border: "1px solid rgba(0,118,182,0.12)",
-    borderRadius: 12,
-    padding: "1rem 1.125rem",
-    marginBottom: "0.75rem",
+    background: "linear-gradient(135deg, rgba(0,118,182,0.05) 0%, rgba(0,118,182,0.02) 100%)",
+    border: "1px solid rgba(0,118,182,0.1)",
+    borderRadius: 14,
+    padding: "0.875rem 1rem",
   } as React.CSSProperties,
 
   tipTitle: {
     fontSize: "0.8125rem",
     fontWeight: 700,
-    color: "#0076B6",
-    marginBottom: "0.375rem",
+    color: BRAND,
+    marginBottom: "0.3rem",
     display: "flex",
     alignItems: "center",
     gap: "0.375rem",
   } as React.CSSProperties,
 
   tipText: {
-    fontSize: "0.875rem",
+    fontSize: "0.8125rem",
     fontWeight: 400,
     color: "#4B5563",
-    lineHeight: 1.55,
+    lineHeight: 1.5,
+    margin: 0,
   } as React.CSSProperties,
 };
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// ── Skeleton tile ──────────────────────────────────────────────────────────────
+
+function SkeletonTile() {
+  return (
+    <div style={{ aspectRatio: "1 / 1", borderRadius: 14, overflow: "hidden" }}>
+      <div style={S.skeleton} />
+    </div>
+  );
+}
+
+// ── Thumbnail tile with hover overlay ─────────────────────────────────────────
+
+interface ThumbTileProps {
+  url: string;
+  index: number;
+  isMain: boolean;
+  isOptimizing: boolean;
+  onRemove: (i: number) => void;
+  onSetMain: (i: number) => void;
+}
+
+function ThumbTile({ url, index, isMain, isOptimizing, onRemove, onSetMain }: ThumbTileProps) {
+  const [hovered, setHovered] = useState(false);
+
+  if (isOptimizing) return <SkeletonTile />;
+
+  return (
+    <div
+      className="v2-thumb-wrap"
+      style={S.thumbWrap}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <img
+        src={url}
+        alt={`Photo ${index + 1}`}
+        className="v2-thumb-img"
+        style={{
+          ...S.thumbImg,
+          transform: hovered ? "scale(1.04)" : "scale(1)",
+        }}
+      />
+      {/* Hover overlay */}
+      <div
+        className="v2-thumb-overlay"
+        style={{
+          ...S.thumbOverlay,
+          opacity: hovered ? 1 : 0,
+        }}
+      >
+        <button
+          style={S.thumbOverlayBtn("danger")}
+          onClick={(e) => { e.stopPropagation(); onRemove(index); }}
+          title="Remove photo"
+        >
+          <Trash2 size={11} /> Remove
+        </button>
+        {!isMain && (
+          <button
+            style={S.thumbOverlayBtn("star")}
+            onClick={(e) => { e.stopPropagation(); onSetMain(index); }}
+            title="Set as main photo"
+          >
+            <Star size={11} /> Main
+          </button>
+        )}
+      </div>
+      {isMain && <span style={S.mainBadge}>★ Main</span>}
+    </div>
+  );
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
 
 export default function HomePage2() {
-  const { signOut, recordUsage, planFeatures, usage, currentPlanLimits, currentPlan } = useAuth();
+  const { recordUsage, planFeatures, usage, currentPlanLimits, currentPlan } = useAuth();
   const cameraInputRef  = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const navigate        = useNavigate();
   const isMobile        = useIsMobile();
 
-  // State (identical to original)
   const [stagedImages,      setStagedImages]      = useState<string[]>([]);
+  const [mainIndex,         setMainIndex]         = useState(0);
   const [dragging,          setDragging]          = useState(false);
   const [optimizing,        setOptimizing]        = useState(false);
   const [optimizeProgress,  setOptimizeProgress]  = useState({ done: 0, total: 0 });
@@ -313,7 +538,6 @@ export default function HomePage2() {
   const timerRef             = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoOptimizeTimerRef = useRef<ReturnType<typeof setTimeout>  | null>(null);
 
-  // Show tour on first visit
   useEffect(() => {
     if (!localStorage.getItem(TOUR_KEY)) {
       const t = setTimeout(() => setShowTour(true), 600);
@@ -321,7 +545,6 @@ export default function HomePage2() {
     }
   }, []);
 
-  // Auto-optimize when images are staged
   useEffect(() => {
     if (stagedImages.length === 0 || imagesOptimized || optimizing) return;
     if (autoOptimizeTimerRef.current) clearTimeout(autoOptimizeTimerRef.current);
@@ -349,7 +572,6 @@ export default function HomePage2() {
     localStorage.setItem(TOUR_KEY, "true");
   };
 
-  // File validation (identical to original)
   const validateAndStageFiles = useCallback((files: FileList | File[] | null) => {
     if (!files) return;
     Array.from(files).forEach((file) => {
@@ -370,13 +592,37 @@ export default function HomePage2() {
     });
   }, []);
 
-  const removeImage    = (i: number)  => { setStagedImages(prev => prev.filter((_, idx) => idx !== i)); setImagesOptimized(false); };
-  const handleCapture  = ()           => { (isMobile ? cameraInputRef : galleryInputRef).current?.click(); };
-  const handleGallery  = ()           => { galleryInputRef.current?.click(); };
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => { validateAndStageFiles(e.target.files); e.target.value = ""; };
-  const handleProcess  = ()           => { if (stagedImages.length) navigate("/analyze", { state: { imageUrls: stagedImages, voiceNote } }); };
+  const removeImage = (i: number) => {
+    setStagedImages(prev => prev.filter((_, idx) => idx !== i));
+    setImagesOptimized(false);
+    setMainIndex(prev => {
+      if (i === prev) return 0;
+      if (i < prev) return prev - 1;
+      return prev;
+    });
+  };
 
-  // Voice
+  const setMainImage = (i: number) => {
+    // Reorder: move selected image to index 0
+    setStagedImages(prev => {
+      const next = [...prev];
+      const [picked] = next.splice(i, 1);
+      next.unshift(picked);
+      return next;
+    });
+    setMainIndex(0);
+    toast.success("Main photo updated");
+  };
+
+  const handleCapture   = () => { (isMobile ? cameraInputRef : galleryInputRef).current?.click(); };
+  const handleGallery   = () => { galleryInputRef.current?.click(); };
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => { validateAndStageFiles(e.target.files); e.target.value = ""; };
+  const handleProcess   = () => {
+    if (!stagedImages.length) return;
+    // Ensure main photo is first
+    navigate("/analyze", { state: { imageUrls: stagedImages, voiceNote } });
+  };
+
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current?.state !== "inactive") mediaRecorderRef.current?.stop();
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
@@ -427,7 +673,13 @@ export default function HomePage2() {
   const handleDragLeave = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragging(false); }, []);
   const handleDrop      = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragging(false); validateAndStageFiles(e.dataTransfer.files); }, [validateAndStageFiles]);
 
-  // ── Render helpers ──────────────────────────────────────────────────────────
+  const planLabel = currentPlan === "free" ? "Free"
+    : currentPlan === "starter" ? "Starter"
+    : currentPlan === "pro" ? "Pro"
+    : currentPlan === "shop" ? "Shop"
+    : "Unlimited";
+
+  // ── Render: empty immersive drop zone ─────────────────────────────────────
 
   const EmptyDropZone = (
     <div
@@ -436,52 +688,47 @@ export default function HomePage2() {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       onClick={handleCapture}
+      data-tour="capture-button"
     >
-      <div style={S.uploadCircle}>
+      <div style={S.uploadIconWrap(dragging)}>
         {isMobile
-          ? <Camera size={36} color="#0076B6" />
-          : <Upload size={36} color="#0076B6" />}
+          ? <Camera size={38} color={BRAND} strokeWidth={1.75} />
+          : <Upload size={38} color={BRAND} strokeWidth={1.75} />}
       </div>
+
       <div>
-        <div style={S.uploadLabel} data-tour="capture-button">
-          {isMobile ? "Capture Item" : "Upload Photos"}
-        </div>
-        <div style={S.uploadSub}>
-          {isMobile
-            ? "Take photos or upload images to generate your eBay listing"
-            : "Click to browse or drag & drop files here"}
-        </div>
-        <div style={{ fontSize: "0.8125rem", color: "#9BA3AD", marginTop: "0.375rem" }}>
+        <p style={S.dropZoneCTA}>
+          {isMobile ? "Tap to capture or upload" : "Drop images here to start"}
+        </p>
+        <p style={S.dropZoneSub}>
+          {isMobile ? "Take a photo or choose from your camera roll" : "or click anywhere to browse files"}
+        </p>
+        <p style={S.dropZoneHint}>
           JPG, PNG, WebP, GIF, MP4, MOV · Max {MAX_FILE_SIZE_MB}MB per file
-        </div>
+        </p>
       </div>
 
-      {/* Gallery shortcut on desktop */}
+      {/* Desktop shortcuts */}
       {!isMobile && (
-        <button
-          style={{ ...S.btnSecondary, marginTop: "0.5rem" }}
-          onClick={e => { e.stopPropagation(); handleGallery(); }}
-        >
-          <Upload size={16} />
-          Browse Files
-        </button>
+        <div style={{ display: "flex", gap: "0.625rem", marginTop: "0.25rem" }}>
+          <button
+            style={S.btnSecondary}
+            onClick={e => { e.stopPropagation(); handleGallery(); }}
+          >
+            <Upload size={15} /> Browse Files
+          </button>
+          <button
+            style={S.btnBrandOutline}
+            onClick={e => { e.stopPropagation(); navigate("/bulk"); }}
+          >
+            <Layers size={15} /> Bulk List (CSV/Excel)
+          </button>
+        </div>
       )}
-
-      {/* Bulk listing shortcut */}
-      <button
-        style={{
-          display: "inline-flex", alignItems: "center", gap: "0.5rem",
-          padding: "0.5rem 1rem", borderRadius: 8,
-          border: "1px solid rgba(0,118,182,0.3)", background: "rgba(0,118,182,0.05)",
-          color: "#0076B6", fontSize: "0.875rem", fontWeight: 500, cursor: "pointer",
-        }}
-        onClick={e => { e.stopPropagation(); navigate("/bulk"); }}
-      >
-        <Layers size={15} />
-        Bulk List (CSV/Excel)
-      </button>
     </div>
   );
+
+  // ── Render: photo staging gallery ─────────────────────────────────────────
 
   const StagingGallery = (
     <div
@@ -492,84 +739,71 @@ export default function HomePage2() {
     >
       {/* Gallery header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ fontSize: "1rem", fontWeight: 600, color: "#141820" }}>
+        <span style={{ fontSize: "1rem", fontWeight: 700, color: FG }}>
           Item Photos ({stagedImages.length})
         </span>
         <button
           onClick={handleCapture}
           style={{ display: "flex", alignItems: "center", gap: "0.375rem", background: "none", border: "none",
-                   color: "#0076B6", fontSize: "0.875rem", fontWeight: 500, cursor: "pointer" }}
+                   color: BRAND, fontSize: "0.875rem", fontWeight: 600, cursor: "pointer" }}
         >
           <ImagePlus size={16} /> Add More
         </button>
       </div>
 
+      {/* Drag-over cue when images already staged */}
       {dragging && (
-        <div style={{ border: "2px dashed #0076B6", borderRadius: 10, padding: "2rem",
-                      textAlign: "center", color: "#0076B6", fontSize: "0.9375rem",
-                      fontWeight: 600, background: "rgba(0,118,182,0.04)" }}>
+        <div style={{ border: `2px dashed ${BRAND}`, borderRadius: 14, padding: "1.5rem",
+                      textAlign: "center", color: BRAND, fontSize: "0.9375rem",
+                      fontWeight: 700, background: "rgba(0,118,182,0.04)" }}>
           Drop files here to add
         </div>
       )}
 
-      {/* Photo grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: "0.625rem" }}>
+      {/* Photo grid with ThumbTile */}
+      <div style={S.thumbGrid}>
         {stagedImages.map((url, i) => (
-          <div
-            key={i}
-            style={{ position: "relative", aspectRatio: "1", borderRadius: 8,
-                     overflow: "hidden", border: "1px solid #E4E7EC", background: "#F7F9FB" }}
-          >
-            <img src={url} alt={`Photo ${i + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            <button
-              onClick={() => removeImage(i)}
-              style={{ position: "absolute", top: 4, right: 4, width: 22, height: 22,
-                       borderRadius: "50%", background: "rgba(255,255,255,0.9)", border: "none",
-                       cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-            >
-              <X size={12} color="#141820" />
-            </button>
-            {i === 0 && (
-              <span style={{ position: "absolute", bottom: 4, left: 4, fontSize: "0.6875rem",
-                             fontWeight: 700, background: "#0076B6", color: "#fff",
-                             padding: "1px 6px", borderRadius: 4 }}>
-                Main
-              </span>
-            )}
-          </div>
+          <ThumbTile
+            key={`${url.slice(-20)}-${i}`}
+            url={url}
+            index={i}
+            isMain={i === 0}
+            isOptimizing={optimizing && i >= optimizeProgress.done}
+            onRemove={removeImage}
+            onSetMain={setMainImage}
+          />
         ))}
         {/* Add tile */}
         <button
           onClick={handleCapture}
-          style={{ aspectRatio: "1", borderRadius: 8, border: "2px dashed #B0B7BC",
-                   background: "transparent", cursor: "pointer", display: "flex",
-                   flexDirection: "column", alignItems: "center", justifyContent: "center",
-                   gap: "0.375rem", color: "#6E7580", transition: "all 0.15s" }}
+          style={{
+            aspectRatio: "1 / 1", borderRadius: 14, border: "2px dashed #B0B7BC",
+            background: "rgba(255,255,255,0.5)", cursor: "pointer", display: "flex",
+            flexDirection: "column", alignItems: "center", justifyContent: "center",
+            gap: "0.375rem", color: MUTED, transition: "all 0.15s",
+          }}
         >
-          {isMobile ? <Camera size={20} /> : <Upload size={20} />}
-          <span style={{ fontSize: "0.75rem", fontWeight: 500 }}>Add</span>
+          {isMobile ? <Camera size={22} /> : <Upload size={22} />}
+          <span style={{ fontSize: "0.75rem", fontWeight: 600 }}>Add</span>
         </button>
       </div>
 
       {/* Auto-optimizer status */}
-      <div
-        data-tour="image-optimizer"
-        style={{ background: "#F7F9FB", border: "1px solid #E4E7EC", borderRadius: 10, padding: "0.875rem 1rem" }}
-      >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.375rem" }}>
+      <div style={S.optimizerBar} data-tour="image-optimizer">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.25rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-            <Sparkles size={15} color="#0076B6" />
-            <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "#141820" }}>Auto-Optimizer</span>
+            <Sparkles size={15} color={BRAND} />
+            <span style={{ fontSize: "0.875rem", fontWeight: 700, color: FG }}>Auto-Optimizer</span>
           </div>
           {imagesOptimized && <span style={S.badge("green")}>✓ Complete</span>}
           {optimizing && (
             <span style={{ ...S.badge("blue"), display: "flex", alignItems: "center", gap: "0.3rem" }}>
               <Loader2 size={11} style={{ animation: "spin 1s linear infinite" }} />
-              Processing...
+              {optimizeProgress.done}/{optimizeProgress.total}
             </span>
           )}
         </div>
-        <p style={{ fontSize: "0.875rem", color: "#6E7580", lineHeight: 1.5, margin: 0 }}>
+        <p style={{ fontSize: "0.8125rem", color: MUTED, lineHeight: 1.5, margin: 0 }}>
           {optimizing
             ? `Optimizing ${optimizeProgress.done}/${optimizeProgress.total} photo${optimizeProgress.total !== 1 ? "s" : ""}…`
             : imagesOptimized
@@ -582,8 +816,8 @@ export default function HomePage2() {
       {planFeatures.hasVoiceNotes ? (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <Mic size={15} color="#0076B6" />
-            <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "#141820" }}>Voice Note</span>
+            <Mic size={15} color={BRAND} />
+            <span style={{ fontSize: "0.875rem", fontWeight: 700, color: FG }}>Voice Note</span>
             <span style={{ fontSize: "0.8125rem", color: "#9BA3AD", marginLeft: "auto" }}>
               Optional · {MAX_RECORDING_SEC}s max
             </span>
@@ -594,12 +828,13 @@ export default function HomePage2() {
               disabled={transcribing}
               style={{
                 display: "inline-flex", alignItems: "center", gap: "0.5rem",
-                padding: "0.625rem 1.25rem", borderRadius: 8,
-                background: recording ? "#dc2626" : "#F7F9FB",
-                color: recording ? "#fff" : "#141820",
-                border: `1px solid ${recording ? "#dc2626" : "#E4E7EC"}`,
-                fontSize: "0.9375rem", fontWeight: 500, cursor: "pointer",
+                padding: "0.625rem 1.25rem", borderRadius: 12,
+                background: recording ? "#dc2626" : "rgba(255,255,255,0.8)",
+                color: recording ? "#fff" : FG,
+                border: `1px solid ${recording ? "#dc2626" : BORDER}`,
+                fontSize: "0.9375rem", fontWeight: 600, cursor: "pointer",
                 opacity: transcribing ? 0.6 : 1,
+                boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
               }}
             >
               {transcribing ? <><Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> Transcribing…</>
@@ -609,17 +844,17 @@ export default function HomePage2() {
             {voiceNote && !recording && !transcribing && (
               <button
                 onClick={() => setVoiceNote("")}
-                style={{ padding: "0.625rem 1rem", borderRadius: 8, border: "1px solid #fca5a5",
+                style={{ padding: "0.625rem 1rem", borderRadius: 12, border: "1px solid #fca5a5",
                          background: "transparent", color: "#dc2626", fontSize: "0.875rem",
-                         fontWeight: 500, cursor: "pointer" }}
+                         fontWeight: 600, cursor: "pointer" }}
               >
                 Clear
               </button>
             )}
           </div>
           {voiceNote && (
-            <div style={{ background: "#F7F9FB", border: "1px solid #E4E7EC", borderRadius: 8, padding: "0.75rem 1rem" }}>
-              <p style={{ fontSize: "0.75rem", fontWeight: 700, color: "#6E7580", marginBottom: "0.375rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            <div style={{ background: "rgba(0,118,182,0.04)", border: "1px solid rgba(0,118,182,0.12)", borderRadius: 12, padding: "0.875rem 1rem" }}>
+              <p style={{ fontSize: "0.75rem", fontWeight: 700, color: MUTED, marginBottom: "0.375rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Transcription
               </p>
               <textarea
@@ -627,18 +862,18 @@ export default function HomePage2() {
                 onChange={e => setVoiceNote(e.target.value)}
                 rows={2}
                 style={{ width: "100%", background: "transparent", border: "none", outline: "none",
-                         resize: "none", fontSize: "0.9375rem", color: "#141820", lineHeight: 1.5 }}
+                         resize: "none", fontSize: "0.9375rem", color: FG, lineHeight: 1.5 }}
               />
             </div>
           )}
         </div>
       ) : (
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem",
-                      background: "#F7F9FB", border: "1px solid #E4E7EC", borderRadius: 10,
-                      padding: "0.875rem 1rem" }}>
+                      background: "rgba(255,255,255,0.6)", border: `1px solid ${BORDER}`, borderRadius: 14,
+                      padding: "0.875rem 1rem", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
           <Mic size={18} color="#B0B7BC" />
           <div>
-            <p style={{ fontSize: "0.9rem", fontWeight: 600, color: "#6E7580", margin: 0 }}>Voice Notes</p>
+            <p style={{ fontSize: "0.9rem", fontWeight: 700, color: MUTED, margin: 0 }}>Voice Notes</p>
             <p style={{ fontSize: "0.8125rem", color: "#9BA3AD", margin: 0 }}>
               Upgrade to Pro ($49/mo) to add voice notes to your listings.
             </p>
@@ -646,8 +881,19 @@ export default function HomePage2() {
         </div>
       )}
 
-      {/* Process button */}
-      <button onClick={handleProcess} style={S.btnPrimary}>
+      {/* Process CTA */}
+      <button
+        onClick={handleProcess}
+        style={S.btnPrimary}
+        onMouseEnter={e => {
+          (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)";
+          (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 6px 22px rgba(0,118,182,0.44)";
+        }}
+        onMouseLeave={e => {
+          (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)";
+          (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 14px 0 rgba(0,118,182,0.38)";
+        }}
+      >
         <Sparkles size={18} />
         Process Now
         <ArrowRight size={18} />
@@ -655,64 +901,62 @@ export default function HomePage2() {
     </div>
   );
 
-  // ── Tips panel (desktop right column) ──────────────────────────────────────
+  // ── Tips panel (desktop right column) ─────────────────────────────────────
 
   const TipsPanel = (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-      <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "#141820", margin: "0 0 0.5rem" }}>
+    <div style={S.tipsPanel}>
+      <h3 style={{ fontSize: "0.9375rem", fontWeight: 700, color: FG, margin: "0 0 0.25rem", letterSpacing: "-0.01em" }}>
         Tips for Best Results
       </h3>
-
       {[
         {
           icon: "📸",
           title: "Photo Quality",
-          text: "Use good lighting and photograph on a clean, neutral background. Multiple angles help the AI give better descriptions.",
+          text: "Good lighting + neutral background = better AI descriptions and pricing.",
         },
         {
           icon: "🔍",
           title: "Show Details",
-          text: "Include close-ups of any labels, hallmarks, serial numbers, or wear. These details help accurate pricing.",
+          text: "Close-ups of labels, hallmarks, or serial numbers help accurate pricing.",
         },
         {
           icon: "🎙️",
           title: "Voice Notes",
-          text: "Add a voice note with extra context — condition notes, provenance, or anything not visible in photos.",
+          text: "Add condition notes or provenance via voice — anything not visible in photos.",
         },
         {
           icon: "⚡",
           title: "Bulk Listing",
-          text: "Listing multiple items? Use the Bulk List (CSV/Excel) option to create many listings at once.",
+          text: "Listing many items? Use the Bulk List CSV/Excel option.",
         },
       ].map(tip => (
         <div key={tip.title} style={S.tipBox}>
           <div style={S.tipTitle}>
-            <span>{tip.icon}</span>
-            {tip.title}
+            <span>{tip.icon}</span> {tip.title}
           </div>
           <p style={S.tipText}>{tip.text}</p>
         </div>
       ))}
-
-      {/* Keyboard shortcut hint for desktop */}
-      <div style={{ padding: "0.75rem 1rem", borderRadius: 8, background: "#F7F9FB",
-                    border: "1px solid #E4E7EC", fontSize: "0.8125rem", color: "#6E7580" }}>
-        <Info size={13} style={{ display: "inline", marginRight: "0.375rem", verticalAlign: "middle" }} />
-        Drag & drop images anywhere on this page to add them.
+      <div style={{ padding: "0.625rem 0.875rem", borderRadius: 10, background: "rgba(255,255,255,0.5)",
+                    border: `1px solid ${BORDER}`, fontSize: "0.75rem", color: MUTED,
+                    boxShadow: "0 1px 4px rgba(0,0,0,0.03)" }}>
+        <Info size={12} style={{ display: "inline", marginRight: "0.3rem", verticalAlign: "middle" }} />
+        Drag & drop images anywhere on this page.
       </div>
     </div>
   );
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Main render ────────────────────────────────────────────────────────────
 
   const isDesktop = !isMobile;
 
   return (
     <AppShell>
-      <div style={{ ...S.page, ...(isDesktop ? {} : {}) }}>
+      <style>{GLOBAL_CSS}</style>
+      <div style={S.page}>
         <div style={isDesktop ? S.pageInner : S.pageInnerMobile}>
 
-          {/* Page header */}
+          {/* Header */}
           <div style={S.headerBar}>
             <div>
               <h1 style={S.pageTitle}>Capture Item</h1>
@@ -728,31 +972,22 @@ export default function HomePage2() {
             </button>
           </div>
 
-          {/* Usage Summary */}
+          {/* Usage summary */}
           <div style={S.usageSection}>
             <UsageSummaryCard
               metrics={[
-                {
-                  label: "AI Analyses",
-                  used: usage.aiAnalysis,
-                  limit: currentPlanLimits.analysisLimit,
-                },
-                {
-                  label: "eBay Publishes",
-                  used: usage.ebayPublish,
-                  limit: currentPlanLimits.publishLimit,
-                },
+                { label: "AI Analyses", used: usage.aiAnalysis, limit: currentPlanLimits.analysisLimit },
+                { label: "eBay Publishes", used: usage.ebayPublish, limit: currentPlanLimits.publishLimit },
               ]}
-              planName={currentPlan === "free" ? "Free" : currentPlan === "starter" ? "Starter" : currentPlan === "pro" ? "Pro" : currentPlan === "shop" ? "Shop" : "Unlimited"}
+              planName={planLabel}
             />
           </div>
 
           {/* Content */}
           {isDesktop ? (
-            /* Desktop: two-column */
             <div style={S.twoCol}>
-              {/* Left: main upload/staging area */}
-              <div style={S.card}>
+              {/* Upload card */}
+              <div style={S.uploadCard}>
                 <div style={S.cardHeader}>
                   <span style={S.cardTitle}>
                     {stagedImages.length === 0 ? "Add Photos" : `Photos (${stagedImages.length})`}
@@ -773,27 +1008,32 @@ export default function HomePage2() {
                 </div>
               </div>
 
-              {/* Right: tips */}
+              {/* Tips */}
               {TipsPanel}
             </div>
           ) : (
-            /* Mobile: single column */
             <div>
-              {stagedImages.length === 0 ? EmptyDropZone : StagingGallery}
+              {/* Mobile: card wrapper */}
+              <div style={{ ...S.uploadCard, marginBottom: "1rem" }}>
+                <div style={S.cardBody}>
+                  {stagedImages.length === 0 ? EmptyDropZone : StagingGallery}
+                </div>
+              </div>
+              {/* Mobile tips (collapsed) */}
+              <div style={{ ...S.tipsPanel, marginTop: "0.5rem" }}>
+                {TipsPanel}
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Hidden file inputs */}
+      {/* Hidden inputs */}
       <input ref={cameraInputRef}  type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
       <input ref={galleryInputRef} type="file" accept={ACCEPT_STRING} multiple className="hidden" onChange={handleFileChange} />
 
       {/* Tour */}
       <WelcomeTour steps={TOUR_STEPS} active={showTour} onFinish={handleTourFinish} />
-
-      {/* Spinner keyframe */}
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </AppShell>
   );
 }

@@ -1,9 +1,10 @@
-# V2 UI Sleek Enhancements
+# V2 HomePage2 — Immersive Upload UX Polish
 
-## Enhancements
-- [x] Update theme.css with sleek design (off-white bg, soft shadows, generous radii, glass-morphic styles, font weight depth)
-- [x] Create UsageSummaryCard component with glass-morphic styling
-- [x] Update HomePage2.tsx with usage summary card and font weight depth
-- [x] Update SettingsPage2.tsx with usage summary card and font weight depth
-- [x] Build and verify changes
+## Tasks
+- [ ] Immersive drop zone: large dashed border, brand-tinted bg, drag glow transition, bold CTA typography
+- [ ] High-end thumbnail grid: perfect square aspect-ratio, skeleton loaders, hover overlay with Delete + Set as Main actions
+- [ ] Glassmorphism & depth: floating box-shadow, backdrop blur on main containers
+- [ ] Brand color modernization: gradient buttons with glow box-shadow, hover lift effect
+- [ ] Layout & spacing: airy padding, max-width 800px upload section, tighter tips panel spacing
+- [ ] Build and verify
 - [ ] Commit and create PR
