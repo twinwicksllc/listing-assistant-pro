@@ -228,7 +228,7 @@ export function PricingInsightsTable({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 overflow-visible">
       {/* Header row */}
       <div className="flex items-center gap-3">
         <div className="flex-1">
@@ -286,9 +286,9 @@ export function PricingInsightsTable({
         </span>
       </div>
 
-      {/* Table */}
-      <div className="border border-border rounded-lg overflow-x-auto">
-        <table className="w-full text-sm">
+      {/* Table — overflow-x-auto for horizontal scroll; no vertical clipping so all rows are visible */}
+      <div className="border border-border rounded-lg overflow-x-auto overflow-y-visible">
+        <table className="min-w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-secondary/30">
               <th className="px-3 py-2 text-left">
