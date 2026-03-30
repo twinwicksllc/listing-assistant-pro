@@ -60,9 +60,7 @@ serve(async (req: Request) => {
   try {
     console.log(`[${invocationId}] 📥 Parsing request body...`);
     // Initialize table in background (non-blocking)
-    ensureTableExists().catch((e) =>
-      console.warn(`[${invocationId}] Table init error:`, e)
-    );
+    ensureTableExists().catch((e) => console.warn(`[${invocationId}] Table init error:`, e));
     // Parse body first (can only call req.json() once)
     const body = await req.json();
     console.log(
@@ -115,9 +113,7 @@ serve(async (req: Request) => {
 
     // --- eBay Account Gate for Free Users (OQ-1: require eBay for Starter) ---
     // Check subscription status via Stripe to determine tier (skip for admins)
-    let tier: "starter" | "pro" | "unlimited" = isAdmin
-      ? "unlimited"
-      : "starter";
+    let tier: "starter" | "pro" | "unlimited" = isAdmin ? "unlimited" : "starter";
     const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
     if (!isAdmin && STRIPE_SECRET_KEY && userEmail) {
       try {
@@ -190,8 +186,7 @@ serve(async (req: Request) => {
 
       if (orgMember && orgMember.length > 0) {
         orgId = orgMember[0].org_id;
-        orgResetDay =
-          (orgMember[0].organizations as any)?.free_tier_reset_day ?? null;
+        orgResetDay = (orgMember[0].organizations as any)?.free_tier_reset_day ?? null;
       }
     }
 
@@ -201,9 +196,7 @@ serve(async (req: Request) => {
       if (orgResetDay) {
         const { data: wsData, error: wsErr } = await svc
           .rpc("get_free_tier_window_start", { p_reset_day: orgResetDay });
-        windowStart = wsData
-          ? new Date(wsData).toISOString()
-          : new Date().toISOString();
+        windowStart = wsData ? new Date(wsData).toISOString() : new Date().toISOString();
       } else {
         // Fresh start for NULL reset_day (existing users pre-migration)
         windowStart = new Date().toISOString();
@@ -241,9 +234,7 @@ serve(async (req: Request) => {
         const upgradeMsg = tier === "pro"
           ? `Monthly analysis limit reached (${ANALYSIS_LIMIT}). Upgrade to Unlimited for no limits.`
           : `Monthly analysis limit reached (${ANALYSIS_LIMIT}). Upgrade to Pro or Unlimited for more.`;
-        const resetAt = tier === "starter"
-          ? computeNextResetAt(orgResetDay)
-          : null;
+        const resetAt = tier === "starter" ? computeNextResetAt(orgResetDay) : null;
         return new Response(
           JSON.stringify({
             error: upgradeMsg,
@@ -272,8 +263,7 @@ serve(async (req: Request) => {
         .single();
 
       if (!spotErr && spotData) {
-        const ageMinutes =
-          (Date.now() - new Date(spotData.fetched_at).getTime()) / 60000;
+        const ageMinutes = (Date.now() - new Date(spotData.fetched_at).getTime()) / 60000;
         if (ageMinutes < 720) {
           // Use DB cache if less than 12 hours old (spot-prices function refreshes every 12 hours)
           spotGold = Number(spotData.gold) || spotGold;
@@ -311,9 +301,7 @@ serve(async (req: Request) => {
     const voiceNote: string = body.voiceNote || "";
     // User-provided category override — if set, this is treated as an absolute lock
     // and the category-lookup pipeline is skipped entirely.
-    const userCategoryId: string | null = body.categoryId
-      ? String(body.categoryId).trim() || null
-      : null;
+    const userCategoryId: string | null = body.categoryId ? String(body.categoryId).trim() || null : null;
     if (userCategoryId) {
       console.log(
         `analyze-item: user-provided categoryId=${userCategoryId} — will lock, skipping AI lookup`,
@@ -460,9 +448,7 @@ serve(async (req: Request) => {
           image_url: { url: `data:${mimeType};base64,${base64Data}` },
         };
       });
-      const pass1VoiceHint = voiceNote
-        ? `\nSeller note: "${voiceNote.slice(0, 200)}"`
-        : "";
+      const pass1VoiceHint = voiceNote ? `\nSeller note: "${voiceNote.slice(0, 200)}"` : "";
       const pass1Resp = await fetch(
         "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
         {
@@ -509,12 +495,9 @@ serve(async (req: Request) => {
               identification = {
                 domain: parsed.domain as Domain,
                 itemName: String(parsed.itemName).slice(0, 120),
-                keywords: Array.isArray(parsed.keywords)
-                  ? parsed.keywords.slice(0, 7).map(String)
-                  : [],
+                keywords: Array.isArray(parsed.keywords) ? parsed.keywords.slice(0, 7).map(String) : [],
                 isMetal: Boolean(parsed.isMetal),
-                metalType:
-                  (parsed.metalType ?? "none") as Identification["metalType"],
+                metalType: (parsed.metalType ?? "none") as Identification["metalType"],
               };
               console.log(
                 `[${invocationId}] ✓ Pass 1 identification succeeded:`,
@@ -555,12 +538,9 @@ serve(async (req: Request) => {
     // mentioned in the seller's voice description
     if (identification.metalType === "none" && voiceNote) {
       const noteText = voiceNote.toLowerCase();
-      const goldKeywords =
-        /\bgold\b|gold\s+(?:coin|bullion|eagle|bar|leaf)|gold\s+\d+/i;
-      const silverKeywords =
-        /\bsilver\b|silver\s+(?:coin|bullion|eagle|bar|oz)|silver\s+\d+/i;
-      const platinumKeywords =
-        /\bplatinum\b|platinum\s+(?:coin|bullion|bar)|platinum\s+\d+/i;
+      const goldKeywords = /\bgold\b|gold\s+(?:coin|bullion|eagle|bar|leaf)|gold\s+\d+/i;
+      const silverKeywords = /\bsilver\b|silver\s+(?:coin|bullion|eagle|bar|oz)|silver\s+\d+/i;
+      const platinumKeywords = /\bplatinum\b|platinum\s+(?:coin|bullion|bar)|platinum\s+\d+/i;
 
       if (goldKeywords.test(noteText)) {
         identification.metalType = "gold";
@@ -719,9 +699,7 @@ serve(async (req: Request) => {
       try { // skip lookup if user already provided a category
         // Use Pass 1 item name + keywords for a much better category query than raw voice note
         const pass1Query = identification.keywords.length > 0
-          ? `${identification.itemName} ${
-            identification.keywords.slice(0, 3).join(" ")
-          }`
+          ? `${identification.itemName} ${identification.keywords.slice(0, 3).join(" ")}`
           : identification.itemName;
         const searchQuery = (pass1Query !== "item" ? pass1Query : voiceNote) ||
           "";
@@ -779,10 +757,9 @@ serve(async (req: Request) => {
                   );
                 } else {
                   // Not locked — provide as strong hint
-                  categoryHints +=
-                    `\n- BEST MATCH (score=${score}, source=${source}): **${lookupData.categoryId}** — ${
-                      lookupData.breadcrumb || lookupData.categoryName
-                    }. Use this as primary category unless the item clearly belongs elsewhere.`;
+                  categoryHints += `\n- BEST MATCH (score=${score}, source=${source}): **${lookupData.categoryId}** — ${
+                    lookupData.breadcrumb || lookupData.categoryName
+                  }. Use this as primary category unless the item clearly belongs elsewhere.`;
                 }
 
                 // Collect alternatives for fallback
@@ -792,9 +769,9 @@ serve(async (req: Request) => {
                   lookupAlternatives = lookupData.alternatives;
                   categoryHints += "\n- ALTERNATIVE CATEGORIES:";
                   for (const alt of lookupData.alternatives.slice(0, 3)) {
-                    categoryHints += `\n  * **${alt.categoryId}** — ${
-                      alt.breadcrumb || alt.categoryName
-                    } (score=${alt.score || "?"})`;
+                    categoryHints += `\n  * **${alt.categoryId}** — ${alt.breadcrumb || alt.categoryName} (score=${
+                      alt.score || "?"
+                    })`;
                   }
                 }
               } else if (
@@ -802,12 +779,11 @@ serve(async (req: Request) => {
                 lookupData.topCandidates.length > 0
               ) {
                 // Circuit breaker fired — no candidate passed threshold (#9)
-                categoryHints +=
-                  "\n- LOW-CONFIDENCE CANDIDATES (use your best judgment):";
+                categoryHints += "\n- LOW-CONFIDENCE CANDIDATES (use your best judgment):";
                 for (const c of lookupData.topCandidates) {
-                  categoryHints += `\n  * **${c.categoryId}** — ${
-                    c.breadcrumb || c.categoryName
-                  } (score=${c.score || "?"})`;
+                  categoryHints += `\n  * **${c.categoryId}** — ${c.breadcrumb || c.categoryName} (score=${
+                    c.score || "?"
+                  })`;
                 }
                 lookupAlternatives = lookupData.topCandidates;
               }
@@ -904,15 +880,11 @@ serve(async (req: Request) => {
       if (compQuery && compQuery !== "item" && userId) {
         try {
           const compResp = await fetch(
-            `${
-              Deno.env.get("SUPABASE_URL")
-            }/functions/v1/ebay-competitor-search`,
+            `${Deno.env.get("SUPABASE_URL")}/functions/v1/ebay-competitor-search`,
             {
               method: "POST",
               headers: {
-                Authorization: `Bearer ${
-                  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
-                }`,
+                Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({ userId, title: compQuery, yourPrice: 0 }),
@@ -959,15 +931,11 @@ serve(async (req: Request) => {
         voiceNote: voiceNote || undefined,
         suggestedCategoryId: lockedCategoryId ?? undefined,
         suggestedCategoryName: lockedCategoryName ?? undefined,
-        spotPrices:
-          (identification.isMetal || identification.metalType !== "none")
-            ? { gold: spotGold, silver: spotSilver, platinum: spotPlatinum }
-            : undefined,
+        spotPrices: (identification.isMetal || identification.metalType !== "none")
+          ? { gold: spotGold, silver: spotSilver, platinum: spotPlatinum }
+          : undefined,
         metalType: identification.metalType,
-        competitorData:
-          competitorData && (competitorData.competitorCount ?? 0) > 0
-            ? competitorData
-            : null,
+        competitorData: competitorData && (competitorData.competitorCount ?? 0) > 0 ? competitorData : null,
         // ─ Pre-Pass 0 agentic context (grounding + vision inspection findings) ─
         prePassContext: prePassResult
           ? {
@@ -975,13 +943,10 @@ serve(async (req: Request) => {
             groundedCategoryId: prePassResult.groundedCategoryId ?? undefined,
             agenticInspection: prePassResult.agenticInspection
               ? {
-                zoomRegionsExamined:
-                  prePassResult.agenticInspection.zoomRegionsExamined,
+                zoomRegionsExamined: prePassResult.agenticInspection.zoomRegionsExamined,
                 keyFindings: prePassResult.agenticInspection.keyFindings,
-                confidenceBoost:
-                  prePassResult.agenticInspection.confidenceBoost,
-                identificationCorrection:
-                  prePassResult.agenticInspection.identificationCorrection,
+                confidenceBoost: prePassResult.agenticInspection.confidenceBoost,
+                identificationCorrection: prePassResult.agenticInspection.identificationCorrection,
               }
               : undefined,
           }
@@ -989,29 +954,24 @@ serve(async (req: Request) => {
       });
       // Inject category hints from pre-lookup into the prompt
       if (categoryHints) {
-        systemPrompt +=
-          `\n\n### CATEGORY SELECTION HINTS (from deterministic pre-lookup)\n${categoryHints}`;
+        systemPrompt += `\n\n### CATEGORY SELECTION HINTS (from deterministic pre-lookup)\n${categoryHints}`;
       }
 
       // Inject dynamic aspects guidance from eBay API
       if (categoryAspects?.aspects && categoryAspects.aspects.length > 0) {
         const required = categoryAspects.aspects.filter((a: any) => a.required)
           .map((a: any) => a.name);
-        const suggested = categoryAspects.aspects.filter((a: any) =>
-          !a.required
-        ).map((a: any) => a.name);
-        let aspectsGuidance =
-          `\n\n### REQUIRED ATTRIBUTES FOR THIS CATEGORY (from eBay API)`;
+        const suggested = categoryAspects.aspects.filter((a: any) => !a.required).map((a: any) => a.name);
+        let aspectsGuidance = `\n\n### REQUIRED ATTRIBUTES FOR THIS CATEGORY (from eBay API)`;
         if (required.length > 0) {
           aspectsGuidance += `\nYou MUST provide these attributes:\n${
             required.map((r: string) => `- ${r}`).join("\n")
           }`;
         }
         if (suggested.length > 0) {
-          aspectsGuidance +=
-            `\n\nSuggested attributes (provide if visible or inferable):\n${
-              suggested.slice(0, 10).map((s: string) => `- ${s}`).join("\n")
-            }`;
+          aspectsGuidance += `\n\nSuggested attributes (provide if visible or inferable):\n${
+            suggested.slice(0, 10).map((s: string) => `- ${s}`).join("\n")
+          }`;
         }
         systemPrompt += aspectsGuidance;
       }
@@ -1091,20 +1051,16 @@ ${categoryHints}
 - For precious metals: Floor = (Melt Value * 1.19) to cover eBay fees (~16%).
 - For collectibles/toys: Use market demand, rarity, and condition.
 - metalWeightOz: Express in TROY OUNCES only (for precious metals).
-- Current spot prices: Gold $${spotGold.toFixed(2)}/oz | Silver $${
-        spotSilver.toFixed(2)
-      }/oz | Platinum $${spotPlatinum.toFixed(2)}/oz
+- Current spot prices: Gold $${spotGold.toFixed(2)}/oz | Silver $${spotSilver.toFixed(2)}/oz | Platinum $${
+        spotPlatinum.toFixed(2)
+      }/oz
 ${
         competitorData && !competitorData.error
-          ? `- MARKET DATA (${
-            competitorData.competitorCount || 0
-          } similar sold): avg $${
+          ? `- MARKET DATA (${competitorData.competitorCount || 0} similar sold): avg $${
             (competitorData.avgPrice || 0).toFixed(2)
           }, range $${(competitorData.minPrice || 0).toFixed(2)}-$${
             (competitorData.maxPrice || 0).toFixed(2)
-          }, median $${
-            (competitorData.medianPrice || 0).toFixed(2)
-          }. USE AS PRIMARY PRICING REFERENCE.`
+          }, median $${(competitorData.medianPrice || 0).toFixed(2)}. USE AS PRIMARY PRICING REFERENCE.`
           : `- No recent sold comps available. Use category knowledge and condition to price appropriately.`
       }
 
@@ -1129,8 +1085,7 @@ Use the \`create_listing\` tool to return the final structured data.`;
     } expertise, and produce a complete eBay listing via the create_listing tool — accurate title, full description, correct category ID, all relevant item specifics, condition, and a fair asking price.`;
 
     if (voiceNote) {
-      userText +=
-        `\n\nSELLER'S VOICE NOTE (treat as authoritative — override visual assessment where applicable):
+      userText += `\n\nSELLER'S VOICE NOTE (treat as authoritative — override visual assessment where applicable):
 The seller recorded the following about this item. Follow these rules:
 - If the seller mentions specific flaws NOT visible in photos: include them in description and adjust grade/condition downward accordingly.
 - If the seller mentions cleaning, damage, repairs, or alterations: disclose in description and lower condition.
@@ -1150,9 +1105,7 @@ Seller's note: "${voiceNote}"`;
     // Condition enum: use eBay's actual allowed conditions for this category,
     // falling back to our generic USED_* set when no category data is available.
     const conditionEnum: string[] = categoryConditions?.conditions?.length > 0
-      ? categoryConditions.conditions.map((c: any) =>
-        c.conditionDescription || String(c.conditionId)
-      )
+      ? categoryConditions.conditions.map((c: any) => c.conditionDescription || String(c.conditionId))
       : [
         "NEW",
         "USED_EXCELLENT",
@@ -1176,9 +1129,7 @@ Seller's note: "${voiceNote}"`;
       for (const aspect of categoryAspects.aspects) {
         const propSchema: any = {
           type: "string",
-          description: aspect.required
-            ? `REQUIRED by eBay: ${aspect.name}`
-            : `Suggested by eBay: ${aspect.name}`,
+          description: aspect.required ? `REQUIRED by eBay: ${aspect.name}` : `Suggested by eBay: ${aspect.name}`,
         };
         // If eBay provides a constrained allowed-values list, add as enum
         if (
@@ -1246,8 +1197,7 @@ Seller's note: "${voiceNote}"`;
         "Precious Metal Content per Unit": { type: "string" },
         "Sport": {
           type: "string",
-          description:
-            "REQUIRED for sports cards. E.g. Baseball, Basketball, Football, Hockey, Soccer",
+          description: "REQUIRED for sports cards. E.g. Baseball, Basketball, Football, Hockey, Soccer",
         },
         "Player/Athlete": {
           type: "string",
@@ -1276,8 +1226,7 @@ Seller's note: "${voiceNote}"`;
         },
         "Character": {
           type: "string",
-          description:
-            "Character name for Funko Pop, Beanie Babies, action figures",
+          description: "Character name for Funko Pop, Beanie Babies, action figures",
         },
         "Brand": {
           type: "string",
@@ -1319,8 +1268,7 @@ Seller's note: "${voiceNote}"`;
               type: "function",
               function: {
                 name: "create_listing",
-                description:
-                  "Generates a structured eBay listing payload for coins and collectibles.",
+                description: "Generates a structured eBay listing payload for coins and collectibles.",
                 parameters: {
                   type: "object",
                   properties: {
@@ -1344,8 +1292,7 @@ Seller's note: "${voiceNote}"`;
                     condition: {
                       type: "string",
                       enum: conditionEnum,
-                      description:
-                        "Item condition from eBay's allowed list for this category",
+                      description: "Item condition from eBay's allowed list for this category",
                     },
                     description: {
                       type: "string",
@@ -1489,9 +1436,7 @@ Seller's note: "${voiceNote}"`;
         // If we had a deterministic lock, the category is already verified
         if (lockedCategoryId && listing.ebayCategoryId !== lockedCategoryId) {
           // AI overrode the locked category — force it back (#3)
-          const lockSource = userCategoryId
-            ? "user-provided"
-            : "deterministic lookup";
+          const lockSource = userCategoryId ? "user-provided" : "deterministic lookup";
           console.warn(
             `analyze-item: AI overrode locked category ${lockedCategoryId} with ${listing.ebayCategoryId} — forcing lock back (source: ${lockSource})`,
           );
@@ -1654,8 +1599,7 @@ Seller's note: "${voiceNote}"`;
                     categoryName: postLookupData.categoryName,
                     breadcrumb: postLookupData.breadcrumb ||
                       postLookupData.categoryName,
-                    reason:
-                      `Post-lookup verified (score=${postScore}, source=${postSource})`,
+                    reason: `Post-lookup verified (score=${postScore}, source=${postSource})`,
                   });
                   // Dedupe
                   const seenIds = new Set<string>();
@@ -1716,8 +1660,7 @@ Seller's note: "${voiceNote}"`;
               listing.suggestedCategories?.[0]?.breadcrumb?.split(" > ")
                 .pop() ||
               null;
-            const catBreadcrumb =
-              listing.suggestedCategories?.[0]?.breadcrumb || null;
+            const catBreadcrumb = listing.suggestedCategories?.[0]?.breadcrumb || null;
 
             // Use category-lookup store action (applies leaf/active gates + quarantine)
             const _storeUrl = Deno.env.get("SUPABASE_URL");
@@ -1763,18 +1706,14 @@ Seller's note: "${voiceNote}"`;
           "analyze-item: fetching competitor prices with AI-generated title...",
           { title: listing.title },
         );
-        const competitorUrl = `${
-          Deno.env.get("SUPABASE_URL")
-        }/functions/v1/ebay-competitor-search`;
+        const competitorUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ebay-competitor-search`;
 
         const competitorResp = await fetch(
           competitorUrl,
           {
             method: "POST",
             headers: {
-              "Authorization": `Bearer ${
-                Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
-              }`,
+              "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
@@ -1978,12 +1917,10 @@ Seller's note: "${voiceNote}"`;
       agenticFields.grounded_category_id = prePassResult.groundedCategoryId;
       if (prePassResult.agenticInspection) {
         agenticFields.agentic_inspection = {
-          zoom_regions_examined:
-            prePassResult.agenticInspection.zoomRegionsExamined,
+          zoom_regions_examined: prePassResult.agenticInspection.zoomRegionsExamined,
           key_findings: prePassResult.agenticInspection.keyFindings,
           confidence_boost: prePassResult.agenticInspection.confidenceBoost,
-          identification_correction:
-            prePassResult.agenticInspection.identificationCorrection,
+          identification_correction: prePassResult.agenticInspection.identificationCorrection,
         };
       } else {
         agenticFields.agentic_inspection = null;
@@ -2001,9 +1938,7 @@ Seller's note: "${voiceNote}"`;
     };
     if (tier === "starter") {
       responsePayload = Object.fromEntries(
-        Object.entries(responsePayload).filter(([k]) =>
-          FREE_TIER_ALLOWED_FIELDS.has(k)
-        ),
+        Object.entries(responsePayload).filter(([k]) => FREE_TIER_ALLOWED_FIELDS.has(k)),
       );
       // Also scrub grading rationale if nested
       if ((responsePayload as any).itemSpecifics?.gradingRationale) {
@@ -2018,9 +1953,7 @@ Seller's note: "${voiceNote}"`;
       : tier === "pro"
       ? Math.max(0, 50 - creditsUsed)
       : null;
-    const creditsResetAt = tier === "starter"
-      ? computeNextResetAt(orgResetDay)
-      : null;
+    const creditsResetAt = tier === "starter" ? computeNextResetAt(orgResetDay) : null;
 
     // Build eBay metadata so the frontend can use real aspects/conditions
     const ebayMetadata = (categoryAspects || categoryConditions)
@@ -2065,9 +1998,7 @@ Seller's note: "${voiceNote}"`;
     // ─── END FINAL RESPONSE LOGGING ──────────────────────────────────────────
 
     console.log(
-      `[${invocationId}] ✅ analyze-item COMPLETE (${
-        Date.now() - startTime
-      }ms)`,
+      `[${invocationId}] ✅ analyze-item COMPLETE (${Date.now() - startTime}ms)`,
     );
 
     return new Response(JSON.stringify(finalResponse), {

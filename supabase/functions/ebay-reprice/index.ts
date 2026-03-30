@@ -63,8 +63,7 @@ async function reviseFixedPriceItem(
       xmlText.includes("<Ack>Failure</Ack>") ||
       xmlText.includes("<Ack>PartialFailure</Ack>")
     ) {
-      const errMsg =
-        xmlText.match(/<LongMessage>([\s\S]*?)<\/LongMessage>/)?.[1] ||
+      const errMsg = xmlText.match(/<LongMessage>([\s\S]*?)<\/LongMessage>/)?.[1] ||
         xmlText.match(/<ShortMessage>([\s\S]*?)<\/ShortMessage>/)?.[1] ||
         "Unknown Trading API error";
       return { success: false, error: errMsg };
@@ -231,9 +230,7 @@ serve(async (req) => {
     const { action, userToken, userId } = body;
 
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-    const apiBase = ebayEnv === "production"
-      ? "https://api.ebay.com"
-      : "https://api.sandbox.ebay.com";
+    const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
 
     console.log(`ebay-reprice: action=${action}, env=${ebayEnv}`);
 
@@ -351,9 +348,7 @@ serve(async (req) => {
           return new Response(
             JSON.stringify({
               success: false,
-              error: `Invalid price for listing ${
-                u.listingId || u.sku
-              }: must be positive`,
+              error: `Invalid price for listing ${u.listingId || u.sku}: must be positive`,
             }),
             {
               status: 400,

@@ -118,9 +118,7 @@ serve(async (req: Request) => {
     // Determine tier
     const ADMIN_EMAILS = ["twinwicksllc@gmail.com"];
     const isAdmin = userEmail ? ADMIN_EMAILS.includes(userEmail) : false;
-    let tier: "starter" | "pro" | "unlimited" | "admin" = isAdmin
-      ? "admin"
-      : "starter";
+    let tier: "starter" | "pro" | "unlimited" | "admin" = isAdmin ? "admin" : "starter";
 
     if (!isAdmin) {
       const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
@@ -175,8 +173,7 @@ serve(async (req: Request) => {
     if (rows.length > cap) {
       return new Response(
         JSON.stringify({
-          error:
-            `Your plan allows bulk publishing up to ${cap} listings at a time. You submitted ${rows.length}.`,
+          error: `Your plan allows bulk publishing up to ${cap} listings at a time. You submitted ${rows.length}.`,
           cap,
           tier,
         }),
@@ -195,8 +192,7 @@ serve(async (req: Request) => {
           rowCount: rows.length,
           tier,
           cap,
-          message:
-            `Dry run successful — ${rows.length} rows validated, ready to publish`,
+          message: `Dry run successful — ${rows.length} rows validated, ready to publish`,
         }),
         {
           status: 200,
@@ -206,9 +202,7 @@ serve(async (req: Request) => {
     }
 
     const ebayEnv = Deno.env.get("EBAY_ENV") || "production";
-    const apiBase = ebayEnv === "sandbox"
-      ? "https://api.sandbox.ebay.com"
-      : "https://api.ebay.com";
+    const apiBase = ebayEnv === "sandbox" ? "https://api.sandbox.ebay.com" : "https://api.ebay.com";
 
     const authHeaders = {
       Authorization: `Bearer ${userToken}`,
@@ -285,9 +279,7 @@ serve(async (req: Request) => {
           return null;
         }
         const policies = data[`${policyType}Policies`] || [];
-        return Array.isArray(policies) && policies.length > 0
-          ? policies[0][`${policyType}PolicyId`] || null
-          : null;
+        return Array.isArray(policies) && policies.length > 0 ? policies[0][`${policyType}PolicyId`] || null : null;
       } catch {
         return null;
       }
@@ -313,22 +305,15 @@ serve(async (req: Request) => {
           if (seqError || seqNum == null) throw new Error("seq error");
           sku = `BK${String(seqNum).padStart(5, "0")}`;
         } catch {
-          sku = `BK-${
-            crypto.randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()
-          }`;
+          sku = `BK-${crypto.randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`;
         }
 
         // Condition normalization
-        const conditionEnum =
-          Object.keys(CONDITION_ID_MAP).includes(row.condition)
-            ? row.condition
-            : "PRE_OWNED_GOOD";
+        const conditionEnum = Object.keys(CONDITION_ID_MAP).includes(row.condition) ? row.condition : "PRE_OWNED_GOOD";
         const conditionId = CONDITION_ID_MAP[conditionEnum] ?? 3000;
 
         // Build inventory item
-        const imageUrls = (row.imageUrls ?? []).filter((u) =>
-          u?.startsWith("http")
-        ).slice(0, 8);
+        const imageUrls = (row.imageUrls ?? []).filter((u) => u?.startsWith("http")).slice(0, 8);
         const inventoryBody: Record<string, unknown> = {
           product: {
             title: row.title.slice(0, 80),
@@ -366,9 +351,7 @@ serve(async (req: Request) => {
         if (!invResp.ok) {
           const errText = await invResp.text();
           throw new Error(
-            `Inventory item failed (${invResp.status}): ${
-              errText.slice(0, 300)
-            }`,
+            `Inventory item failed (${invResp.status}): ${errText.slice(0, 300)}`,
           );
         }
 
@@ -415,9 +398,7 @@ serve(async (req: Request) => {
           listingPolicies: {
             fulfillmentPolicyId,
             ...(returnPolicyId ? { returnPolicyId } : {}),
-            ...(row.paymentPolicyId
-              ? { paymentPolicyId: row.paymentPolicyId }
-              : {}),
+            ...(row.paymentPolicyId ? { paymentPolicyId: row.paymentPolicyId } : {}),
           },
           merchantLocationKey,
           conditionId,
@@ -436,9 +417,7 @@ serve(async (req: Request) => {
         if (!offerResp.ok) {
           const errText = await offerResp.text();
           throw new Error(
-            `Offer creation failed (${offerResp.status}): ${
-              errText.slice(0, 300)
-            }`,
+            `Offer creation failed (${offerResp.status}): ${errText.slice(0, 300)}`,
           );
         }
         let offerData: any;
@@ -472,9 +451,7 @@ serve(async (req: Request) => {
         } else {
           const errText = await publishResp.text();
           console.warn(
-            `Row ${row.rowIndex}: publish failed: ${publishResp.status} - ${
-              errText.slice(0, 200)
-            }`,
+            `Row ${row.rowIndex}: publish failed: ${publishResp.status} - ${errText.slice(0, 200)}`,
           );
           // Offer created but not live — still record partial success
         }

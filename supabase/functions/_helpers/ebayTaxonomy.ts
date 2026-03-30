@@ -29,8 +29,7 @@ export async function getEbayAppToken(
         Authorization: `Basic ${credentials}`,
         "Content-Type": "application/x-www-form-urlencoded",
       },
-      body:
-        "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
+      body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
       signal: AbortSignal.timeout(8_000),
     });
     if (!resp.ok) {
@@ -56,15 +55,11 @@ export async function getCategorySuggestions(
   appToken: string,
   ebayEnv: string,
 ): Promise<Array<{ categoryId: string; categoryName: string }>> {
-  const base = ebayEnv === "production"
-    ? "https://api.ebay.com"
-    : "https://api.sandbox.ebay.com";
+  const base = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
 
   try {
     const resp = await fetch(
-      `${base}/commerce/taxonomy/v1/category_suggestions?q=${
-        encodeURIComponent(query)
-      }&category_tree_id=0`,
+      `${base}/commerce/taxonomy/v1/category_suggestions?q=${encodeURIComponent(query)}&category_tree_id=0`,
       {
         headers: {
           Authorization: `Bearer ${appToken}`,
@@ -98,9 +93,7 @@ export async function getCategoryAspects(
   recommended: string[];
   allowedValues: Record<string, string[]>;
 }> {
-  const base = ebayEnv === "production"
-    ? "https://api.ebay.com"
-    : "https://api.sandbox.ebay.com";
+  const base = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
 
   const empty = { required: [], recommended: [], allowedValues: {} };
 

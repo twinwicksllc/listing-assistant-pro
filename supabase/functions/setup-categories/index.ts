@@ -86,8 +86,7 @@ Deno.serve(async (req) => {
 
     console.log("Inserting verified mappings...");
     for (
-      const [coin_type, categoryId, categoryName, source, confidence]
-        of mappings
+      const [coin_type, categoryId, categoryName, source, confidence] of mappings
     ) {
       try {
         await client.queryArray(

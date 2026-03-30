@@ -162,9 +162,7 @@ function printReport(metrics: MetricsSummary) {
   console.log("\n  BY GROUP:");
   for (const [group, data] of Object.entries(metrics.byGroup)) {
     console.log(
-      `    ${
-        group.padEnd(20)
-      } ${data.correct}/${data.total} (${data.accuracy}%)`,
+      `    ${group.padEnd(20)} ${data.correct}/${data.total} (${data.accuracy}%)`,
     );
   }
 
@@ -178,9 +176,9 @@ function printReport(metrics: MetricsSummary) {
     for (const f of metrics.failures) {
       console.log(`    [${f.id}] "${f.input}"`);
       console.log(
-        `      Expected: ${f.expectedCategoryId} | Got: ${
-          f.actualCategoryId || "NONE"
-        } (${f.candidateSource || "?"}) | Error: ${f.error || "none"}`,
+        `      Expected: ${f.expectedCategoryId} | Got: ${f.actualCategoryId || "NONE"} (${
+          f.candidateSource || "?"
+        }) | Error: ${f.error || "none"}`,
       );
     }
   }
@@ -210,9 +208,7 @@ async function main() {
       console.log(`  Testing ${testCase.id}...`);
     const result = await runTest(testCase, baseUrl, serviceKey);
     console.log(
-      ` ${result.match ? "✓" : "✗"} (${result.latencyMs}ms) ${
-        result.candidateSource || "?"
-      }`,
+      ` ${result.match ? "✓" : "✗"} (${result.latencyMs}ms) ${result.candidateSource || "?"}`,
     );
     results.push(result);
 

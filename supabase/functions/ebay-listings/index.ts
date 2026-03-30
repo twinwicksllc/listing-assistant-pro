@@ -63,9 +63,7 @@ async function fetchAnalyticsForWindow(
     if (!trafficResp.ok) {
       const errText = await trafficResp.text();
       console.warn(
-        `Analytics API error (${days}d): ${trafficResp.status} - ${
-          errText.substring(0, 200)
-        }`,
+        `Analytics API error (${days}d): ${trafficResp.status} - ${errText.substring(0, 200)}`,
       );
       return result;
     }
@@ -83,15 +81,11 @@ async function fetchAnalyticsForWindow(
 
     // Debug: log the raw metricHeaders structure
     console.log(
-      `Analytics API (${days}d): Raw trafficData keys: ${
-        Object.keys(trafficData).join(", ")
-      }`,
+      `Analytics API (${days}d): Raw trafficData keys: ${Object.keys(trafficData).join(", ")}`,
     );
     console.log(
       `Analytics API (${days}d): metricHeaders is: ${
-        Array.isArray(trafficData.metricHeaders)
-          ? "array"
-          : typeof trafficData.metricHeaders
+        Array.isArray(trafficData.metricHeaders) ? "array" : typeof trafficData.metricHeaders
       }`,
     );
     if (trafficData.metricHeaders) {
@@ -104,10 +98,9 @@ async function fetchAnalyticsForWindow(
 
     // Use eBay's metricHeaders if provided, otherwise use our hardcoded order
     // (eBay returns metric values in the same order as requested)
-    const metricHeaders: string[] =
-      trafficData.metricHeaders && trafficData.metricHeaders.length > 0
-        ? (trafficData.metricHeaders as any[]).map((h: any) => h.name)
-        : ANALYTICS_METRICS_ARRAY;
+    const metricHeaders: string[] = trafficData.metricHeaders && trafficData.metricHeaders.length > 0
+      ? (trafficData.metricHeaders as any[]).map((h: any) => h.name)
+      : ANALYTICS_METRICS_ARRAY;
 
     const records = trafficData.records || [];
 
@@ -199,9 +192,9 @@ async function fetchAnalyticsForWindow(
       } listings, total transactions: ${totalTransactions}`,
     );
     console.log(
-      `Analytics API (${days}d): All listing keys returned: ${
-        Object.keys(result).slice(0, 10).join(", ")
-      }${Object.keys(result).length > 10 ? "..." : ""}`,
+      `Analytics API (${days}d): All listing keys returned: ${Object.keys(result).slice(0, 10).join(", ")}${
+        Object.keys(result).length > 10 ? "..." : ""
+      }`,
     );
   } catch (e) {
     console.error(`Analytics API error (${days}d, non-fatal):`, e);
@@ -452,9 +445,7 @@ async function fetchFinancesTransactions(
     console.log(
       `Finances API (30d): refunds=$${result.refunds30d.toFixed(2)}, nonSale=$${
         result.nonSale30d.toFixed(2)
-      }, disputes=$${result.disputes30d.toFixed(2)}, credits=$${
-        result.credits30d.toFixed(2)
-      }`,
+      }, disputes=$${result.disputes30d.toFixed(2)}, credits=$${result.credits30d.toFixed(2)}`,
     );
   } catch (e) {
     console.warn("Finances API: transaction fetch error (non-fatal):", e);
@@ -538,9 +529,9 @@ async function fetchShippingLabelCosts(
     }
 
     console.log(
-      `Finances API: label costs - 7d=$${result.labels7d.toFixed(2)}, 30d=$${
-        result.labels30d.toFixed(2)
-      }, 90d=$${result.labels90d.toFixed(2)}`,
+      `Finances API: label costs - 7d=$${result.labels7d.toFixed(2)}, 30d=$${result.labels30d.toFixed(2)}, 90d=$${
+        result.labels90d.toFixed(2)
+      }`,
     );
   } catch (e) {
     console.warn(
@@ -609,9 +600,7 @@ async function fetchOrderCounts(
     }
     const orders: any[] = data.orders || [];
     console.log(
-      `Fulfillment API: Got ${orders.length} orders (total: ${
-        data.total ?? "?"
-      })`,
+      `Fulfillment API: Got ${orders.length} orders (total: ${data.total ?? "?"})`,
     );
 
     const sevenDaysAgo = new Date(now);
@@ -628,9 +617,7 @@ async function fetchOrderCounts(
       }
 
       const lineItemCount = order.lineItems?.length ?? 1;
-      const createdAt = order.creationDate
-        ? new Date(order.creationDate)
-        : null;
+      const createdAt = order.creationDate ? new Date(order.creationDate) : null;
       if (!createdAt) continue;
 
       // ── Financial extraction ──────────────────────────────────────────────
@@ -702,9 +689,7 @@ async function fetchOrderCounts(
 
     if (data.total && data.total > orders.length) {
       console.log(
-        `Fulfillment API: ${
-          data.total - orders.length
-        } more orders not fetched (pagination needed)`,
+        `Fulfillment API: ${data.total - orders.length} more orders not fetched (pagination needed)`,
       );
     }
 
@@ -712,11 +697,9 @@ async function fetchOrderCounts(
       `Fulfillment API: orders7d=${counts.orders7d}, orders30d=${counts.orders30d}, orders90d=${counts.orders90d}`,
     );
     console.log(
-      `Fulfillment API (30d): revenue=$${
-        financial.w30.revenue.toFixed(2)
-      }, fees=$${financial.w30.ebayFees.toFixed(2)}, labels=$${
-        financial.w30.shippingLabels.toFixed(2)
-      }, net=$${financial.w30.netProfit.toFixed(2)}`,
+      `Fulfillment API (30d): revenue=$${financial.w30.revenue.toFixed(2)}, fees=$${
+        financial.w30.ebayFees.toFixed(2)
+      }, labels=$${financial.w30.shippingLabels.toFixed(2)}, net=$${financial.w30.netProfit.toFixed(2)}`,
     );
   } catch (e) {
     console.error("Fulfillment API error (non-fatal):", e);
@@ -731,8 +714,7 @@ async function fetchWatchDataForListings(
   tradingUrl: string,
   userToken: string,
 ): Promise<Record<string, { watchCount: number; questionCount: number }>> {
-  const result: Record<string, { watchCount: number; questionCount: number }> =
-    {};
+  const result: Record<string, { watchCount: number; questionCount: number }> = {};
   if (listingIds.length === 0) return result;
 
   const promises = listingIds.map(async (itemId) => {
@@ -845,8 +827,7 @@ async function fetchListingsViaTradingAPI(
       firstPageXml.includes("<Ack>Failure</Ack>") ||
       firstPageXml.includes("<Ack>PartialFailure</Ack>")
     ) {
-      const errMsg =
-        firstPageXml.match(/<LongMessage>([\s\S]*?)<\/LongMessage>/)?.[1] ||
+      const errMsg = firstPageXml.match(/<LongMessage>([\s\S]*?)<\/LongMessage>/)?.[1] ||
         firstPageXml.match(/<ShortMessage>([\s\S]*?)<\/ShortMessage>/)?.[1] ||
         "Unknown Trading API error";
       return new Response(
@@ -916,8 +897,7 @@ async function fetchListingsViaTradingAPI(
         const title = get("Title");
         const priceStr = get("CurrentPrice") || get("BuyItNowPrice") || "0";
         const price = parseFloat(priceStr) || 0;
-        const currency =
-          item.match(/<CurrentPrice currencyID="([^"]+)"/)?.[1] || "USD";
+        const currency = item.match(/<CurrentPrice currencyID="([^"]+)"/)?.[1] || "USD";
         const imageUrl = get("GalleryURL") || get("PictureURL") || "";
         const sku = get("SKU");
         const categoryId = get("CategoryID") || "";
@@ -949,9 +929,7 @@ async function fetchListingsViaTradingAPI(
             listingId,
             ebayUrl: `https://www.ebay.com/itm/${listingId}`,
             quantity: quantityAvailable,
-            format: get("ListingType") === "Chinese"
-              ? "AUCTION"
-              : "FIXED_PRICE",
+            format: get("ListingType") === "Chinese" ? "AUCTION" : "FIXED_PRICE",
             condition: get("ConditionDisplayName") || "",
             listingDate: get("StartTime") || null,
             watchCount: isNaN(watchCount) ? 0 : watchCount,
@@ -1056,9 +1034,7 @@ serve(async (req) => {
       "token prefix =",
       userToken ? userToken.substring(0, 20) + "..." : "NONE",
     );
-    const apiBase = ebayEnv === "production"
-      ? "https://api.ebay.com"
-      : "https://api.sandbox.ebay.com";
+    const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
 
     if (!userToken) {
       return new Response(
@@ -1164,9 +1140,7 @@ serve(async (req) => {
         let product: any = {};
         try {
           const itemResp = await fetch(
-            `${apiBase}/sell/inventory/v1/inventory_item/${
-              encodeURIComponent(offer.sku)
-            }`,
+            `${apiBase}/sell/inventory/v1/inventory_item/${encodeURIComponent(offer.sku)}`,
             { headers: ebayHeaders },
           );
           if (itemResp.ok) {
@@ -1252,9 +1226,7 @@ serve(async (req) => {
     ]);
 
     console.log(
-      `ebay-listings: Analytics merge - a7 ${
-        Object.keys(a7).length
-      } items, a30 ${Object.keys(a30).length} items, a90 ${
+      `ebay-listings: Analytics merge - a7 ${Object.keys(a7).length} items, a30 ${Object.keys(a30).length} items, a90 ${
         Object.keys(a90).length
       } items`,
     );

@@ -3,8 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 serve(async (req) => {
@@ -42,9 +41,7 @@ serve(async (req) => {
 
     // ── Date range ──────────────────────────────────────────────────────────
     const now = new Date();
-    const fromDate = startDate
-      ? new Date(startDate)
-      : new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+    const fromDate = startDate ? new Date(startDate) : new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
     const toDate = endDate ? new Date(endDate) : now;
 
     const fromStr = fromDate.toISOString();
@@ -210,9 +207,7 @@ serve(async (req) => {
 
       const netProfit = fo.salePrice + fo.shippingCollected - fo.ebayFees -
         (cogs ?? 0);
-      const margin = cogs != null && fo.salePrice > 0
-        ? (netProfit / fo.salePrice) * 100
-        : null;
+      const margin = cogs != null && fo.salePrice > 0 ? (netProfit / fo.salePrice) * 100 : null;
 
       totalRevenue += fo.salePrice;
       totalFees += fo.ebayFees;
@@ -238,9 +233,7 @@ serve(async (req) => {
     });
 
     // Sort by soldAt descending (newest first)
-    items.sort((a, b) =>
-      new Date(b.soldAt).getTime() - new Date(a.soldAt).getTime()
-    );
+    items.sort((a, b) => new Date(b.soldAt).getTime() - new Date(a.soldAt).getTime());
 
     const overallNet = totalRevenue + totalShipping - totalFees - totalCogs;
     const avgMargin = itemsWithCogs > 0 && totalRevenue > 0

@@ -66,8 +66,7 @@ async function getEbayAppToken(): Promise<string> {
       Authorization: `Basic ${credentials}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
-    body:
-      "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
+    body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
   });
   if (!resp.ok) throw new Error(`Failed to get eBay token: ${resp.status}`);
   const data = await resp.json();
@@ -168,9 +167,7 @@ function buildPriceSuggestion(
   if (absPctDiff <= 5) {
     return {
       suggestedPrice: null,
-      reasoning: `Your price ($${
-        currentPrice.toFixed(2)
-      }) is within 5% of the market ${
+      reasoning: `Your price ($${currentPrice.toFixed(2)}) is within 5% of the market ${
         avgSoldPrice ? "avg sold" : "avg active"
       } price ($${target.toFixed(2)}). No change needed.`,
       direction: "keep",
@@ -187,22 +184,14 @@ function buildPriceSuggestion(
 
     return {
       suggestedPrice: suggested,
-      reasoning: `Your price ($${currentPrice.toFixed(2)}) is ${
-        pctDiff.toFixed(0)
-      }% above the ${avgSoldPrice ? "avg sold" : "avg active"} price ($${
-        target.toFixed(2)
-      }). Lowering to $${
-        suggested.toFixed(2)
-      } should ${strBoost} improve sell speed.${
-        competitionLevel === "high"
-          ? " High competition makes pricing competitively critical."
-          : ""
+      reasoning: `Your price ($${currentPrice.toFixed(2)}) is ${pctDiff.toFixed(0)}% above the ${
+        avgSoldPrice ? "avg sold" : "avg active"
+      } price ($${target.toFixed(2)}). Lowering to $${suggested.toFixed(2)} should ${strBoost} improve sell speed.${
+        competitionLevel === "high" ? " High competition makes pricing competitively critical." : ""
       }`,
       direction: "lower",
       confidence: absPctDiff > 20 ? "high" : "medium",
-      estimatedImpact: absPctDiff > 20
-        ? "+30–50% sell-through"
-        : "+10–20% sell-through",
+      estimatedImpact: absPctDiff > 20 ? "+30–50% sell-through" : "+10–20% sell-through",
     };
   }
 
@@ -210,17 +199,11 @@ function buildPriceSuggestion(
   const suggested = Math.round(target * 0.98 * 100) / 100;
   return {
     suggestedPrice: suggested,
-    reasoning: `Your price ($${currentPrice.toFixed(2)}) is ${
-      Math.abs(pctDiff).toFixed(0)
-    }% below the ${avgSoldPrice ? "avg sold" : "avg active"} price ($${
-      target.toFixed(2)
-    }). You may be leaving money on the table. Consider raising to $${
+    reasoning: `Your price ($${currentPrice.toFixed(2)}) is ${Math.abs(pctDiff).toFixed(0)}% below the ${
+      avgSoldPrice ? "avg sold" : "avg active"
+    } price ($${target.toFixed(2)}). You may be leaving money on the table. Consider raising to $${
       suggested.toFixed(2)
-    }.${
-      market.demandSignal === "strong"
-        ? " Strong demand supports a higher price."
-        : ""
-    }`,
+    }.${market.demandSignal === "strong" ? " Strong demand supports a higher price." : ""}`,
     direction: "raise",
     confidence: absPctDiff > 20 ? "high" : "medium",
     estimatedImpact: `+$${(suggested - currentPrice).toFixed(2)} per sale`,
@@ -257,8 +240,7 @@ function buildTitleSuggestion(
   }
 
   // Check for excessive punctuation/symbols
-  const symbolCount =
-    (title.match(/[!@#$%^&*()_+=\[\]{};':"\\|,.<>?]/g) || []).length;
+  const symbolCount = (title.match(/[!@#$%^&*()_+=\[\]{};':"\\|,.<>?]/g) || []).length;
   if (symbolCount > 3) {
     issues.push(
       "Too many special characters — keep punctuation minimal for better readability",
@@ -276,9 +258,7 @@ function buildTitleSuggestion(
     "wow",
     "look",
   ];
-  const foundFillers = fillerWords.filter((w) =>
-    title.toLowerCase().includes(w)
-  );
+  const foundFillers = fillerWords.filter((w) => title.toLowerCase().includes(w));
   if (foundFillers.length > 0) {
     issues.push(
       `Vague filler words detected ("${
@@ -301,8 +281,7 @@ function buildTitleSuggestion(
   if (issues.length === 0) {
     reasoning = "Your title looks well-optimized. No major changes needed.";
   } else if (issues.length <= 2) {
-    reasoning =
-      `Minor improvements possible: ${issues.length} issue(s) detected.`;
+    reasoning = `Minor improvements possible: ${issues.length} issue(s) detected.`;
     // Provide a cleaned-up version
     let improved = title.trim();
     // Fix excessive caps (convert to title case if all caps)
@@ -314,8 +293,7 @@ function buildTitleSuggestion(
     }
     // If too short, note what to add
     if (titleLen < 40) {
-      reasoning +=
-        ` Consider adding: condition, key specifications, brand, or model number to reach 60–80 characters.`;
+      reasoning += ` Consider adding: condition, key specifications, brand, or model number to reach 60–80 characters.`;
     }
     suggestedTitle = improved !== title ? improved : null;
   } else {
@@ -327,11 +305,7 @@ function buildTitleSuggestion(
     suggestedTitle,
     reasoning,
     issuesFound: issues,
-    confidence: issues.length === 0
-      ? "high"
-      : issues.length <= 2
-      ? "medium"
-      : "low",
+    confidence: issues.length === 0 ? "high" : issues.length <= 2 ? "medium" : "low",
   };
 }
 
@@ -439,16 +413,14 @@ serve(async (req) => {
           flags: [],
           priceSuggestion: {
             suggestedPrice: null,
-            reasoning:
-              "Market data temporarily unavailable. Try again in a moment.",
+            reasoning: "Market data temporarily unavailable. Try again in a moment.",
             direction: "keep",
             confidence: "low",
             estimatedImpact: "Unknown",
           },
           titleSuggestion: {
             suggestedTitle: null,
-            reasoning:
-              "Market data unavailable — title analysis requires market context.",
+            reasoning: "Market data unavailable — title analysis requires market context.",
             issuesFound: [],
             confidence: "low",
           },

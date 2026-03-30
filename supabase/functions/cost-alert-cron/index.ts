@@ -53,9 +53,7 @@ serve(async (req) => {
       totalOutputTokens * COST_PER_OUTPUT_TOKEN;
 
     console.log(
-      `[COST-ALERT-CRON] Month total: $${
-        totalCost.toFixed(4)
-      } across ${totalRequests} requests`,
+      `[COST-ALERT-CRON] Month total: $${totalCost.toFixed(4)} across ${totalRequests} requests`,
     );
 
     if (totalCost < COST_THRESHOLD) {
@@ -112,9 +110,7 @@ serve(async (req) => {
           body: JSON.stringify({
             from: "Teckstart Alerts <alerts@teckstart.com>",
             to: [ADMIN_EMAIL],
-            subject: `⚠️ Teckstart Cost Alert: $${
-              totalCost.toFixed(2)
-            } this month`,
+            subject: `⚠️ Teckstart Cost Alert: $${totalCost.toFixed(2)} this month`,
             html: `
               <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <h2 style="color: #dc2626; margin-bottom: 16px;">⚠️ Monthly AI Cost Alert</h2>

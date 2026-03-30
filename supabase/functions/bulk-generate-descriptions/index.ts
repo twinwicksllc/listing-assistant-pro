@@ -73,9 +73,7 @@ serve(async (req: Request) => {
     // Determine tier
     const ADMIN_EMAILS = ["twinwicksllc@gmail.com"];
     const isAdmin = userEmail ? ADMIN_EMAILS.includes(userEmail) : false;
-    let tier: "starter" | "pro" | "unlimited" | "admin" = isAdmin
-      ? "admin"
-      : "starter";
+    let tier: "starter" | "pro" | "unlimited" | "admin" = isAdmin ? "admin" : "starter";
 
     if (!isAdmin) {
       const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
@@ -116,8 +114,7 @@ serve(async (req: Request) => {
     if (rows.length > cap) {
       return new Response(
         JSON.stringify({
-          error:
-            `Your plan allows AI descriptions for up to ${cap} rows at a time. You submitted ${rows.length}.`,
+          error: `Your plan allows AI descriptions for up to ${cap} rows at a time. You submitted ${rows.length}.`,
           cap,
           tier,
         }),
@@ -144,20 +141,18 @@ serve(async (req: Request) => {
     for (const row of rows) {
       try {
         // Build a concise prompt from the row data
-        const specificsText =
-          row.itemSpecifics && Object.keys(row.itemSpecifics).length > 0
-            ? Object.entries(row.itemSpecifics)
-              .map(([k, v]) => `${k}: ${v}`)
-              .join(", ")
-            : "N/A";
+        const specificsText = row.itemSpecifics && Object.keys(row.itemSpecifics).length > 0
+          ? Object.entries(row.itemSpecifics)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(", ")
+          : "N/A";
 
         const conditionLabel = (row.condition ?? "PRE_OWNED_GOOD")
           .replace(/_/g, " ")
           .toLowerCase()
           .replace(/\b\w/g, (c) => c.toUpperCase());
 
-        const prompt =
-          `Write a compelling eBay listing description for this item.
+        const prompt = `Write a compelling eBay listing description for this item.
 
 Title: ${row.title}
 Condition: ${conditionLabel}

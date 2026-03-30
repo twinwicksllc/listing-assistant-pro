@@ -3,8 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Max-Age": "86400",
 };
 
@@ -383,9 +382,7 @@ function computeEffectiveScore(
   const sourceWeight = sourceWeights[source] || 0;
 
   // Similarity bonus (token overlap as % of query tokens)
-  const similarityBonus = totalQueryTokens > 0
-    ? (tokenOverlap / totalQueryTokens) * 15
-    : 0;
+  const similarityBonus = totalQueryTokens > 0 ? (tokenOverlap / totalQueryTokens) * 15 : 0;
 
   // Recency bonus (decays over time for non-verified sources)
   let recencyBonus = 0;
@@ -397,8 +394,7 @@ function computeEffectiveScore(
   const genericPenalty = isGeneric ? 20 : 0;
 
   // Ambiguity penalty (low token overlap on fuzzy)
-  const ambiguityPenalty =
-    source === "db_fuzzy" && tokenOverlap < FUZZY_MIN_TOKEN_OVERLAP ? 15 : 0;
+  const ambiguityPenalty = source === "db_fuzzy" && tokenOverlap < FUZZY_MIN_TOKEN_OVERLAP ? 15 : 0;
 
   // Non-leaf penalty (EA-P2-C): parent categories should not reach lock threshold
   const nonLeafPenalty = verifiedLeaf === false ? 30 : 0;
@@ -433,8 +429,7 @@ async function getEbayAppToken(): Promise<
       "Authorization": `Basic ${credentials}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
-    body:
-      "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
+    body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
   });
 
   if (!tokenResp.ok) {
@@ -456,9 +451,7 @@ async function getEbayAppToken(): Promise<
     );
     return null;
   }
-  const base = ebayEnv === "production"
-    ? "https://api.ebay.com"
-    : "https://api.sandbox.ebay.com";
+  const base = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
   return { token: tokenJson.access_token, base };
 }
 
@@ -492,15 +485,12 @@ async function fetchCategorySuggestions(
   }
 
   console.log(
-    `category-lookup: eBay suggestion query (sanitized, attempt=${
-      retryCount + 1
-    }): "${query}"`,
+    `category-lookup: eBay suggestion query (sanitized, attempt=${retryCount + 1}): "${query}"`,
   );
 
-  const url =
-    `${base}/commerce/taxonomy/v1/category_tree/${CATEGORY_TREE_ID}/get_category_suggestions?q=${
-      encodeURIComponent(query)
-    }`;
+  const url = `${base}/commerce/taxonomy/v1/category_tree/${CATEGORY_TREE_ID}/get_category_suggestions?q=${
+    encodeURIComponent(query)
+  }`;
 
   try {
     const resp = await fetch(url, {
@@ -565,9 +555,7 @@ async function fetchCategorySuggestions(
       const ancestors = s.categoryTreeNodeAncestors || [];
 
       const ancestorNames = ancestors
-        .sort((a: any, b: any) =>
-          (a.categoryTreeNodeLevel || 0) - (b.categoryTreeNodeLevel || 0)
-        )
+        .sort((a: any, b: any) => (a.categoryTreeNodeLevel || 0) - (b.categoryTreeNodeLevel || 0))
         .map((a: any) => a.categoryName)
         .reverse();
       ancestorNames.push(cat.categoryName);
@@ -658,10 +646,9 @@ async function verifyCategoryLeafActive(
   { isLeaf: boolean; isActive: boolean; categoryName: string | null }
 > {
   try {
-    const url =
-      `${base}/commerce/taxonomy/v1/category_tree/${CATEGORY_TREE_ID}/get_category_subtree?category_id=${
-        encodeURIComponent(categoryId)
-      }`;
+    const url = `${base}/commerce/taxonomy/v1/category_tree/${CATEGORY_TREE_ID}/get_category_subtree?category_id=${
+      encodeURIComponent(categoryId)
+    }`;
     const resp = await fetch(url, {
       method: "GET",
       headers: {
@@ -730,10 +717,9 @@ async function fetchBreadcrumb(
   let currentId = categoryId;
 
   for (let depth = 0; depth < MAX_DEPTH; depth++) {
-    const url =
-      `${base}/commerce/taxonomy/v1/category_tree/${CATEGORY_TREE_ID}/get_category_subtree?category_id=${
-        encodeURIComponent(currentId)
-      }`;
+    const url = `${base}/commerce/taxonomy/v1/category_tree/${CATEGORY_TREE_ID}/get_category_subtree?category_id=${
+      encodeURIComponent(currentId)
+    }`;
     const resp = await fetch(url, {
       method: "GET",
       headers: {
@@ -943,9 +929,7 @@ async function safePersistMapping(
   }
 
   // Gate 3: Determine status based on source (#2)
-  const status = (source === "ebay_api" && confidence >= 85)
-    ? "approved"
-    : "quarantine";
+  const status = (source === "ebay_api" && confidence >= 85) ? "approved" : "quarantine";
 
   // Compute effective_score (#8)
   const sourceWeightMap: Record<string, number> = {
@@ -1069,8 +1053,7 @@ export async function handleRequest(req: Request): Promise<Response> {
       if (exactRows && exactRows.length > 0) {
         for (let i = 0; i < exactRows.length; i++) {
           const row = exactRows[i];
-          const daysSinceUpdate =
-            (Date.now() - new Date(row.updated_at).getTime()) /
+          const daysSinceUpdate = (Date.now() - new Date(row.updated_at).getTime()) /
             (1000 * 60 * 60 * 24);
           const sourceKey = row.verification_source === "user_verified"
             ? "db_exact_user_verified"
@@ -1094,8 +1077,7 @@ export async function handleRequest(req: Request): Promise<Response> {
             source: sourceKey,
             rawScore: row.confidence ?? 80,
             effectiveScore,
-            reason:
-              `DB exact match (${row.verification_source}, confidence=${row.confidence})`,
+            reason: `DB exact match (${row.verification_source}, confidence=${row.confidence})`,
             verifiedLeaf: null, // Not re-verified for DB exact
             verifiedActive: null,
             tokenOverlap: queryTokens.length,
@@ -1169,9 +1151,7 @@ export async function handleRequest(req: Request): Promise<Response> {
 
       // ── Tier 3: DB fuzzy match (approved only, gated) (#1) ───────────
       const dbFuzzyStart = Date.now();
-      const keywords = normalizedKey.split(" ").filter((w) =>
-        w.length > 3 && !STOPWORDS.has(w)
-      );
+      const keywords = normalizedKey.split(" ").filter((w) => w.length > 3 && !STOPWORDS.has(w));
       let fuzzyMatches: any[] = [];
 
       for (const kw of keywords.slice(0, 3)) {
@@ -1204,8 +1184,7 @@ export async function handleRequest(req: Request): Promise<Response> {
         const row = fuzzyMatches[i];
         const candidateText = row.item_type || row.coin_type || "";
         const tokenOverlap = computeTokenOverlap(queryTokens, candidateText);
-        const daysSinceUpdate =
-          (Date.now() - new Date(row.updated_at).getTime()) /
+        const daysSinceUpdate = (Date.now() - new Date(row.updated_at).getTime()) /
           (1000 * 60 * 60 * 24);
         const isGeneric = isGenericItemType(candidateText, queryTokens); // EA-P1-C: context-aware
 
@@ -1243,10 +1222,9 @@ export async function handleRequest(req: Request): Promise<Response> {
           source: "db_fuzzy",
           rawScore: row.confidence ?? 70,
           effectiveScore,
-          reason:
-            `DB fuzzy match "${candidateText}" (overlap=${tokenOverlap}, generic=${isGeneric}, days=${
-              Math.round(daysSinceUpdate)
-            })`,
+          reason: `DB fuzzy match "${candidateText}" (overlap=${tokenOverlap}, generic=${isGeneric}, days=${
+            Math.round(daysSinceUpdate)
+          })`,
           verifiedLeaf: null,
           verifiedActive: null,
           tokenOverlap,
@@ -1303,8 +1281,7 @@ export async function handleRequest(req: Request): Promise<Response> {
                 source: "gemini",
                 rawScore: geminiResult.confidence,
                 effectiveScore,
-                reason:
-                  `Gemini AI suggestion (self-reported confidence=${geminiResult.confidence}, verified leaf)`,
+                reason: `Gemini AI suggestion (self-reported confidence=${geminiResult.confidence}, verified leaf)`,
                 verifiedLeaf: geminiVerifiedLeaf,
                 verifiedActive: geminiVerifiedActive,
                 tokenOverlap: 0,
@@ -1345,9 +1322,7 @@ export async function handleRequest(req: Request): Promise<Response> {
       allCandidates.sort((a, b) => b.effectiveScore - a.effectiveScore);
 
       // Check for deterministic lock (#3): if top eBay candidate is strong enough, lock it
-      const topEbay = allCandidates.find((c) =>
-        c.source === "ebay_api" && c.rank === 1
-      );
+      const topEbay = allCandidates.find((c) => c.source === "ebay_api" && c.rank === 1);
       let winner: LookupCandidate | null = null;
       let lockReason = "";
 
@@ -1364,9 +1339,7 @@ export async function handleRequest(req: Request): Promise<Response> {
         for (const c of allCandidates) {
           if (c.verifiedLeaf === false) continue; // Skip known non-leaf (#4)
           winner = c;
-          lockReason = `Highest effective score: ${
-            c.effectiveScore.toFixed(1)
-          } from ${c.source}`;
+          lockReason = `Highest effective score: ${c.effectiveScore.toFixed(1)} from ${c.source}`;
           break;
         }
         // If all are non-leaf, take the best anyway
@@ -1435,9 +1408,7 @@ export async function handleRequest(req: Request): Promise<Response> {
       }
 
       // Persist audit (non-blocking)
-      persistAuditEntries(supabase, auditEntries).catch((e) =>
-        console.warn("audit persist failed:", e)
-      );
+      persistAuditEntries(supabase, auditEntries).catch((e) => console.warn("audit persist failed:", e));
 
       // ── Build response ──────────────────────────────────────────────
       if (winner) {
@@ -1478,8 +1449,7 @@ export async function handleRequest(req: Request): Promise<Response> {
         JSON.stringify({
           found: false,
           itemType: normalizedKey,
-          message:
-            "No category passed confidence threshold — present top options to user",
+          message: "No category passed confidence threshold — present top options to user",
           requestId: requestId,
           topCandidates: allCandidates.slice(0, 3).map((c) => ({
             categoryId: c.categoryId,
@@ -1531,9 +1501,7 @@ export async function handleRequest(req: Request): Promise<Response> {
         );
         if (!topVerification.isLeaf) {
           console.warn(
-            `category-lookup suggest: top suggestion ${
-              suggestions[0].categoryId
-            } is NOT a leaf category`,
+            `category-lookup suggest: top suggestion ${suggestions[0].categoryId} is NOT a leaf category`,
           );
         }
       }
@@ -1772,9 +1740,7 @@ export async function handleRequest(req: Request): Promise<Response> {
           "is_admin",
         ).eq("id", userId).maybeSingle();
         const isAdmin = profile?.is_admin === true;
-        const source = isAdmin
-          ? (verificationSource || "user_verified")
-          : "ai_auto";
+        const source = isAdmin ? (verificationSource || "user_verified") : "ai_auto";
         const status = isAdmin ? "approved" : "quarantine";
 
         if (!categoryId) {
@@ -1852,14 +1818,11 @@ export async function handleRequest(req: Request): Promise<Response> {
         .eq("ebay_category_id", cid)
         .maybeSingle();
 
-      const newSuccessCount =
-        ((promoteExisting?.publish_success_count as number) || 0) + 1;
+      const newSuccessCount = ((promoteExisting?.publish_success_count as number) || 0) + 1;
 
       // EA-P3-A: Filter by item_type_normalized when provided for precise row targeting
       const promoteNormalized = payload.itemTypeNormalized ||
-        (payload.itemType
-          ? deepNormalize(normalizeItemType(payload.itemType))
-          : null);
+        (payload.itemType ? deepNormalize(normalizeItemType(payload.itemType)) : null);
 
       let promoteQuery = supabase
         .from("category_mappings")
@@ -1895,9 +1858,7 @@ export async function handleRequest(req: Request): Promise<Response> {
 
       // EA-P3-A: Filter by item_type_normalized when provided
       const demoteNormalized = payload.itemTypeNormalized ||
-        (payload.itemType
-          ? deepNormalize(normalizeItemType(payload.itemType))
-          : null);
+        (payload.itemType ? deepNormalize(normalizeItemType(payload.itemType)) : null);
 
       let demoteSelectQuery = supabase
         .from("category_mappings")
@@ -1919,9 +1880,7 @@ export async function handleRequest(req: Request): Promise<Response> {
         const newScore = Math.max(0, (existing.effective_score || 50) - 10);
 
         // Auto-reject if 3+ failures and no successes
-        const newStatus = (newFailCount >= 3 && successCount === 0)
-          ? "rejected"
-          : undefined;
+        const newStatus = (newFailCount >= 3 && successCount === 0) ? "rejected" : undefined;
 
         let demoteUpdateQuery = supabase
           .from("category_mappings")
@@ -2017,8 +1976,7 @@ export async function handleRequest(req: Request): Promise<Response> {
               categoryId: cid,
               conditions: [],
               source: "ebay_api",
-              error:
-                `Invalid JSON in eBay response (length=${dataText.length})`,
+              error: `Invalid JSON in eBay response (length=${dataText.length})`,
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );

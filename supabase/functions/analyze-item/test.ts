@@ -1,10 +1,7 @@
 // Test: analyze-item function with test database items
 // deno test --allow-net --allow-env supabase/functions/analyze-item/test.ts
 
-import {
-  assert,
-  assertEquals,
-} from "https://deno.land/std@0.208.0/assert/mod.ts";
+import { assert, assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import { getTestItemByDomain, TEST_DOMAINS } from "../_test-helpers/test-db.ts";
 
 // Note: These tests expect:

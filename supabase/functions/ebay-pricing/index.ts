@@ -26,8 +26,7 @@ async function scrapeEbaySoldListings(query: string): Promise<SoldItem[]> {
   // LH_Complete=1&LH_Sold=1 → completed AND sold listings only
   // _sop=13 → sort by most recently ended
   // _ipg=50 → 50 results per page
-  const ebayUrl =
-    `https://www.ebay.com/sch/i.html?_nkw=${encoded}&LH_Complete=1&LH_Sold=1&_ipg=50&_sop=13`;
+  const ebayUrl = `https://www.ebay.com/sch/i.html?_nkw=${encoded}&LH_Complete=1&LH_Sold=1&_ipg=50&_sop=13`;
   const jinaUrl = `https://r.jina.ai/${ebayUrl}`;
 
   console.log(
@@ -246,9 +245,9 @@ function filterOutliers(items: SoldItem[]): SoldItem[] {
   const filtered = items.filter((i) => i.price >= lo && i.price <= hi);
   if (filtered.length >= 3) {
     console.log(
-      `[ebay-pricing] Outlier filter: ${items.length} → ${filtered.length} items (fence $${
-        lo.toFixed(2)
-      }–$${hi.toFixed(2)})`,
+      `[ebay-pricing] Outlier filter: ${items.length} → ${filtered.length} items (fence $${lo.toFixed(2)}–$${
+        hi.toFixed(2)
+      })`,
     );
     return filtered;
   }
@@ -262,9 +261,7 @@ function median(nums: number[]): number {
   if (nums.length === 0) return 0;
   const sorted = [...nums].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 !== 0
-    ? sorted[mid]
-    : (sorted[mid - 1] + sorted[mid]) / 2;
+  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 // ----------------------------------------------------------------
@@ -331,12 +328,8 @@ serve(async (req) => {
     const medianPrice = parseFloat(median(prices).toFixed(2));
 
     // Percentile stats (p25, p75) for IQR-based pricing
-    const p25 = prices.length > 0
-      ? prices[Math.max(0, Math.ceil(0.25 * prices.length) - 1)]
-      : 0;
-    const p75 = prices.length > 0
-      ? prices[Math.max(0, Math.ceil(0.75 * prices.length) - 1)]
-      : 0;
+    const p25 = prices.length > 0 ? prices[Math.max(0, Math.ceil(0.25 * prices.length) - 1)] : 0;
+    const p75 = prices.length > 0 ? prices[Math.max(0, Math.ceil(0.75 * prices.length) - 1)] : 0;
 
     // Price histogram buckets (5 buckets for mini chart)
     const histogram: {
@@ -350,9 +343,7 @@ serve(async (req) => {
       for (let i = 0; i < 5; i++) {
         const bucketMin = lowPrice + i * bucketSize;
         const bucketMax = bucketMin + bucketSize;
-        const count = prices.filter((p) =>
-          p >= bucketMin && (i === 4 ? p <= bucketMax : p < bucketMax)
-        ).length;
+        const count = prices.filter((p) => p >= bucketMin && (i === 4 ? p <= bucketMax : p < bucketMax)).length;
         histogram.push({
           bucket: `$${bucketMin.toFixed(0)}–$${bucketMax.toFixed(0)}`,
           count,

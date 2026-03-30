@@ -1134,9 +1134,7 @@ function buildAndNormalizeAspects(
 
   // Apply fixed values ONLY for coin/bullion categories (deficiency #5 guard)
   // Strip "__dynamic_" prefix to get the real category ID for allowlist check
-  const realCatId = categoryId.startsWith("__dynamic_")
-    ? categoryId.slice(10)
-    : categoryId;
+  const realCatId = categoryId.startsWith("__dynamic_") ? categoryId.slice(10) : categoryId;
   if (rule?.fixedValues && COIN_FIXED_VALUES_ALLOWED_IDS.has(realCatId)) {
     for (const [k, v] of Object.entries(rule.fixedValues)) {
       aspects[k] = [v];
@@ -1177,9 +1175,7 @@ function buildAndNormalizeAspects(
       aspects["Sport"] = ["Baseball"];
     }
     console.log(
-      `buildAndNormalizeAspects: inferred Sport="${
-        aspects["Sport"][0]
-      }" for category ${categoryId}`,
+      `buildAndNormalizeAspects: inferred Sport="${aspects["Sport"][0]}" for category ${categoryId}`,
     );
   }
 
@@ -1243,12 +1239,8 @@ function buildAndNormalizeAspects(
     (!normalizedCert || !CERTIFIED_GRADERS.has(normalizedCert))
   ) {
     console.warn(
-      `buildAndNormalizeAspects: dropping Grade="${
-        aspects["Grade"][0]
-      }" for category ${categoryId} ` +
-        `because Certification="${
-          certValue ?? "not set"
-        }" is not a recognized grading service (eBay errorId 25019)`,
+      `buildAndNormalizeAspects: dropping Grade="${aspects["Grade"][0]}" for category ${categoryId} ` +
+        `because Certification="${certValue ?? "not set"}" is not a recognized grading service (eBay errorId 25019)`,
     );
     delete aspects["Grade"];
   }
@@ -1293,35 +1285,26 @@ const CONDITION_DESCRIPTIONS: Record<string, string> = {
   NEW_OTHER: "New without original packaging or tags.",
   NEW_WITH_DEFECTS: "New item with minor cosmetic defects.",
   LIKE_NEW: "Like new condition.",
-  CERTIFIED_REFURBISHED:
-    "Professionally refurbished and certified to work like new.",
+  CERTIFIED_REFURBISHED: "Professionally refurbished and certified to work like new.",
   SELLER_REFURBISHED: "Seller-refurbished item in good working condition.",
   // USED_* — correct conditions for Coins & Paper Money category tree
   // NOTE: Do NOT include numerical grades (AU-50, MS-65, etc.) in descriptions unless coin is certified by NGC, PCGS, ANACS, ICG, CAC, or ICCS
   USED_EXCELLENT: "Lightly circulated. Shows minimal wear on high points only.",
-  USED_VERY_GOOD:
-    "Moderately circulated. Major details clear with moderate wear.",
+  USED_VERY_GOOD: "Moderately circulated. Major details clear with moderate wear.",
   USED_GOOD: "Heavily circulated. All major features visible but worn.",
-  USED_ACCEPTABLE:
-    "Heavily worn but identifiable. Outline and major features visible.",
-  FOR_PARTS_OR_NOT_WORKING:
-    "Damaged, holed, bent, or corroded. Not suitable for collecting.",
+  USED_ACCEPTABLE: "Heavily worn but identifiable. Outline and major features visible.",
+  FOR_PARTS_OR_NOT_WORKING: "Damaged, holed, bent, or corroded. Not suitable for collecting.",
   // Trading card / collectible conditions
   VERY_GOOD: "Item in very good condition with minor wear.",
   GOOD: "Item in good condition with moderate wear.",
-  ACCEPTABLE:
-    "Item in acceptable condition with heavy wear but still functional.",
+  ACCEPTABLE: "Item in acceptable condition with heavy wear but still functional.",
   // Legacy aliases — redirect to their USED_* equivalents
-  EXCELLENT_REFURBISHED:
-    "Lightly circulated. Shows minimal wear on high points only.",
-  VERY_GOOD_REFURBISHED:
-    "Moderately circulated. Major details clear with moderate wear.",
-  GOOD_REFURBISHED:
-    "Moderately circulated. Major details clear with moderate wear.",
+  EXCELLENT_REFURBISHED: "Lightly circulated. Shows minimal wear on high points only.",
+  VERY_GOOD_REFURBISHED: "Moderately circulated. Major details clear with moderate wear.",
+  GOOD_REFURBISHED: "Moderately circulated. Major details clear with moderate wear.",
   PRE_OWNED_GOOD: "Lightly circulated. Shows minimal wear on high points only.",
   PRE_OWNED_FAIR: "Heavily circulated. All major features visible but worn.",
-  PRE_OWNED_POOR:
-    "Heavily worn but identifiable. Outline and major features visible.",
+  PRE_OWNED_POOR: "Heavily worn but identifiable. Outline and major features visible.",
 };
 
 const LEGACY_CONDITION_MAP: Record<string, string> = {
@@ -1590,8 +1573,7 @@ function sanitizeDescription(desc: string): string {
 // eBay errorId 25019: grades in title/description of uncertified coins
 // trigger a policy violation even if the Grade aspect was already dropped.
 // ----------------------------------------------------------------
-const GRADE_PATTERN =
-  /\b(MS|PR|PF|AU|XF|EF|VF|F|VG|G|AG|FA|PO|P)-?\s*(\d{1,2})\b/gi;
+const GRADE_PATTERN = /\b(MS|PR|PF|AU|XF|EF|VF|F|VG|G|AG|FA|PO|P)-?\s*(\d{1,2})\b/gi;
 const CERTIFIED_GRADERS_SET = new Set([
   "PCGS",
   "NGC",
@@ -1617,9 +1599,7 @@ function stripGradesIfUncertified(
     .trim();
   if (stripped !== text) {
     console.log(
-      `stripGradesIfUncertified: removed grade pattern(s) from text (cert="${
-        certificationValue ?? "none"
-      }")`,
+      `stripGradesIfUncertified: removed grade pattern(s) from text (cert="${certificationValue ?? "none"}")`,
     );
   }
   return stripped;
@@ -1802,9 +1782,7 @@ async function uploadDataUrlToStorage(dataUrl: string): Promise<string> {
     // Decode base64 to binary using Deno's base64 decoder
     const bytes = decodeBase64(b64);
 
-    const filename = `server-uploads/${Date.now()}-${
-      Math.random().toString(36).slice(2)
-    }.${ext}`;
+    const filename = `server-uploads/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
     // Use supabase-js client so auth headers are handled correctly
     const adminClient = createClient(supabaseUrl, serviceKey);
@@ -1993,9 +1971,7 @@ async function ensureInventoryLocation(
     try {
       const fallbackErrJson = JSON.parse(fallbackErrText);
       fallbackAlreadyExists = Array.isArray(fallbackErrJson.errors) &&
-        fallbackErrJson.errors.some((e: { errorId: number }) =>
-          e.errorId === 25803
-        );
+        fallbackErrJson.errors.some((e: { errorId: number }) => e.errorId === 25803);
     } catch { /* not JSON */ }
 
     if (fallbackResp.status === 409 || fallbackAlreadyExists) {
@@ -2044,9 +2020,7 @@ serve(async (req) => {
     ({ action, ...payload } = requestBody);
 
     console.log(
-      `ebay-publish action: ${action}, payload keys: ${
-        Object.keys(payload).join(", ")
-      }`,
+      `ebay-publish action: ${action}, payload keys: ${Object.keys(payload).join(", ")}`,
     );
     if (action === "create_draft") {
       console.log(`create_draft payload:`, {
@@ -2084,12 +2058,8 @@ serve(async (req) => {
       throw new Error("eBay API credentials not configured");
     }
 
-    const apiBase = ebayEnv === "production"
-      ? "https://api.ebay.com"
-      : "https://api.sandbox.ebay.com";
-    const authBase = ebayEnv === "production"
-      ? "https://auth.ebay.com"
-      : "https://auth.sandbox.ebay.com";
+    const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
+    const authBase = ebayEnv === "production" ? "https://auth.ebay.com" : "https://auth.sandbox.ebay.com";
     const tokenUrl = ebayEnv === "production"
       ? "https://api.ebay.com/identity/v1/oauth2/token"
       : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
@@ -2446,8 +2416,7 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({
             token: null,
-            error:
-              `Token refresh failed (${refreshResp.status}). Please reconnect eBay.`,
+            error: `Token refresh failed (${refreshResp.status}). Please reconnect eBay.`,
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
@@ -2544,14 +2513,10 @@ serve(async (req) => {
       }
 
       const now = new Date();
-      const expiresAt = data.ebay_token_expires_at
-        ? new Date(data.ebay_token_expires_at)
-        : null;
+      const expiresAt = data.ebay_token_expires_at ? new Date(data.ebay_token_expires_at) : null;
       // Consider token expired if it expires within 5 minutes (proactive refresh window)
       const REFRESH_BUFFER_MS = 5 * 60 * 1000;
-      const isExpiredOrExpiringSoon = expiresAt
-        ? expiresAt.getTime() - now.getTime() < REFRESH_BUFFER_MS
-        : true;
+      const isExpiredOrExpiringSoon = expiresAt ? expiresAt.getTime() - now.getTime() < REFRESH_BUFFER_MS : true;
 
       // Proactively refresh if token is expired or expiring within 5 minutes
       if (isExpiredOrExpiringSoon && data.ebay_refresh_token) {
@@ -2777,9 +2742,7 @@ serve(async (req) => {
 
         // Fallback to random SKU if sequential generation didn't work or userId was missing
         if (!sku) {
-          sku = `LA-${
-            crypto.randomUUID().replace(/-/g, "").slice(0, 16).toUpperCase()
-          }`;
+          sku = `LA-${crypto.randomUUID().replace(/-/g, "").slice(0, 16).toUpperCase()}`;
           console.log(`create_draft: using fallback random SKU: ${sku}`);
         }
       }
@@ -2817,9 +2780,7 @@ serve(async (req) => {
           if (!epnCampaignId) return baseUrl;
           return `https://rover.ebay.com/rover/1/711-53200-19255-0/1?campid=${
             encodeURIComponent(epnCampaignId)
-          }&toolid=10001&customid=teckstart&mpre=${
-            encodeURIComponent(baseUrl)
-          }`;
+          }&toolid=10001&customid=teckstart&mpre=${encodeURIComponent(baseUrl)}`;
         } catch {
           return null;
         }
@@ -2883,8 +2844,7 @@ serve(async (req) => {
             }
 
             // Temporarily inject into CATEGORY_ASPECT_RULES so buildAndNormalizeAspects can use it
-            CATEGORY_ASPECT_RULES[`__dynamic_${categoryForAspects}`] =
-              dynamicRule;
+            CATEGORY_ASPECT_RULES[`__dynamic_${categoryForAspects}`] = dynamicRule;
             categoryForAspects = `__dynamic_${categoryForAspects}`;
             dynamicRuleApplied = true;
             console.log(
@@ -2929,9 +2889,7 @@ serve(async (req) => {
       }
 
       const aspects = buildAndNormalizeAspects(
-        (itemSpecifics && typeof itemSpecifics === "object"
-          ? itemSpecifics
-          : {}) as Record<string, unknown>,
+        (itemSpecifics && typeof itemSpecifics === "object" ? itemSpecifics : {}) as Record<string, unknown>,
         categoryForAspects,
       );
 
@@ -2968,16 +2926,12 @@ serve(async (req) => {
       );
       if (finalTitle !== title) {
         console.log(
-          `create_draft: grade stripped from title (cert="${
-            finalCertValue ?? "none"
-          }"): "${title}" -> "${finalTitle}"`,
+          `create_draft: grade stripped from title (cert="${finalCertValue ?? "none"}"): "${title}" -> "${finalTitle}"`,
         );
       }
       if (finalDescription !== sanitizedDescription) {
         console.log(
-          `create_draft: grade stripped from description (cert="${
-            finalCertValue ?? "none"
-          }")`,
+          `create_draft: grade stripped from description (cert="${finalCertValue ?? "none"}")`,
         );
       }
 
@@ -2993,12 +2947,11 @@ serve(async (req) => {
       // Migrate any legacy deprecated condition codes to current equivalents,
       // then normalize based on the category and item type (e.g., LIKE_NEW not valid for coins).
       const rawCondition = condition || "USED_EXCELLENT";
-      const { condition: normalizedCondition, corrected } =
-        normalizeConditionForCategory(
-          rawCondition,
-          finalCategoryId,
-          itemType,
-        );
+      const { condition: normalizedCondition, corrected } = normalizeConditionForCategory(
+        rawCondition,
+        finalCategoryId,
+        itemType,
+      );
       const conditionEnum = normalizedCondition;
       const conditionId = CONDITION_ID_MAP[conditionEnum] ?? 3000;
       const conditionDesc = CONDITION_DESCRIPTIONS[conditionEnum] ??
@@ -3171,18 +3124,11 @@ serve(async (req) => {
       // Fetch policies — paymentPolicyId is optional for managed payments sellers.
       // Most eBay sellers enrolled in managed payments do NOT need a payment policy.
       // We only require fulfillment and return policies.
-      const [fulfillmentPolicyId, paymentPolicyId, returnPolicyId] =
-        await Promise.all([
-          draftFulfillmentPolicyId
-            ? Promise.resolve(draftFulfillmentPolicyId)
-            : fetchDefaultPolicy("fulfillment"),
-          draftPaymentPolicyId
-            ? Promise.resolve(draftPaymentPolicyId)
-            : fetchDefaultPolicy("payment"),
-          draftReturnPolicyId
-            ? Promise.resolve(draftReturnPolicyId)
-            : fetchDefaultPolicy("return"),
-        ]);
+      const [fulfillmentPolicyId, paymentPolicyId, returnPolicyId] = await Promise.all([
+        draftFulfillmentPolicyId ? Promise.resolve(draftFulfillmentPolicyId) : fetchDefaultPolicy("fulfillment"),
+        draftPaymentPolicyId ? Promise.resolve(draftPaymentPolicyId) : fetchDefaultPolicy("payment"),
+        draftReturnPolicyId ? Promise.resolve(draftReturnPolicyId) : fetchDefaultPolicy("return"),
+      ]);
 
       // Only fulfillment and return policies are required; payment policy is optional
       if (!fulfillmentPolicyId || !returnPolicyId) {
@@ -3226,8 +3172,7 @@ serve(async (req) => {
         );
         return new Response(
           JSON.stringify({
-            error:
-              "Auction format is not supported by the eBay Inventory API. " +
+            error: "Auction format is not supported by the eBay Inventory API. " +
               "Please change the listing format to Fixed Price, or use the eBay " +
               "Seller Hub to create auction listings manually.",
             auctionNotSupported: true,
@@ -3257,9 +3202,7 @@ serve(async (req) => {
       });
 
       console.log(
-        `create_draft: built offer for sku=${sku}, price=${listingPrice}, category=${
-          finalCategoryId || "NONE"
-        }`,
+        `create_draft: built offer for sku=${sku}, price=${listingPrice}, category=${finalCategoryId || "NONE"}`,
       );
       console.log(
         `create_draft: offer body categories - categoryId in offer=${
@@ -3303,9 +3246,7 @@ serve(async (req) => {
         try {
           const errJson = JSON.parse(errText);
           const offerExists = Array.isArray(errJson.errors) &&
-            errJson.errors.some((e: { errorId: number }) =>
-              e.errorId === 25002
-            );
+            errJson.errors.some((e: { errorId: number }) => e.errorId === 25002);
           if (offerExists) {
             const offerIdParam = errJson.errors[0]?.parameters?.find(
               (p: { name: string; value: string }) => p.name === "offerId",
@@ -3418,8 +3359,7 @@ serve(async (req) => {
 
         return new Response(
           JSON.stringify({
-            error:
-              `Offer created (ID: ${offerId}) but publish failed: ${publishResp.status} - ${errText}`,
+            error: `Offer created (ID: ${offerId}) but publish failed: ${publishResp.status} - ${errText}`,
             offerId,
             sku,
             publishFailed: true,
@@ -3556,8 +3496,7 @@ serve(async (req) => {
           results,
           successCount,
           errorCount,
-          message:
-            `${successCount} of ${drafts.length} listings published to eBay`,
+          message: `${successCount} of ${drafts.length} listings published to eBay`,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );

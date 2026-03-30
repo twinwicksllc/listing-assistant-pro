@@ -60,9 +60,7 @@ serve(async (req) => {
     let ebayStatus = { ok: false, error: "" };
     try {
       const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-      const apiBase = ebayEnv === "production"
-        ? "https://api.ebay.com"
-        : "https://api.sandbox.ebay.com";
+      const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
       const resp = await fetch(
         `${apiBase}/buy/browse/v1/item_summary/search?q=test&limit=1`,
         {

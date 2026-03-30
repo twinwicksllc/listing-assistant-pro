@@ -30,8 +30,7 @@ async function getEbayAppToken(): Promise<string> {
       Authorization: `Basic ${credentials}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
-    body:
-      "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
+    body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
   });
 
   if (!resp.ok) {
@@ -63,9 +62,7 @@ async function browseSearch(params: {
 }): Promise<{ prices: number[]; count: number; total: number }> {
   const { query, token, ebayEnv, categoryId, limit = 50 } = params;
 
-  const apiBase = ebayEnv === "production"
-    ? "https://api.ebay.com"
-    : "https://api.sandbox.ebay.com";
+  const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
 
   const searchParams = new URLSearchParams({
     q: query,
@@ -77,8 +74,7 @@ async function browseSearch(params: {
     searchParams.set("category_ids", categoryId);
   }
 
-  const url =
-    `${apiBase}/buy/browse/v1/item_summary/search?${searchParams.toString()}`;
+  const url = `${apiBase}/buy/browse/v1/item_summary/search?${searchParams.toString()}`;
 
   const resp = await fetch(url, {
     method: "GET",
@@ -133,8 +129,7 @@ async function scrapeEbaySoldData(
   medianSoldPrice: number | null;
 }> {
   const encoded = encodeURIComponent(query);
-  let ebayUrl =
-    `https://www.ebay.com/sch/i.html?_nkw=${encoded}&LH_Complete=1&LH_Sold=1&_ipg=50&_sop=13`;
+  let ebayUrl = `https://www.ebay.com/sch/i.html?_nkw=${encoded}&LH_Complete=1&LH_Sold=1&_ipg=50&_sop=13`;
   if (categoryId) {
     ebayUrl += `&_sacat=${categoryId}`;
   }
@@ -181,16 +176,12 @@ async function scrapeEbaySoldData(
   const allListingsMatch = content.match(
     /All Listings \(([\d,]+)\)\s+Filter Applied/,
   );
-  let soldCount = allListingsMatch
-    ? parseInt(allListingsMatch[1].replace(/,/g, ""), 10)
-    : 0;
+  let soldCount = allListingsMatch ? parseInt(allListingsMatch[1].replace(/,/g, ""), 10) : 0;
 
   // Fallback: "X results for"
   if (!soldCount) {
     const resultsMatch = content.match(/([\d,]+)\+?\s+results?\s+for/i);
-    soldCount = resultsMatch
-      ? parseInt(resultsMatch[1].replace(/,/g, ""), 10)
-      : 0;
+    soldCount = resultsMatch ? parseInt(resultsMatch[1].replace(/,/g, ""), 10) : 0;
   }
 
   // Extract price range buckets from filter sidebar
@@ -252,9 +243,7 @@ function median(nums: number[]): number {
   if (nums.length === 0) return 0;
   const sorted = [...nums].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 !== 0
-    ? sorted[mid]
-    : (sorted[mid - 1] + sorted[mid]) / 2;
+  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 function round2(n: number): number {
@@ -325,9 +314,7 @@ serve(async (req) => {
 
     const soldCount = soldData.soldCount;
     // Use Browse API `total` for the real active count (not just the 50 fetched)
-    const activeCount = activeResult.total > 0
-      ? activeResult.total
-      : activeResult.count;
+    const activeCount = activeResult.total > 0 ? activeResult.total : activeResult.count;
     const total = soldCount + activeCount;
 
     // Sell-through rate: sold / (sold + active)

@@ -50,9 +50,9 @@ export interface PromptContext {
 function pricingBlock(ctx: PromptContext): string {
   if (ctx.competitorData && ctx.competitorData.competitorCount > 0) {
     const d = ctx.competitorData;
-    return `MARKET DATA (${d.competitorCount} recently sold similar items): avg $${
-      d.avgPrice.toFixed(2)
-    }, range $${d.minPrice.toFixed(2)}–$${d.maxPrice.toFixed(2)}, median $${
+    return `MARKET DATA (${d.competitorCount} recently sold similar items): avg $${d.avgPrice.toFixed(2)}, range $${
+      d.minPrice.toFixed(2)
+    }–$${d.maxPrice.toFixed(2)}, median $${
       d.medianPrice.toFixed(2)
     }. Use the median as your target price and adjust ±10% based on condition relative to typical examples.`;
   }
@@ -65,10 +65,9 @@ function categoryBlock(ctx: PromptContext): string {
     ctx.suggestedCategoryName || "Unknown"
   }" (ID: ${ctx.suggestedCategoryId}). Use this categoryId unless you are confident a more specific leaf category exists for this exact item.`;
   if (ctx.requiredAspects && ctx.requiredAspects.length > 0) {
-    s +=
-      `\nREQUIRED by eBay for this category — MUST populate all in itemSpecifics:\n  ${
-        ctx.requiredAspects.join(", ")
-      }`;
+    s += `\nREQUIRED by eBay for this category — MUST populate all in itemSpecifics:\n  ${
+      ctx.requiredAspects.join(", ")
+    }`;
   }
   if (ctx.recommendedAspects && ctx.recommendedAspects.length > 0) {
     s += `\nRECOMMENDED: ${ctx.recommendedAspects.slice(0, 12).join(", ")}`;
@@ -87,9 +86,7 @@ function allowedValuesBlock(ctx: PromptContext): string {
     }
   }
   if (lines.length === 0) return "";
-  return `\n### VALID ASPECT VALUES (use EXACTLY these strings for the listed keys)\n${
-    lines.join("\n")
-  }`;
+  return `\n### VALID ASPECT VALUES (use EXACTLY these strings for the listed keys)\n${lines.join("\n")}`;
 }
 
 /**

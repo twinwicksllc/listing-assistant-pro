@@ -4,8 +4,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Max-Age": "86400",
 };
 
@@ -81,8 +80,7 @@ serve(async (req: Request) => {
 
       if (orgMember && orgMember.length > 0) {
         orgId = orgMember[0].org_id;
-        orgResetDay =
-          (orgMember[0].organizations as any)?.free_tier_reset_day ?? null;
+        orgResetDay = (orgMember[0].organizations as any)?.free_tier_reset_day ?? null;
       }
     }
 
@@ -91,9 +89,7 @@ serve(async (req: Request) => {
     if (tier === "starter" && orgResetDay) {
       const { data: wsData, error: wsErr } = await svc
         .rpc("get_free_tier_window_start", { p_reset_day: orgResetDay });
-      windowStart = wsData
-        ? new Date(wsData).toISOString()
-        : new Date().toISOString();
+      windowStart = wsData ? new Date(wsData).toISOString() : new Date().toISOString();
     } else {
       // Pro/Unlimited: calendar month; or fresh start for NULL reset_day
       windowStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
@@ -156,9 +152,7 @@ serve(async (req: Request) => {
       tier,
       creditsUsed: usageCount,
       creditsRemaining,
-      creditsResetAt: tier === "starter"
-        ? computeNextResetAt(orgResetDay)
-        : null,
+      creditsResetAt: tier === "starter" ? computeNextResetAt(orgResetDay) : null,
       ebayConnected: false, // Placeholder: check profiles.ebay_access_token in full impl
     };
 

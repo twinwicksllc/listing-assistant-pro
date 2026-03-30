@@ -118,9 +118,7 @@ Rules:
 - Do NOT add words not implied by the title
 - Return ONLY the keyword string — no explanation, no quotes, no punctuation
 
-Title: "${title.slice(0, 200)}"${
-      categoryId ? `\neBay Category ID: ${categoryId}` : ""
-    }
+Title: "${title.slice(0, 200)}"${categoryId ? `\neBay Category ID: ${categoryId}` : ""}
 
 eBay search keywords:`;
 
@@ -158,8 +156,7 @@ eBay search keywords:`;
     }
 
     const data = await resp.json();
-    const text: string =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+    const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
 
     if (!text || text.length < 3) {
       console.warn(`${label} Empty response — falling back to heuristic`);
@@ -211,8 +208,7 @@ async function getEbayAppToken(ebayEnv: string): Promise<string> {
       "Authorization": `Basic ${credentials}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
-    body:
-      "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
+    body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
   });
 
   if (!resp.ok) {
@@ -238,9 +234,7 @@ async function fetchEbayCompetitors(params: {
 }): Promise<{ prices: number[]; count: number; raw: unknown[] }> {
   const { token, searchQuery, categoryId, ebayEnv } = params;
 
-  const apiBase = ebayEnv === "production"
-    ? "https://api.ebay.com"
-    : "https://api.sandbox.ebay.com";
+  const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
 
   const searchParams = new URLSearchParams({
     q: searchQuery,
@@ -253,12 +247,9 @@ async function fetchEbayCompetitors(params: {
     searchParams.set("category_ids", categoryId);
   }
 
-  const url =
-    `${apiBase}/buy/browse/v1/item_summary/search?${searchParams.toString()}`;
+  const url = `${apiBase}/buy/browse/v1/item_summary/search?${searchParams.toString()}`;
   console.log(
-    `[ebay-competitor-search] Browse API search: "${searchQuery}" (category: ${
-      categoryId ?? "any"
-    })`,
+    `[ebay-competitor-search] Browse API search: "${searchQuery}" (category: ${categoryId ?? "any"})`,
   );
 
   let resp: Response | null = null;
@@ -286,9 +277,7 @@ async function fetchEbayCompetitors(params: {
       if (attempt < 2) {
         const delayMs = 1500 * Math.pow(1.5, attempt);
         console.warn(
-          `[ebay-competitor-search] Fetch error (attempt ${
-            attempt + 1
-          }/3) — retrying in ${delayMs}ms`,
+          `[ebay-competitor-search] Fetch error (attempt ${attempt + 1}/3) — retrying in ${delayMs}ms`,
         );
         await new Promise((r) => setTimeout(r, delayMs));
       }
@@ -299,14 +288,10 @@ async function fetchEbayCompetitors(params: {
     const errBody = await resp?.text?.().catch(() => "(could not read body)") ??
       "(no response)";
     console.error(
-      `[ebay-competitor-search] Browse API failed: ${resp?.status} — ${
-        errBody.slice(0, 300)
-      }`,
+      `[ebay-competitor-search] Browse API failed: ${resp?.status} — ${errBody.slice(0, 300)}`,
     );
     throw new Error(
-      `eBay Browse API error: ${resp?.status ?? "unknown"} — ${
-        errBody.slice(0, 200)
-      }`,
+      `eBay Browse API error: ${resp?.status ?? "unknown"} — ${errBody.slice(0, 200)}`,
     );
   }
 
@@ -347,9 +332,7 @@ function median(nums: number[]): number {
   if (nums.length === 0) return 0;
   const sorted = [...nums].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 !== 0
-    ? sorted[mid]
-    : (sorted[mid - 1] + sorted[mid]) / 2;
+  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 // ----------------------------------------------------------------
@@ -495,9 +478,7 @@ serve(async (req) => {
     const searchQuery = geminiQuery ?? deriveSearchQueryFallback(title);
     const usedGemini = !!geminiQuery;
     console.log(
-      `[ebay-competitor-search] Search query (${
-        usedGemini ? "Gemini" : "heuristic"
-      }): "${searchQuery}"`,
+      `[ebay-competitor-search] Search query (${usedGemini ? "Gemini" : "heuristic"}): "${searchQuery}"`,
     );
 
     // ------------------------------------------------------------------
@@ -557,15 +538,11 @@ serve(async (req) => {
     const minPrice = Math.min(...prices);
     const maxPrice = Math.max(...prices);
     const medianPrice = median(prices);
-    const priceDelta = yourPrice != null
-      ? Math.round((yourPrice - avgPrice) * 100) / 100
-      : null;
+    const priceDelta = yourPrice != null ? Math.round((yourPrice - avgPrice) * 100) / 100 : null;
     const priceDistribution = buildDistribution(prices);
 
     console.log(
-      `[ebay-competitor-search] Stats: avg=$${avgPrice.toFixed(2)}, median=$${
-        medianPrice.toFixed(2)
-      }, n=${count}`,
+      `[ebay-competitor-search] Stats: avg=$${avgPrice.toFixed(2)}, median=$${medianPrice.toFixed(2)}, n=${count}`,
     );
 
     // ------------------------------------------------------------------
@@ -594,9 +571,7 @@ serve(async (req) => {
           }, { onConflict: "user_id,ebay_listing_id" });
 
         console.log(
-          `[ebay-competitor-search] Saved snapshot for listing ${listingId}: avg=$${
-            avgPrice.toFixed(2)
-          }, n=${count}`,
+          `[ebay-competitor-search] Saved snapshot for listing ${listingId}: avg=$${avgPrice.toFixed(2)}, n=${count}`,
         );
       } catch (dbErr) {
         // Non-fatal — still return data to caller
@@ -675,8 +650,7 @@ serve(async (req) => {
               fromCache: true,
               stale: true,
               cacheAgeHours,
-              warning:
-                `eBay API error. Showing data from ${cacheAgeHours}h ago.`,
+              warning: `eBay API error. Showing data from ${cacheAgeHours}h ago.`,
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );

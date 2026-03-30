@@ -110,15 +110,14 @@ async function scoreComparability(
   competitorTitle: string,
   geminiKey: string,
 ): Promise<{ score: number; reason: string } | null> {
-  const prompt =
-    `You are a numismatic expert comparing coin listings for market comparability.
+  const prompt = `You are a numismatic expert comparing coin listings for market comparability.
 
 Your Listing Attributes:
 ${
-      Object.entries(yourAttributes)
-        .map(([k, v]) => `- ${k}: ${v || "(not found)"}`)
-        .join("\n")
-    }
+    Object.entries(yourAttributes)
+      .map(([k, v]) => `- ${k}: ${v || "(not found)"}`)
+      .join("\n")
+  }
 
 Competitor Listing Title: "${competitorTitle}"
 
@@ -268,9 +267,7 @@ function parseEbayItem(item: EbayItem): ComparableListing | null {
   try {
     const itemId = item.itemId?.[0];
     const titleRaw = item.title?.[0];
-    const title = typeof titleRaw === "string"
-      ? titleRaw
-      : (titleRaw as any)?.toString?.() || String(titleRaw || "");
+    const title = typeof titleRaw === "string" ? titleRaw : (titleRaw as any)?.toString?.() || String(titleRaw || "");
     const price = parseFloat(
       item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ ?? "0",
     );
@@ -444,8 +441,7 @@ serve(async (req: Request) => {
       JSON.stringify({
         comparable: topComparable,
         totalScored: comparable.length,
-        reason:
-          `Analyzed ${topComparable.length} truly comparable listings from ${rawCompetitors.length} candidates`,
+        reason: `Analyzed ${topComparable.length} truly comparable listings from ${rawCompetitors.length} candidates`,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

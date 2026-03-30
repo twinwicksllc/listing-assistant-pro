@@ -127,21 +127,18 @@ function getZoomTargets(domain: Domain): ZoomTarget[] {
         },
         {
           region: "edge reeds",
-          rationale:
-            "Helps verify denomination and detect cleaned/altered coins",
+          rationale: "Helps verify denomination and detect cleaned/altered coins",
         },
         {
           region: "surface fields",
-          rationale:
-            "Detect bag marks, cleaning lines, PVC damage, artificial toning",
+          rationale: "Detect bag marks, cleaning lines, PVC damage, artificial toning",
         },
       ];
     case "trading_cards":
       return [
         {
           region: "card number and set symbol",
-          rationale:
-            "Identifies exact set and print run; critical for parallel identification",
+          rationale: "Identifies exact set and print run; critical for parallel identification",
         },
         {
           region: "corners and edges",
@@ -149,21 +146,18 @@ function getZoomTargets(domain: Domain): ZoomTarget[] {
         },
         {
           region: "surface centering",
-          rationale:
-            "Left/right and top/bottom centering affects grade and value significantly",
+          rationale: "Left/right and top/bottom centering affects grade and value significantly",
         },
         {
           region: "holographic or foil pattern",
-          rationale:
-            "Identifies parallel type (refractor, prizm, etc.) and its value tier",
+          rationale: "Identifies parallel type (refractor, prizm, etc.) and its value tier",
         },
       ];
     case "jewelry":
       return [
         {
           region: "hallmarks and stamps",
-          rationale:
-            "Karat, maker's mark, assay office mark — determines metal purity and authenticity",
+          rationale: "Karat, maker's mark, assay office mark — determines metal purity and authenticity",
         },
         {
           region: "clasp and findings",
@@ -171,54 +165,45 @@ function getZoomTargets(domain: Domain): ZoomTarget[] {
         },
         {
           region: "stone clarity and color",
-          rationale:
-            "Visible inclusions, chips, or loose stones affect value significantly",
+          rationale: "Visible inclusions, chips, or loose stones affect value significantly",
         },
         {
           region: "brand signatures",
-          rationale:
-            "Hidden signatures (Tiffany, Cartier, etc.) dramatically increase value",
+          rationale: "Hidden signatures (Tiffany, Cartier, etc.) dramatically increase value",
         },
       ];
     case "electronics":
       return [
         {
           region: "model number sticker",
-          rationale:
-            "Exact model/SKU determines correct eBay category and price point",
+          rationale: "Exact model/SKU determines correct eBay category and price point",
         },
         {
           region: "ports and connectors",
-          rationale:
-            "Damaged ports (bent pins, broken USB-C) are major value detractors",
+          rationale: "Damaged ports (bent pins, broken USB-C) are major value detractors",
         },
         {
           region: "screen condition",
-          rationale:
-            "Dead pixels, scratches, backlight bleed affect condition grade",
+          rationale: "Dead pixels, scratches, backlight bleed affect condition grade",
         },
         {
           region: "serial/IMEI sticker",
-          rationale:
-            "Confirms device identity and can indicate carrier lock status",
+          rationale: "Confirms device identity and can indicate carrier lock status",
         },
       ];
     case "vintage_clothing":
       return [
         {
           region: "brand and size label",
-          rationale:
-            "Vintage sizing runs 1–2 sizes smaller; correct size drives search traffic",
+          rationale: "Vintage sizing runs 1–2 sizes smaller; correct size drives search traffic",
         },
         {
           region: "care instruction label",
-          rationale:
-            "Absence of care label = pre-1971 US; helps date the piece",
+          rationale: "Absence of care label = pre-1971 US; helps date the piece",
         },
         {
           region: "fabric and seam condition",
-          rationale:
-            "Rips, snags, thin spots, and seam separation are critical disclosures",
+          rationale: "Rips, snags, thin spots, and seam separation are critical disclosures",
         },
         {
           region: "union label if present",
@@ -286,8 +271,7 @@ async function runStageA(
 > {
   const searchQueries = buildSearchQueries(domain, itemName);
 
-  const systemInstruction =
-    `You are an expert eBay listing analyst. Use the Google Search tool to find:
+  const systemInstruction = `You are an expert eBay listing analyst. Use the Google Search tool to find:
 1. The current 2026 eBay LEAF category ID for: "${itemName}" (domain: ${domain})
 2. Recently sold eBay prices for this item type, including qualitative value factors.
 
@@ -309,10 +293,9 @@ After searching, return ONLY a single valid JSON object (no markdown, no code bl
         role: "user",
         parts: [
           {
-            text:
-              `Find the eBay leaf category ID and recent sold prices for this ${
-                domain.replace("_", " ")
-              } item: "${itemName}".`,
+            text: `Find the eBay leaf category ID and recent sold prices for this ${
+              domain.replace("_", " ")
+            } item: "${itemName}".`,
           },
         ],
       },
@@ -340,9 +323,7 @@ After searching, return ONLY a single valid JSON object (no markdown, no code bl
   if (!resp.ok) {
     const errText = await resp.text();
     console.warn(
-      `${label}[StageA] ${GROUNDING_MODEL} returned ${resp.status}: ${
-        errText.slice(0, 300)
-      }`,
+      `${label}[StageA] ${GROUNDING_MODEL} returned ${resp.status}: ${errText.slice(0, 300)}`,
     );
     return { marketAnalysis: null, groundedCategoryId: null };
   }
@@ -364,9 +345,7 @@ After searching, return ONLY a single valid JSON object (no markdown, no code bl
     parsed = JSON.parse(extractJson(rawText));
   } catch (e) {
     console.warn(
-      `${label}[StageA] JSON parse failed: ${String(e)}. Raw: ${
-        rawText.slice(0, 200)
-      }`,
+      `${label}[StageA] JSON parse failed: ${String(e)}. Raw: ${rawText.slice(0, 200)}`,
     );
     return { marketAnalysis: null, groundedCategoryId: null };
   }
@@ -424,10 +403,9 @@ async function runStageB(
     .map((t, i) => `${i + 1}. **${t.region}**: ${t.rationale}`)
     .join("\n");
 
-  const systemInstruction =
-    `You are an expert visual analyst performing an agentic inspection of a ${
-      domain.replace("_", " ")
-    } item for eBay listing purposes.
+  const systemInstruction = `You are an expert visual analyst performing an agentic inspection of a ${
+    domain.replace("_", " ")
+  } item for eBay listing purposes.
 
 Using the code_execution tool, perform a Think-Act-Observe inspection loop on the provided image(s):
 
@@ -492,9 +470,7 @@ Return ONLY a single valid JSON object (no markdown, no code blocks):
   if (!resp.ok) {
     const errText = await resp.text();
     console.warn(
-      `${label}[StageB] ${VISION_MODEL} returned ${resp.status}: ${
-        errText.slice(0, 300)
-      }`,
+      `${label}[StageB] ${VISION_MODEL} returned ${resp.status}: ${errText.slice(0, 300)}`,
     );
     return null;
   }
@@ -518,29 +494,22 @@ Return ONLY a single valid JSON object (no markdown, no code blocks):
     parsed = JSON.parse(extractJson(rawText));
   } catch (e) {
     console.warn(
-      `${label}[StageB] JSON parse failed: ${String(e)}. Raw: ${
-        rawText.slice(0, 200)
-      }`,
+      `${label}[StageB] JSON parse failed: ${String(e)}. Raw: ${rawText.slice(0, 200)}`,
     );
     return null;
   }
 
   const zoomRegions = Array.isArray(parsed.zoom_regions_examined)
-    ? parsed.zoom_regions_examined.map(String).filter((s: string) =>
-      s.length > 0
-    )
+    ? parsed.zoom_regions_examined.map(String).filter((s: string) => s.length > 0)
     : [];
-  const keyFindings = typeof parsed.key_findings === "string"
-    ? parsed.key_findings.trim()
-    : "";
+  const keyFindings = typeof parsed.key_findings === "string" ? parsed.key_findings.trim() : "";
   const confidenceBoost = typeof parsed.confidence_boost === "number"
     ? Math.min(100, Math.max(0, Math.round(parsed.confidence_boost)))
     : 0;
-  const identificationCorrection =
-    typeof parsed.identification_correction === "string" &&
+  const identificationCorrection = typeof parsed.identification_correction === "string" &&
       parsed.identification_correction.trim().length > 5
-      ? parsed.identification_correction.trim()
-      : undefined;
+    ? parsed.identification_correction.trim()
+    : undefined;
 
   if (keyFindings.length <= 5 && zoomRegions.length === 0) {
     console.warn(`${label}[StageB] Inspection returned no meaningful findings`);
@@ -618,9 +587,7 @@ export async function runAgenticPrePass(
       ? stageASettled.value
       : { marketAnalysis: null, groundedCategoryId: null };
 
-    const stageB = stageBSettled.status === "fulfilled"
-      ? stageBSettled.value
-      : null;
+    const stageB = stageBSettled.status === "fulfilled" ? stageBSettled.value : null;
 
     const result: PrePassResult = {
       marketAnalysis: stageA.marketAnalysis,
@@ -643,8 +610,7 @@ export async function runAgenticPrePass(
       stageB_model: VISION_MODEL,
       hasMarketAnalysis: !!result.marketAnalysis,
       groundedCategoryId: result.groundedCategoryId,
-      inspectionRegions:
-        result.agenticInspection?.zoomRegionsExamined?.length ?? 0,
+      inspectionRegions: result.agenticInspection?.zoomRegionsExamined?.length ?? 0,
       confidenceBoost: result.agenticInspection?.confidenceBoost ?? 0,
       hasCorrection: !!result.agenticInspection?.identificationCorrection,
     });

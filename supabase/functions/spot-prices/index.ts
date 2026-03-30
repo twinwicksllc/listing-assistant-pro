@@ -37,9 +37,7 @@ async function getSpotPrices(
 
   const now = new Date();
   const fetchedAt = cached?.fetched_at ? new Date(cached.fetched_at) : null;
-  const ageMinutes = fetchedAt
-    ? (now.getTime() - fetchedAt.getTime()) / 60000
-    : Infinity;
+  const ageMinutes = fetchedAt ? (now.getTime() - fetchedAt.getTime()) / 60000 : Infinity;
 
   // 2. If cache is fresh (< 15 min) and not forced to refresh, return it immediately
   if (cached && ageMinutes < CACHE_TTL_MINUTES && !forceRefresh) {
@@ -79,9 +77,7 @@ async function getSpotPrices(
       const prices = {
         gold: goldMatch ? parseFloat(goldMatch[1].replace(/,/g, "")) : 0,
         silver: silverMatch ? parseFloat(silverMatch[1].replace(/,/g, "")) : 0,
-        platinum: platinumMatch
-          ? parseFloat(platinumMatch[1].replace(/,/g, ""))
-          : 0,
+        platinum: platinumMatch ? parseFloat(platinumMatch[1].replace(/,/g, "")) : 0,
       };
 
       console.log("Kitco parsed prices:", prices);
@@ -155,8 +151,7 @@ serve(async (req) => {
     const url = new URL(req.url);
     const forceRefresh = url.searchParams.get("force_refresh") === "true";
 
-    const { gold, silver, platinum, fetched_at, source, refreshed } =
-      await getSpotPrices(svc, forceRefresh);
+    const { gold, silver, platinum, fetched_at, source, refreshed } = await getSpotPrices(svc, forceRefresh);
 
     // If body has metalType & weightOz, also calculate melt value
     let meltValue: number | null = null;

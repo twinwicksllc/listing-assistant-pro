@@ -287,9 +287,7 @@ serve(async (req) => {
 
       // Filter to specific listings if provided
       if (listingIds && listingIds.length > 0) {
-        listings = listings.filter((l) =>
-          listingIds.includes(l.listingId ?? "")
-        );
+        listings = listings.filter((l) => listingIds.includes(l.listingId ?? ""));
       }
 
       // Limit to top 20 per run to avoid rate limits
@@ -359,8 +357,7 @@ serve(async (req) => {
             optimization_type: "reprice_rule",
             old_value: String(listing.price),
             new_value: String(newPrice),
-            reasoning:
-              `Rule "${matchingRule.rule_name}" (${matchingRule.rule_type})`,
+            reasoning: `Rule "${matchingRule.rule_name}" (${matchingRule.rule_type})`,
             applied_by: "auto",
             result: applyResult.success ? "accepted" : "pending",
           });

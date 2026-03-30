@@ -54,8 +54,7 @@ async function getEbayAppToken(): Promise<string> {
       Authorization: `Basic ${credentials}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
-    body:
-      "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
+    body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
   });
 
   if (!resp.ok) {
@@ -86,9 +85,7 @@ async function browseSearch(params: {
 }): Promise<BrowseSearchResult> {
   const { query, token, ebayEnv, categoryId, limit = 50 } = params;
 
-  const apiBase = ebayEnv === "production"
-    ? "https://api.ebay.com"
-    : "https://api.sandbox.ebay.com";
+  const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
 
   const searchParams = new URLSearchParams({
     q: query,
@@ -100,8 +97,7 @@ async function browseSearch(params: {
     searchParams.set("category_ids", categoryId);
   }
 
-  const url =
-    `${apiBase}/buy/browse/v1/item_summary/search?${searchParams.toString()}`;
+  const url = `${apiBase}/buy/browse/v1/item_summary/search?${searchParams.toString()}`;
   console.log(`[keyword-research] Browse API search: "${query}"`);
 
   const resp = await fetch(url, {
@@ -116,9 +112,7 @@ async function browseSearch(params: {
   if (!resp.ok) {
     const txt = await resp.text();
     console.error(
-      `[keyword-research] Browse API error ${resp.status}: ${
-        txt.slice(0, 200)
-      }`,
+      `[keyword-research] Browse API error ${resp.status}: ${txt.slice(0, 200)}`,
     );
     return { prices: [], count: 0, total: 0, topItems: [] };
   }
@@ -178,8 +172,7 @@ async function scrapeEbaySoldData(
   categoryId?: string | null,
 ): Promise<SoldDataResult> {
   const encoded = encodeURIComponent(query);
-  let ebayUrl =
-    `https://www.ebay.com/sch/i.html?_nkw=${encoded}&LH_Complete=1&LH_Sold=1&_ipg=50&_sop=13`;
+  let ebayUrl = `https://www.ebay.com/sch/i.html?_nkw=${encoded}&LH_Complete=1&LH_Sold=1&_ipg=50&_sop=13`;
   if (categoryId) {
     ebayUrl += `&_sacat=${categoryId}`;
   }
@@ -224,16 +217,12 @@ async function scrapeEbaySoldData(
   const allListingsMatch = content.match(
     /All Listings \(([\d,]+)\)\s+Filter Applied/,
   );
-  let soldCount = allListingsMatch
-    ? parseInt(allListingsMatch[1].replace(/,/g, ""), 10)
-    : 0;
+  let soldCount = allListingsMatch ? parseInt(allListingsMatch[1].replace(/,/g, ""), 10) : 0;
 
   // Fallback: "X results for" or "X+ results for"
   if (!soldCount) {
     const resultsMatch = content.match(/([\d,]+)\+?\s+results?\s+for/i);
-    soldCount = resultsMatch
-      ? parseInt(resultsMatch[1].replace(/,/g, ""), 10)
-      : 0;
+    soldCount = resultsMatch ? parseInt(resultsMatch[1].replace(/,/g, ""), 10) : 0;
   }
 
   // Extract price range buckets from the filter sidebar
@@ -300,9 +289,7 @@ function median(nums: number[]): number {
   if (nums.length === 0) return 0;
   const sorted = [...nums].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 !== 0
-    ? sorted[mid]
-    : (sorted[mid - 1] + sorted[mid]) / 2;
+  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 function percentile(sorted: number[], p: number): number {
@@ -370,9 +357,7 @@ serve(async (req) => {
 
     const soldCount = soldData.soldCount;
     // Use Browse API `total` field for the active count (more accurate than page count)
-    const activeCount = activeResult.total > 0
-      ? activeResult.total
-      : activeResult.count;
+    const activeCount = activeResult.total > 0 ? activeResult.total : activeResult.count;
     const total = soldCount + activeCount;
 
     // Sell-through rate: sold / (sold + active)
@@ -389,18 +374,10 @@ serve(async (req) => {
       ? round2(activePrices.reduce((s, p) => s + p, 0) / activePrices.length)
       : null;
     const minActivePrice = activePrices.length > 0 ? activePrices[0] : null;
-    const maxActivePrice = activePrices.length > 0
-      ? activePrices[activePrices.length - 1]
-      : null;
-    const medianActivePrice = activePrices.length > 0
-      ? round2(median(activePrices))
-      : null;
-    const p25ActivePrice = activePrices.length > 0
-      ? round2(percentile(activePrices, 25))
-      : null;
-    const p75ActivePrice = activePrices.length > 0
-      ? round2(percentile(activePrices, 75))
-      : null;
+    const maxActivePrice = activePrices.length > 0 ? activePrices[activePrices.length - 1] : null;
+    const medianActivePrice = activePrices.length > 0 ? round2(median(activePrices)) : null;
+    const p25ActivePrice = activePrices.length > 0 ? round2(percentile(activePrices, 25)) : null;
+    const p75ActivePrice = activePrices.length > 0 ? round2(percentile(activePrices, 75)) : null;
 
     // Competition level (based on active count from API total)
     let competitionLevel: "low" | "medium" | "high" = "low";
