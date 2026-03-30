@@ -15,7 +15,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   User, CreditCard, Zap, Loader2, Check, Shield,
-  Crown, Store, ExternalLink, AlertCircle,
+  Crown, Store, ExternalLink, AlertCircle, ChevronRight,
 } from "lucide-react";
 import { useAuth, PLANS } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -36,7 +36,8 @@ const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica 
 const S = {
   page: {
     minHeight: "100vh",
-    background: "#F8F9FA",
+    background: "linear-gradient(145deg, #e8f4fb 0%, #f0f6ff 40%, #eaf1f8 100%)",
+    backgroundAttachment: "fixed" as const,
     fontFamily: FONT,
   } as React.CSSProperties,
 
@@ -84,13 +85,13 @@ const S = {
 
   // Left sidebar tab list (desktop) - glass-morphic
   tabList: {
-    background: "linear-gradient(135deg, rgba(255,255,255,0.82) 0%, rgba(255,255,255,0.72) 100%)",
+    background: "#ffffff",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
-    border: "1px solid rgba(255,255,255,0.3)",
+    border: "1px solid #D8E4EF",
     borderRadius: 16,
     overflow: "hidden",
-    boxShadow: "0 4px 20px rgba(0,0,0,0.05)",
+    boxShadow: "0 4px 6px -1px rgba(0,0,0,0.07), 0 10px 30px -5px rgba(0,80,140,0.10)",
   } as React.CSSProperties,
 
   tabBtn: (active: boolean): React.CSSProperties => ({
@@ -115,12 +116,13 @@ const S = {
     display: "flex",
     borderBottom: "none",
     marginBottom: "1.25rem",
-    background: "linear-gradient(135deg, rgba(255,255,255,0.82) 0%, rgba(255,255,255,0.72) 100%)",
+    background: "#ffffff",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
+    border: "1px solid #D8E4EF",
     borderRadius: 12,
     overflowX: "auto" as const,
-    boxShadow: "0 2px 10px rgba(0,0,0,0.03)",
+    boxShadow: "0 2px 8px rgba(0,80,140,0.08)",
   } as React.CSSProperties,
 
   mobileTabBtn: (active: boolean): React.CSSProperties => ({
@@ -141,18 +143,20 @@ const S = {
 
   // Content card - glass-morphic
   card: {
-    background: "linear-gradient(135deg, rgba(255,255,255,0.82) 0%, rgba(255,255,255,0.72) 100%)",
+    background: "#ffffff",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
-    border: "1px solid rgba(255,255,255,0.3)",
+    border: "1px solid #D8E4EF",
+    borderTop: "3px solid #0076B6",
     borderRadius: 16,
-    boxShadow: "0 4px 20px rgba(0,0,0,0.05)",
+    boxShadow: "0 4px 6px -1px rgba(0,0,0,0.07), 0 10px 30px -5px rgba(0,80,140,0.10)",
     overflow: "hidden",
   } as React.CSSProperties,
 
   cardHeader: {
     padding: "1.25rem 1.5rem",
-    borderBottom: "1px solid rgba(228,231,236,0.5)",
+    borderBottom: "1px solid #E8EEF5",
+    background: "linear-gradient(180deg, #f7fbff 0%, #ffffff 100%)",
   } as React.CSSProperties,
 
   cardTitle: {
@@ -190,17 +194,27 @@ const S = {
   // Row button (profile, security)
   rowBtn: {
     display: "flex",
-    flexDirection: "column" as const,
-    alignItems: "flex-start",
-    gap: "0.125rem",
+    flexDirection: "row" as const,
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "0.75rem",
     width: "100%",
     padding: "1rem 1.25rem",
-    background: "#fff",
-    border: "1px solid #E4E7EC",
+    background: "#ffffff",
+    border: "1px solid #D8E4EF",
+    borderLeft: "3px solid #0076B6",
     borderRadius: 10,
     cursor: "pointer",
     textAlign: "left" as const,
-    transition: "background 0.15s",
+    transition: "box-shadow 0.15s, transform 0.15s, background 0.15s",
+    boxShadow: "0 2px 8px rgba(0,80,140,0.06)",
+  } as React.CSSProperties,
+
+  rowBtnInner: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: "0.125rem",
+    flex: 1,
   } as React.CSSProperties,
 
   rowBtnLabel: {
@@ -214,6 +228,12 @@ const S = {
     color: "#6E7580",
   } as React.CSSProperties,
 
+  rowBtnArrow: {
+    color: "#0076B6",
+    flexShrink: 0,
+    opacity: 0.7,
+  } as React.CSSProperties,
+
   // Primary button
   btnPrimary: {
     display: "inline-flex",
@@ -221,13 +241,14 @@ const S = {
     justifyContent: "center",
     gap: "0.5rem",
     padding: "0.75rem 1.5rem",
-    background: "#0076B6",
+    background: "linear-gradient(135deg, #0088cc 0%, #0076B6 100%)",
     color: "#fff",
     fontSize: "0.9375rem",
     fontWeight: 600,
     border: "none",
-    borderRadius: 8,
+    borderRadius: 10,
     cursor: "pointer",
+    boxShadow: "0 4px 14px rgba(0,118,182,0.35)",
     width: "100%",
     transition: "background 0.15s",
   } as React.CSSProperties,
@@ -239,14 +260,15 @@ const S = {
     gap: "0.5rem",
     padding: "0.625rem 1.25rem",
     background: "#fff",
-    color: "#141820",
+    color: "#0076B6",
     fontSize: "0.9375rem",
-    fontWeight: 500,
-    border: "1px solid #E4E7EC",
-    borderRadius: 8,
+    fontWeight: 600,
+    border: "1px solid #D8E4EF",
+    borderRadius: 10,
     cursor: "pointer",
     width: "100%",
-    transition: "background 0.15s",
+    transition: "box-shadow 0.15s, background 0.15s",
+    boxShadow: "0 2px 6px rgba(0,80,140,0.07)",
   } as React.CSSProperties,
 
   btnDanger: {
@@ -255,15 +277,16 @@ const S = {
     justifyContent: "center",
     gap: "0.5rem",
     padding: "0.625rem 1.25rem",
-    background: "#fff",
+    background: "#fff5f5",
     color: "#dc2626",
     fontSize: "0.9375rem",
-    fontWeight: 500,
+    fontWeight: 600,
     border: "1px solid #fca5a5",
-    borderRadius: 8,
+    borderRadius: 10,
     cursor: "pointer",
     width: "100%",
-    transition: "background 0.15s",
+    transition: "box-shadow 0.15s, background 0.15s",
+    boxShadow: "0 2px 6px rgba(220,38,38,0.08)",
   } as React.CSSProperties,
 
   // Badge
@@ -496,25 +519,31 @@ export default function SettingsPage2() {
       <button
         style={S.rowBtn}
         onClick={() => setShowProfileModal(true)}
-        onMouseEnter={e => (e.currentTarget.style.background = "#F7F9FB")}
-        onMouseLeave={e => (e.currentTarget.style.background = "#fff")}
+        onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,80,140,0.12)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+        onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,80,140,0.06)"; e.currentTarget.style.transform = "translateY(0)"; }}
       >
-        <span style={S.rowBtnLabel}>Edit Profile</span>
-        <span style={S.rowBtnSub}>Update your name, email, and display preferences</span>
+        <div style={S.rowBtnInner}>
+          <span style={S.rowBtnLabel}>Edit Profile</span>
+          <span style={S.rowBtnSub}>Update your name, email, and display preferences</span>
+        </div>
+        <ChevronRight size={18} style={S.rowBtnArrow} />
       </button>
 
       {isAdmin && (
         <button
-          style={{ ...S.rowBtn, border: "1px solid rgba(245,158,11,0.35)", background: "rgba(245,158,11,0.04)" }}
+          style={{ ...S.rowBtn, border: "1px solid rgba(245,158,11,0.35)", borderLeft: "3px solid #d97706", background: "rgba(245,158,11,0.04)", boxShadow: "0 2px 8px rgba(217,119,6,0.08)" }}
           onClick={() => navigate("/admin")}
-          onMouseEnter={e => (e.currentTarget.style.background = "rgba(245,158,11,0.08)")}
-          onMouseLeave={e => (e.currentTarget.style.background = "rgba(245,158,11,0.04)")}
+          onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 4px 16px rgba(217,119,6,0.14)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+          onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 2px 8px rgba(217,119,6,0.08)"; e.currentTarget.style.transform = "translateY(0)"; }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <Shield size={16} color="#d97706" />
-            <span style={S.rowBtnLabel}>Admin Dashboard</span>
+          <div style={S.rowBtnInner}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <Shield size={16} color="#d97706" />
+              <span style={S.rowBtnLabel}>Admin Dashboard</span>
+            </div>
+            <span style={S.rowBtnSub}>Manage system and user settings</span>
           </div>
-          <span style={S.rowBtnSub}>Manage system and user settings</span>
+          <ChevronRight size={18} style={{ ...S.rowBtnArrow, color: "#d97706" }} />
         </button>
       )}
 
@@ -524,11 +553,14 @@ export default function SettingsPage2() {
         <p style={{ fontSize: "1rem", fontWeight: 700, color: "#141820", marginBottom: "0.75rem" }}>Security</p>
         <button
           style={S.rowBtn}
-          onMouseEnter={e => (e.currentTarget.style.background = "#F7F9FB")}
-          onMouseLeave={e => (e.currentTarget.style.background = "#fff")}
+          onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,80,140,0.12)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+          onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,80,140,0.06)"; e.currentTarget.style.transform = "translateY(0)"; }}
         >
-          <span style={S.rowBtnLabel}>Change Password</span>
-          <span style={S.rowBtnSub}>Update your password regularly for security</span>
+          <div style={S.rowBtnInner}>
+            <span style={S.rowBtnLabel}>Change Password</span>
+            <span style={S.rowBtnSub}>Update your password regularly for security</span>
+          </div>
+          <ChevronRight size={18} style={S.rowBtnArrow} />
         </button>
       </div>
     </div>

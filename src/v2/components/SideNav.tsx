@@ -121,7 +121,7 @@ export default function SideNav() {
         <img
           src={teckstartLogo}
           alt="Teckstart"
-          style={{ width: 36, height: 36, borderRadius: 8, flexShrink: 0 }}
+          style={{ height: 32, width: "auto", maxWidth: 120, flexShrink: 0, objectFit: "contain" }}
         />
         <div>
           <div style={{ color: "#fff", fontWeight: 700, fontSize: "0.9375rem", lineHeight: 1.2 }}>
