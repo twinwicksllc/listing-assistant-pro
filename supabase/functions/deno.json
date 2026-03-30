@@ -12,7 +12,8 @@
         "no-inner-declarations",
         "require-await",
         "no-unused-vars",
-        "no-dupe-keys"
+        "no-dupe-keys",
+        "no-process-global"
       ]
     }
   },
