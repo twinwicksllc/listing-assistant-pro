@@ -20,7 +20,9 @@ import {
   SlidersHorizontal, Heart, ShoppingCart,
   Flame, TrendingDown, Minus, Package,
   Hash, Tag, Clock, LayoutDashboard,
-  CheckSquare, Square, MousePointerClick, MessageSquare,
+  CheckSquare, Square, MousePointerClick,
+  TrendingUp, Receipt, Truck, RotateCcw,
+  Store, ShieldAlert, BadgeCheck, CircleDollarSign,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDrafts } from "@/hooks/useDrafts";
@@ -28,9 +30,8 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import AppShell from "@/v2/components/AppShell";
-import { COLORS, cardStyle, btnPrimaryStyle, inputStyle } from "@/v2/theme";
+import { COLORS, cardStyle, inputStyle } from "@/v2/theme";
 import { CompetitorPriceCard } from "@/components/CompetitorPriceCard";
-import OptimizationQueueWidget from "@/components/OptimizationQueueWidget";
 import ProfitBadge from "@/components/ProfitBadge";
 import { PricingInsightsTable } from "@/components/PricingInsightsTable";
 import { RepriceManagerPanel } from "@/components/RepriceManagerPanel";
@@ -93,6 +94,27 @@ type SortField = "title" | "price" | "views" | "impressions" | "watchCount" | "t
 type SortDir = "asc" | "desc";
 type TrendLabel = "hot" | "stable" | "stale" | "new";
 type ViewMode = "cards" | "pricing";
+type ProfitWindow = "7d" | "30d" | "90d";
+
+interface FinancialWindow {
+  orders: number;
+  revenue: number;
+  shippingCollected: number;
+  ebayFees: number;
+  shippingLabels: number;
+  refunds: number;
+  nonSaleCharges: number;
+  disputes: number;
+  credits: number;
+  cogsTotal: number;
+  netProfit: number;
+}
+
+const emptyFin = (): FinancialWindow => ({
+  orders: 0, revenue: 0, shippingCollected: 0, ebayFees: 0,
+  shippingLabels: 0, refunds: 0, nonSaleCharges: 0, disputes: 0,
+  credits: 0, cogsTotal: 0, netProfit: 0,
+});
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -326,6 +348,15 @@ export default function DashboardPage2() {
   const [setupDismissed, setSetupDismissed] = useState(false);
   const [viewMode,    setViewMode]    = useState<ViewMode>("cards");
 
+  // Financial / P&L state
+  const [fin7,  setFin7]  = useState<FinancialWindow>(emptyFin());
+  const [fin30, setFin30] = useState<FinancialWindow>(emptyFin());
+  const [fin90, setFin90] = useState<FinancialWindow>(emptyFin());
+  const [profitWindow, setProfitWindow] = useState<ProfitWindow>("30d");
+  const [orderCount7d,  setOrderCount7d]  = useState(0);
+  const [orderCount30d, setOrderCount30d] = useState(0);
+  const [orderCount90d, setOrderCount90d] = useState(0);
+
   // Search & filters
   const [searchQuery,  setSearchQuery]  = useState("");
   const [showFilters,  setShowFilters]  = useState(false);
@@ -396,7 +427,54 @@ export default function DashboardPage2() {
 
       const rawListings: EbayListing[] = listRes.data?.listings ?? [];
 
-      // Step 3: fetch competitor prices from DB
+      // Step 3: capture order counts + financial data from Fulfillment API
+      if (typeof listRes.data?.orderCount30d === "number") setOrderCount30d(listRes.data.orderCount30d);
+      if (typeof listRes.data?.orderCount7d  === "number") setOrderCount7d(listRes.data.orderCount7d);
+      if (typeof listRes.data?.orderCount90d === "number") setOrderCount90d(listRes.data.orderCount90d);
+      if (listRes.data?.financial?.w7)  setFin7(listRes.data.financial.w7);
+      if (listRes.data?.financial?.w30) setFin30(listRes.data.financial.w30);
+      if (listRes.data?.financial?.w90) setFin90(listRes.data.financial.w90);
+
+      // Step 4: match COGS from DB to sold orders and apply to financial windows
+      if (user?.id && listRes.data?.financial) {
+        try {
+          const soldOrders: Array<{ sku: string | null; listingId: string | null; soldAt: string }> =
+            listRes.data.financial.soldOrders ?? [];
+          if (soldOrders.length > 0) {
+            const skus       = soldOrders.map(o => o.sku).filter(Boolean) as string[];
+            const listingIds = soldOrders.map(o => o.listingId).filter(Boolean) as string[];
+            const orParts: string[] = [];
+            if (skus.length > 0)       orParts.push(`ebay_sku.in.(${skus.join(",")})`);
+            if (listingIds.length > 0) orParts.push(`ebay_listing_id.in.(${listingIds.join(",")})`);
+            const { data: cogsRows } = await supabase
+              .from("listing_cogs")
+              .select("ebay_sku, ebay_listing_id, cogs")
+              .eq("user_id", user.id)
+              .or(orParts.join(","));
+            const cogsMap: Record<string, number> = {};
+            for (const row of cogsRows ?? []) {
+              if (row.ebay_sku)        cogsMap[row.ebay_sku]        = Number(row.cogs);
+              if (row.ebay_listing_id) cogsMap[row.ebay_listing_id] = Number(row.cogs);
+            }
+            const now = Date.now();
+            const ms7 = 7*86400000, ms30 = 30*86400000, ms90 = 90*86400000;
+            let cogs7 = 0, cogs30 = 0, cogs90 = 0;
+            for (const order of soldOrders) {
+              const cv = (order.sku ? cogsMap[order.sku] : 0) || (order.listingId ? cogsMap[order.listingId] : 0) || 0;
+              if (cv === 0) continue;
+              const age = now - new Date(order.soldAt).getTime();
+              if (age <= ms90) cogs90 += cv;
+              if (age <= ms30) cogs30 += cv;
+              if (age <= ms7)  cogs7  += cv;
+            }
+            setFin7(prev  => ({ ...prev, cogsTotal: cogs7,  netProfit: prev.netProfit - cogs7  }));
+            setFin30(prev => ({ ...prev, cogsTotal: cogs30, netProfit: prev.netProfit - cogs30 }));
+            setFin90(prev => ({ ...prev, cogsTotal: cogs90, netProfit: prev.netProfit - cogs90 }));
+          }
+        } catch (cogsErr) { console.warn("COGS lookup non-fatal:", cogsErr); }
+      }
+
+      // Step 5: fetch competitor prices from DB
       const competitorMap: Record<string, CompetitorPriceSnapshot> = {};
       if (user?.id && rawListings.length > 0) {
         try {
@@ -691,8 +769,8 @@ export default function DashboardPage2() {
 
             <div style={statCard}>
               <div style={statLabel}><ShoppingCart size={12} /> Sales (30d)</div>
-              <div style={statValue}>{metrics.sales}</div>
-              <div style={statSub}>Total transactions</div>
+              <div style={statValue}>{orderCount30d}</div>
+              <div style={statSub}>7d: {orderCount7d} · 90d: {orderCount90d}</div>
             </div>
 
             <div style={statCard}>
@@ -702,27 +780,111 @@ export default function DashboardPage2() {
             </div>
           </div>
 
-          {/* ── Optimization Queue Widget ────────────────────────────── */}
-          {listings.length > 0 && (
-            <div style={{ marginBottom: "1.25rem" }}>
-              <OptimizationQueueWidget
-                listings={listings.map(l => ({
-                  listingId:   l.listingId,
-                  offerId:     l.offerId,
-                  sku:         l.sku,
-                  title:       l.title,
-                  price:       l.price,
-                  imageUrl:    l.imageUrl,
-                  categoryId:  l.categoryId ?? null,
-                  listingDate: l.listingDate ?? null,
-                  ebayUrl:     l.ebayUrl ?? null,
-                }))}
-                onPriceApplied={(listingId, newPrice) =>
-                  setListings(prev => prev.map(l => l.listingId === listingId ? { ...l, price: newPrice } : l))
-                }
-              />
-            </div>
-          )}
+          {/* ── P&L / Sales & Profit ───────────────────────────────────────── */}
+          {(() => {
+            const finMap: Record<string, typeof fin30> = { "7d": fin7, "30d": fin30, "90d": fin90 };
+            const fin = finMap[profitWindow];
+            const profitColor = fin.netProfit >= 0 ? "#16a34a" : "#dc2626";
+            const profitBg    = fin.netProfit >= 0 ? "rgba(34,197,94,0.08)" : "rgba(220,38,38,0.06)";
+            const fmt = (v: number) => v === 0 ? "—" : `${v < 0 ? "-" : ""}$${Math.abs(v).toFixed(2)}`;
+            const fmtPos = (v: number) => v === 0 ? "—" : `$${v.toFixed(2)}`;
+            const fmtNeg = (v: number) => v === 0 ? "—" : `-$${Math.abs(v).toFixed(2)}`;
+            const row = (
+              icon: React.ReactNode,
+              label: string,
+              value: string,
+              color = "#374151",
+              bold = false,
+              topBorder = false,
+            ) => (
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "0.5rem 0",
+                borderTop: topBorder ? "1px solid #E8EEF5" : undefined,
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#6E7580", fontSize: "0.8125rem", fontWeight: bold ? 700 : 400 }}>
+                  {icon}
+                  {label}
+                </div>
+                <span style={{ fontSize: bold ? "0.9375rem" : "0.8125rem", fontWeight: bold ? 700 : 500, color }}>{value}</span>
+              </div>
+            );
+            return (
+              <div style={{ ...sectionCard, marginBottom: "1.25rem" }}>
+                {/* Card header */}
+                <div style={cardHeader}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+                    <CircleDollarSign size={16} style={{ color: BRAND }} />
+                    <span style={{ fontSize: "0.9375rem", fontWeight: 700, color: "#141820" }}>Sales & Profit</span>
+                  </div>
+                  {/* Window toggle */}
+                  <div style={toggleGroup}>
+                    {(["7d","30d","90d"] as ProfitWindow[]).map(w => (
+                      <button key={w} style={toggleBtn(profitWindow === w)} onClick={() => setProfitWindow(w)}>
+                        {w}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={cardBody}>
+                  {/* Big net profit number */}
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: "1.5rem",
+                    background: profitBg,
+                    borderRadius: 10,
+                    padding: "1rem 1.25rem",
+                    marginBottom: "1rem",
+                  }}>
+                    <div>
+                      <div style={{ fontSize: "0.6875rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#6E7580", marginBottom: "0.25rem" }}>
+                        Net Profit ({profitWindow})
+                      </div>
+                      <div style={{ fontSize: "2rem", fontWeight: 800, color: profitColor, letterSpacing: "-0.04em", lineHeight: 1 }}>
+                        {fmt(fin.netProfit)}
+                      </div>
+                    </div>
+                    <div style={{ marginLeft: "auto", textAlign: "right" }}>
+                      <div style={{ fontSize: "0.6875rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#6E7580", marginBottom: "0.25rem" }}>
+                        Orders
+                      </div>
+                      <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "#141820", letterSpacing: "-0.03em" }}>
+                        {fin.orders || (profitWindow === "7d" ? orderCount7d : profitWindow === "30d" ? orderCount30d : orderCount90d)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Breakdown rows */}
+                  <div style={{ padding: "0 0.25rem" }}>
+                    {row(<TrendingUp size={14} />,    "Revenue",              fmtPos(fin.revenue),          "#16a34a")}
+                    {row(<Truck size={14} />,          "Shipping Collected",   fmtPos(fin.shippingCollected), "#374151")}
+                    {row(<Receipt size={14} />,        "eBay Fees",            fmtNeg(fin.ebayFees),          "#dc2626")}
+                    {row(<Truck size={14} />,          "Shipping Labels",      fmtNeg(fin.shippingLabels),    "#dc2626")}
+                    {row(<RotateCcw size={14} />,      "Refunds",              fmtNeg(fin.refunds),           "#dc2626")}
+                    {fin.nonSaleCharges !== 0 && row(<Store size={14} />,      "Store / Non-sale Fees",  fmtNeg(fin.nonSaleCharges),   "#dc2626")}
+                    {fin.disputes !== 0 && row(<ShieldAlert size={14} />,      "Disputes",                fmtNeg(fin.disputes),         "#dc2626")}
+                    {fin.credits   !== 0 && row(<BadgeCheck size={14} />,      "Credits",                 fmtPos(fin.credits),          "#16a34a")}
+                    {row(<Package size={14} />,        "COGS",                 fmtNeg(fin.cogsTotal),         fin.cogsTotal > 0 ? "#dc2626" : "#9BA3AD")}
+                    {/* Summary divider row */}
+                    {row(
+                      <CircleDollarSign size={14} style={{ color: profitColor }} />,
+                      "Net Profit",
+                      fmt(fin.netProfit),
+                      profitColor,
+                      true,
+                      true,
+                    )}
+                  </div>
+
+                  {fin.revenue === 0 && fin.orders === 0 && orderCount30d === 0 && (
+                    <p style={{ fontSize: "0.8125rem", color: "#9BA3AD", textAlign: "center", marginTop: "0.75rem" }}>
+                      No financial data available yet for this window. Data populates from your eBay Seller Hub via the Fulfillment API.
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* ── Listings Section ─────────────────────────────────────── */}
           {loading && listings.length === 0 ? (
