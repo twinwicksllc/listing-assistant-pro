@@ -32,7 +32,13 @@ interface CompetitorPriceSnapshot {
   competitorCount: number;
   priceDistribution: { min: number; max: number; count: number }[];
   fetchedAt: string;
+  cacheExpiresAt?: string | null;
 }
+
+// localStorage key for persisting the bulk-refresh cooldown across page reloads
+const BULK_REFRESH_COOLDOWN_KEY = "competitor_bulk_refresh_until";
+// 8-hour cooldown between bulk refreshes (matches server-side cache TTL)
+const BULK_REFRESH_COOLDOWN_MS  = 8 * 60 * 60 * 1000;
 
 interface EbayListing {
   offerId: string | null;
@@ -554,6 +560,16 @@ export default function DashboardPage() {
   // View mode: "cards" or "pricing"
   const [listingViewMode, setListingViewMode] = useState<"cards" | "pricing">("cards");
 
+  // Bulk competitor refresh cooldown — persisted in localStorage so it survives page reloads
+  const [bulkRefreshCooldownUntil, setBulkRefreshCooldownUntil] = useState<string | null>(() => {
+    try {
+      const stored = localStorage.getItem(BULK_REFRESH_COOLDOWN_KEY);
+      if (stored && new Date(stored) > new Date()) return stored;
+    } catch { /* ignore */ }
+    return null;
+  });
+  const [lastBulkRefreshAt, setLastBulkRefreshAt] = useState<string | null>(null);
+
   // Fetch spot prices
   useEffect(() => {
     const metalDrafts = drafts.filter((d) => d.ebayListingId && d.metalType && d.metalType !== "none" && (d.metalWeightOz ?? 0) > 0);
@@ -685,7 +701,7 @@ export default function DashboardPage() {
           if (listingIds.length > 0) {
             const { data: cpData } = await supabase
               .from("competitor_prices")
-              .select("ebay_listing_id, avg_price, min_price, max_price, median_price, price_delta, competitor_count, price_distribution, fetched_at")
+              .select("ebay_listing_id, avg_price, min_price, max_price, median_price, price_delta, competitor_count, price_distribution, fetched_at, expires_at")
               .eq("user_id", user.id)
               .in("ebay_listing_id", listingIds)
               .order("fetched_at", { ascending: false });
@@ -695,7 +711,7 @@ export default function DashboardPage() {
                   avgPrice: row.avg_price, minPrice: row.min_price, maxPrice: row.max_price,
                   medianPrice: row.median_price, priceDelta: row.price_delta,
                   competitorCount: row.competitor_count, priceDistribution: row.price_distribution ?? [],
-                  fetchedAt: row.fetched_at,
+                  fetchedAt: row.fetched_at, cacheExpiresAt: row.expires_at ?? null,
                 };
               }
             }
@@ -1556,51 +1572,113 @@ export default function DashboardPage() {
                     },
                   });
                   if (error) {
-                    // Check for rate limit error
-                    const errorMsg = error.message || String(error);
-                    if (errorMsg.includes("rate limit") || errorMsg.includes("exceeded")) {
-                      toast.error("eBay API rate limit reached. Please try again in a few minutes.", { duration: 5000 });
-                    } else {
-                      toast.error("Could not retrieve competitor prices. Please try again.");
-                    }
+                    toast.error("Could not retrieve competitor prices. Please try again.");
                     return;
                   }
                   if (data?.error) {
-                    const errorMsg = data.error || "";
-                    if (errorMsg.includes("rate limit") || errorMsg.includes("exceeded")) {
-                      toast.error("eBay API rate limit reached. Please try again in a few minutes.", { duration: 5000 });
-                    } else {
-                      toast.error("Could not retrieve competitor prices. Please try again.");
-                    }
+                    toast.error("Could not retrieve competitor prices. Please try again.");
                     return;
                   }
-                  // Show warning if using stale cache due to rate limiting
                   if (data?.stale && data?.warning) {
                     toast.info(data.warning, { duration: 6000 });
                   }
-                  
                   setListings((prev) =>
                     prev.map((l) =>
                       l.listingId === listingId
                         ? {
                             ...l,
                             competitor: {
-                              avgPrice: data.avgPrice,
-                              minPrice: data.minPrice,
-                              maxPrice: data.maxPrice,
-                              medianPrice: data.medianPrice,
-                              competitorCount: data.competitorCount,
-                              priceDelta: data.priceDelta,
+                              avgPrice:          data.avgPrice,
+                              minPrice:          data.minPrice,
+                              maxPrice:          data.maxPrice,
+                              medianPrice:       data.medianPrice,
+                              competitorCount:   data.competitorCount,
+                              priceDelta:        data.priceDelta,
                               priceDistribution: data.priceDistribution ?? [],
-                              fetchedAt: new Date().toISOString(),
+                              fetchedAt:         new Date().toISOString(),
+                              cacheExpiresAt:    data.cacheExpiresAt ?? null,
                             },
                           }
                         : l
                     )
                   );
-                  toast.success("Competitor prices updated");
+                  if (!data?.fromCache) toast.success("Competitor prices updated");
                 } catch (err) {
                   toast.error("Failed to refresh competitor prices");
+                }
+              }}
+              onRefreshAll={async () => {
+                if (!user?.id) return;
+                if (bulkRefreshCooldownUntil && new Date(bulkRefreshCooldownUntil) > new Date()) {
+                  const diff = new Date(bulkRefreshCooldownUntil).getTime() - Date.now();
+                  const h = Math.floor(diff / 3600000);
+                  const m = Math.ceil((diff % 3600000) / 60000);
+                  toast.info(`Bulk refresh available in ${h > 0 ? `${h}h ` : ""}${m}m`, { duration: 4000 });
+                  return;
+                }
+                const staleListings = listings.filter((l) => {
+                  if (!l.listingId) return false;
+                  if (!l.competitor?.fetchedAt) return true;
+                  const ageMs = Date.now() - new Date(l.competitor.fetchedAt).getTime();
+                  return ageMs >= 30 * 60 * 1000;
+                });
+                if (staleListings.length === 0) {
+                  toast.info("All listings have fresh data — nothing to refresh.");
+                  return;
+                }
+                const cooldownUntil = new Date(Date.now() + BULK_REFRESH_COOLDOWN_MS).toISOString();
+                setBulkRefreshCooldownUntil(cooldownUntil);
+                setLastBulkRefreshAt(new Date().toISOString());
+                try { localStorage.setItem(BULK_REFRESH_COOLDOWN_KEY, cooldownUntil); } catch { /* ignore */ }
+                toast.info(`Refreshing ${staleListings.length} listing${staleListings.length !== 1 ? "s" : ""}…`, { duration: 3000 });
+                let updated = 0;
+                let failed  = 0;
+                for (const listing of staleListings) {
+                  if (!listing.listingId) continue;
+                  try {
+                    const { data, error } = await supabase.functions.invoke("ebay-competitor-search", {
+                      body: {
+                        userId:     user.id,
+                        listingId:  listing.listingId,
+                        title:      listing.title,
+                        categoryId: listing.categoryId,
+                        yourPrice:  listing.price,
+                      },
+                    });
+                    if (!error && data && !data.error) {
+                      setListings((prev) =>
+                        prev.map((l) =>
+                          l.listingId === listing.listingId
+                            ? {
+                                ...l,
+                                competitor: {
+                                  avgPrice:          data.avgPrice,
+                                  minPrice:          data.minPrice,
+                                  maxPrice:          data.maxPrice,
+                                  medianPrice:       data.medianPrice,
+                                  competitorCount:   data.competitorCount,
+                                  priceDelta:        data.priceDelta,
+                                  priceDistribution: data.priceDistribution ?? [],
+                                  fetchedAt:         new Date().toISOString(),
+                                  cacheExpiresAt:    data.cacheExpiresAt ?? null,
+                                },
+                              }
+                            : l
+                        )
+                      );
+                      updated++;
+                    } else {
+                      failed++;
+                    }
+                  } catch {
+                    failed++;
+                  }
+                  await new Promise((r) => setTimeout(r, 400));
+                }
+                if (failed === 0) {
+                  toast.success(`All ${updated} listing${updated !== 1 ? "s" : ""} updated!`);
+                } else {
+                  toast.warning(`Updated ${updated}, failed ${failed}. Try refreshing failed items individually.`);
                 }
               }}
               onPriceChange={(listingId, newPrice) => {
@@ -1613,7 +1691,6 @@ export default function DashboardPage() {
                   toast.error("Not connected to eBay");
                   return;
                 }
-                const listing = listings.find((l) => l.listingId === listingId);
                 const { data, error } = await supabase.functions.invoke("ebay-reprice", {
                   body: {
                     action: "single_update",
@@ -1638,6 +1715,8 @@ export default function DashboardPage() {
               userToken={ebayToken}
               userId={user?.id || ""}
               isLoading={loading}
+              lastBulkRefreshAt={lastBulkRefreshAt}
+              bulkRefreshCooldownUntil={bulkRefreshCooldownUntil}
             />
           )}
 
