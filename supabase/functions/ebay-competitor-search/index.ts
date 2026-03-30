@@ -8,6 +8,13 @@ const corsHeaders = {
 };
 
 // ----------------------------------------------------------------
+// Cache TTL — 8 hours. Balances freshness vs. API call volume.
+// The cron job also uses this constant to decide whether to skip
+// a listing (if its cache is younger than CACHE_TTL_MS, skip it).
+// ----------------------------------------------------------------
+const CACHE_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours in milliseconds
+
+// ----------------------------------------------------------------
 // Build price distribution buckets from a list of prices.
 // Generates up to 5 evenly-spaced buckets between min and max.
 // ----------------------------------------------------------------
@@ -30,10 +37,7 @@ function buildDistribution(
   }));
 
   for (const price of prices) {
-    const idx = Math.min(
-      Math.floor((price - min) / step),
-      BUCKET_COUNT - 1
-    );
+    const idx = Math.min(Math.floor((price - min) / step), BUCKET_COUNT - 1);
     buckets[idx].count++;
   }
 
@@ -41,11 +45,11 @@ function buildDistribution(
 }
 
 // ----------------------------------------------------------------
-// Derive a clean search query from a listing title.
-// Trims keywords down to ~5 meaningful tokens so the eBay search
-// returns comparable items (not just exact title matches).
+// Fallback: derive a clean search query from a listing title using
+// simple heuristics (stop-word removal). Used when Gemini is
+// unavailable or times out.
 // ----------------------------------------------------------------
-function deriveSearchQuery(title: string): string {
+function deriveSearchQueryFallback(title: string): string {
   const stopWords = new Set([
     "a", "an", "the", "and", "or", "of", "in", "for", "to", "with",
     "lot", "set", "collection", "item", "listing", "ebay",
@@ -63,9 +67,102 @@ function deriveSearchQuery(title: string): string {
 }
 
 // ----------------------------------------------------------------
-// Get eBay OAuth App Token (client_credentials — no user token needed).
-// This uses the same EBAY_CLIENT_ID + EBAY_CLIENT_SECRET env vars
-// already required for publishing and category lookups.
+// Gemini Flash — generate an optimised eBay search query.
+//
+// Strategy: give Gemini the full listing title and ask it to
+// produce a short (≤8 word) eBay keyword string that will return
+// the most comparable sold/active listings. This:
+//   • Removes noise adjectives ("beautiful", "stunning", "rare")
+//   • Preserves value-critical identifiers (year, mint mark, grade,
+//     model number, size, colour)
+//   • Adds domain-relevant qualifiers when missing (e.g. "graded"
+//     for coins, "raw" if not graded)
+//
+// Returns the raw query string, or null if Gemini is unavailable.
+// Times out after 5 seconds so it never blocks the main pipeline.
+// ----------------------------------------------------------------
+async function geminiSearchQuery(
+  apiKey: string,
+  title: string,
+  categoryId?: string,
+): Promise<string | null> {
+  const label = "[ebay-competitor-search][Gemini]";
+
+  const prompt = `You are an eBay search specialist. Given a listing title, produce the shortest, most effective eBay keyword search string (≤8 words) to find comparable active listings.
+
+Rules:
+- Keep: brand, model, year, mint mark, grade, size, color, key identifiers
+- Remove: marketing adjectives (beautiful, stunning, rare, vintage, antique, original, authentic), condition words (used, new, mint), lot/set/collection qualifiers
+- Do NOT add words not implied by the title
+- Return ONLY the keyword string — no explanation, no quotes, no punctuation
+
+Title: "${title.slice(0, 200)}"${categoryId ? `\neBay Category ID: ${categoryId}` : ""}
+
+eBay search keywords:`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5_000);
+
+    let resp: Response;
+    try {
+      resp = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.1,
+              maxOutputTokens: 60,
+              stopSequences: ["\n"],
+            },
+          }),
+          signal: controller.signal,
+        }
+      );
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    if (!resp.ok) {
+      console.warn(`${label} Gemini API ${resp.status} — falling back to heuristic`);
+      return null;
+    }
+
+    const data = await resp.json();
+    const text: string =
+      data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+
+    if (!text || text.length < 3) {
+      console.warn(`${label} Empty response — falling back to heuristic`);
+      return null;
+    }
+
+    // Sanitise: strip any accidental quotes/punctuation Gemini may add
+    const cleaned = text
+      .replace(/^["'`]+|["'`]+$/g, "")
+      .replace(/[^\w\s\-\.]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 120);
+
+    console.log(`${label} Query for "${title.slice(0, 60)}…" → "${cleaned}"`);
+    return cleaned || null;
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      console.warn(`${label} Timed out after 5s — falling back to heuristic`);
+    } else {
+      console.warn(`${label} Error: ${String(err)} — falling back to heuristic`);
+    }
+    return null;
+  }
+}
+
+// ----------------------------------------------------------------
+// Get an eBay OAuth app token via client_credentials grant.
+// Uses EBAY_CLIENT_ID + EBAY_CLIENT_SECRET (same as keyword-research).
 // ----------------------------------------------------------------
 async function getEbayAppToken(ebayEnv: string): Promise<string> {
   const clientId     = Deno.env.get("EBAY_CLIENT_ID");
@@ -80,8 +177,6 @@ async function getEbayAppToken(ebayEnv: string): Promise<string> {
     ? "https://api.ebay.com/identity/v1/oauth2/token"
     : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
 
-  console.log(`[ebay-competitor-search] Fetching OAuth app token (${ebayEnv})`);
-
   const resp = await fetch(tokenUrl, {
     method: "POST",
     headers: {
@@ -92,30 +187,24 @@ async function getEbayAppToken(ebayEnv: string): Promise<string> {
   });
 
   if (!resp.ok) {
-    const txt = await resp.text();
-    console.error(`[ebay-competitor-search] Token error ${resp.status}: ${txt.slice(0, 200)}`);
-    throw new Error(`Failed to get eBay OAuth token: ${resp.status}`);
+    const body = await resp.text();
+    throw new Error(`Failed to get eBay OAuth token: ${resp.status} — ${body.slice(0, 200)}`);
   }
 
   const data = await resp.json();
-  return data.access_token;
+  return data.access_token as string;
 }
 
 // ----------------------------------------------------------------
 // Fetch competitor listings via eBay Browse API (modern, no quota issues).
-// Uses client_credentials app token — no user OAuth required.
-// Returns active fixed-price listings sorted by best match.
+// Uses OAuth Bearer token — no hard 5,000 calls/day limit.
 // ----------------------------------------------------------------
 async function fetchEbayCompetitors(params: {
   token: string;
   searchQuery: string;
   categoryId?: string;
   ebayEnv: string;
-}): Promise<{
-  prices: number[];
-  count: number;
-  raw: unknown[];
-}> {
+}): Promise<{ prices: number[]; count: number; raw: unknown[] }> {
   const { token, searchQuery, categoryId, ebayEnv } = params;
 
   const apiBase = ebayEnv === "production"
@@ -123,9 +212,9 @@ async function fetchEbayCompetitors(params: {
     : "https://api.sandbox.ebay.com";
 
   const searchParams = new URLSearchParams({
-    q:     searchQuery,
-    limit: "50",
-    sort:  "price",
+    q:      searchQuery,
+    limit:  "50",
+    sort:   "price",
     filter: "buyingOptions:{FIXED_PRICE}",
   });
 
@@ -137,39 +226,35 @@ async function fetchEbayCompetitors(params: {
   console.log(`[ebay-competitor-search] Browse API search: "${searchQuery}" (category: ${categoryId ?? "any"})`);
 
   let resp: Response | null = null;
-  let lastError: Error | null = null;
 
-  // Retry on 5xx with exponential backoff (up to 3 attempts)
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       resp = await fetch(url, {
-        method: "GET",
         headers: {
-          "Authorization":             `Bearer ${token}`,
-          "Content-Type":              "application/json",
-          "X-EBAY-C-MARKETPLACE-ID":   "EBAY_US",
+          "Authorization": `Bearer ${token}`,
+          "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+          "Accept": "application/json",
         },
       });
 
-      if (resp.ok || resp.status < 500) break; // success or client error — don't retry
+      if (resp.ok || resp.status < 500) break;
 
       if (attempt < 2) {
         const delayMs = 1500 * Math.pow(1.5, attempt);
         console.warn(`[ebay-competitor-search] Browse API returned ${resp.status} — retrying in ${delayMs}ms`);
-        await new Promise(r => setTimeout(r, delayMs));
+        await new Promise((r) => setTimeout(r, delayMs));
       }
     } catch (fetchErr) {
-      lastError = fetchErr instanceof Error ? fetchErr : new Error(String(fetchErr));
       if (attempt < 2) {
         const delayMs = 1500 * Math.pow(1.5, attempt);
-        console.warn(`[ebay-competitor-search] Fetch failed (attempt ${attempt + 1}/3) — retrying in ${delayMs}ms`);
-        await new Promise(r => setTimeout(r, delayMs));
+        console.warn(`[ebay-competitor-search] Fetch error (attempt ${attempt + 1}/3) — retrying in ${delayMs}ms`);
+        await new Promise((r) => setTimeout(r, delayMs));
       }
     }
   }
 
   if (!resp || !resp.ok) {
-    const errBody = await resp?.text?.().catch(() => "(could not read body)") || "(no response)";
+    const errBody = await resp?.text?.().catch(() => "(could not read body)") ?? "(no response)";
     console.error(`[ebay-competitor-search] Browse API failed: ${resp?.status} — ${errBody.slice(0, 300)}`);
     throw new Error(`eBay Browse API error: ${resp?.status ?? "unknown"} — ${errBody.slice(0, 200)}`);
   }
@@ -178,19 +263,13 @@ async function fetchEbayCompetitors(params: {
   let json: any;
   try {
     json = JSON.parse(respText);
-  } catch (parseErr) {
-    console.error(`[ebay-competitor-search] JSON parse failed (length=${respText.length}):`, respText.slice(0, 300));
+  } catch {
     throw new Error(`eBay Browse API returned invalid JSON`);
   }
 
   const items: any[] = json?.itemSummaries ?? [];
-
-  if (items.length === 0) {
-    console.log(`[ebay-competitor-search] No results for "${searchQuery}"`);
-    return { prices: [], count: 0, raw: [] };
-  }
-
   const prices: number[] = [];
+
   for (const item of items) {
     try {
       const priceVal = item?.price?.value ?? item?.currentPrice?.value;
@@ -203,7 +282,10 @@ async function fetchEbayCompetitors(params: {
     }
   }
 
-  console.log(`[ebay-competitor-search] Found ${prices.length} priced items out of ${items.length} results`);
+  console.log(
+    `[ebay-competitor-search] Found ${prices.length} priced items out of ${items.length} Browse API results`
+  );
+
   return { prices, count: prices.length, raw: items };
 }
 
@@ -228,42 +310,32 @@ serve(async (req) => {
   console.log("[ebay-competitor-search] *** REQUEST RECEIVED ***", {
     method: req.method,
     url: req.url,
-    headers: {
-      "content-type": req.headers.get("content-type"),
-      "authorization": req.headers.get("authorization") ? "present" : "missing",
-    },
   });
 
   if (req.method === "OPTIONS") {
-    console.log("[ebay-competitor-search] Handling OPTIONS preflight");
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    console.log("[ebay-competitor-search] Attempting to parse request body...");
-    let body: any;
-    let listingId: string | undefined;
-    let userId: string | undefined;
+  // Track these for stale-cache fallback in error handler
+  let userId: string | undefined;
+  let listingId: string | undefined;
 
+  try {
+    let body: any;
     try {
       body = await req.json();
-      console.log("[ebay-competitor-search] Successfully parsed JSON body, keys:", Object.keys(body));
     } catch (parseErr) {
-      console.error("[ebay-competitor-search] JSON parse failed:", parseErr);
       return new Response(
         JSON.stringify({ error: "Invalid JSON in request body", detail: String(parseErr) }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log("[ebay-competitor-search] Body parsed:", Object.keys(body));
     const { title, categoryId, yourPrice } = body;
     listingId = body.listingId;
     userId    = body.userId;
 
-    console.log("[ebay-competitor-search] Validation step - checking title...");
     if (!title) {
-      console.error("[ebay-competitor-search] Missing title");
       return new Response(
         JSON.stringify({ error: "title is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -271,24 +343,27 @@ serve(async (req) => {
     }
 
     console.log("[ebay-competitor-search] Loading environment variables...");
-    // FIXED: Default to "production" — the sandbox Finding API had its own 5k/day
-    // quota that was getting exhausted. The Browse API (OAuth) has no such hard limit.
-    const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "production";
-    console.log("[ebay-competitor-search] ebayEnv:", ebayEnv);
+    // Default to "production" — sandbox has its own separate (tiny) quota
+    const ebayEnv   = Deno.env.get("EBAY_ENVIRONMENT") || "production";
+    const geminiKey = Deno.env.get("GEMINI_API_KEY");
+    console.log("[ebay-competitor-search] ebayEnv:", ebayEnv, "geminiKey exists:", !!geminiKey);
 
-    // ── Check database cache before hitting eBay API ──────────────────────────
-    // Primary cache: 23 hours (fresh data)
-    // Fallback cache: Any data available (graceful degradation during API errors)
+    // ------------------------------------------------------------------
+    // Supabase client (used for cache read + write)
+    // ------------------------------------------------------------------
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      { auth: { persistSession: false } }
+    );
+
+    // ------------------------------------------------------------------
+    // Cache check — return immediately if data is < CACHE_TTL_MS old.
+    // ------------------------------------------------------------------
     if (userId && listingId) {
       try {
-        const supabaseCheck = createClient(
-          Deno.env.get("SUPABASE_URL") ?? "",
-          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-          { auth: { persistSession: false } }
-        );
-
-        const freshCutoff = new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString();
-        const { data: cachedFresh } = await supabaseCheck
+        const freshCutoff = new Date(Date.now() - CACHE_TTL_MS).toISOString();
+        const { data: cachedFresh } = await supabase
           .from("competitor_prices")
           .select("*")
           .eq("user_id", userId)
@@ -299,59 +374,75 @@ serve(async (req) => {
           .maybeSingle();
 
         if (cachedFresh) {
-          console.log("[ebay-competitor-search] Returning fresh cached result from", cachedFresh.fetched_at);
+          const cacheAgeMs   = Date.now() - new Date(cachedFresh.fetched_at).getTime();
+          const cacheAgeMins = Math.round(cacheAgeMs / 60000);
+          const cacheExpiresAt = new Date(
+            new Date(cachedFresh.fetched_at).getTime() + CACHE_TTL_MS
+          ).toISOString();
+          console.log(`[ebay-competitor-search] Cache hit (${cacheAgeMins}min old) — returning cached data`);
           return new Response(
             JSON.stringify({
-              searchQuery:         cachedFresh.search_query,
-              avgPrice:            cachedFresh.avg_price,
-              minPrice:            cachedFresh.min_price,
-              maxPrice:            cachedFresh.max_price,
-              medianPrice:         cachedFresh.median_price,
-              priceDelta:          cachedFresh.price_delta,
-              competitorCount:     cachedFresh.competitor_count,
-              priceDistribution:   cachedFresh.price_distribution ?? [],
-              noData:              false,
-              fromCache:           true,
-              cacheAge:            Math.round((Date.now() - new Date(cachedFresh.fetched_at).getTime()) / 1000),
+              searchQuery:       cachedFresh.gemini_search_query ?? cachedFresh.search_query,
+              avgPrice:          cachedFresh.avg_price,
+              minPrice:          cachedFresh.min_price,
+              maxPrice:          cachedFresh.max_price,
+              medianPrice:       cachedFresh.median_price,
+              priceDelta:        cachedFresh.price_delta,
+              competitorCount:   cachedFresh.competitor_count,
+              priceDistribution: cachedFresh.price_distribution ?? [],
+              noData:            false,
+              fromCache:         true,
+              cacheAgeMins,
+              cacheExpiresAt,
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
-        console.log("[ebay-competitor-search] No fresh cache found, fetching from eBay...");
+        console.log("[ebay-competitor-search] Cache miss / stale — fetching live data from eBay...");
       } catch (cacheErr) {
         console.warn("[ebay-competitor-search] Cache check failed, proceeding to eBay:", cacheErr);
       }
     }
 
-    // ── Get OAuth app token ───────────────────────────────────────────────────
-    console.log("[ebay-competitor-search] Getting eBay OAuth app token...");
+    // ------------------------------------------------------------------
+    // Step 1 — Generate optimised search query via Gemini Flash
+    // Falls back to heuristic if Gemini is unavailable / times out.
+    // ------------------------------------------------------------------
+    let geminiQuery: string | null = null;
+    if (geminiKey) {
+      geminiQuery = await geminiSearchQuery(geminiKey, title, categoryId);
+    } else {
+      console.log("[ebay-competitor-search] No GEMINI_API_KEY — skipping Gemini query optimisation");
+    }
+
+    const searchQuery = geminiQuery ?? deriveSearchQueryFallback(title);
+    const usedGemini  = !!geminiQuery;
+    console.log(`[ebay-competitor-search] Search query (${usedGemini ? "Gemini" : "heuristic"}): "${searchQuery}"`);
+
+    // ------------------------------------------------------------------
+    // Step 2 — Get eBay OAuth token
+    // ------------------------------------------------------------------
     let token: string;
     try {
       token = await getEbayAppToken(ebayEnv);
-      console.log("[ebay-competitor-search] OAuth token obtained successfully");
     } catch (tokenErr) {
-      const msg = tokenErr instanceof Error ? tokenErr.message : String(tokenErr);
-      console.error("[ebay-competitor-search] Failed to get OAuth token:", msg);
+      console.error("[ebay-competitor-search] Failed to get eBay OAuth token:", tokenErr);
       return new Response(
-        JSON.stringify({ error: `eBay authentication failed: ${msg}` }),
+        JSON.stringify({ error: String(tokenErr) }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // ── Derive search query and fetch from eBay Browse API ───────────────────
-    console.log("[ebay-competitor-search] Deriving search query...");
-    const searchQuery = deriveSearchQuery(title);
-    console.log("[ebay-competitor-search] Search query:", searchQuery);
-
-    console.log("[ebay-competitor-search] Fetching eBay competitors via Browse API...");
+    // ------------------------------------------------------------------
+    // Step 3 — Fetch from eBay Browse API
+    // ------------------------------------------------------------------
     const { prices, count } = await fetchEbayCompetitors({
       token,
       searchQuery,
       categoryId,
       ebayEnv,
     });
-    console.log("[ebay-competitor-search] Fetched", prices.length, "prices from", count, "competitors");
 
     if (prices.length === 0) {
       console.log("[ebay-competitor-search] No prices found, returning empty response");
@@ -371,80 +462,78 @@ serve(async (req) => {
       );
     }
 
-    console.log("[ebay-competitor-search] Computing statistics...");
-    const avgPrice         = prices.reduce((s, p) => s + p, 0) / prices.length;
-    const minPrice         = Math.min(...prices);
-    const maxPrice         = Math.max(...prices);
-    const medianPrice      = median(prices);
-    const priceDelta       = yourPrice != null ? Math.round((yourPrice - avgPrice) * 100) / 100 : null;
+    // ------------------------------------------------------------------
+    // Step 4 — Compute statistics
+    // ------------------------------------------------------------------
+    const avgPrice          = prices.reduce((s, p) => s + p, 0) / prices.length;
+    const minPrice          = Math.min(...prices);
+    const maxPrice          = Math.max(...prices);
+    const medianPrice       = median(prices);
+    const priceDelta        = yourPrice != null ? Math.round((yourPrice - avgPrice) * 100) / 100 : null;
     const priceDistribution = buildDistribution(prices);
 
-    console.log("[ebay-competitor-search] Stats: avg=$" + avgPrice.toFixed(2) + ", median=$" + medianPrice.toFixed(2));
+    console.log(`[ebay-competitor-search] Stats: avg=$${avgPrice.toFixed(2)}, median=$${medianPrice.toFixed(2)}, n=${count}`);
 
-    // ── Persist to competitor_prices table ───────────────────────────────────
+    // ------------------------------------------------------------------
+    // Step 5 — Persist to competitor_prices (upsert)
+    // ------------------------------------------------------------------
     if (userId && listingId) {
-      console.log("[ebay-competitor-search] Persisting to database...");
       try {
-        const supabase = createClient(
-          Deno.env.get("SUPABASE_URL") ?? "",
-          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-          { auth: { persistSession: false } }
-        );
+        const expiresAt = new Date(Date.now() + CACHE_TTL_MS).toISOString();
 
         await supabase
           .from("competitor_prices")
           .upsert({
-            user_id:            userId,
-            ebay_listing_id:    listingId,
-            search_query:       searchQuery,
-            avg_price:          Math.round(avgPrice * 100) / 100,
-            min_price:          minPrice,
-            max_price:          maxPrice,
-            median_price:       Math.round(medianPrice * 100) / 100,
-            price_delta:        priceDelta,
-            your_price:         yourPrice ?? null,
-            competitor_count:   count,
-            price_distribution: priceDistribution,
-          });
+            user_id:             userId,
+            ebay_listing_id:     listingId,
+            search_query:        searchQuery,
+            gemini_search_query: geminiQuery ?? null,
+            avg_price:           Math.round(avgPrice * 100) / 100,
+            min_price:           minPrice,
+            max_price:           maxPrice,
+            median_price:        Math.round(medianPrice * 100) / 100,
+            price_delta:         priceDelta,
+            your_price:          yourPrice ?? null,
+            competitor_count:    count,
+            price_distribution:  priceDistribution,
+            expires_at:          expiresAt,
+          }, { onConflict: "user_id,ebay_listing_id" });
 
         console.log(`[ebay-competitor-search] Saved snapshot for listing ${listingId}: avg=$${avgPrice.toFixed(2)}, n=${count}`);
       } catch (dbErr) {
         // Non-fatal — still return data to caller
         console.warn("[ebay-competitor-search] Failed to persist snapshot:", dbErr);
       }
-    } else {
-      console.log("[ebay-competitor-search] Skipping database persistence (no userId or listingId)");
     }
 
-    console.log("[ebay-competitor-search] Returning response...");
+    const cacheExpiresAt = new Date(Date.now() + CACHE_TTL_MS).toISOString();
+
     return new Response(
       JSON.stringify({
         searchQuery,
-        avgPrice:          Math.round(avgPrice * 100) / 100,
+        geminiSearchQuery:  geminiQuery,
+        avgPrice:           Math.round(avgPrice * 100) / 100,
         minPrice,
         maxPrice,
-        medianPrice:       Math.round(medianPrice * 100) / 100,
+        medianPrice:        Math.round(medianPrice * 100) / 100,
         priceDelta,
-        competitorCount:   count,
+        competitorCount:    count,
         priceDistribution,
-        noData:            false,
+        noData:             false,
+        fromCache:          false,
+        cacheExpiresAt,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (err) {
     const msg   = err instanceof Error ? err.message : String(err);
-    const stack = err instanceof Error ? err.stack : "no stack";
-    console.error("[ebay-competitor-search] *** OUTER ERROR HANDLER ***", {
-      message:   msg,
-      errorType: err?.constructor?.name,
-      stack:     stack,
-    });
+    const stack = err instanceof Error ? err.stack    : "no stack";
+    console.error("[ebay-competitor-search] *** OUTER ERROR HANDLER ***", { message: msg, stack });
 
-    // Rate limit fallback — return stale cache if available
-    if ((msg.includes("rate limit") || msg.includes("exceeded") || msg.includes("429")) && userId && listingId) {
+    // Graceful degradation — serve stale cache if we have any
+    if (userId && listingId) {
       try {
-        console.log("[ebay-competitor-search] API error, attempting stale cache fallback...");
         const supabaseCache = createClient(
           Deno.env.get("SUPABASE_URL") ?? "",
           Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
@@ -461,11 +550,13 @@ serve(async (req) => {
           .maybeSingle();
 
         if (staleCached) {
-          const cacheAgeHours = Math.round((Date.now() - new Date(staleCached.fetched_at).getTime()) / (60 * 60 * 1000));
-          console.log("[ebay-competitor-search] Returning stale cache from", staleCached.fetched_at);
+          const cacheAgeHours = Math.round(
+            (Date.now() - new Date(staleCached.fetched_at).getTime()) / (60 * 60 * 1000)
+          );
+          console.log(`[ebay-competitor-search] Returning stale cache (${cacheAgeHours}h old) as fallback`);
           return new Response(
             JSON.stringify({
-              searchQuery:       staleCached.search_query,
+              searchQuery:       staleCached.gemini_search_query ?? staleCached.search_query,
               avgPrice:          staleCached.avg_price,
               minPrice:          staleCached.min_price,
               maxPrice:          staleCached.max_price,
@@ -477,7 +568,7 @@ serve(async (req) => {
               fromCache:         true,
               stale:             true,
               cacheAgeHours,
-              warning:           `eBay API temporarily unavailable. Showing data from ${cacheAgeHours}h ago.`,
+              warning:           `eBay API error. Showing data from ${cacheAgeHours}h ago.`,
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
