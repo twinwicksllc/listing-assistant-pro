@@ -11,7 +11,8 @@
         "prefer-const",
         "no-inner-declarations",
         "require-await",
-        "no-unused-vars"
+        "no-unused-vars",
+        "no-dupe-keys"
       ]
     }
   },
