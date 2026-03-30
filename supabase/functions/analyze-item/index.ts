@@ -288,6 +288,59 @@ serve(async (req: Request) => {
       throw new Error("GEMINI_API_KEY is not configured");
     }
 
+    // ─── PRE-PASS 0: Agentic Grounding + Vision Inspection ────────────────────
+    // Uses the NATIVE Gemini generateContent API with googleSearch + codeExecution
+    // tools. Runs BEFORE Pass 1 so grounded category & market data can influence
+    // the entire downstream pipeline.
+    // Non-blocking: any failure leaves prePassResult = null, pipeline continues.
+    let prePassResult: { marketAnalysis: string | null; groundedCategoryId: string | null; agenticInspection: { zoomRegionsExamined: string[]; keyFindings: string; confidenceBoost: number; identificationCorrection?: string } | null } | null = null;
+    try {
+      const { runAgenticPrePass } = await import("../_helpers/agenticPrePass.ts");
+
+      // Build base64 + mime lists for pre-pass (parse from data URLs)
+      const prePassBase64List: string[] = [];
+      const prePassMimeList: string[] = [];
+      for (const img of imageList.slice(0, 3)) {
+        const ppBase64 = img.includes(",") ? img.split(",")[1] : img;
+        const ppMimeMatch = img.match(/^data:(image\/\w+);/);
+        const ppMimeType = ppMimeMatch ? ppMimeMatch[1] : "image/jpeg";
+        prePassBase64List.push(ppBase64);
+        prePassMimeList.push(ppMimeType);
+      }
+
+      // Fast preliminary domain guess from voice note keywords.
+      // Pass 1 hasn't run yet, so we use heuristics here.
+      type PrePassDomain = "coins_bullion" | "trading_cards" | "jewelry" | "electronics" | "vintage_clothing" | "general";
+      let prelimDomain: PrePassDomain = "general";
+      const noteForDomain = (voiceNote + " " + String(body.voiceNote || "")).toLowerCase();
+      if (/\bcoin|bullion|silver|gold|dollar|eagle|morgan|kennedy|quarter|dime|nickel|cent|peso\b/.test(noteForDomain)) {
+        prelimDomain = "coins_bullion";
+      } else if (/\bcard|pokemon|magic|yugioh|baseball|football|basketball|nba|nfl|mlb\b/.test(noteForDomain)) {
+        prelimDomain = "trading_cards";
+      } else if (/\bring|necklace|bracelet|earring|jewel|watch|pendant|brooch\b/.test(noteForDomain)) {
+        prelimDomain = "jewelry";
+      } else if (/\bphone|laptop|tablet|console|camera|iphone|samsung|macbook|xbox|playstation\b/.test(noteForDomain)) {
+        prelimDomain = "electronics";
+      } else if (/\bshirt|jacket|dress|pants|vintage|coat|blouse|skirt|denim|levi\b/.test(noteForDomain)) {
+        prelimDomain = "vintage_clothing";
+      }
+
+      // Use voice note or generic placeholder as preliminary item name
+      const prelimItemName = voiceNote.trim().slice(0, 80) || "collectible item";
+
+      prePassResult = await runAgenticPrePass(
+        GEMINI_API_KEY,
+        prelimDomain,
+        prelimItemName,
+        prePassBase64List,
+        prePassMimeList,
+        invocationId,
+      );
+    } catch (prePassErr) {
+      console.warn(`[${invocationId}] Pre-Pass 0 outer catch (non-blocking):`, String(prePassErr));
+    }
+    // ─── END PRE-PASS 0 ─────────────────────────────────────────────────────────
+
     // ─── PASS 1: Fast item identification ────────────────────────────────────
     // Sends ≤2 images to determine domain, item name, and keywords.
     // Results are used to improve the pre-lookup query and route to the correct
@@ -402,6 +455,43 @@ serve(async (req: Request) => {
     // ─── END FALLBACK ────────────────────────────────────────────────────────
     // ─── END PASS 1 ──────────────────────────────────────────────────────────
 
+    // ─── POST-PASS-1: Upgrade Pre-Pass 0 with real domain + item name ──────────────
+    // Now that Pass 1 has identified the item, re-run Pre-Pass 0 if the
+    // preliminary domain guess was wrong OR if itemName is now more precise.
+    // This ensures grounding is run with the best possible item name.
+    if (prePassResult === null ||
+        (identification.domain !== 'general' && identification.itemName !== 'collectible item' && identification.itemName !== 'item')) {
+      try {
+        const { runAgenticPrePass: runAgenticPrePassUpgrade } = await import('../_helpers/agenticPrePass.ts');
+        // Only re-run if we have a meaningful item name from Pass 1
+        if (identification.itemName && identification.itemName !== 'item' && identification.itemName.length > 3) {
+          const upgradeBase64: string[] = [];
+          const upgradeMime: string[] = [];
+          for (const img of imageList.slice(0, 3)) {
+            const upB64 = img.includes(',') ? img.split(',')[1] : img;
+            const upMimeMatch = img.match(/^data:(image\/\w+);/);
+            upgradeBase64.push(upB64);
+            upgradeMime.push(upMimeMatch ? upMimeMatch[1] : 'image/jpeg');
+          }
+          const upgradeResult = await runAgenticPrePassUpgrade(
+            GEMINI_API_KEY,
+            identification.domain as any,
+            identification.itemName,
+            upgradeBase64,
+            upgradeMime,
+            invocationId,
+          );
+          if (upgradeResult !== null) {
+            prePassResult = upgradeResult;
+            console.log(`[${invocationId}] Pre-Pass 0 upgraded with real domain=${identification.domain}, item=${identification.itemName}`);
+          }
+        }
+      } catch (upgradeErr) {
+        console.warn(`[${invocationId}] Pre-Pass 0 upgrade failed (non-blocking):`, String(upgradeErr));
+      }
+    }
+    // ─── END POST-PASS-1 ─────────────────────────────────────────────────────────
+
     // ── Pre-lookup: Deterministic category resolution ──────────────────────────
     let categoryHints = "";
     let lockedCategoryId: string | null = null;
@@ -418,6 +508,51 @@ serve(async (req: Request) => {
       categoryHints = `\n- **USER-LOCKED CATEGORY**: **${userCategoryId}**. The seller has explicitly chosen this category. YOU MUST USE THIS EXACT CATEGORY ID. Do not suggest any other.`;
       console.log(`analyze-item: user category lock applied: ${userCategoryId}`);
     }
+
+    // ── Tier-2: Grounded category from Pre-Pass 0 Google Search ─────────────────
+    // If Pre-Pass 0 found a category ID via live Google Search, verify it
+    // as a leaf via category-lookup. If verified, use it as a high-confidence lock.
+    // Priority: user lock > grounded verified leaf > deterministic DB > AI hint
+    if (!userCategoryId && prePassResult?.groundedCategoryId) {
+      try {
+        const _groundedVerifyUrl = Deno.env.get('SUPABASE_URL');
+        const _groundedVerifyKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+        if (_groundedVerifyUrl && _groundedVerifyKey) {
+          const groundedVerifyResp = await fetch(
+            `${_groundedVerifyUrl}/functions/v1/category-lookup`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${_groundedVerifyKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ action: 'verify', categoryId: prePassResult.groundedCategoryId }),
+            }
+          );
+          if (groundedVerifyResp.ok) {
+            const groundedVerifyText = await groundedVerifyResp.text();
+            let groundedVerifyData: any;
+            try { groundedVerifyData = JSON.parse(groundedVerifyText); } catch { groundedVerifyData = {}; }
+
+            if (groundedVerifyData.isLeaf === true && groundedVerifyData.valid !== false) {
+              // Grounded leaf verified — use as a strong (but not absolute) lock
+              lockedCategoryId = prePassResult.groundedCategoryId;
+              lockedCategoryName = groundedVerifyData.categoryName || '';
+              lockedBreadcrumb = groundedVerifyData.breadcrumb || groundedVerifyData.categoryName || '';
+              categoryHints += `\n- **GROUNDED CATEGORY** (verified leaf from live Google Search): **${lockedCategoryId}** — ${lockedBreadcrumb}. This was found by searching eBay\'s current 2026 taxonomy. USE THIS CATEGORY unless you have strong evidence it is incorrect.`;
+              console.log(`[${invocationId}] GROUNDED LOCK: category ${lockedCategoryId} (${lockedBreadcrumb}) verified as leaf via Pre-Pass 0`);
+            } else {
+              // Not a valid leaf — downgrade to a strong hint
+              categoryHints += `\n- GROUNDING HINT (unverified leaf): **${prePassResult.groundedCategoryId}** (from live Google Search — use as hint, verify before locking).`;
+              console.log(`[${invocationId}] Grounded category ${prePassResult.groundedCategoryId} NOT a verified leaf (isLeaf=${groundedVerifyData.isLeaf}) — using as hint only`);
+            }
+          }
+        }
+      } catch (groundedLookupErr) {
+        console.warn(`[${invocationId}] Grounded category verification failed (non-blocking):`, String(groundedLookupErr));
+      }
+    }
+    // ── End grounded category tier ───────────────────────────────────────────────
 
     if (!userCategoryId) try {  // skip lookup if user already provided a category
       // Use Pass 1 item name + keywords for a much better category query than raw voice note
@@ -602,6 +737,17 @@ serve(async (req: Request) => {
         metalType: identification.metalType,
         competitorData:
           competitorData && (competitorData.competitorCount ?? 0) > 0 ? competitorData : null,
+        // ─ Pre-Pass 0 agentic context (grounding + vision inspection findings) ─
+        prePassContext: prePassResult ? {
+          marketAnalysis: prePassResult.marketAnalysis ?? undefined,
+          groundedCategoryId: prePassResult.groundedCategoryId ?? undefined,
+          agenticInspection: prePassResult.agenticInspection ? {
+            zoomRegionsExamined: prePassResult.agenticInspection.zoomRegionsExamined,
+            keyFindings: prePassResult.agenticInspection.keyFindings,
+            confidenceBoost: prePassResult.agenticInspection.confidenceBoost,
+            identificationCorrection: prePassResult.agenticInspection.identificationCorrection,
+          } : undefined,
+        } : null,
       });
       // Inject category hints from pre-lookup into the prompt
       if (categoryHints) {
@@ -1305,8 +1451,36 @@ Seller's note: "${voiceNote}"`;
       "itemSpecifics",
       "suggestedGrade", "packageWeightAndSize",
       "domain",
+      // Agentic Pre-Pass 0 fields (available on all tiers — no pricing info)
+      "market_analysis", "grounded_category_id", "agentic_inspection",
       // Locked to paid: priceMin, priceMax, meltValue, spotPrices, pricingNotes, gradingRationale, competitorData
     ]);
+
+    // ─ Assemble agentic fields from Pre-Pass 0 (additive — never replace existing fields) ─
+    const agenticFields: {
+      market_analysis?: string | null;
+      grounded_category_id?: string | null;
+      agentic_inspection?: {
+        zoom_regions_examined: string[];
+        key_findings: string;
+        confidence_boost: number;
+        identification_correction?: string;
+      } | null;
+    } = {};
+    if (prePassResult) {
+      agenticFields.market_analysis = prePassResult.marketAnalysis;
+      agenticFields.grounded_category_id = prePassResult.groundedCategoryId;
+      if (prePassResult.agenticInspection) {
+        agenticFields.agentic_inspection = {
+          zoom_regions_examined: prePassResult.agenticInspection.zoomRegionsExamined,
+          key_findings: prePassResult.agenticInspection.keyFindings,
+          confidence_boost: prePassResult.agenticInspection.confidenceBoost,
+          identification_correction: prePassResult.agenticInspection.identificationCorrection,
+        };
+      } else {
+        agenticFields.agentic_inspection = null;
+      }
+    }
 
     let responsePayload = { ...listing, meltValue, spotPrices: { gold: spotGold, silver: spotSilver, platinum: spotPlatinum } };
     if (tier === "starter") {
@@ -1342,6 +1516,8 @@ Seller's note: "${voiceNote}"`;
 
     const finalResponse = {
       ...responsePayload,
+      // Agentic Pre-Pass 0 fields (new — additive, backward compatible)
+      ...agenticFields,
       ...(ebayMetadata ? { _ebayMetadata: ebayMetadata } : {}),
       _meta: {
         tier,

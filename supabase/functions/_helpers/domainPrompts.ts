@@ -31,6 +31,18 @@ export interface PromptContext {
     maxPrice: number;
     medianPrice: number;
   } | null;
+  // ─── Agentic Pre-Pass 0 context (optional — injected when grounding succeeds) ───
+  // Contains live Google Search grounding results and vision inspection findings.
+  prePassContext?: {
+    marketAnalysis?: string;           // Grounded market narrative (search citations)
+    groundedCategoryId?: string;       // Category ID found via live Google Search
+    agenticInspection?: {              // Think-Act-Observe zoom findings
+      zoomRegionsExamined: string[];   // e.g. ["mint mark", "date digits", "edge reeds"]
+      keyFindings: string;             // Narrative of what was found
+      confidenceBoost: number;         // 0-100 — how much more certain the model is post-inspection
+      identificationCorrection?: string; // Non-null if inspection changed the identification
+    };
+  } | null;
 }
 
 // ─── Shared context blocks ────────────────────────────────────────────────────
@@ -65,6 +77,54 @@ function allowedValuesBlock(ctx: PromptContext): string {
   }
   if (lines.length === 0) return "";
   return `\n### VALID ASPECT VALUES (use EXACTLY these strings for the listed keys)\n${lines.join("\n")}`;
+}
+
+/**
+ * Builds the agentic pre-pass context block injected into every domain prompt.
+ * When Pre-Pass 0 (grounding + vision) succeeded, this surfaces its findings
+ * directly into the Pass 2 system prompt so the main model can leverage them.
+ */
+function prePassBlock(ctx: PromptContext): string {
+  const pp = ctx.prePassContext;
+  if (!pp) return "";
+
+  const parts: string[] = [];
+  parts.push("\n\n### 🔍 AGENTIC PRE-PASS FINDINGS (from live Google Search grounding + visual inspection)");
+  parts.push("The following intelligence was gathered BEFORE your analysis via a separate grounding pass.");
+  parts.push("Treat these findings as authoritative — they are based on live 2026 eBay data and detailed visual inspection.\n");
+
+  // 1. Grounded category override hint
+  if (pp.groundedCategoryId) {
+    parts.push(`**GROUNDED CATEGORY ID** (from live Google Search): \`${pp.groundedCategoryId}\``);
+    parts.push("This category was found by searching eBay's current taxonomy. Prefer this over your internal knowledge IF it passes leaf verification (it should — it was verified). Only override if you have strong evidence it is incorrect.\n");
+  }
+
+  // 2. Market analysis from Google Search grounding
+  if (pp.marketAnalysis && pp.marketAnalysis.trim().length > 10) {
+    parts.push("**LIVE MARKET ANALYSIS** (grounded from eBay sold listings & category searches):");
+    parts.push(pp.marketAnalysis.trim());
+    parts.push("\nUse the above market data as your PRIMARY pricing reference. Adjust for your observed condition.\n");
+  }
+
+  // 3. Agentic vision inspection findings
+  if (pp.agenticInspection) {
+    const ins = pp.agenticInspection;
+    parts.push("**VISUAL INSPECTION FINDINGS** (from zoomed agentic inspection pass):");
+    if (ins.zoomRegionsExamined.length > 0) {
+      parts.push(`Zoom regions examined: ${ins.zoomRegionsExamined.join(", ")}`);
+    }
+    parts.push(`Key findings: ${ins.keyFindings}`);
+    if (ins.confidenceBoost > 0) {
+      parts.push(`Confidence boost from inspection: +${ins.confidenceBoost} points`);
+    }
+    if (ins.identificationCorrection) {
+      parts.push(`⚠️  IDENTIFICATION CORRECTION: ${ins.identificationCorrection}`);
+      parts.push("The inspection found a discrepancy. Use the CORRECTED identification above — it is more accurate than first impression.");
+    }
+    parts.push("");
+  }
+
+  return parts.join("\n");
 }
 
 // ─── coins_bullion ────────────────────────────────────────────────────────────
@@ -112,7 +172,7 @@ Sets: US Proof Sets=41109 | US Mint Sets=526
 Other: Ancient Coins=532 | Medieval Coins=173685 | World Coins (all non-US)=45243
 - World coins (45243): REQUIRED aspect "Materials sourced from" = issuing country (e.g., "Canada")
 - Always provide 1–2 alternativeCategoryIds (e.g., Morgan → alt: 39489 Silver Bars if unsure collector vs bullion)
-${categoryBlock(ctx)}${allowedValuesBlock(ctx)}
+${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}
 
 ### ITEM SPECIFICS
 Required: Certification, Year, Composition
@@ -150,7 +210,7 @@ Raw (ungraded) cards:
 Sports: MLB Baseball=261328 | NFL Football=261329 | NBA Basketball=261330 | NHL Hockey=261331 | Soccer/Football=261332
 TCG: Pokémon=183454 | Magic The Gathering=2536 | Yu-Gi-Oh=61793 | Non-Sports/Other=45643
 Card Lots: Mixed Sports Card Lots=213
-${categoryBlock(ctx)}${allowedValuesBlock(ctx)}
+${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}
 
 ### ITEM SPECIFICS
 Sports cards: Sport, Player, Team, Year, Set, Card Number, Parallel/Variety, Graded, Grade, Professional Grader, Autographed, Rookie
@@ -191,7 +251,7 @@ Earrings: Fine=10968 | Fashion=56168
 Brooches/Pins: Fine=9531
 Watches: Men's Fine=98764 | Women's Fine=31387 | Fashion Watches=185.1 | Pocket Watches=3937
 Vintage Jewelry (pre-1980): 48579
-${categoryBlock(ctx)}${allowedValuesBlock(ctx)}
+${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}
 
 ### ITEM SPECIFICS
 Required: Metal, Style, Main Stone
@@ -230,14 +290,14 @@ Headphones: 112529 | Bluetooth Speakers: 14969
 Smart Watches/Fitness: 178893
 Video Game Consoles: PlayStation 5=309966 | Xbox (all)=139971 | Nintendo Switch=117042 | Retro Consoles=139973
 Video Games (discs/cartridges): 139973
-${categoryBlock(ctx)}${allowedValuesBlock(ctx)}
+${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}
 
 ### ITEM SPECIFICS
 Required: Brand, Model
 Recommended: Storage Capacity, Color, Operating System, RAM, Screen Size, Network/Connectivity, Compatible Model, MPN, UPC, Processor, Features, Custom Bundle`;
 }
 
-// ─── vintage_clothing ────────────────────────────────────────────────────────
+// ─── vintage_clothing ─────────────────────────────────────────────────────────
 
 function buildVintageClothingPrompt(ctx: PromptContext): string {
   return `You are a vintage clothing expert and experienced eBay reseller specializing in fashion from the 1920s through 1990s.
@@ -261,7 +321,7 @@ function buildVintageClothingPrompt(ctx: PromptContext): string {
 Men's Vintage: Shirts=57991 | Jackets/Coats=57988 | Pants=57989 | Suits=57990 | T-Shirts=15687
 Women's Vintage: Dresses=63861 | Blouses/Tops=63862 | Jackets/Coats=63863 | Skirts=11554
 Accessories: Hats/Caps=52365 | Scarves=45238 | Belts=2993 | Handbags=63852
-${categoryBlock(ctx)}${allowedValuesBlock(ctx)}
+${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}
 
 ### ITEM SPECIFICS
 Required: Brand, Size, Color, Department (Men's/Women's/Unisex/Kids)
@@ -288,7 +348,7 @@ function buildGeneralPrompt(ctx: PromptContext): string {
 - Noticeable wear, fully functional → USED_GOOD
 - Heavy wear OR minor issue affecting use → USED_ACCEPTABLE
 - Broken, non-functional, or for parts only → FOR_PARTS_OR_NOT_WORKING
-${categoryBlock(ctx)}${allowedValuesBlock(ctx)}
+${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}
 
 ### ITEM SPECIFICS
 Use eBay aspect names for the selected category. Common universally useful aspects:
