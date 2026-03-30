@@ -19,7 +19,6 @@ function buildDistribution(
   const min = Math.min(...prices);
   const max = Math.max(...prices);
 
-  // If all prices are the same, return a single bucket
   if (min === max) return [{ min, max, count: prices.length }];
 
   const BUCKET_COUNT = 5;
@@ -47,7 +46,6 @@ function buildDistribution(
 // returns comparable items (not just exact title matches).
 // ----------------------------------------------------------------
 function deriveSearchQuery(title: string): string {
-  // Remove common filler/noise words for coins & collectibles
   const stopWords = new Set([
     "a", "an", "the", "and", "or", "of", "in", "for", "to", "with",
     "lot", "set", "collection", "item", "listing", "ebay",
@@ -61,17 +59,55 @@ function deriveSearchQuery(title: string): string {
     .split(/\s+/)
     .filter((t) => t.length > 1 && !stopWords.has(t));
 
-  // Take up to 6 tokens to keep search focused
   return tokens.slice(0, 6).join(" ");
 }
 
 // ----------------------------------------------------------------
-// Fetch competitor listings from eBay Finding API (product search).
-// Uses the findItemsByKeywords endpoint which requires only an App ID
-// (not a user token), making it safe to run server-side without OAuth.
+// Get eBay OAuth App Token (client_credentials — no user token needed).
+// This uses the same EBAY_CLIENT_ID + EBAY_CLIENT_SECRET env vars
+// already required for publishing and category lookups.
+// ----------------------------------------------------------------
+async function getEbayAppToken(ebayEnv: string): Promise<string> {
+  const clientId     = Deno.env.get("EBAY_CLIENT_ID");
+  const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
+
+  if (!clientId || !clientSecret) {
+    throw new Error("EBAY_CLIENT_ID or EBAY_CLIENT_SECRET not configured");
+  }
+
+  const credentials = btoa(`${clientId}:${clientSecret}`);
+  const tokenUrl = ebayEnv === "production"
+    ? "https://api.ebay.com/identity/v1/oauth2/token"
+    : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
+
+  console.log(`[ebay-competitor-search] Fetching OAuth app token (${ebayEnv})`);
+
+  const resp = await fetch(tokenUrl, {
+    method: "POST",
+    headers: {
+      "Authorization": `Basic ${credentials}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
+  });
+
+  if (!resp.ok) {
+    const txt = await resp.text();
+    console.error(`[ebay-competitor-search] Token error ${resp.status}: ${txt.slice(0, 200)}`);
+    throw new Error(`Failed to get eBay OAuth token: ${resp.status}`);
+  }
+
+  const data = await resp.json();
+  return data.access_token;
+}
+
+// ----------------------------------------------------------------
+// Fetch competitor listings via eBay Browse API (modern, no quota issues).
+// Uses client_credentials app token — no user OAuth required.
+// Returns active fixed-price listings sorted by best match.
 // ----------------------------------------------------------------
 async function fetchEbayCompetitors(params: {
-  appId: string;
+  token: string;
   searchQuery: string;
   categoryId?: string;
   ebayEnv: string;
@@ -80,61 +116,46 @@ async function fetchEbayCompetitors(params: {
   count: number;
   raw: unknown[];
 }> {
-  const { appId, searchQuery, categoryId, ebayEnv } = params;
+  const { token, searchQuery, categoryId, ebayEnv } = params;
 
-  const baseUrl =
-    ebayEnv === "production"
-      ? "https://svcs.ebay.com/services/search/FindingService/v1"
-      : "https://svcs.sandbox.ebay.com/services/search/FindingService/v1";
+  const apiBase = ebayEnv === "production"
+    ? "https://api.ebay.com"
+    : "https://api.sandbox.ebay.com";
 
-  const queryParams = new URLSearchParams({
-    "OPERATION-NAME": "findItemsByKeywords",
-    "SERVICE-VERSION": "1.0.0",
-    "SECURITY-APPNAME": appId,
-    "RESPONSE-DATA-FORMAT": "JSON",
-    "keywords": searchQuery,
-    "itemFilter(0).name": "ListingType",
-    "itemFilter(0).value": "FixedPrice",
-    "itemFilter(1).name": "Condition",
-    "itemFilter(1).value(0)": "1000", // New
-    "itemFilter(1).value(1)": "2000", // Certified refurbished
-    "itemFilter(1).value(2)": "2500", // Seller refurbished
-    "itemFilter(1).value(3)": "3000", // Pre-owned good
-    "paginationInput.entriesPerPage": "50",
-    "paginationInput.pageNumber": "1",
-    "sortOrder": "BestMatch",
+  const searchParams = new URLSearchParams({
+    q:     searchQuery,
+    limit: "50",
+    sort:  "price",
+    filter: "buyingOptions:{FIXED_PRICE}",
   });
 
   if (categoryId) {
-    queryParams.set("categoryId", categoryId);
+    searchParams.set("category_ids", categoryId);
   }
 
-  const url = `${baseUrl}?${queryParams.toString()}`;
-  console.log(`[ebay-competitor-search] Searching: "${searchQuery}" (category: ${categoryId ?? "any"})`);
+  const url = `${apiBase}/buy/browse/v1/item_summary/search?${searchParams.toString()}`;
+  console.log(`[ebay-competitor-search] Browse API search: "${searchQuery}" (category: ${categoryId ?? "any"})`);
 
-  // Retry on 5xx server errors with exponential backoff (up to 3 attempts)
-  // Rate limit errors (429/500 with RateLimiter) get longer delays
   let resp: Response | null = null;
   let lastError: Error | null = null;
-  
+
+  // Retry on 5xx with exponential backoff (up to 3 attempts)
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       resp = await fetch(url, {
-        headers: { "Accept": "application/json" },
+        method: "GET",
+        headers: {
+          "Authorization":             `Bearer ${token}`,
+          "Content-Type":              "application/json",
+          "X-EBAY-C-MARKETPLACE-ID":   "EBAY_US",
+        },
       });
 
-      if (resp.ok || (resp.status < 500)) break; // success or client error — don't retry on client errors
+      if (resp.ok || resp.status < 500) break; // success or client error — don't retry
 
-      // 5xx error — check if it's a rate limit
-      const respText = await resp!.text();
-      const isRateLimited = respText.includes("RateLimiter") || respText.includes("exceeded");
-      
       if (attempt < 2) {
-        // Exponential backoff: 2s for first retry, 4s for second
-        const delayMs = isRateLimited ? (2000 * Math.pow(2, attempt)) : (1500 * Math.pow(1.5, attempt));
-        console.warn(
-          `[ebay-competitor-search] eBay returned ${resp!.status}${isRateLimited ? " (rate limited)" : ""} — retrying in ${delayMs}ms`
-        );
+        const delayMs = 1500 * Math.pow(1.5, attempt);
+        console.warn(`[ebay-competitor-search] Browse API returned ${resp.status} — retrying in ${delayMs}ms`);
         await new Promise(r => setTimeout(r, delayMs));
       }
     } catch (fetchErr) {
@@ -149,46 +170,31 @@ async function fetchEbayCompetitors(params: {
 
   if (!resp || !resp.ok) {
     const errBody = await resp?.text?.().catch(() => "(could not read body)") || "(no response)";
-    const isRateLimited = errBody.includes("RateLimiter") || errBody.includes("exceeded");
-    
-    if (isRateLimited) {
-      console.error(`[ebay-competitor-search] eBay rate limit exceeded (10001)`);
-      throw new Error(`eBay API rate limit exceeded. Please try again in a few minutes.`);
-    }
-    
-    throw new Error(`eBay Finding API error: ${resp?.status ?? "unknown"} ${errBody}`);
+    console.error(`[ebay-competitor-search] Browse API failed: ${resp?.status} — ${errBody.slice(0, 300)}`);
+    throw new Error(`eBay Browse API error: ${resp?.status ?? "unknown"} — ${errBody.slice(0, 200)}`);
   }
 
-  // Safe JSON parsing — guard against truncated responses
   const respText = await resp.text();
   let json: any;
   try {
     json = JSON.parse(respText);
   } catch (parseErr) {
-    console.error(`[ebay-competitor-search] JSON parse failed (body length=${respText.length}):`, respText.slice(0, 300));
-    throw new Error(`eBay Finding API returned invalid JSON (length=${respText.length})`);
+    console.error(`[ebay-competitor-search] JSON parse failed (length=${respText.length}):`, respText.slice(0, 300));
+    throw new Error(`eBay Browse API returned invalid JSON`);
   }
 
-  // Navigate eBay's deeply nested Finding API response structure
-  const searchResult =
-    json?.findItemsByKeywordsResponse?.[0]?.searchResult?.[0];
+  const items: any[] = json?.itemSummaries ?? [];
 
-  if (!searchResult || searchResult["@count"] === "0") {
+  if (items.length === 0) {
     console.log(`[ebay-competitor-search] No results for "${searchQuery}"`);
     return { prices: [], count: 0, raw: [] };
   }
 
-  const items: unknown[] = searchResult.item ?? [];
   const prices: number[] = [];
-
   for (const item of items) {
     try {
-      const itemRecord = item as Record<string, Record<string, unknown>[]>;
-      const sellingStatus = itemRecord?.sellingStatus;
-      const priceStr =
-        sellingStatus?.[0]?.currentPrice &&
-        (sellingStatus[0].currentPrice as Record<string, string>[])?.[0]?.__value__;
-      const price = parseFloat(priceStr as string);
+      const priceVal = item?.price?.value ?? item?.currentPrice?.value;
+      const price = parseFloat(String(priceVal ?? "0"));
       if (!isNaN(price) && price > 0) {
         prices.push(price);
       }
@@ -197,10 +203,7 @@ async function fetchEbayCompetitors(params: {
     }
   }
 
-  console.log(
-    `[ebay-competitor-search] Found ${prices.length} priced items out of ${items.length} results`
-  );
-
+  console.log(`[ebay-competitor-search] Found ${prices.length} priced items out of ${items.length} results`);
   return { prices, count: prices.length, raw: items };
 }
 
@@ -230,7 +233,7 @@ serve(async (req) => {
       "authorization": req.headers.get("authorization") ? "present" : "missing",
     },
   });
-  
+
   if (req.method === "OPTIONS") {
     console.log("[ebay-competitor-search] Handling OPTIONS preflight");
     return new Response(null, { headers: corsHeaders });
@@ -238,10 +241,10 @@ serve(async (req) => {
 
   try {
     console.log("[ebay-competitor-search] Attempting to parse request body...");
-    let body;
+    let body: any;
     let listingId: string | undefined;
     let userId: string | undefined;
-    
+
     try {
       body = await req.json();
       console.log("[ebay-competitor-search] Successfully parsed JSON body, keys:", Object.keys(body));
@@ -252,10 +255,11 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
     console.log("[ebay-competitor-search] Body parsed:", Object.keys(body));
     const { title, categoryId, yourPrice } = body;
     listingId = body.listingId;
-    userId = body.userId;
+    userId    = body.userId;
 
     console.log("[ebay-competitor-search] Validation step - checking title...");
     if (!title) {
@@ -267,21 +271,14 @@ serve(async (req) => {
     }
 
     console.log("[ebay-competitor-search] Loading environment variables...");
-    const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-    const appId = Deno.env.get("EBAY_CLIENT_ID");
-    console.log("[ebay-competitor-search] ebayEnv:", ebayEnv, "appId exists:", !!appId);
+    // FIXED: Default to "production" — the sandbox Finding API had its own 5k/day
+    // quota that was getting exhausted. The Browse API (OAuth) has no such hard limit.
+    const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "production";
+    console.log("[ebay-competitor-search] ebayEnv:", ebayEnv);
 
-    if (!appId) {
-      console.error("[ebay-competitor-search] EBAY_CLIENT_ID not configured");
-      return new Response(
-        JSON.stringify({ error: "EBAY_CLIENT_ID not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Check database cache before hitting eBay API
+    // ── Check database cache before hitting eBay API ──────────────────────────
     // Primary cache: 23 hours (fresh data)
-    // Fallback cache: Any data available (used during rate limits as graceful degradation)
+    // Fallback cache: Any data available (graceful degradation during API errors)
     if (userId && listingId) {
       try {
         const supabaseCheck = createClient(
@@ -289,8 +286,7 @@ serve(async (req) => {
           Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
           { auth: { persistSession: false } }
         );
-        
-        // Try fresh cache first (23 hours)
+
         const freshCutoff = new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString();
         const { data: cachedFresh } = await supabaseCheck
           .from("competitor_prices")
@@ -306,35 +302,51 @@ serve(async (req) => {
           console.log("[ebay-competitor-search] Returning fresh cached result from", cachedFresh.fetched_at);
           return new Response(
             JSON.stringify({
-              searchQuery: cachedFresh.search_query,
-              avgPrice: cachedFresh.avg_price,
-              minPrice: cachedFresh.min_price,
-              maxPrice: cachedFresh.max_price,
-              medianPrice: cachedFresh.median_price,
-              priceDelta: cachedFresh.price_delta,
-              competitorCount: cachedFresh.competitor_count,
-              priceDistribution: cachedFresh.price_distribution ?? [],
-              noData: false,
-              fromCache: true,
-              cacheAge: Math.round((Date.now() - new Date(cachedFresh.fetched_at).getTime()) / 1000),
+              searchQuery:         cachedFresh.search_query,
+              avgPrice:            cachedFresh.avg_price,
+              minPrice:            cachedFresh.min_price,
+              maxPrice:            cachedFresh.max_price,
+              medianPrice:         cachedFresh.median_price,
+              priceDelta:          cachedFresh.price_delta,
+              competitorCount:     cachedFresh.competitor_count,
+              priceDistribution:   cachedFresh.price_distribution ?? [],
+              noData:              false,
+              fromCache:           true,
+              cacheAge:            Math.round((Date.now() - new Date(cachedFresh.fetched_at).getTime()) / 1000),
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
-        
+
         console.log("[ebay-competitor-search] No fresh cache found, fetching from eBay...");
       } catch (cacheErr) {
         console.warn("[ebay-competitor-search] Cache check failed, proceeding to eBay:", cacheErr);
       }
     }
 
+    // ── Get OAuth app token ───────────────────────────────────────────────────
+    console.log("[ebay-competitor-search] Getting eBay OAuth app token...");
+    let token: string;
+    try {
+      token = await getEbayAppToken(ebayEnv);
+      console.log("[ebay-competitor-search] OAuth token obtained successfully");
+    } catch (tokenErr) {
+      const msg = tokenErr instanceof Error ? tokenErr.message : String(tokenErr);
+      console.error("[ebay-competitor-search] Failed to get OAuth token:", msg);
+      return new Response(
+        JSON.stringify({ error: `eBay authentication failed: ${msg}` }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── Derive search query and fetch from eBay Browse API ───────────────────
     console.log("[ebay-competitor-search] Deriving search query...");
     const searchQuery = deriveSearchQuery(title);
     console.log("[ebay-competitor-search] Search query:", searchQuery);
 
-    console.log("[ebay-competitor-search] Fetching eBay competitors...");
+    console.log("[ebay-competitor-search] Fetching eBay competitors via Browse API...");
     const { prices, count } = await fetchEbayCompetitors({
-      appId,
+      token,
       searchQuery,
       categoryId,
       ebayEnv,
@@ -346,31 +358,30 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           searchQuery,
-          avgPrice: null,
-          minPrice: null,
-          maxPrice: null,
-          medianPrice: null,
-          priceDelta: null,
-          competitorCount: 0,
+          avgPrice:          null,
+          minPrice:          null,
+          maxPrice:          null,
+          medianPrice:       null,
+          priceDelta:        null,
+          competitorCount:   0,
           priceDistribution: [],
-          noData: true,
+          noData:            true,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     console.log("[ebay-competitor-search] Computing statistics...");
-    const avgPrice = prices.reduce((s, p) => s + p, 0) / prices.length;
-    const minPrice = Math.min(...prices);
-    const maxPrice = Math.max(...prices);
-    const medianPrice = median(prices);
-    const priceDelta =
-      yourPrice != null ? Math.round((yourPrice - avgPrice) * 100) / 100 : null;
+    const avgPrice         = prices.reduce((s, p) => s + p, 0) / prices.length;
+    const minPrice         = Math.min(...prices);
+    const maxPrice         = Math.max(...prices);
+    const medianPrice      = median(prices);
+    const priceDelta       = yourPrice != null ? Math.round((yourPrice - avgPrice) * 100) / 100 : null;
     const priceDistribution = buildDistribution(prices);
 
     console.log("[ebay-competitor-search] Stats: avg=$" + avgPrice.toFixed(2) + ", median=$" + medianPrice.toFixed(2));
 
-    // Persist to competitor_prices table if we have the context
+    // ── Persist to competitor_prices table ───────────────────────────────────
     if (userId && listingId) {
       console.log("[ebay-competitor-search] Persisting to database...");
       try {
@@ -380,30 +391,25 @@ serve(async (req) => {
           { auth: { persistSession: false } }
         );
 
-        console.log("[ebay-competitor-search] Upserting competitor prices snapshot...");
-        // Use upsert instead of delete + insert for atomic operation and race condition safety
-        // Unique constraint (user_id, ebay_listing_id) ensures only one latest snapshot per listing
         await supabase
           .from("competitor_prices")
           .upsert({
-            user_id: userId,
-            ebay_listing_id: listingId,
-            search_query: searchQuery,
-            avg_price: Math.round(avgPrice * 100) / 100,
-            min_price: minPrice,
-            max_price: maxPrice,
-            median_price: Math.round(medianPrice * 100) / 100,
-            price_delta: priceDelta,
-            your_price: yourPrice ?? null,
-            competitor_count: count,
+            user_id:            userId,
+            ebay_listing_id:    listingId,
+            search_query:       searchQuery,
+            avg_price:          Math.round(avgPrice * 100) / 100,
+            min_price:          minPrice,
+            max_price:          maxPrice,
+            median_price:       Math.round(medianPrice * 100) / 100,
+            price_delta:        priceDelta,
+            your_price:         yourPrice ?? null,
+            competitor_count:   count,
             price_distribution: priceDistribution,
           });
 
-        console.log(
-          `[ebay-competitor-search] Saved snapshot for listing ${listingId}: avg=$${avgPrice.toFixed(2)}, n=${count}`
-        );
+        console.log(`[ebay-competitor-search] Saved snapshot for listing ${listingId}: avg=$${avgPrice.toFixed(2)}, n=${count}`);
       } catch (dbErr) {
-        // Non-fatal — still return the data to the caller
+        // Non-fatal — still return data to caller
         console.warn("[ebay-competitor-search] Failed to persist snapshot:", dbErr);
       }
     } else {
@@ -414,37 +420,37 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         searchQuery,
-        avgPrice: Math.round(avgPrice * 100) / 100,
+        avgPrice:          Math.round(avgPrice * 100) / 100,
         minPrice,
         maxPrice,
-        medianPrice: Math.round(medianPrice * 100) / 100,
+        medianPrice:       Math.round(medianPrice * 100) / 100,
         priceDelta,
-        competitorCount: count,
+        competitorCount:   count,
         priceDistribution,
-        noData: false,
+        noData:            false,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
+
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg   = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error ? err.stack : "no stack";
     console.error("[ebay-competitor-search] *** OUTER ERROR HANDLER ***", {
-      message: msg,
+      message:   msg,
       errorType: err?.constructor?.name,
-      stack: stack,
+      stack:     stack,
     });
-    
-    // If rate limit error, try to return stale cache as graceful degradation
-    if ((msg.includes("rate limit") || msg.includes("exceeded")) && userId && listingId) {
+
+    // Rate limit fallback — return stale cache if available
+    if ((msg.includes("rate limit") || msg.includes("exceeded") || msg.includes("429")) && userId && listingId) {
       try {
-        console.log("[ebay-competitor-search] Rate limit hit, attempting to return ANY cached data...");
+        console.log("[ebay-competitor-search] API error, attempting stale cache fallback...");
         const supabaseCache = createClient(
           Deno.env.get("SUPABASE_URL") ?? "",
           Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
           { auth: { persistSession: false } }
         );
-        
-        // Get ANY cache for this listing (no TTL restriction)
+
         const { data: staleCached } = await supabaseCache
           .from("competitor_prices")
           .select("*")
@@ -453,25 +459,25 @@ serve(async (req) => {
           .order("fetched_at", { ascending: false })
           .limit(1)
           .maybeSingle();
-        
+
         if (staleCached) {
-          console.log("[ebay-competitor-search] Found stale cache from", staleCached.fetched_at, "— returning as fallback");
           const cacheAgeHours = Math.round((Date.now() - new Date(staleCached.fetched_at).getTime()) / (60 * 60 * 1000));
+          console.log("[ebay-competitor-search] Returning stale cache from", staleCached.fetched_at);
           return new Response(
             JSON.stringify({
-              searchQuery: staleCached.search_query,
-              avgPrice: staleCached.avg_price,
-              minPrice: staleCached.min_price,
-              maxPrice: staleCached.max_price,
-              medianPrice: staleCached.median_price,
-              priceDelta: staleCached.price_delta,
-              competitorCount: staleCached.competitor_count,
+              searchQuery:       staleCached.search_query,
+              avgPrice:          staleCached.avg_price,
+              minPrice:          staleCached.min_price,
+              maxPrice:          staleCached.max_price,
+              medianPrice:       staleCached.median_price,
+              priceDelta:        staleCached.price_delta,
+              competitorCount:   staleCached.competitor_count,
               priceDistribution: staleCached.price_distribution ?? [],
-              noData: false,
-              fromCache: true,
-              stale: true,
+              noData:            false,
+              fromCache:         true,
+              stale:             true,
               cacheAgeHours,
-              warning: `eBay API rate limit reached. Showing data from ${cacheAgeHours}h ago.`,
+              warning:           `eBay API temporarily unavailable. Showing data from ${cacheAgeHours}h ago.`,
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
@@ -480,10 +486,10 @@ serve(async (req) => {
         console.warn("[ebay-competitor-search] Stale cache fallback failed:", fallbackErr);
       }
     }
-    
+
     return new Response(
-      JSON.stringify({ 
-        error: msg,
+      JSON.stringify({
+        error:     msg,
         errorType: err?.constructor?.name,
         timestamp: new Date().toISOString(),
       }),
@@ -492,5 +498,4 @@ serve(async (req) => {
   }
 });
 
-// Add a final log after serve is set up
 console.log("[ebay-competitor-search] *** FUNCTION READY ***");
