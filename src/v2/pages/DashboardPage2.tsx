@@ -132,7 +132,7 @@ const pageStyle: React.CSSProperties = {
 const contentStyle: React.CSSProperties = {
   maxWidth: "1400px",
   margin: "0 auto",
-  padding: "2rem 2rem 2rem 20rem", // Left padding for sidebar
+  padding: "2rem 2rem 3rem 2rem", // AppShell <main> already handles sidebar offset
 };
 
 const headerStyle: React.CSSProperties = {
@@ -262,18 +262,59 @@ export default function DashboardPage2() {
   const [needsAuth, setNeedsAuth] = useState(false);
   const [setupDismissed, setSetupDismissed] = useState(false);
 
-  // Load listings
+  // Load listings — mirrors the exact token flow from original DashboardPage
   const fetchListings = useCallback(async () => {
-    if (!user?.id) return;
+    let token: string | null = null;
+
+    // Step 1: try to get stored eBay token for this user
+    if (user?.id) {
+      try {
+        const { data: tokenData } = await supabase.functions.invoke("ebay-publish", {
+          body: { action: "get_stored_token", userId: user.id },
+        });
+        if (tokenData?.token) {
+          token = tokenData.token;
+          localStorage.setItem("ebay-user-token", token!);
+        }
+        if (tokenData?.isExpired) {
+          localStorage.removeItem("ebay-user-token");
+          setNeedsAuth(true);
+          setEbayAccount(null);
+          setListings([]);
+          toast.error("eBay session expired. Please reconnect in Settings.");
+          return;
+        }
+      } catch { /* fall through to localStorage */ }
+    }
+
+    // Step 2: fall back to localStorage token
+    if (!token) token = localStorage.getItem("ebay-user-token");
+    if (!token) { setNeedsAuth(true); setEbayAccount(null); setListings([]); return; }
+
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("ebay-fetch-listings", {
-        body: { userId: user.id },
-      });
-      if (error) throw error;
-      setListings(data?.listings || []);
-      setEbayAccount(data?.account);
-      setNeedsAuth(!data?.account);
+      // Step 3: fetch listings with token
+      const [listingsResult, userResult] = await Promise.all([
+        supabase.functions.invoke("ebay-listings", { body: { userToken: token } }),
+        supabase.functions.invoke("ebay-user",     { body: { userToken: token } }),
+      ]);
+
+      if (listingsResult.error || listingsResult.data?.needsAuth) {
+        localStorage.removeItem("ebay-user-token");
+        setNeedsAuth(true);
+        setListings([]);
+        setEbayAccount(null);
+        toast.error("eBay connection expired. Please reconnect in Settings.");
+        return;
+      }
+      if (listingsResult.data?.error) {
+        toast.error(`eBay error: ${listingsResult.data.error}`);
+        return;
+      }
+
+      setListings(listingsResult.data?.listings || []);
+      setEbayAccount(userResult.data?.user || null);
+      setNeedsAuth(false);
     } catch (e) {
       console.error("Failed to load listings:", e);
       toast.error("Failed to load listings. Check your eBay connection.");
