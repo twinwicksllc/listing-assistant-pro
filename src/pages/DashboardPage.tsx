@@ -937,7 +937,7 @@ export default function DashboardPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen bg-background pb-24 overflow-x-hidden">
       {/* Header */}
       <header className="px-5 pt-12 pb-4 md:px-8 lg:px-12">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
@@ -1350,7 +1350,7 @@ export default function DashboardPage() {
         )}
 
         {/* ── Listings Section ─────────────────────────────────────────────── */}
-        <div className="space-y-3">
+        <div className="space-y-3 overflow-visible">
           {/* Section header */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
