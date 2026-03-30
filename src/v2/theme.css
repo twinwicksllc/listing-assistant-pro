@@ -55,14 +55,10 @@
     --v2-danger-light:     0 84% 96%;
 
     --v2-card:             0 0% 100%;
-    --v2-card-shadow:      0 1px 3px 0 rgb(0 0 0 / 0.04);
-    --v2-card-shadow-md:   0 4px 20px 0 rgb(0 0 0 / 0.05);
-    --v2-card-shadow-lg:   0 8px 30px 0 rgb(0 0 0 / 0.08);
-    --v2-card-glass-bg:    linear-gradient(
-                              135deg,
-                              hsl(0 0% 100% / 0.82) 0%,
-                              hsl(0 0% 100% / 0.72) 100%
-                           );
+    --v2-card-shadow:      0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 80 140 / 0.06);
+    --v2-card-shadow-md:   0 4px 6px -1px rgb(0 0 0 / 0.07), 0 10px 24px -4px rgb(0 80 140 / 0.08);
+    --v2-card-shadow-lg:   0 8px 16px -4px rgb(0 0 0 / 0.08), 0 24px 48px -8px rgb(0 80 140 / 0.12);
+    --v2-card-glass-bg:    #ffffff;
     --v2-card-glass-blur:  blur(12px);
 
     /* ── Sidebar ────────────────────────────────────────────────────────────── */
@@ -97,25 +93,25 @@
 
 /* Cards */
 .v2-card {
-  background: hsl(var(--v2-card));
-  border: none;
+  background: #ffffff;
+  border: 1px solid #D8E4EF;
   border-radius: var(--v2-radius);
   box-shadow: var(--v2-card-shadow);
 }
 
 .v2-card-elevated {
-  background: hsl(var(--v2-card));
-  border: none;
+  background: #ffffff;
+  border: 1px solid #D8E4EF;
   border-radius: var(--v2-radius);
   box-shadow: var(--v2-card-shadow-md);
 }
 
 /* Glass-morphic card */
 .v2-card-glass {
-  background: var(--v2-card-glass-bg);
+  background: #ffffff;
   backdrop-filter: var(--v2-card-glass-blur);
   -webkit-backdrop-filter: var(--v2-card-glass-blur);
-  border: 1px solid hsl(0 0% 100% / 0.3);
+  border: 1px solid #D8E4EF;
   border-radius: var(--v2-radius);
   box-shadow: var(--v2-card-shadow-md);
 }
@@ -237,13 +233,19 @@
 /* ── Usage Summary Card ───────────────────────────────────────────────────── */
 
 .v2-usage-card {
-  background: var(--v2-card-glass-bg);
+  background: #ffffff;
   backdrop-filter: var(--v2-card-glass-blur);
   -webkit-backdrop-filter: var(--v2-card-glass-blur);
-  border: 1px solid hsl(0 0% 100% / 0.3);
+  border: 1px solid #D8E4EF;
+  border-top: 3px solid hsl(var(--v2-primary));
   border-radius: var(--v2-radius);
   box-shadow: var(--v2-card-shadow-md);
   padding: 1.25rem;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.v2-usage-card:hover {
+  box-shadow: var(--v2-card-shadow-lg);
+  transform: translateY(-1px);
 }
 
 .v2-usage-card-title {

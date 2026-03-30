@@ -86,19 +86,19 @@ const GLOBAL_CSS = `
 const BRAND     = "#0076B6";
 const BRAND_DRK = "#005a8a";
 const BRAND_LT  = "#e6f4fb";
-const BG        = "#F8F9FA";
+const BG        = "linear-gradient(145deg, #e8f4fb 0%, #f0f6ff 40%, #eaf1f8 100%)";
 const FG        = "#141820";
 const MUTED     = "#6E7580";
-const BORDER    = "#E4E7EC";
+const BORDER    = "#D0D9E4";
 const FONT      = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 
 const cardFloat: React.CSSProperties = {
-  background: "linear-gradient(135deg, rgba(255,255,255,0.90) 0%, rgba(255,255,255,0.82) 100%)",
+  background: "#ffffff",
   backdropFilter: "blur(14px)",
   WebkitBackdropFilter: "blur(14px)",
-  border: "1px solid rgba(255,255,255,0.4)",
-  borderRadius: 20,
-  boxShadow: "0 10px 40px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.04)",
+  border: "1px solid #D8E4EF",
+  borderRadius: 16,
+  boxShadow: "0 4px 6px -1px rgba(0,0,0,0.07), 0 10px 30px -5px rgba(0,80,140,0.10), 0 0 0 1px rgba(0,118,182,0.04)",
 };
 
 const S = {
@@ -106,6 +106,7 @@ const S = {
     minHeight: "100vh",
     background: BG,
     fontFamily: FONT,
+    backgroundAttachment: "fixed",
   } as React.CSSProperties,
 
   pageInner: {
@@ -148,12 +149,12 @@ const S = {
     width: 40,
     height: 40,
     borderRadius: 12,
-    border: "none",
-    background: "rgba(255,255,255,0.85)",
+    border: "1px solid #D8E4EF",
+    background: "#ffffff",
     cursor: "pointer",
     color: MUTED,
     flexShrink: 0,
-    boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
+    boxShadow: "0 2px 8px rgba(0,80,140,0.08)",
     transition: "all 0.15s",
   } as React.CSSProperties,
 
@@ -173,14 +174,16 @@ const S = {
   uploadCard: {
     ...cardFloat,
     overflow: "hidden",
+    borderTop: `3px solid ${BRAND}`,
   } as React.CSSProperties,
 
   cardHeader: {
     padding: "1.125rem 1.5rem",
-    borderBottom: "1px solid rgba(228,231,236,0.5)",
+    borderBottom: "1px solid #E8EEF5",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
+    background: "linear-gradient(180deg, #f7fbff 0%, #ffffff 100%)",
   } as React.CSSProperties,
 
   cardTitle: {
@@ -413,10 +416,12 @@ const S = {
   } as React.CSSProperties,
 
   tipBox: {
-    background: "linear-gradient(135deg, rgba(0,118,182,0.05) 0%, rgba(0,118,182,0.02) 100%)",
-    border: "1px solid rgba(0,118,182,0.1)",
-    borderRadius: 14,
+    background: "linear-gradient(135deg, rgba(0,118,182,0.06) 0%, rgba(0,118,182,0.02) 100%)",
+    border: "1px solid rgba(0,118,182,0.15)",
+    borderLeft: `3px solid ${BRAND}`,
+    borderRadius: 12,
     padding: "0.875rem 1rem",
+    boxShadow: "0 2px 8px rgba(0,80,140,0.06)",
   } as React.CSSProperties,
 
   tipTitle: {
@@ -937,9 +942,9 @@ export default function HomePage2() {
           <p style={S.tipText}>{tip.text}</p>
         </div>
       ))}
-      <div style={{ padding: "0.625rem 0.875rem", borderRadius: 10, background: "rgba(255,255,255,0.5)",
+      <div style={{ padding: "0.625rem 0.875rem", borderRadius: 10, background: "#ffffff",
                     border: `1px solid ${BORDER}`, fontSize: "0.75rem", color: MUTED,
-                    boxShadow: "0 1px 4px rgba(0,0,0,0.03)" }}>
+                    boxShadow: "0 2px 6px rgba(0,0,0,0.05)" }}>
         <Info size={12} style={{ display: "inline", marginRight: "0.3rem", verticalAlign: "middle" }} />
         Drag & drop images anywhere on this page.
       </div>
