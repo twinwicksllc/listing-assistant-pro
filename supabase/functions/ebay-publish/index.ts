@@ -2769,18 +2769,10 @@ serve(async (req) => {
         );
       }
 
-      // eBay Partner Network campaign ID for affiliate revenue tracking
-      const epnCampaignId = Deno.env.get("EPN_CAMPAIGN_ID") || "";
-
-      // Build EPN rover affiliate link — wrapped in try/catch so EPN failure
-      // never blocks or fails the publish transaction
+      // Build direct eBay listing URL (no affiliate wrapping)
       const buildAffiliateUrl = (listingId: string): string | null => {
         try {
-          const baseUrl = `https://www.ebay.com/itm/${listingId}`;
-          if (!epnCampaignId) return baseUrl;
-          return `https://rover.ebay.com/rover/1/711-53200-19255-0/1?campid=${
-            encodeURIComponent(epnCampaignId)
-          }&toolid=10001&customid=teckstart&mpre=${encodeURIComponent(baseUrl)}`;
+          return `https://www.ebay.com/itm/${listingId}`;
         } catch {
           return null;
         }
