@@ -972,15 +972,10 @@ async function fetchListingsViaTradingAPI(
       `Trading API fallback: Real order counts - 7d=${orderCounts.orders7d}, 30d=${orderCounts.orders30d}, 90d=${orderCounts.orders90d}`,
     );
 
-    // Build EPN affiliate links
-    const epnCampaignId = Deno.env.get("EPN_CAMPAIGN_ID") || "";
+    // Direct eBay listing URL (no affiliate wrapping)
     const buildEbayUrl = (listingId: string | null) => {
       if (!listingId) return null;
-      const baseUrl = `https://www.ebay.com/itm/${listingId}`;
-      if (!epnCampaignId) return baseUrl;
-      return `https://rover.ebay.com/rover/1/711-53200-19255-0/1?campid=${epnCampaignId}&toolid=10001&customid=teckstart&mpre=${
-        encodeURIComponent(baseUrl)
-      }`;
+      return `https://www.ebay.com/itm/${listingId}`;
     };
 
     const finalListings = listings.map((l) => ({
@@ -1234,14 +1229,10 @@ serve(async (req) => {
       `ebay-listings: Real order counts - 7d=${orderCounts.orders7d}, 30d=${orderCounts.orders30d}, 90d=${orderCounts.orders90d}`,
     );
 
-    const epnCampaignId = Deno.env.get("EPN_CAMPAIGN_ID") || "";
+    // Direct eBay listing URL (no affiliate wrapping)
     const buildEbayUrl = (listingId: string | null) => {
       if (!listingId) return null;
-      const baseUrl = `https://www.ebay.com/itm/${listingId}`;
-      if (!epnCampaignId) return baseUrl;
-      return `https://rover.ebay.com/rover/1/711-53200-19255-0/1?campid=${epnCampaignId}&toolid=10001&customid=teckstart&mpre=${
-        encodeURIComponent(baseUrl)
-      }`;
+      return `https://www.ebay.com/itm/${listingId}`;
     };
 
     const enrichedListings = listings.map((l: any) => {

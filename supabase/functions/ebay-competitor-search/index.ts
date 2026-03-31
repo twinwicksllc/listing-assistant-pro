@@ -336,6 +336,32 @@ function median(nums: number[]): number {
 }
 
 // ----------------------------------------------------------------
+// Remove statistical outliers using the IQR (Interquartile Range)
+// method. Prices outside Q1 - 1.5*IQR .. Q3 + 1.5*IQR are removed.
+// This eliminates $3.99 trinkets and $2,499 unrelated premium items
+// from skewing the competitor price analysis.
+// Requires at least 4 items to apply filtering; returns all if fewer.
+// ----------------------------------------------------------------
+function removeOutliers(prices: number[]): number[] {
+  if (prices.length < 4) return prices;
+  const sorted = [...prices].sort((a, b) => a - b);
+  const q1Idx = Math.floor(sorted.length / 4);
+  const q3Idx = Math.floor((3 * sorted.length) / 4);
+  const q1 = sorted[q1Idx];
+  const q3 = sorted[q3Idx];
+  const iqr = q3 - q1;
+  // If IQR is 0 (all same price), skip filtering
+  if (iqr === 0) return prices;
+  const lower = q1 - 1.5 * iqr;
+  const upper = q3 + 1.5 * iqr;
+  const filtered = sorted.filter((p) => p >= lower && p <= upper);
+  console.log(
+    `[ebay-competitor-search] IQR filter: ${prices.length} → ${filtered.length} prices (removed ${prices.length - filtered.length} outliers, range $${lower.toFixed(2)}-$${upper.toFixed(2)})`,
+  );
+  return filtered.length >= 2 ? filtered : prices; // Fallback if too aggressive
+}
+
+// ----------------------------------------------------------------
 // Main handler
 // ----------------------------------------------------------------
 console.log("[ebay-competitor-search] Module loaded, serve() initializing...");
@@ -532,17 +558,22 @@ serve(async (req) => {
     }
 
     // ------------------------------------------------------------------
-    // Step 4 — Compute statistics
+    // Step 4 — Compute statistics (with outlier removal)
     // ------------------------------------------------------------------
-    const avgPrice = prices.reduce((s, p) => s + p, 0) / prices.length;
-    const minPrice = Math.min(...prices);
-    const maxPrice = Math.max(...prices);
-    const medianPrice = median(prices);
-    const priceDelta = yourPrice != null ? Math.round((yourPrice - avgPrice) * 100) / 100 : null;
-    const priceDistribution = buildDistribution(prices);
+    // Remove statistical outliers before computing any metrics.
+    // This prevents a few wildly-priced unrelated items from skewing
+    // the average and suggested price (e.g. $3.99–$2,499 for a $15 item).
+    const cleanPrices = removeOutliers(prices);
+    const avgPrice = cleanPrices.reduce((s, p) => s + p, 0) / cleanPrices.length;
+    const minPrice = Math.min(...cleanPrices);
+    const maxPrice = Math.max(...cleanPrices);
+    const medianPrice = median(cleanPrices);
+    // Use median as basis for priceDelta — more robust than avg for skewed distributions
+    const priceDelta = yourPrice != null ? Math.round((yourPrice - medianPrice) * 100) / 100 : null;
+    const priceDistribution = buildDistribution(cleanPrices);
 
     console.log(
-      `[ebay-competitor-search] Stats: avg=$${avgPrice.toFixed(2)}, median=$${medianPrice.toFixed(2)}, n=${count}`,
+      `[ebay-competitor-search] Stats (after outlier removal): avg=$${avgPrice.toFixed(2)}, median=$${medianPrice.toFixed(2)}, n=${cleanPrices.length} (raw: ${count})`,
     );
 
     // ------------------------------------------------------------------
@@ -565,7 +596,7 @@ serve(async (req) => {
             median_price: Math.round(medianPrice * 100) / 100,
             price_delta: priceDelta,
             your_price: yourPrice ?? null,
-            competitor_count: count,
+            competitor_count: cleanPrices.length,
             price_distribution: priceDistribution,
             expires_at: expiresAt,
           }, { onConflict: "user_id,ebay_listing_id" });
@@ -593,7 +624,7 @@ serve(async (req) => {
         maxPrice,
         medianPrice: Math.round(medianPrice * 100) / 100,
         priceDelta,
-        competitorCount: count,
+        competitorCount: cleanPrices.length,
         priceDistribution,
         noData: false,
         fromCache: false,

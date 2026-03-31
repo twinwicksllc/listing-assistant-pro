@@ -88,8 +88,10 @@ export function PricingInsightsTable({
 
   // ---- Per-item helpers ----
   const getDelta = (listing: ListingWithCompetitor): number => {
-    if (!listing.competitor?.avgPrice) return 0;
-    return ((listing.price - listing.competitor.avgPrice) / listing.competitor.avgPrice) * 100;
+    // Use median as the comparison basis — more robust than avg against outliers
+    const basis = listing.competitor?.medianPrice ?? listing.competitor?.avgPrice;
+    if (!basis) return 0;
+    return ((listing.price - basis) / basis) * 100;
   };
 
   const getPositioning = (delta: number): { label: string; color: string; icon: React.ElementType } => {
@@ -101,10 +103,12 @@ export function PricingInsightsTable({
   };
 
   const getSuggestedPrice = (listing: ListingWithCompetitor): number | null => {
-    const avg = listing.competitor?.avgPrice;
+    // Prefer median over avg — median is far more robust against outlier prices
+    // (e.g. one $2,499 item won't skew a $15 copper round to $173)
+    const basis = listing.competitor?.medianPrice ?? listing.competitor?.avgPrice;
     const min = listing.competitor?.minPrice;
-    if (!avg) return null;
-    const target  = avg * 0.97;
+    if (!basis) return null;
+    const target  = basis * 0.97;
     const clamped = min != null ? Math.max(target, min + 0.01) : target;
     const rounded = Math.floor(clamped) + 0.99;
     const suggested = rounded > clamped ? rounded - 1 : rounded;
