@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
-    "lib": ["deno.window"]
+    "lib": ["deno.window"],
+    "types": []
   },
   "lint": {
     "rules": {
