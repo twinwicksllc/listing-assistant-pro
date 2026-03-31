@@ -38,6 +38,7 @@ import RepriceRulesPage2 from "./v2/pages/RepriceRulesPage2";
 import ProfitReportPage2 from "./v2/pages/ProfitReportPage2";
 import BulkCogsPage2 from "./v2/pages/BulkCogsPage2";
 import HistoricalCogsPage2 from "./v2/pages/HistoricalCogsPage2";
+import ListingsPage2 from "./v2/pages/ListingsPage2";
 
 // Smart root redirect
 function RootRedirect() {
@@ -92,6 +93,7 @@ const App = () => (
               <Route path="/profit-report" element={<ProtectedRoute ownerOnly><ProfitReportPage2 /></ProtectedRoute>} />
               <Route path="/cogs-editor"   element={<ProtectedRoute ownerOnly><BulkCogsPage2 /></ProtectedRoute>} />
               <Route path="/historical-cogs" element={<ProtectedRoute ownerOnly><HistoricalCogsPage2 /></ProtectedRoute>} />
+              <Route path="/listings" element={<ProtectedRoute ownerOnly><ListingsPage2 /></ProtectedRoute>} />
 
               {/* Legacy preview aliases — redirect to canonical routes */}
               <Route path="/home2"     element={<Navigate to="/home"     replace />} />

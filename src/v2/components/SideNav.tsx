@@ -14,7 +14,7 @@ import {
   Camera, FileText, LayoutDashboard, Layers,
   TrendingUp, Zap, Receipt, DollarSign,
   ShoppingCart, Users, Settings,
-  ChevronDown, ChevronUp, LogOut, Heart,
+  ChevronDown, ChevronUp, LogOut, Heart, LayoutList,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import teckstartLogo from "@/assets/teckstart-logo.png";
@@ -47,8 +47,9 @@ function useNavSections(isOwner: boolean): NavSection[] {
       key: "manage",
       label: "Manage",
       items: [
-        { path: "/bulk",   icon: Layers,    label: "Bulk List" },
-        { path: "/market", icon: TrendingUp, label: "Market Research" },
+        { path: "/listings", icon: LayoutList,  label: "Edit Listings" },
+        { path: "/bulk",     icon: Layers,      label: "Bulk List" },
+        { path: "/market",   icon: TrendingUp,  label: "Market Research" },
         ...(isOwner ? [{ path: "/reprice-rules", icon: Zap, label: "Optimize" }] : []),
       ],
     },

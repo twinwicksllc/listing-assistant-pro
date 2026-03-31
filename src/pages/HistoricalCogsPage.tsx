@@ -85,8 +85,6 @@ function MarginBadge({ salePrice, shipping, fees, cogs }: { salePrice: number; s
 
 export default function HistoricalCogsPage() {
   const { user, planFeatures, isOwner } = useAuth();
-  const ebayToken = typeof window !== "undefined" ? localStorage.getItem("ebay-user-token") : null;
-
   const [orders,     setOrders]     = useState<SoldOrder[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [saving,     setSaving]     = useState(false);
@@ -96,12 +94,30 @@ export default function HistoricalCogsPage() {
   const [filterMode, setFilterMode] = useState<FilterMode>("missing");
   const [savedCount, setSavedCount] = useState(0);
   const [windowFilter, setWindowFilter] = useState<"all" | "7d" | "30d" | "90d" | "older">("all");
+  const [noToken, setNoToken] = useState(false);
 
   // ── Fetch sold orders + COGS ─────────────────────────────────────────────
 
   const load = useCallback(async () => {
-    if (!user || !ebayToken) { setLoading(false); return; }
+    if (!user) { setLoading(false); return; }
     setLoading(true);
+    setNoToken(false);
+
+    // Resolve eBay token: try ebay-publish first, fall back to localStorage
+    let ebayToken: string | null = null;
+    try {
+      const { data: td } = await supabase.functions.invoke("ebay-publish", {
+        body: { action: "get_stored_token", userId: user.id },
+      });
+      if (td?.token) {
+        ebayToken = td.token;
+        localStorage.setItem("ebay-user-token", ebayToken!);
+      } else if (td?.isExpired) {
+        localStorage.removeItem("ebay-user-token");
+      }
+    } catch { /* fall through */ }
+    if (!ebayToken) ebayToken = localStorage.getItem("ebay-user-token");
+    if (!ebayToken) { setNoToken(true); setLoading(false); return; }
 
     try {
       // 1. Pull sold orders from the existing cogs-report edge function
@@ -156,7 +172,7 @@ export default function HistoricalCogsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user, ebayToken]);
+  }, [user?.id]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -425,7 +441,7 @@ export default function HistoricalCogsPage() {
             <Loader2 className="w-7 h-7 animate-spin" />
             <p className="text-sm">Loading your sold orders…</p>
           </div>
-        ) : !ebayToken ? (
+        ) : noToken ? (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
             <AlertCircle className="w-8 h-8 text-amber-500" />
             <p className="text-sm font-medium">eBay account not connected</p>

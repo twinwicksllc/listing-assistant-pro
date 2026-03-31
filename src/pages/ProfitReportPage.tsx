@@ -120,11 +120,20 @@ export default function ProfitReportPage() {
       // Always fetch 90d; we slice for the card comparisons
       const { start, end } = periodToDates("90d");
 
-      // Get stored eBay token
-      const { data: tokenData } = await supabase.functions.invoke("ebay-publish", {
-        body: { action: "get_stored_token", userId: user.id },
-      });
-      const ebayToken = tokenData?.token ?? localStorage.getItem("ebay-user-token");
+      // Get stored eBay token — try ebay-publish, fall back to localStorage
+      let ebayToken: string | null = null;
+      try {
+        const { data: tokenData } = await supabase.functions.invoke("ebay-publish", {
+          body: { action: "get_stored_token", userId: user.id },
+        });
+        if (tokenData?.token) {
+          ebayToken = tokenData.token;
+          localStorage.setItem("ebay-user-token", ebayToken!);
+        } else if (tokenData?.isExpired) {
+          localStorage.removeItem("ebay-user-token");
+        }
+      } catch { /* fall through */ }
+      if (!ebayToken) ebayToken = localStorage.getItem("ebay-user-token");
       if (!ebayToken) {
         setError("No eBay account connected. Please connect eBay in Settings.");
         setLoading(false);
@@ -154,7 +163,8 @@ export default function ProfitReportPage() {
       setSummary(data.summary ?? null);
     } catch (err: unknown) {
       console.error("cogs-report fetch error:", err);
-      setError(err.message || "Failed to load profit report");
+      const msg = err instanceof Error ? err.message : "Failed to load profit report";
+      setError(msg);
       toast.error("Failed to load profit report");
     } finally {
       setLoading(false);
