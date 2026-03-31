@@ -50,32 +50,14 @@ function buildDistribution(
 // unavailable or times out.
 // ----------------------------------------------------------------
 function deriveSearchQueryFallback(title: string): string {
+  // Stop words to remove — but KEEP grading companies (PCGS, NGC, ICG, ANACS),
+  // signatures, and silver/gold composition markers as they affect value significantly.
   const stopWords = new Set([
-    "a",
-    "an",
-    "the",
-    "and",
-    "or",
-    "of",
-    "in",
-    "for",
-    "to",
-    "with",
-    "lot",
-    "set",
-    "collection",
-    "item",
-    "listing",
-    "ebay",
-    "certified",
-    "uncirculated",
-    "beautiful",
-    "stunning",
-    "rare",
-    "vintage",
-    "antique",
-    "original",
-    "authentic",
+    "a", "an", "the", "and", "or", "of", "in", "for", "to", "with",
+    "lot", "set", "collection", "item", "listing", "ebay",
+    // Marketing fluff only — NOT grading companies or signatures
+    "beautiful", "stunning", "rare", "vintage", "antique", "original", "authentic",
+    "certified", "uncirculated", "circulated",  // condition words
   ]);
 
   const tokens = title
