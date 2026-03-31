@@ -356,7 +356,9 @@ function removeOutliers(prices: number[]): number[] {
   const upper = q3 + 1.5 * iqr;
   const filtered = sorted.filter((p) => p >= lower && p <= upper);
   console.log(
-    `[ebay-competitor-search] IQR filter: ${prices.length} → ${filtered.length} prices (removed ${prices.length - filtered.length} outliers, range $${lower.toFixed(2)}-$${upper.toFixed(2)})`,
+    `[ebay-competitor-search] IQR filter: ${prices.length} → ${filtered.length} prices (removed ${
+      prices.length - filtered.length
+    } outliers, range $${lower.toFixed(2)}-$${upper.toFixed(2)})`,
   );
   return filtered.length >= 2 ? filtered : prices; // Fallback if too aggressive
 }
@@ -573,7 +575,9 @@ serve(async (req) => {
     const priceDistribution = buildDistribution(cleanPrices);
 
     console.log(
-      `[ebay-competitor-search] Stats (after outlier removal): avg=$${avgPrice.toFixed(2)}, median=$${medianPrice.toFixed(2)}, n=${cleanPrices.length} (raw: ${count})`,
+      `[ebay-competitor-search] Stats (after outlier removal): avg=$${avgPrice.toFixed(2)}, median=$${
+        medianPrice.toFixed(2)
+      }, n=${cleanPrices.length} (raw: ${count})`,
     );
 
     // ------------------------------------------------------------------

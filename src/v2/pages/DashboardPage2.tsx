@@ -661,7 +661,7 @@ export default function DashboardPage2() {
     const k = listingKey(l);
     setSelectedIds(prev => {
       const n = new Set(prev);
-      n.has(k) ? n.delete(k) : n.add(k);
+      if (n.has(k)) { n.delete(k); } else { n.add(k); }
       return n;
     });
   };

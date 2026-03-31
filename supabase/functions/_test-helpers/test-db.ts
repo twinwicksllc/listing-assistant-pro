@@ -27,6 +27,8 @@ export interface TestItem {
   ebay_category_id: string;
   item_specifics: Record<string, any>;
   condition: string;
+  image_urls?: string[] | null;
+  metal_type?: string | null;
 }
 
 /**
