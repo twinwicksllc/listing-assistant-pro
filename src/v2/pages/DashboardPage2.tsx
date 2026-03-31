@@ -786,9 +786,10 @@ export default function DashboardPage2() {
             const fin = finMap[profitWindow];
             const profitColor = fin.netProfit >= 0 ? "#16a34a" : "#dc2626";
             const profitBg    = fin.netProfit >= 0 ? "rgba(34,197,94,0.08)" : "rgba(220,38,38,0.06)";
-            const fmt = (v: number) => v === 0 ? "—" : `${v < 0 ? "-" : ""}$${Math.abs(v).toFixed(2)}`;
-            const fmtPos = (v: number) => v === 0 ? "—" : `$${v.toFixed(2)}`;
-            const fmtNeg = (v: number) => v === 0 ? "—" : `-$${Math.abs(v).toFixed(2)}`;
+            const usd = (v: number) => v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const fmt    = (v: number) => (!isFinite(v) || isNaN(v)) ? "—" : v === 0 ? "—" : `${v < 0 ? "-" : ""}$${usd(Math.abs(v))}`;
+            const fmtPos = (v: number) => (!isFinite(v) || isNaN(v)) ? "—" : v === 0 ? "—" : `$${usd(v)}`;
+            const fmtNeg = (v: number) => (!isFinite(v) || isNaN(v)) ? "—" : v === 0 ? "—" : `-$${usd(Math.abs(v))}`;
             const row = (
               icon: React.ReactNode,
               label: string,

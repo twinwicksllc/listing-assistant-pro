@@ -69,6 +69,7 @@ export function PricingInsightsTable({
   const [applying,    setApplying]    = useState<Set<string>>(new Set());
   const [applied,     setApplied]     = useState<Set<string>>(new Set());
   const [refreshingAll, setRefreshingAll] = useState(false);
+  const [pricingFilter, setPricingFilter] = useState<"all" | "overpriced" | "underpriced" | "stale">("all");
 
   // ---- Bulk cooldown helpers ----
   const bulkCooldownActive = bulkRefreshCooldownUntil
@@ -132,10 +133,14 @@ export function PricingInsightsTable({
   // ---- Filters / sort ----
   const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase();
-    return listings.filter(
-      (l) => l.title.toLowerCase().includes(q) || l.sku.toLowerCase().includes(q)
-    );
-  }, [listings, searchQuery]);
+    return listings.filter((l) => {
+      if (!(l.title.toLowerCase().includes(q) || l.sku.toLowerCase().includes(q))) return false;
+      if (pricingFilter === "overpriced")  return getDelta(l) > 10;
+      if (pricingFilter === "underpriced") return getDelta(l) < -10;
+      if (pricingFilter === "stale")       return getCacheFreshness(l) === "stale" || getCacheFreshness(l) === "none";
+      return true;
+    });
+  }, [listings, searchQuery, pricingFilter]);
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
@@ -273,18 +278,72 @@ export function PricingInsightsTable({
         </div>
       </div>
 
-      {/* Stats bar */}
-      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-        <span>{filtered.length} listings</span>
-        <span>·</span>
-        <span>Overpriced: {filtered.filter((l) => getDelta(l) > 10).length}</span>
-        <span>·</span>
-        <span>Underpriced: {filtered.filter((l) => getDelta(l) < -10).length}</span>
-        <span>·</span>
-        <span>
-          Stale data: {filtered.filter((l) => getCacheFreshness(l) === "stale" || getCacheFreshness(l) === "none").length}
-        </span>
-      </div>
+      {/* Stats bar — clickable filter pills */}
+      {(() => {
+        const allListings = listings;
+        const overpricedCount  = allListings.filter((l) => getDelta(l) > 10).length;
+        const underpricedCount = allListings.filter((l) => getDelta(l) < -10).length;
+        const staleCount       = allListings.filter((l) => getCacheFreshness(l) === "stale" || getCacheFreshness(l) === "none").length;
+
+        const pillBase = "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer border transition-all select-none";
+        const pillActive   = (color: string) => `${pillBase} ${color} border-current`;
+        const pillInactive = `${pillBase} text-muted-foreground border-border bg-transparent hover:bg-secondary`;
+
+        return (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              {pricingFilter === "all" ? allListings.length : filtered.length}
+              {pricingFilter !== "all" && ` / ${allListings.length}`} listings
+            </span>
+            <span className="text-muted-foreground/40">·</span>
+
+            {/* Overpriced pill */}
+            <button
+              onClick={() => setPricingFilter(pricingFilter === "overpriced" ? "all" : "overpriced")}
+              className={pricingFilter === "overpriced"
+                ? pillActive("text-red-600 bg-red-500/10")
+                : pillInactive}
+              title="Filter to overpriced listings only"
+            >
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "currentColor", display: "inline-block", flexShrink: 0 }} />
+              Overpriced: {overpricedCount}
+            </button>
+
+            {/* Underpriced pill */}
+            <button
+              onClick={() => setPricingFilter(pricingFilter === "underpriced" ? "all" : "underpriced")}
+              className={pricingFilter === "underpriced"
+                ? pillActive("text-blue-600 bg-blue-500/10")
+                : pillInactive}
+              title="Filter to underpriced listings only"
+            >
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "currentColor", display: "inline-block", flexShrink: 0 }} />
+              Underpriced: {underpricedCount}
+            </button>
+
+            {/* Stale data pill */}
+            <button
+              onClick={() => setPricingFilter(pricingFilter === "stale" ? "all" : "stale")}
+              className={pricingFilter === "stale"
+                ? pillActive("text-amber-600 bg-amber-500/10")
+                : pillInactive}
+              title="Filter to listings with stale or missing competitor data"
+            >
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "currentColor", display: "inline-block", flexShrink: 0 }} />
+              Stale data: {staleCount}
+            </button>
+
+            {pricingFilter !== "all" && (
+              <button
+                onClick={() => setPricingFilter("all")}
+                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+              >
+                Clear filter
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Table — overflow-x-auto for horizontal scroll; no vertical clipping so all rows are visible */}
       <div className="border border-border rounded-lg overflow-x-auto overflow-y-visible">
