@@ -20,6 +20,7 @@ interface ReportItem {
   ebaySku: string | null;
   salePrice: number;
   shippingCollected: number;
+  shippingLabelCost: number;
   ebayFees: number;
   cogs: number | null;
   netProfit: number;
@@ -31,7 +32,9 @@ interface ReportSummary {
   totalRevenue: number;
   totalCogs: number;
   totalFees: number;
-  totalShipping: number;
+  totalShippingCollected: number;
+  totalShippingLabels: number;
+  totalShippingNet: number;
   netProfit: number;
   avgMargin: number | null;
   itemsWithCogs: number;
@@ -69,7 +72,7 @@ function periodToDates(period: PeriodKey): { start: Date; end: Date } {
 function downloadCsv(items: ReportItem[]) {
   const headers = [
     "Sold Date", "Title", "eBay Listing ID", "SKU",
-    "Sale Price", "Shipping Collected", "eBay Fees", "Item Cost (COGS)",
+    "Sale Price", "Shipping Collected", "Shipping Label Cost", "eBay Fees", "Item Cost (COGS)",
     "Net Profit", "Margin %",
   ];
   const rows = items.map((r) => [
@@ -79,6 +82,7 @@ function downloadCsv(items: ReportItem[]) {
     r.ebaySku ?? "",
     r.salePrice.toFixed(2),
     r.shippingCollected.toFixed(2),
+    r.shippingLabelCost.toFixed(2),
     r.ebayFees.toFixed(2),
     r.cogs != null ? r.cogs.toFixed(2) : "",
     r.netProfit.toFixed(2),
@@ -184,13 +188,23 @@ export default function ProfitReportPage() {
   function buildCardProps(p: "7d" | "30d" | "90d") {
     const { start } = periodToDates(p);
     const subset = allItems.filter((i) => new Date(i.soldAt) >= start);
-    const rev     = subset.reduce((s, i) => s + i.salePrice, 0);
-    const cogs    = subset.reduce((s, i) => s + (i.cogs ?? 0), 0);
-    const fees    = subset.reduce((s, i) => s + i.ebayFees, 0);
-    const ship    = subset.reduce((s, i) => s + i.shippingCollected, 0);
-    const net     = rev + ship - fees - cogs;
-    const margin  = rev > 0 ? (net / rev) * 100 : null;
-    return { grossRevenue: rev, totalCogs: cogs, ebayFees: fees, shippingNet: ship, otherDeductions: 0, netProfit: net, trueMarginPct: margin != null ? parseFloat(margin.toFixed(1)) : null };
+    const rev        = subset.reduce((s, i) => s + i.salePrice, 0);
+    const cogs       = subset.reduce((s, i) => s + (i.cogs ?? 0), 0);
+    const fees       = subset.reduce((s, i) => s + i.ebayFees, 0);
+    const shipIn     = subset.reduce((s, i) => s + i.shippingCollected, 0);
+    const shipOut    = subset.reduce((s, i) => s + i.shippingLabelCost, 0);
+    const shippingNet = shipIn - shipOut;
+    const net        = rev + shippingNet - fees - cogs;
+    const margin     = rev > 0 ? (net / rev) * 100 : null;
+    return {
+      grossRevenue: rev,
+      totalCogs: cogs,
+      ebayFees: fees,
+      shippingNet,
+      otherDeductions: 0,
+      netProfit: net,
+      trueMarginPct: margin != null ? parseFloat(margin.toFixed(1)) : null,
+    };
   }
 
   // ─── Locked state for non-Pro/Shop ─────────────────────────────────────────
@@ -378,10 +392,20 @@ export default function ProfitReportPage() {
                       −{fmtMoney(item.ebayFees)}
                     </span>
 
-                    {/* Shipping */}
-                    <span className={`text-xs text-right whitespace-nowrap ${item.shippingCollected >= 0 ? "text-foreground" : "text-red-500"}`}>
-                      {item.shippingCollected >= 0 ? "+" : "−"}{fmtMoney(Math.abs(item.shippingCollected))}
-                    </span>
+                    {/* Shipping net (collected − label cost) */}
+                    {(() => {
+                      const shipNet = item.shippingCollected - item.shippingLabelCost;
+                      return (
+                        <span
+                          title={`Collected: ${fmtMoney(item.shippingCollected)} − Label: ${fmtMoney(item.shippingLabelCost)}`}
+                          className={`text-xs text-right whitespace-nowrap ${Math.abs(shipNet) < 0.01 ? "text-muted-foreground" : shipNet >= 0 ? "text-foreground" : "text-red-500"}`}
+                        >
+                          {Math.abs(shipNet) < 0.01
+                            ? "≈$0"
+                            : `${shipNet >= 0 ? "+" : "−"}${fmtMoney(Math.abs(shipNet))}`}
+                        </span>
+                      );
+                    })()}
 
                     {/* Net profit */}
                     <span className={`text-xs font-semibold text-right whitespace-nowrap ${profitColor}`}>
@@ -394,10 +418,12 @@ export default function ProfitReportPage() {
 
             {/* Table footer totals */}
             {items.length > 1 && (() => {
-              const totRev   = items.reduce((s, i) => s + i.salePrice, 0);
-              const totCogs  = items.reduce((s, i) => s + (i.cogs ?? 0), 0);
-              const totFees  = items.reduce((s, i) => s + i.ebayFees, 0);
-              const totShip  = items.reduce((s, i) => s + i.shippingCollected, 0);
+              const totRev    = items.reduce((s, i) => s + i.salePrice, 0);
+              const totCogs   = items.reduce((s, i) => s + (i.cogs ?? 0), 0);
+              const totFees   = items.reduce((s, i) => s + i.ebayFees, 0);
+              const totShipIn = items.reduce((s, i) => s + i.shippingCollected, 0);
+              const totShipOut = items.reduce((s, i) => s + i.shippingLabelCost, 0);
+              const totShipNet = totShipIn - totShipOut;
               const totProfit = items.reduce((s, i) => s + i.netProfit, 0);
               const profitPos = totProfit >= 0;
               return (
@@ -408,7 +434,12 @@ export default function ProfitReportPage() {
                     {totCogs > 0 ? `−${fmtMoney(totCogs)}` : "—"}
                   </span>
                   <span className="text-right text-red-500 dark:text-red-400">−{fmtMoney(totFees)}</span>
-                  <span className="text-right">{totShip >= 0 ? "+" : "−"}{fmtMoney(Math.abs(totShip))}</span>
+                  <span
+                    title={`Collected: ${fmtMoney(totShipIn)} − Labels: ${fmtMoney(totShipOut)}`}
+                    className="text-right text-muted-foreground"
+                  >
+                    {Math.abs(totShipNet) < 0.01 ? "≈$0" : `${totShipNet >= 0 ? "+" : "−"}${fmtMoney(Math.abs(totShipNet))}`}
+                  </span>
                   <span className={`text-right ${profitPos ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
                     {profitPos ? "+" : "−"}{fmtMoney(Math.abs(totProfit))}
                   </span>
