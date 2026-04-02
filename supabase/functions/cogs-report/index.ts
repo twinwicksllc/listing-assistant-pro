@@ -178,6 +178,12 @@ async function processOrders(
     ebaySku: string | null;
     salePrice: number;
     shippingCollected: number;
+    // shippingLabelCost: what the seller paid for the outbound label.
+    // eBay Fulfillment API does not expose label costs directly.
+    // We use shippingCollected as the best proxy (they typically wash).
+    // When a real label cost is stored in listing_financials it will
+    // override this estimate in Phase 2.
+    shippingLabelCost: number;
     ebayFees: number;
     soldAt: string;
   }
@@ -210,6 +216,8 @@ async function processOrders(
         ebaySku: sku,
         salePrice: parseFloat(lineTotal.toFixed(2)),
         shippingCollected: parseFloat(shipping.toFixed(2)),
+        // Default label cost = collected (net-zero assumption until real data available)
+        shippingLabelCost: parseFloat(shipping.toFixed(2)),
         ebayFees: parseFloat(feeAmt.toFixed(2)),
         soldAt,
       });
@@ -255,6 +263,7 @@ async function processOrders(
     ebaySku: string | null;
     salePrice: number;
     shippingCollected: number;
+    shippingLabelCost: number;
     ebayFees: number;
     cogs: number | null;
     netProfit: number;
@@ -265,7 +274,8 @@ async function processOrders(
   let totalRevenue = 0;
   let totalCogs = 0;
   let totalFees = 0;
-  let totalShipping = 0;
+  let totalShippingCollected = 0;
+  let totalShippingLabels = 0;
   let itemsWithCogs = 0;
   let itemsWithout = 0;
 
@@ -274,12 +284,18 @@ async function processOrders(
       (fo.ebayListingId ? cogsMap[fo.ebayListingId] : null) ??
       null;
 
-    const netProfit = fo.salePrice + fo.shippingCollected - fo.ebayFees - (cogs ?? 0);
+    // Net profit:
+    //   salePrice + shippingCollected - shippingLabelCost - ebayFees - cogs
+    // shippingCollected - shippingLabelCost nets to ~$0 by default (proxy assumption)
+    // and will be overridden by real label costs in Phase 2.
+    const netProfit = fo.salePrice + fo.shippingCollected - fo.shippingLabelCost -
+      fo.ebayFees - (cogs ?? 0);
     const margin = cogs != null && fo.salePrice > 0 ? (netProfit / fo.salePrice) * 100 : null;
 
     totalRevenue += fo.salePrice;
     totalFees += fo.ebayFees;
-    totalShipping += fo.shippingCollected;
+    totalShippingCollected += fo.shippingCollected;
+    totalShippingLabels += fo.shippingLabelCost;
     if (cogs != null) {
       totalCogs += cogs;
       itemsWithCogs++;
@@ -294,6 +310,7 @@ async function processOrders(
       ebaySku: fo.ebaySku,
       salePrice: fo.salePrice,
       shippingCollected: fo.shippingCollected,
+      shippingLabelCost: fo.shippingLabelCost,
       ebayFees: fo.ebayFees,
       cogs,
       netProfit: parseFloat(netProfit.toFixed(2)),
@@ -305,7 +322,9 @@ async function processOrders(
   // Sort by soldAt descending (newest first)
   items.sort((a, b) => new Date(b.soldAt).getTime() - new Date(a.soldAt).getTime());
 
-  const overallNet = totalRevenue + totalShipping - totalFees - totalCogs;
+  // shippingNet = collected - labels (nets to ~0 with proxy, real value in Phase 2)
+  const totalShippingNet = totalShippingCollected - totalShippingLabels;
+  const overallNet = totalRevenue + totalShippingNet - totalFees - totalCogs;
   const avgMargin = itemsWithCogs > 0 && totalRevenue > 0
     ? parseFloat(((overallNet / totalRevenue) * 100).toFixed(1))
     : null;
@@ -323,7 +342,9 @@ async function processOrders(
         totalRevenue: parseFloat(totalRevenue.toFixed(2)),
         totalCogs: parseFloat(totalCogs.toFixed(2)),
         totalFees: parseFloat(totalFees.toFixed(2)),
-        totalShipping: parseFloat(totalShipping.toFixed(2)),
+        totalShippingCollected: parseFloat(totalShippingCollected.toFixed(2)),
+        totalShippingLabels: parseFloat(totalShippingLabels.toFixed(2)),
+        totalShippingNet: parseFloat(totalShippingNet.toFixed(2)),
         netProfit: parseFloat(overallNet.toFixed(2)),
         avgMargin,
         itemsWithCogs,
@@ -354,6 +375,7 @@ async function dualWriteFinancials(
     ebaySku: string | null;
     salePrice: number;
     shippingCollected: number;
+    shippingLabelCost: number;
     ebayFees: number;
     cogs: number | null;
     netProfit: number;
@@ -380,7 +402,7 @@ async function dualWriteFinancials(
     shipping_buyer_paid: it.shippingCollected,
     ebay_fees: it.ebayFees,
     cogs: it.cogs,
-    shipping_label_cost: null, // Phase 2+
+    shipping_label_cost: it.shippingLabelCost,
     refund: 0, // Phase 2+
     net_profit: it.netProfit,
     sold_at: it.soldAt,
