@@ -3320,41 +3320,92 @@ serve(async (req) => {
           `create_draft: publish failed with condition=${conditionEnum} (id=${conditionId}), category=${finalCategoryId}, format=${listingFormat}`,
         );
         // Deficiency #8: Demote category mapping on publish failure
+        // IMPORTANT: Only demote for errors that indicate a genuinely bad category
+        // or condition mismatch. Do NOT demote for transient eBay server errors
+        // (errorId 25001 = "Core Inventory Service internal error") or rate limits,
+        // as those are eBay-side issues unrelated to our category choice.
+        const DEMOTABLE_ERROR_IDS = new Set([
+          25002,  // Invalid condition for category
+          21919288, // Invalid category ID
+          25004,  // Category not supported
+          21916585, // Category requires item specifics
+          25017,  // Leaf category required
+        ]);
+        let shouldDemote = false;
         try {
-          const _supabaseUrl = Deno.env.get("SUPABASE_URL");
-          const _serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-          if (_supabaseUrl && _serviceKey && finalCategoryId) {
-            await fetch(`${_supabaseUrl}/functions/v1/category-lookup`, {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${_serviceKey}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                action: "demote",
-                categoryId: finalCategoryId,
-                itemType: payload.itemType || "",
-                itemTypeNormalized: payload.itemTypeNormalized || "", // EA-P3-A: precise row targeting
-                reason: `publish_failed_${publishResp.status}`,
-              }),
-            });
+          const errJson = JSON.parse(errText);
+          const errorIds: number[] = (errJson?.errors ?? []).map((e: { errorId?: number }) => e.errorId);
+          // Only demote for known category/condition mismatch errors, never for 500s
+          shouldDemote = publishResp.status !== 500 &&
+            errorIds.some((id) => DEMOTABLE_ERROR_IDS.has(id));
+          if (!shouldDemote) {
             console.warn(
-              `create_draft: demoted category mapping for ${finalCategoryId} after publish failure`,
+              `create_draft: skipping category demotion for ${finalCategoryId} — error IDs [${errorIds.join(", ")}] are not category-related (HTTP ${publishResp.status})`,
             );
           }
-        } catch (demoteErr) {
-          console.warn(
-            "create_draft: demote call failed (non-fatal):",
-            demoteErr,
-          );
+        } catch (_parseErr) {
+          // If we can't parse the error body, skip demotion
+          shouldDemote = false;
+        }
+        if (shouldDemote) {
+          try {
+            const _supabaseUrl = Deno.env.get("SUPABASE_URL");
+            const _serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+            if (_supabaseUrl && _serviceKey && finalCategoryId) {
+              await fetch(`${_supabaseUrl}/functions/v1/category-lookup`, {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${_serviceKey}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  action: "demote",
+                  categoryId: finalCategoryId,
+                  itemType: payload.itemType || "",
+                  itemTypeNormalized: payload.itemTypeNormalized || "", // EA-P3-A: precise row targeting
+                  reason: `publish_failed_${publishResp.status}`,
+                }),
+              });
+              console.warn(
+                `create_draft: demoted category mapping for ${finalCategoryId} after publish failure`,
+              );
+            }
+          } catch (demoteErr) {
+            console.warn(
+              "create_draft: demote call failed (non-fatal):",
+              demoteErr,
+            );
+          }
+        }
+
+        // Provide a user-friendly error message based on the error type
+        let userFriendlyError: string;
+        try {
+          const errJson = JSON.parse(errText);
+          const firstError = errJson?.errors?.[0];
+          const errorId = firstError?.errorId;
+          if (publishResp.status === 500 || errorId === 25001) {
+            userFriendlyError = "eBay is experiencing a temporary issue. Please wait a minute and try publishing again. Your listing details are saved.";
+          } else if (errorId === 25002) {
+            userFriendlyError = "The selected condition is not valid for this category. Please adjust the condition and try again.";
+          } else if (errorId === 21919288 || errorId === 25004 || errorId === 25017) {
+            userFriendlyError = "The selected category is not valid for this item. Please choose a different category and try again.";
+          } else {
+            userFriendlyError = firstError?.message || `Publish failed: ${publishResp.status}. Please try again.`;
+          }
+        } catch (_) {
+          userFriendlyError = publishResp.status === 500
+            ? "eBay is experiencing a temporary issue. Please wait a minute and try publishing again."
+            : `Publish failed: ${publishResp.status}. Please try again.`;
         }
 
         return new Response(
           JSON.stringify({
-            error: `Offer created (ID: ${offerId}) but publish failed: ${publishResp.status} - ${errText}`,
+            error: userFriendlyError,
             offerId,
             sku,
             publishFailed: true,
+            isTransientError: publishResp.status === 500,
           }),
           {
             status: 200,
