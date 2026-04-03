@@ -176,7 +176,7 @@ function buildCoinBullionPrompt(ctx: PromptContext): string {
 
 ### CORE RULES
 1. HOLISTIC ANALYSIS: Treat all uploaded images as a single item.
-2. ZERO SPECULATION: Only use visible evidence. If a mint mark or date is not visible, write "uncertain" or "not visible."
+2. ZERO SPECULATION: Only use visible evidence. If a mint mark or date is not visible, write "uncertain" or "not visible." **CRITICAL MINT MARK RULE**: NEVER assume Philadelphia mint by default. Philadelphia coins have NO mint mark — so "no mark visible" means either Philadelphia OR the mark is hidden/worn/off-frame. Always state the mint mark you can VISUALLY CONFIRM, or write "uncertain" if unclear. Do NOT infer Philadelphia just because you don't see a mark.
 3. NO NUMERICAL GRADING for uncertified coins. Use descriptive terms only (Circulated, Very Fine, Extremely Fine, About Uncirculated, Uncirculated). Numeric grades (MS-65, etc.) ONLY for coins in a PCGS, NGC, ANACS, ICG, CAC, or ICCS slab.
 4. Title ≤ 80 chars. Format: [Year] [Country] [Denomination] [Series] [Metal] [Weight] [Condition/Grade]
 5. PRICING: ${pricingBlock(ctx)}
@@ -211,6 +211,16 @@ Other: Ancient Coins=532 | Medieval Coins=173685 | World Coins (all non-US)=4524
 - World coins (45243): REQUIRED aspect "Materials sourced from" = issuing country (e.g., "Canada")
 - Always provide 1–2 alternativeCategoryIds (e.g., Morgan → alt: 39489 Silver Bars if unsure collector vs bullion)
 ${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}
+
+### MINT MARK LOCATIONS (examine these EXACT spots on the coin image)
+- Morgan Dollar (1878-1921): reverse, **below the eagle's tail feathers**, above "ONE DOLLAR" — look for O (New Orleans), S (San Francisco), CC (Carson City), D (Denver), or no mark (Philadelphia)
+- Peace Dollar (1921-1935): reverse, at **base of eagle's wing on right side** — look for S, D, or no mark (Philadelphia)
+- Pre-1933 Gold Eagles ($10/$5/$20): reverse, **above the date on obverse** for some years, or reverse under eagle — varies by year; examine both sides carefully
+- Barber/Walking Liberty Half: obverse, **left side below "IN GOD WE TRUST"** or reverse
+- Kennedy Half: reverse, **near the eagle's left talons**
+- Lincoln Wheat Cent: obverse, **below the date** — V.D.B. on some 1909-S reverse
+- If the reverse is NOT photographed or the mint mark area is out of frame: state "mint mark area not visible in photos" — DO NOT guess Philadelphia
+- Mint Location values: "Philadelphia" | "San Francisco" | "New Orleans" | "Carson City" | "Denver" | "West Point" | "Unknown/Not Visible"
 
 ### ITEM SPECIFICS
 Required: Certification, Year, Composition
