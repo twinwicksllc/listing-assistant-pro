@@ -71,11 +71,30 @@ const STAGE_B_TIMEOUT_MS = 10_000; // 10 s for vision inspection (more complex)
 function buildSearchQueries(domain: Domain, itemName: string): string[] {
   const base = itemName.slice(0, 80);
   switch (domain) {
-    case "coins_bullion":
+    case "coins_bullion": {
+      // Include denomination keywords in the search so Google Search distinguishes
+      // e.g. "$10 Eagle" (39471) from "$5 Half Eagle" (39470) or "$20 Double Eagle" (39467)
+      const denomHint = /\$20|double eagle|twenty dollar/i.test(base)
+        ? "Double Eagle $20 gold coin Pre-1933"
+        : /\$10|ten dollar|eagle gold/i.test(base) && !/half eagle|\$5|five dollar/i.test(base)
+        ? "Eagle $10 gold coin Pre-1933"
+        : /half eagle|\$5|five dollar/i.test(base)
+        ? "Half Eagle $5 gold coin Pre-1933"
+        : /quarter eagle|\$2\.50|two and a half/i.test(base)
+        ? "Quarter Eagle $2.50 gold coin Pre-1933"
+        : /\$3|three dollar/i.test(base)
+        ? "Three Dollar gold coin Pre-1933"
+        : /gold dollar|\$1 gold|one dollar gold/i.test(base)
+        ? "Gold Dollar coin Pre-1933"
+        : "";
+      const coinQuery = denomHint
+        ? `eBay leaf category ID "${base}" ${denomHint} 2026 numismatic`
+        : `eBay leaf category ID "${base}" 2026 coin bullion numismatic`;
       return [
-        `eBay leaf category ID "${base}" 2026 coin bullion numismatic`,
+        coinQuery,
         `eBay recently sold "${base}" price 2026 mint mark error premium toning`,
       ];
+    }
     case "trading_cards":
       return [
         `eBay leaf category ID "${base}" trading card 2026`,
