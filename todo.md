@@ -1,10 +1,16 @@
-# V2 HomePage2 — Immersive Upload UX Polish
+# eBay Shipping Label Cost Integration
 
-## Tasks
-- [ ] Immersive drop zone: large dashed border, brand-tinted bg, drag glow transition, bold CTA typography
-- [ ] High-end thumbnail grid: perfect square aspect-ratio, skeleton loaders, hover overlay with Delete + Set as Main actions
-- [ ] Glassmorphism & depth: floating box-shadow, backdrop blur on main containers
-- [ ] Brand color modernization: gradient buttons with glow box-shadow, hover lift effect
-- [ ] Layout & spacing: airy padding, max-width 800px upload section, tighter tips panel spacing
-- [ ] Build and verify
-- [ ] Commit and create PR
+## Research Phase
+- [x] Research eBay APIs for shipping label costs
+- [x] Identify the correct API (Finances API with SHIPPING_LABEL transaction type)
+
+## Implementation Phase
+- [x] Review current cogs-report edge function implementation
+- [x] Design the shipping label cost retrieval approach
+- [x] Implement shipping label cost fetching from eBay Finances API
+- [x] Update the P&L calculation to use actual shipping label costs
+- [ ] Test the implementation
+
+## Deployment Phase
+- [ ] Push changes to GitHub
+- [ ] Deploy to Supabase

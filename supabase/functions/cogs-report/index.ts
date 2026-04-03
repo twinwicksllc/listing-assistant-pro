@@ -6,6 +6,74 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Fetch shipping label costs from eBay Finances API
+// Returns a map of orderId -> total label cost for that order
+// ─────────────────────────────────────────────────────────────────────────────
+async function fetchShippingLabelCosts(
+  userToken: string,
+  fromStr: string,
+  toStr: string,
+): Promise<Map<string, number>> {
+  const labelCosts = new Map<string, number>();
+
+  try {
+    // The Finances API uses a different base URL (apiz.ebay.com)
+    const financesApiBase = "https://apiz.ebay.com";
+    const ebayHeaders = {
+      Authorization: `Bearer ${userToken}`,
+      "Content-Type": "application/json",
+      "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+    };
+
+    // Filter for SHIPPING_LABEL transactions within the date range
+    // Note: transactionDate filter uses the same format as fulfillment API
+    const filterValue = `transactionType:{SHIPPING_LABEL},transactionDate:[${fromStr}..${toStr}]`;
+    const transactionsUrl = `${financesApiBase}/sell/finances/v1/transaction?filter=${
+      encodeURIComponent(filterValue)
+    }&limit=200`;
+
+    console.log("Fetching shipping label transactions from Finances API:", transactionsUrl);
+
+    const resp = await fetch(transactionsUrl, { headers: ebayHeaders });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.warn("Finances API error (non-fatal, will use proxy):", resp.status, errText);
+      return labelCosts; // Return empty map, will fall back to proxy
+    }
+
+    const respText = await resp.text();
+    const data = JSON.parse(respText);
+    const transactions = data.transactions ?? [];
+
+    console.log(`Found ${transactions.length} SHIPPING_LABEL transactions`);
+
+    // Aggregate label costs by orderId
+    for (const tx of transactions) {
+      const orderId = tx.orderId;
+      const amount = parseFloat(tx.amount?.value ?? 0);
+      const bookingEntry = tx.bookingEntry; // DEBIT for purchases, CREDIT for refunds
+
+      if (orderId) {
+        const currentCost = labelCosts.get(orderId) ?? 0;
+        // DEBIT increases cost (label purchase), CREDIT decreases (refund/adjustment)
+        if (bookingEntry === "DEBIT") {
+          labelCosts.set(orderId, currentCost + amount);
+        } else if (bookingEntry === "CREDIT") {
+          labelCosts.set(orderId, currentCost - amount);
+        }
+      }
+    }
+
+    console.log(`Aggregated label costs for ${labelCosts.size} orders`);
+  } catch (err) {
+    console.warn("Error fetching shipping label costs (non-fatal):", err);
+  }
+
+  return labelCosts;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -113,7 +181,7 @@ serve(async (req) => {
             { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
-        return processOrders(ordersData2, fromStr, toStr, user.id, supabase, corsHeaders);
+        return processOrders(ordersData2, fromStr, toStr, user.id, supabase, corsHeaders, userToken);
       }
 
       return new Response(
@@ -146,7 +214,7 @@ serve(async (req) => {
       );
     }
 
-    return processOrders(ordersData, fromStr, toStr, user.id, supabase, corsHeaders);
+    return processOrders(ordersData, fromStr, toStr, user.id, supabase, corsHeaders, userToken);
   } catch (err: any) {
     console.error("cogs-report error:", err);
     return new Response(JSON.stringify({ error: err.message }), {
@@ -164,8 +232,13 @@ async function processOrders(
   userId: string,
   supabase: any,
   corsHeaders: Record<string, string>,
+  userToken: string,
 ): Promise<Response> {
   const rawOrders: any[] = ordersData.orders ?? [];
+
+  // ── Fetch shipping label costs from eBay Finances API ─────────────────────────────
+  // This gives us the actual cost the seller paid for labels purchased through eBay
+  const labelCosts = await fetchShippingLabelCosts(userToken, fromStr, toStr);
 
   // ── Collect all SKUs and listing IDs for the COGS lookup ─────────────────
   const skuSet = new Set<string>();
@@ -178,11 +251,9 @@ async function processOrders(
     ebaySku: string | null;
     salePrice: number;
     shippingCollected: number;
-    // shippingLabelCost: what the seller paid for the outbound label.
-    // eBay Fulfillment API does not expose label costs directly.
-    // We use shippingCollected as the best proxy (they typically wash).
-    // When a real label cost is stored in listing_financials it will
-    // override this estimate in Phase 2.
+    // shippingLabelCost: actual cost the seller paid for the outbound label.
+    // Fetched from eBay Finances API (SHIPPING_LABEL transactions).
+    // Falls back to shippingCollected as proxy if Finances API unavailable.
     shippingLabelCost: number;
     ebayFees: number;
     soldAt: string;
@@ -209,6 +280,11 @@ async function processOrders(
       if (sku) skuSet.add(sku);
       if (listingId) listingIdSet.add(listingId);
 
+      // Look up actual shipping label cost from Finances API
+      // Fall back to shippingCollected as proxy if no label cost found
+      const actualLabelCost = labelCosts.get(order.orderId) ?? null;
+      const labelCost = actualLabelCost !== null ? actualLabelCost : shipping;
+
       flatOrders.push({
         orderId: order.orderId,
         title,
@@ -216,8 +292,8 @@ async function processOrders(
         ebaySku: sku,
         salePrice: parseFloat(lineTotal.toFixed(2)),
         shippingCollected: parseFloat(shipping.toFixed(2)),
-        // Default label cost = collected (net-zero assumption until real data available)
-        shippingLabelCost: parseFloat(shipping.toFixed(2)),
+        // Use actual label cost from Finances API if available, otherwise proxy
+        shippingLabelCost: parseFloat(labelCost.toFixed(2)),
         ebayFees: parseFloat(feeAmt.toFixed(2)),
         soldAt,
       });
@@ -286,8 +362,7 @@ async function processOrders(
 
     // Net profit:
     //   salePrice + shippingCollected - shippingLabelCost - ebayFees - cogs
-    // shippingCollected - shippingLabelCost nets to ~$0 by default (proxy assumption)
-    // and will be overridden by real label costs in Phase 2.
+    // shippingLabelCost is now fetched from Finances API for accurate P&L.
     const netProfit = fo.salePrice + fo.shippingCollected - fo.shippingLabelCost -
       fo.ebayFees - (cogs ?? 0);
     const margin = cogs != null && fo.salePrice > 0 ? (netProfit / fo.salePrice) * 100 : null;
@@ -322,7 +397,7 @@ async function processOrders(
   // Sort by soldAt descending (newest first)
   items.sort((a, b) => new Date(b.soldAt).getTime() - new Date(a.soldAt).getTime());
 
-  // shippingNet = collected - labels (nets to ~0 with proxy, real value in Phase 2)
+  // shippingNet = collected - labels (actual label costs from Finances API)
   const totalShippingNet = totalShippingCollected - totalShippingLabels;
   const overallNet = totalRevenue + totalShippingNet - totalFees - totalCogs;
   const avgMargin = itemsWithCogs > 0 && totalRevenue > 0

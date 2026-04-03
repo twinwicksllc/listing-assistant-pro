@@ -16,6 +16,7 @@ import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
 import { uploadListingImages, uploadListingImage } from "@/lib/imageUpload";
 import { EbayPolicySelector } from "@/components/EbayPolicySelector";
 import type { SelectedPolicies } from "@/types/ebay-policies";
+import EbayIntegrationBanner from "@/components/EbayIntegrationBanner";
 
 export default function AnalyzePage() {
   const { canAnalyze, canPublish, isPro, isShop, isUnlimited, isPaid, usage, recordUsage, isOwner, isLister, currentPlanLimits, planFeatures, currentPlan, user } = useAuth();
@@ -91,6 +92,7 @@ export default function AnalyzePage() {
     paymentPolicyId: null,
     returnPolicyId: null,
   });
+  const [dismissedEbayBanner, setDismissedEbayBanner] = useState(false);
 
   // Listing format and price — separate from AI pricing research (priceMin/priceMax
   // are read-only AI suggestions; these are what actually gets submitted to eBay)
@@ -414,25 +416,22 @@ export default function AnalyzePage() {
         }
         // Offer created but publish step failed — extract clean eBay error message
         if (data?.publishFailed) {
-          // Try to extract a clean human-readable message from the raw eBay error JSON
-          let publishErrMsg = data.error as string;
-          try {
-            // Error format: "Offer created (ID: X) but publish failed: 400 {\"errors\":[{\"message\":\"...\"}]}"
-            const jsonStart = publishErrMsg.indexOf("{");
-            if (jsonStart !== -1) {
-              const errJson = JSON.parse(publishErrMsg.slice(jsonStart));
-              const firstErr = errJson?.errors?.[0];
-              if (firstErr?.message) {
-                // eBay error messages can be very long HTML — truncate to first sentence
-                const cleanMsg = firstErr.message.replace(/<[^>]+>/g, "").split(".")[0].trim();
-                publishErrMsg = cleanMsg || publishErrMsg;
-              }
-            }
-          } catch { /* keep raw error */ }
-          toast.error("eBay rejected the listing", {
-            description: publishErrMsg,
-            duration: 10000,
-          });
+          if (data?.isTransientError) {
+            // eBay 500 / transient server error — prompt user to retry
+            toast.error("eBay is temporarily unavailable", {
+              description: data.error as string,
+              action: {
+                label: "Retry",
+                onClick: handlePublish,
+              },
+              duration: 12000,
+            });
+          } else {
+            toast.error("eBay rejected the listing", {
+              description: data.error as string,
+              duration: 10000,
+            });
+          }
           return;
         }
         throw new Error(data?.error || error?.message || "Publish failed");
@@ -476,6 +475,12 @@ export default function AnalyzePage() {
       </header>
 
       <div className="px-4 pt-4 max-w-lg mx-auto space-y-4">
+        {!dismissedEbayBanner && (
+          <EbayIntegrationBanner 
+            onDismiss={() => setDismissedEbayBanner(true)}
+            className="mb-4"
+          />
+        )}
         {/* Image carousel */}
         <div className="relative rounded-xl overflow-hidden border border-border aspect-square bg-secondary">
           <img src={imageUrls[activePhoto]} alt={`Item photo ${activePhoto + 1}`} className="w-full h-full object-cover" />
