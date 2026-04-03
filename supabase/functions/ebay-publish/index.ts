@@ -3324,23 +3324,86 @@ serve(async (req) => {
         // or condition mismatch. Do NOT demote for transient eBay server errors
         // (errorId 25001 = "Core Inventory Service internal error") or rate limits,
         // as those are eBay-side issues unrelated to our category choice.
+        // errorId 25002 is OVERLOADED by eBay — it can mean:
+        //   (a) "Invalid condition for category"  → demotable, condition error
+        //   (b) "Seller monthly listing limit exceeded"  → NOT demotable, account limit
+        //   (c) "Country of Origin value too long"  → NOT demotable, data error
+        //   (d) "Missing required item specific"  → NOT demotable, data error
+        // We detect seller-limit flavor by checking message text for known keywords.
+        const SELLER_LIMIT_PATTERNS = [
+          /exceed.*amount.*you can list/i,
+          /selling limit/i,
+          /monthly.*limit/i,
+          /list.*more.*this month/i,
+          /\$[\d,]+.*more.*total sales/i,
+        ];
         const DEMOTABLE_ERROR_IDS = new Set([
-          25002,  // Invalid condition for category
           21919288, // Invalid category ID
           25004,  // Category not supported
           21916585, // Category requires item specifics
           25017,  // Leaf category required
+          // NOTE: 25002 intentionally excluded — handled below with message-text check
         ]);
         let shouldDemote = false;
+        let isSellerLimitError = false;
+        let parsedErrJson: any = null;
         try {
-          const errJson = JSON.parse(errText);
-          const errorIds: number[] = (errJson?.errors ?? []).map((e: { errorId?: number }) => e.errorId);
-          // Only demote for known category/condition mismatch errors, never for 500s
-          shouldDemote = publishResp.status !== 500 &&
-            errorIds.some((id) => DEMOTABLE_ERROR_IDS.has(id));
+          parsedErrJson = JSON.parse(errText);
+          const errors: Array<{ errorId?: number; message?: string }> = parsedErrJson?.errors ?? [];
+          const errorIds: number[] = errors.map((e) => e.errorId ?? 0);
+
+          // Check for seller limit flavor of 25002 first
+          for (const e of errors) {
+            if (e.errorId === 25002 && SELLER_LIMIT_PATTERNS.some((p) => p.test(e.message ?? ""))) {
+              isSellerLimitError = true;
+              console.warn(
+                `create_draft: errorId 25002 is a SELLER LIMIT error (not condition/category) — skipping demotion. Message: ${e.message?.slice(0, 120)}`,
+              );
+              // Undo any demotion that may have already fired for this category
+              // (previous code versions incorrectly demoted on seller limit errors)
+              try {
+                const _repairUrl = Deno.env.get("SUPABASE_URL");
+                const _repairKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+                if (_repairUrl && _repairKey && finalCategoryId) {
+                  await fetch(`${_repairUrl}/functions/v1/category-lookup`, {
+                    method: "POST",
+                    headers: {
+                      "Authorization": `Bearer ${_repairKey}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      action: "promote",
+                      categoryId: finalCategoryId,
+                    }),
+                  });
+                  console.log(
+                    `create_draft: auto-promoted category ${finalCategoryId} to repair incorrect demotion from seller limit error`,
+                  );
+                }
+              } catch (repairErr) {
+                console.warn("create_draft: category repair failed (non-fatal):", repairErr);
+              }
+              break;
+            }
+          }
+
+          // Only demote for known category/condition mismatch errors, never for 500s or seller limit
+          if (!isSellerLimitError && publishResp.status !== 500) {
+            shouldDemote = errorIds.some((id) => DEMOTABLE_ERROR_IDS.has(id));
+            // 25002 is demotable ONLY when it is NOT a seller limit error
+            const has25002 = errorIds.includes(25002);
+            if (has25002 && !isSellerLimitError) {
+              // Check all 25002 errors in this response — if any is NOT a seller limit, it's a condition error
+              const conditionError = errors.some(
+                (e) => e.errorId === 25002 && !SELLER_LIMIT_PATTERNS.some((p) => p.test(e.message ?? "")),
+              );
+              if (conditionError) shouldDemote = true;
+            }
+          }
+
           if (!shouldDemote) {
             console.warn(
-              `create_draft: skipping category demotion for ${finalCategoryId} — error IDs [${errorIds.join(", ")}] are not category-related (HTTP ${publishResp.status})`,
+              `create_draft: skipping category demotion for ${finalCategoryId} — not a category/condition error (HTTP ${publishResp.status}, sellerLimit=${isSellerLimitError})`,
             );
           }
         } catch (_parseErr) {
@@ -3379,13 +3442,21 @@ serve(async (req) => {
         }
 
         // Provide a user-friendly error message based on the error type
+        // Re-use parsedErrJson from the demotion block above (already parsed)
         let userFriendlyError: string;
         try {
-          const errJson = JSON.parse(errText);
-          const firstError = errJson?.errors?.[0];
+          const firstError = parsedErrJson?.errors?.[0];
           const errorId = firstError?.errorId;
           if (publishResp.status === 500 || errorId === 25001) {
             userFriendlyError = "eBay is experiencing a temporary issue. Please wait a minute and try publishing again. Your listing details are saved.";
+          } else if (isSellerLimitError) {
+            // Extract the human-readable portion of the seller limit message
+            const rawMsg: string = firstError?.message ?? "";
+            const limitMatch = rawMsg.match(/You can list up to ([\$\d,\.]+) more[^.]*\./i);
+            const remaining = limitMatch ? limitMatch[1] : null;
+            userFriendlyError = remaining
+              ? `Your eBay account has reached its monthly selling limit. You have ${remaining} of listing capacity remaining this month. Visit eBay's Selling Limits page to request an increase.`
+              : "Your eBay account has reached its monthly selling limit. Please visit eBay's Selling Limits page to request an increase before listing high-value items.";
           } else if (errorId === 25002) {
             userFriendlyError = "The selected condition is not valid for this category. Please adjust the condition and try again.";
           } else if (errorId === 21919288 || errorId === 25004 || errorId === 25017) {
@@ -3405,7 +3476,8 @@ serve(async (req) => {
             offerId,
             sku,
             publishFailed: true,
-            isTransientError: publishResp.status === 500,
+            // Seller limit errors are also "transient" from listing perspective — not a listing defect
+            isTransientError: publishResp.status === 500 || isSellerLimitError,
           }),
           {
             status: 200,
