@@ -1699,6 +1699,55 @@ Seller's note: "${voiceNote}"`;
     }
     // --- end auto-persist ---
 
+    // ─── POST-PASS: Focused Detail Extraction & Override ────────────────────
+    // Runs a dedicated, domain-specific vision pass that focuses ONLY on
+    // high-value identification details the main model frequently misses:
+    //   • Coins: mint marks, key dates, die varieties
+    //   • Trading Cards: set, parallel, serial number, rookie status
+    //   • Jewelry: hallmarks, brand signatures, karat
+    // Findings are AUTHORITATIVE and OVERRIDE the main model's output.
+    try {
+      const { extractKeyDetails, applyDetailOverrides } = await import(
+        "../_helpers/detailExtractor.ts"
+      );
+
+      // Build image lists for the detail extractor (use ALL images, up to 5)
+      const detailBase64List: string[] = [];
+      const detailMimeList: string[] = [];
+      for (const img of imageList.slice(0, 5)) {
+        const detB64 = img.includes(",") ? img.split(",")[1] : img;
+        const detMimeMatch = img.match(/^data:(image\/\w+);/);
+        detailBase64List.push(detB64);
+        detailMimeList.push(detMimeMatch ? detMimeMatch[1] : "image/jpeg");
+      }
+
+      const detailResult = await extractKeyDetails(
+        GEMINI_API_KEY,
+        identification.domain as any,
+        identification.itemName,
+        detailBase64List,
+        detailMimeList,
+        invocationId,
+      );
+
+      if (detailResult) {
+        applyDetailOverrides(listing, detailResult, invocationId);
+        console.log(
+          `[${invocationId}] ✓ Detail extraction applied (domain=${detailResult.domain})`,
+        );
+      } else {
+        console.log(
+          `[${invocationId}] Detail extraction returned null (domain=${identification.domain}) — no overrides`,
+        );
+      }
+    } catch (detailErr) {
+      console.warn(
+        `[${invocationId}] Detail extraction failed (non-blocking):`,
+        String(detailErr),
+      );
+    }
+    // ─── END POST-PASS ─────────────────────────────────────────────────────
+
     // --- Fetch competitor prices now that AI has generated the title ---
     if (listing.title && userId) {
       try {

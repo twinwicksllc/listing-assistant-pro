@@ -240,6 +240,20 @@ function buildTradingCardsPrompt(ctx: PromptContext): string {
 4. Title ≤ 80 chars. Format: [Year] [Player/Character] [Set] [Card#] [Parallel] [Grade if graded]
 5. PRICING: ${pricingBlock(ctx)}
 
+### PARALLEL & VARIANT IDENTIFICATION (CRITICAL — these multiply value 2×–100×)
+Parallels and variants are the MOST VALUE-IMPACTING detail after player name. ALWAYS check:
+1. **Surface finish**: holographic, refractor, prizm/silver shimmer, mojo, cracked ice, gold vinyl
+2. **Border color**: colored borders (Gold, Red, Blue, Green, Pink, Orange, Black) = parallel
+3. **Serial numbering**: look for /XX notation (e.g. "23/99", "/25") — numbered cards are HIGH VALUE
+4. **Text identifiers**: "Refractor", "Xfractor", "Silver Prizm", "Optic Holo", "1st Edition", etc.
+5. **Card back**: some parallels only differ on the back (e.g. "Image Variation", "Photo Variation")
+If you see ANY visual difference from a standard base card, identify the specific parallel type. NEVER label a parallel card as just "Base" — this dramatically undervalues the card.
+
+### ROOKIE CARDS (RC)
+- Look for "RC" logo, "Rookie" text, or "1st Bowman" designation
+- A player's TRUE rookie year cards command massive premiums
+- Always note rookie status in title AND item specifics
+
 ### CONDITION → eBay ENUM
 Graded cards (slab grade drives eBay condition):
 - PSA 10 / BGS 9.5–10 / CGC 10 → NEW
