@@ -64,7 +64,7 @@ const GROUNDING_MODEL = "gemini-2.5-flash";
 const VISION_MODEL = "gemini-3-flash-preview";
 
 const STAGE_A_TIMEOUT_MS = 8_000; // 8 s for search grounding
-const STAGE_B_TIMEOUT_MS = 10_000; // 10 s for vision inspection (more complex)
+const STAGE_B_TIMEOUT_MS = 30_000; // 30 s for vision inspection (code_execution needs more time)
 
 // ─── Domain-specific search query templates ───────────────────────────────────
 
