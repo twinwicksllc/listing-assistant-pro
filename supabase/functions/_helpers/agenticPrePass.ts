@@ -140,9 +140,17 @@ function getZoomTargets(domain: Domain): ZoomTarget[] {
             "Critical for correct year — misreading 1964 vs 1965 Kennedy Half Dollar changes silver content from 90% to 40%",
         },
         {
-          region: "mint mark",
+          region: "mint mark — EXACT locations by series",
           rationale:
-            "Location above/below date or on reverse; determines rarity and value (e.g., CC, S, D, O, W marks)",
+            "CRITICAL: Examine the correct region for this specific coin series. " +
+            "Morgan Dollar: reverse BELOW the eagle's tail feathers, above 'ONE DOLLAR'. " +
+            "Peace Dollar: reverse at base of eagle's right wing. " +
+            "Pre-1933 Gold: check both obverse above date AND reverse under eagle. " +
+            "Barber/Walking Liberty Half: obverse left side near motto. " +
+            "Kennedy Half: reverse near eagle's left talons. " +
+            "Lincoln Cent: obverse below date. " +
+            "Look for: O (New Orleans), S (San Francisco), CC (Carson City), D (Denver), W (West Point). " +
+            "NO mark = Philadelphia. If the mint mark area is not in frame or not legible, report 'not visible' — NEVER assume Philadelphia.",
         },
         {
           region: "edge reeds",
