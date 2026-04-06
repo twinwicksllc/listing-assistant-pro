@@ -249,6 +249,7 @@ async function processOrders(
     title: string;
     ebayListingId: string | null;
     ebaySku: string | null;
+    quantity: number;
     salePrice: number;
     shippingCollected: number;
     // shippingLabelCost: actual cost the seller paid for the outbound label.
@@ -290,6 +291,7 @@ async function processOrders(
         title,
         ebayListingId: listingId,
         ebaySku: sku,
+        quantity,
         salePrice: parseFloat(lineTotal.toFixed(2)),
         shippingCollected: parseFloat(shipping.toFixed(2)),
         // Use actual label cost from Finances API if available, otherwise proxy
@@ -337,10 +339,12 @@ async function processOrders(
     title: string;
     ebayListingId: string | null;
     ebaySku: string | null;
+    quantity: number;
     salePrice: number;
     shippingCollected: number;
     shippingLabelCost: number;
     ebayFees: number;
+    unitCogs: number | null;
     cogs: number | null;
     netProfit: number;
     margin: number | null;
@@ -356,23 +360,28 @@ async function processOrders(
   let itemsWithout = 0;
 
   const items: ResultItem[] = flatOrders.map((fo) => {
-    const cogs = (fo.ebaySku ? cogsMap[fo.ebaySku] : null) ??
+    // unitCogs: the cost of a single unit (as stored in listing_cogs)
+    const unitCogs = (fo.ebaySku ? cogsMap[fo.ebaySku] : null) ??
       (fo.ebayListingId ? cogsMap[fo.ebayListingId] : null) ??
       null;
 
+    // totalLineCogs: multiply per-unit COGS by quantity sold
+    const totalLineCogs = unitCogs != null ? unitCogs * fo.quantity : null;
+
     // Net profit:
-    //   salePrice + shippingCollected - shippingLabelCost - ebayFees - cogs
-    // shippingLabelCost is now fetched from Finances API for accurate P&L.
+    //   salePrice + shippingCollected - shippingLabelCost - ebayFees - (unitCogs x quantity)
+    // salePrice already reflects lineItemCost x quantity (set in the lineItems loop above).
+    // shippingLabelCost is fetched from Finances API for accurate P&L.
     const netProfit = fo.salePrice + fo.shippingCollected - fo.shippingLabelCost -
-      fo.ebayFees - (cogs ?? 0);
-    const margin = cogs != null && fo.salePrice > 0 ? (netProfit / fo.salePrice) * 100 : null;
+      fo.ebayFees - (totalLineCogs ?? 0);
+    const margin = totalLineCogs != null && fo.salePrice > 0 ? (netProfit / fo.salePrice) * 100 : null;
 
     totalRevenue += fo.salePrice;
     totalFees += fo.ebayFees;
     totalShippingCollected += fo.shippingCollected;
     totalShippingLabels += fo.shippingLabelCost;
-    if (cogs != null) {
-      totalCogs += cogs;
+    if (totalLineCogs != null) {
+      totalCogs += totalLineCogs;
       itemsWithCogs++;
     } else {
       itemsWithout++;
@@ -383,11 +392,13 @@ async function processOrders(
       title: fo.title,
       ebayListingId: fo.ebayListingId,
       ebaySku: fo.ebaySku,
+      quantity: fo.quantity,
       salePrice: fo.salePrice,
       shippingCollected: fo.shippingCollected,
       shippingLabelCost: fo.shippingLabelCost,
       ebayFees: fo.ebayFees,
-      cogs,
+      unitCogs,
+      cogs: totalLineCogs,
       netProfit: parseFloat(netProfit.toFixed(2)),
       margin: margin != null ? parseFloat(margin.toFixed(1)) : null,
       soldAt: fo.soldAt,
@@ -448,10 +459,12 @@ async function dualWriteFinancials(
     title: string;
     ebayListingId: string | null;
     ebaySku: string | null;
+    quantity: number;
     salePrice: number;
     shippingCollected: number;
     shippingLabelCost: number;
     ebayFees: number;
+    unitCogs: number | null;
     cogs: number | null;
     netProfit: number;
     soldAt: string;
@@ -473,10 +486,12 @@ async function dualWriteFinancials(
     ebay_listing_id: it.ebayListingId,
     ebay_sku: it.ebaySku,
     title: it.title,
+    quantity: it.quantity,
     sale_price: it.salePrice,
     shipping_buyer_paid: it.shippingCollected,
     ebay_fees: it.ebayFees,
-    cogs: it.cogs,
+    cogs: it.cogs,           // total line COGS (unit_cogs × quantity)
+    unit_cogs: it.unitCogs,  // per-unit COGS for reference
     shipping_label_cost: it.shippingLabelCost,
     refund: 0, // Phase 2+
     net_profit: it.netProfit,
