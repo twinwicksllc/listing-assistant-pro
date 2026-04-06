@@ -441,6 +441,61 @@ export async function extractKeyDetails(
  * This function OVERRIDES the main model's output where the detail extractor
  * has higher-confidence findings.
  */
+// ─────────────────────────────────────────────────────────────────────────────
+// inferCoinWeightOz
+// Returns the fine troy oz of pure metal for well-known coin/bullion types.
+// Matches against a combined series + title string (lowercased).
+// Returns 0 if the type is not recognised.
+// ─────────────────────────────────────────────────────────────────────────────
+function inferCoinWeightOz(text: string): number {
+  // ── Silver ──
+  if (/american silver eagle/.test(text)) return 1.0000;
+  if (/morgan dollar|peace dollar/.test(text)) return 0.7734;
+  if (/walking liberty half|franklin half|barber half|kennedy half.*1964/.test(text)) return 0.3618;
+  if (/kennedy half.*196[5-9]|kennedy half.*1970/.test(text)) return 0.1479; // 40% silver
+  if (/barber quarter|standing liberty quarter|washington quarter/.test(text)) return 0.1809;
+  if (/mercury dime|barber dime|roosevelt dime/.test(text)) return 0.0724;
+  if (/silver war nickel|1942.*nickel|1943.*nickel|1944.*nickel|1945.*nickel/.test(text)) return 0.0563;
+  // Generic silver bars/rounds — look for weight in oz in the text
+  const silverOzMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:troy\s*)?oz\s*(?:\.999|fine|silver)/);
+  if (silverOzMatch) return parseFloat(silverOzMatch[1]);
+  if (/1\s*oz.*silver|silver.*1\s*oz/.test(text)) return 1.0000;
+  if (/10\s*oz.*silver|silver.*10\s*oz/.test(text)) return 10.0000;
+  if (/100\s*oz.*silver|silver.*100\s*oz/.test(text)) return 100.0000;
+  if (/1\/2\s*oz.*silver|silver.*1\/2\s*oz/.test(text)) return 0.5000;
+  if (/1\/4\s*oz.*silver|silver.*1\/4\s*oz/.test(text)) return 0.2500;
+  if (/1\/10\s*oz.*silver|silver.*1\/10\s*oz/.test(text)) return 0.1000;
+
+  // ── Gold ──
+  if (/american gold eagle.*\$50|1\s*oz.*gold eagle|gold eagle.*1\s*oz/.test(text)) return 1.0000;
+  if (/american gold eagle.*\$25|1\/2\s*oz.*gold eagle|gold eagle.*1\/2\s*oz/.test(text)) return 0.5000;
+  if (/american gold eagle.*\$10|1\/4\s*oz.*gold eagle|gold eagle.*1\/4\s*oz/.test(text)) return 0.2500;
+  if (/american gold eagle.*\$5|1\/10\s*oz.*gold eagle|gold eagle.*1\/10\s*oz/.test(text)) return 0.1000;
+  if (/american gold buffalo/.test(text)) return 1.0000;
+  if (/gold sovereign/.test(text)) return 0.2354;
+  // Pre-1933 US gold
+  if (/double eagle|\$20\s*gold/.test(text)) return 0.9675;
+  if (/\$10\s*eagle|\$10\s*gold|eagle gold/.test(text)) return 0.4838;
+  if (/\$5\s*half eagle|\$5\s*gold|half eagle/.test(text)) return 0.2419;
+  if (/\$2\.5|quarter eagle|\$2\.50\s*gold/.test(text)) return 0.1209;
+  if (/\$1\s*gold|gold dollar/.test(text)) return 0.0484;
+  // Indian Head gold ($2.50 / $5 / $10)
+  if (/indian head.*\$2\.5|indian.*quarter eagle/.test(text)) return 0.1209;
+  if (/indian head.*\$5|indian.*half eagle/.test(text)) return 0.2419;
+  if (/indian head.*\$10|indian.*eagle/.test(text)) return 0.4838;
+  // Generic gold bars/rounds
+  const goldOzMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:troy\s*)?oz\s*(?:\.999|\.9999|fine|gold)/);
+  if (goldOzMatch) return parseFloat(goldOzMatch[1]);
+  if (/1\s*oz.*gold|gold.*1\s*oz/.test(text)) return 1.0000;
+  if (/1\/10\s*oz.*gold|gold.*1\/10\s*oz/.test(text)) return 0.1000;
+  if (/1\/4\s*oz.*gold|gold.*1\/4\s*oz/.test(text)) return 0.2500;
+  if (/1\/2\s*oz.*gold|gold.*1\/2\s*oz/.test(text)) return 0.5000;
+  // LEGO silver bars — "1/8 oz" style
+  if (/1\/8\s*oz.*silver|silver.*1\/8\s*oz/.test(text)) return 0.125;
+
+  return 0;
+}
+
 export function applyDetailOverrides(
   listing: any,
   extraction: DetailExtractionResult,
@@ -552,6 +607,41 @@ export function applyDetailOverrides(
     }
 
     listing.itemSpecifics = specs;
+
+    // ── Metal Type & Weight Backstop ──
+    // If Pass 2 failed to populate metalType/metalWeightOz (common when Pass 1
+    // didn't flag isMetal), derive them from the coin series identified here.
+    // This ensures melt value is always calculated for precious metal coins.
+    const seriesLower = (cd.series ?? listing.itemSpecifics?.["Series"] ?? "").toLowerCase();
+    const titleLower = (listing.title ?? "").toLowerCase();
+    const combinedText = `${seriesLower} ${titleLower}`;
+
+    // Determine metal type from series/title if not already set
+    if (!listing.metalType || listing.metalType === "none") {
+      if (
+        /morgan|peace|american silver eagle|silver dollar|silver dime|silver quarter|silver half|mercury dime|barber|walking liberty|franklin half|silver bar|silver round|silver bullion/.test(combinedText)
+      ) {
+        listing.metalType = "silver";
+        console.log(`${label} BACKSTOP metalType -> "silver" (derived from series/title)`);
+      } else if (
+        /gold eagle|gold buffalo|double eagle|gold sovereign|half eagle|quarter eagle|indian head gold|\$2\.5|\$5 gold|\$10 gold|\$20 gold|gold bar|gold round|gold bullion|gold coin/.test(combinedText)
+      ) {
+        listing.metalType = "gold";
+        console.log(`${label} BACKSTOP metalType -> "gold" (derived from series/title)`);
+      } else if (/platinum/.test(combinedText)) {
+        listing.metalType = "platinum";
+        console.log(`${label} BACKSTOP metalType -> "platinum" (derived from series/title)`);
+      }
+    }
+
+    // Determine weight from series/title if not already set (or is 0)
+    if (listing.metalType && listing.metalType !== "none" && !(listing.metalWeightOz > 0)) {
+      const w = inferCoinWeightOz(combinedText);
+      if (w > 0) {
+        listing.metalWeightOz = w;
+        console.log(`${label} BACKSTOP metalWeightOz -> ${w} (derived from series/title)`);
+      }
+    }
   }
 
   if (extraction.cardDetails) {

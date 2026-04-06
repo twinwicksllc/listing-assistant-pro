@@ -931,7 +931,7 @@ serve(async (req: Request) => {
         voiceNote: voiceNote || undefined,
         suggestedCategoryId: lockedCategoryId ?? undefined,
         suggestedCategoryName: lockedCategoryName ?? undefined,
-        spotPrices: (identification.isMetal || identification.metalType !== "none")
+        spotPrices: (identification.isMetal || identification.metalType !== "none" || identification.domain === "coins_bullion")
           ? { gold: spotGold, silver: spotSilver, platinum: spotPlatinum }
           : undefined,
         metalType: identification.metalType,
@@ -1324,6 +1324,8 @@ Seller's note: "${voiceNote}"`;
                     "price",
                     "itemSpecifics",
                     "isSlabbed",
+                    "metalType",
+                    "metalWeightOz",
                   ],
                   additionalProperties: false,
                 },
