@@ -1104,8 +1104,40 @@ Seller's note: "${voiceNote}"`;
     // ── Build dynamic tool schema from eBay aspects/conditions ─────────────────
     // Condition enum: use eBay's actual allowed conditions for this category,
     // falling back to our generic USED_* set when no category data is available.
+    //
+    // IMPORTANT: We must use our internal UPPERCASE enum keys (e.g. "NEW", "USED_EXCELLENT")
+    // NOT conditionDescription strings (e.g. "New", "Used") from the eBay API.
+    // If Gemini stores a human-readable description like "New" in the draft, the
+    // publish function can't map it to a valid ConditionEnum and eBay returns:
+    //   errorId 2004: "Could not serialize field [condition]"
+    //
+    // Map eBay conditionId -> our internal enum key for the prompt.
+    const CONDITION_ID_TO_ENUM: Record<number, string> = {
+      1000: "NEW",
+      1500: "NEW_OTHER",
+      1750: "NEW_WITH_DEFECTS",
+      2000: "CERTIFIED_REFURBISHED",
+      2010: "CERTIFIED_REFURBISHED",
+      2020: "CERTIFIED_REFURBISHED",
+      2030: "CERTIFIED_REFURBISHED",
+      2500: "SELLER_REFURBISHED",
+      2750: "LIKE_NEW",
+      3000: "USED_EXCELLENT",
+      4000: "USED_VERY_GOOD",
+      5000: "USED_GOOD",
+      6000: "USED_ACCEPTABLE",
+      7000: "FOR_PARTS_OR_NOT_WORKING",
+    };
     const conditionEnum: string[] = categoryConditions?.conditions?.length > 0
-      ? categoryConditions.conditions.map((c: any) => c.conditionDescription || String(c.conditionId))
+      ? [
+          ...new Set(
+            categoryConditions.conditions.map((c: any) => {
+              const id = Number(c.conditionId);
+              return CONDITION_ID_TO_ENUM[id] ??
+                String(c.conditionDescription ?? c.conditionId).toUpperCase().replace(/\s+/g, "_");
+            })
+          ),
+        ]
       : [
         "NEW",
         "USED_EXCELLENT",

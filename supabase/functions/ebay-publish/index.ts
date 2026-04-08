@@ -1316,6 +1316,31 @@ const LEGACY_CONDITION_MAP: Record<string, string> = {
   PRE_OWNED_GOOD: "USED_EXCELLENT", // "good quality pre-owned" = lightly used, NOT numismatic "Good" (F-12)
   PRE_OWNED_FAIR: "USED_GOOD",
   PRE_OWNED_POOR: "USED_ACCEPTABLE",
+
+  // Safety net: human-readable conditionDescription strings that eBay returns from
+  // their category conditions API. If Gemini stores one of these in the draft instead
+  // of the uppercase enum key, we map it back here.
+  // Root cause: analyze-item was using c.conditionDescription ("New", "Used", etc.)
+  // as the enum value in the Gemini prompt, causing errorId 2004 on publish.
+  // Fixed in analyze-item (PR #221) but keeping these mappings as a permanent backstop.
+  "New": "NEW",
+  "New other (see details)": "NEW_OTHER",
+  "New with defects": "NEW_WITH_DEFECTS",
+  "Certified refurbished": "CERTIFIED_REFURBISHED",
+  "Seller refurbished": "SELLER_REFURBISHED",
+  "Like New": "LIKE_NEW",
+  "Used": "USED_EXCELLENT",
+  "Very Good": "USED_VERY_GOOD",
+  "Good": "USED_GOOD",
+  "Acceptable": "USED_ACCEPTABLE",
+  "For parts or not working": "FOR_PARTS_OR_NOT_WORKING",
+  // Also handle plain lowercase variants
+  "new": "NEW",
+  "used": "USED_EXCELLENT",
+  "very good": "USED_VERY_GOOD",
+  "good": "USED_GOOD",
+  "acceptable": "USED_ACCEPTABLE",
+  "like new": "LIKE_NEW",
 };
 
 // Condition normalization now uses both hardcoded fallback sets (from top of file)
