@@ -39,6 +39,7 @@ interface EbayListing {
   ebayUrl: string | null;
   listingDate?: string | null;
   views30d: number;
+  impressions30d: number;
   watchCount: number;
   transactions30d: number;
 }
@@ -525,7 +526,10 @@ export default function ListingsPage2() {
                           {/* Pills */}
                           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem", marginBottom: "0.375rem" }}>
                             {listing.views30d > 0 && (
-                              <span style={pillStyle}>👁 {listing.views30d.toLocaleString()} views (30d)</span>
+                              <span style={pillStyle} title="Views = buyers who clicked to your View Item page (last 30 days)">👁 {listing.views30d.toLocaleString()} views (30d)</span>
+                            )}
+                            {listing.impressions30d > 0 && (
+                              <span style={{ ...pillStyle, background: "rgba(110,117,128,0.07)", color: "#6E7580" }} title="Impressions = times your listing appeared in search results (last 30 days)">📊 {listing.impressions30d.toLocaleString()} impr (30d)</span>
                             )}
                             {listing.watchCount > 0 && (
                               <span style={pillStyle}>♥ {listing.watchCount} watchers</span>
