@@ -79,28 +79,25 @@ async function fetchAnalyticsForWindow(
       return result;
     }
 
-    // Debug: log the raw metricHeaders structure
+    // Debug: log the raw response structure
     console.log(
       `Analytics API (${days}d): Raw trafficData keys: ${Object.keys(trafficData).join(", ")}`,
     );
-    console.log(
-      `Analytics API (${days}d): metricHeaders is: ${
-        Array.isArray(trafficData.metricHeaders) ? "array" : typeof trafficData.metricHeaders
-      }`,
-    );
-    if (trafficData.metricHeaders) {
-      console.log(
-        `Analytics API (${days}d): First metricHeader: ${
-          JSON.stringify(trafficData.metricHeaders[0]).substring(0, 200)
-        }`,
-      );
-    }
 
-    // Use eBay's metricHeaders if provided, otherwise use our hardcoded order
-    // (eBay returns metric values in the same order as requested)
-    const metricHeaders: string[] = trafficData.metricHeaders && trafficData.metricHeaders.length > 0
-      ? (trafficData.metricHeaders as any[]).map((h: any) => h.name)
-      : ANALYTICS_METRICS_ARRAY;
+    // eBay Analytics API returns metric order in header.metrics[].key
+    // (NOT in a "metricHeaders" field — that field does not exist in the response)
+    // Fall back to our hardcoded request order if header is missing/empty,
+    // since eBay guarantees values are returned in the same order as requested.
+    const headerMetrics: string[] =
+      Array.isArray(trafficData.header?.metrics) && trafficData.header.metrics.length > 0
+        ? (trafficData.header.metrics as any[]).map((h: any) => h.key as string)
+        : ANALYTICS_METRICS_ARRAY;
+
+    console.log(
+      `Analytics API (${days}d): metric order = [${headerMetrics.join(", ")}]`,
+    );
+
+    const metricHeaders = headerMetrics;
 
     const records = trafficData.records || [];
 

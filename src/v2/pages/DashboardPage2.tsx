@@ -743,9 +743,10 @@ export default function DashboardPage2() {
 
             {planFeatures.hasListingAnalytics ? (
               <div style={statCard}>
-                <div style={statLabel}><Eye size={12} /> Views (30d)</div>
+                <div style={statLabel} title="Total View Item page clicks across all active listings (not impressions)"><Eye size={12} /> Views (30d)</div>
                 <div style={statValue}>{metrics.views30d.toLocaleString()}</div>
                 <div style={statSub}>7d: {metrics.views7d.toLocaleString()} • 90d: {metrics.views90d.toLocaleString()}</div>
+                <div style={{ fontSize: "0.65rem", color: "#9BA3AD", marginTop: "0.25rem" }}>Sum across all active listings</div>
               </div>
             ) : (
               <div style={statCard}>
