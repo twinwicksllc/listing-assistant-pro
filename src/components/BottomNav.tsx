@@ -3,7 +3,7 @@ import {
   Camera, FileText, LayoutDashboard, Settings,
   Layers, TrendingUp, Zap, Receipt, DollarSign,
   ShoppingCart, Users, MoreHorizontal, X,
-  ChevronRight,
+  ChevronRight, LogOut,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -31,7 +31,7 @@ interface NavGroup {
 export default function BottomNav() {
   const location  = useLocation();
   const navigate  = useNavigate();
-  const { isOwner } = useAuth();
+  const { isOwner, signOut } = useAuth();
 
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -228,6 +228,16 @@ export default function BottomNav() {
               </button>
             );
           })}
+
+          {/* Logout button */}
+          <button
+            onClick={signOut}
+            className="flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors text-muted-foreground hover:text-red-500"
+            title="Sign out"
+          >
+            <LogOut className="w-5 h-5" />
+            <span className="text-[10px] font-medium">Logout</span>
+          </button>
         </div>
       </nav>
 
