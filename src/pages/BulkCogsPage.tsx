@@ -236,23 +236,23 @@ export default function BulkCogsPage() {
 
   const dirtyCount = rows.filter((r) => r.dirty).length;
 
-  // ── Export missing-COGS rows to CSV ─────────────────────────────────────
-  function exportMissingCogs() {
-    const missing = rows.filter((r) => r.savedCogs == null);
-    if (missing.length === 0) {
-      toast.info("All listings already have COGS — nothing to export!");
+  // ── Export rows to CSV (only missing COGS by default) ───────────────────
+  function exportCogs(onlyMissing = true) {
+    const toExport = onlyMissing ? rows.filter((r) => r.savedCogs == null) : rows;
+    if (toExport.length === 0) {
+      toast.info("No listings to export.");
       return;
     }
 
     const escapeCell = (v: string) => `"${v.replace(/"/g, '""')}"`;
     const header = ["sku", "ebay_listing_id", "title", "price", "cogs"].join(",");
-    const lines  = missing.map((r) =>
+    const lines  = toExport.map((r) =>
       [
         escapeCell(r.sku),
         escapeCell(r.listingId),
         escapeCell(r.title),
         r.price.toFixed(2),
-        "",                     // blank for the user to fill in
+        r.savedCogs ? r.savedCogs.toString() : "",
       ].join(",")
     );
 
@@ -261,10 +261,11 @@ export default function BulkCogsPage() {
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
     a.href     = url;
-    a.download = `missing-cogs-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `cogs-${onlyMissing ? "missing" : "all"}-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success(`Exported ${missing.length} listings — fill in the "cogs" column and re-upload.`);
+    const count = toExport.length;
+    toast.success(`Exported ${count} listing${count > 1 ? "s" : ""} — fill in the "cogs" column and re-upload.`);
   }
 
   // ── SortHeader helper ────────────────────────────────────────────────────
@@ -329,15 +330,25 @@ export default function BulkCogsPage() {
             Save All
           </button>
 
-          {rows.some((r) => r.savedCogs == null) && (
-            <button
-              onClick={exportMissingCogs}
-              className="flex items-center gap-1.5 border border-border text-foreground px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-muted transition-colors"
-              title="Download CSV of all listings missing a COGS value"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Export Missing
-            </button>
+          {rows.length > 0 && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => exportCogs(true)}
+                className="flex items-center gap-1.5 border border-border text-foreground px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-muted transition-colors"
+                title="Download CSV of items missing COGS values"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Missing Only
+              </button>
+              <button
+                onClick={() => exportCogs(false)}
+                className="flex items-center gap-1.5 border border-border text-foreground px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-muted transition-colors"
+                title="Download CSV template of all listings"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Download All
+              </button>
+            </div>
           )}
 
           <button
@@ -370,15 +381,38 @@ export default function BulkCogsPage() {
         </div>
       </div>
 
-      {/* CSV Import Section */}
+      {/* CSV Export/Import Section */}
       {!loading && (
-        <div className="max-w-4xl mx-auto px-4 py-4 border-b border-border/50">
+        <div className="max-w-4xl mx-auto px-4 py-4 space-y-4 border-b border-border/50">
+          {/* Export Instructions */}
+          <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 rounded-lg p-3">
+            <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-2">📥 Download CSV Template</h3>
+            <p className="text-xs text-blue-800 dark:text-blue-300 mb-3">
+              Click <strong>"Missing Only"</strong> to download items without costs, or <strong>"Download All"</strong> to get a template of all listings.
+            </p>
+            <ul className="text-xs text-blue-700 dark:text-blue-400 space-y-1">
+              <li>✓ Open the CSV in Excel, Google Sheets, or Numbers</li>
+              <li>✓ Fill in the <strong>"cogs"</strong> column with your item costs</li>
+              <li>✓ <strong>Do NOT</strong> change column headers (sku, ebay_listing_id, title, price, cogs)</li>
+              <li>✓ <strong>Do NOT</strong> add, remove, or reorder columns</li>
+              <li>✓ <strong>Do NOT</strong> add or delete rows unless you know what you're doing</li>
+              <li>✓ Save the file as CSV format before uploading</li>
+            </ul>
+          </div>
+
+          {/* Import Instructions */}
           <details className="group">
             <summary className="cursor-pointer flex items-center gap-2 font-semibold text-foreground hover:text-primary transition-colors">
               <ChevronRight className="w-4 h-4 group-open:rotate-90 transition-transform" />
-              Import COGS from CSV
+              Upload CSV to Import Costs
             </summary>
-            <div className="mt-4 pt-4 border-t border-border/50">
+            <div className="mt-4 pt-4 border-t border-border/50 space-y-3">
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-lg p-3">
+                <p className="text-xs text-amber-800 dark:text-amber-300">
+                  <strong>Important:</strong> The CSV file you upload must have the same format and column headers as when you downloaded it. 
+                  Any changes to columns, headers, or row order will cause the import to fail.
+                </p>
+              </div>
               <CsvCogsImporter userId={user?.id || ""} onSuccess={load} />
             </div>
           </details>
