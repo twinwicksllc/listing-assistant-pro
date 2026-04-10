@@ -168,45 +168,76 @@ export default function ListingDetailModal({ listing, onClose }: ListingDetailMo
   async function loadCogs() {
     setCogsLoading(true);
     try {
-      // Check listing_cogs first (most reliable for published listings)
-      const orParts: string[] = [];
-      if (listing.sku)       orParts.push(`ebay_sku.eq.${listing.sku}`);
-      if (listing.listingId) orParts.push(`ebay_listing_id.eq.${listing.listingId}`);
+      // ── SKU normalization ──────────────────────────────────────────────────
+      // eBay API returns SKUs in the format they were submitted, but may
+      // lowercase them. The app stores SKUs as e.g. "LA-ED5BB0BC7F394C2A"
+      // (uppercase, with dash) but eBay returns "laED5BB0BC7F394C2A".
+      // Build all candidate forms so we match regardless of case/dash.
+      const rawSku = listing.sku ?? "";
+      const skuCandidates = new Set<string>();
+      if (rawSku) {
+        skuCandidates.add(rawSku);
+        skuCandidates.add(rawSku.toUpperCase());
+        skuCandidates.add(rawSku.toLowerCase());
+        const up = rawSku.toUpperCase();
+        // Add dash after 2-char prefix if missing: "LAXXXXX" -> "LA-XXXXX"
+        if (up.length > 2 && up[2] !== "-") {
+          skuCandidates.add(up.slice(0, 2) + "-" + up.slice(2));
+        }
+        // Remove dash if present: "LA-XXXXX" -> "LAXXXXX"
+        skuCandidates.add(up.replace(/-/g, ""));
+      }
+      const skuList = Array.from(skuCandidates).filter(Boolean);
 
-      if (orParts.length === 0) { setCogsLoading(false); return; }
+      // ── 1. Try listing_cogs table (preferred — survives draft deletion) ──
+      if (skuList.length > 0 || listing.listingId) {
+        const orParts: string[] = [];
+        if (skuList.length > 0) orParts.push(`ebay_sku.in.(${skuList.join(",")})`);
+        if (listing.listingId)  orParts.push(`ebay_listing_id.eq.${listing.listingId}`);
 
-      const { data: cogsRows } = await supabase
-        .from("listing_cogs")
-        .select("id, cogs, cogs_source, acquired_at, title")
-        .eq("user_id", user!.id)
-        .or(orParts.join(","))
-        .limit(1)
-        .maybeSingle();
+        const { data: cogsRows, error: cogsErr } = await supabase
+          .from("listing_cogs")
+          .select("id, cogs, cogs_source, acquired_at, title")
+          .eq("user_id", user!.id)
+          .or(orParts.join(","))
+          .order("created_at", { ascending: false })
+          .limit(1);
 
-      if (cogsRows) {
-        setCogsRecord({
-          id: cogsRows.id,
-          cogs: Number(cogsRows.cogs),
-          cogs_source: cogsRows.cogs_source ?? "manual",
-          acquired_at: cogsRows.acquired_at,
-          title: cogsRows.title,
-        });
-        setCogsInput(String(Number(cogsRows.cogs)));
-        setCogsLoading(false);
-        return;
+        console.log("[ListingDetailModal] listing_cogs ->", { cogsRows, cogsErr, skuList, listingId: listing.listingId });
+
+        const row = cogsRows?.[0];
+        if (row) {
+          setCogsRecord({
+            id: row.id,
+            cogs: Number(row.cogs),
+            cogs_source: row.cogs_source ?? "manual",
+            acquired_at: row.acquired_at,
+            title: row.title,
+          });
+          setCogsInput(String(Number(row.cogs)));
+          setCogsLoading(false);
+          return;
+        }
       }
 
-      // Fall back to drafts table (COGS may have been set during analysis)
-      if (listing.sku) {
-        const { data: draft } = await supabase
-          .from("drafts")
-          .select("cogs, cogs_source, cogs_acquired_at")
-          .eq("user_id", user!.id)
-          .eq("ebay_sku", listing.sku)
-          .not("cogs", "is", null)
-          .limit(1)
-          .maybeSingle();
+      // ── 2. Fall back to drafts table (COGS set at analysis time) ──
+      if (skuList.length > 0 || listing.listingId) {
+        const orParts: string[] = [];
+        if (skuList.length > 0) orParts.push(`ebay_sku.in.(${skuList.join(",")})`);
+        if (listing.listingId)  orParts.push(`ebay_listing_id.eq.${listing.listingId}`);
 
+        const { data: draftRows, error: draftErr } = await supabase
+          .from("drafts")
+          .select("cogs, cogs_source, cogs_acquired_at, ebay_sku")
+          .eq("user_id", user!.id)
+          .not("cogs", "is", null)
+          .or(orParts.join(","))
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        console.log("[ListingDetailModal] drafts fallback ->", { draftRows, draftErr, skuList });
+
+        const draft = draftRows?.[0];
         if (draft?.cogs != null) {
           setCogsRecord({
             cogs: Number(draft.cogs),
@@ -234,17 +265,8 @@ export default function ListingDetailModal({ listing, onClose }: ListingDetailMo
 
     setCogsSaving(true);
     try {
-      const payload = {
-        user_id: user.id,
-        ebay_sku: listing.sku || null,
-        ebay_listing_id: listing.listingId || null,
-        title: listing.title,
-        cogs: val,
-        cogs_source: "manual",
-      };
-
       if (cogsRecord?.id) {
-        // Update existing row
+        // Update existing listing_cogs row by id
         const { error } = await supabase
           .from("listing_cogs")
           .update({ cogs: val, cogs_source: "manual" })
@@ -252,19 +274,28 @@ export default function ListingDetailModal({ listing, onClose }: ListingDetailMo
           .eq("user_id", user.id);
         if (error) throw error;
       } else {
-        // Insert new row
+        // Insert new row — no unique constraint on listing_cogs so use insert
         const { data, error } = await supabase
           .from("listing_cogs")
-          .upsert(payload, { onConflict: "user_id,ebay_sku" })
+          .insert({
+            user_id: user.id,
+            ebay_sku: listing.sku || null,
+            ebay_listing_id: listing.listingId || null,
+            title: listing.title,
+            cogs: val,
+            cogs_source: "manual",
+          })
           .select("id")
-          .maybeSingle();
+          .limit(1);
         if (error) throw error;
-        if (data?.id) {
-          setCogsRecord(prev => ({ ...prev!, id: data.id }));
+        const newId = data?.[0]?.id;
+        if (newId) {
+          setCogsRecord(prev => ({ ...(prev ?? { cogs_source: "manual" }), id: newId }));
         }
       }
 
       setCogsRecord(prev => ({ ...(prev ?? { cogs_source: "manual" }), cogs: val }));
+      setCogsInput(String(val));
       setEditingCogs(false);
       toast.success(`COGS saved: $${fmt(val)}`);
     } catch (e: any) {
