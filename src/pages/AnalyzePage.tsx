@@ -451,6 +451,23 @@ export default function AnalyzePage() {
       });
       await recordUsage("ebay_publish");
 
+      // Persist COGS to listing_cogs so the Listings detail modal and Profit Report
+      // can show cost/margin data even after this session ends.
+      if (cogs != null && user?.id && (data.sku || data.listingId)) {
+        try {
+          await supabase.from("listing_cogs").insert({
+            user_id: user.id,
+            ebay_sku: data.sku ?? null,
+            ebay_listing_id: data.listingId ?? null,
+            title,
+            cogs,
+            cogs_source: "manual",
+          });
+        } catch (cogsErr) {
+          console.warn("Failed to persist COGS after direct publish:", cogsErr);
+        }
+      }
+
       // Success — navigate back to capture page for the next item
       navigate("/home");
     } catch (err: unknown) {

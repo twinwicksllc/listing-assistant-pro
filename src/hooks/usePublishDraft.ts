@@ -357,20 +357,28 @@ export function usePublishDraft() {
 
       // Auto-write COGS to listing_cogs table so Profit Report can match
       // sold orders even after the draft is deleted.
+      // upsert on (user_id, ebay_sku) — matches the partial unique index
+      // uq_listing_cogs_user_sku (WHERE ebay_sku IS NOT NULL).
+      // When no SKU is available, fall back to a plain insert so we still
+      // capture the cost and can match by ebay_listing_id at read time.
       if (draft.cogs != null && user?.id) {
         try {
-          await supabase.from("listing_cogs").upsert(
-            {
-              user_id: user.id,
-              ebay_sku: data.sku ?? null,
-              ebay_listing_id: data.listingId ?? null,
-              title: draft.title,
-              cogs: draft.cogs,
-              cogs_source: draft.cogsSource ?? "manual",
-              acquired_at: draft.cogsAcquiredAt?.toISOString() ?? null,
-            },
-            { onConflict: "ebay_sku" }
-          );
+          const payload = {
+            user_id: user.id,
+            ebay_sku: data.sku ?? null,
+            ebay_listing_id: data.listingId ?? null,
+            title: draft.title,
+            cogs: draft.cogs,
+            cogs_source: draft.cogsSource ?? "manual",
+            acquired_at: draft.cogsAcquiredAt?.toISOString() ?? null,
+          };
+          if (data.sku) {
+            await supabase
+              .from("listing_cogs")
+              .upsert(payload, { onConflict: "user_id,ebay_sku" });
+          } else {
+            await supabase.from("listing_cogs").insert(payload);
+          }
         } catch (cogsErr) {
           // Non-fatal — log but don't block the success flow
           console.warn("Failed to write COGS to listing_cogs:", cogsErr);

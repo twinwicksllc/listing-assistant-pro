@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   DollarSign, Save, RefreshCw, Loader2, Search, X,
   TrendingUp, TrendingDown, Minus, CheckCircle2, AlertCircle,
-  ChevronUp, ChevronDown, Lock, ChevronRight,
+  ChevronUp, ChevronDown, Lock, ChevronRight, Download,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -168,18 +168,22 @@ export default function BulkCogsPage() {
           .eq("user_id", user.id)
           .or(`ebay_listing_id.eq.${row.listingId},ebay_sku.eq.${row.sku}`);
       } else {
-        await supabase.from("listing_cogs").upsert(
-          {
-            user_id:          user.id,
-            ebay_listing_id:  row.listingId || null,
-            ebay_sku:         row.sku       || null,
-            title:            row.title,
-            cogs:             row.cogs,
-            cogs_source:      "manual",
-            updated_at:       new Date().toISOString(),
-          },
-          { onConflict: "ebay_listing_id" }
-        );
+        const payload = {
+          user_id:          user.id,
+          ebay_listing_id:  row.listingId || null,
+          ebay_sku:         row.sku       || null,
+          title:            row.title,
+          cogs:             row.cogs,
+          cogs_source:      "manual",
+          updated_at:       new Date().toISOString(),
+        };
+        if (row.sku) {
+          // Upsert by (user_id, ebay_sku) — matches the unique partial index
+          await supabase.from("listing_cogs").upsert(payload, { onConflict: "user_id,ebay_sku" });
+        } else {
+          // No SKU — use insert (avoids constraint violation)
+          await supabase.from("listing_cogs").insert(payload);
+        }
       }
 
       setRows((prev) =>
@@ -231,6 +235,37 @@ export default function BulkCogsPage() {
     });
 
   const dirtyCount = rows.filter((r) => r.dirty).length;
+
+  // ── Export missing-COGS rows to CSV ─────────────────────────────────────
+  function exportMissingCogs() {
+    const missing = rows.filter((r) => r.savedCogs == null);
+    if (missing.length === 0) {
+      toast.info("All listings already have COGS — nothing to export!");
+      return;
+    }
+
+    const escapeCell = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const header = ["sku", "ebay_listing_id", "title", "price", "cogs"].join(",");
+    const lines  = missing.map((r) =>
+      [
+        escapeCell(r.sku),
+        escapeCell(r.listingId),
+        escapeCell(r.title),
+        r.price.toFixed(2),
+        "",                     // blank for the user to fill in
+      ].join(",")
+    );
+
+    const csv  = [header, ...lines].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `missing-cogs-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${missing.length} listings — fill in the "cogs" column and re-upload.`);
+  }
 
   // ── SortHeader helper ────────────────────────────────────────────────────
 
@@ -293,6 +328,17 @@ export default function BulkCogsPage() {
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
             Save All
           </button>
+
+          {rows.some((r) => r.savedCogs == null) && (
+            <button
+              onClick={exportMissingCogs}
+              className="flex items-center gap-1.5 border border-border text-foreground px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-muted transition-colors"
+              title="Download CSV of all listings missing a COGS value"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export Missing
+            </button>
+          )}
 
           <button
             onClick={load}

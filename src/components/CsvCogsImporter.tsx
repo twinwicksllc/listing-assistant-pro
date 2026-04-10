@@ -137,12 +137,24 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
         return;
       }
 
-      // Upsert: update if exists by (user_id, ebay_sku) or (user_id, ebay_listing_id)
-      const { error } = await supabase.from("listing_cogs").upsert(toInsert, {
-        onConflict: "user_id,ebay_sku,ebay_listing_id",
-      });
+      // Split rows: upsert rows that have a SKU (matches the unique index
+      // uq_listing_cogs_user_sku on (user_id, ebay_sku)), plain insert for
+      // rows that only have a listing ID so we don't violate the constraint.
+      const withSku    = toInsert.filter((r) => r.ebay_sku);
+      const withoutSku = toInsert.filter((r) => !r.ebay_sku);
 
-      if (error) throw error;
+      if (withSku.length > 0) {
+        const { error } = await supabase
+          .from("listing_cogs")
+          .upsert(withSku, { onConflict: "user_id,ebay_sku" });
+        if (error) throw error;
+      }
+      if (withoutSku.length > 0) {
+        const { error } = await supabase
+          .from("listing_cogs")
+          .insert(withoutSku);
+        if (error) throw error;
+      }
 
       toast.success(`Imported COGS for ${toInsert.length} items`);
       setCsvText("");
