@@ -184,16 +184,19 @@ export default function ListingDetailModal({ listing, onClose }: ListingDetailMo
         if (up.length > 2 && up[2] !== "-") {
           skuCandidates.add(up.slice(0, 2) + "-" + up.slice(2));
         }
-        // Remove dash if present: "LA-XXXXX" -> "LAXXXXX"
-        skuCandidates.add(up.replace(/-/g, ""));
+        // Remove dash if present: "LA-XXXXX" -> "LAXXXXX" (upper and lower)
+        const noDash = up.replace(/-/g, "");
+        skuCandidates.add(noDash);
+        skuCandidates.add(noDash.toLowerCase());
       }
       const skuList = Array.from(skuCandidates).filter(Boolean);
 
       // ── 1. Try listing_cogs table (preferred — survives draft deletion) ──
       if (skuList.length > 0 || listing.listingId) {
         const orParts: string[] = [];
-        if (skuList.length > 0) orParts.push(`ebay_sku.in.(${skuList.join(",")})`);
-        if (listing.listingId)  orParts.push(`ebay_listing_id.eq.${listing.listingId}`);
+        // Quote values to handle SKUs containing dashes or special chars
+        if (skuList.length > 0) orParts.push(`ebay_sku.in.(${skuList.map((s) => `"${s}"`).join(",")})`);
+        if (listing.listingId)  orParts.push(`ebay_listing_id.eq."${listing.listingId}"`);
 
         const { data: cogsRows, error: cogsErr } = await supabase
           .from("listing_cogs")
@@ -223,8 +226,8 @@ export default function ListingDetailModal({ listing, onClose }: ListingDetailMo
       // ── 2. Fall back to drafts table (COGS set at analysis time) ──
       if (skuList.length > 0 || listing.listingId) {
         const orParts: string[] = [];
-        if (skuList.length > 0) orParts.push(`ebay_sku.in.(${skuList.join(",")})`);
-        if (listing.listingId)  orParts.push(`ebay_listing_id.eq.${listing.listingId}`);
+        if (skuList.length > 0) orParts.push(`ebay_sku.in.(${skuList.map((s) => `"${s}"`).join(",")})`);
+        if (listing.listingId)  orParts.push(`ebay_listing_id.eq."${listing.listingId}"`);
 
         const { data: draftRows, error: draftErr } = await supabase
           .from("drafts")
