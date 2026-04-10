@@ -106,19 +106,26 @@ async function geminiSearchQuery(
   apiKey: string,
   title: string,
   categoryId?: string,
+  yourPrice?: number | null,
 ): Promise<string | null> {
   const label = "[ebay-competitor-search][Gemini]";
 
+  const priceContext = yourPrice && yourPrice > 0
+    ? `\nSeller's listed price: $${yourPrice.toFixed(2)} USD — the search results should be for items in a similar price range`
+    : "";
+
   const prompt =
-    `You are an eBay search specialist. Given a listing title, produce the shortest, most effective eBay keyword search string (≤8 words) to find comparable active listings.
+    `You are an eBay search specialist. Given a listing title, produce the shortest, most effective eBay keyword search string (≤8 words) to find comparable active listings at a similar price point.
 
 Rules:
-- Keep: brand, model, year, mint mark, grade, size, color, key identifiers
+- Keep: brand, model, year, mint mark, grade/certification (e.g. PCGS MS63, NGC AU58), size, color, key identifiers
+- Keep: grading/certification info if present — it determines value category (e.g. "PCGS MS63" vs ungraded)
 - Remove: marketing adjectives (beautiful, stunning, rare, vintage, antique, original, authentic), condition words (used, new, mint), lot/set/collection qualifiers
 - Do NOT add words not implied by the title
+- Do NOT remove grading organization names (PCGS, NGC, ANACS) or grade numbers (MS63, AU58, etc.)
 - Return ONLY the keyword string — no explanation, no quotes, no punctuation
 
-Title: "${title.slice(0, 200)}"${categoryId ? `\neBay Category ID: ${categoryId}` : ""}
+Title: "${title.slice(0, 200)}"${categoryId ? `\neBay Category ID: ${categoryId}` : ""}${priceContext}
 
 eBay search keywords:`;
 
@@ -336,6 +343,28 @@ function median(nums: number[]): number {
 }
 
 // ----------------------------------------------------------------
+// Price-anchor pre-filter: when the seller's price is known and
+// significant (> $50), remove results priced at less than 10% of
+// the seller's price. This prevents $0.95 novelty coins from
+// contaminating the market analysis of a $995 graded gold coin.
+// Also removes items priced at more than 10x yourPrice (unrelated
+// premium items that happen to match by keyword).
+// ----------------------------------------------------------------
+function priceAnchorFilter(prices: number[], yourPrice: number | null | undefined): number[] {
+  if (!yourPrice || yourPrice < 50) return prices;
+  const lower = yourPrice * 0.10; // Must be at least 10% of your price
+  const upper = yourPrice * 10.0; // Must not be more than 10x your price
+  const filtered = prices.filter((p) => p >= lower && p <= upper);
+  if (filtered.length !== prices.length) {
+    console.log(
+      `[ebay-competitor-search] Price-anchor filter ($${lower.toFixed(2)}-$${upper.toFixed(2)}): ${prices.length} → ${filtered.length} prices (removed ${prices.length - filtered.length} price-mismatched items)`,
+    );
+  }
+  // Fall back to unfiltered if we filtered too aggressively (< 2 items remain)
+  return filtered.length >= 2 ? filtered : prices;
+}
+
+// ----------------------------------------------------------------
 // Remove statistical outliers using the IQR (Interquartile Range)
 // method. Prices outside Q1 - 1.5*IQR .. Q3 + 1.5*IQR are removed.
 // This eliminates $3.99 trinkets and $2,499 unrelated premium items
@@ -496,7 +525,7 @@ serve(async (req) => {
     // ------------------------------------------------------------------
     let geminiQuery: string | null = null;
     if (geminiKey) {
-      geminiQuery = await geminiSearchQuery(geminiKey, title, categoryId);
+      geminiQuery = await geminiSearchQuery(geminiKey, title, categoryId, yourPrice);
     } else {
       console.log(
         "[ebay-competitor-search] No GEMINI_API_KEY — skipping Gemini query optimisation",
@@ -560,12 +589,15 @@ serve(async (req) => {
     }
 
     // ------------------------------------------------------------------
-    // Step 4 — Compute statistics (with outlier removal)
+    // Step 4 — Compute statistics (with price-anchor + outlier removal)
     // ------------------------------------------------------------------
-    // Remove statistical outliers before computing any metrics.
-    // This prevents a few wildly-priced unrelated items from skewing
-    // the average and suggested price (e.g. $3.99–$2,499 for a $15 item).
-    const cleanPrices = removeOutliers(prices);
+    // First apply a price-anchor filter: remove items whose price is
+    // < 10% or > 10x the seller's own price. This prevents e.g. $0.95
+    // novelty coins from polluting the market analysis of a $995 graded
+    // gold coin when both match the same keywords.
+    // Then apply IQR outlier removal for the remaining items.
+    const anchoredPrices = priceAnchorFilter(prices, yourPrice);
+    const cleanPrices = removeOutliers(anchoredPrices);
     const avgPrice = cleanPrices.reduce((s, p) => s + p, 0) / cleanPrices.length;
     const minPrice = Math.min(...cleanPrices);
     const maxPrice = Math.max(...cleanPrices);

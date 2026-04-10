@@ -13,6 +13,8 @@ interface CompetitorPriceSnapshot {
   competitorCount: number;
   priceDistribution: { min: number; max: number; count: number }[];
   fetchedAt: string;
+  searchQuery?: string | null;
+  cacheExpiresAt?: string | null;
 }
 
 interface ComparableListing {
@@ -100,6 +102,8 @@ export function CompetitorDetailsModal({
         competitorCount: data.competitorCount,
         priceDistribution: data.priceDistribution ?? [],
         fetchedAt: new Date().toISOString(),
+        searchQuery: data.geminiSearchQuery ?? data.searchQuery ?? null,
+        cacheExpiresAt: data.cacheExpiresAt ?? null,
       });
 
       toast.success("Competitor prices updated");
@@ -142,7 +146,7 @@ export function CompetitorDetailsModal({
     }
   };
 
-  const { avgPrice, minPrice, maxPrice, medianPrice, priceDelta, competitorCount, priceDistribution, fetchedAt } = competitor;
+  const { avgPrice, minPrice, maxPrice, medianPrice, priceDelta, competitorCount, priceDistribution, fetchedAt, searchQuery } = competitor;
 
   const deltaPct =
     avgPrice && avgPrice > 0
@@ -192,6 +196,11 @@ export function CompetitorDetailsModal({
           <div className="flex-1 min-w-0 pr-3">
             <h2 className="text-sm font-semibold text-foreground line-clamp-2">{title}</h2>
             <p className="text-xs text-muted-foreground mt-0.5">Competitor price analysis</p>
+            {searchQuery && (
+              <p className="text-[10px] text-muted-foreground/70 mt-0.5 truncate" title={`eBay searched for: "${searchQuery}"`}>
+                🔍 Searched: &ldquo;{searchQuery}&rdquo;
+              </p>
+            )}
           </div>
           <button
             onClick={onClose}

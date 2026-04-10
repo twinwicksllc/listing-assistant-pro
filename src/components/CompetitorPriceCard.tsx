@@ -14,6 +14,8 @@ interface CompetitorPriceSnapshot {
   competitorCount: number;
   priceDistribution: { min: number; max: number; count: number }[];
   fetchedAt: string;
+  searchQuery?: string | null;
+  cacheExpiresAt?: string | null;
 }
 
 interface CompetitorPriceCardProps {
@@ -76,6 +78,8 @@ export function CompetitorPriceCard({
         competitorCount: data.competitorCount,
         priceDistribution: data.priceDistribution ?? [],
         fetchedAt: new Date().toISOString(),
+        searchQuery: data.geminiSearchQuery ?? data.searchQuery ?? null,
+        cacheExpiresAt: data.cacheExpiresAt ?? null,
       });
 
       toast.success("Competitor prices updated");
@@ -201,12 +205,22 @@ export function CompetitorPriceCard({
         />
       )}
 
-      <button
-        onClick={() => setShowModal(true)}
-        className="flex items-center gap-0.5 text-xs text-primary hover:underline mt-0.5"
-      >
-        View details <ChevronRight className="w-3 h-3" />
-      </button>
+      <div className="flex items-center justify-between mt-0.5">
+        <button
+          onClick={() => setShowModal(true)}
+          className="flex items-center gap-0.5 text-xs text-primary hover:underline"
+        >
+          View details <ChevronRight className="w-3 h-3" />
+        </button>
+        {competitor.searchQuery && (
+          <span
+            className="text-[10px] text-muted-foreground truncate max-w-[180px]"
+            title={`eBay search: "${competitor.searchQuery}"`}
+          >
+            🔍 &ldquo;{competitor.searchQuery}&rdquo;
+          </span>
+        )}
+      </div>
 
       {showModal && (
         <CompetitorDetailsModal
