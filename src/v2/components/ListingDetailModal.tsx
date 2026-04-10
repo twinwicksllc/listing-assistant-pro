@@ -168,45 +168,60 @@ export default function ListingDetailModal({ listing, onClose }: ListingDetailMo
   async function loadCogs() {
     setCogsLoading(true);
     try {
-      // Check listing_cogs first (most reliable for published listings)
+      // ── 1. Try listing_cogs table (preferred — survives draft deletion) ──
+      // Use array query + [0] instead of maybeSingle() to avoid
+      // "multiple rows returned" error when both SKU and listing_id match.
       const orParts: string[] = [];
       if (listing.sku)       orParts.push(`ebay_sku.eq.${listing.sku}`);
       if (listing.listingId) orParts.push(`ebay_listing_id.eq.${listing.listingId}`);
 
-      if (orParts.length === 0) { setCogsLoading(false); return; }
+      if (orParts.length > 0) {
+        const { data: cogsRows, error: cogsErr } = await supabase
+          .from("listing_cogs")
+          .select("id, cogs, cogs_source, acquired_at, title")
+          .eq("user_id", user!.id)
+          .or(orParts.join(","))
+          .order("created_at", { ascending: false })
+          .limit(1);
 
-      const { data: cogsRows } = await supabase
-        .from("listing_cogs")
-        .select("id, cogs, cogs_source, acquired_at, title")
-        .eq("user_id", user!.id)
-        .or(orParts.join(","))
-        .limit(1)
-        .maybeSingle();
+        console.log("[ListingDetailModal] listing_cogs query ->", { cogsRows, cogsErr, orParts });
 
-      if (cogsRows) {
-        setCogsRecord({
-          id: cogsRows.id,
-          cogs: Number(cogsRows.cogs),
-          cogs_source: cogsRows.cogs_source ?? "manual",
-          acquired_at: cogsRows.acquired_at,
-          title: cogsRows.title,
-        });
-        setCogsInput(String(Number(cogsRows.cogs)));
-        setCogsLoading(false);
-        return;
+        const row = cogsRows?.[0];
+        if (row) {
+          setCogsRecord({
+            id: row.id,
+            cogs: Number(row.cogs),
+            cogs_source: row.cogs_source ?? "manual",
+            acquired_at: row.acquired_at,
+            title: row.title,
+          });
+          setCogsInput(String(Number(row.cogs)));
+          setCogsLoading(false);
+          return;
+        }
       }
 
-      // Fall back to drafts table (COGS may have been set during analysis)
-      if (listing.sku) {
-        const { data: draft } = await supabase
+      // ── 2. Fall back to drafts table (COGS set during AI analysis) ──
+      if (listing.sku || listing.listingId) {
+        let draftQuery = supabase
           .from("drafts")
           .select("cogs, cogs_source, cogs_acquired_at")
           .eq("user_id", user!.id)
-          .eq("ebay_sku", listing.sku)
           .not("cogs", "is", null)
-          .limit(1)
-          .maybeSingle();
+          .order("created_at", { ascending: false })
+          .limit(1);
 
+        // Match by SKU first, fall back to listing ID
+        if (listing.sku) {
+          draftQuery = draftQuery.eq("ebay_sku", listing.sku) as typeof draftQuery;
+        } else if (listing.listingId) {
+          draftQuery = draftQuery.eq("ebay_listing_id", listing.listingId) as typeof draftQuery;
+        }
+
+        const { data: draftRows, error: draftErr } = await draftQuery;
+        console.log("[ListingDetailModal] drafts fallback ->", { draftRows, draftErr });
+
+        const draft = draftRows?.[0];
         if (draft?.cogs != null) {
           setCogsRecord({
             cogs: Number(draft.cogs),
@@ -234,17 +249,8 @@ export default function ListingDetailModal({ listing, onClose }: ListingDetailMo
 
     setCogsSaving(true);
     try {
-      const payload = {
-        user_id: user.id,
-        ebay_sku: listing.sku || null,
-        ebay_listing_id: listing.listingId || null,
-        title: listing.title,
-        cogs: val,
-        cogs_source: "manual",
-      };
-
       if (cogsRecord?.id) {
-        // Update existing row
+        // ── Update existing listing_cogs row ──
         const { error } = await supabase
           .from("listing_cogs")
           .update({ cogs: val, cogs_source: "manual" })
@@ -252,19 +258,29 @@ export default function ListingDetailModal({ listing, onClose }: ListingDetailMo
           .eq("user_id", user.id);
         if (error) throw error;
       } else {
-        // Insert new row
+        // ── Insert new listing_cogs row ──
+        // No unique constraint exists on listing_cogs, so use plain insert.
         const { data, error } = await supabase
           .from("listing_cogs")
-          .upsert(payload, { onConflict: "user_id,ebay_sku" })
+          .insert({
+            user_id: user.id,
+            ebay_sku: listing.sku || null,
+            ebay_listing_id: listing.listingId || null,
+            title: listing.title,
+            cogs: val,
+            cogs_source: "manual",
+          })
           .select("id")
-          .maybeSingle();
+          .limit(1);
         if (error) throw error;
-        if (data?.id) {
-          setCogsRecord(prev => ({ ...prev!, id: data.id }));
+        const newId = data?.[0]?.id;
+        if (newId) {
+          setCogsRecord(prev => ({ ...(prev ?? { cogs_source: "manual" }), id: newId }));
         }
       }
 
       setCogsRecord(prev => ({ ...(prev ?? { cogs_source: "manual" }), cogs: val }));
+      setCogsInput(String(val));
       setEditingCogs(false);
       toast.success(`COGS saved: $${fmt(val)}`);
     } catch (e: any) {
