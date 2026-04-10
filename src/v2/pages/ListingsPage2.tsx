@@ -13,8 +13,9 @@ import {
   RefreshCw, ExternalLink, Search, Package,
   Loader2, AlertCircle, DollarSign, Tag,
   Hash, Clock, CheckSquare, Square, X,
-  Check, Pencil, LayoutList,
+  Check, Pencil, LayoutList, Info,
 } from "lucide-react";
+import ListingDetailModal, { type ListingDetailData } from "@/v2/components/ListingDetailModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -38,10 +39,19 @@ interface EbayListing {
   listingId: string | null;
   ebayUrl: string | null;
   listingDate?: string | null;
+  views7d: number;
   views30d: number;
+  views90d: number;
+  impressions7d: number;
   impressions30d: number;
+  impressions90d: number;
+  clickThroughRate: number;
+  salesConversionRate: number;
   watchCount: number;
+  transactions7d: number;
   transactions30d: number;
+  transactions90d: number;
+  questionCount?: number;
 }
 
 type FilterStatus = "all" | "active" | "inactive";
@@ -161,6 +171,9 @@ export default function ListingsPage2() {
 
   // Bulk select
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Listing detail modal
+  const [detailListing, setDetailListing] = useState<EbayListing | null>(null);
 
   // ─── Fetch listings ────────────────────────────────────────────────────────
 
@@ -430,6 +443,12 @@ export default function ListingsPage2() {
                           gap: "0.875rem",
                           marginBottom: "0.75rem",
                           transition: "all 0.15s",
+                          cursor: "pointer",
+                        }}
+                        onClick={(e) => {
+                          const target = e.target as HTMLElement;
+                          if (target.closest("button") || target.closest("a") || target.closest("input")) return;
+                          setDetailListing(listing);
                         }}
                       >
                         {/* Checkbox */}
@@ -521,6 +540,20 @@ export default function ListingsPage2() {
                                 <Pencil size={12} /> Edit on eBay
                               </a>
                             )}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setDetailListing(listing); }}
+                              style={{
+                                display: "inline-flex", alignItems: "center", gap: "0.2rem",
+                                padding: "0.25rem 0.625rem",
+                                background: "rgba(0,118,182,0.06)",
+                                border: "1px solid rgba(0,118,182,0.15)",
+                                borderRadius: 6, fontSize: "0.75rem", fontWeight: 600,
+                                color: BRAND, cursor: "pointer",
+                              }}
+                              title="View details & COGS"
+                            >
+                              <Info size={11} /> Details
+                            </button>
                           </div>
 
                           {/* Pills */}
@@ -585,6 +618,14 @@ export default function ListingsPage2() {
 
         </div>
       </div>
+
+      {/* Listing detail modal */}
+      {detailListing && (
+        <ListingDetailModal
+          listing={detailListing as ListingDetailData}
+          onClose={() => setDetailListing(null)}
+        />
+      )}
     </AppShell>
   );
 }
