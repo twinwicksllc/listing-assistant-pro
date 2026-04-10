@@ -185,8 +185,6 @@ export default function BulkCogsPage() {
           await supabase.from("listing_cogs").insert(payload);
         }
       }
-        );
-      }
 
       setRows((prev) =>
         prev.map((r) =>
