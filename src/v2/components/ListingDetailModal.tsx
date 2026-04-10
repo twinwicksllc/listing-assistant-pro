@@ -168,14 +168,33 @@ export default function ListingDetailModal({ listing, onClose }: ListingDetailMo
   async function loadCogs() {
     setCogsLoading(true);
     try {
-      // ── 1. Try listing_cogs table (preferred — survives draft deletion) ──
-      // Use array query + [0] instead of maybeSingle() to avoid
-      // "multiple rows returned" error when both SKU and listing_id match.
-      const orParts: string[] = [];
-      if (listing.sku)       orParts.push(`ebay_sku.eq.${listing.sku}`);
-      if (listing.listingId) orParts.push(`ebay_listing_id.eq.${listing.listingId}`);
+      // ── SKU normalization ──────────────────────────────────────────────────
+      // eBay API returns SKUs in the format they were submitted, but may
+      // lowercase them. The app stores SKUs as e.g. "LA-ED5BB0BC7F394C2A"
+      // (uppercase, with dash) but eBay returns "laED5BB0BC7F394C2A".
+      // Build all candidate forms so we match regardless of case/dash.
+      const rawSku = listing.sku ?? "";
+      const skuCandidates = new Set<string>();
+      if (rawSku) {
+        skuCandidates.add(rawSku);
+        skuCandidates.add(rawSku.toUpperCase());
+        skuCandidates.add(rawSku.toLowerCase());
+        const up = rawSku.toUpperCase();
+        // Add dash after 2-char prefix if missing: "LAXXXXX" -> "LA-XXXXX"
+        if (up.length > 2 && up[2] !== "-") {
+          skuCandidates.add(up.slice(0, 2) + "-" + up.slice(2));
+        }
+        // Remove dash if present: "LA-XXXXX" -> "LAXXXXX"
+        skuCandidates.add(up.replace(/-/g, ""));
+      }
+      const skuList = Array.from(skuCandidates).filter(Boolean);
 
-      if (orParts.length > 0) {
+      // ── 1. Try listing_cogs table (preferred — survives draft deletion) ──
+      if (skuList.length > 0 || listing.listingId) {
+        const orParts: string[] = [];
+        if (skuList.length > 0) orParts.push(`ebay_sku.in.(${skuList.join(",")})`);
+        if (listing.listingId)  orParts.push(`ebay_listing_id.eq.${listing.listingId}`);
+
         const { data: cogsRows, error: cogsErr } = await supabase
           .from("listing_cogs")
           .select("id, cogs, cogs_source, acquired_at, title")
@@ -184,7 +203,7 @@ export default function ListingDetailModal({ listing, onClose }: ListingDetailMo
           .order("created_at", { ascending: false })
           .limit(1);
 
-        console.log("[ListingDetailModal] listing_cogs query ->", { cogsRows, cogsErr, orParts });
+        console.log("[ListingDetailModal] listing_cogs ->", { cogsRows, cogsErr, skuList, listingId: listing.listingId });
 
         const row = cogsRows?.[0];
         if (row) {
@@ -201,25 +220,22 @@ export default function ListingDetailModal({ listing, onClose }: ListingDetailMo
         }
       }
 
-      // ── 2. Fall back to drafts table (COGS set during AI analysis) ──
-      if (listing.sku || listing.listingId) {
-        let draftQuery = supabase
+      // ── 2. Fall back to drafts table (COGS set at analysis time) ──
+      if (skuList.length > 0 || listing.listingId) {
+        const orParts: string[] = [];
+        if (skuList.length > 0) orParts.push(`ebay_sku.in.(${skuList.join(",")})`);
+        if (listing.listingId)  orParts.push(`ebay_listing_id.eq.${listing.listingId}`);
+
+        const { data: draftRows, error: draftErr } = await supabase
           .from("drafts")
-          .select("cogs, cogs_source, cogs_acquired_at")
+          .select("cogs, cogs_source, cogs_acquired_at, ebay_sku")
           .eq("user_id", user!.id)
           .not("cogs", "is", null)
+          .or(orParts.join(","))
           .order("created_at", { ascending: false })
           .limit(1);
 
-        // Match by SKU first, fall back to listing ID
-        if (listing.sku) {
-          draftQuery = draftQuery.eq("ebay_sku", listing.sku) as typeof draftQuery;
-        } else if (listing.listingId) {
-          draftQuery = draftQuery.eq("ebay_listing_id", listing.listingId) as typeof draftQuery;
-        }
-
-        const { data: draftRows, error: draftErr } = await draftQuery;
-        console.log("[ListingDetailModal] drafts fallback ->", { draftRows, draftErr });
+        console.log("[ListingDetailModal] drafts fallback ->", { draftRows, draftErr, skuList });
 
         const draft = draftRows?.[0];
         if (draft?.cogs != null) {
@@ -250,7 +266,7 @@ export default function ListingDetailModal({ listing, onClose }: ListingDetailMo
     setCogsSaving(true);
     try {
       if (cogsRecord?.id) {
-        // ── Update existing listing_cogs row ──
+        // Update existing listing_cogs row by id
         const { error } = await supabase
           .from("listing_cogs")
           .update({ cogs: val, cogs_source: "manual" })
@@ -258,8 +274,7 @@ export default function ListingDetailModal({ listing, onClose }: ListingDetailMo
           .eq("user_id", user.id);
         if (error) throw error;
       } else {
-        // ── Insert new listing_cogs row ──
-        // No unique constraint exists on listing_cogs, so use plain insert.
+        // Insert new row — no unique constraint on listing_cogs so use insert
         const { data, error } = await supabase
           .from("listing_cogs")
           .insert({
