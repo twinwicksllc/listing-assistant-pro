@@ -574,13 +574,18 @@ async function fetchOrderCounts(
       fetchFinancesTransactions(apiBase, ebayHeaders, ninetyDaysAgo),
     ]);
 
-    const filter = `creationdate:[${fromStr}..]`;
-    const url = new URL(`${apiBase}/sell/fulfillment/v1/order`);
-    url.searchParams.set("filter", filter);
-    url.searchParams.set("limit", "200");
+    // Use encodeURIComponent (not URLSearchParams) to avoid double-encoding the
+    // square brackets and dots in the eBay filter syntax. URLSearchParams percent-
+    // encodes [ ] and . which produces a malformed filter eBay silently rejects,
+    // returning 0 orders. Manual construction matches the pattern used in
+    // cogs-report/index.ts which is known to work correctly.
+    const toStr = now.toISOString().replace(/\.\d{3}Z$/, "Z");
+    const fromStrClean = fromStr.replace(/\.\d{3}Z$/, "Z");
+    const filterValue = `creationdate:[${fromStrClean}..${toStr}]`;
+    const ordersUrl = `${apiBase}/sell/fulfillment/v1/order?filter=${encodeURIComponent(filterValue)}&limit=200`;
 
-    console.log(`Fulfillment API: Fetching orders from ${fromStr}`);
-    const resp = await fetch(url.toString(), { headers: ebayHeaders });
+    console.log(`Fulfillment API: Fetching orders, filter=${filterValue}`);
+    const resp = await fetch(ordersUrl, { headers: ebayHeaders });
 
     if (!resp.ok) {
       const errText = await resp.text();
@@ -611,9 +616,13 @@ async function fetchOrderCounts(
     for (const order of orders) {
       // Skip cancelled orders
       if (order.cancelStatus?.cancelState === "CANCELED") continue;
-      // Only count paid orders
+      // Log unpaid orders but don't skip them — orderPaymentStatus may be absent
+      // or have values like "FULLY_REFUNDED" on legitimate completed orders.
+      // We keep all non-cancelled orders so sold items appear in the COGS editor.
       if (order.orderPaymentStatus && order.orderPaymentStatus !== "PAID") {
-        continue;
+        console.log(
+          `Fulfillment API: order ${order.orderId} has paymentStatus=${order.orderPaymentStatus} — including anyway`,
+        );
       }
 
       const lineItemCount = order.lineItems?.length ?? 1;
