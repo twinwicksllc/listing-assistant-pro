@@ -549,6 +549,7 @@ async function fetchOrderCounts(
     orders30d: number;
     orders90d: number;
     financial: FinancialSummary;
+    soldItems: any[];
   }
 > {
   const counts = { orders7d: 0, orders30d: 0, orders90d: 0 };
@@ -557,6 +558,9 @@ async function fetchOrderCounts(
     w30: emptyWindow(),
     w90: emptyWindow(),
   };
+  // soldItems: listing-shaped objects for every line item in completed orders,
+  // used by the COGS bulk editor to show sold items alongside active listings.
+  const soldItems: any[] = [];
 
   try {
     const now = new Date();
@@ -583,7 +587,7 @@ async function fetchOrderCounts(
       console.warn(
         `Fulfillment API error: ${resp.status} - ${errText.substring(0, 300)}`,
       );
-      return { ...counts, financial };
+      return { ...counts, financial, soldItems };
     }
 
     let data: any;
@@ -592,7 +596,7 @@ async function fetchOrderCounts(
       data = JSON.parse(respText);
     } catch (e) {
       console.warn(`Fulfillment API: Failed to parse response: ${e}`);
-      return { ...counts, financial };
+      return { ...counts, financial, soldItems };
     }
     const orders: any[] = data.orders || [];
     console.log(
@@ -653,6 +657,54 @@ async function fetchOrderCounts(
         addToWindow(financial.w7);
         counts.orders7d += lineItemCount;
       }
+
+      // ── Build sold listing objects for COGS bulk editor ───────────────────
+      // Extract each line item as a listing-shaped object so the COGS bulk
+      // editor can show sold items alongside active listings without needing
+      // a separate Fulfillment API call.
+      const soldAt = order.creationDate ?? null;
+      for (const line of order.lineItems ?? []) {
+        const listingId = line.legacyItemId ?? null;
+        const sku = line.sku ?? null;
+        const title = line.title ?? "";
+        const qty = Number(line.quantity ?? 1);
+        const price = Number(line.lineItemCost?.value ?? 0);
+
+        soldItems.push({
+          offerId: null,
+          sku: sku || listingId || "",
+          title: title || listingId || "Untitled",
+          imageUrl: "",
+          price,
+          currency: line.lineItemCost?.currency || "USD",
+          status: "SOLD",
+          categoryId: "",
+          listingId,
+          ebayUrl: listingId ? `https://www.ebay.com/itm/${listingId}` : null,
+          quantity: qty,
+          format: "FIXED_PRICE",
+          condition: "",
+          listingDate: null,
+          soldAt,
+          orderId: order.orderId,
+          views: 0,
+          views7d: 0,
+          views30d: 0,
+          views90d: 0,
+          impressions: 0,
+          impressions7d: 0,
+          impressions30d: 0,
+          impressions90d: 0,
+          clickThroughRate: 0,
+          salesConversionRate: 0,
+          transactions: 0,
+          transactions7d: 0,
+          transactions30d: 0,
+          transactions90d: 0,
+          watchCount: 0,
+          questionCount: 0,
+        });
+      }
     }
 
     // Apply real shipping label costs from Finances API
@@ -701,7 +753,7 @@ async function fetchOrderCounts(
     console.error("Fulfillment API error (non-fatal):", e);
   }
 
-  return { ...counts, financial };
+  return { ...counts, financial, soldItems };
 }
 
 // ─── Fetch WatchCount + QuestionCount via GetItem ────────────────────────────
@@ -1352,12 +1404,12 @@ serve(async (req) => {
     const enrichedListings = [...enrichedInventoryListings, ...tradingOnly];
 
     // ── Optionally include sold/completed items (for COGS bulk editor) ──
-    // When includeSold is true, fetch sold orders from Fulfillment API and
-    // append them as listings with status "SOLD". Deduplicate against active
-    // listings by listingId so items that are still active aren't doubled.
+    // Re-use the soldItems already collected by fetchOrderCounts (which called
+    // the Fulfillment API as part of the parallel work above). This avoids a
+    // second Fulfillment API call that was causing the edge function to time out.
     let soldListings: any[] = [];
     if (includeSold) {
-      const rawSold = await fetchSoldListings(apiBase, ebayHeaders);
+      const rawSold = orderCounts.soldItems;
       const activeListingIdSet = new Set(
         enrichedListings
           .map((l: any) => l.listingId)
@@ -1373,7 +1425,7 @@ serve(async (req) => {
         return true;
       });
       console.log(
-        `ebay-listings: includeSold=true, ${rawSold.length} raw sold → ${soldListings.length} unique after dedup`,
+        `ebay-listings: includeSold=true, reused ${rawSold.length} sold items from fetchOrderCounts → ${soldListings.length} unique after dedup`,
       );
     }
 
