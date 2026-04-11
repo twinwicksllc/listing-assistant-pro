@@ -949,121 +949,131 @@ async function fetchListingsViaTradingAPI(
 // ─── Fetch sold/completed orders from Fulfillment API ──────────────────────
 // Returns listing-shaped objects for items that have sold, so the COGS
 // bulk editor can display them alongside active listings.
+// ─── Fetch sold/completed orders from Fulfillment API ──────────────────────
+// Uses the same URL construction pattern as fetchOrderCounts (new URL +
+// searchParams.set) which is known to work correctly with the eBay Fulfillment API.
+// NO try/catch wrapping — errors will propagate so they appear in logs.
 async function fetchSoldListings(
   apiBase: string,
   ebayHeaders: Record<string, string>,
 ): Promise<any[]> {
   const results: any[] = [];
-  try {
-    const now = new Date();
-    // Fetch orders from the last 365 days (eBay Fulfillment API max range).
-    // eBay requires a CLOSED date range [from..to] — open-ended ranges are rejected.
-    const fromDate = new Date(now);
-    fromDate.setDate(fromDate.getDate() - 365);
-    // Strip milliseconds: eBay expects 2024-01-01T00:00:00Z not 2024-01-01T00:00:00.000Z
-    const fromStr = fromDate.toISOString().replace(/\.\d{3}Z$/, "Z");
-    const toStr = now.toISOString().replace(/\.\d{3}Z$/, "Z");
 
-    // Must use closed range [from..to] — eBay rejects open-ended ranges
-    const filter = `creationdate:[${fromStr}..${toStr}]`;
-    let offset = 0;
-    const PAGE_SIZE = 200;
-    let totalOrders = 0;
+  const now = new Date();
+  // Use 365-day window. Full ISO string with ms — same as fetchOrderCounts.
+  const fromDate = new Date(now);
+  fromDate.setDate(fromDate.getDate() - 365);
+  const fromStr = fromDate.toISOString();
 
-    while (true) {
-      // Manually construct URL to prevent double-encoding of filter brackets/dots
-      const url = `${apiBase}/sell/fulfillment/v1/order?filter=${
-        encodeURIComponent(filter)
-      }&limit=${PAGE_SIZE}&offset=${offset}`;
-      console.log(
-        `fetchSoldListings: Fetching orders offset=${offset}, filter=${filter}`,
-      );
-      const resp = await fetch(url, { headers: ebayHeaders });
+  // Use open-ended range — same format fetchOrderCounts uses successfully.
+  const filter = `creationdate:[${fromStr}..]`;
 
-      if (!resp.ok) {
-        const errText = await resp.text();
-        console.warn(
-          `fetchSoldListings: Fulfillment API error ${resp.status}: ${errText.substring(0, 200)}`,
-        );
-        break;
-      }
+  let offset = 0;
+  const PAGE_SIZE = 200;
+  let totalOrders = 0;
+  let pagesFetched = 0;
 
-      let data: any;
-      try {
-        const respText = await resp.text();
-        data = JSON.parse(respText);
-      } catch (e) {
-        console.warn(`fetchSoldListings: Failed to parse response: ${e}`);
-        break;
-      }
+  console.log(`fetchSoldListings: starting, filter=${filter}`);
 
-      const orders: any[] = data.orders || [];
-      totalOrders = data.total ?? orders.length;
-
-      for (const order of orders) {
-        // Skip cancelled orders
-        if (order.cancelStatus?.cancelState === "CANCELED") continue;
-
-        const soldAt = order.creationDate ?? null;
-
-        for (const line of order.lineItems ?? []) {
-          const listingId = line.legacyItemId ?? null;
-          const sku = line.sku ?? null;
-          const title = line.title ?? "";
-          const quantity = Number(line.quantity ?? 1);
-          const price = Number(line.lineItemCost?.value ?? 0);
-          const imageUrl = line.legacyVariationId ? "" : (line.image?.imageUrl ?? "");
-
-          results.push({
-            offerId: null,
-            sku: sku || listingId || "",
-            title: title || listingId || "Untitled",
-            imageUrl,
-            price,
-            currency: line.lineItemCost?.currency || "USD",
-            status: "SOLD",
-            categoryId: "",
-            listingId,
-            ebayUrl: listingId ? `https://www.ebay.com/itm/${listingId}` : null,
-            quantity,
-            format: "FIXED_PRICE",
-            condition: "",
-            listingDate: null,
-            soldAt,
-            orderId: order.orderId,
-            // Analytics placeholders
-            views: 0,
-            views7d: 0,
-            views30d: 0,
-            views90d: 0,
-            impressions: 0,
-            impressions7d: 0,
-            impressions30d: 0,
-            impressions90d: 0,
-            clickThroughRate: 0,
-            salesConversionRate: 0,
-            transactions: 0,
-            transactions7d: 0,
-            transactions30d: 0,
-            transactions90d: 0,
-            watchCount: 0,
-            questionCount: 0,
-          });
-        }
-      }
-
-      if (orders.length < PAGE_SIZE || (offset + orders.length) >= totalOrders) {
-        break;
-      }
-      offset += PAGE_SIZE;
-    }
+  while (true) {
+    // Use new URL + searchParams — same pattern as fetchOrderCounts (avoids encoding issues)
+    const url = new URL(`${apiBase}/sell/fulfillment/v1/order`);
+    url.searchParams.set("filter", filter);
+    url.searchParams.set("limit", String(PAGE_SIZE));
+    if (offset > 0) url.searchParams.set("offset", String(offset));
 
     console.log(
-      `fetchSoldListings: Found ${results.length} sold line items from ${totalOrders} orders`,
+      `fetchSoldListings: page ${pagesFetched + 1}, offset=${offset}, url=${url.toString()}`,
     );
-  } catch (e) {
-    console.warn("fetchSoldListings error:", e);
+
+    const resp = await fetch(url.toString(), { headers: ebayHeaders });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.error(
+        `fetchSoldListings: Fulfillment API ${resp.status}: ${errText.substring(0, 400)}`,
+      );
+      break;
+    }
+
+    const respText = await resp.text();
+    let data: any;
+    try {
+      data = JSON.parse(respText);
+    } catch (e) {
+      console.error(
+        `fetchSoldListings: JSON parse error: ${e}. Body: ${respText.substring(0, 200)}`,
+      );
+      break;
+    }
+
+    const orders: any[] = data.orders || [];
+    totalOrders = data.total ?? orders.length;
+    pagesFetched++;
+
+    console.log(
+      `fetchSoldListings: page ${pagesFetched} → ${orders.length} orders (total reported: ${totalOrders})`,
+    );
+
+    for (const order of orders) {
+      if (order.cancelStatus?.cancelState === "CANCELED") continue;
+
+      const soldAt = order.creationDate ?? null;
+
+      for (const line of order.lineItems ?? []) {
+        const listingId = line.legacyItemId ?? null;
+        const sku = line.sku ?? null;
+        const title = line.title ?? "";
+        const quantity = Number(line.quantity ?? 1);
+        const price = Number(line.lineItemCost?.value ?? 0);
+        const imageUrl = line.legacyVariationId ? "" : (line.image?.imageUrl ?? "");
+
+        results.push({
+          offerId: null,
+          sku: sku || listingId || "",
+          title: title || listingId || "Untitled",
+          imageUrl,
+          price,
+          currency: line.lineItemCost?.currency || "USD",
+          status: "SOLD",
+          categoryId: "",
+          listingId,
+          ebayUrl: listingId ? `https://www.ebay.com/itm/${listingId}` : null,
+          quantity,
+          format: "FIXED_PRICE",
+          condition: "",
+          listingDate: null,
+          soldAt,
+          orderId: order.orderId,
+          views: 0,
+          views7d: 0,
+          views30d: 0,
+          views90d: 0,
+          impressions: 0,
+          impressions7d: 0,
+          impressions30d: 0,
+          impressions90d: 0,
+          clickThroughRate: 0,
+          salesConversionRate: 0,
+          transactions: 0,
+          transactions7d: 0,
+          transactions30d: 0,
+          transactions90d: 0,
+          watchCount: 0,
+          questionCount: 0,
+        });
+      }
+    }
+
+    if (orders.length < PAGE_SIZE || (offset + orders.length) >= totalOrders) {
+      break;
+    }
+    offset += PAGE_SIZE;
   }
+
+  console.log(
+    `fetchSoldListings: done — ${results.length} line items from ${totalOrders} orders (${pagesFetched} pages fetched)`,
+  );
   return results;
 }
 
