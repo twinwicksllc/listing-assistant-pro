@@ -11,6 +11,7 @@
  *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
  */
 
+import process from "node:process";
 import fixtures from "./category-test-fixtures.json" with { type: "json" };
 
 interface TestResult {

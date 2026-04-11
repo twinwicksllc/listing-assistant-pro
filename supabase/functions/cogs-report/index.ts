@@ -490,8 +490,8 @@ async function dualWriteFinancials(
     sale_price: it.salePrice,
     shipping_buyer_paid: it.shippingCollected,
     ebay_fees: it.ebayFees,
-    cogs: it.cogs,           // total line COGS (unit_cogs × quantity)
-    unit_cogs: it.unitCogs,  // per-unit COGS for reference
+    cogs: it.cogs, // total line COGS (unit_cogs × quantity)
+    unit_cogs: it.unitCogs, // per-unit COGS for reference
     shipping_label_cost: it.shippingLabelCost,
     refund: 0, // Phase 2+
     net_profit: it.netProfit,

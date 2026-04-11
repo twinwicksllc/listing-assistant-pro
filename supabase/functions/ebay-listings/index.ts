@@ -88,10 +88,9 @@ async function fetchAnalyticsForWindow(
     // (NOT in a "metricHeaders" field — that field does not exist in the response)
     // Fall back to our hardcoded request order if header is missing/empty,
     // since eBay guarantees values are returned in the same order as requested.
-    const headerMetrics: string[] =
-      Array.isArray(trafficData.header?.metrics) && trafficData.header.metrics.length > 0
-        ? (trafficData.header.metrics as any[]).map((h: any) => h.key as string)
-        : ANALYTICS_METRICS_ARRAY;
+    const headerMetrics: string[] = Array.isArray(trafficData.header?.metrics) && trafficData.header.metrics.length > 0
+      ? (trafficData.header.metrics as any[]).map((h: any) => h.key as string)
+      : ANALYTICS_METRICS_ARRAY;
 
     console.log(
       `Analytics API (${days}d): metric order = [${headerMetrics.join(", ")}]`,
@@ -803,7 +802,10 @@ async function fetchTradingAPIListingsRaw(
     if (firstPageXml.includes("<Ack>Failure</Ack>") || firstPageXml.includes("<Ack>PartialFailure</Ack>")) return [];
 
     const totalPages = parseInt(firstPageXml.match(/<TotalNumberOfPages>(\d+)<\/TotalNumberOfPages>/)?.[1] || "1", 10);
-    const totalEntries = parseInt(firstPageXml.match(/<TotalNumberOfEntries>(\d+)<\/TotalNumberOfEntries>/)?.[1] || "0", 10);
+    const totalEntries = parseInt(
+      firstPageXml.match(/<TotalNumberOfEntries>(\d+)<\/TotalNumberOfEntries>/)?.[1] || "0",
+      10,
+    );
     console.log(`fetchTradingAPIListingsRaw: totalPages=${totalPages}, totalEntries=${totalEntries}`);
 
     const allXmlPages: string[] = [firstPageXml];
@@ -811,7 +813,7 @@ async function fetchTradingAPIListingsRaw(
       const pagePromises = [];
       for (let p = 2; p <= totalPages; p++) pagePromises.push(fetchTradingPage(p));
       const extraPages = await Promise.all(pagePromises);
-      for (const pg of extraPages) { if (pg) allXmlPages.push(pg); }
+      for (const pg of extraPages) if (pg) allXmlPages.push(pg);
     }
 
     const listings: any[] = [];
@@ -857,10 +859,20 @@ async function fetchTradingAPIListingsRaw(
           listingDate: get("StartTime") || null,
           watchCount: isNaN(watchCount) ? 0 : watchCount,
           questionCount: isNaN(questionCount) ? 0 : questionCount,
-          views: 0, views7d: 0, views30d: 0, views90d: 0,
-          impressions: 0, impressions7d: 0, impressions30d: 0, impressions90d: 0,
-          clickThroughRate: 0, salesConversionRate: 0,
-          transactions: 0, transactions7d: 0, transactions30d: 0, transactions90d: 0,
+          views: 0,
+          views7d: 0,
+          views30d: 0,
+          views90d: 0,
+          impressions: 0,
+          impressions7d: 0,
+          impressions30d: 0,
+          impressions90d: 0,
+          clickThroughRate: 0,
+          salesConversionRate: 0,
+          transactions: 0,
+          transactions7d: 0,
+          transactions30d: 0,
+          transactions90d: 0,
         });
       }
     }
@@ -1201,7 +1213,9 @@ serve(async (req) => {
       }));
 
     console.log(
-      `ebay-listings: Inventory API=${enrichedInventoryListings.length}, Trading API new=${tradingOnly.length}, total=${enrichedInventoryListings.length + tradingOnly.length}`,
+      `ebay-listings: Inventory API=${enrichedInventoryListings.length}, Trading API new=${tradingOnly.length}, total=${
+        enrichedInventoryListings.length + tradingOnly.length
+      }`,
     );
 
     const enrichedListings = [...enrichedInventoryListings, ...tradingOnly];

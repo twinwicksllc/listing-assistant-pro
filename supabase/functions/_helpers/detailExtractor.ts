@@ -27,42 +27,42 @@ export type Domain =
   | "general";
 
 export interface CoinDetails {
-  mintMark: string | null;        // "O", "S", "CC", "D", "W", or null (no mark / Philadelphia)
+  mintMark: string | null; // "O", "S", "CC", "D", "W", or null (no mark / Philadelphia)
   mintMarkConfidence: "confirmed" | "likely" | "not_visible";
-  mintLocation: string | null;    // "New Orleans", "San Francisco", etc.
+  mintLocation: string | null; // "New Orleans", "San Francisco", etc.
   year: string | null;
   denomination: string | null;
-  series: string | null;          // "Morgan Dollar", "Peace Dollar", etc.
-  keyDate: boolean;               // Is this a key/semi-key date?
-  keyDateReason: string | null;   // e.g. "1893-S Morgan is the key date of the series"
-  variety: string | null;         // VAM, DDO, RPM, etc.
-  errors: string | null;          // Die cracks, clips, off-center, etc.
-  reverseVisible: boolean;        // Was the reverse photographed?
+  series: string | null; // "Morgan Dollar", "Peace Dollar", etc.
+  keyDate: boolean; // Is this a key/semi-key date?
+  keyDateReason: string | null; // e.g. "1893-S Morgan is the key date of the series"
+  variety: string | null; // VAM, DDO, RPM, etc.
+  errors: string | null; // Die cracks, clips, off-center, etc.
+  reverseVisible: boolean; // Was the reverse photographed?
 }
 
 export interface CardDetails {
-  sport: string | null;           // "Baseball", "Basketball", "Football", "Pokemon", etc.
+  sport: string | null; // "Baseball", "Basketball", "Football", "Pokemon", etc.
   playerOrCharacter: string | null;
   year: string | null;
-  setName: string | null;         // "Topps Chrome", "Prizm", "Base Set", etc.
+  setName: string | null; // "Topps Chrome", "Prizm", "Base Set", etc.
   cardNumber: string | null;
-  parallel: string | null;        // "Refractor", "Silver Prizm", "Holo", etc.
-  variant: string | null;         // "Short Print", "Error", "Photo Variation", etc.
+  parallel: string | null; // "Refractor", "Silver Prizm", "Holo", etc.
+  variant: string | null; // "Short Print", "Error", "Photo Variation", etc.
   serialNumbered: boolean;
-  serialNumber: string | null;    // e.g. "/99", "/25"
+  serialNumber: string | null; // e.g. "/99", "/25"
   rookie: boolean;
   autographed: boolean;
   graded: boolean;
-  grader: string | null;          // "PSA", "BGS", "CGC", etc.
-  grade: string | null;           // "10", "9.5", etc.
+  grader: string | null; // "PSA", "BGS", "CGC", etc.
+  grade: string | null; // "10", "9.5", etc.
 }
 
 export interface JewelryDetails {
-  metalType: string | null;       // "Gold", "Silver", "Platinum"
-  karat: string | null;           // "10k", "14k", "18k", "925", etc.
+  metalType: string | null; // "Gold", "Silver", "Platinum"
+  karat: string | null; // "10k", "14k", "18k", "925", etc.
   hallmarks: string[];
   makersMark: string | null;
-  brandSignature: string | null;  // "Tiffany & Co.", "Cartier", etc.
+  brandSignature: string | null; // "Tiffany & Co.", "Cartier", etc.
   gemstones: string[];
 }
 
@@ -71,7 +71,7 @@ export interface DetailExtractionResult {
   coinDetails: CoinDetails | null;
   cardDetails: CardDetails | null;
   jewelryDetails: JewelryDetails | null;
-  rawFindings: string;            // Full narrative for logging
+  rawFindings: string; // Full narrative for logging
 }
 
 const DETAIL_MODEL = "gemini-2.5-flash";
@@ -303,7 +303,8 @@ export async function extractKeyDetails(
         parts: [
           ...imageParts,
           {
-            text: `Examine these ${imageParts.length} photograph(s) of "${itemName}" and extract the specific identification details requested. Look at EVERY image — the key details may be on any side of the item.`,
+            text:
+              `Examine these ${imageParts.length} photograph(s) of "${itemName}" and extract the specific identification details requested. Look at EVERY image — the key details may be on any side of the item.`,
           },
         ],
       },
@@ -514,12 +515,16 @@ export function applyDetailOverrides(
 
       if (cd.mintLocation && cd.mintLocation !== "Unknown/Not Visible") {
         specs["Mint Location"] = cd.mintLocation;
-        console.log(`${label} OVERRIDE Mint Location: "${oldMintLocation}" → "${cd.mintLocation}" (confidence: ${cd.mintMarkConfidence})`);
+        console.log(
+          `${label} OVERRIDE Mint Location: "${oldMintLocation}" → "${cd.mintLocation}" (confidence: ${cd.mintMarkConfidence})`,
+        );
       }
 
       if (cd.mintMark !== null && cd.mintMark !== undefined) {
         specs["Mint Mark"] = cd.mintMark;
-        console.log(`${label} OVERRIDE Mint Mark: "${oldMintMark}" → "${cd.mintMark}" (confidence: ${cd.mintMarkConfidence})`);
+        console.log(
+          `${label} OVERRIDE Mint Mark: "${oldMintMark}" → "${cd.mintMark}" (confidence: ${cd.mintMarkConfidence})`,
+        );
       } else if (cd.mintLocation === "Philadelphia") {
         specs["Mint Mark"] = "None";
         specs["Mint Location"] = "Philadelphia";
@@ -531,11 +536,11 @@ export function applyDetailOverrides(
         const title = listing.title as string;
         // Check if title has wrong mint info or is missing mint mark
         const mintMarkInTitle = /\b([OSDW]|CC)\s*(?:mint|mark)?\b/i.test(title) ||
-                                /\bPhiladelphia\b/i.test(title) ||
-                                /\bNew Orleans\b/i.test(title) ||
-                                /\bSan Francisco\b/i.test(title) ||
-                                /\bCarson City\b/i.test(title) ||
-                                /\bDenver\b/i.test(title);
+          /\bPhiladelphia\b/i.test(title) ||
+          /\bNew Orleans\b/i.test(title) ||
+          /\bSan Francisco\b/i.test(title) ||
+          /\bCarson City\b/i.test(title) ||
+          /\bDenver\b/i.test(title);
 
         // Add mint mark to title if not already there correctly
         if (!mintMarkInTitle && cd.year && cd.mintMark) {
@@ -559,7 +564,9 @@ export function applyDetailOverrides(
                 const newTitle = title.replace(wrongPattern, `${cd.year}-${cd.mintMark}`);
                 if (newTitle.length <= 80) {
                   listing.title = newTitle;
-                  console.log(`${label} OVERRIDE Title: fixed mint mark "${currentMark}" → "${cd.mintMark}" → "${newTitle}"`);
+                  console.log(
+                    `${label} OVERRIDE Title: fixed mint mark "${currentMark}" → "${cd.mintMark}" → "${newTitle}"`,
+                  );
                 }
               }
             }
@@ -619,12 +626,14 @@ export function applyDetailOverrides(
     // Determine metal type from series/title if not already set
     if (!listing.metalType || listing.metalType === "none") {
       if (
-        /morgan|peace|american silver eagle|silver dollar|silver dime|silver quarter|silver half|mercury dime|barber|walking liberty|franklin half|silver bar|silver round|silver bullion/.test(combinedText)
+        /morgan|peace|american silver eagle|silver dollar|silver dime|silver quarter|silver half|mercury dime|barber|walking liberty|franklin half|silver bar|silver round|silver bullion/
+          .test(combinedText)
       ) {
         listing.metalType = "silver";
         console.log(`${label} BACKSTOP metalType -> "silver" (derived from series/title)`);
       } else if (
-        /gold eagle|gold buffalo|double eagle|gold sovereign|half eagle|quarter eagle|indian head gold|\$2\.5|\$5 gold|\$10 gold|\$20 gold|gold bar|gold round|gold bullion|gold coin/.test(combinedText)
+        /gold eagle|gold buffalo|double eagle|gold sovereign|half eagle|quarter eagle|indian head gold|\$2\.5|\$5 gold|\$10 gold|\$20 gold|gold bar|gold round|gold bullion|gold coin/
+          .test(combinedText)
       ) {
         listing.metalType = "gold";
         console.log(`${label} BACKSTOP metalType -> "gold" (derived from series/title)`);
@@ -705,7 +714,9 @@ export function applyDetailOverrides(
       if (!specs["Features"]?.toLowerCase().includes("rookie")) {
         specs["Features"] = specs["Features"] ? `${specs["Features"]}, Rookie` : "Rookie";
       }
-      if (listing.title && !listing.title.toLowerCase().includes("rc") && !listing.title.toLowerCase().includes("rookie")) {
+      if (
+        listing.title && !listing.title.toLowerCase().includes("rc") && !listing.title.toLowerCase().includes("rookie")
+      ) {
         const newTitle = `${listing.title} RC`.slice(0, 80).replace(/\s+\S*$/, "").trim();
         listing.title = newTitle;
         console.log(`${label} OVERRIDE Title: added RC → "${newTitle}"`);
