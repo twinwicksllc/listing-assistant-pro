@@ -753,20 +753,19 @@ async function fetchWatchDataForListings(
   return result;
 }
 
-// ─── Trading API fallback ─────────────────────────────────────────────────────
-async function fetchListingsViaTradingAPI(
+// ─── Trading API: fetch raw active listing array ──────────────────────────────
+// Returns the raw listing objects (no analytics, no Response).
+// Used both by the full Trading-API fallback path AND by the Inventory API
+// path to merge in manually-created (non-SKU) listings.
+async function fetchTradingAPIListingsRaw(
   apiBase: string,
   userToken: string,
-  corsHeaders: Record<string, string>,
-): Promise<Response> {
+): Promise<any[]> {
   const tradingUrl = apiBase.includes("sandbox")
     ? "https://api.sandbox.ebay.com/ws/api.dll"
     : "https://api.ebay.com/ws/api.dll";
 
-  // Helper to fetch one page from Trading API
-  const fetchTradingPage = async (
-    pageNumber: number,
-  ): Promise<string | null> => {
+  const fetchTradingPage = async (pageNumber: number): Promise<string | null> => {
     const xml = `<?xml version="1.0" encoding="utf-8"?>
 <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <ActiveList>
@@ -794,168 +793,100 @@ async function fetchListingsViaTradingAPI(
       },
       body: xml,
     });
-
-    if (!resp.ok) {
-      console.error(`Trading API page ${pageNumber} error: ${resp.status}`);
-      return null;
-    }
+    if (!resp.ok) return null;
     return await resp.text();
   };
 
   try {
-    // Fetch page 1 first to determine total pages
     const firstPageXml = await fetchTradingPage(1);
-    if (!firstPageXml) {
-      return new Response(
-        JSON.stringify({ listings: [], error: "Trading API error on page 1" }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
+    if (!firstPageXml) return [];
+    if (firstPageXml.includes("<Ack>Failure</Ack>") || firstPageXml.includes("<Ack>PartialFailure</Ack>")) return [];
 
-    console.log(
-      "Trading API page 1 status: 200 — first 800 chars:",
-      firstPageXml.substring(0, 800),
-    );
+    const totalPages = parseInt(firstPageXml.match(/<TotalNumberOfPages>(\d+)<\/TotalNumberOfPages>/)?.[1] || "1", 10);
+    const totalEntries = parseInt(firstPageXml.match(/<TotalNumberOfEntries>(\d+)<\/TotalNumberOfEntries>/)?.[1] || "0", 10);
+    console.log(`fetchTradingAPIListingsRaw: totalPages=${totalPages}, totalEntries=${totalEntries}`);
 
-    if (
-      firstPageXml.includes("<Ack>Failure</Ack>") ||
-      firstPageXml.includes("<Ack>PartialFailure</Ack>")
-    ) {
-      const errMsg = firstPageXml.match(/<LongMessage>([\s\S]*?)<\/LongMessage>/)?.[1] ||
-        firstPageXml.match(/<ShortMessage>([\s\S]*?)<\/ShortMessage>/)?.[1] ||
-        "Unknown Trading API error";
-      return new Response(
-        JSON.stringify({
-          listings: [],
-          error: `eBay Trading API error: ${errMsg}`,
-        }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    // Extract total pages from pagination info
-    const totalPages = parseInt(
-      firstPageXml.match(/<TotalNumberOfPages>(\d+)<\/TotalNumberOfPages>/)
-        ?.[1] || "1",
-      10,
-    );
-    const totalEntries = parseInt(
-      firstPageXml.match(/<TotalNumberOfEntries>(\d+)<\/TotalNumberOfEntries>/)
-        ?.[1] || "0",
-      10,
-    );
-    console.log(
-      `Trading API: totalPages=${totalPages}, totalEntries=${totalEntries}`,
-    );
-
-    // Collect all XML pages
     const allXmlPages: string[] = [firstPageXml];
     if (totalPages > 1) {
       const pagePromises = [];
-      for (let p = 2; p <= totalPages; p++) {
-        pagePromises.push(fetchTradingPage(p));
-      }
+      for (let p = 2; p <= totalPages; p++) pagePromises.push(fetchTradingPage(p));
       const extraPages = await Promise.all(pagePromises);
-      for (const pg of extraPages) {
-        if (pg) allXmlPages.push(pg);
-      }
+      for (const pg of extraPages) { if (pg) allXmlPages.push(pg); }
     }
-    console.log(`Trading API: fetched ${allXmlPages.length} pages`);
 
     const listings: any[] = [];
-
     for (const xmlText of allXmlPages) {
-      const activeListMatch = xmlText.match(
-        /<ActiveList[^>]*>([\s\S]*?)<\/ActiveList>/,
-      );
+      const activeListMatch = xmlText.match(/<ActiveList[^>]*>([\s\S]*?)<\/ActiveList>/);
       if (!activeListMatch) continue;
-
-      const activeListContent = activeListMatch[1];
-      const itemMatches = activeListContent.matchAll(
-        /<Item>([\s\S]*?)<\/Item>/g,
-      );
-
+      const itemMatches = activeListMatch[1].matchAll(/<Item>([\s\S]*?)<\/Item>/g);
       for (const match of itemMatches) {
         const item = match[1];
         const get = (tag: string) => {
-          const m = item.match(
-            new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`),
-          );
+          const m = item.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`));
           return m ? m[1].trim() : "";
         };
-
         const listingId = get("ItemID");
-        const title = get("Title");
-        const priceStr = get("CurrentPrice") || get("BuyItNowPrice") || "0";
-        const price = parseFloat(priceStr) || 0;
-        const currency = item.match(/<CurrentPrice currencyID="([^"]+)"/)?.[1] || "USD";
-        const imageUrl = get("GalleryURL") || get("PictureURL") || "";
-        const sku = get("SKU");
-        const categoryId = get("CategoryID") || "";
-        const listingStatus = get("ListingStatus");
-
         const quantity = parseInt(get("Quantity") || "0", 10);
         const quantitySold = parseInt(get("QuantitySold") || "0", 10);
         const quantityAvailable = quantity - quantitySold;
-
-        const isCompletedOrEnded = listingStatus === "Completed" ||
-          listingStatus === "Ended";
+        const listingStatus = get("ListingStatus");
+        const isCompletedOrEnded = listingStatus === "Completed" || listingStatus === "Ended";
         const isSingleQtySold = quantity === 1 && quantitySold >= 1;
-        const isGenuinelyActive = quantityAvailable > 0 &&
-          !isCompletedOrEnded && !isSingleQtySold;
+        const isGenuinelyActive = quantityAvailable > 0 && !isCompletedOrEnded && !isSingleQtySold;
+        if (!listingId || !isGenuinelyActive) continue;
 
-        if (listingId && isGenuinelyActive) {
-          const watchCount = parseInt(get("WatchCount") || "0", 10);
-          const questionCount = parseInt(get("QuestionCount") || "0", 10);
+        const priceStr = get("CurrentPrice") || get("BuyItNowPrice") || "0";
+        const sku = get("SKU");
+        const watchCount = parseInt(get("WatchCount") || "0", 10);
+        const questionCount = parseInt(get("QuestionCount") || "0", 10);
 
-          listings.push({
-            offerId: null,
-            sku: sku || listingId,
-            title: title || listingId,
-            imageUrl,
-            price,
-            currency,
-            status: "Active",
-            categoryId,
-            listingId,
-            ebayUrl: `https://www.ebay.com/itm/${listingId}`,
-            quantity: quantityAvailable,
-            format: get("ListingType") === "Chinese" ? "AUCTION" : "FIXED_PRICE",
-            condition: get("ConditionDisplayName") || "",
-            listingDate: get("StartTime") || null,
-            watchCount: isNaN(watchCount) ? 0 : watchCount,
-            questionCount: isNaN(questionCount) ? 0 : questionCount,
-            // Analytics — filled below
-            views: 0,
-            views7d: 0,
-            views30d: 0,
-            views90d: 0,
-            impressions: 0,
-            impressions7d: 0,
-            impressions30d: 0,
-            impressions90d: 0,
-            clickThroughRate: 0,
-            salesConversionRate: 0,
-            transactions: 0,
-            transactions7d: 0,
-            transactions30d: 0,
-            transactions90d: 0,
-          });
-        }
-      } // end for itemMatches
-    } // end for allXmlPages
+        listings.push({
+          offerId: null,
+          sku: sku || listingId,
+          title: get("Title") || listingId,
+          imageUrl: get("GalleryURL") || get("PictureURL") || "",
+          price: parseFloat(priceStr) || 0,
+          currency: item.match(/<CurrentPrice currencyID="([^"]+)"/)?.[1] || "USD",
+          status: "Active",
+          categoryId: get("CategoryID") || "",
+          listingId,
+          ebayUrl: `https://www.ebay.com/itm/${listingId}`,
+          quantity: quantityAvailable,
+          format: get("ListingType") === "Chinese" ? "AUCTION" : "FIXED_PRICE",
+          condition: get("ConditionDisplayName") || "",
+          listingDate: get("StartTime") || null,
+          watchCount: isNaN(watchCount) ? 0 : watchCount,
+          questionCount: isNaN(questionCount) ? 0 : questionCount,
+          views: 0, views7d: 0, views30d: 0, views90d: 0,
+          impressions: 0, impressions7d: 0, impressions30d: 0, impressions90d: 0,
+          clickThroughRate: 0, salesConversionRate: 0,
+          transactions: 0, transactions7d: 0, transactions30d: 0, transactions90d: 0,
+        });
+      }
+    }
+    console.log(`fetchTradingAPIListingsRaw: collected ${listings.length} active listings`);
+    return listings;
+  } catch (e) {
+    console.warn("fetchTradingAPIListingsRaw error:", e);
+    return [];
+  }
+}
 
-    console.log(
-      `Trading API fallback: collected ${listings.length} active listings across all pages`,
-    );
+// ─── Trading API fallback (full response) ────────────────────────────────────
+// Used when the Inventory API fails entirely. Delegates to fetchTradingAPIListingsRaw
+// and wraps the result in a full Response with analytics.
+async function fetchListingsViaTradingAPI(
+  apiBase: string,
+  userToken: string,
+  corsHeaders: Record<string, string>,
+): Promise<Response> {
+  try {
+    const listings = await fetchTradingAPIListingsRaw(apiBase, userToken);
 
-    // Fetch all three analytics windows + real order counts in parallel
+    if (listings.length === 0) {
+      console.warn("Trading API fallback: no active listings returned");
+    }
+
     const ebayHeaders = {
       Authorization: `Bearer ${userToken}`,
       "Content-Type": "application/json",
@@ -969,21 +900,13 @@ async function fetchListingsViaTradingAPI(
       `Trading API fallback: Real order counts - 7d=${orderCounts.orders7d}, 30d=${orderCounts.orders30d}, 90d=${orderCounts.orders90d}`,
     );
 
-    // Direct eBay listing URL (no affiliate wrapping)
-    const buildEbayUrl = (listingId: string | null) => {
-      if (!listingId) return null;
-      return `https://www.ebay.com/itm/${listingId}`;
-    };
-
     const finalListings = listings.map((l) => ({
       ...l,
       ...mergeAnalytics(l.listingId, l.sku, a7, a30, a90),
-      ebayUrl: buildEbayUrl(l.listingId),
+      ebayUrl: l.listingId ? `https://www.ebay.com/itm/${l.listingId}` : null,
     }));
 
-    console.log(
-      `Trading API fallback: loaded ${finalListings.length} active listings`,
-    );
+    console.log(`Trading API fallback: loaded ${finalListings.length} active listings`);
 
     return new Response(
       JSON.stringify({
@@ -1042,6 +965,8 @@ serve(async (req) => {
     };
 
     // eBay Inventory API max limit per page is 100 — paginate to get all offers
+    // Filter to PUBLISHED only so the total count matches active listings
+    // and pagination math is correct (unpublished drafts are excluded).
     const offers: any[] = [];
     let offset = 0;
     const PAGE_SIZE = 100;
@@ -1049,7 +974,7 @@ serve(async (req) => {
 
     while (true) {
       const offersResp = await fetch(
-        `${apiBase}/sell/inventory/v1/offer?limit=${PAGE_SIZE}&offset=${offset}`,
+        `${apiBase}/sell/inventory/v1/offer?limit=${PAGE_SIZE}&offset=${offset}&status=PUBLISHED`,
         { headers: ebayHeaders },
       );
 
@@ -1125,6 +1050,14 @@ serve(async (req) => {
     console.log(
       `ebay-listings: Fetched ${offers.length} total offers from eBay Inventory API (reported total: ${totalOffers})`,
     );
+
+    // ── Also fetch Trading API listings (manually-created listings not in Inventory API)
+    // Run in parallel with inventory item detail lookups below.
+    // We'll merge them after deduplicating by listingId.
+    const tradingListingsPromise = fetchTradingAPIListingsRaw(apiBase, userToken).catch((e) => {
+      console.warn("ebay-listings: Trading API merge fetch failed (non-fatal):", e);
+      return [] as any[];
+    });
 
     // Fetch inventory item details for each offer
     const listings = await Promise.all(
@@ -1232,7 +1165,7 @@ serve(async (req) => {
       return `https://www.ebay.com/itm/${listingId}`;
     };
 
-    const enrichedListings = listings.map((l: any) => {
+    const enrichedInventoryListings = listings.map((l: any) => {
       const w = l.listingId ? (watchMap[l.listingId] || null) : null;
       return {
         ...l,
@@ -1242,6 +1175,36 @@ serve(async (req) => {
         ebayUrl: buildEbayUrl(l.listingId),
       };
     });
+
+    // ── Merge Trading API listings (manually-created, not in Inventory API) ──
+    // Build a set of listingIds already covered by Inventory API results.
+    // Trading API items whose listingId is already present are skipped (dedup).
+    const tradingListings = await tradingListingsPromise;
+    const inventoryListingIdSet = new Set(
+      enrichedInventoryListings.map((l: any) => l.listingId).filter(Boolean),
+    );
+    const inventorySkuSet = new Set(
+      enrichedInventoryListings.map((l: any) => l.sku).filter(Boolean),
+    );
+
+    const tradingOnly = tradingListings
+      .filter((l: any) => {
+        // Skip if already in Inventory API results (by listingId or SKU)
+        if (l.listingId && inventoryListingIdSet.has(l.listingId)) return false;
+        if (l.sku && l.sku !== l.listingId && inventorySkuSet.has(l.sku)) return false;
+        return true;
+      })
+      .map((l: any) => ({
+        ...l,
+        ...mergeAnalytics(l.listingId, l.sku, a7, a30, a90),
+        ebayUrl: buildEbayUrl(l.listingId),
+      }));
+
+    console.log(
+      `ebay-listings: Inventory API=${enrichedInventoryListings.length}, Trading API new=${tradingOnly.length}, total=${enrichedInventoryListings.length + tradingOnly.length}`,
+    );
+
+    const enrichedListings = [...enrichedInventoryListings, ...tradingOnly];
 
     return new Response(
       JSON.stringify({
