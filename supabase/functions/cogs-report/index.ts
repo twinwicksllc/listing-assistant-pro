@@ -361,8 +361,9 @@ async function processOrders(
 
   const items: ResultItem[] = flatOrders.map((fo) => {
     // unitCogs: the cost of a single unit (as stored in listing_cogs)
-    const unitCogs = (fo.ebaySku ? cogsMap[fo.ebaySku] : null) ??
-      (fo.ebayListingId ? cogsMap[fo.ebayListingId] : null) ??
+    // Prefer listing ID over SKU — it's the most stable eBay identifier.
+    const unitCogs = (fo.ebayListingId ? cogsMap[fo.ebayListingId] : null) ??
+      (fo.ebaySku ? cogsMap[fo.ebaySku] : null) ??
       null;
 
     // totalLineCogs: multiply per-unit COGS by quantity sold

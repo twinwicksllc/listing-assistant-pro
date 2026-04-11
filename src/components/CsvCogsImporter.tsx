@@ -137,22 +137,31 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
         return;
       }
 
-      // Split rows: upsert rows that have a SKU (matches the unique index
-      // uq_listing_cogs_user_sku on (user_id, ebay_sku)), plain insert for
-      // rows that only have a listing ID so we don't violate the constraint.
-      const withSku    = toInsert.filter((r) => r.ebay_sku);
-      const withoutSku = toInsert.filter((r) => !r.ebay_sku);
+      // Split rows by which unique index they can upsert against:
+      //  1. Rows with listing ID → upsert on (user_id, ebay_listing_id)
+      //  2. Rows with only SKU → upsert on (user_id, ebay_sku)
+      //  3. Rows with neither → plain insert
+      // Listing ID is the most stable eBay identifier and is preferred.
+      const withListingId = toInsert.filter((r) => r.ebay_listing_id);
+      const skuOnly = toInsert.filter((r) => !r.ebay_listing_id && r.ebay_sku);
+      const neither = toInsert.filter((r) => !r.ebay_listing_id && !r.ebay_sku);
 
-      if (withSku.length > 0) {
+      if (withListingId.length > 0) {
         const { error } = await supabase
           .from("listing_cogs")
-          .upsert(withSku, { onConflict: "user_id,ebay_sku" });
+          .upsert(withListingId, { onConflict: "user_id,ebay_listing_id" });
         if (error) throw error;
       }
-      if (withoutSku.length > 0) {
+      if (skuOnly.length > 0) {
         const { error } = await supabase
           .from("listing_cogs")
-          .insert(withoutSku);
+          .upsert(skuOnly, { onConflict: "user_id,ebay_sku" });
+        if (error) throw error;
+      }
+      if (neither.length > 0) {
+        const { error } = await supabase
+          .from("listing_cogs")
+          .insert(neither);
         if (error) throw error;
       }
 

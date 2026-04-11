@@ -18,11 +18,12 @@ interface ListingRow {
   title: string;
   imageUrl: string;
   price: number;
-  status: string;
+  status: string;                    // "ACTIVE", "PUBLISHED", "SOLD", etc.
   cogs: number | undefined;          // value currently in the input
   savedCogs: number | undefined;     // last value persisted to DB
   saving: boolean;
   dirty: boolean;                    // input changed but not yet saved
+  soldAt: string | null;             // ISO date when item sold (null if active)
 }
 
 type SortField = "title" | "price" | "cogs" | "margin";
@@ -72,9 +73,9 @@ export default function BulkCogsPage() {
     setLoading(true);
 
     try {
-      // 1. Pull active listings from eBay Inventory API
+      // 1. Pull active + sold listings from eBay
       const inventoryRes = await supabase.functions.invoke("ebay-listings", {
-        body: { userToken: ebayToken },
+        body: { userToken: ebayToken, includeSold: true },
       });
 
       const rawListings: any[] = inventoryRes.data?.listings ?? [];
@@ -124,6 +125,7 @@ export default function BulkCogsPage() {
           savedCogs,
           saving:    false,
           dirty:     false,
+          soldAt:    l.soldAt ?? null,
         };
       });
 
@@ -177,11 +179,13 @@ export default function BulkCogsPage() {
           cogs_source:      "manual",
           updated_at:       new Date().toISOString(),
         };
-        if (row.sku) {
-          // Upsert by (user_id, ebay_sku) — matches the unique partial index
+        // Prefer listing ID as primary key (most stable eBay identifier).
+        // Fall back to SKU only when listing ID is unavailable.
+        if (row.listingId) {
+          await supabase.from("listing_cogs").upsert(payload, { onConflict: "user_id,ebay_listing_id" });
+        } else if (row.sku) {
           await supabase.from("listing_cogs").upsert(payload, { onConflict: "user_id,ebay_sku" });
         } else {
-          // No SKU — use insert (avoids constraint violation)
           await supabase.from("listing_cogs").insert(payload);
         }
       }
@@ -245,14 +249,15 @@ export default function BulkCogsPage() {
     }
 
     const escapeCell = (v: string) => `"${v.replace(/"/g, '""')}"`;
-    const header = ["sku", "ebay_listing_id", "title", "price", "cogs"].join(",");
+    const header = ["sku", "ebay_listing_id", "title", "price", "status", "cogs"].join(",");
     const lines  = toExport.map((r) =>
       [
         escapeCell(r.sku),
         escapeCell(r.listingId),
         escapeCell(r.title),
         r.price.toFixed(2),
-        r.savedCogs ? r.savedCogs.toString() : "",
+        escapeCell(r.status === "SOLD" ? "SOLD" : "ACTIVE"),
+        r.savedCogs != null ? r.savedCogs.toString() : "",
       ].join(",")
     );
 
@@ -265,7 +270,9 @@ export default function BulkCogsPage() {
     a.click();
     URL.revokeObjectURL(url);
     const count = toExport.length;
-    toast.success(`Exported ${count} listing${count > 1 ? "s" : ""} — fill in the "cogs" column and re-upload.`);
+    const activeCount = toExport.filter((r) => r.status !== "SOLD").length;
+    const soldCount = toExport.filter((r) => r.status === "SOLD").length;
+    toast.success(`Exported ${count} listing${count > 1 ? "s" : ""} (${activeCount} active, ${soldCount} sold) — fill in the "cogs" column and re-upload.`);
   }
 
   // ── SortHeader helper ────────────────────────────────────────────────────
@@ -393,7 +400,7 @@ export default function BulkCogsPage() {
             <ul className="text-xs text-blue-700 dark:text-blue-400 space-y-1">
               <li>✓ Open the CSV in Excel, Google Sheets, or Numbers</li>
               <li>✓ Fill in the <strong>"cogs"</strong> column with your item costs</li>
-              <li>✓ <strong>Do NOT</strong> change column headers (sku, ebay_listing_id, title, price, cogs)</li>
+              <li>✓ <strong>Do NOT</strong> change column headers (sku, ebay_listing_id, title, price, status, cogs)</li>
               <li>✓ <strong>Do NOT</strong> add, remove, or reorder columns</li>
               <li>✓ <strong>Do NOT</strong> add or delete rows unless you know what you're doing</li>
               <li>✓ Save the file as CSV format before uploading</li>
@@ -423,6 +430,8 @@ export default function BulkCogsPage() {
       {!loading && rows.length > 0 && (
         <div className="max-w-4xl mx-auto px-4 py-2 flex items-center gap-4 text-xs text-muted-foreground border-b border-border/50">
           <span>{rows.length} listings</span>
+          <span>{rows.filter((r) => r.status !== "SOLD").length} active</span>
+          <span>{rows.filter((r) => r.status === "SOLD").length} sold</span>
           <span>{rows.filter((r) => r.savedCogs != null).length} with COGS</span>
           <span>{rows.filter((r) => r.savedCogs == null).length} missing COGS</span>
           {savedCount > 0 && (
@@ -509,9 +518,14 @@ function ListingRowItem({
         }
       </div>
 
-      {/* Title + SKU */}
+      {/* Title + SKU + sold badge */}
       <div className="min-w-0">
-        <p className="text-xs font-medium text-foreground line-clamp-2 leading-snug">{row.title}</p>
+        <div className="flex items-center gap-1.5">
+          {row.status === "SOLD" && (
+            <span className="shrink-0 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400">Sold</span>
+          )}
+          <p className="text-xs font-medium text-foreground line-clamp-2 leading-snug">{row.title}</p>
+        </div>
         {row.sku && <p className="text-[10px] text-muted-foreground mt-0.5">SKU: {row.sku}</p>}
       </div>
 
