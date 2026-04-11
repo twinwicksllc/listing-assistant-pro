@@ -111,7 +111,9 @@ async function geminiSearchQuery(
   const label = "[ebay-competitor-search][Gemini]";
 
   const priceContext = yourPrice && yourPrice > 0
-    ? `\nSeller's listed price: $${yourPrice.toFixed(2)} USD — the search results should be for items in a similar price range`
+    ? `\nSeller's listed price: $${
+      yourPrice.toFixed(2)
+    } USD — the search results should be for items in a similar price range`
     : "";
 
   const prompt =
@@ -357,7 +359,11 @@ function priceAnchorFilter(prices: number[], yourPrice: number | null | undefine
   const filtered = prices.filter((p) => p >= lower && p <= upper);
   if (filtered.length !== prices.length) {
     console.log(
-      `[ebay-competitor-search] Price-anchor filter ($${lower.toFixed(2)}-$${upper.toFixed(2)}): ${prices.length} → ${filtered.length} prices (removed ${prices.length - filtered.length} price-mismatched items)`,
+      `[ebay-competitor-search] Price-anchor filter ($${lower.toFixed(2)}-$${
+        upper.toFixed(2)
+      }): ${prices.length} → ${filtered.length} prices (removed ${
+        prices.length - filtered.length
+      } price-mismatched items)`,
     );
   }
   // Fall back to unfiltered if we filtered too aggressively (< 2 items remain)

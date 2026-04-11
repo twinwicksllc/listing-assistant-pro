@@ -3364,9 +3364,9 @@ serve(async (req) => {
         ];
         const DEMOTABLE_ERROR_IDS = new Set([
           21919288, // Invalid category ID
-          25004,  // Category not supported
+          25004, // Category not supported
           21916585, // Category requires item specifics
-          25017,  // Leaf category required
+          25017, // Leaf category required
           // NOTE: 25002 intentionally excluded — handled below with message-text check
         ]);
         let shouldDemote = false;
@@ -3382,7 +3382,9 @@ serve(async (req) => {
             if (e.errorId === 25002 && SELLER_LIMIT_PATTERNS.some((p) => p.test(e.message ?? ""))) {
               isSellerLimitError = true;
               console.warn(
-                `create_draft: errorId 25002 is a SELLER LIMIT error (not condition/category) — skipping demotion. Message: ${e.message?.slice(0, 120)}`,
+                `create_draft: errorId 25002 is a SELLER LIMIT error (not condition/category) — skipping demotion. Message: ${
+                  e.message?.slice(0, 120)
+                }`,
               );
               // Undo any demotion that may have already fired for this category
               // (previous code versions incorrectly demoted on seller limit errors)
@@ -3473,7 +3475,8 @@ serve(async (req) => {
           const firstError = parsedErrJson?.errors?.[0];
           const errorId = firstError?.errorId;
           if (publishResp.status === 500 || errorId === 25001) {
-            userFriendlyError = "eBay is experiencing a temporary issue. Please wait a minute and try publishing again. Your listing details are saved.";
+            userFriendlyError =
+              "eBay is experiencing a temporary issue. Please wait a minute and try publishing again. Your listing details are saved.";
           } else if (isSellerLimitError) {
             // Extract the human-readable portion of the seller limit message
             const rawMsg: string = firstError?.message ?? "";
@@ -3483,9 +3486,11 @@ serve(async (req) => {
               ? `Your eBay account has reached its monthly selling limit. You have ${remaining} of listing capacity remaining this month. Visit eBay's Selling Limits page to request an increase.`
               : "Your eBay account has reached its monthly selling limit. Please visit eBay's Selling Limits page to request an increase before listing high-value items.";
           } else if (errorId === 25002) {
-            userFriendlyError = "The selected condition is not valid for this category. Please adjust the condition and try again.";
+            userFriendlyError =
+              "The selected condition is not valid for this category. Please adjust the condition and try again.";
           } else if (errorId === 21919288 || errorId === 25004 || errorId === 25017) {
-            userFriendlyError = "The selected category is not valid for this item. Please choose a different category and try again.";
+            userFriendlyError =
+              "The selected category is not valid for this item. Please choose a different category and try again.";
           } else {
             userFriendlyError = firstError?.message || `Publish failed: ${publishResp.status}. Please try again.`;
           }

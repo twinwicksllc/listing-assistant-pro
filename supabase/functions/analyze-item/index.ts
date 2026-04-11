@@ -931,9 +931,10 @@ serve(async (req: Request) => {
         voiceNote: voiceNote || undefined,
         suggestedCategoryId: lockedCategoryId ?? undefined,
         suggestedCategoryName: lockedCategoryName ?? undefined,
-        spotPrices: (identification.isMetal || identification.metalType !== "none" || identification.domain === "coins_bullion")
-          ? { gold: spotGold, silver: spotSilver, platinum: spotPlatinum }
-          : undefined,
+        spotPrices:
+          (identification.isMetal || identification.metalType !== "none" || identification.domain === "coins_bullion")
+            ? { gold: spotGold, silver: spotSilver, platinum: spotPlatinum }
+            : undefined,
         metalType: identification.metalType,
         competitorData: competitorData && (competitorData.competitorCount ?? 0) > 0 ? competitorData : null,
         // ─ Pre-Pass 0 agentic context (grounding + vision inspection findings) ─
@@ -1130,14 +1131,14 @@ Seller's note: "${voiceNote}"`;
     };
     const conditionEnum: string[] = categoryConditions?.conditions?.length > 0
       ? [
-          ...new Set(
-            categoryConditions.conditions.map((c: any) => {
-              const id = Number(c.conditionId);
-              return CONDITION_ID_TO_ENUM[id] ??
-                String(c.conditionDescription ?? c.conditionId).toUpperCase().replace(/\s+/g, "_");
-            })
-          ),
-        ]
+        ...new Set(
+          categoryConditions.conditions.map((c: any) => {
+            const id = Number(c.conditionId);
+            return CONDITION_ID_TO_ENUM[id] ??
+              String(c.conditionDescription ?? c.conditionId).toUpperCase().replace(/\s+/g, "_");
+          }),
+        ),
+      ]
       : [
         "NEW",
         "USED_EXCELLENT",

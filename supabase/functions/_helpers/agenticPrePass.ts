@@ -141,8 +141,7 @@ function getZoomTargets(domain: Domain): ZoomTarget[] {
         },
         {
           region: "mint mark — EXACT locations by series",
-          rationale:
-            "CRITICAL: Examine the correct region for this specific coin series. " +
+          rationale: "CRITICAL: Examine the correct region for this specific coin series. " +
             "Morgan Dollar: reverse BELOW the eagle's tail feathers, above 'ONE DOLLAR'. " +
             "Peace Dollar: reverse at base of eagle's right wing. " +
             "Pre-1933 Gold: check both obverse above date AND reverse under eagle. " +
