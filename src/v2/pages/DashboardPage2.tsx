@@ -35,6 +35,7 @@ import { CompetitorPriceCard } from "@/components/CompetitorPriceCard";
 import ProfitBadge from "@/components/ProfitBadge";
 import { PricingInsightsTable } from "@/components/PricingInsightsTable";
 import { RepriceManagerPanel } from "@/components/RepriceManagerPanel";
+import ListingDetailModal, { ListingDetailData } from "@/v2/components/ListingDetailModal";
 
 // ─── Constants ────────────────────────────────────────────────────────
 
@@ -54,6 +55,7 @@ interface CompetitorPriceSnapshot {
   priceDistribution: { min: number; max: number; count: number }[];
   fetchedAt: string;
   cacheExpiresAt?: string | null;
+  searchQuery?: string | null;
 }
 
 interface EbayListing {
@@ -366,6 +368,9 @@ export default function DashboardPage2() {
   const [sortField,    setSortField]    = useState<SortField>("listingDate");
   const [sortDir,      setSortDir]      = useState<SortDir>("desc");
 
+  // Detail modal
+  const [detailListing, setDetailListing] = useState<ListingDetailData | null>(null);
+
   // Bulk select
   const [selectedIds,   setSelectedIds]   = useState<Set<string>>(new Set());
 
@@ -482,7 +487,7 @@ export default function DashboardPage2() {
           if (ids.length > 0) {
             const { data: cpData } = await supabase
               .from("competitor_prices")
-              .select("ebay_listing_id, avg_price, min_price, max_price, median_price, price_delta, competitor_count, price_distribution, fetched_at, expires_at")
+              .select("ebay_listing_id, avg_price, min_price, max_price, median_price, price_delta, competitor_count, price_distribution, fetched_at, expires_at, gemini_search_query, search_query")
               .eq("user_id", user.id)
               .in("ebay_listing_id", ids)
               .order("fetched_at", { ascending: false });
@@ -498,6 +503,7 @@ export default function DashboardPage2() {
                   priceDistribution: row.price_distribution ?? [],
                   fetchedAt:         row.fetched_at,
                   cacheExpiresAt:    row.expires_at ?? null,
+                  searchQuery:       row.gemini_search_query ?? row.search_query ?? null,
                 };
               }
             }
@@ -590,6 +596,7 @@ export default function DashboardPage2() {
           medianPrice: data.medianPrice, competitorCount: data.competitorCount,
           priceDelta: data.priceDelta, priceDistribution: data.priceDistribution ?? [],
           fetchedAt: new Date().toISOString(), cacheExpiresAt: data.cacheExpiresAt ?? null,
+          searchQuery: data.geminiSearchQuery ?? data.searchQuery ?? null,
         },
       }));
       if (!data?.fromCache) toast.success("Competitor prices updated");
@@ -631,6 +638,7 @@ export default function DashboardPage2() {
               medianPrice: data.medianPrice, competitorCount: data.competitorCount,
               priceDelta: data.priceDelta, priceDistribution: data.priceDistribution ?? [],
               fetchedAt: new Date().toISOString(), cacheExpiresAt: data.cacheExpiresAt ?? null,
+              searchQuery: data.geminiSearchQuery ?? data.searchQuery ?? null,
             },
           }));
           updated++;
@@ -1068,23 +1076,87 @@ export default function DashboardPage2() {
                               {selected ? <CheckSquare size={15} style={{ color: BRAND }} /> : <Square size={15} />}
                             </button>
 
-                            {/* Image */}
-                            {listing.imageUrl ? (
-                              <img src={listing.imageUrl} alt={listing.title} style={{ width: 72, height: 72, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
-                            ) : (
-                              <div style={{ width: 72, height: 72, borderRadius: 10, background: "#EFF2F5", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                <Package size={24} style={{ color: "#9BA3AD" }} />
-                              </div>
-                            )}
+                            {/* Image — click to open detail modal */}
+                            <button
+                              onClick={() => setDetailListing({
+                                offerId: listing.offerId,
+                                sku: listing.sku,
+                                title: listing.title,
+                                imageUrl: listing.imageUrl,
+                                price: listing.price,
+                                currency: listing.currency,
+                                status: listing.status,
+                                quantity: listing.quantity,
+                                format: listing.format,
+                                condition: listing.condition,
+                                listingId: listing.listingId,
+                                ebayUrl: listing.ebayUrl,
+                                listingDate: listing.listingDate,
+                                views7d: listing.views7d,
+                                views30d: listing.views30d,
+                                views90d: listing.views90d,
+                                impressions7d: listing.impressions7d,
+                                impressions30d: listing.impressions30d,
+                                impressions90d: listing.impressions90d,
+                                clickThroughRate: listing.clickThroughRate,
+                                salesConversionRate: listing.salesConversionRate,
+                                watchCount: listing.watchCount,
+                                transactions7d: listing.transactions7d,
+                                transactions30d: listing.transactions30d,
+                                transactions90d: listing.transactions90d,
+                                questionCount: listing.questionCount,
+                              })}
+                              style={{ background: "none", border: "none", padding: 0, cursor: "pointer", flexShrink: 0 }}
+                              title="View listing details & COGS"
+                            >
+                              {listing.imageUrl ? (
+                                <img src={listing.imageUrl} alt={listing.title} style={{ width: 72, height: 72, borderRadius: 10, objectFit: "cover", display: "block", transition: "opacity 0.15s" }} />
+                              ) : (
+                                <div style={{ width: 72, height: 72, borderRadius: 10, background: "#EFF2F5", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                  <Package size={24} style={{ color: "#9BA3AD" }} />
+                                </div>
+                              )}
+                            </button>
 
                             {/* Content */}
                             <div style={{ flex: 1, minWidth: 0 }}>
                               {/* Title row */}
                               <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.375rem" }}>
-                                <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "#141820", flex: 1, minWidth: 0 }}>
+                                <button
+                                  onClick={() => setDetailListing({
+                                    offerId: listing.offerId,
+                                    sku: listing.sku,
+                                    title: listing.title,
+                                    imageUrl: listing.imageUrl,
+                                    price: listing.price,
+                                    currency: listing.currency,
+                                    status: listing.status,
+                                    quantity: listing.quantity,
+                                    format: listing.format,
+                                    condition: listing.condition,
+                                    listingId: listing.listingId,
+                                    ebayUrl: listing.ebayUrl,
+                                    listingDate: listing.listingDate,
+                                    views7d: listing.views7d,
+                                    views30d: listing.views30d,
+                                    views90d: listing.views90d,
+                                    impressions7d: listing.impressions7d,
+                                    impressions30d: listing.impressions30d,
+                                    impressions90d: listing.impressions90d,
+                                    clickThroughRate: listing.clickThroughRate,
+                                    salesConversionRate: listing.salesConversionRate,
+                                    watchCount: listing.watchCount,
+                                    transactions7d: listing.transactions7d,
+                                    transactions30d: listing.transactions30d,
+                                    transactions90d: listing.transactions90d,
+                                    questionCount: listing.questionCount,
+                                  })}
+                                  style={{ fontSize: "0.9375rem", fontWeight: 600, color: "#141820", flex: 1, minWidth: 0, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
+                                  title="View listing details & COGS"
+                                >
                                   {listing.title}
-                                </span>
-                                <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", flexShrink: 0 }}>
+                                </button>
+                                <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", flexShrink: 0, marginLeft: "auto" }}>
                                   {planFeatures.hasListingAnalytics && <TrendBadge listing={listing} />}
                                   <span style={statusBadge(slabel)}>{slabel}</span>
                                 </div>
@@ -1180,6 +1252,14 @@ export default function DashboardPage2() {
 
         </div>
       </div>
+
+      {/* Listing Detail Modal — opened by clicking card image or title */}
+      {detailListing && (
+        <ListingDetailModal
+          listing={detailListing}
+          onClose={() => setDetailListing(null)}
+        />
+      )}
     </AppShell>
   );
 }
