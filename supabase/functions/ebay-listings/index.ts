@@ -956,22 +956,27 @@ async function fetchSoldListings(
   const results: any[] = [];
   try {
     const now = new Date();
-    // Fetch orders from the last 365 days (eBay Fulfillment API max range)
+    // Fetch orders from the last 365 days (eBay Fulfillment API max range).
+    // eBay requires a CLOSED date range [from..to] — open-ended ranges are rejected.
     const fromDate = new Date(now);
     fromDate.setDate(fromDate.getDate() - 365);
+    // Strip milliseconds: eBay expects 2024-01-01T00:00:00Z not 2024-01-01T00:00:00.000Z
     const fromStr = fromDate.toISOString().replace(/\.\d{3}Z$/, "Z");
+    const toStr = now.toISOString().replace(/\.\d{3}Z$/, "Z");
 
-    const filter = `creationdate:[${fromStr}..]`;
+    // Must use closed range [from..to] — eBay rejects open-ended ranges
+    const filter = `creationdate:[${fromStr}..${toStr}]`;
     let offset = 0;
     const PAGE_SIZE = 200;
     let totalOrders = 0;
 
     while (true) {
+      // Manually construct URL to prevent double-encoding of filter brackets/dots
       const url = `${apiBase}/sell/fulfillment/v1/order?filter=${
         encodeURIComponent(filter)
       }&limit=${PAGE_SIZE}&offset=${offset}`;
       console.log(
-        `fetchSoldListings: Fetching orders offset=${offset}`,
+        `fetchSoldListings: Fetching orders offset=${offset}, filter=${filter}`,
       );
       const resp = await fetch(url, { headers: ebayHeaders });
 
