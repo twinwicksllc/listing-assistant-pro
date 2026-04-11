@@ -946,13 +946,129 @@ async function fetchListingsViaTradingAPI(
   }
 }
 
+// ─── Fetch sold/completed orders from Fulfillment API ──────────────────────
+// Returns listing-shaped objects for items that have sold, so the COGS
+// bulk editor can display them alongside active listings.
+async function fetchSoldListings(
+  apiBase: string,
+  ebayHeaders: Record<string, string>,
+): Promise<any[]> {
+  const results: any[] = [];
+  try {
+    const now = new Date();
+    // Fetch orders from the last 365 days (eBay Fulfillment API max range)
+    const fromDate = new Date(now);
+    fromDate.setDate(fromDate.getDate() - 365);
+    const fromStr = fromDate.toISOString().replace(/\.\d{3}Z$/, "Z");
+
+    const filter = `creationdate:[${fromStr}..]`;
+    let offset = 0;
+    const PAGE_SIZE = 200;
+    let totalOrders = 0;
+
+    while (true) {
+      const url = `${apiBase}/sell/fulfillment/v1/order?filter=${
+        encodeURIComponent(filter)
+      }&limit=${PAGE_SIZE}&offset=${offset}`;
+      console.log(
+        `fetchSoldListings: Fetching orders offset=${offset}`,
+      );
+      const resp = await fetch(url, { headers: ebayHeaders });
+
+      if (!resp.ok) {
+        const errText = await resp.text();
+        console.warn(
+          `fetchSoldListings: Fulfillment API error ${resp.status}: ${errText.substring(0, 200)}`,
+        );
+        break;
+      }
+
+      let data: any;
+      try {
+        const respText = await resp.text();
+        data = JSON.parse(respText);
+      } catch (e) {
+        console.warn(`fetchSoldListings: Failed to parse response: ${e}`);
+        break;
+      }
+
+      const orders: any[] = data.orders || [];
+      totalOrders = data.total ?? orders.length;
+
+      for (const order of orders) {
+        // Skip cancelled orders
+        if (order.cancelStatus?.cancelState === "CANCELED") continue;
+
+        const soldAt = order.creationDate ?? null;
+
+        for (const line of order.lineItems ?? []) {
+          const listingId = line.legacyItemId ?? null;
+          const sku = line.sku ?? null;
+          const title = line.title ?? "";
+          const quantity = Number(line.quantity ?? 1);
+          const price = Number(line.lineItemCost?.value ?? 0);
+          const imageUrl = line.legacyVariationId ? "" : (line.image?.imageUrl ?? "");
+
+          results.push({
+            offerId: null,
+            sku: sku || listingId || "",
+            title: title || listingId || "Untitled",
+            imageUrl,
+            price,
+            currency: line.lineItemCost?.currency || "USD",
+            status: "SOLD",
+            categoryId: "",
+            listingId,
+            ebayUrl: listingId ? `https://www.ebay.com/itm/${listingId}` : null,
+            quantity,
+            format: "FIXED_PRICE",
+            condition: "",
+            listingDate: null,
+            soldAt,
+            orderId: order.orderId,
+            // Analytics placeholders
+            views: 0,
+            views7d: 0,
+            views30d: 0,
+            views90d: 0,
+            impressions: 0,
+            impressions7d: 0,
+            impressions30d: 0,
+            impressions90d: 0,
+            clickThroughRate: 0,
+            salesConversionRate: 0,
+            transactions: 0,
+            transactions7d: 0,
+            transactions30d: 0,
+            transactions90d: 0,
+            watchCount: 0,
+            questionCount: 0,
+          });
+        }
+      }
+
+      if (orders.length < PAGE_SIZE || (offset + orders.length) >= totalOrders) {
+        break;
+      }
+      offset += PAGE_SIZE;
+    }
+
+    console.log(
+      `fetchSoldListings: Found ${results.length} sold line items from ${totalOrders} orders`,
+    );
+  } catch (e) {
+    console.warn("fetchSoldListings error:", e);
+  }
+  return results;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { userToken } = await req.json();
+    const { userToken, includeSold } = await req.json();
 
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
     console.log(
@@ -1220,9 +1336,37 @@ serve(async (req) => {
 
     const enrichedListings = [...enrichedInventoryListings, ...tradingOnly];
 
+    // ── Optionally include sold/completed items (for COGS bulk editor) ──
+    // When includeSold is true, fetch sold orders from Fulfillment API and
+    // append them as listings with status "SOLD". Deduplicate against active
+    // listings by listingId so items that are still active aren't doubled.
+    let soldListings: any[] = [];
+    if (includeSold) {
+      const rawSold = await fetchSoldListings(apiBase, ebayHeaders);
+      const activeListingIdSet = new Set(
+        enrichedListings
+          .map((l: any) => l.listingId)
+          .filter(Boolean),
+      );
+      // Deduplicate sold items: keep only unique listingIds not in active set.
+      // For multi-quantity items that sold multiple times, keep the first (most recent).
+      const seenSoldIds = new Set<string>();
+      soldListings = rawSold.filter((l: any) => {
+        if (l.listingId && activeListingIdSet.has(l.listingId)) return false;
+        if (l.listingId && seenSoldIds.has(l.listingId)) return false;
+        if (l.listingId) seenSoldIds.add(l.listingId);
+        return true;
+      });
+      console.log(
+        `ebay-listings: includeSold=true, ${rawSold.length} raw sold → ${soldListings.length} unique after dedup`,
+      );
+    }
+
+    const allListings = includeSold ? [...enrichedListings, ...soldListings] : enrichedListings;
+
     return new Response(
       JSON.stringify({
-        listings: enrichedListings,
+        listings: allListings,
         needsAuth: false,
         orderCount7d: orderCounts.orders7d,
         orderCount30d: orderCounts.orders30d,
