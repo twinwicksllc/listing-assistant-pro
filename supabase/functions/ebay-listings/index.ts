@@ -953,6 +953,7 @@ async function fetchListingsViaTradingAPI(
   apiBase: string,
   userToken: string,
   corsHeaders: Record<string, string>,
+  includeSold = false,
 ): Promise<Response> {
   try {
     const listings = await fetchTradingAPIListingsRaw(apiBase, userToken);
@@ -966,9 +967,16 @@ async function fetchListingsViaTradingAPI(
       "Content-Type": "application/json",
       "Accept-Language": "en-US",
     };
-    const [{ a7, a30, a90 }, orderCounts] = await Promise.all([
+    // Fetch sold listings in parallel when includeSold=true (same pattern as main path)
+    const [{ a7, a30, a90 }, orderCounts, soldItemsRaw] = await Promise.all([
       fetchAllAnalytics(apiBase, ebayHeaders),
       fetchOrderCounts(apiBase, ebayHeaders),
+      includeSold
+        ? fetchSoldListings(apiBase, ebayHeaders).catch((e: any) => {
+          console.error("Trading API fallback: fetchSoldListings CRASHED (non-fatal):", e?.message ?? e);
+          return [] as any[];
+        })
+        : Promise.resolve([] as any[]),
     ]);
     console.log(
       `Trading API fallback: Real order counts - 7d=${orderCounts.orders7d}, 30d=${orderCounts.orders30d}, 90d=${orderCounts.orders90d}`,
@@ -982,9 +990,28 @@ async function fetchListingsViaTradingAPI(
 
     console.log(`Trading API fallback: loaded ${finalListings.length} active listings`);
 
+    // Merge sold listings if requested (same dedup logic as main path)
+    let soldListings: any[] = [];
+    if (includeSold) {
+      console.log(`Trading API fallback: fetchSoldListings returned ${soldItemsRaw.length} sold items`);
+      const activeListingIdSet = new Set(
+        finalListings.map((l: any) => l.listingId).filter(Boolean),
+      );
+      const seenSoldIds = new Set<string>();
+      soldListings = soldItemsRaw.filter((l: any) => {
+        if (l.listingId && activeListingIdSet.has(l.listingId)) return false;
+        if (l.listingId && seenSoldIds.has(l.listingId)) return false;
+        if (l.listingId) seenSoldIds.add(l.listingId);
+        return true;
+      });
+      console.log(`Trading API fallback: ${soldListings.length} unique sold items after dedup`);
+    }
+
+    const allListings = includeSold ? [...finalListings, ...soldListings] : finalListings;
+
     return new Response(
       JSON.stringify({
-        listings: finalListings,
+        listings: allListings,
         needsAuth: false,
         orderCount7d: orderCounts.orders7d,
         orderCount30d: orderCounts.orders30d,
@@ -1229,6 +1256,7 @@ serve(async (req) => {
             apiBase,
             userToken,
             corsHeaders,
+            includeSold,
           );
         }
 
