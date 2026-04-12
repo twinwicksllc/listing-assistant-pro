@@ -564,9 +564,13 @@ async function fetchOrderCounts(
 
   try {
     const now = new Date();
+    // Use 365-day window to match fetchSoldListings and give accurate dashboard counts.
     const ninetyDaysAgo = new Date(now);
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-    const fromStr = ninetyDaysAgo.toISOString();
+    // Keep ninetyDaysAgo for the financial window calculations below (7/30/90d buckets).
+    // For the API call itself, use 365 days so we don't miss older orders.
+    const threeSixtyFiveDaysAgo = new Date(now);
+    threeSixtyFiveDaysAgo.setDate(threeSixtyFiveDaysAgo.getDate() - 365);
 
     // Fetch label costs + refunds/credits/disputes/non-sale charges in parallel
     const [labelCosts, finTx] = await Promise.all([
@@ -574,13 +578,10 @@ async function fetchOrderCounts(
       fetchFinancesTransactions(apiBase, ebayHeaders, ninetyDaysAgo),
     ]);
 
-    // Use encodeURIComponent (not URLSearchParams) to avoid double-encoding the
-    // square brackets and dots in the eBay filter syntax. URLSearchParams percent-
-    // encodes [ ] and . which produces a malformed filter eBay silently rejects,
-    // returning 0 orders. Manual construction matches the pattern used in
-    // cogs-report/index.ts which is known to work correctly.
+    // Strip milliseconds: eBay requires ISO 8601 without ms (e.g. "2024-01-01T00:00:00Z").
+    // Use encodeURIComponent (not URLSearchParams) to avoid double-encoding [ ] and .
     const toStr = now.toISOString().replace(/\.\d{3}Z$/, "Z");
-    const fromStrClean = fromStr.replace(/\.\d{3}Z$/, "Z");
+    const fromStrClean = threeSixtyFiveDaysAgo.toISOString().replace(/\.\d{3}Z$/, "Z");
     const filterValue = `creationdate:[${fromStrClean}..${toStr}]`;
     const ordersUrl = `${apiBase}/sell/fulfillment/v1/order?filter=${encodeURIComponent(filterValue)}&limit=200`;
 
@@ -1021,13 +1022,18 @@ async function fetchSoldListings(
   const results: any[] = [];
 
   const now = new Date();
-  // Use 365-day window. Full ISO string with ms — same as fetchOrderCounts.
+  // 365-day window — captures full order history within eBay API limits.
   const fromDate = new Date(now);
   fromDate.setDate(fromDate.getDate() - 365);
-  const fromStr = fromDate.toISOString();
+  // Strip milliseconds: eBay requires ISO 8601 without ms (e.g. "2024-01-01T00:00:00Z").
+  // Including milliseconds (e.g. "2024-01-01T00:00:00.000Z") causes eBay to silently
+  // return 0 orders with a 200 OK — same as the double-encoding bug.
+  const fromStr = fromDate.toISOString().replace(/\.\d{3}Z$/, "Z");
+  const toStr = now.toISOString().replace(/\.\d{3}Z$/, "Z");
 
-  // Use open-ended range — same format fetchOrderCounts uses successfully.
-  const filter = `creationdate:[${fromStr}..]`;
+  // Closed date range, no fulfillment status filter — gets ALL orders (paid, unpaid,
+  // fulfilled, unfulfilled) so nothing is missed.
+  const filter = `creationdate:[${fromStr}..${toStr}]`;
 
   let offset = 0;
   const PAGE_SIZE = 200;
@@ -1037,17 +1043,18 @@ async function fetchSoldListings(
   console.log(`fetchSoldListings: starting, filter=${filter}`);
 
   while (true) {
-    // Use new URL + searchParams — same pattern as fetchOrderCounts (avoids encoding issues)
-    const url = new URL(`${apiBase}/sell/fulfillment/v1/order`);
-    url.searchParams.set("filter", filter);
-    url.searchParams.set("limit", String(PAGE_SIZE));
-    if (offset > 0) url.searchParams.set("offset", String(offset));
+    // Use encodeURIComponent (NOT URLSearchParams) to avoid double-encoding the
+    // square brackets and dots in eBay filter syntax. URLSearchParams encodes
+    // [ ] and . which produces a malformed filter eBay silently rejects with 0 orders.
+    const ordersUrl = `${apiBase}/sell/fulfillment/v1/order?filter=${encodeURIComponent(filter)}&limit=${PAGE_SIZE}${
+      offset > 0 ? `&offset=${offset}` : ""
+    }`;
 
     console.log(
-      `fetchSoldListings: page ${pagesFetched + 1}, offset=${offset}, url=${url.toString()}`,
+      `fetchSoldListings: page ${pagesFetched + 1}, offset=${offset}, url=${ordersUrl}`,
     );
 
-    const resp = await fetch(url.toString(), { headers: ebayHeaders });
+    const resp = await fetch(ordersUrl, { headers: ebayHeaders });
 
     if (!resp.ok) {
       const errText = await resp.text();
@@ -1413,12 +1420,16 @@ serve(async (req) => {
     const enrichedListings = [...enrichedInventoryListings, ...tradingOnly];
 
     // ── Optionally include sold/completed items (for COGS bulk editor) ──
-    // Re-use the soldItems already collected by fetchOrderCounts (which called
-    // the Fulfillment API as part of the parallel work above). This avoids a
-    // second Fulfillment API call that was causing the edge function to time out.
+    // Call fetchSoldListings() directly — it uses a 365-day window, proper
+    // encodeURIComponent URL encoding, and full pagination. This is the correct
+    // data source for sold listings; orderCounts.soldItems was only a 90-day
+    // fallback that was never designed to be the primary source.
     let soldListings: any[] = [];
     if (includeSold) {
-      const rawSold = orderCounts.soldItems;
+      console.log("ebay-listings: includeSold=true, calling fetchSoldListings for full 365-day sold history");
+      const rawSold = await fetchSoldListings(apiBase, ebayHeaders);
+      console.log(`ebay-listings: fetchSoldListings returned ${rawSold.length} sold items`);
+
       const activeListingIdSet = new Set(
         enrichedListings
           .map((l: any) => l.listingId)
@@ -1434,7 +1445,7 @@ serve(async (req) => {
         return true;
       });
       console.log(
-        `ebay-listings: includeSold=true, reused ${rawSold.length} sold items from fetchOrderCounts → ${soldListings.length} unique after dedup`,
+        `ebay-listings: ${soldListings.length} unique sold items after dedup against ${activeListingIdSet.size} active listings`,
       );
     }
 
