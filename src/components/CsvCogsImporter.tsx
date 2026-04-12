@@ -31,6 +31,20 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
   const [importing, setImporting] = useState(false);
   const [showMapping, setShowMapping] = useState(false);
 
+  // Convert scientific notation (e.g. "1.37161E+11") to full integer string.
+  // Excel silently converts long eBay listing IDs to sci notation when saving CSV.
+  function normalizeSciNotation(val: string): string {
+    if (!val) return val;
+    if (/^-?\d+\.?\d*[eE][+\-]?\d+$/.test(val.trim())) {
+      try {
+        return BigInt(Math.round(parseFloat(val))).toString();
+      } catch {
+        return val;
+      }
+    }
+    return val;
+  }
+
   // Parse CSV text into headers + rows
   function parseCSV(text: string) {
     const lines = text.split("\n").filter((l) => l.trim());
@@ -86,7 +100,7 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
       // Show preview (first 5 rows only for display)
       const preview = rows.slice(0, 5).map((row) => ({
         sku: autoMapping.skuCol ? row[autoMapping.skuCol] : undefined,
-        listingId: autoMapping.listingIdCol ? row[autoMapping.listingIdCol] : undefined,
+        listingId: autoMapping.listingIdCol ? normalizeSciNotation(row[autoMapping.listingIdCol]) : undefined,
         cogs: autoMapping.cogsCol ? parseFloat(row[autoMapping.cogsCol]) : undefined,
         source: file.name,
       }));
@@ -123,7 +137,7 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
 
       for (const row of rows) {
         const sku = mapping.skuCol ? row[mapping.skuCol]?.trim() : "";
-        const listingId = mapping.listingIdCol ? row[mapping.listingIdCol]?.trim() : "";
+        const listingId = mapping.listingIdCol ? normalizeSciNotation(row[mapping.listingIdCol]?.trim()) : "";
         const cogsStr = mapping.cogsCol ? row[mapping.cogsCol]?.trim() : "";
 
         if (!cogsStr) continue;
