@@ -97,100 +97,118 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
     setImporting(true);
     try {
       const { headers: _h, rows } = parseCSV(csvText);
-      const toInsert: Array<{
+      const now = new Date().toISOString();
+
+      // Build the list of valid rows from CSV
+      interface CsvRow {
         user_id: string;
-        ebay_sku?: string | null;
-        ebay_listing_id?: string | null;
+        ebay_sku: string | null;
+        ebay_listing_id: string | null;
         cogs: number;
         cogs_source: string;
         acquired_at: string;
-      }> = [];
+      }
+      const csvRows: CsvRow[] = [];
 
       for (const row of rows) {
         const sku = mapping.skuCol ? row[mapping.skuCol]?.trim() : "";
         const listingId = mapping.listingIdCol ? row[mapping.listingIdCol]?.trim() : "";
         const cogsStr = mapping.cogsCol ? row[mapping.cogsCol]?.trim() : "";
 
-        // Skip rows without COGS
         if (!cogsStr) continue;
-
         const cogs = parseFloat(cogsStr);
-        if (isNaN(cogs) || cogs < 0) {
-          console.warn(`Invalid COGS value in row: ${cogsStr}`);
-          continue;
-        }
-
-        // Need at least SKU or ListingID
+        if (isNaN(cogs) || cogs < 0) continue;
         if (!sku && !listingId) continue;
 
-        toInsert.push({
+        csvRows.push({
           user_id: userId,
           ebay_sku: sku || null,
           ebay_listing_id: listingId || null,
           cogs,
           cogs_source: "csv_import",
-          acquired_at: new Date().toISOString(),
+          acquired_at: now,
         });
       }
 
-      if (toInsert.length === 0) {
+      if (csvRows.length === 0) {
         toast.error("No valid rows to import");
         setImporting(false);
         return;
       }
 
-      // Process in chunks of 50 to avoid request size limits
-      const CHUNK_SIZE = 50;
-      for (let i = 0; i < toInsert.length; i += CHUNK_SIZE) {
-        const chunk = toInsert.slice(i, i + CHUNK_SIZE);
+      // Step 1: Fetch ALL existing listing_cogs rows for this user in one query.
+      // Build lookup maps by listing_id and by sku so we can match in memory
+      // without N+1 queries. This also avoids any duplicate-key conflicts since
+      // we always UPDATE existing rows and only INSERT truly new ones.
+      const { data: existingRows, error: fetchError } = await supabase
+        .from("listing_cogs")
+        .select("id, ebay_listing_id, ebay_sku")
+        .eq("user_id", userId);
+      if (fetchError) throw fetchError;
 
-        for (const row of chunk) {
-          if (row.ebay_listing_id) {
-            // Try to update existing row by listing ID first
-            const { data: existing } = await supabase
-              .from("listing_cogs")
-              .select("id")
-              .eq("user_id", userId)
-              .eq("ebay_listing_id", row.ebay_listing_id)
-              .maybeSingle();
+      const byListingId = new Map<string, string>(); // listing_id -> row id
+      const bySku = new Map<string, string>();        // sku -> row id
+      for (const r of existingRows ?? []) {
+        if (r.ebay_listing_id) byListingId.set(r.ebay_listing_id, r.id);
+        if (r.ebay_sku) bySku.set(r.ebay_sku, r.id);
+      }
 
-            if (existing) {
-              const { error } = await supabase
-                .from("listing_cogs")
-                .update({ cogs: row.cogs, cogs_source: row.cogs_source, acquired_at: row.acquired_at })
-                .eq("id", existing.id);
-              if (error) throw error;
-            } else {
-              const { error } = await supabase.from("listing_cogs").insert(row);
-              if (error) throw error;
-            }
-          } else if (row.ebay_sku) {
-            // Fall back to SKU matching
-            const { data: existing } = await supabase
-              .from("listing_cogs")
-              .select("id")
-              .eq("user_id", userId)
-              .eq("ebay_sku", row.ebay_sku)
-              .maybeSingle();
+      // Step 2: Categorize each CSV row as update or insert.
+      // Priority: listing_id match > sku match > new insert.
+      // For inserts, if the row has a SKU that already exists under a different
+      // listing_id row, we still UPDATE that row rather than inserting a duplicate.
+      const updates: Array<{ id: string; cogs: number; cogs_source: string; acquired_at: string }> = [];
+      const inserts: CsvRow[] = [];
+      const updatedIds = new Set<string>(); // prevent double-updating same row
 
-            if (existing) {
-              const { error } = await supabase
-                .from("listing_cogs")
-                .update({ cogs: row.cogs, cogs_source: row.cogs_source, acquired_at: row.acquired_at })
-                .eq("id", existing.id);
-              if (error) throw error;
-            } else {
-              const { error } = await supabase.from("listing_cogs").insert(row);
-              if (error) throw error;
-            }
-          } else {
-            // No identifier — skip
-            console.warn("Skipping row with no SKU or listing ID");
+      for (const row of csvRows) {
+        const updatePayload = { cogs: row.cogs, cogs_source: row.cogs_source, acquired_at: row.acquired_at };
+
+        // 1. Match by listing ID (most reliable)
+        if (row.ebay_listing_id && byListingId.has(row.ebay_listing_id)) {
+          const id = byListingId.get(row.ebay_listing_id)!;
+          if (!updatedIds.has(id)) {
+            updates.push({ id, ...updatePayload });
+            updatedIds.add(id);
           }
+          continue;
+        }
+
+        // 2. Match by SKU
+        if (row.ebay_sku && bySku.has(row.ebay_sku)) {
+          const id = bySku.get(row.ebay_sku)!;
+          if (!updatedIds.has(id)) {
+            updates.push({ id, ...updatePayload });
+            updatedIds.add(id);
+          }
+          continue;
+        }
+
+        // 3. Truly new row — safe to insert
+        inserts.push(row);
+      }
+
+      // Step 3: Execute updates in chunks of 50
+      const CHUNK = 50;
+      for (let i = 0; i < updates.length; i += CHUNK) {
+        const chunk = updates.slice(i, i + CHUNK);
+        for (const u of chunk) {
+          const { error } = await supabase
+            .from("listing_cogs")
+            .update({ cogs: u.cogs, cogs_source: u.cogs_source, acquired_at: u.acquired_at })
+            .eq("id", u.id);
+          if (error) throw error;
         }
       }
 
-      toast.success(`Imported COGS for ${toInsert.length} items`);
+      // Step 4: Execute inserts in chunks of 50
+      for (let i = 0; i < inserts.length; i += CHUNK) {
+        const chunk = inserts.slice(i, i + CHUNK);
+        const { error } = await supabase.from("listing_cogs").insert(chunk);
+        if (error) throw error;
+      }
+
+      toast.success(`Imported COGS for ${csvRows.length} items (${updates.length} updated, ${inserts.length} new)`);
       setCsvText("");
       setHeaders([]);
       setMapping({});
