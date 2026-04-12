@@ -35,7 +35,7 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
   // Excel silently converts long eBay listing IDs to sci notation when saving CSV.
   function normalizeSciNotation(val: string): string {
     if (!val) return val;
-    if (/^-?\d+\.?\d*[eE][+\-]?\d+$/.test(val.trim())) {
+    if (/^-?\d+\.?\d*[eE][+-]?\d+$/.test(val.trim())) {
       try {
         return BigInt(Math.round(parseFloat(val))).toString();
       } catch {
