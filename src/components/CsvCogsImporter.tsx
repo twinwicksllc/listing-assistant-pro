@@ -219,14 +219,22 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
       // Priority: listing_id match > sku match > new insert.
       // Also track listing_ids and skus already scheduled for insert to prevent
       // duplicate inserts within the same batch.
-      const updates: Array<{ id: string; cogs: number; cogs_source: string; acquired_at: string }> = [];
+      const updates: Array<{ id: string; cogs: number; cogs_source: string; acquired_at: string; ebay_sku?: string | null; ebay_listing_id?: string | null }> = [];
       const inserts: CsvRow[] = [];
       const updatedIds = new Set<string>();         // prevent double-updating same DB row
       const insertedListingIds = new Set<string>(); // prevent duplicate inserts by listing_id
       const insertedSkus = new Set<string>();       // prevent duplicate inserts by sku
 
       for (const row of dedupedRows) {
-        const updatePayload = { cogs: row.cogs, cogs_source: row.cogs_source, acquired_at: row.acquired_at };
+        // Always include ebay_sku in updates so the DB row gets the SKU populated
+        // even if it was originally stored with only a listing ID. This ensures
+        // future page lookups by SKU work correctly.
+        const updatePayload = {
+          cogs: row.cogs,
+          cogs_source: row.cogs_source,
+          acquired_at: row.acquired_at,
+          ebay_sku: row.ebay_sku || null,
+        };
 
         // 1. Match by SKU first — SKU is a plain string that Excel never corrupts.
         //    Listing IDs from Excel CSV are unreliable (truncated sci notation means
@@ -271,9 +279,17 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
       for (let i = 0; i < updates.length; i += CHUNK) {
         const chunk = updates.slice(i, i + CHUNK);
         for (const u of chunk) {
+          const updateFields: Record<string, unknown> = {
+            cogs: u.cogs,
+            cogs_source: u.cogs_source,
+            acquired_at: u.acquired_at,
+          };
+          // Also write ebay_sku so rows originally stored by listing_id only
+          // can be found by SKU on subsequent page loads
+          if (u.ebay_sku) updateFields.ebay_sku = u.ebay_sku;
           const { error } = await supabase
             .from("listing_cogs")
-            .update({ cogs: u.cogs, cogs_source: u.cogs_source, acquired_at: u.acquired_at })
+            .update(updateFields)
             .eq("id", u.id);
           if (error) throw error;
         }
