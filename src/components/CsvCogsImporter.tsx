@@ -27,6 +27,7 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
   const [headers, setHeaders] = useState<string[]>([]);
   const [mapping, setMapping] = useState<ColumnMapping>({});
   const [previewRows, setPreviewRows] = useState<PendingRow[]>([]);
+  const [totalRows, setTotalRows] = useState(0);
   const [importing, setImporting] = useState(false);
   const [showMapping, setShowMapping] = useState(false);
 
@@ -71,7 +72,7 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
       });
       setMapping(autoMapping);
 
-      // Show preview
+      // Show preview (first 5 rows only for display)
       const preview = rows.slice(0, 5).map((row) => ({
         sku: autoMapping.skuCol ? row[autoMapping.skuCol] : undefined,
         listingId: autoMapping.listingIdCol ? row[autoMapping.listingIdCol] : undefined,
@@ -79,6 +80,7 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
         source: file.name,
       }));
       setPreviewRows(preview);
+      setTotalRows(rows.length);
       setShowMapping(true);
     } catch (e) {
       toast.error(`Failed to read file: ${e.message}`);
@@ -275,7 +277,7 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
           {/* Preview */}
           {previewRows.length > 0 && (
             <div className="border border-border rounded-lg p-3 bg-secondary/30">
-              <h4 className="text-xs font-semibold text-foreground mb-2">Preview (first 5 rows)</h4>
+              <h4 className="text-xs font-semibold text-foreground mb-2">Preview (first 5 of {totalRows.toLocaleString()} rows)</h4>
               <div className="space-y-1 text-xs">
                 {previewRows.map((row, i) => (
                   <div key={i} className="flex gap-2 p-1.5 bg-card rounded border border-border/50">
@@ -296,7 +298,7 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
           <div className="flex gap-2 p-2.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200/50 dark:border-blue-800/50 text-xs text-blue-900 dark:text-blue-400">
             <Clock className="w-4 h-4 shrink-0 mt-0.5" />
             <p>
-              Matches by SKU first, then Listing ID. Duplicates will update existing COGS entries.
+              All {totalRows.toLocaleString()} rows will be imported. Matches by Listing ID first, then SKU. Existing COGS values <strong>will be overwritten</strong> with the values from your CSV.
             </p>
           </div>
 
@@ -315,7 +317,7 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
               className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
             >
               {importing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Import {previewRows.length} Rows
+              Import {totalRows.toLocaleString()} Rows
             </button>
           </div>
         </div>
