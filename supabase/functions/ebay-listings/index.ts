@@ -1056,15 +1056,20 @@ async function fetchSoldListings(
 
     const resp = await fetch(ordersUrl, { headers: ebayHeaders });
 
+    console.log(`fetchSoldListings: HTTP status=${resp.status}, ok=${resp.ok}`);
+
     if (!resp.ok) {
       const errText = await resp.text();
       console.error(
-        `fetchSoldListings: Fulfillment API ${resp.status}: ${errText.substring(0, 400)}`,
+        `fetchSoldListings: Fulfillment API ERROR ${resp.status}: ${errText.substring(0, 800)}`,
       );
       break;
     }
 
     const respText = await resp.text();
+    // Log the first 500 chars of the raw response to see exactly what eBay returns
+    console.log(`fetchSoldListings: raw response (first 500 chars): ${respText.substring(0, 500)}`);
+
     let data: any;
     try {
       data = JSON.parse(respText);
@@ -1078,6 +1083,11 @@ async function fetchSoldListings(
     const orders: any[] = data.orders || [];
     totalOrders = data.total ?? orders.length;
     pagesFetched++;
+    console.log(
+      `fetchSoldListings: parsed OK — orders array length=${orders.length}, total=${totalOrders}, href=${
+        data.href ?? "none"
+      }, next=${data.next ?? "none"}`,
+    );
 
     console.log(
       `fetchSoldListings: page ${pagesFetched} → ${orders.length} orders (total reported: ${totalOrders})`,
@@ -1361,7 +1371,12 @@ serve(async (req) => {
       fetchOrderCounts(apiBase, ebayHeaders),
       // Fetch sold listings in parallel so it doesn't add to sequential execution time.
       // Running it after the other fetches caused the edge function to time out.
-      includeSold ? fetchSoldListings(apiBase, ebayHeaders) : Promise.resolve([] as any[]),
+      includeSold
+        ? fetchSoldListings(apiBase, ebayHeaders).catch((e: any) => {
+          console.error("fetchSoldListings CRASHED (non-fatal):", e?.message ?? e);
+          return [] as any[];
+        })
+        : Promise.resolve([] as any[]),
     ]);
 
     console.log(
@@ -1430,6 +1445,16 @@ serve(async (req) => {
       console.log(
         `ebay-listings: includeSold=true, fetchSoldListings returned ${soldItemsRaw.length} sold items (fetched in parallel)`,
       );
+
+      if (soldItemsRaw.length > 0) {
+        console.log(
+          `ebay-listings: first sold item sample: ${JSON.stringify(soldItemsRaw[0]).substring(0, 300)}`,
+        );
+      } else {
+        console.log(
+          "ebay-listings: soldItemsRaw is EMPTY - check fetchSoldListings logs above for raw eBay response",
+        );
+      }
 
       const activeListingIdSet = new Set(
         enrichedListings
