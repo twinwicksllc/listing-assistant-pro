@@ -161,6 +161,12 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
         return;
       }
 
+      // === DEBUG LOGGING ===
+      console.log("=== CSV IMPORT DEBUG ===");
+      console.log("Total CSV rows parsed:", csvRows.length);
+      console.log("Sample CSV rows (first 3):", csvRows.slice(0, 3));
+      // === END DEBUG ===
+
       // Step 1: Fetch ALL existing listing_cogs rows for this user in one query.
       // Build lookup maps by listing_id and by sku so we can match in memory
       // without N+1 queries. This also avoids any duplicate-key conflicts since
@@ -177,6 +183,11 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
         if (r.ebay_listing_id) byListingId.set(r.ebay_listing_id, r.id);
         if (r.ebay_sku) bySku.set(r.ebay_sku, r.id);
       }
+      console.log("Existing DB rows:", existingRows?.length);
+      console.log("byListingId map size:", byListingId.size);
+      console.log("bySku map size:", bySku.size);
+      console.log("Sample byListingId keys (first 5):", Array.from(byListingId.keys()).slice(0, 5));
+      console.log("Sample bySku keys (first 5):", Array.from(bySku.keys()).slice(0, 5));
 
       // Step 2: Deduplicate CSV rows themselves before categorizing.
       // The CSV may contain the same listing multiple times (e.g. active + sold).
@@ -233,6 +244,13 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
         if (row.ebay_listing_id) insertedListingIds.add(row.ebay_listing_id);
         if (row.ebay_sku) insertedSkus.add(row.ebay_sku);
       }
+
+      console.log("=== CATEGORIZATION RESULTS ===");
+      console.log("Deduped CSV rows:", dedupedRows.length);
+      console.log("Updates queued:", updates.length);
+      console.log("Inserts queued:", inserts.length);
+      console.log("Sample updates (first 3):", updates.slice(0, 3));
+      console.log("Sample inserts (first 3):", inserts.slice(0, 3));
 
       // Step 3: Execute updates in chunks of 50
       const CHUNK = 50;
