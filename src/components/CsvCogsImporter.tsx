@@ -103,7 +103,7 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
         ebay_listing_id?: string | null;
         cogs: number;
         cogs_source: string;
-        cogs_acquired_at: string;
+        acquired_at: string;
       }> = [];
 
       for (const row of rows) {
@@ -129,7 +129,7 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
           ebay_listing_id: listingId || null,
           cogs,
           cogs_source: "csv_import",
-          cogs_acquired_at: new Date().toISOString().split("T")[0],
+          acquired_at: new Date().toISOString(),
         });
       }
 
