@@ -122,7 +122,9 @@ serve(async (req) => {
     }
 
     // ── Fetch COGS records from Supabase ────────────────────────────────────
-    const cogsMap: Record<string, number> = {};
+    // Use separate maps for listing ID and SKU so we can match by either
+    const cogsByListingId: Record<string, number> = {};
+    const cogsBySku:       Record<string, number> = {};
 
     if (skuSet.size > 0 || listingIdSet.size > 0) {
       const skus       = Array.from(skuSet);
@@ -143,9 +145,12 @@ serve(async (req) => {
       }
 
       for (const row of cogsRows ?? []) {
-        if (row.ebay_sku)        cogsMap[row.ebay_sku]        = Number(row.cogs);
-        if (row.ebay_listing_id) cogsMap[row.ebay_listing_id] = Number(row.cogs);
+        const cogsVal = Number(row.cogs);
+        if (row.ebay_listing_id) cogsByListingId[row.ebay_listing_id] = cogsVal;
+        if (row.ebay_sku)        cogsBySku[row.ebay_sku]              = cogsVal;
       }
+
+      console.log(`COGS lookup: ${Object.keys(cogsByListingId).length} by listing ID, ${Object.keys(cogsBySku).length} by SKU`);
     }
 
     // ── Build per-item result rows ──────────────────────────────────────────
@@ -171,10 +176,10 @@ serve(async (req) => {
     let itemsWithout   = 0;
 
     const items: ResultItem[] = flatOrders.map((fo) => {
+      // Match COGS: prefer listing ID match, fall back to SKU match
       const cogs =
-        (fo.ebaySku       ? cogsMap[fo.ebaySku]       : null) ??
-        (fo.ebayListingId ? cogsMap[fo.ebayListingId] : null) ??
-        null;
+        (fo.ebayListingId ? cogsByListingId[fo.ebayListingId] ?? null : null) ??
+        (fo.ebaySku       ? cogsBySku[fo.ebaySku]             ?? null : null);
 
       const netProfit = fo.salePrice + fo.shippingCollected - fo.ebayFees - (cogs ?? 0);
       const margin    = cogs != null && fo.salePrice > 0
