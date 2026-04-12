@@ -1,0 +1,426 @@
+{
+  "version": "1.0",
+  "description": "60 test cases for category lookup validation (verified leaf IDs as of 2025-01)",
+  "cases": [
+    {
+      "id": "coin-01",
+      "group": "coins",
+      "input": "1889 Morgan Silver Dollar",
+      "expectedCategoryId": "39464",
+      "expectedBreadcrumb": "Coins & Paper Money > Coins: US > Dollars > Morgan (1878-1921)"
+    },
+    {
+      "id": "coin-02",
+      "group": "coins",
+      "input": "1964 Kennedy Half Dollar",
+      "expectedCategoryId": "41102",
+      "expectedBreadcrumb": "Coins & Paper Money > Coins: US > Half Dollars > Kennedy (1964-Now)"
+    },
+    {
+      "id": "coin-03",
+      "group": "coins",
+      "input": "1922 Peace Dollar",
+      "expectedCategoryId": "11980",
+      "expectedBreadcrumb": "Coins & Paper Money > Coins: US > Dollars > Peace (1921-35)"
+    },
+    {
+      "id": "coin-04",
+      "group": "coins",
+      "input": "1916 Walking Liberty Half Dollar",
+      "expectedCategoryId": "41099",
+      "expectedBreadcrumb": "Coins & Paper Money > Coins: US > Half Dollars > Liberty Walking (1916-47)"
+    },
+    {
+      "id": "coin-05",
+      "group": "coins",
+      "input": "2024 American Silver Eagle 1 oz",
+      "expectedCategoryId": "177653",
+      "expectedBreadcrumb": "Coins & Paper Money > Bullion > Silver > Coins"
+    },
+    {
+      "id": "coin-06",
+      "group": "coins",
+      "input": "1909-S VDB Lincoln Wheat Penny",
+      "expectedCategoryId": "39455",
+      "expectedBreadcrumb": "Coins & Paper Money > Coins: US > Pennies > Lincoln Wheat (1909-1958)"
+    },
+    {
+      "id": "coin-07",
+      "group": "coins",
+      "input": "1971 Eisenhower Dollar",
+      "expectedCategoryId": "11981",
+      "expectedBreadcrumb": "Coins & Paper Money > Coins: US > Dollars > Eisenhower (1971-78)"
+    },
+    {
+      "id": "coin-08",
+      "group": "coins",
+      "input": "1950 Franklin Half Dollar",
+      "expectedCategoryId": "11973",
+      "expectedBreadcrumb": "Coins & Paper Money > Coins: US > Half Dollars > Franklin (1948-1963)"
+    },
+    {
+      "id": "coin-09",
+      "group": "coins",
+      "input": "1 oz PAMP Suisse Gold Bar",
+      "expectedCategoryId": "178906",
+      "expectedBreadcrumb": "Coins & Paper Money > Bullion > Gold > Bars & Rounds"
+    },
+    {
+      "id": "coin-10",
+      "group": "coins",
+      "input": "10 oz Engelhard Silver Bar",
+      "expectedCategoryId": "39489",
+      "expectedBreadcrumb": "Coins & Paper Money > Bullion > Silver > Bars & Rounds"
+    },
+    {
+      "id": "coin-11",
+      "group": "coins",
+      "input": "2024 American Gold Eagle 1/10 oz",
+      "expectedCategoryId": "177652",
+      "expectedBreadcrumb": "Coins & Paper Money > Bullion > Gold > Coins"
+    },
+    {
+      "id": "coin-12",
+      "group": "coins",
+      "input": "2024 American Gold Buffalo 1 oz",
+      "expectedCategoryId": "177652",
+      "expectedBreadcrumb": "Coins & Paper Money > Bullion > Gold > Coins"
+    },
+    {
+      "id": "coin-13",
+      "group": "coins",
+      "input": "1877 Indian Head Cent",
+      "expectedCategoryId": "41084",
+      "expectedBreadcrumb": "Coins & Paper Money > Coins: US > Small Cents > Indian Head (1859-1909)"
+    },
+    {
+      "id": "coin-14",
+      "group": "coins",
+      "input": "1967 Canadian Silver Dollar",
+      "expectedCategoryId": "3383",
+      "expectedBreadcrumb": "Coins & Paper Money > Coins: Canada > Dollars"
+    },
+    {
+      "id": "coin-15",
+      "group": "coins",
+      "input": "1 oz Copper Round Buffalo Design",
+      "expectedCategoryId": "166679",
+      "expectedBreadcrumb": "Coins & Paper Money > Bullion > Other"
+    },
+    {
+      "id": "card-01",
+      "group": "trading_cards",
+      "input": "2023 Topps Chrome Baseball Card Mike Trout",
+      "expectedCategoryId": "261328",
+      "expectedBreadcrumb": "Sports Mem, Cards & Fan Shop > Sports Trading Cards > Trading Card Singles"
+    },
+    {
+      "id": "card-02",
+      "group": "trading_cards",
+      "input": "2024 Panini Prizm Basketball Card LeBron James",
+      "expectedCategoryId": "261328",
+      "expectedBreadcrumb": "Sports Mem, Cards & Fan Shop > Sports Trading Cards > Basketball Cards"
+    },
+    {
+      "id": "card-03",
+      "group": "trading_cards",
+      "input": "Pokemon Charizard VMAX Holo Rare",
+      "expectedCategoryId": "183454",
+      "expectedBreadcrumb": "Toys & Hobbies > Collectible Card Games > Pokémon > Cards"
+    },
+    {
+      "id": "card-04",
+      "group": "trading_cards",
+      "input": "Magic The Gathering Black Lotus",
+      "expectedCategoryId": "183454",
+      "expectedBreadcrumb": "Toys & Hobbies > Collectible Card Games > CCG Individual Cards"
+    },
+    {
+      "id": "card-05",
+      "group": "trading_cards",
+      "input": "2024 Panini Football Card Patrick Mahomes",
+      "expectedCategoryId": "261328",
+      "expectedBreadcrumb": "Sports Mem, Cards & Fan Shop > Sports Trading Cards"
+    },
+    {
+      "id": "card-06",
+      "group": "trading_cards",
+      "input": "2023 Topps Baseball Card Shohei Ohtani Rookie",
+      "expectedCategoryId": "261328",
+      "expectedBreadcrumb": "Sports Mem, Cards & Fan Shop > Sports Trading Cards > Trading Card Singles"
+    },
+    {
+      "id": "card-07",
+      "group": "trading_cards",
+      "input": "2024 Upper Deck Hockey Card Connor McDavid",
+      "expectedCategoryId": "261328",
+      "expectedBreadcrumb": "Sports Mem, Cards & Fan Shop > Sports Trading Cards"
+    },
+    {
+      "id": "card-08",
+      "group": "trading_cards",
+      "input": "PSA 10 1st Edition Pokemon Pikachu",
+      "expectedCategoryId": "183454",
+      "expectedBreadcrumb": "Toys & Hobbies > Collectible Card Games > Pokémon > Cards"
+    },
+    {
+      "id": "card-09",
+      "group": "trading_cards",
+      "input": "Yu-Gi-Oh Blue Eyes White Dragon 1st Edition",
+      "expectedCategoryId": "183454",
+      "expectedBreadcrumb": "Toys & Hobbies > Collectible Card Games > CCG Individual Cards"
+    },
+    {
+      "id": "card-10",
+      "group": "trading_cards",
+      "input": "2024 Donruss Optic Football Caleb Williams Rated Rookie",
+      "expectedCategoryId": "261328",
+      "expectedBreadcrumb": "Sports Mem, Cards & Fan Shop > Sports Trading Cards"
+    },
+    {
+      "id": "card-11",
+      "group": "trading_cards",
+      "input": "BGS 9.5 Luka Doncic Prizm Silver",
+      "expectedCategoryId": "261328",
+      "expectedBreadcrumb": "Sports Mem, Cards & Fan Shop > Sports Trading Cards > Basketball Cards"
+    },
+    {
+      "id": "card-12",
+      "group": "trading_cards",
+      "input": "2023 Bowman 1st Chrome Baseball Prospect Auto",
+      "expectedCategoryId": "261328",
+      "expectedBreadcrumb": "Sports Mem, Cards & Fan Shop > Sports Trading Cards > Trading Card Singles"
+    },
+    {
+      "id": "card-13",
+      "group": "trading_cards",
+      "input": "Garbage Pail Kids Series 1 Adam Bomb",
+      "expectedCategoryId": "183050",
+      "expectedBreadcrumb": "Collectibles > Non-Sport Trading Cards > Trading Card Singles"
+    },
+    {
+      "id": "card-14",
+      "group": "trading_cards",
+      "input": "2024 Panini Select Soccer Card Messi",
+      "expectedCategoryId": "261328",
+      "expectedBreadcrumb": "Sports Mem, Cards & Fan Shop > Sports Trading Cards"
+    },
+    {
+      "id": "card-15",
+      "group": "trading_cards",
+      "input": "2024 Topps Series 1 Baseball Wax Box Sealed",
+      "expectedCategoryId": "261332",
+      "expectedBreadcrumb": "Sports Mem, Cards & Fan Shop > Sports Trading Cards > Sealed Trading Card Boxes"
+    },
+    {
+      "id": "toy-01",
+      "group": "toys",
+      "input": "Ty Beanie Baby Princess Diana Bear Purple",
+      "expectedCategoryId": "440",
+      "expectedBreadcrumb": "Toys & Hobbies > Beanbag Plush > Ty > Beanie Babies-Original > Retired"
+    },
+    {
+      "id": "toy-02",
+      "group": "toys",
+      "input": "Funko Pop Marvel Spider-Man #593",
+      "expectedCategoryId": "149372",
+      "expectedBreadcrumb": "Collectibles > Collectible Figures & Supplies > Collectible Figures & Bobbleheads"
+    },
+    {
+      "id": "toy-03",
+      "group": "toys",
+      "input": "LEGO Star Wars Millennium Falcon 75375",
+      "expectedCategoryId": "19006",
+      "expectedBreadcrumb": "Toys & Hobbies > Building Toys > LEGO (R) Building Toys > LEGO (R) Complete Sets & Packs"
+    },
+    {
+      "id": "toy-04",
+      "group": "toys",
+      "input": "Ty Beanie Baby Valentino Bear white with red heart",
+      "expectedCategoryId": "440",
+      "expectedBreadcrumb": "Toys & Hobbies > Beanbag Plush > Ty > Beanie Babies-Original > Retired"
+    },
+    {
+      "id": "toy-05",
+      "group": "toys",
+      "input": "Hot Wheels 1967 Camaro Treasure Hunt",
+      "expectedCategoryId": "180506",
+      "expectedBreadcrumb": "Toys & Hobbies > Diecast & Toy Vehicles > Cars, Trucks & Vans > Contemporary Manufacture"
+    },
+    {
+      "id": "toy-06",
+      "group": "toys",
+      "input": "Star Wars Black Series Darth Vader Action Figure 6 inch",
+      "expectedCategoryId": "261068",
+      "expectedBreadcrumb": "Toys & Hobbies > Action Figures & Accessories > Action Figures"
+    },
+    {
+      "id": "toy-07",
+      "group": "toys",
+      "input": "Monopoly Board Game Classic Edition Sealed",
+      "expectedCategoryId": "180349",
+      "expectedBreadcrumb": "Toys & Hobbies > Games > Board & Traditional Games > Contemporary Manufacture"
+    },
+    {
+      "id": "toy-08",
+      "group": "toys",
+      "input": "Jellycat Bashful Bunny Plush Medium Pink",
+      "expectedCategoryId": "158786",
+      "expectedBreadcrumb": "Toys & Hobbies > Stuffed Animals > Jellycat"
+    },
+    {
+      "id": "toy-09",
+      "group": "toys",
+      "input": "Funko Pop Disney Stitch Flocked Exclusive #159",
+      "expectedCategoryId": "149372",
+      "expectedBreadcrumb": "Collectibles > Collectible Figures & Supplies > Collectible Figures & Bobbleheads"
+    },
+    {
+      "id": "toy-10",
+      "group": "toys",
+      "input": "Ty Beanie Baby Peanut Elephant Royal Blue",
+      "expectedCategoryId": "440",
+      "expectedBreadcrumb": "Toys & Hobbies > Beanbag Plush > Ty > Beanie Babies-Original > Retired"
+    },
+    {
+      "id": "toy-11",
+      "group": "toys",
+      "input": "LEGO Technic Bugatti Chiron 42083",
+      "expectedCategoryId": "19006",
+      "expectedBreadcrumb": "Toys & Hobbies > Building Toys > LEGO (R) Building Toys > LEGO (R) Complete Sets & Packs"
+    },
+    {
+      "id": "toy-12",
+      "group": "toys",
+      "input": "Barbie Dreamhouse 2024 New In Box",
+      "expectedCategoryId": "180102",
+      "expectedBreadcrumb": "Dolls & Bears > Dolls, Clothing & Accessories > Doll Clothes & Accessories > Houses & Furniture"
+    },
+    {
+      "id": "toy-13",
+      "group": "toys",
+      "input": "Squishmallow 16 inch Cow Belana",
+      "expectedCategoryId": "230",
+      "expectedBreadcrumb": "Toys & Hobbies > Stuffed Animals > Other Stuffed Animals"
+    },
+    {
+      "id": "toy-14",
+      "group": "toys",
+      "input": "Transformers G1 Optimus Prime Original 1984",
+      "expectedCategoryId": "261068",
+      "expectedBreadcrumb": "Toys & Hobbies > Action Figures & Accessories > Action Figures"
+    },
+    {
+      "id": "toy-15",
+      "group": "toys",
+      "input": "Ravensburger Disney Villains 1000 Piece Puzzle",
+      "expectedCategoryId": "19183",
+      "expectedBreadcrumb": "Toys & Hobbies > Puzzles > Contemporary Puzzles > Jigsaw"
+    },
+    {
+      "id": "other-01",
+      "group": "other",
+      "input": "Olivetti Lettera 32 Vintage Typewriter 1960s",
+      "expectedCategoryId": "165654",
+      "expectedBreadcrumb": "Collectibles > Pens & Writing Instruments > Typewriters"
+    },
+    {
+      "id": "other-02",
+      "group": "other",
+      "input": "Apple iPhone 15 Pro Max 256GB Unlocked",
+      "expectedCategoryId": "9355",
+      "expectedBreadcrumb": "Cell Phones & Smartphones"
+    },
+    {
+      "id": "other-03",
+      "group": "other",
+      "input": "Sony PlayStation 5 Console Disc Edition",
+      "expectedCategoryId": "139971",
+      "expectedBreadcrumb": "Video Games & Consoles"
+    },
+    {
+      "id": "other-04",
+      "group": "other",
+      "input": "Nike Air Jordan 1 Retro High OG Chicago Size 10",
+      "expectedCategoryId": "15709",
+      "expectedBreadcrumb": "Clothing, Shoes & Accessories > Men > Men's Shoes > Athletic Shoes"
+    },
+    {
+      "id": "other-05",
+      "group": "other",
+      "input": "KitchenAid Stand Mixer Artisan 5 Quart Red",
+      "expectedCategoryId": "133701",
+      "expectedBreadcrumb": "Home & Garden > Kitchen, Dining & Bar > Small Kitchen Appliances > Countertop Mixers"
+    },
+    {
+      "id": "other-06",
+      "group": "other",
+      "input": "Canon EOS R5 Mirrorless Camera Body",
+      "expectedCategoryId": "31388",
+      "expectedBreadcrumb": "Consumer Electronics > Cameras & Photo > Digital Cameras"
+    },
+    {
+      "id": "other-07",
+      "group": "other",
+      "input": "DeWalt 20V Max Impact Driver Kit DCF887",
+      "expectedCategoryId": "168134",
+      "expectedBreadcrumb": "Home & Garden > Tools & Workshop Equipment > Power Tools > Impact Drivers"
+    },
+    {
+      "id": "other-08",
+      "group": "other",
+      "input": "First Edition Harry Potter Philosopher's Stone Book",
+      "expectedCategoryId": "261186",
+      "expectedBreadcrumb": "Books & Magazines > Books"
+    },
+    {
+      "id": "other-09",
+      "group": "other",
+      "input": "Rolex Submariner Date 126610LN Watch",
+      "expectedCategoryId": "31387",
+      "expectedBreadcrumb": "Jewelry & Watches > Watches, Parts & Accessories > Watches > Wristwatches"
+    },
+    {
+      "id": "other-10",
+      "group": "other",
+      "input": "Vintage Persian Rug Hand Knotted 8x10",
+      "expectedCategoryId": "37978",
+      "expectedBreadcrumb": "Home & Garden > Rugs & Carpets"
+    },
+    {
+      "id": "other-11",
+      "group": "other",
+      "input": "Sony WH-1000XM5 Wireless Noise Cancelling Headphones",
+      "expectedCategoryId": "112529",
+      "expectedBreadcrumb": "Consumer Electronics > Audio > Headphones"
+    },
+    {
+      "id": "other-12",
+      "group": "other",
+      "input": "14K Gold Diamond Engagement Ring 1 Carat Solitaire",
+      "expectedCategoryId": "261975",
+      "expectedBreadcrumb": "Jewelry & Watches > Fine Jewelry > Rings > Engagement Rings"
+    },
+    {
+      "id": "other-13",
+      "group": "other",
+      "input": "Banksy Girl With Balloon Print Signed",
+      "expectedCategoryId": "360",
+      "expectedBreadcrumb": "Art > Art Prints"
+    },
+    {
+      "id": "other-14",
+      "group": "other",
+      "input": "Eames Lounge Chair Herman Miller Vintage",
+      "expectedCategoryId": "261259",
+      "expectedBreadcrumb": "Home & Garden > Furniture > Chairs"
+    },
+    {
+      "id": "other-15",
+      "group": "other",
+      "input": "Samsung 65 inch OLED 4K Smart TV 2024",
+      "expectedCategoryId": "11071",
+      "expectedBreadcrumb": "Consumer Electronics > TV, Video & Home Audio > TVs"
+    }
+  ]
+}
