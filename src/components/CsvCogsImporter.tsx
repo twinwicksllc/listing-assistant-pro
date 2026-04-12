@@ -114,6 +114,10 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
 
   // Import all rows
   async function handleImport() {
+    console.log("========== CSV IMPORT STARTED ==========");
+    console.log("Mapping:", mapping);
+    console.log("CSV text length:", csvText.length);
+
     if (!mapping.cogsCol && !mapping.skuCol && !mapping.listingIdCol) {
       toast.error("Please map at least one column");
       return;
@@ -123,6 +127,10 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
     try {
       const { headers: _h, rows } = parseCSV(csvText);
       const now = new Date().toISOString();
+      console.log("========== AFTER PARSE ==========");
+      console.log("Parsed rows count:", rows.length);
+      console.log("Headers:", _h);
+      console.log("Sample raw rows (first 3):", rows.slice(0, 3));
 
       // Build the list of valid rows from CSV
       interface CsvRow {
