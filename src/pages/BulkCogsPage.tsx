@@ -249,11 +249,16 @@ export default function BulkCogsPage() {
     }
 
     const escapeCell = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    // escapeId forces Excel/Sheets to treat numeric-looking IDs as text by
+    // wrapping in ="..." formula notation. Without this, Excel silently converts
+    // 12-digit eBay listing IDs to scientific notation (e.g. 1.37161E+11),
+    // which causes the re-import to fail since precision is lost.
+    const escapeId = (v: string) => `"=""${v.replace(/"/g, '""')}"""`;
     const header = ["sku", "ebay_listing_id", "title", "price", "status", "cogs"].join(",");
     const lines  = toExport.map((r) =>
       [
         escapeCell(r.sku),
-        escapeCell(r.listingId),
+        escapeId(r.listingId),
         escapeCell(r.title),
         r.price.toFixed(2),
         escapeCell(r.status === "SOLD" ? "SOLD" : "ACTIVE"),
