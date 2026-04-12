@@ -153,15 +153,30 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
         if (r.ebay_sku) bySku.set(r.ebay_sku, r.id);
       }
 
-      // Step 2: Categorize each CSV row as update or insert.
+      // Step 2: Deduplicate CSV rows themselves before categorizing.
+      // The CSV may contain the same listing multiple times (e.g. active + sold).
+      // Keep the last occurrence of each listing_id / sku (last row wins).
+      const deduped = new Map<string, CsvRow>();
+      for (const row of csvRows) {
+        // Use listing_id as primary key, sku as fallback key for dedup
+        const key = row.ebay_listing_id
+          ? `lid:${row.ebay_listing_id}`
+          : `sku:${row.ebay_sku}`;
+        deduped.set(key, row); // last row with this key wins
+      }
+      const dedupedRows = Array.from(deduped.values());
+
+      // Step 3: Categorize each CSV row as update or insert.
       // Priority: listing_id match > sku match > new insert.
-      // For inserts, if the row has a SKU that already exists under a different
-      // listing_id row, we still UPDATE that row rather than inserting a duplicate.
+      // Also track listing_ids and skus already scheduled for insert to prevent
+      // duplicate inserts within the same batch.
       const updates: Array<{ id: string; cogs: number; cogs_source: string; acquired_at: string }> = [];
       const inserts: CsvRow[] = [];
-      const updatedIds = new Set<string>(); // prevent double-updating same row
+      const updatedIds = new Set<string>();         // prevent double-updating same DB row
+      const insertedListingIds = new Set<string>(); // prevent duplicate inserts by listing_id
+      const insertedSkus = new Set<string>();       // prevent duplicate inserts by sku
 
-      for (const row of csvRows) {
+      for (const row of dedupedRows) {
         const updatePayload = { cogs: row.cogs, cogs_source: row.cogs_source, acquired_at: row.acquired_at };
 
         // 1. Match by listing ID (most reliable)
@@ -184,8 +199,14 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
           continue;
         }
 
-        // 3. Truly new row — safe to insert
+        // 3. Truly new row — check we haven't already queued an insert for
+        //    this listing_id or sku (handles duplicates across dedup keys)
+        if (row.ebay_listing_id && insertedListingIds.has(row.ebay_listing_id)) continue;
+        if (row.ebay_sku && insertedSkus.has(row.ebay_sku)) continue;
+
         inserts.push(row);
+        if (row.ebay_listing_id) insertedListingIds.add(row.ebay_listing_id);
+        if (row.ebay_sku) insertedSkus.add(row.ebay_sku);
       }
 
       // Step 3: Execute updates in chunks of 50
@@ -208,7 +229,7 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
         if (error) throw error;
       }
 
-      toast.success(`Imported COGS for ${csvRows.length} items (${updates.length} updated, ${inserts.length} new)`);
+      toast.success(`Imported COGS for ${dedupedRows.length} items (${updates.length} updated, ${inserts.length} new)`);
       setCsvText("");
       setHeaders([]);
       setMapping({});
