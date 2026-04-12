@@ -139,32 +139,55 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
         return;
       }
 
-      // Split rows by which unique index they can upsert against:
-      //  1. Rows with listing ID → upsert on (user_id, ebay_listing_id)
-      //  2. Rows with only SKU → upsert on (user_id, ebay_sku)
-      //  3. Rows with neither → plain insert
-      // Listing ID is the most stable eBay identifier and is preferred.
-      const withListingId = toInsert.filter((r) => r.ebay_listing_id);
-      const skuOnly = toInsert.filter((r) => !r.ebay_listing_id && r.ebay_sku);
-      const neither = toInsert.filter((r) => !r.ebay_listing_id && !r.ebay_sku);
+      // Process in chunks of 50 to avoid request size limits
+      const CHUNK_SIZE = 50;
+      for (let i = 0; i < toInsert.length; i += CHUNK_SIZE) {
+        const chunk = toInsert.slice(i, i + CHUNK_SIZE);
 
-      if (withListingId.length > 0) {
-        const { error } = await supabase
-          .from("listing_cogs")
-          .upsert(withListingId, { onConflict: "user_id,ebay_listing_id" });
-        if (error) throw error;
-      }
-      if (skuOnly.length > 0) {
-        const { error } = await supabase
-          .from("listing_cogs")
-          .upsert(skuOnly, { onConflict: "user_id,ebay_sku" });
-        if (error) throw error;
-      }
-      if (neither.length > 0) {
-        const { error } = await supabase
-          .from("listing_cogs")
-          .insert(neither);
-        if (error) throw error;
+        for (const row of chunk) {
+          if (row.ebay_listing_id) {
+            // Try to update existing row by listing ID first
+            const { data: existing } = await supabase
+              .from("listing_cogs")
+              .select("id")
+              .eq("user_id", userId)
+              .eq("ebay_listing_id", row.ebay_listing_id)
+              .maybeSingle();
+
+            if (existing) {
+              const { error } = await supabase
+                .from("listing_cogs")
+                .update({ cogs: row.cogs, cogs_source: row.cogs_source, acquired_at: row.acquired_at })
+                .eq("id", existing.id);
+              if (error) throw error;
+            } else {
+              const { error } = await supabase.from("listing_cogs").insert(row);
+              if (error) throw error;
+            }
+          } else if (row.ebay_sku) {
+            // Fall back to SKU matching
+            const { data: existing } = await supabase
+              .from("listing_cogs")
+              .select("id")
+              .eq("user_id", userId)
+              .eq("ebay_sku", row.ebay_sku)
+              .maybeSingle();
+
+            if (existing) {
+              const { error } = await supabase
+                .from("listing_cogs")
+                .update({ cogs: row.cogs, cogs_source: row.cogs_source, acquired_at: row.acquired_at })
+                .eq("id", existing.id);
+              if (error) throw error;
+            } else {
+              const { error } = await supabase.from("listing_cogs").insert(row);
+              if (error) throw error;
+            }
+          } else {
+            // No identifier — skip
+            console.warn("Skipping row with no SKU or listing ID");
+          }
+        }
       }
 
       toast.success(`Imported COGS for ${toInsert.length} items`);
