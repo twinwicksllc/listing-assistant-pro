@@ -62,13 +62,24 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
       const { headers: parsedHeaders, rows } = parseCSV(text);
       setHeaders(parsedHeaders);
 
-      // Auto-detect common column names
+      // Auto-detect common column names.
+      // Use exact matches first, then fallbacks — to avoid mapping "price" to cogsCol
+      // when the CSV also has a separate "cogs" column (as our own export does).
       const autoMapping: ColumnMapping = {};
+      // Pass 1: exact matches (case-insensitive)
       parsedHeaders.forEach((h) => {
-        const lower = h.toLowerCase();
-        if (lower.includes("sku")) autoMapping.skuCol = h;
-        if (lower.includes("listing") || lower.includes("item")) autoMapping.listingIdCol = h;
-        if (lower.includes("cost") || lower.includes("cogs") || lower.includes("price")) autoMapping.cogsCol = h;
+        const lower = h.toLowerCase().trim();
+        if (lower === "sku")                                                               autoMapping.skuCol      = h;
+        if (lower === "ebay_listing_id" || lower === "listing_id" || lower === "item_id") autoMapping.listingIdCol = h;
+        if (lower === "cogs" || lower === "cost" || lower === "item_cost")                autoMapping.cogsCol     = h;
+      });
+      // Pass 2: partial matches only for fields not yet mapped
+      parsedHeaders.forEach((h) => {
+        const lower = h.toLowerCase().trim();
+        if (!autoMapping.skuCol      && lower.includes("sku"))                                       autoMapping.skuCol      = h;
+        if (!autoMapping.listingIdCol && (lower.includes("listing") || lower.includes("item_id")))   autoMapping.listingIdCol = h;
+        // Only fall back to partial match for cogs — never map "price" to cogs
+        if (!autoMapping.cogsCol     && (lower.includes("cogs") || lower.includes("cost")))          autoMapping.cogsCol     = h;
       });
       setMapping(autoMapping);
 
