@@ -197,15 +197,20 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
       console.log("Sample byListingId keys (first 5):", Array.from(byListingId.keys()).slice(0, 5));
       console.log("Sample bySku keys (first 5):", Array.from(bySku.keys()).slice(0, 5));
 
-      // Step 2: Deduplicate CSV rows themselves before categorizing.
-      // The CSV may contain the same listing multiple times (e.g. active + sold).
-      // Keep the last occurrence of each listing_id / sku (last row wins).
+      // Step 2: Deduplicate CSV rows by SKU (primary) or listing_id (fallback).
+      // IMPORTANT: Excel truncates long eBay listing IDs to scientific notation
+      // with limited precision (e.g. 137136000000 AND 137136100000 both become
+      // "1.37136E+11"). This means multiple different listings collapse to the
+      // same sci-notation string, making listing_id UNRELIABLE for dedup/matching
+      // when the CSV came from Excel.
+      // SKU is a plain string that Excel never corrupts, so we use it as the
+      // primary dedup key and matching key.
       const deduped = new Map<string, CsvRow>();
       for (const row of csvRows) {
-        // Use listing_id as primary key, sku as fallback key for dedup
-        const key = row.ebay_listing_id
-          ? `lid:${row.ebay_listing_id}`
-          : `sku:${row.ebay_sku}`;
+        // Use SKU as primary dedup key; fall back to listing_id only if no SKU
+        const key = row.ebay_sku
+          ? `sku:${row.ebay_sku}`
+          : `lid:${row.ebay_listing_id}`;
         deduped.set(key, row); // last row with this key wins
       }
       const dedupedRows = Array.from(deduped.values());
@@ -223,17 +228,9 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
       for (const row of dedupedRows) {
         const updatePayload = { cogs: row.cogs, cogs_source: row.cogs_source, acquired_at: row.acquired_at };
 
-        // 1. Match by listing ID (most reliable)
-        if (row.ebay_listing_id && byListingId.has(row.ebay_listing_id)) {
-          const id = byListingId.get(row.ebay_listing_id)!;
-          if (!updatedIds.has(id)) {
-            updates.push({ id, ...updatePayload });
-            updatedIds.add(id);
-          }
-          continue;
-        }
-
-        // 2. Match by SKU
+        // 1. Match by SKU first — SKU is a plain string that Excel never corrupts.
+        //    Listing IDs from Excel CSV are unreliable (truncated sci notation means
+        //    multiple different IDs map to the same string).
         if (row.ebay_sku && bySku.has(row.ebay_sku)) {
           const id = bySku.get(row.ebay_sku)!;
           if (!updatedIds.has(id)) {
@@ -243,14 +240,23 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
           continue;
         }
 
-        // 3. Truly new row — check we haven't already queued an insert for
-        //    this listing_id or sku (handles duplicates across dedup keys)
-        if (row.ebay_listing_id && insertedListingIds.has(row.ebay_listing_id)) continue;
+        // 2. Match by listing ID only for rows that have no SKU
+        if (row.ebay_listing_id && byListingId.has(row.ebay_listing_id)) {
+          const id = byListingId.get(row.ebay_listing_id)!;
+          if (!updatedIds.has(id)) {
+            updates.push({ id, ...updatePayload });
+            updatedIds.add(id);
+          }
+          continue;
+        }
+
+        // 3. Truly new row — check we haven't already queued an insert for this sku
         if (row.ebay_sku && insertedSkus.has(row.ebay_sku)) continue;
+        if (row.ebay_listing_id && insertedListingIds.has(row.ebay_listing_id)) continue;
 
         inserts.push(row);
-        if (row.ebay_listing_id) insertedListingIds.add(row.ebay_listing_id);
         if (row.ebay_sku) insertedSkus.add(row.ebay_sku);
+        if (row.ebay_listing_id) insertedListingIds.add(row.ebay_listing_id);
       }
 
       console.log("=== CATEGORIZATION RESULTS ===");
