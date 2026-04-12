@@ -1355,10 +1355,13 @@ serve(async (req) => {
       }`,
     );
 
-    const [watchMap, { a7, a30, a90 }, orderCounts] = await Promise.all([
+    const [watchMap, { a7, a30, a90 }, orderCounts, soldItemsRaw] = await Promise.all([
       fetchWatchDataForListings(listingIds, tradingUrl, userToken),
       fetchAllAnalytics(apiBase, ebayHeaders),
       fetchOrderCounts(apiBase, ebayHeaders),
+      // Fetch sold listings in parallel so it doesn't add to sequential execution time.
+      // Running it after the other fetches caused the edge function to time out.
+      includeSold ? fetchSoldListings(apiBase, ebayHeaders) : Promise.resolve([] as any[]),
     ]);
 
     console.log(
@@ -1420,15 +1423,13 @@ serve(async (req) => {
     const enrichedListings = [...enrichedInventoryListings, ...tradingOnly];
 
     // ── Optionally include sold/completed items (for COGS bulk editor) ──
-    // Call fetchSoldListings() directly — it uses a 365-day window, proper
-    // encodeURIComponent URL encoding, and full pagination. This is the correct
-    // data source for sold listings; orderCounts.soldItems was only a 90-day
-    // fallback that was never designed to be the primary source.
+    // soldItemsRaw was fetched in parallel above via fetchSoldListings() —
+    // 365-day window, encodeURIComponent encoding, full pagination, no timeout risk.
     let soldListings: any[] = [];
     if (includeSold) {
-      console.log("ebay-listings: includeSold=true, calling fetchSoldListings for full 365-day sold history");
-      const rawSold = await fetchSoldListings(apiBase, ebayHeaders);
-      console.log(`ebay-listings: fetchSoldListings returned ${rawSold.length} sold items`);
+      console.log(
+        `ebay-listings: includeSold=true, fetchSoldListings returned ${soldItemsRaw.length} sold items (fetched in parallel)`,
+      );
 
       const activeListingIdSet = new Set(
         enrichedListings
@@ -1438,7 +1439,7 @@ serve(async (req) => {
       // Deduplicate sold items: keep only unique listingIds not in active set.
       // For multi-quantity items that sold multiple times, keep the first (most recent).
       const seenSoldIds = new Set<string>();
-      soldListings = rawSold.filter((l: any) => {
+      soldListings = soldItemsRaw.filter((l: any) => {
         if (l.listingId && activeListingIdSet.has(l.listingId)) return false;
         if (l.listingId && seenSoldIds.has(l.listingId)) return false;
         if (l.listingId) seenSoldIds.add(l.listingId);
