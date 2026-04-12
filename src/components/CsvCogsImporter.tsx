@@ -31,10 +31,16 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
   const [importing, setImporting] = useState(false);
   const [showMapping, setShowMapping] = useState(false);
 
-  // Convert scientific notation (e.g. "1.37161E+11") to full integer string.
-  // Excel silently converts long eBay listing IDs to sci notation when saving CSV.
-  function normalizeSciNotation(val: string): string {
+  // Normalize a listing ID value from CSV:
+  // 1. Strip Excel ="..." formula wrapper (from our own export format)
+  // 2. Convert scientific notation (e.g. "1.37161E+11") to full integer string
+  //    (Excel silently converts long numeric IDs to sci notation when saving CSV)
+  function normalizeListingId(val: string): string {
     if (!val) return val;
+    // Strip ="..." wrapper produced by our escapeId export function
+    const formulaMatch = val.trim().match(/^="?(.*?)"?=?$/) || val.trim().match(/^=?"(.*)"$/);
+    if (formulaMatch) return formulaMatch[1].trim();
+    // Convert scientific notation to full integer
     if (/^-?\d+\.?\d*[eE][+-]?\d+$/.test(val.trim())) {
       try {
         return BigInt(Math.round(parseFloat(val))).toString();
@@ -42,7 +48,7 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
         return val;
       }
     }
-    return val;
+    return val.trim();
   }
 
   // Parse CSV text into headers + rows
@@ -100,7 +106,7 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
       // Show preview (first 5 rows only for display)
       const preview = rows.slice(0, 5).map((row) => ({
         sku: autoMapping.skuCol ? row[autoMapping.skuCol] : undefined,
-        listingId: autoMapping.listingIdCol ? normalizeSciNotation(row[autoMapping.listingIdCol]) : undefined,
+        listingId: autoMapping.listingIdCol ? normalizeListingId(row[autoMapping.listingIdCol]) : undefined,
         cogs: autoMapping.cogsCol ? parseFloat(row[autoMapping.cogsCol]) : undefined,
         source: file.name,
       }));
@@ -145,7 +151,7 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
 
       for (const row of rows) {
         const sku = mapping.skuCol ? row[mapping.skuCol]?.trim() : "";
-        const listingId = mapping.listingIdCol ? normalizeSciNotation(row[mapping.listingIdCol]?.trim()) : "";
+        const listingId = mapping.listingIdCol ? normalizeListingId(row[mapping.listingIdCol]?.trim()) : "";
         const cogsStr = mapping.cogsCol ? row[mapping.cogsCol]?.trim() : "";
 
         if (!cogsStr) continue;
