@@ -287,16 +287,33 @@ serve(async (req) => {
         ]);
         const result = results[0];
         
-        // If Inventory API fails with "not currently supported" error, fall back to Trading API
-        if (!result.success && result.error?.includes("not currently supported") && listingId) {
-          console.log(`[ebay-reprice] Inventory API unsupported for ${offerId}, falling back to Trading API with ${listingId}`);
-          const tradingResult = await reviseFixedPriceItem(apiBase, token, listingId, newPrice, currency);
-          return new Response(
-            JSON.stringify(tradingResult),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-          );
+        // If Inventory API fails, try to extract the full error message and check for fallback-worthy errors
+        const errorMsg = result.error || "";
+        const shouldFallback = 
+          !result.success && 
+          (errorMsg.includes("not currently supported") || 
+           errorMsg.includes("Inventory-based listing management")) &&
+          listingId;
+        
+        if (shouldFallback) {
+          console.log(`[ebay-reprice] Inventory API error for ${offerId}: "${errorMsg}". Attempting fallback to Trading API with listing ${listingId}`);
+          try {
+            const tradingResult = await reviseFixedPriceItem(apiBase, token, listingId, newPrice, currency);
+            console.log(`[ebay-reprice] Trading API fallback result:`, tradingResult.success ? "SUCCESS" : `FAILED: ${tradingResult.error}`);
+            return new Response(
+              JSON.stringify(tradingResult),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          } catch (fallbackErr) {
+            console.error(`[ebay-reprice] Trading API fallback exception:`, fallbackErr);
+            return new Response(
+              JSON.stringify({ success: false, error: `Trading API fallback failed: ${fallbackErr}` }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
         }
         
+        console.log(`[ebay-reprice] Inventory API result for ${offerId}:`, result.success ? "SUCCESS" : `FAILED: ${result.error}`);
         return new Response(
           JSON.stringify({ success: result.success, error: result.error }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
