@@ -88,12 +88,16 @@ function PricingTab({
   onApply,
   onDismiss,
   applying,
+  customPrice,
+  onPriceChange,
 }: {
   result: OptimizeListingResult;
   listing: NonNullable<Props["listing"]>;
   onApply: () => void;
   onDismiss: () => void;
   applying: boolean;
+  customPrice: string;
+  onPriceChange: (val: string) => void;
 }) {
   const { priceSuggestion, market } = result;
   const dirIcon =
@@ -114,10 +118,25 @@ function PricingTab({
           <p className="text-2xl font-bold">${listing.currentPrice.toFixed(2)}</p>
         </div>
         <div className={`rounded-lg border p-4 text-center ${priceSuggestion.suggestedPrice ? "border-primary bg-primary/5" : "bg-muted/30"}`}>
-          <p className="text-xs text-muted-foreground mb-1">Suggested Price</p>
-          <p className={`text-2xl font-bold ${priceSuggestion.suggestedPrice ? "text-primary" : "text-muted-foreground"}`}>
-            {priceSuggestion.suggestedPrice ? `$${priceSuggestion.suggestedPrice.toFixed(2)}` : "—"}
-          </p>
+          <p className="text-xs text-muted-foreground mb-1">New Price</p>
+          <div className="flex items-center justify-center gap-1">
+            <span className="text-2xl font-bold text-primary">$</span>
+            <input
+              type="number"
+              step="0.01"
+              value={customPrice}
+              onChange={(e) => onPriceChange(e.target.value)}
+              className="w-24 bg-transparent border-b border-primary/30 text-2xl font-bold text-primary focus:outline-none focus:border-primary text-center"
+            />
+          </div>
+          {priceSuggestion.suggestedPrice && Math.abs(parseFloat(customPrice) - priceSuggestion.suggestedPrice) > 0.01 && (
+            <button 
+              onClick={() => onPriceChange(priceSuggestion.suggestedPrice!.toFixed(2))}
+              className="text-[10px] text-primary hover:underline mt-1 block w-full"
+            >
+              Reset to suggested: ${priceSuggestion.suggestedPrice.toFixed(2)}
+            </button>
+          )}
         </div>
       </div>
 
@@ -179,13 +198,13 @@ function PricingTab({
       </div>
 
       {/* Actions */}
-      {priceSuggestion.suggestedPrice && priceSuggestion.direction !== "keep" && (
+      {parseFloat(customPrice) > 0 && (
         <div className="flex gap-2 pt-1">
           <Button onClick={onApply} disabled={applying} className="flex-1">
             {applying ? (
               <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Applying…</>
             ) : (
-              <><CheckCircle2 className="w-4 h-4 mr-2" /> Apply ${priceSuggestion.suggestedPrice.toFixed(2)}</>
+              <><CheckCircle2 className="w-4 h-4 mr-2" /> Apply ${parseFloat(customPrice).toFixed(2)}</>
             )}
           </Button>
           <Button variant="outline" onClick={onDismiss} disabled={applying}>
@@ -193,7 +212,7 @@ function PricingTab({
           </Button>
         </div>
       )}
-      {priceSuggestion.direction === "keep" && (
+      {priceSuggestion.direction === "keep" && parseFloat(customPrice) === listing.currentPrice && (
         <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 rounded-lg p-3">
           <CheckCircle2 className="w-4 h-4" />
           <span>Price is well-positioned. No change needed.</span>
@@ -364,6 +383,7 @@ export default function OptimizationModal({ open, onClose, listing, onPriceAppli
   const { analyze, applying, analyzing, applyPriceChange, dismissSuggestion } = useOptimizeListing();
   const [result, setResult] = useState<OptimizeListingResult | null>(null);
   const [applied, setApplied] = useState(false);
+  const [customPrice, setCustomPrice] = useState<string>("");
 
   useEffect(() => {
     if (open && listing && !result) {
@@ -373,33 +393,39 @@ export default function OptimizationModal({ open, onClose, listing, onPriceAppli
         currentPrice: listing.currentPrice,
         categoryId: listing.categoryId,
         listingDate: listing.listingDate,
-      }).then(setResult);
+      }).then((res) => {
+        setResult(res);
+        if (res?.priceSuggestion?.suggestedPrice) {
+          setCustomPrice(res.priceSuggestion.suggestedPrice.toFixed(2));
+        }
+      });
     }
     if (!open) {
       setResult(null);
       setApplied(false);
+      setCustomPrice("");
     }
   }, [open, listing]);
 
   const handleApplyPrice = async () => {
     if (!result || !listing || !user) return;
-    const { suggestedPrice, reasoning } = result.priceSuggestion;
-    if (!suggestedPrice) return;
+    const finalPrice = parseFloat(customPrice);
+    if (isNaN(finalPrice) || finalPrice <= 0) return;
 
     const success = await applyPriceChange({
       offerId: listing.offerId,
       sku: listing.sku,
       listingId: listing.listingId,
-      newPrice: suggestedPrice,
+      newPrice: finalPrice,
       listingTitle: listing.title,
       oldPrice: listing.currentPrice,
-      reasoning,
+      reasoning: result.priceSuggestion.reasoning,
       userId: user.id,
     });
 
     if (success) {
       setApplied(true);
-      onPriceApplied?.(listing.listingId, suggestedPrice);
+      onPriceApplied?.(listing.listingId, finalPrice);
     }
   };
 
@@ -493,6 +519,8 @@ export default function OptimizationModal({ open, onClose, listing, onPriceAppli
                       onApply={handleApplyPrice}
                       onDismiss={handleDismissPrice}
                       applying={applying}
+                      customPrice={customPrice}
+                      onPriceChange={setCustomPrice}
                     />
                   </TabsContent>
 
