@@ -579,16 +579,18 @@ export default function OptimizationModal({ open, onClose, listing, onPriceAppli
                 )}
 
                 <Tabs defaultValue="pricing">
-                  <TabsList className="grid grid-cols-4 w-full">
+                  <TabsList className={`grid w-full ${result.descriptionSuggestion.issuesFound.length > 0 || result.descriptionSuggestion.suggestedDescription ? "grid-cols-4" : "grid-cols-3"}`}>
                     <TabsTrigger value="pricing" className="text-xs">
                       <Tag className="w-3.5 h-3.5 mr-1" /> Pricing
                     </TabsTrigger>
                     <TabsTrigger value="title" className="text-xs">
                       <Type className="w-3.5 h-3.5 mr-1" /> Title
                     </TabsTrigger>
-                    <TabsTrigger value="description" className="text-xs">
-                      <AlignLeft className="w-3.5 h-3.5 mr-1" /> Desc.
-                    </TabsTrigger>
+                    {(result.descriptionSuggestion.issuesFound.length > 0 || result.descriptionSuggestion.suggestedDescription) && (
+                      <TabsTrigger value="description" className="text-xs">
+                        <AlignLeft className="w-3.5 h-3.5 mr-1" /> Desc.
+                      </TabsTrigger>
+                    )}
                     <TabsTrigger value="market" className="text-xs">
                       <BarChart2 className="w-3.5 h-3.5 mr-1" /> Market
                     </TabsTrigger>
@@ -610,9 +612,11 @@ export default function OptimizationModal({ open, onClose, listing, onPriceAppli
                     <TitleTab result={result} listing={listing} />
                   </TabsContent>
 
-                  <TabsContent value="description" className="mt-4">
-                    <DescriptionTab result={result} listing={listing} />
-                  </TabsContent>
+                  {(result.descriptionSuggestion.issuesFound.length > 0 || result.descriptionSuggestion.suggestedDescription) && (
+                    <TabsContent value="description" className="mt-4">
+                      <DescriptionTab result={result} listing={listing} />
+                    </TabsContent>
+                  )}
 
                   <TabsContent value="market" className="mt-4">
                     <MarketTab result={result} />
