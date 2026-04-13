@@ -21,7 +21,7 @@ import {
   Flame, TrendingDown, Minus, Package,
   Hash, Tag, Clock, LayoutDashboard,
   CheckSquare, Square, MousePointerClick,
-  TrendingUp, Receipt, Truck, RotateCcw,
+  TrendingUp, Receipt, Truck, RotateCcw, Zap,
   Store, ShieldAlert, BadgeCheck, CircleDollarSign,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
