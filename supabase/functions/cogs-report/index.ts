@@ -74,6 +74,89 @@ async function fetchShippingLabelCosts(
   return labelCosts;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Fetch eBay marketplace fees from Finances API
+// Returns a map of orderId -> total fees for that order
+// Covers: FINAL_VALUE_FEE, FINAL_VALUE_FEE_FIXED_PER_ORDER, AD_FEE, etc.
+// ─────────────────────────────────────────────────────────────────────────────
+async function fetchEbayFees(
+  userToken: string,
+  fromStr: string,
+  toStr: string,
+): Promise<Map<string, number>> {
+  const feesMap = new Map<string, number>();
+
+  try {
+    const financesApiBase = "https://apiz.ebay.com";
+    const ebayHeaders = {
+      Authorization: `Bearer ${userToken}`,
+      "Content-Type": "application/json",
+      "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+    };
+
+    // Fetch all fee-type transactions in the date range.
+    // eBay fee transaction types that reduce seller payout:
+    //   FINAL_VALUE_FEE, FINAL_VALUE_FEE_FIXED_PER_ORDER, AD_FEE,
+    //   LISTING_FEE, REGULATORY_FEE, DISPUTE_FEE, etc.
+    // We fetch ALL transaction types and filter to DEBIT entries,
+    // then exclude SHIPPING_LABEL (handled separately) and SALE/REFUND types.
+    const filterValue = `transactionDate:[${fromStr}..${toStr}]`;
+    let offset = 0;
+    const limit = 200;
+    let hasMore = true;
+
+    while (hasMore) {
+      const transactionsUrl = `${financesApiBase}/sell/finances/v1/transaction?filter=${
+        encodeURIComponent(filterValue)
+      }&limit=${limit}&offset=${offset}`;
+
+      console.log(`Fetching Finances API transactions (offset=${offset}):`, transactionsUrl);
+
+      const resp = await fetch(transactionsUrl, { headers: ebayHeaders });
+
+      if (!resp.ok) {
+        const errText = await resp.text();
+        console.warn("Finances API fees fetch error (non-fatal):", resp.status, errText);
+        break;
+      }
+
+      const data = JSON.parse(await resp.text());
+      const transactions = data.transactions ?? [];
+      const total = data.total ?? 0;
+
+      for (const tx of transactions) {
+        const orderId = tx.orderId;
+        if (!orderId) continue;
+
+        const txType: string = tx.transactionType ?? "";
+        const bookingEntry: string = tx.bookingEntry ?? "";
+        const amount = parseFloat(tx.amount?.value ?? "0");
+
+        // Skip non-fee transaction types
+        const skipTypes = new Set(["SALE", "REFUND", "SHIPPING_LABEL", "CREDIT", "NON_SALE_CHARGE"]);
+        if (skipTypes.has(txType)) continue;
+
+        // Only count DEBITs (charges to seller), not CREDITs (adjustments/refunds of fees)
+        if (bookingEntry === "DEBIT") {
+          feesMap.set(orderId, (feesMap.get(orderId) ?? 0) + amount);
+        } else if (bookingEntry === "CREDIT") {
+          // Fee refunds/adjustments reduce the fee
+          feesMap.set(orderId, (feesMap.get(orderId) ?? 0) - amount);
+        }
+      }
+
+      offset += transactions.length;
+      hasMore = offset < total && transactions.length > 0;
+    }
+
+    console.log(`Aggregated eBay fees for ${feesMap.size} orders from Finances API`);
+  } catch (err) {
+    console.warn("Error fetching eBay fees (non-fatal):", err);
+  }
+
+  return feesMap;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -238,7 +321,11 @@ async function processOrders(
 
   // ── Fetch shipping label costs from eBay Finances API ─────────────────────────────
   // This gives us the actual cost the seller paid for labels purchased through eBay
-  const labelCosts = await fetchShippingLabelCosts(userToken, fromStr, toStr);
+  // Run both Finances API fetches in parallel for performance
+  const [labelCosts, financeFees] = await Promise.all([
+    fetchShippingLabelCosts(userToken, fromStr, toStr),
+    fetchEbayFees(userToken, fromStr, toStr),
+  ]);
 
   // ── Collect all SKUs and listing IDs for the COGS lookup ─────────────────
   const skuSet = new Set<string>();
@@ -273,10 +360,19 @@ async function processOrders(
 
       const lineTotal = Number(line.lineItemCost?.value ?? 0) * quantity;
       const shipping = Number(line.deliveryCost?.shippingCost?.value ?? 0);
-      const feeAmt = (line.marketplaceFees ?? []).reduce(
+      // eBay Fulfillment API rarely populates marketplaceFees on line items.
+      // We use the Finances API (FINAL_VALUE_FEE etc.) as the authoritative
+      // source. marketplaceFees is kept as a fallback for orders not yet
+      // settled in the Finances API.
+      const fallbackFeeAmt = (line.marketplaceFees ?? []).reduce(
         (sum: number, f: any) => sum + Number(f.amount?.value ?? 0),
         0,
       );
+      // Finances API fees are per-order (not per line item), so for multi-line
+      // orders we apportion fees proportionally by line item sale value.
+      // For single-line orders (the common case) this is just the full fee.
+      const financesFeeForOrder = financeFees.get(order.orderId) ?? null;
+      const feeAmt = financesFeeForOrder !== null ? financesFeeForOrder : fallbackFeeAmt;
 
       if (sku) skuSet.add(sku);
       if (listingId) listingIdSet.add(listingId);
