@@ -317,20 +317,30 @@ serve(async (req) => {
           { offerId, sku: sku || offerId, newPrice, currency },
         ]);
         const result = results[0];
-        
+
         // If Inventory API fails, try to extract the full error message and check for fallback-worthy errors
         const errorMsg = result.error || "";
-        const shouldFallback = 
-          !result.success && 
-          (errorMsg.includes("not currently supported") || 
-           errorMsg.includes("Inventory-based listing management")) &&
+        const shouldFallback = !result.success &&
+          (errorMsg.includes("not currently supported") ||
+            errorMsg.includes("Inventory-based listing management")) &&
           listingId;
         
         if (shouldFallback) {
-          console.log(`[ebay-reprice] Inventory API error for ${offerId}: "${errorMsg}". Attempting fallback to Trading API with listing ${listingId}`);
+          console.log(
+            `[ebay-reprice] Inventory API error for ${offerId}: "${errorMsg}". Attempting fallback to Trading API with listing ${listingId}`,
+          );
           try {
-            const tradingResult = await reviseFixedPriceItem(apiBase, token, listingId, newPrice, currency);
-            console.log(`[ebay-reprice] Trading API fallback result:`, tradingResult.success ? "SUCCESS" : `FAILED: ${tradingResult.error}`);
+            const tradingResult = await reviseFixedPriceItem(
+              apiBase,
+              token,
+              listingId,
+              newPrice,
+              currency,
+            );
+            console.log(
+              `[ebay-reprice] Trading API fallback result:`,
+              tradingResult.success ? "SUCCESS" : `FAILED: ${tradingResult.error}`,
+            );
             return new Response(
               JSON.stringify(tradingResult),
               { headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -343,8 +353,11 @@ serve(async (req) => {
             );
           }
         }
-        
-        console.log(`[ebay-reprice] Inventory API result for ${offerId}:`, result.success ? "SUCCESS" : `FAILED: ${result.error}`);
+
+        console.log(
+          `[ebay-reprice] Inventory API result for ${offerId}:`,
+          result.success ? "SUCCESS" : `FAILED: ${result.error}`,
+        );
         return new Response(
           JSON.stringify({ success: result.success, error: result.error }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -363,15 +376,13 @@ serve(async (req) => {
 
         // eBay may reject this if the listing is actually Inventory-managed.
         // In that case, look up the offerId by SKU and retry via Inventory API.
-        const isInventoryItem =
-          !tradingResult.success &&
+        const isInventoryItem = !tradingResult.success &&
           (tradingResult.error?.includes("not allowed for inventory") ||
             tradingResult.error?.includes("Inventory-based listing"));
 
         if (isInventoryItem && sku) {
           console.log(
-            `[ebay-reprice] Trading API rejected inventory item ${listingId}. ` +
-              `Looking up offerId by sku=${sku}`,
+            `[ebay-reprice] Trading API rejected inventory item ${listingId}. Looking up offerId by sku=${sku}`,
           );
           const resolvedOfferId = await lookupOfferIdBySku(apiBase, token, sku);
           if (resolvedOfferId) {
