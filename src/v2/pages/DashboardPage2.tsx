@@ -36,6 +36,7 @@ import ProfitBadge from "@/components/ProfitBadge";
 import { PricingInsightsTable } from "@/components/PricingInsightsTable";
 import { RepriceManagerPanel } from "@/components/RepriceManagerPanel";
 import ListingDetailModal, { ListingDetailData } from "@/v2/components/ListingDetailModal";
+import OptimizationModal from "@/components/OptimizationModal";
 
 // ─── Constants ────────────────────────────────────────────────────────
 
@@ -370,6 +371,7 @@ export default function DashboardPage2() {
 
   // Detail modal
   const [detailListing, setDetailListing] = useState<ListingDetailData | null>(null);
+  const [optimizeListing, setOptimizeListing] = useState<any | null>(null);
 
   // Bulk select
   const [selectedIds,   setSelectedIds]   = useState<Set<string>>(new Set());
@@ -449,8 +451,8 @@ export default function DashboardPage2() {
             const skus       = soldOrders.map(o => o.sku).filter(Boolean) as string[];
             const listingIds = soldOrders.map(o => o.listingId).filter(Boolean) as string[];
             const orParts: string[] = [];
-            if (skus.length > 0)       orParts.push(`ebay_sku.in.(${skus.join(",")})`);
-            if (listingIds.length > 0) orParts.push(`ebay_listing_id.in.(${listingIds.join(",")})`);
+            if (skus.length > 0)       orParts.push(`ebay_sku.in.(${skus.map(s => `"${s}"`).join(",")})`);
+            if (listingIds.length > 0) orParts.push(`ebay_listing_id.in.(${listingIds.map(id => `"${id}"`).join(",")})`);
             const { data: cogsRows } = await supabase
               .from("listing_cogs")
               .select("ebay_sku, ebay_listing_id, cogs")
@@ -1167,6 +1169,22 @@ export default function DashboardPage2() {
                                 <span style={{ fontSize: "1rem", fontWeight: 800, color: BRAND }}>
                                   ${listing.price.toFixed(2)}
                                 </span>
+                                <button
+                                  onClick={() => setOptimizeListing({
+                                    listingId: listing.listingId,
+                                    offerId: listing.offerId,
+                                    sku: listing.sku,
+                                    title: listing.title,
+                                    currentPrice: listing.price,
+                                    imageUrl: listing.imageUrl,
+                                    categoryId: listing.categoryId,
+                                    listingDate: listing.listingDate,
+                                    ebayUrl: listing.ebayUrl,
+                                  })}
+                                  style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontSize: "0.8125rem", color: BRAND, background: "rgba(0,118,182,0.08)", border: "none", padding: "0.2rem 0.6rem", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}
+                                >
+                                  <Zap size={12} fill={BRAND} /> Optimize
+                                </button>
                                 {listing.ebayUrl && (
                                   <a href={listing.ebayUrl} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: "0.2rem", fontSize: "0.8125rem", color: BRAND, textDecoration: "none" }}>
                                     <ExternalLink size={12} /> View on eBay
@@ -1260,6 +1278,17 @@ export default function DashboardPage2() {
           onClose={() => setDetailListing(null)}
         />
       )}
+
+      {/* AI Optimization Modal */}
+      <OptimizationModal
+        open={!!optimizeListing}
+        onClose={() => setOptimizeListing(null)}
+        listing={optimizeListing}
+        onPriceApplied={(listingId, newPrice) => {
+          setListings(prev => prev.map(l => l.listingId === listingId ? { ...l, price: newPrice } : l));
+          setOptimizeListing(null);
+        }}
+      />
     </AppShell>
   );
 }
