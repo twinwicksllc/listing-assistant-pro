@@ -130,7 +130,7 @@ function PricingTab({
       </div>
 
       {/* Custom price input */}
-      {priceSuggestion.suggestedPrice && priceSuggestion.direction !== "keep" && (
+      {priceSuggestion.suggestedPrice && (
         <div>
           <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-2">
             Override with Custom Price (Optional)
@@ -223,7 +223,7 @@ function PricingTab({
       </div>
 
       {/* Actions */}
-      {priceSuggestion.suggestedPrice && priceSuggestion.direction !== "keep" && (
+      {priceSuggestion.suggestedPrice && (
         <div className="flex gap-2 pt-1">
           <Button onClick={onApply} disabled={applying} className="flex-1">
             {applying ? (
@@ -579,14 +579,14 @@ export default function OptimizationModal({ open, onClose, listing, onPriceAppli
                 )}
 
                 <Tabs defaultValue="pricing">
-                  <TabsList className={`grid w-full ${result.descriptionSuggestion.issuesFound.length > 0 || result.descriptionSuggestion.suggestedDescription ? "grid-cols-4" : "grid-cols-3"}`}>
+                  <TabsList className={`grid w-full ${result.descriptionSuggestion.suggestedDescription || result.descriptionSuggestion.issuesFound.length > 0 ? "grid-cols-4" : "grid-cols-3"}`}>
                     <TabsTrigger value="pricing" className="text-xs">
                       <Tag className="w-3.5 h-3.5 mr-1" /> Pricing
                     </TabsTrigger>
                     <TabsTrigger value="title" className="text-xs">
                       <Type className="w-3.5 h-3.5 mr-1" /> Title
                     </TabsTrigger>
-                    {(result.descriptionSuggestion.issuesFound.length > 0 || result.descriptionSuggestion.suggestedDescription) && (
+                    {(result.descriptionSuggestion.suggestedDescription || result.descriptionSuggestion.issuesFound.length > 0) && (
                       <TabsTrigger value="description" className="text-xs">
                         <AlignLeft className="w-3.5 h-3.5 mr-1" /> Desc.
                       </TabsTrigger>
@@ -612,7 +612,7 @@ export default function OptimizationModal({ open, onClose, listing, onPriceAppli
                     <TitleTab result={result} listing={listing} />
                   </TabsContent>
 
-                  {(result.descriptionSuggestion.issuesFound.length > 0 || result.descriptionSuggestion.suggestedDescription) && (
+                  {(result.descriptionSuggestion.suggestedDescription || result.descriptionSuggestion.issuesFound.length > 0) && (
                     <TabsContent value="description" className="mt-4">
                       <DescriptionTab result={result} listing={listing} />
                     </TabsContent>
