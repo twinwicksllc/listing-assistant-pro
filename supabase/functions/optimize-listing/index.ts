@@ -376,7 +376,8 @@ async function buildDescriptionSuggestion(
 
   // Core improvement logic via LLM — only called if we have issues to fix
   let suggestedDescription: string | null = null;
-  const reasoning = "AI has restructured your description with better visual hierarchy, bullet points, and clear sections.";
+  const reasoning =
+    "AI has restructured your description with better visual hierarchy, bullet points, and clear sections.";
 
   try {
     const geminiKey = Deno.env.get("GEMINI_API_KEY");
