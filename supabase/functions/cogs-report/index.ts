@@ -401,7 +401,7 @@ async function processOrders(
   // ── Fetch COGS records from Supabase ──────────────────────────────────────
   // Use separate maps for listing ID and SKU so matching is unambiguous
   const cogsByListingId: Record<string, number> = {};
-  const cogsBySku:       Record<string, number> = {};
+  const cogsBySku: Record<string, number> = {};
 
   if (skuSet.size > 0 || listingIdSet.size > 0) {
     const skus = Array.from(skuSet);
@@ -426,10 +426,12 @@ async function processOrders(
     for (const row of cogsRows ?? []) {
       const cogsVal = Number(row.cogs);
       if (row.ebay_listing_id) cogsByListingId[row.ebay_listing_id] = cogsVal;
-      if (row.ebay_sku)        cogsBySku[row.ebay_sku]              = cogsVal;
+      if (row.ebay_sku) cogsBySku[row.ebay_sku] = cogsVal;
     }
 
-    console.log(`COGS lookup: ${Object.keys(cogsByListingId).length} by listing ID, ${Object.keys(cogsBySku).length} by SKU`);
+    console.log(
+      `COGS lookup: ${Object.keys(cogsByListingId).length} by listing ID, ${Object.keys(cogsBySku).length} by SKU`,
+    );
   }
 
   // ── Build per-item result rows ─────────────────────────────────────────────
