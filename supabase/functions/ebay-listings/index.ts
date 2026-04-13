@@ -782,12 +782,18 @@ async function fetchOrderCounts(
 }
 
 // ─── Fetch WatchCount + QuestionCount + Description via GetItem ────────────────────────────
+type WatchData = {
+  watchCount: number;
+  questionCount: number;
+  description?: string;
+};
+
 async function fetchWatchDataForListings(
   listingIds: string[],
   tradingUrl: string,
   userToken: string,
-): Promise<Record<string, { watchCount: number; questionCount: number; description?: string }>> {
-  const result: Record<string, { watchCount: number; questionCount: number; description?: string }> = {};
+): Promise<Record<string, WatchData>> {
+  const result: Record<string, WatchData> = {};
   if (listingIds.length === 0) return result;
 
   const promises = listingIds.map(async (itemId) => {
