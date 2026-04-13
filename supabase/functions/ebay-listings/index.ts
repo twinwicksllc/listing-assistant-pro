@@ -781,13 +781,13 @@ async function fetchOrderCounts(
   return { ...counts, financial, soldItems };
 }
 
-// ─── Fetch WatchCount + QuestionCount via GetItem ────────────────────────────
+// ─── Fetch WatchCount + QuestionCount + Description via GetItem ────────────────────────────
 async function fetchWatchDataForListings(
   listingIds: string[],
   tradingUrl: string,
   userToken: string,
-): Promise<Record<string, { watchCount: number; questionCount: number }>> {
-  const result: Record<string, { watchCount: number; questionCount: number }> = {};
+): Promise<Record<string, { watchCount: number; questionCount: number; description?: string }>> {
+  const result: Record<string, { watchCount: number; questionCount: number; description?: string }> = {};
   if (listingIds.length === 0) return result;
 
   const promises = listingIds.map(async (itemId) => {
@@ -795,7 +795,7 @@ async function fetchWatchDataForListings(
 <GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <ItemID>${itemId}</ItemID>
   <IncludeWatchCount>true</IncludeWatchCount>
-  <OutputSelector>ItemID,WatchCount,QuestionCount</OutputSelector>
+  <OutputSelector>ItemID,WatchCount,QuestionCount,Description</OutputSelector>
 </GetItemRequest>`;
     try {
       const resp = await fetch(tradingUrl, {
@@ -816,9 +816,11 @@ async function fetchWatchDataForListings(
           ?.trim() || "";
       const watchCount = parseInt(getTag("WatchCount") || "0", 10);
       const questionCount = parseInt(getTag("QuestionCount") || "0", 10);
+      const description = getTag("Description");
       result[itemId] = {
         watchCount: isNaN(watchCount) ? 0 : watchCount,
         questionCount: isNaN(questionCount) ? 0 : questionCount,
+        description: description ? description.trim() : undefined,
       };
     } catch (e) {
       console.warn(`GetItem failed for ${itemId}:`, e);
@@ -1444,6 +1446,7 @@ serve(async (req) => {
         ...mergeAnalytics(l.listingId, l.sku, a7, a30, a90),
         watchCount: w?.watchCount ?? 0,
         questionCount: w?.questionCount ?? 0,
+        description: w?.description,
         ebayUrl: buildEbayUrl(l.listingId),
       };
     });

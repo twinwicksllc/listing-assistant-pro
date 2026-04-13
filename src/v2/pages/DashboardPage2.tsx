@@ -63,6 +63,7 @@ interface EbayListing {
   offerId: string | null;
   sku: string;
   title: string;
+  description?: string;
   imageUrl: string;
   price: number;
   currency: string;
