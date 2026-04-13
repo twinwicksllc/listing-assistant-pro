@@ -75,6 +75,37 @@ async function reviseFixedPriceItem(
   }
 }
 
+// ─── Inventory API: look up offerId by SKU ──────────────────────────────────────
+async function lookupOfferIdBySku(
+  apiBase: string,
+  userToken: string,
+  sku: string,
+): Promise<string | null> {
+  try {
+    const resp = await fetch(
+      `${apiBase}/sell/inventory/v1/offer?sku=${encodeURIComponent(sku)}&limit=1`,
+      {
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+          "Content-Type": "application/json",
+          "Accept-Language": "en-US",
+        },
+      },
+    );
+    if (!resp.ok) {
+      console.warn(`lookupOfferIdBySku: HTTP ${resp.status} for sku=${sku}`);
+      return null;
+    }
+    const data = await resp.json();
+    const offerId = data?.offers?.[0]?.offerId ?? null;
+    console.log(`lookupOfferIdBySku: sku=${sku} → offerId=${offerId}`);
+    return offerId;
+  } catch (e) {
+    console.warn(`lookupOfferIdBySku exception: ${e}`);
+    return null;
+  }
+}
+
 // ─── Inventory API: bulkUpdatePriceQuantity ────────────────────────────────────
 // Groups offers by SKU as required by the API.
 // Each request item: { sku, offers: [{ offerId, price }] }
@@ -322,15 +353,54 @@ serve(async (req) => {
 
       // Legacy Trading API listing (no offerId, has listingId)
       if (listingId) {
-        const result = await reviseFixedPriceItem(
+        const tradingResult = await reviseFixedPriceItem(
           apiBase,
           token,
           listingId,
           newPrice,
           currency,
         );
+
+        // eBay may reject this if the listing is actually Inventory-managed.
+        // In that case, look up the offerId by SKU and retry via Inventory API.
+        const isInventoryItem =
+          !tradingResult.success &&
+          (tradingResult.error?.includes("not allowed for inventory") ||
+            tradingResult.error?.includes("Inventory-based listing"));
+
+        if (isInventoryItem && sku) {
+          console.log(
+            `[ebay-reprice] Trading API rejected inventory item ${listingId}. ` +
+              `Looking up offerId by sku=${sku}`,
+          );
+          const resolvedOfferId = await lookupOfferIdBySku(apiBase, token, sku);
+          if (resolvedOfferId) {
+            const inventoryResults = await bulkUpdateInventoryPrices(
+              apiBase,
+              token,
+              [{ offerId: resolvedOfferId, sku, newPrice, currency }],
+            );
+            const inventoryResult = inventoryResults[0];
+            console.log(
+              `[ebay-reprice] Inventory API retry for offerId=${resolvedOfferId}: ` +
+                (inventoryResult.success ? "SUCCESS" : `FAILED: ${inventoryResult.error}`),
+            );
+            return new Response(
+              JSON.stringify({
+                success: inventoryResult.success,
+                error: inventoryResult.error,
+              }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
+          console.warn(
+            `[ebay-reprice] Could not resolve offerId for sku=${sku}; ` +
+              `returning original Trading API error`,
+          );
+        }
+
         return new Response(
-          JSON.stringify(result),
+          JSON.stringify(tradingResult),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
