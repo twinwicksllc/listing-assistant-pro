@@ -1176,6 +1176,7 @@ export default function DashboardPage2() {
                                     sku: listing.sku,
                                     title: listing.title,
                                     currentPrice: listing.price,
+                                    description: listing.description,
                                     imageUrl: listing.imageUrl,
                                     categoryId: listing.categoryId,
                                     listingDate: listing.listingDate,

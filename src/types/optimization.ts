@@ -49,12 +49,20 @@ export interface TitleSuggestion {
   confidence: "low" | "medium" | "high";
 }
 
+export interface DescriptionSuggestion {
+  suggestedDescription: string | null;
+  reasoning: string;
+  issuesFound: string[];
+  confidence: "low" | "medium" | "high";
+}
+
 export interface OptimizeListingResult {
   listingId: string;
   opportunityScore: number;
   flags: OptimizationFlag[];
   priceSuggestion: PriceSuggestion;
   titleSuggestion: TitleSuggestion;
+  descriptionSuggestion: DescriptionSuggestion;
   market: {
     soldCount: number;
     activeCount: number;
