@@ -237,7 +237,7 @@ For multi-item lots and bullion bars/rounds, structure your description for visu
 - **Additional details**: Notable features, mix of mints (diversity), investment vs collectible appeal, proper call-to-action
 - Use **bold** sparingly for key selling points
 - Use line breaks between sections for readability — NO solid blocks of text
-- End with a compelling closing (e.g., "Great way to diversify your stack!" or "Perfect for serious collectors!")`
+- End with a compelling closing (e.g., "Great way to diversify your stack!" or "Perfect for serious collectors!")`;
 }
 
 // ─── trading_cards ────────────────────────────────────────────────────────────
