@@ -303,7 +303,9 @@ async function processOrders(
   }
 
   // ── Fetch COGS records from Supabase ──────────────────────────────────────
-  const cogsMap: Record<string, number> = {};
+  // Use separate maps for listing ID and SKU so matching is unambiguous
+  const cogsByListingId: Record<string, number> = {};
+  const cogsBySku:       Record<string, number> = {};
 
   if (skuSet.size > 0 || listingIdSet.size > 0) {
     const skus = Array.from(skuSet);
@@ -326,11 +328,12 @@ async function processOrders(
     }
 
     for (const row of cogsRows ?? []) {
-      if (row.ebay_sku) cogsMap[row.ebay_sku] = Number(row.cogs);
-      if (row.ebay_listing_id) {
-        cogsMap[row.ebay_listing_id] = Number(row.cogs);
-      }
+      const cogsVal = Number(row.cogs);
+      if (row.ebay_listing_id) cogsByListingId[row.ebay_listing_id] = cogsVal;
+      if (row.ebay_sku)        cogsBySku[row.ebay_sku]              = cogsVal;
     }
+
+    console.log(`COGS lookup: ${Object.keys(cogsByListingId).length} by listing ID, ${Object.keys(cogsBySku).length} by SKU`);
   }
 
   // ── Build per-item result rows ─────────────────────────────────────────────
@@ -362,8 +365,9 @@ async function processOrders(
   const items: ResultItem[] = flatOrders.map((fo) => {
     // unitCogs: the cost of a single unit (as stored in listing_cogs)
     // Prefer listing ID over SKU — it's the most stable eBay identifier.
-    const unitCogs = (fo.ebayListingId ? cogsMap[fo.ebayListingId] : null) ??
-      (fo.ebaySku ? cogsMap[fo.ebaySku] : null) ??
+    // Match by listing ID first (most precise), then fall back to SKU
+    const unitCogs = (fo.ebayListingId ? cogsByListingId[fo.ebayListingId] ?? null : null) ??
+      (fo.ebaySku ? cogsBySku[fo.ebaySku] ?? null : null) ??
       null;
 
     // totalLineCogs: multiply per-unit COGS by quantity sold

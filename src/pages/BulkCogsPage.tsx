@@ -163,30 +163,64 @@ export default function BulkCogsPage() {
 
     try {
       if (row.cogs == null) {
-        // Delete the COGS record if user cleared the field
-        await supabase
-          .from("listing_cogs")
-          .delete()
-          .eq("user_id", user.id)
-          .or(`ebay_listing_id.eq.${row.listingId},ebay_sku.eq.${row.sku}`);
+        // Delete the COGS record if user cleared the field.
+        // Build OR filter only for non-null identifiers to avoid matching NULLs.
+        const orParts: string[] = [];
+        if (row.listingId) orParts.push(`ebay_listing_id.eq.${row.listingId}`);
+        if (row.sku)       orParts.push(`ebay_sku.eq.${row.sku}`);
+        if (orParts.length > 0) {
+          await supabase
+            .from("listing_cogs")
+            .delete()
+            .eq("user_id", user.id)
+            .or(orParts.join(","));
+        }
       } else {
-        const payload = {
-          user_id:          user.id,
-          ebay_listing_id:  row.listingId || null,
-          ebay_sku:         row.sku       || null,
-          title:            row.title,
-          cogs:             row.cogs,
-          cogs_source:      "manual",
-          updated_at:       new Date().toISOString(),
-        };
-        // Prefer listing ID as primary key (most stable eBay identifier).
-        // Fall back to SKU only when listing ID is unavailable.
+        // Use select-then-update-or-insert to avoid partial unique index issues.
+        // ON CONFLICT doesn't work with partial indexes (WHERE ... IS NOT NULL).
+        let existingId: string | null = null;
+
         if (row.listingId) {
-          await supabase.from("listing_cogs").upsert(payload, { onConflict: "user_id,ebay_listing_id" });
-        } else if (row.sku) {
-          await supabase.from("listing_cogs").upsert(payload, { onConflict: "user_id,ebay_sku" });
+          const { data: byListingId } = await supabase
+            .from("listing_cogs")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("ebay_listing_id", row.listingId)
+            .maybeSingle();
+          if (byListingId) existingId = byListingId.id;
+        }
+
+        if (!existingId && row.sku) {
+          const { data: bySku } = await supabase
+            .from("listing_cogs")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("ebay_sku", row.sku)
+            .maybeSingle();
+          if (bySku) existingId = bySku.id;
+        }
+
+        const payload = {
+          user_id:         user.id,
+          ebay_listing_id: row.listingId || null,
+          ebay_sku:        row.sku       || null,
+          title:           row.title,
+          cogs:            row.cogs,
+          cogs_source:     "manual",
+          updated_at:      new Date().toISOString(),
+        };
+
+        if (existingId) {
+          const { error } = await supabase
+            .from("listing_cogs")
+            .update(payload)
+            .eq("id", existingId);
+          if (error) throw error;
         } else {
-          await supabase.from("listing_cogs").insert(payload);
+          const { error } = await supabase
+            .from("listing_cogs")
+            .insert(payload);
+          if (error) throw error;
         }
       }
 
