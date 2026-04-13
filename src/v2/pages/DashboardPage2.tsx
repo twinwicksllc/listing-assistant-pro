@@ -1280,6 +1280,7 @@ export default function DashboardPage2() {
         open={!!optimizeListing}
         onClose={() => setOptimizeListing(null)}
         listing={optimizeListing}
+        userToken={ebayToken}
         onPriceApplied={(listingId, newPrice) => {
           setListings(prev => prev.map(l => l.listingId === listingId ? { ...l, price: newPrice } : l));
           setOptimizeListing(null);
