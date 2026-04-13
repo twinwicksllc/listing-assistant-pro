@@ -1227,7 +1227,15 @@ Seller's note: "${voiceNote}"`;
         "Brand/Mint": { type: "string" },
         "Country of Origin": { type: "string" },
         "Materials sourced from": { type: "string" },
+        "Shape": {
+          type: "string",
+          description: "For bullion bars/rounds: Bar, Round, Coin, Slab, etc.",
+        },
         "Precious Metal Content per Unit": { type: "string" },
+        "Total Precious Metal Content": {
+          type: "string",
+          description: "For lots with multiple items: e.g., '5 oz total silver'",
+        },
         "Sport": {
           type: "string",
           description: "REQUIRED for sports cards. E.g. Baseball, Basketball, Football, Hockey, Soccer",
