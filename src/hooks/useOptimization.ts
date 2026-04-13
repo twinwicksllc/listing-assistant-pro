@@ -213,6 +213,7 @@ export function useOptimizeListing() {
       listingId: string;
       title: string;
       currentPrice: number;
+      description?: string;
       categoryId?: string | null;
       listingDate?: string | null;
     }): Promise<OptimizeListingResult | null> => {

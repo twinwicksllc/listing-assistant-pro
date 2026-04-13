@@ -10,6 +10,7 @@ interface OptimizeListing {
   listingId: string;
   title: string;
   currentPrice: number;
+  description?: string;
   categoryId?: string | null;
   listingDate?: string | null;
   condition?: string | null;
@@ -42,6 +43,23 @@ interface TitleSuggestion {
   reasoning: string;
   issuesFound: string[];
   confidence: "low" | "medium" | "high";
+}
+
+interface DescriptionSuggestion {
+  suggestedDescription: string | null;
+  reasoning: string;
+  issuesFound: string[];
+  confidence: "low" | "medium" | "high";
+}
+
+export interface OptimizeListingResult {
+  listingId: string;
+  opportunityScore: number;
+  flags: OptimizationFlag[];
+  priceSuggestion: PriceSuggestion;
+  titleSuggestion: TitleSuggestion;
+  descriptionSuggestion: DescriptionSuggestion;
+  market: MarketData | null;
 }
 
 // ----------------------------------------------------------------
@@ -310,6 +328,91 @@ function buildTitleSuggestion(
 }
 
 // ----------------------------------------------------------------
+// Generate description suggestions via LLM (Deno)
+// ----------------------------------------------------------------
+async function buildDescriptionSuggestion(
+  listing: OptimizeListing,
+): Promise<DescriptionSuggestion> {
+  const issues: string[] = [];
+  const currentDesc = listing.description || "";
+  
+  // Quick heuristic checks
+  if (!currentDesc || currentDesc.length < 50) {
+    issues.push("Description is very short — more detail builds buyer trust and improves search ranking");
+  }
+  
+  if (currentDesc.includes("<div") && currentDesc.includes("style=")) {
+    issues.push("Description contains heavy HTML styling — many mobile buyers prefer clean, fast-loading text");
+  }
+
+  // Check for "wall of text" (long paragraphs without line breaks or bullets)
+  const paragraphs = currentDesc.split(/\n\s*\n/);
+  const longParagraph = paragraphs.find(p => p.length > 500);
+  if (longParagraph && !currentDesc.includes("<li>") && !currentDesc.includes("* ")) {
+    issues.push("Description looks like a 'wall of text' — use bullet points and line breaks for better readability");
+  }
+
+  // Core improvement logic via LLM
+  let suggestedDescription: string | null = null;
+  let reasoning = "Your description is basic. AI can restructure it with better visual clarity and bullet points.";
+
+  // If no major issues, don't force an update
+  if (issues.length === 0 && currentDesc.length > 200) {
+    return {
+      suggestedDescription: null,
+      reasoning: "Your description looks well-structured.",
+      issuesFound: [],
+      confidence: "high",
+    };
+  }
+
+  try {
+    const geminiKey = Deno.env.get("GEMINI_API_KEY");
+    if (!geminiKey) throw new Error("GEMINI_API_KEY not set");
+
+    // Call Gemini to optimize the description
+    const prompt = `You are an eBay listing expert. Re-write the following item description to be professional, compelling, and easy to read. 
+IMPORTANT RULES:
+1. Use bullet points for key features and what is included.
+2. Break up long paragraphs into short, 1-2 sentence sections.
+3. Use a clear structure: Overview, Key Details, Condition, and Shipping/Handling.
+4. Keep it in plain text or very simple HTML (no complex styles).
+5. DO NOT invent facts not present in the original text, but do fix spelling/grammar.
+
+CURRENT DESCRIPTION:
+"${currentDesc}"
+
+Respond ONLY with the optimized description text.`;
+
+    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+      }),
+    });
+
+    if (resp.ok) {
+      const data = await resp.json();
+      suggestedDescription = data.candidates?.[0]?.content?.parts?.[0]?.text || null;
+      if (suggestedDescription) {
+        reasoning = "AI has restructured your description with better visual hierarchy, bullet points, and clear sections.";
+      }
+    }
+  } catch (e) {
+    console.error("[optimize-listing] description AI error:", e);
+    reasoning = "Could not generate AI suggestion at this time.";
+  }
+
+  return {
+    suggestedDescription,
+    reasoning,
+    issuesFound: issues,
+    confidence: suggestedDescription ? "medium" : "low",
+  };
+}
+
+// ----------------------------------------------------------------
 // Calculate opportunity score (0-100)
 // ----------------------------------------------------------------
 function calcOpportunityScore(
@@ -424,6 +527,12 @@ serve(async (req) => {
             issuesFound: [],
             confidence: "low",
           },
+          descriptionSuggestion: {
+            suggestedDescription: null,
+            reasoning: "Market data unavailable — description analysis skipped.",
+            issuesFound: [],
+            confidence: "low",
+          },
           market: null,
           noData: true,
         }),
@@ -434,6 +543,7 @@ serve(async (req) => {
     // Build suggestions
     const priceSuggestion = buildPriceSuggestion(listing, market);
     const titleSuggestion = buildTitleSuggestion(listing.title, market);
+    const descriptionSuggestion = await buildDescriptionSuggestion(listing);
     const opportunityScore = calcOpportunityScore(
       listing,
       market,
@@ -459,6 +569,7 @@ serve(async (req) => {
         flags,
         priceSuggestion,
         titleSuggestion,
+        descriptionSuggestion,
         market,
         noData: false,
       }),

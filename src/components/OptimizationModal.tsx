@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   TrendingDown, TrendingUp, Minus, CheckCircle2, XCircle,
   AlertTriangle, Loader2, Tag, Type, BarChart2, ArrowRight,
+  AlignLeft,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOptimizeListing } from "@/hooks/useOptimization";
@@ -23,6 +24,7 @@ interface Props {
     sku: string;
     title: string;
     currentPrice: number;
+    description?: string;
     imageUrl?: string;
     categoryId?: string | null;
     listingDate?: string | null;
@@ -275,6 +277,63 @@ function TitleTab({ result, listing }: { result: OptimizeListingResult; listing:
 }
 
 // ----------------------------------------------------------------
+// Description Tab
+// ----------------------------------------------------------------
+function DescriptionTab({ result, listing }: { result: OptimizeListingResult; listing: NonNullable<Props["listing"]> }) {
+  const { descriptionSuggestion } = result;
+
+  return (
+    <div className="space-y-4">
+      {/* Current description */}
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Current Description</p>
+        <div className="rounded-lg border bg-muted/30 p-3 max-h-[150px] overflow-y-auto">
+          <p className="text-sm whitespace-pre-wrap">{listing.description || "No description provided."}</p>
+        </div>
+      </div>
+
+      {/* Issues */}
+      {descriptionSuggestion.issuesFound.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Optimization Opportunities</p>
+          {descriptionSuggestion.issuesFound.map((issue, i) => (
+            <div key={i} className="flex gap-2 text-sm bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <AlignLeft className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+              <span>{issue}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Suggested description */}
+      {descriptionSuggestion.suggestedDescription && (
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">AI Enhanced Description</p>
+          <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 max-h-[300px] overflow-y-auto">
+            <p className="text-sm whitespace-pre-wrap italic text-muted-foreground mb-3 leading-relaxed">
+              Note: Bulk description optimization is disabled for large sets to conserve API usage. 
+              This preview shows how we can restructure this specific listing for better conversion.
+            </p>
+            <div className="p-3 bg-white rounded border text-sm whitespace-pre-wrap">
+              {descriptionSuggestion.suggestedDescription}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reasoning */}
+      <div className="rounded-lg bg-muted/40 p-3 flex gap-2">
+        <AlignLeft className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+        <div className="space-y-1">
+          <ConfidenceBadge confidence={descriptionSuggestion.confidence} />
+          <p className="text-sm text-muted-foreground">{descriptionSuggestion.reasoning}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------
 // Market Tab
 // ----------------------------------------------------------------
 function MarketTab({ result }: { result: OptimizeListingResult }) {
@@ -371,6 +430,7 @@ export default function OptimizationModal({ open, onClose, listing, onPriceAppli
         listingId: listing.listingId,
         title: listing.title,
         currentPrice: listing.currentPrice,
+        description: listing.description,
         categoryId: listing.categoryId,
         listingDate: listing.listingDate,
       }).then(setResult);
@@ -474,12 +534,15 @@ export default function OptimizationModal({ open, onClose, listing, onPriceAppli
                 )}
 
                 <Tabs defaultValue="pricing">
-                  <TabsList className="grid grid-cols-3 w-full">
+                  <TabsList className="grid grid-cols-4 w-full">
                     <TabsTrigger value="pricing" className="text-xs">
                       <Tag className="w-3.5 h-3.5 mr-1" /> Pricing
                     </TabsTrigger>
                     <TabsTrigger value="title" className="text-xs">
                       <Type className="w-3.5 h-3.5 mr-1" /> Title
+                    </TabsTrigger>
+                    <TabsTrigger value="description" className="text-xs">
+                      <AlignLeft className="w-3.5 h-3.5 mr-1" /> Desc.
                     </TabsTrigger>
                     <TabsTrigger value="market" className="text-xs">
                       <BarChart2 className="w-3.5 h-3.5 mr-1" /> Market
@@ -498,6 +561,10 @@ export default function OptimizationModal({ open, onClose, listing, onPriceAppli
 
                   <TabsContent value="title" className="mt-4">
                     <TitleTab result={result} listing={listing} />
+                  </TabsContent>
+
+                  <TabsContent value="description" className="mt-4">
+                    <DescriptionTab result={result} listing={listing} />
                   </TabsContent>
 
                   <TabsContent value="market" className="mt-4">
