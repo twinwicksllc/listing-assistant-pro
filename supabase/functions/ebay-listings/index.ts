@@ -305,6 +305,11 @@ interface FinancialSummary {
   w7: FinancialWindow;
   w30: FinancialWindow;
   w90: FinancialWindow;
+  soldOrders: Array<{
+    sku: string | null;
+    listingId: string | null;
+    soldAt: string;
+  }>;
 }
 function emptyWindow(): FinancialWindow {
   return {
@@ -557,6 +562,7 @@ async function fetchOrderCounts(
     w7: emptyWindow(),
     w30: emptyWindow(),
     w90: emptyWindow(),
+    soldOrders: [],
   };
   // soldItems: listing-shaped objects for every line item in completed orders,
   // used by the COGS bulk editor to show sold items alongside active listings.
@@ -666,6 +672,15 @@ async function fetchOrderCounts(
       if (createdAt >= sevenDaysAgo) {
         addToWindow(financial.w7);
         counts.orders7d += lineItemCount;
+      }
+
+      // ── Capture order for COGS lookup in frontend ─────────────────────────
+      for (const line of order.lineItems ?? []) {
+        financial.soldOrders.push({
+          sku: line.sku ?? null,
+          listingId: line.legacyItemId ?? null,
+          soldAt: order.creationDate,
+        });
       }
 
       // ── Build sold listing objects for COGS bulk editor ───────────────────
