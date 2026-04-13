@@ -90,12 +90,16 @@ function PricingTab({
   onApply,
   onDismiss,
   applying,
+  customPrice,
+  onCustomPriceChange,
 }: {
   result: OptimizeListingResult;
   listing: NonNullable<Props["listing"]>;
   onApply: () => void;
   onDismiss: () => void;
   applying: boolean;
+  customPrice: string;
+  onCustomPriceChange: (price: string) => void;
 }) {
   const { priceSuggestion, market } = result;
   const dirIcon =
@@ -106,6 +110,8 @@ function PricingTab({
     ) : (
       <Minus className="w-5 h-5 text-muted-foreground" />
     );
+
+  const priceToApply = customPrice ? parseFloat(customPrice) : priceSuggestion.suggestedPrice;
 
   return (
     <div className="space-y-4">
@@ -122,6 +128,42 @@ function PricingTab({
           </p>
         </div>
       </div>
+
+      {/* Custom price input */}
+      {priceSuggestion.suggestedPrice && priceSuggestion.direction !== "keep" && (
+        <div>
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-2">
+            Override with Custom Price (Optional)
+          </label>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={customPrice}
+                onChange={(e) => onCustomPriceChange(e.target.value)}
+                placeholder={priceSuggestion.suggestedPrice.toFixed(2)}
+                className="w-full pl-7 pr-3 py-2 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+            {customPrice && (
+              <button
+                onClick={() => onCustomPriceChange("")}
+                className="px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted rounded-lg transition"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          {customPrice && parseFloat(customPrice) !== priceSuggestion.suggestedPrice && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Using custom price: ${parseFloat(customPrice).toFixed(2)}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Market benchmarks */}
       {market && (
@@ -187,7 +229,7 @@ function PricingTab({
             {applying ? (
               <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Applying…</>
             ) : (
-              <><CheckCircle2 className="w-4 h-4 mr-2" /> Apply ${priceSuggestion.suggestedPrice.toFixed(2)}</>
+              <><CheckCircle2 className="w-4 h-4 mr-2" /> Apply ${priceToApply?.toFixed(2)}</>
             )}
           </Button>
           <Button variant="outline" onClick={onDismiss} disabled={applying}>
@@ -423,6 +465,7 @@ export default function OptimizationModal({ open, onClose, listing, onPriceAppli
   const { analyze, applying, analyzing, applyPriceChange, dismissSuggestion } = useOptimizeListing();
   const [result, setResult] = useState<OptimizeListingResult | null>(null);
   const [applied, setApplied] = useState(false);
+  const [customPrice, setCustomPrice] = useState("");
 
   useEffect(() => {
     if (open && listing && !result) {
@@ -438,19 +481,21 @@ export default function OptimizationModal({ open, onClose, listing, onPriceAppli
     if (!open) {
       setResult(null);
       setApplied(false);
+      setCustomPrice("");
     }
   }, [open, listing]);
 
   const handleApplyPrice = async () => {
     if (!result || !listing || !user) return;
     const { suggestedPrice, reasoning } = result.priceSuggestion;
-    if (!suggestedPrice) return;
+    const finalPrice = customPrice ? parseFloat(customPrice) : suggestedPrice;
+    if (!finalPrice) return;
 
     const success = await applyPriceChange({
       offerId: listing.offerId,
       sku: listing.sku,
       listingId: listing.listingId,
-      newPrice: suggestedPrice,
+      newPrice: finalPrice,
       listingTitle: listing.title,
       oldPrice: listing.currentPrice,
       reasoning,
@@ -459,7 +504,7 @@ export default function OptimizationModal({ open, onClose, listing, onPriceAppli
 
     if (success) {
       setApplied(true);
-      onPriceApplied?.(listing.listingId, suggestedPrice);
+      onPriceApplied?.(listing.listingId, finalPrice);
     }
   };
 
@@ -556,6 +601,8 @@ export default function OptimizationModal({ open, onClose, listing, onPriceAppli
                       onApply={handleApplyPrice}
                       onDismiss={handleDismissPrice}
                       applying={applying}
+                      customPrice={customPrice}
+                      onCustomPriceChange={setCustomPrice}
                     />
                   </TabsContent>
 
