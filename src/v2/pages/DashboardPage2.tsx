@@ -783,12 +783,6 @@ export default function DashboardPage2() {
               <div style={statValue}>{orderCount30d}</div>
               <div style={statSub}>7d: {orderCount7d} · 90d: {orderCount90d}</div>
             </div>
-
-            <div style={statCard}>
-              <div style={statLabel}><LayoutDashboard size={12} /> Active Listings</div>
-              <div style={statValue}>{metrics.active}</div>
-              <div style={statSub}>Of {metrics.total} total</div>
-            </div>
           </div>
 
           {/* ── P&L / Sales & Profit ───────────────────────────────────────── */}
