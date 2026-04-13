@@ -356,8 +356,7 @@ async function buildDescriptionSuggestion(
 
   // Core improvement logic via LLM
   let suggestedDescription: string | null = null;
-  let reasoning =
-    "Your description is basic. AI can restructure it with better visual clarity and bullet points.";
+  let reasoning = "Your description is basic. AI can restructure it with better visual clarity and bullet points.";
 
   // If no major issues, don't force an update
   if (issues.length === 0 && currentDesc.length > 200) {
