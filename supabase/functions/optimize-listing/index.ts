@@ -333,14 +333,20 @@ function buildTitleSuggestion(
 async function buildDescriptionSuggestion(
   listing: OptimizeListing,
 ): Promise<DescriptionSuggestion> {
-  const issues: string[] = [];
   const currentDesc = listing.description || "";
-  
-  // Quick heuristic checks
+
+  // If no description or too short to meaningfully optimize, skip LLM call
   if (!currentDesc || currentDesc.length < 50) {
-    issues.push("Description is very short — more detail builds buyer trust and improves search ranking");
+    return {
+      suggestedDescription: null,
+      reasoning: "No description to optimize. Add more detail to build buyer trust and improve search ranking.",
+      issuesFound: [],
+      confidence: "low",
+    };
   }
-  
+
+  const issues: string[] = [];
+
   if (currentDesc.includes("<div") && currentDesc.includes("style=")) {
     issues.push("Description contains heavy HTML styling — many mobile buyers prefer clean, fast-loading text");
   }
@@ -348,18 +354,18 @@ async function buildDescriptionSuggestion(
   // Check for "wall of text" (long paragraphs without line breaks or bullets)
   const paragraphs = currentDesc.split(/\n\s*\n/);
   const longParagraph = paragraphs.find((p) => p.length > 500);
-  if (longParagraph && !currentDesc.includes("<li>") && !currentDesc.includes("* ")) {
+  if (
+    longParagraph &&
+    !currentDesc.includes("<li>") &&
+    !currentDesc.includes("* ")
+  ) {
     issues.push(
       "Description looks like a 'wall of text' — use bullet points and line breaks for better readability",
     );
   }
 
-  // Core improvement logic via LLM
-  let suggestedDescription: string | null = null;
-  let reasoning = "Your description is basic. AI can restructure it with better visual clarity and bullet points.";
-
-  // If no major issues, don't force an update
-  if (issues.length === 0 && currentDesc.length > 200) {
+  // If no issues detected, don't force an optimization
+  if (issues.length === 0) {
     return {
       suggestedDescription: null,
       reasoning: "Your description looks well-structured.",
@@ -367,6 +373,10 @@ async function buildDescriptionSuggestion(
       confidence: "high",
     };
   }
+
+  // Core improvement logic via LLM — only called if we have issues to fix
+  let suggestedDescription: string | null = null;
+  const reasoning = "AI has restructured your description with better visual hierarchy, bullet points, and clear sections.";
 
   try {
     const geminiKey = Deno.env.get("GEMINI_API_KEY");
