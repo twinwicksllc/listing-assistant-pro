@@ -1461,6 +1461,27 @@ serve(async (req) => {
     // Build a set of listingIds already covered by Inventory API results.
     // Trading API items whose listingId is already present are skipped (dedup).
     const tradingListings = await tradingListingsPromise;
+
+    // Backfill listingId for inventory listings where offer.listing?.listingId was null.
+    // This happens for listings created via Seller Hub or the legacy Trading API — eBay
+    // returns them via getOffers but with offer.listing=null, so listingId is null.
+    // The same physical item appears in the Trading API results with a valid listingId.
+    // We use the SKU to match and copy the listingId across so the Trading API repricing
+    // fallback (in ebay-reprice) has the item ID it needs.
+    const tradingSkuToListingId = new Map<string, string>();
+    for (const tl of tradingListings) {
+      if (tl.sku && tl.listingId) tradingSkuToListingId.set(tl.sku, tl.listingId);
+    }
+    for (const l of enrichedInventoryListings) {
+      if (!l.listingId && l.sku && tradingSkuToListingId.has(l.sku)) {
+        l.listingId = tradingSkuToListingId.get(l.sku)!;
+        l.ebayUrl = buildEbayUrl(l.listingId);
+        console.log(
+          `ebay-listings: Backfilled listingId=${l.listingId} for offerId=${l.offerId} sku=${l.sku}`,
+        );
+      }
+    }
+
     const inventoryListingIdSet = new Set(
       enrichedInventoryListings.map((l: any) => l.listingId).filter(Boolean),
     );
