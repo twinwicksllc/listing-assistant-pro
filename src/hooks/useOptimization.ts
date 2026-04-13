@@ -247,6 +247,7 @@ export function useOptimizeListing() {
       oldPrice: number;
       reasoning: string;
       userId: string;
+      userToken?: string | null;
     }): Promise<boolean> => {
       setApplying(true);
       try {
@@ -258,6 +259,8 @@ export function useOptimizeListing() {
             sku: params.sku,
             listingId: params.listingId,
             newPrice: params.newPrice,
+            userToken: params.userToken,
+            userId: params.userId,
           },
         });
         if (error) throw error;

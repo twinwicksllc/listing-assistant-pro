@@ -31,6 +31,7 @@ interface Props {
     ebayUrl?: string | null;
   } | null;
   onPriceApplied?: (listingId: string, newPrice: number) => void;
+  userToken?: string | null;
 }
 
 function FlagBadge({ flag }: { flag: OptimizationFlag }) {
@@ -460,7 +461,7 @@ function MarketTab({ result }: { result: OptimizeListingResult }) {
 // ----------------------------------------------------------------
 // Main Modal
 // ----------------------------------------------------------------
-export default function OptimizationModal({ open, onClose, listing, onPriceApplied }: Props) {
+export default function OptimizationModal({ open, onClose, listing, onPriceApplied, userToken }: Props) {
   const { user } = useAuth();
   const { analyze, applying, analyzing, applyPriceChange, dismissSuggestion } = useOptimizeListing();
   const [result, setResult] = useState<OptimizeListingResult | null>(null);
@@ -500,6 +501,7 @@ export default function OptimizationModal({ open, onClose, listing, onPriceAppli
       oldPrice: listing.currentPrice,
       reasoning,
       userId: user.id,
+      userToken,
     });
 
     if (success) {
