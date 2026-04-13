@@ -224,8 +224,20 @@ ${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}
 
 ### ITEM SPECIFICS
 Required: Certification, Year, Composition
-Recommended: Grade (certified only), Circulated/Uncirculated, Mint Location, Denomination, Fineness, Strike Type, Mint Mark, Precious Metal Content per Unit, Brand/Mint, Country of Origin
-World coins: add "Materials sourced from" = issuing country`;
+Recommended: Grade (certified only), Circulated/Uncirculated, Mint Location, Denomination, Fineness, Strike Type, Mint Mark, Precious Metal Content per Unit, Total Precious Metal Content (for lots), Shape (for bars/rounds), Brand/Mint, Country of Origin
+World coins: add "Materials sourced from" = issuing country
+
+### DESCRIPTION FORMATTING (Required for bullion/lots)
+For multi-item lots and bullion bars/rounds, structure your description for visual clarity:
+- **Lead paragraph**: What is this lot? Why should buyers want it? (1-2 sentences, compelling)
+- **What's Included section**: List each item with mint/brand using bullet points:
+  * X × [Mint] [Weight] [Type] Bars/Rounds
+  * X × [Mint] [Weight] [Type] Bars/Rounds
+- **Condition section**: Overall condition, storage handling, whether items have slabs/capsules
+- **Additional details**: Notable features, mix of mints (diversity), investment vs collectible appeal, proper call-to-action
+- Use **bold** sparingly for key selling points
+- Use line breaks between sections for readability — NO solid blocks of text
+- End with a compelling closing (e.g., "Great way to diversify your stack!" or "Perfect for serious collectors!")`
 }
 
 // ─── trading_cards ────────────────────────────────────────────────────────────
