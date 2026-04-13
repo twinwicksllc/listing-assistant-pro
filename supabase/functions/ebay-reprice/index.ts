@@ -286,6 +286,17 @@ serve(async (req) => {
           { offerId, sku: sku || offerId, newPrice, currency },
         ]);
         const result = results[0];
+        
+        // If Inventory API fails with "not currently supported" error, fall back to Trading API
+        if (!result.success && result.error?.includes("not currently supported") && listingId) {
+          console.log(`[ebay-reprice] Inventory API unsupported for ${offerId}, falling back to Trading API with ${listingId}`);
+          const tradingResult = await reviseFixedPriceItem(apiBase, token, listingId, newPrice, currency);
+          return new Response(
+            JSON.stringify(tradingResult),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+        
         return new Response(
           JSON.stringify({ success: result.success, error: result.error }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
