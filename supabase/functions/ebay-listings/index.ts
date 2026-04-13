@@ -28,6 +28,12 @@ interface AnalyticsSnapshot {
 
 type AnalyticsMap = Record<string, AnalyticsSnapshot>;
 
+type WatchData = {
+  watchCount: number;
+  questionCount: number;
+  description?: string;
+};
+
 // ─── Fetch analytics for one date window ─────────────────────────────────────
 async function fetchAnalyticsForWindow(
   apiBase: string,
@@ -782,12 +788,6 @@ async function fetchOrderCounts(
 }
 
 // ─── Fetch WatchCount + QuestionCount + Description via GetItem ────────────────────────────
-type WatchData = {
-  watchCount: number;
-  questionCount: number;
-  description?: string;
-};
-
 async function fetchWatchDataForListings(
   listingIds: string[],
   tradingUrl: string,
