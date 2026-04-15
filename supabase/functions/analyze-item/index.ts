@@ -543,18 +543,26 @@ serve(async (req: Request) => {
             ocrBase64List.push(b64);
             ocrMimeList.push(mimeMatch ? mimeMatch[1] : "image/jpeg");
           }
+          console.log(
+            `[${invocationId}] Calling Slab OCR with ${ocrBase64List.length} images`,
+          );
           slabOcrResult = await runSlabOcr(
             OPENAI_API_KEY,
             ocrBase64List,
             ocrMimeList,
             invocationId,
           );
+          console.log(
+            `[${invocationId}] Slab OCR result: isSlabbed=${slabOcrResult?.isSlabbed}, grader=${slabOcrResult?.grader}, year=${slabOcrResult?.year}, grade=${slabOcrResult?.grade}, certNumber=${slabOcrResult?.certNumber}`,
+          );
           if (slabOcrResult?.isSlabbed) {
             console.log(
-              `[${invocationId}] Slab OCR: detected slab, grader=${slabOcrResult.grader}, year=${slabOcrResult.year}, grade=${slabOcrResult.grade}`,
+              `[${invocationId}] Slab OCR: detected slab, grader=${slabOcrResult.grader}, year=${slabOcrResult.year}, grade=${slabOcrResult.grade}, certNumber=${slabOcrResult.certNumber}`,
             );
           } else {
-            console.log(`[${invocationId}] Slab OCR: no slab detected`);
+            console.log(
+              `\`${invocationId}\` Slab OCR: no slab detected (isSlabbed=\${slabOcrResult?.isSlabbed || "false"}, grader=\${slabOcrResult?.grader || "null"})`,
+            );
           }
         } else {
           console.warn(
@@ -965,9 +973,17 @@ serve(async (req: Request) => {
         const { formatSlabOcrContext } = await import("../_helpers/slabOcr.ts");
         const ocrContext = formatSlabOcrContext(slabOcrResult);
         if (ocrContext) {
+          const originalLength = systemPrompt.length;
           systemPrompt = ocrContext + "\n\n" + systemPrompt;
           console.log(
-            `[${invocationId}] Slab OCR ground truth injected into system prompt`,
+            `[${invocationId}] Slab OCR ground truth injected into system prompt (length=${ocrContext.length} chars, total prompt now ${systemPrompt.length} chars)`,
+          );
+          console.log(
+            `[${invocationId}] OCR context preview: ${ocrContext.slice(0, 200)}...`,
+          );
+        } else {
+          console.warn(
+            `[${invocationId}] formatSlabOcrContext returned empty string despite isSlabbed=true`,
           );
         }
       } catch (fmtErr) {
@@ -976,6 +992,10 @@ serve(async (req: Request) => {
           fmtErr,
         );
       }
+    } else {
+      console.log(
+        `[${invocationId}] Slab OCR context not injected: isSlabbed=${slabOcrResult?.isSlabbed}`,
+      );
     }
     // ─── END Slab OCR injection ──────────────────────────────────────────────────────────────────
 
