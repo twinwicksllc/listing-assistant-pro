@@ -1608,6 +1608,20 @@ function markdownToHtml(markdown: string): string {
     return html;
   }
 
+  // Pre-process: Convert inline " - " bullets to separate lines
+  // Handles cases like "- Year: 2026 - Mint: West Point - Grade: MS 70"
+  // Pattern: " - Label:" should become "\n- Label:"
+  const bulletLabels = [
+    "Year:", "Mint:", "Grade:", "Certification Number:",
+    "Metal Content:", "Condition:", "Historical Note:"
+  ];
+  const labelPattern = bulletLabels.join("|");
+  // Replace " - Label:" with "\n- Label:" when not at start of line
+  html = html.replace(
+    new RegExp(`(?!^|\n)(\s*-\s*)(${labelPattern})`, "g"),
+    "\n- $2"
+  );
+
   // Convert headers (### ## #)
   html = html.replace(/^### (.+)$/gm, "<h3>$1</h3>");
   html = html.replace(/^## (.+)$/gm, "<h2>$1</h2>");

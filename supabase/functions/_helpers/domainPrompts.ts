@@ -240,7 +240,7 @@ Use this exact five-part structure:
 
 2. **What sets it apart** (2–4 sentences starting with "What truly sets this piece apart is..."): Explain WHY the specific attributes matter to a serious collector. Cover grade significance, mint history, strike quality, eye appeal, or population data if known. Explain the numismatic context — why THIS example stands out.
 
-3. **Key Details and Facts:** (structured bullet list — include ALL that are known):
+3. **Key Details and Facts:** (EACH BULLET ON ITS OWN LINE — never on the same line):
    - Year: [year]
    - Mint: [mint location and mark, e.g. "Philadelphia (no mint mark)"]
    - Grade: [e.g. "MS 65 (PCGS)"]
@@ -248,6 +248,11 @@ Use this exact five-part structure:
    - Metal Content: [e.g. "90% Silver — 0.7734 troy oz ASW"]
    - Condition: [brief honest condition note, e.g. "Lustrous surfaces with no distracting marks"]
    - Historical Note: [1–2 sentences of historical/numismatic significance specific to this date/mint/series]
+   
+   CRITICAL: Each bullet point above must be on a SEPARATE LINE. Do NOT write "- Year: 2026 - Mint: West Point" on one line. Write each bullet on its own line like this:
+   - Year: 2026
+   - Mint: West Point (W)
+   - Grade: MS 70 (PCGS)
 
 4. **Closing statement** (1–2 sentences): Speak to investment value, scarcity, or long-term collectability. Make the buyer feel the urgency and desirability without hype.
 
