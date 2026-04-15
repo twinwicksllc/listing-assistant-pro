@@ -268,7 +268,8 @@ Structure for visual clarity:
 - Use **bold** sparingly for key selling points only
 - Use line breaks between sections — NO solid walls of text
 - Never write generic phrases like "great condition" or "a wonderful addition" without specific evidence
-- Historical Notes must be specific to THIS coin's date/mint — not generic series history`;
+- Historical Notes must be specific to THIS coin's date/mint — not generic series history
+- **PROFESSIONAL TONE**: No emojis, no em-dashes (—), no en-dashes (–). Use plain hyphens (-) or commas instead. Avoid AI-like phrasing such as "Discover...", "Unveil...", "Elevate your collection...", or starting sentences with "Whether you're...". Write like a knowledgeable coin dealer, not a marketing email. Be direct, factual, and confident.`;
 }
 
 // ─── trading_cards ────────────────────────────────────────────────────────────

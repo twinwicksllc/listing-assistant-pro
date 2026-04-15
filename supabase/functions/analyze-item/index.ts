@@ -1419,6 +1419,43 @@ Seller's note: "${voiceNote}"`;
     }
     // ── End Anti-Novelty Guard ─────────────────────────────────────────────
 
+    // ── Professional Tone Guard ─────────────────────────────────────────────
+    // Strip emojis and em-dashes from title and description for a professional
+    // eBay listing appearance. Em-dashes (—) become hyphens (-) or spaces.
+    // This ensures a professional tone regardless of AI output.
+    // ── ────────────────────────────────────────────────────────────────────
+    if (listing.title) {
+      const titleBefore = listing.title as string;
+      // Remove emojis (common ranges)
+      listing.title = titleBefore
+        .replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, "")
+        .replace(/\u{1F6A8}/gu, "") // police car light emoji specifically
+        .replace(/[—–]/g, "-") // em-dash and en-dash -> hyphen
+        .replace(/\s+/g, " ")
+        .trim();
+      if (listing.title !== titleBefore) {
+        console.log(
+          `[${invocationId}] ProfessionalTone: cleaned title (removed emojis/dashes)`,
+        );
+      }
+    }
+    if (listing.description) {
+      const descBefore = listing.description as string;
+      // Remove emojis (common ranges)
+      listing.description = descBefore
+        .replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, "")
+        .replace(/\u{1F6A8}/gu, "") // police car light emoji specifically
+        .replace(/[—–]/g, "-") // em-dash and en-dash -> hyphen
+        .replace(/\s+/g, " ")
+        .trim();
+      if (listing.description !== descBefore) {
+        console.log(
+          `[${invocationId}] ProfessionalTone: cleaned description (removed emojis/dashes)`,
+        );
+      }
+    }
+    // ── End Professional Tone Guard ─────────────────────────────────────────
+
     // --- Build suggestedCategories (dedupe, backfill names via exact DB lookup) ---
     try {
       const { buildSuggestedCategories } = await import(
