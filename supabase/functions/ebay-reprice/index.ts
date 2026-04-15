@@ -324,7 +324,7 @@ serve(async (req) => {
           (errorMsg.includes("not currently supported") ||
             errorMsg.includes("Inventory-based listing management")) &&
           listingId;
-        
+
         if (shouldFallback) {
           console.log(
             `[ebay-reprice] Inventory API error for ${offerId}: "${errorMsg}". Attempting fallback to Trading API with listing ${listingId}`,
