@@ -189,9 +189,15 @@ export function formatSlabOcrContext(ocr: SlabOcrResult): string {
 
   const lines: string[] = [
     "### CONFIRMED SLAB DATA (GPT-4o OCR — AUTHORITATIVE, DO NOT OVERRIDE)",
-    `This coin IS in a professional grading slab. The following data was read directly`,
-    `from the slab label by a dedicated OCR system. Use these values EXACTLY as provided.`,
-    `Do NOT substitute your own reading of the coin face or label.`,
+    `This coin IS in a PROFESSIONAL, GENUINE grading slab from ${ocr.grader}.`,
+    `The following data was read directly from the slab label by GPT-4o Vision OCR.`,
+    `Use these values EXACTLY as provided. Do NOT substitute your own reading.`,
+    "",
+    "**CRITICAL: THIS IS A REAL, GENUINE SLABBED COIN — NOT A NOVELTY, NOT A REPLICA, NOT A FANTASY ITEM.**",
+    `Professional grading services (PCGS, NGC, ANACS, ICG, CAC) ONLY grade authentic coins.`,
+    `If GPT-4o detected a ${ocr.grader} slab with a certification number, this is 100% genuine.`,
+    `Do NOT describe this as novelty, fantasy, replica, tribute, or exonumia.`,
+    `The title and description must reflect that this is a genuine certified coin.`,
     "",
   ];
 
