@@ -1680,7 +1680,7 @@ function markdownToHtml(markdown: string): string {
   // First, wrap paragraphs (blocks of text separated by blank lines)
   html = html.replace(/\n\n+/g, "</p><p>");
   html = html.replace(/\n/g, "<br>");
-  
+
   // Wrap in paragraph tags if not already wrapped
   if (!html.startsWith("<")) {
     html = "<p>" + html + "</p>";
