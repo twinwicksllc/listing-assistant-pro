@@ -323,11 +323,9 @@ serve(async (req: Request) => {
       throw new Error("GEMINI_API_KEY is not configured");
     }
 
-    // ─── PRE-PASS 0: Agentic Grounding + Vision Inspection ────────────────────
-    // Uses the NATIVE Gemini generateContent API with googleSearch + codeExecution
-    // tools. Runs BEFORE Pass 1 so grounded category & market data can influence
-    // the entire downstream pipeline.
-    // Non-blocking: any failure leaves prePassResult = null, pipeline continues.
+    // ─── PRE-PASS 0 RESULT (populated AFTER Pass 1 with real identity) ──────────
+    // The actual agentic grounding + vision call runs AFTER Pass 1 so it
+    // can use the real domain and item name instead of a heuristic guess.
     let prePassResult: {
       marketAnalysis: string | null;
       groundedCategoryId: string | null;
@@ -338,84 +336,9 @@ serve(async (req: Request) => {
         identificationCorrection?: string;
       } | null;
     } | null = null;
-    try {
-      const { runAgenticPrePass } = await import(
-        "../_helpers/agenticPrePass.ts"
-      );
-
-      // Build base64 + mime lists for pre-pass (parse from data URLs) — use ALL images
-      const prePassBase64List: string[] = [];
-      const prePassMimeList: string[] = [];
-      for (const img of imageList) {
-        const ppBase64 = img.includes(",") ? img.split(",")[1] : img;
-        const ppMimeMatch = img.match(/^data:(image\/\w+);/);
-        const ppMimeType = ppMimeMatch ? ppMimeMatch[1] : "image/jpeg";
-        prePassBase64List.push(ppBase64);
-        prePassMimeList.push(ppMimeType);
-      }
-
-      // Fast preliminary domain guess from voice note keywords.
-      // Pass 1 hasn't run yet, so we use heuristics here.
-      type PrePassDomain =
-        | "coins_bullion"
-        | "trading_cards"
-        | "jewelry"
-        | "electronics"
-        | "vintage_clothing"
-        | "general";
-      let prelimDomain: PrePassDomain = "general";
-      const noteForDomain = (voiceNote + " " + String(body.voiceNote || ""))
-        .toLowerCase();
-      if (
-        /\bcoin|bullion|silver|gold|dollar|eagle|morgan|kennedy|quarter|dime|nickel|cent|peso\b/
-          .test(noteForDomain)
-      ) {
-        prelimDomain = "coins_bullion";
-      } else if (
-        /\bcard|pokemon|magic|yugioh|baseball|football|basketball|nba|nfl|mlb\b/
-          .test(noteForDomain)
-      ) {
-        prelimDomain = "trading_cards";
-      } else if (
-        /\bring|necklace|bracelet|earring|jewel|watch|pendant|brooch\b/.test(
-          noteForDomain,
-        )
-      ) {
-        prelimDomain = "jewelry";
-      } else if (
-        /\bphone|laptop|tablet|console|camera|iphone|samsung|macbook|xbox|playstation\b/
-          .test(noteForDomain)
-      ) {
-        prelimDomain = "electronics";
-      } else if (
-        /\bshirt|jacket|dress|pants|vintage|coat|blouse|skirt|denim|levi\b/
-          .test(noteForDomain)
-      ) {
-        prelimDomain = "vintage_clothing";
-      }
-
-      // Use voice note or generic placeholder as preliminary item name
-      const prelimItemName = voiceNote.trim().slice(0, 80) ||
-        "collectible item";
-
-      prePassResult = await runAgenticPrePass(
-        GEMINI_API_KEY,
-        prelimDomain,
-        prelimItemName,
-        prePassBase64List,
-        prePassMimeList,
-        invocationId,
-      );
-    } catch (prePassErr) {
-      console.warn(
-        `[${invocationId}] Pre-Pass 0 outer catch (non-blocking):`,
-        String(prePassErr),
-      );
-    }
-    // ─── END PRE-PASS 0 ─────────────────────────────────────────────────────────
 
     // ─── PASS 1: Fast item identification ────────────────────────────────────
-    // Sends ≤2 images to determine domain, item name, and keywords.
+    // Sends ALL images to determine domain, item name, and keywords.
     // Results are used to improve the pre-lookup query and route to the correct
     // domain-specific prompt for Pass 2.
     type Domain =
@@ -465,7 +388,7 @@ serve(async (req: Request) => {
               {
                 role: "system",
                 content:
-                  `You are an item identification assistant. Examine the image carefully and return ONLY valid JSON (no markdown, no code blocks):\n{"domain":"coins_bullion|trading_cards|jewelry|electronics|vintage_clothing|general","itemName":"short name (max 80 chars)","keywords":["kw1","kw2","kw3","kw4","kw5"],"isMetal":true|false,"metalType":"gold|silver|platinum|none"}\nDomain guide: coins_bullion=coins/currency/bullion; trading_cards=sports/TCG/Pokémon/Magic; jewelry=rings/watches/necklaces; electronics=phones/PCs/consoles/cameras; vintage_clothing=clothing/shoes/accessories; general=anything else.\nCRITICAL FOR COINS/CARDS IN GRADING SLABS: If the item is in a PCGS, NGC, PSA, BGS, or other certification slab, READ THE PRINTED LABEL TEXT FIRST. The label is the AUTHORITATIVE source for year, denomination, grade, and item identity. Do NOT guess the year from the coin/card face if a label is clearly visible. Common AI error: misreading 2026 as 2021. Read each digit on the label carefully.`,
+                  `You are an item identification assistant. Examine the image carefully and return ONLY valid JSON (no markdown, no code blocks):\n{"domain":"coins_bullion|trading_cards|jewelry|electronics|vintage_clothing|general","itemName":"short name (max 80 chars)","keywords":["kw1","kw2","kw3","kw4","kw5"],"isMetal":true|false,"metalType":"gold|silver|platinum|none"}\nDomain guide: coins_bullion=coins/currency/bullion; trading_cards=sports/TCG/Pokémon/Magic; jewelry=rings/watches/necklaces; electronics=phones/PCs/consoles/cameras; vintage_clothing=clothing/shoes/accessories; general=anything else.\nCRITICAL FOR COINS/CARDS IN GRADING SLABS: If the item is in a PCGS, NGC, PSA, BGS, or other certification slab, READ THE PRINTED LABEL TEXT FIRST. The label is the AUTHORITATIVE source for year, denomination, grade, and item identity. Do NOT guess the year from the coin/card face if a label is clearly visible. Common AI error: misreading 2026 as 2021. Read each digit on the label carefully.\nCRITICAL: Coins dated in recent or current years (2024, 2025, 2026, 2027) ARE REAL government-issued coins. They are NOT novelty, fantasy, replica, or tribute coins. The US Mint and other world mints actively produce coins with these dates. NEVER classify a professionally slabbed/graded coin (PCGS, NGC, etc.) as novelty, fantasy, or exonumia. Slabbed coins are ALWAYS domain coins_bullion.`,
               },
               {
                 role: "user",
@@ -559,57 +482,48 @@ serve(async (req: Request) => {
     }
     // ─── END FALLBACK ────────────────────────────────────────────────────────
     // ─── END PASS 1 ──────────────────────────────────────────────────────────
+    // ─── PRE-PASS 0: Agentic Grounding + Vision (runs AFTER Pass 1) ─────────────
+    // Now that Pass 1 has identified the item, run Pre-Pass 0 with the REAL
+    // domain and item name. This eliminates the old two-call pattern (heuristic
+    // guess → re-run with real name) and ensures grounding uses accurate data.
+    // Non-blocking: any failure leaves prePassResult = null, pipeline continues.
+    try {
+      const { runAgenticPrePass } = await import(
+        "../_helpers/agenticPrePass.ts"
+      );
 
-    // ─── POST-PASS-1: Upgrade Pre-Pass 0 with real domain + item name ──────────────
-    // Now that Pass 1 has identified the item, re-run Pre-Pass 0 if the
-    // preliminary domain guess was wrong OR if itemName is now more precise.
-    // This ensures grounding is run with the best possible item name.
-    if (
-      prePassResult === null ||
-      (identification.domain !== "general" &&
-        identification.itemName !== "collectible item" &&
-        identification.itemName !== "item")
-    ) {
-      try {
-        const { runAgenticPrePass: runAgenticPrePassUpgrade } = await import(
-          "../_helpers/agenticPrePass.ts"
-        );
-        // Only re-run if we have a meaningful item name from Pass 1
-        if (
-          identification.itemName && identification.itemName !== "item" &&
-          identification.itemName.length > 3
-        ) {
-          const upgradeBase64: string[] = [];
-          const upgradeMime: string[] = [];
-          for (const img of imageList) {
-            const upB64 = img.includes(",") ? img.split(",")[1] : img;
-            const upMimeMatch = img.match(/^data:(image\/\w+);/);
-            upgradeBase64.push(upB64);
-            upgradeMime.push(upMimeMatch ? upMimeMatch[1] : "image/jpeg");
-          }
-          const upgradeResult = await runAgenticPrePassUpgrade(
-            GEMINI_API_KEY,
-            identification.domain as any,
-            identification.itemName,
-            upgradeBase64,
-            upgradeMime,
-            invocationId,
-          );
-          if (upgradeResult !== null) {
-            prePassResult = upgradeResult;
-            console.log(
-              `[${invocationId}] Pre-Pass 0 upgraded with real domain=${identification.domain}, item=${identification.itemName}`,
-            );
-          }
-        }
-      } catch (upgradeErr) {
-        console.warn(
-          `[${invocationId}] Pre-Pass 0 upgrade failed (non-blocking):`,
-          String(upgradeErr),
+      // Build base64 + mime lists for pre-pass (parse from data URLs) — use ALL images
+      const prePassBase64List: string[] = [];
+      const prePassMimeList: string[] = [];
+      for (const img of imageList) {
+        const ppBase64 = img.includes(",") ? img.split(",")[1] : img;
+        const ppMimeMatch = img.match(/^data:(image\/\w+);/);
+        const ppMimeType = ppMimeMatch ? ppMimeMatch[1] : "image/jpeg";
+        prePassBase64List.push(ppBase64);
+        prePassMimeList.push(ppMimeType);
+      }
+
+      // Use real domain + item name from Pass 1 (not a heuristic guess)
+      prePassResult = await runAgenticPrePass(
+        GEMINI_API_KEY,
+        identification.domain as any,
+        identification.itemName,
+        prePassBase64List,
+        prePassMimeList,
+        invocationId,
+      );
+      if (prePassResult) {
+        console.log(
+          `[${invocationId}] Pre-Pass 0 completed with domain=${identification.domain}, item=${identification.itemName}`,
         );
       }
+    } catch (prePassErr) {
+      console.warn(
+        `[${invocationId}] Pre-Pass 0 outer catch (non-blocking):`,
+        String(prePassErr),
+      );
     }
-    // ─── END POST-PASS-1 ─────────────────────────────────────────────────────────
+    // ─── END PRE-PASS 0 ─────────────────────────────────────────────────────────
 
     // ── Pre-lookup: Deterministic category resolution ──────────────────────────
     let categoryHints = "";
@@ -1768,7 +1682,7 @@ Seller's note: "${voiceNote}"`;
       const detailResult = await extractKeyDetails(
         GEMINI_API_KEY,
         identification.domain as any,
-        identification.itemName,
+        listing.title || identification.itemName,
         detailBase64List,
         detailMimeList,
         invocationId,
