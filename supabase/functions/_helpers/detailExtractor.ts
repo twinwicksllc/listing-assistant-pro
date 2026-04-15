@@ -14,7 +14,7 @@
  * Unlike the advisory pre-pass, findings from this module are AUTHORITATIVE
  * and will OVERRIDE the main model's output when they differ.
  *
- * Uses gemini-2.5-flash with structured JSON output (no code_execution needed —
+ * Uses gemini-3-flash-preview with structured JSON output (no code_execution needed —
  * we send ALL images and ask the model to focus specifically on the detail areas).
  */
 
@@ -74,7 +74,7 @@ export interface DetailExtractionResult {
   rawFindings: string; // Full narrative for logging
 }
 
-const DETAIL_MODEL = "gemini-2.5-flash";
+const DETAIL_MODEL = "gemini-3-flash-preview";
 const DETAIL_TIMEOUT_MS = 15_000; // 15 seconds
 
 async function fetchWithTimeout(
