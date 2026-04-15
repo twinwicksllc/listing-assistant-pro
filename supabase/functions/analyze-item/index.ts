@@ -1371,6 +1371,54 @@ Seller's note: "${voiceNote}"`;
         .trim();
     }
 
+    // ── Anti-Novelty Guard ─────────────────────────────────────────────────
+    // The AI occasionally prefixes the title with "NOVELTY REPLICA" or
+    // "NOVELTY / FANTASY REPLICA" for legitimate certified coins (PCGS/NGC),
+    // especially when it misreads the year and thinks the coin is impossible.
+    // This is ALWAYS wrong for any coin in a professional grading slab.
+    // Strip the novelty prefix deterministically from title AND description
+    // whenever the domain is coins_bullion.
+    // ── ────────────────────────────────────────────────────────────────────
+    if (identification.domain === "coins_bullion") {
+      // Strip from title: "NOVELTY REPLICA ...", "NOVELTY / FANTASY REPLICA ...", "NOVELTY ..."
+      if (listing.title) {
+        const titleBefore = listing.title as string;
+        listing.title = titleBefore
+          .replace(/^NOVELTY\s*[\/&]?\s*FANTASY\s*REPLICA\s*/i, "")
+          .replace(/^NOVELTY\s*REPLICA\s*/i, "")
+          .replace(/^NOVELTY\s+/i, "")
+          .replace(/^FANTASY\s*REPLICA\s*/i, "")
+          .trim();
+        if (listing.title !== titleBefore) {
+          console.log(
+            `[${invocationId}] Anti-Novelty: stripped novelty prefix from title: "${titleBefore}" -> "${listing.title}"`,
+          );
+        }
+      }
+
+      // Strip from description: the warning block the AI adds when it wrongly
+      // classifies the coin as a novelty/fantasy replica.
+      if (listing.description) {
+        const descBefore = listing.description as string;
+        listing.description = descBefore
+          .replace(
+            /\u{1F6A8}\s*IMPORTANT[^]*?(?:All details are descriptions from seller\.|verified by the buyer\.)\s*/iu,
+            "",
+          )
+          .replace(
+            /This listing is for a \*?NOVELTY[^]*?grading company\.[^\n]*/gi,
+            "",
+          )
+          .trim();
+        if (listing.description !== descBefore) {
+          console.log(
+            `[${invocationId}] Anti-Novelty: stripped novelty disclaimer from description`,
+          );
+        }
+      }
+    }
+    // ── End Anti-Novelty Guard ─────────────────────────────────────────────
+
     // --- Build suggestedCategories (dedupe, backfill names via exact DB lookup) ---
     try {
       const { buildSuggestedCategories } = await import(
