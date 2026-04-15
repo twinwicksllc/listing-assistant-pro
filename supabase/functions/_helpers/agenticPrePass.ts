@@ -10,8 +10,8 @@
  *
  * MODEL ROUTING (per official Gemini API docs, verified 2026):
  * ┌─────────────────────────────────────────────────────────────────────────┐
- * │  Stage A — Google Search Grounding   → gemini-2.5-flash                │
- * │    • googleSearch tool fully supported on 2.5 Flash                    │
+ * │  Stage A — Google Search Grounding   → gemini-3-flash-preview          │
+ * │    • googleSearch tool fully supported on gemini-3-flash-preview        │
  * │    • No images needed; pure text grounding pass                        │
  * │    • Cheaper, faster, stable GA model                                  │
  * │                                                                         │
@@ -56,7 +56,7 @@ export interface PrePassResult {
 
 // ─── Model constants ──────────────────────────────────────────────────────────
 // Stage A: Google Search grounding — supported on 2.5 Flash (GA, stable, cheaper)
-const GROUNDING_MODEL = "gemini-2.5-flash";
+const GROUNDING_MODEL = "gemini-3-flash-preview";
 // Stage B: Agentic vision inspection with images — requires Gemini 3+ (per docs):
 // "Code Execution with images is officially supported in Gemini 3 Flash.
 //  The model writes and executes Python code to actively manipulate and
@@ -563,7 +563,7 @@ Return ONLY a single valid JSON object (no markdown, no code blocks):
 /**
  * Runs the two-stage agentic pre-pass concurrently:
  *
- *   Stage A (gemini-2.5-flash)       — googleSearch for eBay category + market pricing
+ *   Stage A (gemini-3-flash-preview)   — googleSearch for eBay category + market pricing
  *   Stage B (gemini-3-flash-preview) — codeExecution vision inspection on images
  *
  * Both stages run in parallel via Promise.allSettled.
