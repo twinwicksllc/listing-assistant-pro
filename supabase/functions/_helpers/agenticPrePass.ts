@@ -135,9 +135,18 @@ function getZoomTargets(domain: Domain): ZoomTarget[] {
     case "coins_bullion":
       return [
         {
-          region: "date digits",
+          region: "certification slab label (PCGS/NGC/ANACS/ICG text)",
           rationale:
-            "Critical for correct year — misreading 1964 vs 1965 Kennedy Half Dollar changes silver content from 90% to 40%",
+            "HIGHEST PRIORITY: If the coin is in a grading slab, the printed label is the AUTHORITATIVE source for year, mint mark, denomination, grade, and certification number. " +
+            "Read EVERY word and number on the label EXACTLY as printed — do NOT rely on reading the coin face when a label is present. " +
+            "Common misreads: '2026' misread as '2021', '2024' misread as '2004'. The label text is machine-printed and definitive. " +
+            "Also read the certification/serial number (e.g. '48839647') and the grade (e.g. 'MS70', 'PR69DCAM'). " +
+            "If no slab is present, skip this region.",
+        },
+        {
+          region: "date digits on coin face",
+          rationale: "Critical for correct year — but if a slab label is present, DEFER to the label's year. " +
+            "Misreading 1964 vs 1965 Kennedy Half Dollar changes silver content from 90% to 40%",
         },
         {
           region: "mint mark — EXACT locations by series",
