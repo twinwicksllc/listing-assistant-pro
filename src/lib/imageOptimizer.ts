@@ -5,12 +5,13 @@
  *  2. Brightness / contrast / saturation normalization
  *  3. Output as a clean, uniform data-URL
  *
- * Optimized for Gemini AI analysis: 786px reduces token usage by ~50% while
- * preserving sufficient detail for coin/collectible identification (mint marks,
- * condition, wear patterns). eBay publishing uses separate 1600px pipeline.
+ * Optimized for Gemini AI analysis: 1200px with 20% margin preserves slab label
+ * details (year, mint mark, grade) for accurate OCR. Previous 786px/5% margin
+ * caused year misreads (2026→2020) by cutting off label edges and downsampling.
+ * eBay publishing uses separate 1600px pipeline.
  */
 
-const TARGET_SIZE = 786; // max output dimension (optimized for Gemini AI)
+const TARGET_SIZE = 1200; // max output dimension (increased for better OCR of slab label text)
 
 /** Load a data-URL into an HTMLImageElement */
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -106,11 +107,12 @@ function detectSubjectBounds(
     }
   }
 
-  // Add a small margin (5% of the crop dimension)
+  // Add a generous margin (20% of the crop dimension)
+  // This preserves slab label edges that would otherwise be cropped off
   const cropW = right - left + 1;
   const cropH = bottom - top + 1;
-  const marginX = Math.round(cropW * 0.05);
-  const marginY = Math.round(cropH * 0.05);
+  const marginX = Math.round(cropW * 0.20);
+  const marginY = Math.round(cropH * 0.20);
 
   return {
     x: Math.max(0, left - marginX),
