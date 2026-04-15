@@ -343,10 +343,10 @@ serve(async (req: Request) => {
         "../_helpers/agenticPrePass.ts"
       );
 
-      // Build base64 + mime lists for pre-pass (parse from data URLs)
+      // Build base64 + mime lists for pre-pass (parse from data URLs) — use ALL images
       const prePassBase64List: string[] = [];
       const prePassMimeList: string[] = [];
-      for (const img of imageList.slice(0, 3)) {
+      for (const img of imageList) {
         const ppBase64 = img.includes(",") ? img.split(",")[1] : img;
         const ppMimeMatch = img.match(/^data:(image\/\w+);/);
         const ppMimeType = ppMimeMatch ? ppMimeMatch[1] : "image/jpeg";
@@ -440,8 +440,9 @@ serve(async (req: Request) => {
       metalType: "none",
     };
     try {
-      // OPTIMIZATION: Use only 1st image for Pass 1 to reduce timeout risk
-      const pass1Images = imageList.slice(0, 1).map((img) => {
+      // Use ALL images for Pass 1 — critical for items where key details
+      // (slab labels, reverses, mint marks) may not appear in the first photo
+      const pass1Images = imageList.map((img) => {
         const { base64Data, mimeType } = parseImageDataUrl(img);
         return {
           type: "image_url",
@@ -580,7 +581,7 @@ serve(async (req: Request) => {
         ) {
           const upgradeBase64: string[] = [];
           const upgradeMime: string[] = [];
-          for (const img of imageList.slice(0, 3)) {
+          for (const img of imageList) {
             const upB64 = img.includes(",") ? img.split(",")[1] : img;
             const upMimeMatch = img.match(/^data:(image\/\w+);/);
             upgradeBase64.push(upB64);
@@ -1754,10 +1755,10 @@ Seller's note: "${voiceNote}"`;
         "../_helpers/detailExtractor.ts"
       );
 
-      // Build image lists for the detail extractor (use ALL images, up to 5)
+      // Build image lists for the detail extractor — use ALL images
       const detailBase64List: string[] = [];
       const detailMimeList: string[] = [];
-      for (const img of imageList.slice(0, 5)) {
+      for (const img of imageList) {
         const detB64 = img.includes(",") ? img.split(",")[1] : img;
         const detMimeMatch = img.match(/^data:(image\/\w+);/);
         detailBase64List.push(detB64);

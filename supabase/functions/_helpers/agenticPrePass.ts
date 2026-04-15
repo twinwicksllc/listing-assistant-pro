@@ -428,8 +428,8 @@ async function runStageB(
 
   const zoomTargets = getZoomTargets(domain);
 
-  // Use up to 3 images for the pre-pass
-  const imageParts = imageBase64List.slice(0, 3).map((b64, i) => ({
+  // Use ALL images for the pre-pass — reverse, label, and detail shots are all critical
+  const imageParts = imageBase64List.map((b64, i) => ({
     inlineData: {
       mimeType: imageMimeTypes[i] ?? "image/jpeg",
       data: b64,
