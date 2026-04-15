@@ -116,8 +116,7 @@ Return ONLY valid JSON, no markdown, no explanation:
         content: [
           {
             type: "text",
-            text:
-              "Read all text from any grading slab label visible in these images and return the structured JSON.",
+            text: "Read all text from any grading slab label visible in these images and return the structured JSON.",
           },
           ...imageContentParts,
         ],
