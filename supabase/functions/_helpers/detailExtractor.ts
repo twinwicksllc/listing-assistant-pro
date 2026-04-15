@@ -285,8 +285,8 @@ export async function extractKeyDetails(
       return null;
   }
 
-  // Build image parts — use ALL images (up to 5) to maximize coverage
-  const imageParts = imageBase64List.slice(0, 5).map((b64, i) => ({
+  // Build image parts — use ALL images to maximize coverage
+  const imageParts = imageBase64List.map((b64, i) => ({
     inlineData: {
       mimeType: imageMimeTypes[i] ?? "image/jpeg",
       data: b64,
