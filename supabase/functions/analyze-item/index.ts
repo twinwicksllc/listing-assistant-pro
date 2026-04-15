@@ -434,10 +434,36 @@ serve(async (req: Request) => {
               );
             }
           } catch (jsonParseErr) {
-            console.error(`[${invocationId}] ❌ Pass 1 JSON parse failed:`, {
-              error: String(jsonParseErr),
-              raw: pass1Text.slice(0, 200),
-            });
+            // Try to extract JSON from the text (Gemini sometimes wraps it)
+            const jsonMatch = pass1Text.match(/\{[\s\S]*"domain"[\s\S]*\}/);
+            if (jsonMatch) {
+              try {
+                const parsed = JSON.parse(jsonMatch[0]);
+                if (parsed.domain && parsed.itemName) {
+                  identification = {
+                    domain: parsed.domain as Domain,
+                    itemName: String(parsed.itemName).slice(0, 120),
+                    keywords: Array.isArray(parsed.keywords) ? parsed.keywords.slice(0, 7).map(String) : [],
+                    isMetal: Boolean(parsed.isMetal),
+                    metalType: (parsed.metalType ?? "none") as Identification["metalType"],
+                  };
+                  console.log(
+                    `[${invocationId}] ✓ Pass 1 identification succeeded (extracted from text):`,
+                    identification,
+                  );
+                }
+              } catch {
+                console.error(`[${invocationId}] ❌ Pass 1 JSON parse failed (even after extraction):`, {
+                  error: String(jsonParseErr),
+                  raw: pass1Text.slice(0, 200),
+                });
+              }
+            } else {
+              console.error(`[${invocationId}] ❌ Pass 1 JSON parse failed:`, {
+                error: String(jsonParseErr),
+                raw: pass1Text.slice(0, 200),
+              });
+            }
           }
         }
       } else {
@@ -525,56 +551,67 @@ serve(async (req: Request) => {
     }
     // ─── END PRE-PASS 0 ─────────────────────────────────────────────────────────
 
-    // ─── SLAB OCR: GPT-4o Vision label reading (coins_bullion only) ─────────────
+    // ─── SLAB OCR: GPT-4o Vision label reading (ALL domains) ──────────────────
     // Runs BEFORE Pass 2 so the correct year/grade/cert are injected as ground
     // truth into the Gemini prompt. Eliminates year misreads at the source.
     // Non-blocking: failure leaves slabOcrResult = null, pipeline continues.
     let slabOcrResult: Awaited<ReturnType<typeof import("../_helpers/slabOcr.ts").runSlabOcr>> = null;
-    if (identification.domain === "coins_bullion") {
-      try {
-        const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-        if (OPENAI_API_KEY) {
-          const { runSlabOcr } = await import("../_helpers/slabOcr.ts");
-          const ocrBase64List: string[] = [];
-          const ocrMimeList: string[] = [];
-          for (const img of imageList) {
-            const b64 = img.includes(",") ? img.split(",")[1] : img;
-            const mimeMatch = img.match(/^data:(image\/\w+);/);
-            ocrBase64List.push(b64);
-            ocrMimeList.push(mimeMatch ? mimeMatch[1] : "image/jpeg");
-          }
+    try {
+      const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+      if (OPENAI_API_KEY) {
+        const { runSlabOcr } = await import("../_helpers/slabOcr.ts");
+        const ocrBase64List: string[] = [];
+        const ocrMimeList: string[] = [];
+        for (const img of imageList) {
+          const b64 = img.includes(",") ? img.split(",")[1] : img;
+          const mimeMatch = img.match(/^data:(image\/\w+);/);
+          ocrBase64List.push(b64);
+          ocrMimeList.push(mimeMatch ? mimeMatch[1] : "image/jpeg");
+        }
+        console.log(
+          `[${invocationId}] Calling Slab OCR with ${ocrBase64List.length} images (domain=${identification.domain})`,
+        );
+        slabOcrResult = await runSlabOcr(
+          OPENAI_API_KEY,
+          ocrBase64List,
+          ocrMimeList,
+          invocationId,
+        );
+        console.log(
+          `[${invocationId}] Slab OCR result: isSlabbed=${slabOcrResult?.isSlabbed}, grader=${slabOcrResult?.grader}, year=${slabOcrResult?.year}, grade=${slabOcrResult?.grade}, certNumber=${slabOcrResult?.certNumber}`,
+        );
+        if (slabOcrResult?.isSlabbed) {
           console.log(
-            `[${invocationId}] Calling Slab OCR with ${ocrBase64List.length} images`,
+            `[${invocationId}] Slab OCR: detected slab, grader=${slabOcrResult.grader}, year=${slabOcrResult.year}, grade=${slabOcrResult.grade}, certNumber=${slabOcrResult.certNumber}`,
           );
-          slabOcrResult = await runSlabOcr(
-            OPENAI_API_KEY,
-            ocrBase64List,
-            ocrMimeList,
-            invocationId,
-          );
-          console.log(
-            `[${invocationId}] Slab OCR result: isSlabbed=${slabOcrResult?.isSlabbed}, grader=${slabOcrResult?.grader}, year=${slabOcrResult?.year}, grade=${slabOcrResult?.grade}, certNumber=${slabOcrResult?.certNumber}`,
-          );
-          if (slabOcrResult?.isSlabbed) {
+          // If Pass 1 failed and defaulted to "general", correct the domain now
+          if (identification.domain !== "coins_bullion") {
             console.log(
-              `[${invocationId}] Slab OCR: detected slab, grader=${slabOcrResult.grader}, year=${slabOcrResult.year}, grade=${slabOcrResult.grade}, certNumber=${slabOcrResult.certNumber}`,
+              `[${invocationId}] Slab OCR: correcting domain from "${identification.domain}" to "coins_bullion"`,
             );
-          } else {
-            console.log(
-              `\`${invocationId}\` Slab OCR: no slab detected (isSlabbed=\${slabOcrResult?.isSlabbed || "false"}, grader=\${slabOcrResult?.grader || "null"})`,
-            );
+            identification.domain = "coins_bullion";
+            if (!identification.itemName || identification.itemName === "item") {
+              identification.itemName = slabOcrResult.coinName ??
+                `${slabOcrResult.year ?? ""} ${slabOcrResult.grader ?? ""} ${slabOcrResult.grade ?? ""} ${
+                  slabOcrResult.coinName ?? "Coin"
+                }`.trim();
+            }
           }
         } else {
-          console.warn(
-            `[${invocationId}] Slab OCR: OPENAI_API_KEY not set — skipping`,
+          console.log(
+            `\`${invocationId}\` Slab OCR: no slab detected (isSlabbed=\${slabOcrResult?.isSlabbed || "false"}, grader=\${slabOcrResult?.grader || "null"})`,
           );
         }
-      } catch (ocrErr) {
+      } else {
         console.warn(
-          `[${invocationId}] Slab OCR failed (non-blocking):`,
-          String(ocrErr),
+          `[${invocationId}] Slab OCR: OPENAI_API_KEY not set — skipping`,
         );
       }
+    } catch (ocrErr) {
+      console.warn(
+        `[${invocationId}] Slab OCR failed (non-blocking):`,
+        String(ocrErr),
+      );
     }
     // ─── END SLAB OCR ─────────────────────────────────────────────────────────────────────
 
