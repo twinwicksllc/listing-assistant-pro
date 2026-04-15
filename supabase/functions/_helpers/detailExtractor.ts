@@ -139,8 +139,13 @@ This is the MOST IMPORTANT thing to get right. Follow these steps:
 - If the reverse side is not in the photos, set reverseVisible to false and mintMarkConfidence to "not_visible".
 - For Morgan Dollars specifically: the "O" mint mark is often small and can look worn — look carefully below the eagle's tail feathers.
 
+### YEAR IDENTIFICATION (CRITICAL FOR SLABBED COINS)
+- **If the coin is in a PCGS, NGC, ANACS, or other certification slab**: Read the year from the PRINTED SLAB LABEL, NOT from the coin face. The label is machine-printed and authoritative.
+- **KNOWN AI MISREAD WARNING**: The digits "2026" on slab labels are FREQUENTLY misread as "2020", "2021", "2024", or "2006". The US Mint actively produces coins dated 2025 and 2026. If you see a 4-digit year starting with "202" on a slab label, read the LAST digit extremely carefully: 0 has a round shape, 6 has a tail curving DOWN-LEFT.
+- **CROSS-CHECK**: If the item was described with a year that differs from what you read on the slab label, the SLAB LABEL is always correct. Report what the label actually says.
+- If no slab is present, read the year from the obverse of the coin.
+
 ### OTHER DETAILS TO EXTRACT
-- Year: Read from the obverse. Note if it's hard to read.
 - Denomination: $1, 50C, 25C, 10C, 5C, 1C, $5, $10, $20
 - Series: Morgan Dollar, Peace Dollar, Kennedy Half, etc.
 - Key Date: Is this year+mint combination a key or semi-key date? (e.g. 1893-S Morgan, 1916-D Mercury Dime, 1909-S VDB Lincoln)
@@ -148,6 +153,7 @@ This is the MOST IMPORTANT thing to get right. Follow these steps:
 - Errors: Die cracks, clips, off-center strike, etc.?
 
 The item was described as: "${itemName}"
+**IMPORTANT**: If the year in the description above does NOT match what you read on the slab label, trust the SLAB LABEL and report the label's year. This is a known issue where earlier pipeline stages misread digits.
 
 Return ONLY valid JSON (no markdown, no code blocks):
 {
@@ -592,10 +598,44 @@ export function applyDetailOverrides(
       }
     }
 
-    // ── Year Override ──
-    if (cd.year && cd.year !== specs["Year"]) {
-      console.log(`${label} OVERRIDE Year: "${specs["Year"]}" → "${cd.year}"`);
-      specs["Year"] = cd.year;
+    // ── Year Override (specs + title + description) ──
+    if (cd.year) {
+      // Override Year in item specifics
+      if (cd.year !== specs["Year"]) {
+        console.log(`${label} OVERRIDE Year spec: "${specs["Year"]}" → "${cd.year}"`);
+        specs["Year"] = cd.year;
+      }
+
+      // Override Year in title — find any 4-digit year that differs
+      if (listing.title) {
+        const titleStr = listing.title as string;
+        const titleYearMatch = titleStr.match(/\b(1[89]\d{2}|20[0-4]\d)\b/);
+        if (titleYearMatch && titleYearMatch[1] !== cd.year) {
+          const oldYear = titleYearMatch[1];
+          // Replace old year with correct year (preserve mint mark suffix like "-W", "-S")
+          const yearWithMarkPattern = new RegExp(`\\b${oldYear}(-(\\w{1,2}))?\\b`);
+          const newTitle = titleStr.replace(yearWithMarkPattern, (match, markSuffix) => {
+            return markSuffix ? `${cd.year}${markSuffix}` : cd.year!;
+          });
+          if (newTitle !== titleStr) {
+            listing.title = newTitle;
+            console.log(`${label} OVERRIDE Title year: "${oldYear}" → "${cd.year}" → "${newTitle}"`);
+          }
+        }
+      }
+
+      // Override Year in description — replace first occurrence of wrong year
+      if (listing.description) {
+        const descStr = listing.description as string;
+        const descYearMatch = descStr.match(/\b(1[89]\d{2}|20[0-4]\d)\b/);
+        if (descYearMatch && descYearMatch[1] !== cd.year) {
+          const oldYear = descYearMatch[1];
+          // Replace all occurrences of the wrong year in description
+          const wrongYearPattern = new RegExp(`\\b${oldYear}\\b`, "g");
+          listing.description = descStr.replace(wrongYearPattern, cd.year);
+          console.log(`${label} OVERRIDE Description year: "${oldYear}" → "${cd.year}"`);
+        }
+      }
     }
 
     // ── Key Date notation ──
