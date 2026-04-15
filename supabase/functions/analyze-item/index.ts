@@ -458,7 +458,7 @@ serve(async (req: Request) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "gemini-2.5-pro-latest",
+            model: "gemini-2.5-pro-exp-03-25",
             response_format: { type: "json_object" },
             messages: [
               {
@@ -1299,7 +1299,7 @@ Seller's note: "${voiceNote}"`;
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gemini-2.5-pro-latest",
+          model: "gemini-2.5-pro-exp-03-25",
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: contentParts },
@@ -1418,7 +1418,7 @@ Seller's note: "${voiceNote}"`;
       await svc.from("gemini_usage").insert({
         user_id: userId,
         function_name: "analyze-item",
-        model: "gemini-2.5-pro-latest",
+        model: "gemini-2.5-pro-exp-03-25",
         prompt_tokens: usage?.prompt_tokens || 0,
         completion_tokens: usage?.completion_tokens || 0,
         total_tokens: usage?.total_tokens || 0,
