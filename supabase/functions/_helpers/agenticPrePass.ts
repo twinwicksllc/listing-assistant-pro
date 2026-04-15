@@ -332,7 +332,9 @@ After searching, return ONLY a single valid JSON object (no markdown, no code bl
     generationConfig: {
       temperature: 0.1,
       maxOutputTokens: 800,
-      responseMimeType: "application/json",
+      // NOTE: responseMimeType: "application/json" is NOT compatible with
+      // googleSearch grounding tool — the API returns 400 INVALID_ARGUMENT.
+      // JSON is requested via the system prompt instead; we parse it manually.
     },
   };
 
@@ -479,7 +481,9 @@ Return ONLY a single valid JSON object (no markdown, no code blocks):
     generationConfig: {
       temperature: 0.1,
       maxOutputTokens: 1200,
-      responseMimeType: "application/json",
+      // NOTE: responseMimeType: "application/json" is NOT compatible with
+      // codeExecution tool — the API returns 400 INVALID_ARGUMENT.
+      // JSON is requested via the system prompt instead; we parse it manually.
     },
   };
 
