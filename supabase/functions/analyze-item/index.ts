@@ -525,6 +525,51 @@ serve(async (req: Request) => {
     }
     // ─── END PRE-PASS 0 ─────────────────────────────────────────────────────────
 
+    // ─── SLAB OCR: GPT-4o Vision label reading (coins_bullion only) ─────────────
+    // Runs BEFORE Pass 2 so the correct year/grade/cert are injected as ground
+    // truth into the Gemini prompt. Eliminates year misreads at the source.
+    // Non-blocking: failure leaves slabOcrResult = null, pipeline continues.
+    let slabOcrResult: Awaited<ReturnType<typeof import("../_helpers/slabOcr.ts").runSlabOcr>> = null;
+    if (identification.domain === "coins_bullion") {
+      try {
+        const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+        if (OPENAI_API_KEY) {
+          const { runSlabOcr } = await import("../_helpers/slabOcr.ts");
+          const ocrBase64List: string[] = [];
+          const ocrMimeList: string[] = [];
+          for (const img of imageList) {
+            const b64 = img.includes(",") ? img.split(",")[1] : img;
+            const mimeMatch = img.match(/^data:(image\/\w+);/);
+            ocrBase64List.push(b64);
+            ocrMimeList.push(mimeMatch ? mimeMatch[1] : "image/jpeg");
+          }
+          slabOcrResult = await runSlabOcr(
+            OPENAI_API_KEY,
+            ocrBase64List,
+            ocrMimeList,
+            invocationId,
+          );
+          if (slabOcrResult?.isSlabbed) {
+            console.log(
+              `[${invocationId}] Slab OCR: detected slab, grader=${slabOcrResult.grader}, year=${slabOcrResult.year}, grade=${slabOcrResult.grade}`,
+            );
+          } else {
+            console.log(`[${invocationId}] Slab OCR: no slab detected`);
+          }
+        } else {
+          console.warn(
+            `[${invocationId}] Slab OCR: OPENAI_API_KEY not set — skipping`,
+          );
+        }
+      } catch (ocrErr) {
+        console.warn(
+          `[${invocationId}] Slab OCR failed (non-blocking):`,
+          String(ocrErr),
+        );
+      }
+    }
+    // ─── END SLAB OCR ─────────────────────────────────────────────────────────────────────
+
     // ── Pre-lookup: Deterministic category resolution ──────────────────────────
     let categoryHints = "";
     let lockedCategoryId: string | null = null;
@@ -912,6 +957,28 @@ serve(async (req: Request) => {
       systemPrompt =
         `You are a professional eBay listing expert. Analyze the provided photo(s) and generate a complete, accurate listing via the create_listing tool. Title ≤ 80 chars. Condition must be one of: NEW, USED_EXCELLENT, USED_VERY_GOOD, USED_GOOD, USED_ACCEPTABLE, FOR_PARTS_OR_NOT_WORKING.`;
     }
+    // ─── Inject Slab OCR ground truth into system prompt ──────────────────────────────
+    // If GPT-4o successfully read the slab label, prepend it to the system prompt
+    // so Gemini sees the correct year/grade/cert BEFORE all other instructions.
+    if (slabOcrResult?.isSlabbed) {
+      try {
+        const { formatSlabOcrContext } = await import("../_helpers/slabOcr.ts");
+        const ocrContext = formatSlabOcrContext(slabOcrResult);
+        if (ocrContext) {
+          systemPrompt = ocrContext + "\n\n" + systemPrompt;
+          console.log(
+            `[${invocationId}] Slab OCR ground truth injected into system prompt`,
+          );
+        }
+      } catch (fmtErr) {
+        console.warn(
+          `[${invocationId}] Failed to format slab OCR context:`,
+          fmtErr,
+        );
+      }
+    }
+    // ─── END Slab OCR injection ──────────────────────────────────────────────────────────────────
+
     // DUMMY_PLACEHOLDER — remove this line (keeps template literal parser happy)
     const _promoteSystemPrompt =
       `You are a professional eBay Listing Expert and item identifier. Your task is to analyze item photos and generate a complete listing via the \`create_listing\` tool.
