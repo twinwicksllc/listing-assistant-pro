@@ -1465,17 +1465,45 @@ Seller's note: "${voiceNote}"`;
 
       // Strip from description: the warning block the AI adds when it wrongly
       // classifies the coin as a novelty/fantasy replica.
+      // Match multiple formats the AI has produced:
+      // - "*** PLEASE READ CAREFULLY BEFORE PURCHASING ***... This is a NOVELTY..."
+      // - "🚨 IMPORTANT... NOVELTY REPLICA..."
+      // - "This is a NOVELTY / FANTASY item..."
+      // - "This listing is for a NOVELTY..."
       if (listing.description) {
         const descBefore = listing.description as string;
         listing.description = descBefore
+          // Format 1: "*** PLEASE READ... ***" block with NOVELTY disclaimer
+          .replace(
+            /\*{3,}\s*PLEASE READ[^]*?NOVELTY[^]*?(?:\*{3,}|\n\n)/gi,
+            "",
+          )
+          // Format 2: emoji + IMPORTANT block
           .replace(
             /\u{1F6A8}\s*IMPORTANT[^]*?(?:All details are descriptions from seller\.|verified by the buyer\.)\s*/iu,
             "",
           )
+          // Format 3: "This is a NOVELTY / FANTASY item..." paragraph
+          .replace(
+            /This is a NOVELTY[\s\/&]*FANTASY[^]*?(?:\n\n|selling\.)/gi,
+            "",
+          )
+          // Format 4: "This listing is for a NOVELTY..."
           .replace(
             /This listing is for a \*?NOVELTY[^]*?grading company\.[^\n]*/gi,
             "",
           )
+          // Format 5: Any paragraph starting with NOVELTY disclaimer
+          .replace(
+            /\n\n\*{0,3}\s*PLEASE READ[^]*?NOVELTY[^]*?\.\s*\n/gi,
+            "\n",
+          )
+          // Remove "NOT A GENUINE..." bullet points that often follow
+          .replace(/\n\s*[•\-*]\s*\*?NOT[^\n]*\n/gi, "\n")
+          .replace(/\n\s*[•\-*]\s*NOT REAL[^\n]*\n/gi, "\n")
+          .replace(/\n\s*[•\-*]\s*NOT A GENUINE[^\n]*\n/gi, "\n")
+          // Clean up multiple blank lines
+          .replace(/\n{3,}/g, "\n\n")
           .trim();
         if (listing.description !== descBefore) {
           console.log(
