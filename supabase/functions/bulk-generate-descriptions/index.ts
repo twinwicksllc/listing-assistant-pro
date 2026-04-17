@@ -158,15 +158,26 @@ Title: ${row.title}
 Condition: ${conditionLabel}
 Item Specifics: ${specificsText}
 
-Requirements:
-- 3–5 short paragraphs, plain text only (no HTML, no bullet lists)
-- Lead with the most compelling feature or value
-- Mention condition honestly
-- Include relevant details from the item specifics
-- End with a brief buyer confidence statement (fast shipping, returns accepted, etc.)
-- Max 500 words
-- Do NOT include the title as a heading
-- Do NOT make up facts not provided above`;
+Structure your description using these FOUR sections:
+
+1. OPENING (1-2 sentences): Direct, conversational hook. Lead with the best feature or an honest note about condition. Use "You're looking at...", "Here's a great...", or "Let's be honest..." as openers. Do NOT start with the item title.
+
+2. WHAT YOU'RE GETTING (bullet list using - ):
+   - List the key facts: year/model, condition, specs, what's included
+   - Be specific to what's provided above - do not invent details
+
+3. WHY IT WORKS (2-3 sentences): Honest appeal - who is this for and why does it stand out? Historical note, rarity, or practical value. Be SPECIFIC to this item.
+
+4. Bottom line: (always labeled exactly "Bottom line:") One closing sentence with your honest take on value and who should buy this.
+
+TONE RULES:
+- Write like a knowledgeable seller talking to a fellow enthusiast, not a corporate email
+- Use contractions naturally ("it's", "you're", "here's")
+- Be honest about condition - builds trust and reduces returns
+- Max 400 words total
+- Plain text only, no HTML
+- AVOID these phrases: "comprises", "showcases", "features exceptional", "museum-quality", "elevate your collection", "delve into", "in the realm of"
+- Do NOT include the title as a heading`;
 
         const response = await fetch(
           "https://api.openai.com/v1/chat/completions",
@@ -182,7 +193,7 @@ Requirements:
                 {
                   role: "system",
                   content:
-                    "You are an expert eBay listing copywriter. Write clear, honest, persuasive descriptions that help items sell.",
+                    "You are an expert eBay seller who writes honest, human-sounding listing descriptions. Write like a knowledgeable dealer talking to a fellow enthusiast - conversational but professional. Use contractions naturally. Always end with a 'Bottom line:' closing sentence. Never use: 'comprises', 'showcases', 'elevate your collection', 'delve into', 'museum-quality', 'in the realm of', 'features exceptional'. Use phrases like 'Here\'s what you\'re getting:', 'Let\'s be honest...', 'You\'re looking at...', 'What makes this special is...'",
                 },
                 { role: "user", content: prompt },
               ],

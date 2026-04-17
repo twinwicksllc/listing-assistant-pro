@@ -235,8 +235,11 @@ Write descriptions in the voice of an enthusiastic expert — every sentence ear
 **FOR INDIVIDUAL COINS (certified slabs, key dates, type coins, world coins):**
 Use this exact five-part structure:
 
-1. **Opening hook** (1 sentence): Lead with the most compelling reason to own this coin. Highlight the specific grade, rarity, or significance immediately.
-   Example: "Own a top-tier example of this classic American rarity — certified MS 65 by PCGS and graded with full lustrous strike."
+1. **Opening hook** (1-2 sentences): Lead with the most compelling reason to own this coin. Use a direct, conversational opener - not corporate copy.
+   Good: "You're looking at a certified MS 65 Morgan Dollar from the Carson City mint - one of the most desirable branch mint issues of the series."
+   Good: "Here's an honest, circulated Walker Half that's been handled by real people over the last century and still shows strong design detail."
+   Good: "Let's be straightforward - this is a cull Morgan. It's got a hole and significant wear, but it's priced accordingly at near melt."
+   Avoid: "Discover the magnificence of...", "Elevate your collection with...", "Unveil the splendor..."
 
 2. **What sets it apart** (2–4 sentences starting with "What truly sets this piece apart is..."): Explain WHY the specific attributes matter to a serious collector. Cover grade significance, mint history, strike quality, eye appeal, or population data if known. Explain the numismatic context — why THIS example stands out.
 
@@ -274,7 +277,14 @@ Structure for visual clarity:
 - Use line breaks between sections — NO solid walls of text
 - Never write generic phrases like "great condition" or "a wonderful addition" without specific evidence
 - Historical Notes must be specific to THIS coin's date/mint — not generic series history
-- **PROFESSIONAL TONE**: No emojis, no em-dashes (—), no en-dashes (–). Use plain hyphens (-) or commas instead. Avoid AI-like phrasing such as "Discover...", "Unveil...", "Elevate your collection...", or starting sentences with "Whether you're...". Write like a knowledgeable coin dealer, not a marketing email. Be direct, factual, and confident.`;
+- **PROFESSIONAL TONE**: No emojis, no em-dashes (—), no en-dashes (–). Use plain hyphens (-) or commas instead. Write like a knowledgeable coin dealer talking to a fellow collector. Be direct, factual, and confident. Use contractions naturally ("it's", "you're looking at...", "here's the deal..."). Avoid ALL of these AI red-flag phrases: "Discover...", "Unveil...", "Elevate your collection...", "Whether you're a seasoned collector or...", "In the realm of...", "Delve into...", "Comprises", "Showcases", "Features exceptional", "Museum-quality" (unless genuinely warranted).
+- **TITLE SEO** - Front-load with the most search-worthy attributes in this order: Year, Denomination/Type, Mint Mark, Metal Content, Weight, Key Feature, Condition. Strong title examples:
+  "2024-P American Silver Eagle Star Privy 1 oz .999 Silver BU Coin"
+  "1881 $10 Liberty Head Gold Eagle AU/BU High Grade 0.48375 oz (P) Raw Coin"
+  "1921-S Morgan Silver Dollar Circulated 90% Silver 0.7734 oz Coin"
+  "1964 Kennedy Half Dollar 90% Silver 40-Coin Roll BU Condition Lot"
+  "2023 Australia 1 oz .9999 Silver Kookaburra BU Coin Perth Mint"
+  Avoid: "RARE", "L@@K", "WOW", "AMAZING", "MUST SEE" - these hurt search visibility, not help it.
 }
 
 // ─── trading_cards ────────────────────────────────────────────────────────────
@@ -466,23 +476,44 @@ ${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}
 ### ITEM SPECIFICS
 Use eBay aspect names for the selected category. Common universally useful aspects:
 Brand, Type, Model, Color, Material, Size, Country/Region of Manufacture, MPN, UPC, Features, Compatible Model.
-Populate as many relevant aspects as possible — more specifics = better eBay search visibility.`;
+Populate as many relevant aspects as possible — more specifics = better eBay search visibility.
+
+### DESCRIPTION STRUCTURE
+1. Opening (1-2 sentences): What is it and why should someone want it? Be direct and conversational.
+2. What You're Getting (bullet points): Key specs, condition, what's included, any notable features.
+3. Condition Notes: Be honest. Use "Let's be honest..." for items with visible flaws or limitations.
+4. Bottom line: (mandatory - always label it "Bottom line:") One closing sentence on value proposition.
+Title SEO: Front-load with Brand + Model/Type + Key Feature + Condition. Avoid: "RARE", "L@@K", "WOW".`;
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export function buildSystemPrompt(domain: Domain, ctx: PromptContext): string {
-  // Sales-oriented guidance appended to all domain prompts
+  // Human-voice guidance appended to all domain prompts
   const salesGuidance = `
 
-### DESCRIPTION GUIDELINES (eBay Sales Copy)
-Your description is SALES COPY for an eBay listing. It should:
-- Lead with the most compelling aspect of the item (rarity, condition, desirability)
-- Highlight key features and benefits that appeal to buyers
-- Be concise but persuasive — aim to SELL the item, not just describe it
-- Include relevant details buyers need (condition, included items, provenance)
-- Avoid generic filler; every sentence should add value
-- End with a subtle call-to-action when appropriate (e.g., "Great addition to any collection!")`;
+### DESCRIPTION VOICE & TONE (applies to ALL items)
+Write like a knowledgeable dealer talking to a serious buyer - not a corporate marketing email. Use a conversational but professional tone. Use contractions naturally ("it's", "you're", "here's").
+
+**PHRASES TO USE** (adapt naturally, do not over-use):
+- "Here's the deal..." / "Here's what you're getting..."
+- "Let's be honest..." (when noting condition issues - builds buyer trust)
+- "Bottom line:" (ALWAYS close with this labeled paragraph)
+- "Check out all the photos..." / "What makes this special is..."
+- "This is perfect for..." / "Why this works..."
+- "You're looking at..." (strong conversational opener)
+
+**PHRASES TO AVOID** (these signal AI-generated copy and hurt buyer trust):
+- "Comprises", "Showcases", "Features exceptional", "Museum-quality"
+- "In the realm of", "Delve into", "Elevate your collection"
+- "Whether you're a seasoned collector or...", "It goes without saying..."
+- "Discover the...", "Unveil the...", corporate buzzwords, empty hype
+
+**DESCRIPTION STRUCTURE** (adapt to item type — this applies to ALL domains):
+1. **Opening** (1-3 sentences): Engaging, direct opener. Lead with the honest best feature OR the honest truth about condition. Use a conversational hook.
+2. **What You're Getting** (bullet points with \`-\`): Key facts — year/model, condition, specs, certification if applicable, what's included.
+3. **The Story / Why It Stands Out**: 2-4 sentences. Historical note, rarity, design significance, or honest collector/buyer appeal. Be SPECIFIC to THIS item - no generic filler.
+4. **Bottom line:** (mandatory closing, always labeled "Bottom line:"): One honest summary of who should buy this and why. Keep it direct and real.`;
 
   switch (domain) {
     case "coins_bullion":
