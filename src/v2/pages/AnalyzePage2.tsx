@@ -29,6 +29,30 @@ import {
 } from "@/v2/theme";
 
 // ─── local style helpers ──────────────────────────────────────────────────────
+// Convert HTML to plain markdown for display in the textarea.
+// Handles cases where the AI returns HTML tags instead of markdown.
+function htmlToPlainMarkdown(text: string): string {
+  if (!text) return text;
+  // If no HTML tags detected, return as-is
+  if (!/<[a-z][\s\S]*>/i.test(text)) return text;
+  return text
+    .replace(/<strong>(.*?)<\/strong>/gi, "**$1**")
+    .replace(/<b>(.*?)<\/b>/gi, "**$1**")
+    .replace(/<em>(.*?)<\/em>/gi, "*$1*")
+    .replace(/<i>(.*?)<\/i>/gi, "*$1*")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>\s*<p>/gi, "\n\n")
+    .replace(/<p>/gi, "")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<ul>/gi, "")
+    .replace(/<\/ul>/gi, "")
+    .replace(/<li>(.*?)<\/li>/gi, "- $1\n")
+    .replace(/<h[1-3]>(.*?)<\/h[1-3]>/gi, "**$1**\n")
+    .replace(/<[^>]+>/g, "") // strip any remaining tags
+    .replace(/\n{3,}/g, "\n\n") // collapse excessive newlines
+    .trim();
+}
+
 const S = {
   page: {
     minHeight: "100vh",
@@ -440,7 +464,7 @@ export default function AnalyzePage2() {
       else setEbayMetadata(null);
 
       setTitle((data.title || "").slice(0, 80));
-      setDescription(data.description || "");
+      setDescription(htmlToPlainMarkdown(data.description || ""));
       setPriceMin(data.priceMin || 0);
       setPriceMax(data.priceMax || 0);
       setMetalType(data.metalType || "none");
