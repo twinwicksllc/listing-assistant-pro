@@ -308,8 +308,12 @@ serve(async (req: Request) => {
       );
     }
 
-    // Initialize competitorData early (will be populated after AI analysis)
+    // Initialize competitor data tracking (will be populated in two stages)
+    // Pre-AI: Uses Pass 1 keywords (context for Gemini)
+    // Post-AI: Uses AI-generated title (better accuracy for final response)
+    let preAICompetitorData: any = null;
     let competitorData: any = null;
+    let competitorDataSource: string = "none";
 
     if (imageList.length === 0) {
       return new Response(JSON.stringify({ error: "No images provided" }), {
@@ -879,11 +883,15 @@ serve(async (req: Request) => {
     // ── End dynamic aspects/conditions fetch ──────────────────────────────────
 
     // ─── Pre-AI sold comps (so AI has real pricing context in Pass 2) ────────
+    // Uses Pass 1 keywords for broader context search
     {
       const compQuery = identification.keywords.slice(0, 5).join(" ") ||
         identification.itemName;
       if (compQuery && compQuery !== "item" && userId) {
         try {
+          console.log(
+            `[${invocationId}] Pre-AI competitor search with query: "${compQuery}"`,
+          );
           const compResp = await fetch(
             `${Deno.env.get("SUPABASE_URL")}/functions/v1/ebay-competitor-search`,
             {
@@ -902,24 +910,39 @@ serve(async (req: Request) => {
               compData = JSON.parse(compText);
             } catch {
               console.warn(
-                `analyze-item: competitor search returned invalid JSON (length=${compText.length})`,
+                `[${invocationId}] Pre-AI competitor search returned invalid JSON (length=${compText.length})`,
               );
               compData = null;
             }
             if (compData && (compData.competitorCount ?? 0) > 0) {
+              preAICompetitorData = compData;
               competitorData = compData;
-              console.log("analyze-item: pre-AI comps:", {
-                count: compData.competitorCount,
-                avg: compData.avgPrice,
-              });
+              competitorDataSource = "pre-ai";
+              console.log(
+                `[${invocationId}] Pre-AI comps succeeded: count=${compData.competitorCount}, avg=$${
+                  compData.avgPrice?.toFixed(2)
+                }, median=$${compData.medianPrice?.toFixed(2)}`,
+              );
+            } else {
+              console.log(
+                `[${invocationId}] Pre-AI comps returned 0 results (will retry post-AI with full title)`,
+              );
             }
+          } else {
+            console.warn(
+              `[${invocationId}] Pre-AI competitor search failed with status ${compResp.status}`,
+            );
           }
         } catch (preCompErr) {
           console.warn(
-            "analyze-item: pre-AI comp fetch failed (non-blocking):",
+            `[${invocationId}] Pre-AI comp fetch error (non-blocking):`,
             preCompErr,
           );
         }
+      } else {
+        console.log(
+          `[${invocationId}] Skipping pre-AI competitor search (compQuery="${compQuery}", userId=${!!userId})`,
+        );
       }
     }
     // ─── END pre-AI sold comps ────────────────────────────────────────────────
@@ -1943,104 +1966,98 @@ Seller's note: "${voiceNote}"`;
     }
     // ─── END POST-PASS ─────────────────────────────────────────────────────
 
-    // --- Fetch competitor prices now that AI has generated the title ---
-    if (listing.title && userId) {
-      try {
-        console.log(
-          "analyze-item: fetching competitor prices with AI-generated title...",
-          { title: listing.title },
-        );
-        const competitorUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ebay-competitor-search`;
+    // ─── POST-AI competitor search: Fetch with AI-generated title ─────────────
+    // This runs AFTER Gemini generates a better title. Use full title for accuracy.
+    // If pre-AI failed/returned 0, this provides fallback data for response.
+    // If pre-AI succeeded, post-AI data can be compared/enhanced.
+    {
+      if (listing.title && userId) {
+        try {
+          console.log(
+            `[${invocationId}] Post-AI competitor search with title: "${listing.title.substring(0, 60)}..."`,
+          );
+          const competitorUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ebay-competitor-search`;
 
-        const competitorResp = await fetch(
-          competitorUrl,
-          {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-              "Content-Type": "application/json",
+          const competitorResp = await fetch(
+            competitorUrl,
+            {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                userId,
+                title: listing.title,
+                yourPrice: listing.priceMin || listing.price?.amount || 0,
+              }),
             },
-            body: JSON.stringify({
-              userId,
-              title: listing.title,
-              yourPrice: listing.priceMin || listing.price?.amount || 0,
-            }),
-          },
-        );
+          );
 
-        console.log(
-          "analyze-item: competitor response status:",
-          competitorResp.status,
-        );
+          console.log(
+            `[${invocationId}] Post-AI competitor response status: ${competitorResp.status}`,
+          );
 
-        if (competitorResp.ok) {
-          try {
-            const compRespText = await competitorResp.text();
-            competitorData = JSON.parse(compRespText);
-          } catch {
-            console.warn(
-              "analyze-item: competitor search returned invalid JSON",
-            );
-            competitorData = null;
-          }
-          console.log("analyze-item: competitor data retrieved", {
-            competitorCount: competitorData?.competitorCount,
-            avgPrice: competitorData?.avgPrice,
-            minPrice: competitorData?.minPrice,
-            maxPrice: competitorData?.maxPrice,
-            fromCache: competitorData?.fromCache,
-          });
+          if (competitorResp.ok) {
+            try {
+              const compRespText = await competitorResp.text();
+              const postAICompData = JSON.parse(compRespText);
 
-          // Post-process pricing based on market data (if not a precious metal with melt floor)
-          if (
-            competitorData && competitorData.competitorCount > 0 &&
-            (!listing.metalType || listing.metalType === "none")
-          ) {
-            const aiMid = (listing.priceMin + listing.priceMax) / 2;
-            const marketMid = competitorData.medianPrice ||
-              competitorData.avgPrice;
+              const postAICount = postAICompData?.competitorCount || 0;
+              const preAICount = preAICompetitorData?.competitorCount || 0;
 
-            if (marketMid && aiMid > 0) {
-              // If AI price is way above market (>30%), trust market data instead
-              if (aiMid / marketMid > 1.3) {
-                const adjustedPrice = parseFloat((marketMid * 0.95).toFixed(2));
-                listing.priceMin = adjustedPrice;
-                listing.priceMax = parseFloat((marketMid * 1.05).toFixed(2));
+              console.log(
+                `[${invocationId}] Post-AI comps complete: count=${postAICount}, avg=$${
+                  postAICompData?.avgPrice?.toFixed(2)
+                }, median=$${postAICompData?.medianPrice?.toFixed(2)}`,
+              );
+
+              // Fallback logic: Use post-AI if pre-AI failed/returned 0
+              if (!competitorData || competitorDataSource === "none") {
+                competitorData = postAICompData;
+                competitorDataSource = "post-ai";
                 console.log(
-                  `analyze-item: AI price adjusted based on market data (${aiMid} → ${adjustedPrice})`,
+                  `[${invocationId}] Using post-AI comps as primary (pre-AI was empty/failed)`,
+                );
+              } else if (postAICount > preAICount) {
+                // Post-AI found more competitors — prefer it for response
+                console.log(
+                  `[${invocationId}] Post-AI comps found more results (${postAICount} vs ${preAICount}); using post-AI for response`,
+                );
+                competitorData = postAICompData;
+                competitorDataSource = "post-ai";
+              } else {
+                // Pre-AI is still primary but log that post-AI returned data
+                console.log(
+                  `[${invocationId}] Keeping pre-AI comps (${preAICount} results); post-AI returned ${postAICount}`,
                 );
               }
+            } catch (jsonErr) {
+              console.warn(
+                `[${invocationId}] Post-AI competitor JSON parse failed:`,
+                jsonErr,
+              );
             }
+          } else {
+            const errText = await competitorResp.text();
+            console.warn(`[${invocationId}] Post-AI competitor search failed:`, {
+              status: competitorResp.status,
+              error: errText.substring(0, 200),
+            });
           }
-
-          // Always include competitor data in response
-          listing.competitorData = {
-            competitorCount: competitorData.competitorCount || 0,
-            avgPrice: competitorData.avgPrice || 0,
-            minPrice: competitorData.minPrice || 0,
-            maxPrice: competitorData.maxPrice || 0,
-            medianPrice: competitorData.medianPrice || 0,
-            fromCache: competitorData.fromCache || false,
-          };
-        } else {
-          const errText = await competitorResp.text();
-          console.warn("analyze-item: competitor search failed:", {
-            status: competitorResp.status,
-            error: errText,
-          });
+        } catch (compErr) {
+          console.warn(
+            `[${invocationId}] Post-AI competitor fetch error (non-blocking):`,
+            compErr,
+          );
         }
-      } catch (compErr) {
-        console.warn(
-          "analyze-item: competitor fetch error (non-blocking):",
-          compErr,
+      } else {
+        console.log(
+          `[${invocationId}] Skipping post-AI competitor search (title=${!!listing.title}, userId=${!!userId})`,
         );
       }
-    } else {
-      console.log(
-        "analyze-item: skipping competitor search - missing title or userId",
-      );
     }
-    // --- End competitor prices ---
+    // ─── END post-AI competitor search ────────────────────────────────────────
 
     // --- Server-side melt value enforcement ---
     let meltValue: number | null = null;
@@ -2171,6 +2188,26 @@ Seller's note: "${voiceNote}"`;
       }
     }
 
+    // --- Post-process competitor data for response ─────────────────────────────
+    // Always include competitor data if available (even if 0 competitors found)
+    if (competitorData) {
+      listing.competitorData = {
+        competitorCount: competitorData.competitorCount || 0,
+        avgPrice: competitorData.avgPrice || 0,
+        minPrice: competitorData.minPrice || 0,
+        maxPrice: competitorData.maxPrice || 0,
+        medianPrice: competitorData.medianPrice || 0,
+        fromCache: competitorData.fromCache || false,
+      };
+      console.log(
+        `[${invocationId}] Final response includes competitor data from ${competitorDataSource}: ${competitorData.competitorCount} competitors`,
+      );
+    } else {
+      console.log(
+        `[${invocationId}] No competitor data available for response (pre-AI and post-AI both failed or returned 0)`,
+      );
+    }
+
     let responsePayload = {
       ...listing,
       meltValue,
@@ -2230,6 +2267,7 @@ Seller's note: "${voiceNote}"`;
     // ─── FINAL RESPONSE LOGGING (for diagnostics) ──────────────────────────────
     console.log(`[${invocationId}] 📊 FINAL RESPONSE PRICING & METALS:`, {
       title: finalResponse.title?.slice(0, 60),
+      domain: finalResponse.domain,
       metalType: finalResponse.metalType,
       metalWeightOz: finalResponse.metalWeightOz,
       meltValue: finalResponse.meltValue,
@@ -2238,6 +2276,8 @@ Seller's note: "${voiceNote}"`;
       pricingNotes: finalResponse.pricingNotes?.slice(0, 80),
       competitorCount: finalResponse.competitorData?.competitorCount,
       competitorAvg: finalResponse.competitorData?.avgPrice,
+      competitorMedian: finalResponse.competitorData?.medianPrice,
+      competitorSource: competitorDataSource,
     });
     // ─── END FINAL RESPONSE LOGGING ──────────────────────────────────────────
 
