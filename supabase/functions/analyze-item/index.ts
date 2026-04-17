@@ -1377,7 +1377,7 @@ Seller's note: "${voiceNote}"`;
                     description: {
                       type: "string",
                       description:
-                        "SEO-friendly, sales-oriented eBay description. Highlight key features and benefits that would appeal to buyers. Be concise but compelling to drive buyer interest. Focus on what makes this item desirable.",
+                        "SEO-friendly, sales-oriented eBay description. Use plain text and markdown only (e.g. **bold**, bullet points with '- ', line breaks with newlines). Do NOT use HTML tags like <p>, <strong>, <br>, <ul>, or <li>. The system will convert markdown to HTML automatically before publishing to eBay.",
                     },
                     price: {
                       type: "object",
