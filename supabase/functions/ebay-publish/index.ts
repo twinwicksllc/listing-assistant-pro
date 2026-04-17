@@ -1107,8 +1107,7 @@ function buildAndNormalizeAspects(
 
     // eBay hard limit for Country of Origin is 65 characters.
     // Guard against AI hallucination where description text is placed in this field:
-    // drop the value if it exceeds 65 chars OR contains sentence-like punctuation
-    // (periods, commas in long strings) that no valid country name would ever contain.
+    // drop the value if it exceeds 65 chars OR contains sentence-like punctuation (periods, commas in long strings) that no valid country name would ever contain.
     if (key === "Country of Origin") {
       const looksLikeSentence = value.length > 65 || /[.!?]/.test(value) ||
         (value.includes(",") && value.length > 40);
@@ -1612,14 +1611,19 @@ function markdownToHtml(markdown: string): string {
   // Handles cases like "- Year: 2026 - Mint: West Point - Grade: MS 70"
   // Pattern: " - Label:" should become "\n- Label:"
   const bulletLabels = [
-    "Year:", "Mint:", "Grade:", "Certification Number:",
-    "Metal Content:", "Condition:", "Historical Note:"
+    "Year:",
+    "Mint:",
+    "Grade:",
+    "Certification Number:",
+    "Metal Content:",
+    "Condition:",
+    "Historical Note:",
   ];
   const labelPattern = bulletLabels.join("|");
   // Replace " - Label:" with "\n- Label:" when not at start of line
   html = html.replace(
     new RegExp(`(?!^|\n)(\s*-\s*)(${labelPattern})`, "g"),
-    "\n- $2"
+    "\n- $2",
   );
 
   // Convert headers (### ## #)
