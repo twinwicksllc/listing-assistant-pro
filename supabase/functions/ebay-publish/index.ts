@@ -208,7 +208,6 @@ const HARDCODED_COIN_CATEGORY_IDS = new Set([
   "526",
   "253",
   "45243",
-  "261186",
   "39471",
   "39472",
   "39473",
