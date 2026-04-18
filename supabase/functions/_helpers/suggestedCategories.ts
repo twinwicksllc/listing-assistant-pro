@@ -220,10 +220,14 @@ export async function buildSuggestedCategories(listing: any, svc: any) {
     }
   }
 
-  // Backfill: any suggestion still missing a name gets a fallback
+  // Backfill: ensure every suggestion has at least a breadcrumb or categoryName
   for (let i = 0; i < finalSuggestions.length; i++) {
-    if (!finalSuggestions[i].categoryName) {
+    if (!finalSuggestions[i].breadcrumb && !finalSuggestions[i].categoryName) {
       finalSuggestions[i].categoryName = `Category #${finalSuggestions[i].categoryId}`;
+    }
+    // If we still don't have a breadcrumb but have a categoryName, make it the breadcrumb
+    if (!finalSuggestions[i].breadcrumb) {
+      finalSuggestions[i].breadcrumb = finalSuggestions[i].categoryName;
     }
   }
 
