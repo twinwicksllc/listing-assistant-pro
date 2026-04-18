@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { X, AlertCircle, CheckCircle2, Loader2, HelpCircle } from "lucide-react";
-import { EBAY_CATEGORY_BREADCRUMBS } from "@/lib/ebayCategoryMap";
+import { EBAY_CATEGORY_BREADCRUMBS, getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
 import { supabase } from "@/integrations/supabase/client";
 
 interface CategoryConfirmDialogProps {
@@ -239,17 +239,21 @@ export default function CategoryConfirmDialog({
                 <div className="space-y-2 pt-2 border-t border-amber-500/20">
                   <p className="text-xs font-medium text-amber-600 dark:text-amber-400">AI-Recommended Categories</p>
                   <div className="space-y-1.5">
-                    {suggestedCategories.map((cat) => (
-                      <button
-                        key={cat.categoryId}
-                        onClick={() => onConfirm(cat.categoryId)}
-                        className="w-full text-left p-2 text-xs rounded-lg hover:bg-primary/10 border border-transparent hover:border-primary/30 transition-colors cursor-pointer"
-                      >
-                        <p className="font-semibold text-foreground">#{cat.categoryId}</p>
-                        <p className="text-muted-foreground text-[11px]">{cat.breadcrumb || cat.categoryName}</p>
-                        <p className="text-[10px] text-primary/70 italic">{cat.reason}</p>
-                      </button>
-                    ))}
+                    {suggestedCategories.map((cat) => {
+                      // Always prioritize breadcrumb, then use frontend map as fallback
+                      const displayBreadcrumb = cat.breadcrumb || getEbayCategoryBreadcrumb(cat.categoryId) || cat.categoryName || `Category #${cat.categoryId}`;
+                      return (
+                        <button
+                          key={cat.categoryId}
+                          onClick={() => onConfirm(cat.categoryId)}
+                          className="w-full text-left p-2 text-xs rounded-lg hover:bg-primary/10 border border-transparent hover:border-primary/30 transition-colors cursor-pointer"
+                        >
+                          <p className="font-semibold text-foreground">#{cat.categoryId}</p>
+                          <p className="text-muted-foreground text-[11px]">{displayBreadcrumb}</p>
+                          <p className="text-[10px] text-primary/70 italic">{cat.reason}</p>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}

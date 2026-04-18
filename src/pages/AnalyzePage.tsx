@@ -665,17 +665,21 @@ export default function AnalyzePage() {
                         className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       >
                         {suggestedCategories.length > 0 ? (
-                          suggestedCategories.map((cat) => (
-                            <option key={cat.categoryId} value={cat.categoryId}>
-                              #{cat.categoryId} — {cat.breadcrumb || cat.categoryName || getEbayCategoryBreadcrumb(cat.categoryId)}
-                            </option>
-                          ))
+                          suggestedCategories.map((cat) => {
+                            // Always prioritize breadcrumb, then use frontend map as fallback
+                            const displayBreadcrumb = cat.breadcrumb || getEbayCategoryBreadcrumb(cat.categoryId) || cat.categoryName || `Category #${cat.categoryId}`;
+                            return (
+                              <option key={cat.categoryId} value={cat.categoryId}>
+                                {displayBreadcrumb}
+                              </option>
+                            );
+                          })
                         ) : (
                           <option value="">No category selected</option>
                         )}
                         {ebayCategoryId && !suggestedCategories.find(c => c.categoryId === ebayCategoryId) && (
                           <option value={ebayCategoryId}>
-                            #{ebayCategoryId} — {getEbayCategoryBreadcrumb(ebayCategoryId) || "Custom category"}
+                            {getEbayCategoryBreadcrumb(ebayCategoryId) || `Category #${ebayCategoryId}`}
                           </option>
                         )}
                         <option value="__custom__">✏️ Enter custom category ID...</option>
