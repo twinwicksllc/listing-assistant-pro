@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { captureException, initSentry } from "../_helpers/sentry.ts";
+import { extractImagePayloads, toOpenAiImageContentParts } from "../_helpers/imageParsing.ts";
+import type { Domain, IdentificationResult } from "../_helpers/pipelineContracts.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,13 +16,6 @@ const corsHeaders = {
 async function ensureTableExists() {
   // No-op for now - category-lookup will initialize the table
   return;
-}
-
-function parseImageDataUrl(dataUrl: string) {
-  const base64Data = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
-  const mimeMatch = dataUrl.match(/^data:(image\/\w+);/);
-  const mimeType = mimeMatch ? mimeMatch[1] : "image/jpeg";
-  return { base64Data, mimeType };
 }
 
 function computeNextResetAt(resetDay: number | null): string | null {
@@ -382,21 +377,7 @@ serve(async (req: Request) => {
     // Sends ALL images to determine domain, item name, and keywords.
     // Results are used to improve the pre-lookup query and route to the correct
     // domain-specific prompt for Pass 2.
-    type Domain =
-      | "coins_bullion"
-      | "trading_cards"
-      | "jewelry"
-      | "electronics"
-      | "vintage_clothing"
-      | "general";
-    interface Identification {
-      domain: Domain;
-      itemName: string;
-      keywords: string[];
-      isMetal: boolean;
-      metalType: "gold" | "silver" | "platinum" | "none";
-    }
-    let identification: Identification = {
+    let identification: IdentificationResult = {
       domain: "general",
       itemName: "item",
       keywords: [],
@@ -406,13 +387,7 @@ serve(async (req: Request) => {
     try {
       // Use ALL images for Pass 1 — critical for items where key details
       // (slab labels, reverses, mint marks) may not appear in the first photo
-      const pass1Images = imageList.map((img) => {
-        const { base64Data, mimeType } = parseImageDataUrl(img);
-        return {
-          type: "image_url",
-          image_url: { url: `data:${mimeType};base64,${base64Data}` },
-        };
-      });
+      const pass1Images = toOpenAiImageContentParts(imageList);
       const pass1VoiceHint = voiceNote ? `\nSeller note: "${voiceNote.slice(0, 200)}"` : "";
       const pass1Resp = await fetch(
         "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
@@ -462,7 +437,7 @@ serve(async (req: Request) => {
                 itemName: String(parsed.itemName).slice(0, 120),
                 keywords: Array.isArray(parsed.keywords) ? parsed.keywords.slice(0, 7).map(String) : [],
                 isMetal: Boolean(parsed.isMetal),
-                metalType: (parsed.metalType ?? "none") as Identification["metalType"],
+                metalType: (parsed.metalType ?? "none") as IdentificationResult["metalType"],
               };
               console.log(
                 `[${invocationId}] ✓ Pass 1 identification succeeded:`,
@@ -560,15 +535,10 @@ serve(async (req: Request) => {
       );
 
       // Build base64 + mime lists for pre-pass (parse from data URLs) — use ALL images
-      const prePassBase64List: string[] = [];
-      const prePassMimeList: string[] = [];
-      for (const img of imageList) {
-        const ppBase64 = img.includes(",") ? img.split(",")[1] : img;
-        const ppMimeMatch = img.match(/^data:(image\/\w+);/);
-        const ppMimeType = ppMimeMatch ? ppMimeMatch[1] : "image/jpeg";
-        prePassBase64List.push(ppBase64);
-        prePassMimeList.push(ppMimeType);
-      }
+      const {
+        base64List: prePassBase64List,
+        mimeList: prePassMimeList,
+      } = extractImagePayloads(imageList);
 
       // Use real domain + item name from Pass 1 (not a heuristic guess)
       prePassResult = await runAgenticPrePass(
@@ -601,14 +571,10 @@ serve(async (req: Request) => {
       const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
       if (OPENAI_API_KEY) {
         const { runSlabOcr } = await import("../_helpers/slabOcr.ts");
-        const ocrBase64List: string[] = [];
-        const ocrMimeList: string[] = [];
-        for (const img of imageList) {
-          const b64 = img.includes(",") ? img.split(",")[1] : img;
-          const mimeMatch = img.match(/^data:(image\/\w+);/);
-          ocrBase64List.push(b64);
-          ocrMimeList.push(mimeMatch ? mimeMatch[1] : "image/jpeg");
-        }
+        const {
+          base64List: ocrBase64List,
+          mimeList: ocrMimeList,
+        } = extractImagePayloads(imageList);
         console.log(
           `[${invocationId}] Calling Slab OCR with ${ocrBase64List.length} images (domain=${identification.domain})`,
         );
@@ -1203,13 +1169,7 @@ Use the \`create_listing\` tool to return the final structured data.`;
     void _promoteSystemPrompt;
 
     // Build content array with all images + text prompt
-    const contentParts: any[] = imageList.map((img) => {
-      const { base64Data, mimeType } = parseImageDataUrl(img);
-      return {
-        type: "image_url",
-        image_url: { url: `data:${mimeType};base64,${base64Data}` },
-      };
-    });
+    const contentParts: any[] = toOpenAiImageContentParts(imageList);
 
     let userText = `I've provided ${imageList.length} photo${
       imageList.length > 1 ? "s" : ""
@@ -2202,14 +2162,10 @@ Seller's note: "${voiceNote}"`;
       );
 
       // Build image lists for the detail extractor — use ALL images
-      const detailBase64List: string[] = [];
-      const detailMimeList: string[] = [];
-      for (const img of imageList) {
-        const detB64 = img.includes(",") ? img.split(",")[1] : img;
-        const detMimeMatch = img.match(/^data:(image\/\w+);/);
-        detailBase64List.push(detB64);
-        detailMimeList.push(detMimeMatch ? detMimeMatch[1] : "image/jpeg");
-      }
+      const {
+        base64List: detailBase64List,
+        mimeList: detailMimeList,
+      } = extractImagePayloads(imageList);
 
       const detailResult = await extractKeyDetails(
         GEMINI_API_KEY,
