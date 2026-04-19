@@ -7,17 +7,17 @@ import CategoryConfirmDialog from "@/components/CategoryConfirmDialog";
 import { useDrafts } from "@/hooks/useDrafts";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import type { ItemSpecifics, ListingFormat } from "@/types/listing";
+import type { ItemSpecifics } from "@/types/listing";
 import { getConditionsForCategory } from "@/types/listing";
 import { useAuth } from "@/contexts/AuthContext";
 import { exportListing, type ExportPlatform, type ExportFormat } from "@/lib/exportCSV";
 import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
-import { uploadListingImages } from "@/lib/imageUpload";
 import { EbayPolicySelector } from "@/components/EbayPolicySelector";
 import type { SelectedPolicies } from "@/types/ebay-policies";
 import { VideoUploadInput } from "@/components/VideoUploadInput";
 import { useAnalyzePublish } from "@/hooks/useAnalyzePublish";
 import { useAnalyzeGeneration } from "@/hooks/useAnalyzeGeneration";
+import { useAnalyzeSave } from "@/hooks/useAnalyzeSave";
 
 export default function AnalyzePage() {
   const { canAnalyze, canPublish, usage, recordUsage, isOwner, currentPlanLimits, planFeatures, currentPlan, user } = useAuth();
@@ -223,6 +223,55 @@ export default function AnalyzePage() {
     onSuccess: handleAnalyzeSuccess,
   });
 
+  const buildDraftPayload = (uploadedUrls: string[]) => ({
+    id: crypto.randomUUID(),
+    imageUrl: uploadedUrls[0],
+    imageUrls: uploadedUrls,
+    title,
+    description: getDescriptionWithFooter(),
+    priceMin,
+    priceMax,
+    listingPrice: listingPrice > 0
+      ? listingPrice
+      : auctionStartPrice > 0
+      ? auctionStartPrice
+      : parseFloat(((priceMin + priceMax) / 2).toFixed(2)),
+    listingFormat,
+    createdAt: new Date(),
+    ebayCategoryId,
+    ebayCategoryBreadcrumb: getEbayCategoryBreadcrumb(ebayCategoryId),
+    itemSpecifics,
+    condition,
+    consignor,
+    cogs: cogs ?? undefined,
+    cogsSource: cogs != null ? "manual" : undefined,
+    fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId ?? undefined,
+    paymentPolicyId: selectedPolicies.paymentPolicyId ?? undefined,
+    returnPolicyId: selectedPolicies.returnPolicyId ?? undefined,
+    metalType: metalType !== "none" ? metalType : undefined,
+    metalWeightOz: metalWeightOz > 0 ? metalWeightOz : undefined,
+    bestOfferEnabled: bestOfferEnabled || undefined,
+    bestOfferAutoAcceptPrice: bestOfferEnabled && bestOfferAutoAcceptPrice > 0
+      ? bestOfferAutoAcceptPrice
+      : undefined,
+    bestOfferAutoDeclinePrice: bestOfferEnabled && bestOfferAutoDeclinePrice > 0
+      ? bestOfferAutoDeclinePrice
+      : undefined,
+    quantity: quantity > 1 ? quantity : undefined,
+    pricingMode: quantity > 1 ? pricingMode : undefined,
+    videoUrl: videoUrl ?? undefined,
+    ebayVideoId: ebayVideoId ?? undefined,
+    ebayVideoStatus: ebayVideoStatus ?? undefined,
+  });
+
+  const { handleSave } = useAnalyzeSave({
+    userId: user?.id,
+    imageUrls,
+    addDraft,
+    buildDraftPayload,
+    onSaved: () => navigate("/drafts"),
+  });
+
   // Fetch the stored eBay token once when analysis results are shown
   // so the EbayPolicySelector can load policies without waiting for publish
   useEffect(() => {
@@ -246,51 +295,6 @@ export default function AnalyzePage() {
     navigate("/home");
     return null;
   }
-
-  const handleSave = async () => {
-    // Upload base64 images to Supabase Storage so the draft stores a public URL.
-    // eBay (and other platforms) require real HTTPS URLs — data: URLs are rejected.
-    let uploadedUrls = imageUrls;
-    if (user?.id) {
-      uploadedUrls = await uploadListingImages(imageUrls, user.id);
-    }
-    const success = await addDraft({
-      id: crypto.randomUUID(),
-      imageUrl: uploadedUrls[0],
-      imageUrls: uploadedUrls,
-      title,
-      description: getDescriptionWithFooter(),
-      priceMin,
-      priceMax,
-      listingPrice: listingPrice > 0 ? listingPrice : auctionStartPrice > 0 ? auctionStartPrice : parseFloat(((priceMin + priceMax) / 2).toFixed(2)),
-      listingFormat: listingFormat as ListingFormat,
-      createdAt: new Date(),
-      ebayCategoryId,
-      ebayCategoryBreadcrumb: getEbayCategoryBreadcrumb(ebayCategoryId),
-      itemSpecifics,
-      condition,
-      consignor,
-      cogs: cogs ?? undefined,
-      cogsSource: cogs != null ? "manual" : undefined,
-      fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId ?? undefined,
-      paymentPolicyId: selectedPolicies.paymentPolicyId ?? undefined,
-      returnPolicyId: selectedPolicies.returnPolicyId ?? undefined,
-      metalType: metalType !== "none" ? metalType : undefined,
-      metalWeightOz: metalWeightOz > 0 ? metalWeightOz : undefined,
-      bestOfferEnabled: bestOfferEnabled || undefined,
-      bestOfferAutoAcceptPrice: bestOfferEnabled && bestOfferAutoAcceptPrice > 0 ? bestOfferAutoAcceptPrice : undefined,
-      bestOfferAutoDeclinePrice: bestOfferEnabled && bestOfferAutoDeclinePrice > 0 ? bestOfferAutoDeclinePrice : undefined,
-      quantity: quantity > 1 ? quantity : undefined,
-      pricingMode: quantity > 1 ? pricingMode : undefined,
-      videoUrl: videoUrl ?? undefined,
-      ebayVideoId: ebayVideoId ?? undefined,
-      ebayVideoStatus: ebayVideoStatus ?? undefined,
-    });
-    if (success) {
-      toast.success("Draft saved!");
-      navigate("/drafts");
-    }
-  };
 
   // Filter out empty item specifics for display
   const displaySpecifics = Object.entries(itemSpecifics).filter(([, v]) => v && v.trim() !== "");
