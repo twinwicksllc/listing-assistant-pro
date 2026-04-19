@@ -1983,62 +1983,18 @@ Seller's note: "${voiceNote}"`;
       listing.ebayCategoryId &&
       listing.ebayCategoryId !== fetchedMetadataCategoryId
     ) {
-      const _metadataUrl = Deno.env.get("SUPABASE_URL");
-      const _metadataKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-      if (_metadataUrl && _metadataKey) {
-        try {
-          const aspectsResp = await fetch(
-            `${_metadataUrl}/functions/v1/category-lookup`,
-            {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${_metadataKey}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                action: "aspects",
-                categoryId: listing.ebayCategoryId,
-              }),
-            },
-          );
-          if (aspectsResp.ok) {
-            categoryAspects = await aspectsResp.json();
-          }
-        } catch (aspectErr) {
-          console.warn(
-            `[${invocationId}] analyze-item: final-category aspects fetch failed (non-blocking):`,
-            aspectErr,
-          );
-        }
-
-        try {
-          const conditionsResp = await fetch(
-            `${_metadataUrl}/functions/v1/category-lookup`,
-            {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${_metadataKey}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                action: "conditions",
-                categoryId: listing.ebayCategoryId,
-              }),
-            },
-          );
-          if (conditionsResp.ok) {
-            categoryConditions = await conditionsResp.json();
-          }
-        } catch (condErr) {
-          console.warn(
-            `[${invocationId}] analyze-item: final-category conditions fetch failed (non-blocking):`,
-            condErr,
-          );
-        }
-
+      try {
+        const metadata = await fetchCategoryMetadata(listing.ebayCategoryId);
+        categoryAspects = metadata.aspects;
+        categoryConditions = metadata.conditions;
         fetchedMetadataCategoryId = listing.ebayCategoryId;
         console.log(
           `[${invocationId}] analyze-item: resynced metadata to final category ${listing.ebayCategoryId}`,
+        );
+      } catch (metadataErr) {
+        console.warn(
+          `[${invocationId}] analyze-item: final-category metadata fetch failed (non-blocking):`,
+          metadataErr,
         );
       }
     }
