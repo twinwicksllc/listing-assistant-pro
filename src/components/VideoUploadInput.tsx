@@ -73,7 +73,6 @@ export function VideoUploadInput({
     if (initialVideoId && resolveInitialStatus() === "processing") {
       startPolling(initialVideoId);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const stopPolling = () => {
