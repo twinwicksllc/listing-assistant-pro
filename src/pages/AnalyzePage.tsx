@@ -508,6 +508,41 @@ export default function AnalyzePage() {
   const selectedSuggestedCategory = suggestedCategories.find((c) => c.categoryId === ebayCategoryId);
   const hasSelectedCategoryInSuggestions = !!selectedSuggestedCategory;
 
+  const confirmCustomCategoryInput = () => {
+    const trimmed = customCategoryInput.trim();
+    if (!trimmed) return;
+    setPendingCategoryId(trimmed);
+    setShowCategoryConfirm(true);
+  };
+
+  const cancelCustomCategoryMode = () => {
+    setIsCustomCategoryMode(false);
+    setCustomCategoryInput("");
+  };
+
+  const handleCategorySelectChange = (value: string) => {
+    if (value === "__custom__") {
+      setIsCustomCategoryMode(true);
+      setCustomCategoryInput("");
+      return;
+    }
+    setEbayCategoryId(value);
+    setCustomCategoryInput("");
+  };
+
+  const handleCategoryDialogConfirm = (categoryId: string) => {
+    setEbayCategoryId(categoryId);
+    setCustomCategoryInput("");
+    setShowCategoryConfirm(false);
+    toast.success(`Category ${categoryId} confirmed`);
+  };
+
+  const handleCategoryDialogCancel = () => {
+    setShowCategoryConfirm(false);
+    setPendingCategoryId("");
+    // Don't reset customCategoryInput — user might want to try a different ID
+  };
+
   return (
     <div className="min-h-screen bg-background pb-8">
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-3">
@@ -673,16 +708,7 @@ export default function AnalyzePage() {
                     <>
                       <select
                         value={ebayCategoryId}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === "__custom__") {
-                            setIsCustomCategoryMode(true);
-                            setCustomCategoryInput("");
-                          } else {
-                            setEbayCategoryId(val);
-                            setCustomCategoryInput("");
-                          }
-                        }}
+                        onChange={(e) => handleCategorySelectChange(e.target.value)}
                         className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       >
                         {suggestedCategories.length > 0 ? (
@@ -723,34 +749,21 @@ export default function AnalyzePage() {
                         onChange={(e) => setCustomCategoryInput(e.target.value.replace(/\D/g, ""))}
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
-                            const v = customCategoryInput.trim();
-                            if (v) {
-                              setPendingCategoryId(v);
-                              setShowCategoryConfirm(true);
-                            }
+                            confirmCustomCategoryInput();
                           }
                         }}
                         className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       />
                       <div className="flex gap-2">
                         <button
-                          onClick={() => {
-                            const v = customCategoryInput.trim();
-                            if (v) {
-                              setPendingCategoryId(v);
-                              setShowCategoryConfirm(true);
-                            }
-                          }}
+                          onClick={confirmCustomCategoryInput}
                           disabled={!customCategoryInput.trim()}
                           className="flex-1 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 font-medium transition-colors"
                         >
                           Confirm ID
                         </button>
                         <button
-                          onClick={() => {
-                            setIsCustomCategoryMode(false);
-                            setCustomCategoryInput("");
-                          }}
+                          onClick={cancelCustomCategoryMode}
                           className="flex-1 py-1.5 text-xs rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 font-medium transition-colors"
                         >
                           Cancel
@@ -1253,17 +1266,8 @@ export default function AnalyzePage() {
         open={showCategoryConfirm}
         categoryId={pendingCategoryId}
         suggestedCategories={suggestedCategories}
-        onConfirm={(categoryId) => {
-          setEbayCategoryId(categoryId);
-          setCustomCategoryInput("");
-          setShowCategoryConfirm(false);
-          toast.success(`Category ${categoryId} confirmed`);
-        }}
-        onCancel={() => {
-          setShowCategoryConfirm(false);
-          setPendingCategoryId("");
-          // Don't reset customCategoryInput — user might want to try a different ID
-        }}
+        onConfirm={handleCategoryDialogConfirm}
+        onCancel={handleCategoryDialogCancel}
       />
     </div>
   );
