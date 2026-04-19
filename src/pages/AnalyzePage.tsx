@@ -10,7 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { ItemSpecifics } from "@/types/listing";
 import { getConditionsForCategory } from "@/types/listing";
 import { useAuth } from "@/contexts/AuthContext";
-import { exportListing, type ExportPlatform, type ExportFormat } from "@/lib/exportCSV";
+import type { ExportPlatform, ExportFormat } from "@/lib/exportCSV";
 import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
 import { EbayPolicySelector } from "@/components/EbayPolicySelector";
 import type { SelectedPolicies } from "@/types/ebay-policies";
@@ -1047,4 +1047,4 @@ export default function AnalyzePage() {
       />
     </div>
   );
-}
+}}
