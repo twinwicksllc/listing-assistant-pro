@@ -148,7 +148,7 @@ export default function AnalyzePage() {
     // can show cost/margin data even after this session ends.
     if (cogs != null && user?.id && (data.sku || data.listingId)) {
       try {
-        await supabase.from("listing_cogs").insert({
+        await (supabase as any).from("listing_cogs").insert({
           user_id: user.id,
           ebay_sku: data.sku ?? null,
           ebay_listing_id: data.listingId ?? null,
