@@ -739,7 +739,7 @@ export default function AnalyzePage() {
             {/* Item Cost (COGS) */}
             <CogsInput
               cogs={cogs}
-              listingPrice={listingPrice > 0 ? listingPrice : auctionStartPrice > 0 ? auctionStartPrice : (priceMin + priceMax) / 2}
+              listingPrice={listingPriceForCogs}
               onChange={setCogs}
               disabled={!planFeatures.hasCogsTracking}
             />
@@ -754,10 +754,7 @@ export default function AnalyzePage() {
               metalWeightOz={planFeatures.hasMeltProtection && metalType !== "none" ? metalWeightOz : undefined}
               meltValue={planFeatures.hasMeltProtection && metalType !== "none" ? meltValue : null}
               spotPrices={planFeatures.hasMeltProtection && metalType !== "none" ? spotPrices : null}
-              onApplyPrice={(price) => {
-                setListingPrice(price);
-                setAuctionStartPrice(price);
-              }}
+              onApplyPrice={applyRecommendedPrice}
             />
 
             {/* Listing Format + Price */}
@@ -770,7 +767,7 @@ export default function AnalyzePage() {
               {/* Format selector */}
               <div className="flex gap-2">
                 <button
-                  onClick={() => setListingFormat("FIXED_PRICE")}
+                  onClick={selectFixedPriceFormat}
                   className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium border transition-colors ${
                     listingFormat === "FIXED_PRICE"
                       ? "border-primary bg-primary/10 text-primary"
@@ -781,7 +778,7 @@ export default function AnalyzePage() {
                   Buy It Now
                 </button>
                 <button
-                  onClick={() => setListingFormat("AUCTION")}
+                  onClick={selectAuctionFormat}
                   className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium border transition-colors ${
                     listingFormat === "AUCTION"
                       ? "border-primary bg-primary/10 text-primary"
@@ -804,7 +801,7 @@ export default function AnalyzePage() {
                       step="0.01"
                       value={listingPrice || ""}
                       placeholder="0.00"
-                      onChange={(e) => setListingPrice(parseFloat(e.target.value) || 0)}
+                      onChange={(e) => updateListingPriceFromInput(e.target.value)}
                       className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </div>
@@ -819,11 +816,7 @@ export default function AnalyzePage() {
                           min="1"
                           step="1"
                           value={quantity}
-                          onChange={(e) => {
-                            const q = Math.max(1, Math.floor(parseFloat(e.target.value) || 1));
-                            setQuantity(q);
-                            if (q === 1) setPricingMode('per_item');
-                          }}
+                          onChange={(e) => updateQuantityFromInput(e.target.value)}
                           className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                       </div>
@@ -915,7 +908,7 @@ export default function AnalyzePage() {
                       step="0.01"
                       value={auctionStartPrice || ""}
                       placeholder="0.00"
-                      onChange={(e) => setAuctionStartPrice(parseFloat(e.target.value) || 0)}
+                      onChange={(e) => updateAuctionStartPriceFromInput(e.target.value)}
                       className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </div>
@@ -923,7 +916,7 @@ export default function AnalyzePage() {
                     <input
                       type="checkbox"
                       checked={auctionBuyItNowEnabled}
-                      onChange={(e) => setAuctionBuyItNowEnabled(e.target.checked)}
+                      onChange={(e) => toggleAuctionBuyItNow(e.target.checked)}
                       className="h-4 w-4 rounded border-border accent-primary"
                     />
                     <span className="text-xs text-muted-foreground">Add Buy It Now price to auction</span>
@@ -937,7 +930,7 @@ export default function AnalyzePage() {
                         step="0.01"
                         value={auctionBuyItNow || ""}
                         placeholder="0.00"
-                        onChange={(e) => setAuctionBuyItNow(parseFloat(e.target.value) || 0)}
+                        onChange={(e) => updateAuctionBuyItNowFromInput(e.target.value)}
                         className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       />
                     </div>
