@@ -10,7 +10,6 @@ import { supabase } from "@/integrations/supabase/client";
 import type { ItemSpecifics } from "@/types/listing";
 import { getConditionsForCategory } from "@/types/listing";
 import { useAuth } from "@/contexts/AuthContext";
-import type { ExportPlatform, ExportFormat } from "@/lib/exportCSV";
 import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
 import { EbayPolicySelector } from "@/components/EbayPolicySelector";
 import type { SelectedPolicies } from "@/types/ebay-policies";
@@ -22,6 +21,7 @@ import { useAnalyzeCategorySelection } from "@/hooks/useAnalyzeCategorySelection
 import { useAnalyzeExport } from "@/hooks/useAnalyzeExport";
 import { useAnalyzePolicyToken } from "@/hooks/useAnalyzePolicyToken";
 import { useAnalyzePublishPayload } from "@/hooks/useAnalyzePublishPayload";
+import { useAnalyzeExportPreferences } from "@/hooks/useAnalyzeExportPreferences";
 
 export default function AnalyzePage() {
   const { canAnalyze, canPublish, usage, recordUsage, isOwner, currentPlanLimits, planFeatures, currentPlan, user } = useAuth();
@@ -45,8 +45,8 @@ export default function AnalyzePage() {
   const [suggestedCategories, setSuggestedCategories] = useState<Array<{ categoryId: string; categoryName: string; reason: string; breadcrumb?: string }>>([]);
   const [itemSpecifics, setItemSpecifics] = useState<ItemSpecifics>({});
   const [condition, setCondition] = useState<string>("USED_EXCELLENT");
-  const [exportPlatform, setExportPlatform] = useState<ExportPlatform>("ebay_file_exchange");
-  const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
+  const { exportPlatform, exportFormat, setExportPlatform, setExportFormat } =
+    useAnalyzeExportPreferences();
   const [suggestedGrade, setSuggestedGrade] = useState<string>("");
   const [gradingRationale, setGradingRationale] = useState<string>("");
   const [isSlabbed, setIsSlabbed] = useState(false);
