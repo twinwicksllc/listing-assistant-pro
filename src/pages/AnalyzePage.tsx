@@ -26,6 +26,7 @@ import { useAnalyzePricingControls } from "@/hooks/useAnalyzePricingControls";
 import { useAnalyzeVideoHandlers } from "@/hooks/useAnalyzeVideoHandlers";
 import { useAnalyzeBestOfferControls } from "@/hooks/useAnalyzeBestOfferControls";
 import { useAnalyzeConditionOptions } from "@/hooks/useAnalyzeConditionOptions";
+import { useAnalyzeGradeControls } from "@/hooks/useAnalyzeGradeControls";
 
 export default function AnalyzePage() {
   const { canAnalyze, canPublish, usage, recordUsage, isOwner, currentPlanLimits, planFeatures, currentPlan, user } = useAuth();
@@ -356,6 +357,14 @@ export default function AnalyzePage() {
     setCondition,
   });
 
+  const { acceptSuggestedGrade, dismissSuggestedGrade, undoGradeConfirmation } =
+    useAnalyzeGradeControls({
+      setGradeConfirmed,
+      setItemSpecifics,
+      setSuggestedGrade,
+      setGradingRationale,
+    });
+
   // Auto-trigger AI analysis on mount — skip the redundant "Generate Listing" step
   useEffect(() => { handleGenerate(); }, []); // mount-only intentional
 
@@ -671,23 +680,14 @@ export default function AnalyzePage() {
                   {!gradeConfirmed ? (
                     <div className="flex gap-2">
                       <button
-                        onClick={() => {
-                          setGradeConfirmed(true);
-                          setItemSpecifics(prev => ({ ...prev, Grade: suggestedGrade }));
-                          toast.success(`Grade ${suggestedGrade} applied to item specifics`);
-                        }}
+                        onClick={() => acceptSuggestedGrade(suggestedGrade)}
                         className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold transition-all hover:opacity-90 active:scale-[0.98]"
                       >
                         <Check className="w-3.5 h-3.5" />
                         Accept Grade
                       </button>
                       <button
-                        onClick={() => {
-                          setSuggestedGrade("");
-                          setGradingRationale("");
-                          setItemSpecifics(prev => ({ ...prev, Grade: "Ungraded" }));
-                          toast("Grade dismissed — set to Ungraded");
-                        }}
+                        onClick={dismissSuggestedGrade}
                         className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-secondary text-foreground text-xs font-semibold transition-all hover:bg-secondary/80 active:scale-[0.98]"
                       >
                         <XIcon className="w-3.5 h-3.5" />
@@ -696,10 +696,7 @@ export default function AnalyzePage() {
                     </div>
                   ) : (
                     <button
-                      onClick={() => {
-                        setGradeConfirmed(false);
-                        setItemSpecifics(prev => ({ ...prev, Grade: "Ungraded" }));
-                      }}
+                      onClick={undoGradeConfirmation}
                       className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
                     >
                       Undo confirmation
