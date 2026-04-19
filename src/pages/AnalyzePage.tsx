@@ -22,6 +22,7 @@ import { useAnalyzeExport } from "@/hooks/useAnalyzeExport";
 import { useAnalyzePolicyToken } from "@/hooks/useAnalyzePolicyToken";
 import { useAnalyzePublishPayload } from "@/hooks/useAnalyzePublishPayload";
 import { useAnalyzeExportPreferences } from "@/hooks/useAnalyzeExportPreferences";
+import { useAnalyzeImageCarousel } from "@/hooks/useAnalyzeImageCarousel";
 
 export default function AnalyzePage() {
   const { canAnalyze, canPublish, usage, recordUsage, isOwner, currentPlanLimits, planFeatures, currentPlan, user } = useAuth();
@@ -38,7 +39,8 @@ export default function AnalyzePage() {
   const [description, setDescription] = useState("");
   const [priceMin, setPriceMin] = useState(0);
   const [priceMax, setPriceMax] = useState(0);
-  const [activePhoto, setActivePhoto] = useState(0);
+  const { activePhoto, selectPhoto, goToNextPhoto, goToPreviousPhoto } =
+    useAnalyzeImageCarousel(imageUrls.length);
   const [metalType, setMetalType] = useState<string>("none");
   const [metalWeightOz, setMetalWeightOz] = useState<number>(0);
   const [ebayCategoryId, setEbayCategoryId] = useState<string>("");
@@ -332,13 +334,13 @@ export default function AnalyzePage() {
           {imageUrls.length > 1 && (
             <>
               <button
-                onClick={() => setActivePhoto((p) => (p - 1 + imageUrls.length) % imageUrls.length)}
+                onClick={goToPreviousPhoto}
                 className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-background/70 backdrop-blur-sm flex items-center justify-center text-foreground hover:bg-background/90 transition-colors"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <button
-                onClick={() => setActivePhoto((p) => (p + 1) % imageUrls.length)}
+                onClick={goToNextPhoto}
                 className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-background/70 backdrop-blur-sm flex items-center justify-center text-foreground hover:bg-background/90 transition-colors"
               >
                 <ChevronRight className="w-4 h-4" />
@@ -347,7 +349,7 @@ export default function AnalyzePage() {
                 {imageUrls.map((_, i) => (
                   <button
                     key={i}
-                    onClick={() => setActivePhoto(i)}
+                    onClick={() => selectPhoto(i)}
                     className={`w-2 h-2 rounded-full transition-colors ${i === activePhoto ? "bg-primary" : "bg-background/60"}`}
                   />
                 ))}
@@ -362,7 +364,7 @@ export default function AnalyzePage() {
             {imageUrls.map((url, i) => (
               <button
                 key={i}
-                onClick={() => setActivePhoto(i)}
+                onClick={() => selectPhoto(i)}
                 className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-colors ${i === activePhoto ? "border-primary" : "border-border"}`}
               >
                 <img src={url} alt={`Thumb ${i + 1}`} className="w-full h-full object-cover" />
