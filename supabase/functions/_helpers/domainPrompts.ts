@@ -209,8 +209,9 @@ US Cents: Indian Head=41084 | Lincoln Wheat=39455 | Lincoln Memorial=11116
 US Gold: American Gold Eagle=40166 | American Gold Buffalo=40167 | $20 Double Eagle=40161 | $10 Eagle=40162 | $5 Half Eagle=40163
 US Bullion: American Silver Eagle=41111 | Silver Bars/Rounds=39489 | Gold Bars/Rounds=178906 | Other Silver Bullion=3361 | Copper Rounds=166679
 Sets: US Proof Sets=41109 | US Mint Sets=526
-Other: Ancient Coins=532 | Medieval Coins=173685 | World Coins (all non-US)=45243
-- World coins (45243): REQUIRED aspect "Materials sourced from" = issuing country (e.g., "Canada")
+World Coins: Australia=40196 | Canada=40197 | Europe=40198 | UK=40199 | Mexico=40200 | Other World Coins=45243
+Other: Ancient Coins=532 | Medieval Coins=173685
+- World coins (World Coins sub-categories or 45243): REQUIRED aspect "Materials sourced from" = issuing country (e.g., "Australia", "Canada")
 - Always provide 1–2 alternativeCategoryIds (e.g., Morgan → alt: 39489 Silver Bars if unsure collector vs bullion)
 ${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}
 
