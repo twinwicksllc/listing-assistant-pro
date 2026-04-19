@@ -3339,7 +3339,7 @@ serve(async (req) => {
         listingPrice: (() => {
           const rawQty = Number(payloadQuantity) || 1;
           const rawPrice = Number(listingPrice ?? 0);
-          return (pricingMode === 'total' && rawQty > 1) ? rawPrice / rawQty : rawPrice;
+          return (pricingMode === "total" && rawQty > 1) ? rawPrice / rawQty : rawPrice;
         })(),
         quantity: Number(payloadQuantity) || 1,
         condition: conditionEnum,
