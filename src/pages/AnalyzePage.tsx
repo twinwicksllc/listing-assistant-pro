@@ -24,6 +24,7 @@ import { useAnalyzePublishPayload } from "@/hooks/useAnalyzePublishPayload";
 import { useAnalyzeExportPreferences } from "@/hooks/useAnalyzeExportPreferences";
 import { useAnalyzeImageCarousel } from "@/hooks/useAnalyzeImageCarousel";
 import { useAnalyzePricingControls } from "@/hooks/useAnalyzePricingControls";
+import { useAnalyzeVideoHandlers } from "@/hooks/useAnalyzeVideoHandlers";
 
 export default function AnalyzePage() {
   const { canAnalyze, canPublish, usage, recordUsage, isOwner, currentPlanLimits, planFeatures, currentPlan, user } = useAuth();
@@ -329,6 +330,12 @@ export default function AnalyzePage() {
     setPricingMode,
     setAuctionBuyItNowEnabled,
     setAuctionBuyItNow,
+  });
+
+  const { onVideoReady, onVideoRemoved, onVideoStatusChange } = useAnalyzeVideoHandlers({
+    setEbayVideoId,
+    setVideoUrl,
+    setEbayVideoStatus,
   });
 
   // Auto-trigger AI analysis on mount — skip the redundant "Generate Listing" step
@@ -932,17 +939,9 @@ export default function AnalyzePage() {
               <VideoUploadInput
                 title={title}
                 userToken={ebayTokenForPolicies}
-                onVideoReady={(id, url) => {
-                  setEbayVideoId(id);
-                  setVideoUrl(url);
-                  setEbayVideoStatus("LIVE");
-                }}
-                onVideoRemoved={() => {
-                  setEbayVideoId(null);
-                  setVideoUrl(null);
-                  setEbayVideoStatus(null);
-                }}
-                onStatusChange={(status) => setEbayVideoStatus(status)}
+                onVideoReady={onVideoReady}
+                onVideoRemoved={onVideoRemoved}
+                onStatusChange={onVideoStatusChange}
               />
             )}
 
