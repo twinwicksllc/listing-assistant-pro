@@ -17,6 +17,7 @@ import { EbayPolicySelector } from "@/components/EbayPolicySelector";
 import type { SelectedPolicies } from "@/types/ebay-policies";
 import { VideoUploadInput } from "@/components/VideoUploadInput";
 import { useAnalyzePublish } from "@/hooks/useAnalyzePublish";
+import { useAnalyzeGeneration } from "@/hooks/useAnalyzeGeneration";
 
 export default function AnalyzePage() {
   const { canAnalyze, canPublish, usage, recordUsage, isOwner, currentPlanLimits, planFeatures, currentPlan, user } = useAuth();
@@ -29,7 +30,6 @@ export default function AnalyzePage() {
   const voiceNote: string = state?.voiceNote || "";
 
   const [generated, setGenerated] = useState(false);
-  const [generating, setGenerating] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priceMin, setPriceMin] = useState(0);
@@ -176,6 +176,53 @@ export default function AnalyzePage() {
     onPublishSuccess: handlePublishSuccess,
   });
 
+  const handleAnalyzeSuccess = (data: any) => {
+    if (data._meta) {
+      setAnalysisMeta(data._meta);
+    }
+    if (data._ebayMetadata) {
+      setEbayMetadata(data._ebayMetadata);
+    } else {
+      setEbayMetadata(null);
+    }
+
+    setTitle((data.title || "").slice(0, 80));
+    setDescription(data.description || "");
+    setPriceMin(data.priceMin || 0);
+    setPriceMax(data.priceMax || 0);
+    setMetalType(data.metalType || "none");
+    setMetalWeightOz(data.metalWeightOz || 0);
+    setEbayCategoryId(data.ebayCategoryId || "");
+    setIsCustomCategoryMode(false);
+    setSuggestedCategories(data.suggestedCategories || []);
+    setItemSpecifics(data.itemSpecifics || {});
+    setCondition(data.condition || "USED_EXCELLENT");
+    setSuggestedGrade(data.suggestedGrade || "");
+    setGradingRationale(data.gradingRationale || "");
+    setIsSlabbed(data.isSlabbed ?? false);
+    setMeltValue(data.meltValue ?? null);
+    setSpotPrices(data.spotPrices ?? null);
+    setGradeConfirmed(false);
+    setDomain(data.domain || "general");
+
+    // Pre-fill listing price with AI midpoint as a starting suggestion
+    const aiMid = ((data.priceMin || 0) + (data.priceMax || data.priceMin || 0)) / 2;
+    setListingPrice(parseFloat(aiMid.toFixed(2)) || 0);
+    setAuctionStartPrice(parseFloat((data.priceMin || 0).toFixed(2)) || 0);
+    setGenerated(true);
+  };
+
+  const { generating, handleGenerate } = useAnalyzeGeneration({
+    canAnalyze,
+    analysisLimit: currentPlanLimits.analysisLimit,
+    imageUrls,
+    voiceNote,
+    ebayCategoryId,
+    onRequireBilling: () => navigate("/billing"),
+    onRequireSettings: () => navigate("/settings?tab=billing"),
+    onSuccess: handleAnalyzeSuccess,
+  });
+
   // Fetch the stored eBay token once when analysis results are shown
   // so the EbayPolicySelector can load policies without waiting for publish
   useEffect(() => {
@@ -191,92 +238,6 @@ export default function AnalyzePage() {
       cancelled = true;
     };
   }, [generated, user?.id, loadPolicyToken]);
-
-  const handleGenerate = async () => {
-    if (!canAnalyze) {
-      toast.error(`Monthly analysis limit reached (${currentPlanLimits.analysisLimit}). Upgrade for more listings.`);
-      navigate("/billing");
-      return;
-    }
-    setGenerating(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("analyze-item", {
-        body: { images: imageUrls, voiceNote, ...(ebayCategoryId ? { categoryId: ebayCategoryId } : {}) },
-      });
-
-      if (error) {
-        if (error.status === 429) {
-          toast.error("Monthly AI analysis limit reached. Upgrade to Pro or Unlimited.");
-          navigate("/settings?tab=billing");
-          setGenerating(false);
-          return;
-        }
-        throw new Error(error.message || "Analysis failed");
-      }
-      
-      if (data?.error) {
-        // Starter tier without eBay account connected
-        if (data.error === "ebay_account_required") {
-          toast.error("Connect an eBay account to start generating listings", {
-            description: "The free tier requires an active eBay connection.",
-            action: {
-              label: "Connect",
-              onClick: () => navigate("/settings"),
-            },
-          });
-          setGenerating(false);
-          return;
-        }
-        if (data.error.includes("limit")) {
-          toast.error(data.error);
-          navigate("/settings?tab=billing");
-          setGenerating(false);
-          return;
-        }
-        throw new Error(data.error);
-      }
-
-      // Extract metadata if available
-      if (data._meta) {
-        setAnalysisMeta(data._meta);
-      }
-      if (data._ebayMetadata) {
-        setEbayMetadata(data._ebayMetadata);
-      } else {
-        setEbayMetadata(null);
-      }
-
-      setTitle((data.title || "").slice(0, 80));
-      setDescription(data.description || "");
-      setPriceMin(data.priceMin || 0);
-      setPriceMax(data.priceMax || 0);
-      setMetalType(data.metalType || "none");
-      setMetalWeightOz(data.metalWeightOz || 0);
-      setEbayCategoryId(data.ebayCategoryId || "");
-      setIsCustomCategoryMode(false);
-      setSuggestedCategories(data.suggestedCategories || []);
-      setItemSpecifics(data.itemSpecifics || {});
-      setCondition(data.condition || "USED_EXCELLENT");
-      setSuggestedGrade(data.suggestedGrade || "");
-      setGradingRationale(data.gradingRationale || "");
-      setIsSlabbed(data.isSlabbed ?? false);
-      setMeltValue(data.meltValue ?? null);
-      setSpotPrices(data.spotPrices ?? null);
-      setGradeConfirmed(false);
-      setDomain(data.domain || "general");
-      // Pre-fill listing price with AI midpoint as a starting suggestion
-      const aiMid = ((data.priceMin || 0) + (data.priceMax || data.priceMin || 0)) / 2;
-      setListingPrice(parseFloat(aiMid.toFixed(2)) || 0);
-      setAuctionStartPrice(parseFloat((data.priceMin || 0).toFixed(2)) || 0);
-      setGenerated(true);
-      // OQ-12: recordUsage removed — analyze-item edge function inserts server-side usage row
-    } catch (err: any) {
-      console.error("Analysis error:", err);
-      toast.error(err.message || "Failed to analyze item. Please try again.");
-    } finally {
-      setGenerating(false);
-    }
-  };
 
   // Auto-trigger AI analysis on mount — skip the redundant "Generate Listing" step
   useEffect(() => { handleGenerate(); }, []); // mount-only intentional
