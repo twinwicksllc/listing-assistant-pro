@@ -27,6 +27,7 @@ import { useAnalyzeVideoHandlers } from "@/hooks/useAnalyzeVideoHandlers";
 import { useAnalyzeBestOfferControls } from "@/hooks/useAnalyzeBestOfferControls";
 import { useAnalyzeConditionOptions } from "@/hooks/useAnalyzeConditionOptions";
 import { useAnalyzeGradeControls } from "@/hooks/useAnalyzeGradeControls";
+import { useAnalyzeListingFieldHandlers } from "@/hooks/useAnalyzeListingFieldHandlers";
 
 export default function AnalyzePage() {
   const { canAnalyze, canPublish, usage, recordUsage, isOwner, currentPlanLimits, planFeatures, currentPlan, user } = useAuth();
@@ -365,6 +366,20 @@ export default function AnalyzePage() {
       setGradingRationale,
     });
 
+  const {
+    updateTitle,
+    updateDescription,
+    toggleAiFooter,
+    updateConsignor,
+    updateItemSpecificValue,
+  } = useAnalyzeListingFieldHandlers({
+    setTitle,
+    setDescription,
+    setIncludeAiFooter,
+    setConsignor,
+    setItemSpecifics,
+  });
+
   // Auto-trigger AI analysis on mount — skip the redundant "Generate Listing" step
   useEffect(() => { handleGenerate(); }, []); // mount-only intentional
 
@@ -498,7 +513,7 @@ export default function AnalyzePage() {
               </div>
               <input
                 value={title}
-                onChange={(e) => setTitle(e.target.value.slice(0, 80))}
+                onChange={(e) => updateTitle(e.target.value)}
                 className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
@@ -507,7 +522,7 @@ export default function AnalyzePage() {
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Item Description</label>
               <textarea
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => updateDescription(e.target.value)}
                 rows={5}
                 className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
               />
@@ -515,7 +530,7 @@ export default function AnalyzePage() {
                 <input
                   type="checkbox"
                   checked={includeAiFooter}
-                  onChange={(e) => setIncludeAiFooter(e.target.checked)}
+                  onChange={(e) => toggleAiFooter(e.target.checked)}
                   className="h-4 w-4 rounded border-border text-primary focus:ring-ring accent-primary"
                 />
                 <span className="text-xs text-muted-foreground">
@@ -618,7 +633,7 @@ export default function AnalyzePage() {
                         </span>
                         <input
                           value={(value as string) || ""}
-                          onChange={(e) => setItemSpecifics(prev => ({ ...prev, [key]: e.target.value }))}
+                          onChange={(e) => updateItemSpecificValue(key, e.target.value)}
                           className="text-xs text-foreground text-right bg-transparent border-none focus:outline-none focus:ring-0 max-w-[55%]"
                         />
                       </div>
@@ -715,7 +730,7 @@ export default function AnalyzePage() {
               </div>
               <input
                 value={consignor}
-                onChange={(e) => setConsignor(e.target.value)}
+                onChange={(e) => updateConsignor(e.target.value)}
                 placeholder="Who does this item belong to?"
                 className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
