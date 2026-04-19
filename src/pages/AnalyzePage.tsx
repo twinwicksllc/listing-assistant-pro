@@ -17,6 +17,7 @@ import { uploadListingImages, uploadListingImage } from "@/lib/imageUpload";
 import { EbayPolicySelector } from "@/components/EbayPolicySelector";
 import type { SelectedPolicies } from "@/types/ebay-policies";
 import EbayIntegrationBanner from "@/components/EbayIntegrationBanner";
+import { VideoUploadInput } from "@/components/VideoUploadInput";
 
 export default function AnalyzePage() {
   const { canAnalyze, canPublish, isPro, isShop, isUnlimited, isPaid, usage, recordUsage, isOwner, isLister, currentPlanLimits, planFeatures, currentPlan, user } = useAuth();
@@ -110,6 +111,12 @@ export default function AnalyzePage() {
   // Multi-quantity (Fixed Price only)
   const [quantity, setQuantity] = useState(1);
   const [pricingMode, setPricingMode] = useState<'per_item' | 'total'>('per_item');
+
+  // Video upload (optional — eBay Video API)
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [ebayVideoId, setEbayVideoId] = useState<string | null>(null);
+  const [ebayVideoStatus, setEbayVideoStatus] = useState<string | null>(null);
+  const videoIsProcessing = !!ebayVideoId && ebayVideoStatus !== "LIVE" && ebayVideoStatus !== "FAILED";
 
   // Fetch the stored eBay token once when analysis results are shown
   // so the EbayPolicySelector can load policies without waiting for publish
@@ -265,6 +272,9 @@ export default function AnalyzePage() {
       bestOfferAutoDeclinePrice: bestOfferEnabled && bestOfferAutoDeclinePrice > 0 ? bestOfferAutoDeclinePrice : undefined,
       quantity: quantity > 1 ? quantity : undefined,
       pricingMode: quantity > 1 ? pricingMode : undefined,
+      videoUrl: videoUrl ?? undefined,
+      ebayVideoId: ebayVideoId ?? undefined,
+      ebayVideoStatus: ebayVideoStatus ?? undefined,
     });
     if (success) {
       toast.success("Draft saved!");
@@ -361,6 +371,7 @@ export default function AnalyzePage() {
           bestOfferAutoDeclinePrice: bestOfferEnabled && bestOfferAutoDeclinePrice > 0 ? bestOfferAutoDeclinePrice : undefined,
           quantity: quantity > 1 ? quantity : undefined,
           pricingMode: quantity > 1 ? pricingMode : undefined,
+          ebayVideoId: ebayVideoStatus === "LIVE" ? ebayVideoId : undefined,
         }));
         window.location.href = data.authUrl;
         return;
@@ -391,6 +402,7 @@ export default function AnalyzePage() {
           bestOfferAutoDeclinePrice: bestOfferEnabled && bestOfferAutoDeclinePrice > 0 ? bestOfferAutoDeclinePrice : undefined,
           quantity: quantity > 1 ? quantity : undefined,
           pricingMode: quantity > 1 ? pricingMode : undefined,
+          ebayVideoId: ebayVideoStatus === "LIVE" ? ebayVideoId : undefined,
         },
       });
 
@@ -1104,6 +1116,25 @@ export default function AnalyzePage() {
               />
             </div>
 
+            {/* Video Upload (optional) */}
+            {ebayTokenForPolicies && (
+              <VideoUploadInput
+                title={title}
+                userToken={ebayTokenForPolicies}
+                onVideoReady={(id, url) => {
+                  setEbayVideoId(id);
+                  setVideoUrl(url);
+                  setEbayVideoStatus("LIVE");
+                }}
+                onVideoRemoved={() => {
+                  setEbayVideoId(null);
+                  setVideoUrl(null);
+                  setEbayVideoStatus(null);
+                }}
+                onStatusChange={(status) => setEbayVideoStatus(status)}
+              />
+            )}
+
             {/* Export */}
             <div className="space-y-2">
               <div className="flex items-center gap-1.5">
@@ -1186,7 +1217,7 @@ export default function AnalyzePage() {
               {isOwner ? (
                 <button
                   onClick={handlePublish}
-                  disabled={publishing}
+                  disabled={publishing || videoIsProcessing}
                   className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
                 >
                   {publishing ? (
@@ -1206,6 +1237,12 @@ export default function AnalyzePage() {
                   <Lock className="w-4 h-4" />
                   Publishing restricted to account owner
                 </div>
+              )}
+              {videoIsProcessing && (
+                <p className="text-xs text-center text-amber-600">
+                  <Loader2 className="inline w-3 h-3 animate-spin mr-1" />
+                  Video is processing on eBay — save as draft now and publish once it's ready.
+                </p>
               )}
             </div>
           </div>

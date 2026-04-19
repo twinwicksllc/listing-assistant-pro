@@ -64,6 +64,10 @@ export function useDrafts() {
           // Multi-quantity
           quantity: d.quantity ?? 1,
           pricingMode: (d.pricing_mode as 'per_item' | 'total') ?? 'per_item',
+          // Video
+          videoUrl: d.video_url || undefined,
+          ebayVideoId: d.ebay_video_id || undefined,
+          ebayVideoStatus: d.ebay_video_status || undefined,
         }))
       );
     }
@@ -107,6 +111,10 @@ export function useDrafts() {
       // Multi-quantity
       quantity: draft.quantity ?? 1,
       pricing_mode: draft.pricingMode ?? 'per_item',
+      // Video
+      video_url: draft.videoUrl ?? null,
+      ebay_video_id: draft.ebayVideoId ?? null,
+      ebay_video_status: draft.ebayVideoStatus ?? null,
       // Cost of Goods Sold
       cogs: draft.cogs ?? null,
       cogs_source: draft.cogsSource ?? null,
@@ -170,6 +178,10 @@ export function useDrafts() {
     // Multi-quantity
     if (updates.quantity !== undefined)                patch.quantity = updates.quantity;
     if (updates.pricingMode !== undefined)             patch.pricing_mode = updates.pricingMode;
+    // Video
+    if (updates.videoUrl !== undefined)                patch.video_url = updates.videoUrl ?? null;
+    if (updates.ebayVideoId !== undefined)             patch.ebay_video_id = updates.ebayVideoId ?? null;
+    if (updates.ebayVideoStatus !== undefined)         patch.ebay_video_status = updates.ebayVideoStatus ?? null;
     // Cost of Goods Sold
     if (updates.cogs !== undefined)                    patch.cogs = updates.cogs ?? null;
     if (updates.cogsSource !== undefined)              patch.cogs_source = updates.cogsSource ?? null;
