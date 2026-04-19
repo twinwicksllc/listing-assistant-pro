@@ -8,7 +8,6 @@ import { useDrafts } from "@/hooks/useDrafts";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { ItemSpecifics } from "@/types/listing";
-import { getConditionsForCategory } from "@/types/listing";
 import { useAuth } from "@/contexts/AuthContext";
 import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
 import { EbayPolicySelector } from "@/components/EbayPolicySelector";
@@ -26,6 +25,7 @@ import { useAnalyzeImageCarousel } from "@/hooks/useAnalyzeImageCarousel";
 import { useAnalyzePricingControls } from "@/hooks/useAnalyzePricingControls";
 import { useAnalyzeVideoHandlers } from "@/hooks/useAnalyzeVideoHandlers";
 import { useAnalyzeBestOfferControls } from "@/hooks/useAnalyzeBestOfferControls";
+import { useAnalyzeConditionOptions } from "@/hooks/useAnalyzeConditionOptions";
 
 export default function AnalyzePage() {
   const { canAnalyze, canPublish, usage, recordUsage, isOwner, currentPlanLimits, planFeatures, currentPlan, user } = useAuth();
@@ -349,6 +349,13 @@ export default function AnalyzePage() {
     setBestOfferAutoDeclinePrice,
   });
 
+  const { conditionOptions, updateCondition } = useAnalyzeConditionOptions({
+    ebayMetadata,
+    ebayCategoryId,
+    domain,
+    setCondition,
+  });
+
   // Auto-trigger AI analysis on mount — skip the redundant "Generate Listing" step
   useEffect(() => { handleGenerate(); }, []); // mount-only intentional
 
@@ -614,17 +621,12 @@ export default function AnalyzePage() {
                   <span className="text-xs font-medium text-muted-foreground">Condition</span>
                   <select
                     value={condition}
-                    onChange={(e) => setCondition(e.target.value)}
+                    onChange={(e) => updateCondition(e.target.value)}
                     className="text-xs text-foreground bg-transparent border-none focus:outline-none cursor-pointer text-right"
                   >
-                    {ebayMetadata?.allowedConditions && ebayMetadata.allowedConditions.length > 0
-                      ? ebayMetadata.allowedConditions.map((c) => (
-                          <option key={c} value={c}>{c}</option>
-                        ))
-                      : getConditionsForCategory(ebayCategoryId || undefined, domain, getEbayCategoryBreadcrumb(ebayCategoryId) || undefined).map((opt) => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
-                        ))
-                    }
+                    {conditionOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>
