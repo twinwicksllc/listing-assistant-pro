@@ -106,21 +106,39 @@ export default function AnalyzePage() {
   const [ebayVideoStatus, setEbayVideoStatus] = useState<string | null>(null);
   const videoIsProcessing = !!ebayVideoId && ebayVideoStatus !== "LIVE" && ebayVideoStatus !== "FAILED";
 
+  const fetchStoredTokenData = async (userId: string): Promise<{
+    token: string | null;
+    postalCode: string | null;
+    city: string | null;
+  }> => {
+    try {
+      const { data } = await supabase.functions.invoke("ebay-publish", {
+        body: { action: "get_stored_token", userId },
+      });
+      return {
+        token: data?.token ?? null,
+        postalCode: data?.postalCode ?? null,
+        city: data?.city ?? null,
+      };
+    } catch (e) {
+      console.error("AnalyzePage: get_stored_token error", e);
+      return {
+        token: null,
+        postalCode: null,
+        city: null,
+      };
+    }
+  };
+
   // Fetch the stored eBay token once when analysis results are shown
   // so the EbayPolicySelector can load policies without waiting for publish
   useEffect(() => {
     if (!generated || !user?.id) return;
     let cancelled = false;
     (async () => {
-      try {
-        const { data } = await supabase.functions.invoke("ebay-publish", {
-          body: { action: "get_stored_token", userId: user.id },
-        });
-        if (!cancelled) {
-          setEbayTokenForPolicies(data?.token ?? localStorage.getItem("ebay-user-token"));
-        }
-      } catch {
-        if (!cancelled) setEbayTokenForPolicies(localStorage.getItem("ebay-user-token"));
+      const tokenData = await fetchStoredTokenData(user.id);
+      if (!cancelled) {
+        setEbayTokenForPolicies(tokenData.token ?? localStorage.getItem("ebay-user-token"));
       }
     })();
     return () => { cancelled = true; };
@@ -329,32 +347,25 @@ export default function AnalyzePage() {
       let city: string | null = null;
 
       if (user?.id) {
-        try {
-          const { data: tokenData } = await supabase.functions.invoke("ebay-publish", {
-            body: { action: "get_stored_token", userId: user.id },
+        const tokenData = await fetchStoredTokenData(user.id);
+        if (tokenData.token) {
+          ebayToken = tokenData.token;
+          postalCode = tokenData.postalCode;
+          city = tokenData.city;
+          console.log("AnalyzePage: retrieved stored token data", {
+            hasToken: !!tokenData.token,
+            postalCode,
+            city,
           });
-          if (tokenData?.token) {
-            ebayToken = tokenData.token;
-            postalCode = tokenData.postalCode ?? null;
-            city = tokenData.city ?? null;
-            console.log("AnalyzePage: retrieved stored token data", {
-              hasToken: !!tokenData.token,
-              postalCode,
-              city,
-            });
-          } else {
-            // Token retrieval failed, but we can still get postal_code from database
-            // This happens when eBay token is expired but profile is set
-            postalCode = tokenData?.postalCode ?? null;
-            city = tokenData?.city ?? null;
-            console.log("AnalyzePage: no token but got location data from database", {
-              postalCode,
-              city,
-            });
-          }
-        } catch (e) {
-          console.error("AnalyzePage: get_stored_token error", e);
-          // fall through to localStorage
+        } else {
+          // Token retrieval failed, but we can still get postal_code from database
+          // This happens when eBay token is expired but profile is set
+          postalCode = tokenData.postalCode;
+          city = tokenData.city;
+          console.log("AnalyzePage: no token but got location data from database", {
+            postalCode,
+            city,
+          });
         }
       }
       if (!ebayToken) {
