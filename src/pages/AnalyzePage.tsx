@@ -23,6 +23,7 @@ import { useAnalyzePolicyToken } from "@/hooks/useAnalyzePolicyToken";
 import { useAnalyzePublishPayload } from "@/hooks/useAnalyzePublishPayload";
 import { useAnalyzeExportPreferences } from "@/hooks/useAnalyzeExportPreferences";
 import { useAnalyzeImageCarousel } from "@/hooks/useAnalyzeImageCarousel";
+import { useAnalyzePricingControls } from "@/hooks/useAnalyzePricingControls";
 
 export default function AnalyzePage() {
   const { canAnalyze, canPublish, usage, recordUsage, isOwner, currentPlanLimits, planFeatures, currentPlan, user } = useAuth();
@@ -304,6 +305,30 @@ export default function AnalyzePage() {
     generated,
     userId: user?.id,
     loadPolicyToken,
+  });
+
+  const {
+    listingPriceForCogs,
+    applyRecommendedPrice,
+    selectFixedPriceFormat,
+    selectAuctionFormat,
+    updateListingPriceFromInput,
+    updateAuctionStartPriceFromInput,
+    updateQuantityFromInput,
+    toggleAuctionBuyItNow,
+    updateAuctionBuyItNowFromInput,
+  } = useAnalyzePricingControls({
+    listingPrice,
+    auctionStartPrice,
+    priceMin,
+    priceMax,
+    setListingPrice,
+    setAuctionStartPrice,
+    setListingFormat,
+    setQuantity,
+    setPricingMode,
+    setAuctionBuyItNowEnabled,
+    setAuctionBuyItNow,
   });
 
   // Auto-trigger AI analysis on mount — skip the redundant "Generate Listing" step
