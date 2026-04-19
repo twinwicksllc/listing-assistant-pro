@@ -25,6 +25,7 @@ import { useAnalyzeExportPreferences } from "@/hooks/useAnalyzeExportPreferences
 import { useAnalyzeImageCarousel } from "@/hooks/useAnalyzeImageCarousel";
 import { useAnalyzePricingControls } from "@/hooks/useAnalyzePricingControls";
 import { useAnalyzeVideoHandlers } from "@/hooks/useAnalyzeVideoHandlers";
+import { useAnalyzeBestOfferControls } from "@/hooks/useAnalyzeBestOfferControls";
 
 export default function AnalyzePage() {
   const { canAnalyze, canPublish, usage, recordUsage, isOwner, currentPlanLimits, planFeatures, currentPlan, user } = useAuth();
@@ -336,6 +337,16 @@ export default function AnalyzePage() {
     setEbayVideoId,
     setVideoUrl,
     setEbayVideoStatus,
+  });
+
+  const {
+    toggleBestOffer,
+    updateBestOfferAutoAccept,
+    updateBestOfferAutoDecline,
+  } = useAnalyzeBestOfferControls({
+    setBestOfferEnabled,
+    setBestOfferAutoAcceptPrice,
+    setBestOfferAutoDeclinePrice,
   });
 
   // Auto-trigger AI analysis on mount — skip the redundant "Generate Listing" step
@@ -835,7 +846,7 @@ export default function AnalyzePage() {
                     <input
                       type="checkbox"
                       checked={bestOfferEnabled}
-                      onChange={(e) => setBestOfferEnabled(e.target.checked)}
+                      onChange={(e) => toggleBestOffer(e.target.checked)}
                       className="h-4 w-4 rounded border-border accent-primary"
                     />
                     <span className="text-xs text-muted-foreground">Accept Best Offers from buyers</span>
@@ -855,7 +866,7 @@ export default function AnalyzePage() {
                           step="0.01"
                           value={bestOfferAutoAcceptPrice || ""}
                           placeholder="Leave blank to review manually"
-                          onChange={(e) => setBestOfferAutoAcceptPrice(parseFloat(e.target.value) || 0)}
+                          onChange={(e) => updateBestOfferAutoAccept(e.target.value)}
                           className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                       </div>
@@ -870,7 +881,7 @@ export default function AnalyzePage() {
                           step="0.01"
                           value={bestOfferAutoDeclinePrice || ""}
                           placeholder="Leave blank to review manually"
-                          onChange={(e) => setBestOfferAutoDeclinePrice(parseFloat(e.target.value) || 0)}
+                          onChange={(e) => updateBestOfferAutoDecline(e.target.value)}
                           className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                       </div>
