@@ -258,7 +258,9 @@ function buildTitleSuggestion(
   }
 
   // Check for excessive punctuation/symbols
-  const symbolCount = (title.match(/[!@#$%^&*()_+=\[\]{};':"\\|,.<>?]/g) || []).length;
+  const symbolCount =
+    (title.match(new RegExp("[!@#$%^&*()_+=\\[\\]{};':\"\\\\|,.<>?]", "g")) || [])
+      .length;
   if (symbolCount > 3) {
     issues.push(
       "Too many special characters — keep punctuation minimal for better readability",

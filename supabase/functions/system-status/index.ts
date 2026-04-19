@@ -38,7 +38,7 @@ serve(async (req) => {
     }
 
     // --- Stripe Status ---
-    let stripeStatus = { mode: "unknown", activeSubscriptions: 0, error: "" };
+    const stripeStatus = { mode: "unknown", activeSubscriptions: 0, error: "" };
     try {
       const stripeKey = Deno.env.get("STRIPE_SECRET_KEY") || "";
       stripeStatus.mode = stripeKey.startsWith("sk_live_")
@@ -57,7 +57,7 @@ serve(async (req) => {
     }
 
     // --- eBay API Ping ---
-    let ebayStatus = { ok: false, error: "" };
+    const ebayStatus = { ok: false, error: "" };
     try {
       const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
       const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
@@ -88,7 +88,7 @@ serve(async (req) => {
     }
 
     // --- Gemini Usage ---
-    let geminiUsage = {
+    const geminiUsage = {
       totalTokens: 0,
       totalCalls: 0,
       last30Days: [] as any[],
@@ -205,7 +205,7 @@ serve(async (req) => {
     }
 
     // --- Feature Usage Analytics ---
-    let featureUsage = {
+    const featureUsage = {
       ai_analysis: 0,
       ebay_publish: 0,
       optimize: 0,

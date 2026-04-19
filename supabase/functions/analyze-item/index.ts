@@ -646,7 +646,7 @@ serve(async (req: Request) => {
               lockedCategoryName = groundedCategoryName;
               lockedBreadcrumb = groundedBreadcrumb;
               categoryHints +=
-                `\n- **GROUNDED CATEGORY** (verified leaf from live Google Search): **${lockedCategoryId}** — ${lockedBreadcrumb}. This was found by searching eBay\'s current 2026 taxonomy. USE THIS CATEGORY unless you have strong evidence it is incorrect.`;
+                `\n- **GROUNDED CATEGORY** (verified leaf from live Google Search): **${lockedCategoryId}** — ${lockedBreadcrumb}. This was found by searching eBay's current 2026 taxonomy. USE THIS CATEGORY unless you have strong evidence it is incorrect.`;
               console.log(
                 `[${invocationId}] GROUNDED LOCK: category ${lockedCategoryId} (${lockedBreadcrumb}) verified as leaf via Pre-Pass 0`,
               );
@@ -1066,7 +1066,7 @@ ${
 
 Use the \`create_listing\` tool to return the final structured data.`;
     // The _promoteSystemPrompt above is the fallback template — actual systemPrompt is built above.
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+     
     void _promoteSystemPrompt;
 
     // Build content array with all images + text prompt
@@ -1462,7 +1462,7 @@ Seller's note: "${voiceNote}"`;
       if (listing.title) {
         const titleBefore = listing.title as string;
         listing.title = titleBefore
-          .replace(/^NOVELTY\s*[\/&]?\s*FANTASY\s*REPLICA\s*/i, "")
+            .replace(/^NOVELTY\s*[/&]?\s*FANTASY\s*REPLICA\s*/i, "")
           .replace(/^NOVELTY\s*REPLICA\s*/i, "")
           .replace(/^NOVELTY\s+/i, "")
           .replace(/^FANTASY\s*REPLICA\s*/i, "")
@@ -1496,7 +1496,7 @@ Seller's note: "${voiceNote}"`;
           )
           // Format 3: "This is a NOVELTY / FANTASY item..." paragraph
           .replace(
-            /This is a NOVELTY[\s\/&]*FANTASY[^]*?(?:\n\n|selling\.)/gi,
+              /This is a NOVELTY[\s/&]*FANTASY[^]*?(?:\n\n|selling\.)/gi,
             "",
           )
           // Format 4: "This listing is for a NOVELTY..."

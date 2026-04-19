@@ -301,7 +301,7 @@ function generateRequestId(): string {
 // ── Helper: Normalize item type for consistent matching ──────────────────────
 function normalizeItemType(input: string): string {
   return (input || "").toLowerCase().trim()
-    .replace(/[^a-z0-9\s\-]/g, "")
+    .replace(/[^a-z0-9\s-]/g, "")
     .replace(/\s+/g, " ");
 }
 
@@ -319,7 +319,7 @@ function deepNormalize(input: string): string {
 // ── Helper: Extract meaningful tokens from a string ──────────────────────────
 function meaningfulTokens(input: string): string[] {
   return (input || "").toLowerCase()
-    .replace(/[^a-z0-9\s\-]/g, "")
+    .replace(/[^a-z0-9\s-]/g, "")
     .split(/\s+/)
     .filter((w) => w.length > 2 && !STOPWORDS.has(w));
 }
@@ -464,7 +464,7 @@ async function fetchCategorySuggestions(
 ): Promise<CategorySuggestion[]> {
   // EA-P2-A: Sanitize query — strip special chars and truncate to eBay's limit
   let query = (rawQuery || "")
-    .replace(/[^\w\s\-\.]/g, " ") // Keep word chars, spaces, hyphens, dots
+    .replace(/[^\w\s.-]/g, " ") // Keep word chars, spaces, hyphens, dots
     .replace(/\s+/g, " ")
     .trim();
 

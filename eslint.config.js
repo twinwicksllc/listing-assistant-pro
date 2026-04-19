@@ -8,6 +8,7 @@ export default tseslint.config(
   {
     ignores: [
       "dist",
+      "backups/**",
       // shadcn/ui generated components — not hand-maintained, formatter handles style
       "src/components/ui/**",
     ],

@@ -175,7 +175,7 @@ eBay search keywords:`;
     // Sanitise: strip any accidental quotes/punctuation Gemini may add
     const cleaned = text
       .replace(/^["'`]+|["'`]+$/g, "")
-      .replace(/[^\w\s\-\.]/g, " ")
+      .replace(/[^\w\s.-]/g, " ")
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, 120);

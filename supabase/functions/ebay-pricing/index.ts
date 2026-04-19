@@ -92,7 +92,7 @@ function parseSoldItemsFromMarkdown(
 
   // Strategy 2: Extract structured listing blocks
   // Jina outputs eBay listings as markdown sections with title links + price
-  const listingBlocks = content.split(/\n(?=\[|\!\[|##\s|\*\*)/);
+  const listingBlocks = content.split(/\n(?=\[|!\[|##\s|\*\*)/);
 
   for (const block of listingBlocks) {
     // Look for a price in this block
