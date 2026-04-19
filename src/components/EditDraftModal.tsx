@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import CogsInput from "@/components/CogsInput";
+import { VideoUploadInput } from "@/components/VideoUploadInput";
 
 interface EditDraftModalProps {
   draft: ListingDraft;
@@ -79,6 +80,12 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
   const [quantity, setQuantity] = useState(draft.quantity ?? 1);
   const [pricingMode, setPricingMode] = useState<'per_item' | 'total'>(draft.pricingMode ?? 'per_item');
 
+  // Video upload — seed from saved draft values
+  const [storedEbayToken, setStoredEbayToken] = useState<string | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(draft.videoUrl ?? null);
+  const [ebayVideoId, setEbayVideoId] = useState<string | null>(draft.ebayVideoId ?? null);
+  const [ebayVideoStatus, setEbayVideoStatus] = useState<string | null>(draft.ebayVideoStatus ?? null);
+
   const [saving, setSaving] = useState(false);
 
   const displaySpecifics = Object.entries(itemSpecifics).filter(([, v]) => v !== undefined);
@@ -137,6 +144,7 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
       }
 
       setEbayConnected(true);
+      setStoredEbayToken(ebayToken);
 
       const { data, error } = await supabase.functions.invoke("ebay-publish", {
         body: { action: "get_policies", userToken: ebayToken, userId: user?.id ?? null },
@@ -225,6 +233,9 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
       returnPolicyId:      returnPolicyId      || undefined,
       quantity: quantity > 1 ? quantity : 1,
       pricingMode,
+      videoUrl: videoUrl ?? undefined,
+      ebayVideoId: ebayVideoId ?? undefined,
+      ebayVideoStatus: ebayVideoStatus ?? undefined,
     };
 
     const ok = await updateDraft(draft.id, updates);
@@ -650,6 +661,30 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
               </div>
             )}
           </div>
+
+          {/* Video Upload (optional) */}
+          {storedEbayToken && (
+            <div className="px-4 pt-1 pb-2">
+              <VideoUploadInput
+                title={title}
+                userToken={storedEbayToken}
+                initialVideoId={ebayVideoId ?? undefined}
+                initialVideoStatus={ebayVideoStatus ?? undefined}
+                initialVideoUrl={videoUrl ?? undefined}
+                onVideoReady={(id, url) => {
+                  setEbayVideoId(id);
+                  setVideoUrl(url);
+                  setEbayVideoStatus("LIVE");
+                }}
+                onVideoRemoved={() => {
+                  setEbayVideoId(null);
+                  setVideoUrl(null);
+                  setEbayVideoStatus(null);
+                }}
+                onStatusChange={(status) => setEbayVideoStatus(status)}
+              />
+            </div>
+          )}
 
         </div>
 

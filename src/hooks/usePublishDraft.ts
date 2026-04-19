@@ -266,6 +266,8 @@ export function usePublishDraft() {
         fulfillmentPolicyId: draft.fulfillmentPolicyId ?? null,
         paymentPolicyId: draft.paymentPolicyId ?? null,
         returnPolicyId: draft.returnPolicyId ?? null,
+        // Only attach video if it has fully processed — LIVE status required by eBay
+        ebayVideoId: draft.ebayVideoStatus === "LIVE" ? (draft.ebayVideoId ?? null) : null,
       };
 
       console.log(`publishWithRetry [attempt ${attempt}/${maxRetries}]: invoking ebay-publish`, {

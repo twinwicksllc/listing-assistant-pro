@@ -49,13 +49,14 @@ export default function DraftsPage() {
     });
   };
 
-  const allSelected = drafts.length > 0 && selectedIds.size === drafts.length;
+  const selectableDrafts = drafts.filter((d) => !(d.ebayVideoId && d.ebayVideoStatus !== "LIVE"));
+  const allSelected = selectableDrafts.length > 0 && selectableDrafts.every((d) => selectedIds.has(d.id));
 
   const toggleSelectAll = () => {
     if (allSelected) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(drafts.map((d) => d.id)));
+      setSelectedIds(new Set(selectableDrafts.map((d) => d.id)));
     }
   };
 
@@ -191,6 +192,7 @@ export default function DraftsPage() {
           const isAuction      = draft.listingFormat === "AUCTION";
           const isSelected     = selectedIds.has(draft.id);
           const isBeingPublished = publishingIds.has(draft.id);
+          const hasVideoProcessing = !!draft.ebayVideoId && draft.ebayVideoStatus !== "LIVE";
 
           // Melt value alert: check if listing price is below precious metal melt floor
           const metalKey = draft.metalType?.toLowerCase() as keyof typeof spotPrices;
@@ -209,9 +211,15 @@ export default function DraftsPage() {
             >
               {/* Checkbox */}
               <button
-                onClick={() => toggleSelect(draft.id)}
+                onClick={() => {
+                  if (hasVideoProcessing) {
+                    toast.info("Video still processing — wait for it to finish before publishing");
+                    return;
+                  }
+                  toggleSelect(draft.id);
+                }}
                 className="self-start mt-0.5 flex-shrink-0 text-muted-foreground hover:text-primary transition-colors"
-                title={isSelected ? "Deselect" : "Select for publishing"}
+                title={hasVideoProcessing ? "Video still processing" : isSelected ? "Deselect" : "Select for publishing"}
               >
                 {isSelected ? (
                   <CheckSquare className="w-4 h-4 text-primary" />
@@ -252,6 +260,11 @@ export default function DraftsPage() {
                   {isBeingPublished && (
                     <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400">
                       <Loader2 className="w-2.5 h-2.5 animate-spin" /> Publishing…
+                    </span>
+                  )}
+                  {hasVideoProcessing && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600">
+                      <Loader2 className="w-2.5 h-2.5 animate-spin" /> Video processing
                     </span>
                   )}
                   {isBelowMelt && liveMelt && (

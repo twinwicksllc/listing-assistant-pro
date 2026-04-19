@@ -307,7 +307,11 @@ async function runStageA(
   const searchQueries = buildSearchQueries(domain, itemName);
 
   const systemInstruction = `You are an expert eBay listing analyst. Use the Google Search tool to find:
-1. The current 2026 eBay LEAF category ID for: "${itemName}" (domain: ${domain})
+1. The exact current 2026 eBay LEAF category ID for: "${itemName}" (domain: ${domain})
+    - Search for the specific numeric ID (e.g., "eBay category ID for world coins australia").
+    - If the item is a non-US coin, it MUST be in a sub-category of "Coins & Paper Money > Coins: World" (parent 253), such as 40196 (Australia), 40197 (Canada), 40200 (Mexico), etc.
+    - NEVER return a parent category ID like 253, 11111, or 1.
+    - NEVER return a category in a different domain (e.g., Books 261186 or Collectibles 1).
 2. Recently sold eBay prices for this item type, including qualitative value factors.
 
 Search queries to execute:

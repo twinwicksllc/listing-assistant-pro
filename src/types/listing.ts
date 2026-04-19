@@ -161,6 +161,11 @@ export interface ListingDraft {
   quantity?: number;                 // How many units are available (default 1)
   pricingMode?: 'per_item' | 'total'; // Whether listingPrice is per-item or total for all units
 
+  // eBay video support (FIXED_PRICE only)
+  videoUrl?: string;           // Supabase Storage public URL for the raw video file
+  ebayVideoId?: string;        // eBay Video API videoId
+  ebayVideoStatus?: string;    // PENDING | PROCESSING | LIVE | FAILED
+
   // Cost of Goods Sold — what the seller paid to acquire this item
   cogs?: number;             // purchase cost in USD
   cogsSource?: string;       // 'manual' | 'import' | 'consignor_split'

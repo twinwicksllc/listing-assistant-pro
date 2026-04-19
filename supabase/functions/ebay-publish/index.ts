@@ -2198,7 +2198,7 @@ serve(async (req) => {
     // (exchange_code, refresh_token, get_auth_url, create_draft, bulk_create_draft).
     // get_stored_token and get_policies only need Supabase credentials, so we defer
     // this check to avoid blocking those actions when eBay app credentials are misconfigured.
-    const requiresEbayCredentials = !["get_stored_token", "get_policies"]
+    const requiresEbayCredentials = !["get_stored_token", "get_policies", "upload_video", "get_video_status"]
       .includes(action);
     if (requiresEbayCredentials && (!clientId || !clientSecret)) {
       throw new Error("eBay API credentials not configured");
@@ -2223,6 +2223,7 @@ serve(async (req) => {
         "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
         "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly", // Required for dashboard views/analytics
         "https://api.ebay.com/oauth/api_scope/sell.finances", // Required for shipping label cost data
+        "https://api.ebay.com/oauth/api_scope/sell.marketing", // Required for eBay Video API
         "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly", // OQ-5: required for Identity API username/accountType lookup
       ].join(" ");
 
@@ -2548,6 +2549,7 @@ serve(async (req) => {
             "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
             "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly",
             "https://api.ebay.com/oauth/api_scope/sell.finances",
+            "https://api.ebay.com/oauth/api_scope/sell.marketing",
           ].join(" "),
         }).toString(),
       });
@@ -2704,6 +2706,7 @@ serve(async (req) => {
                 "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
                 "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly",
                 "https://api.ebay.com/oauth/api_scope/sell.finances",
+                "https://api.ebay.com/oauth/api_scope/sell.marketing",
               ].join(" "),
             }).toString(),
           });
@@ -2782,6 +2785,77 @@ serve(async (req) => {
       );
     }
 
+    // --- ACTION: Upload video to eBay Video API ---
+    if (action === "upload_video") {
+      const { userToken, videoUrl, title: videoTitle, fileSize, contentType } = payload;
+      if (!userToken) throw new Error("No eBay user token provided");
+      if (!videoUrl) throw new Error("No videoUrl provided");
+
+      // Step 1: Create the video entity in eBay
+      const createResp = await fetchWithTimeout(`${apiBase}/sell/marketing/v1_beta/video`, {
+        method: "POST",
+        timeout: 15000,
+        headers: { Authorization: `Bearer ${userToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ title: videoTitle || "Item Video", size: Number(fileSize) || 0 }),
+      });
+      if (!createResp.ok) {
+        const e = await createResp.text();
+        throw new Error(`eBay video create failed (${createResp.status}): ${e}`);
+      }
+      const createData = await createResp.json();
+      const videoId = createData.videoId;
+      if (!videoId) throw new Error("eBay returned no videoId");
+      console.log(`upload_video: created eBay video entity videoId=${videoId}`);
+
+      // Step 2: Fetch video bytes from Supabase Storage
+      const videoFetchResp = await fetch(videoUrl as string);
+      if (!videoFetchResp.ok) {
+        throw new Error(`Failed to fetch video from storage (${videoFetchResp.status})`);
+      }
+
+      // Step 3: Upload bytes to eBay (no short timeout — large files may take minutes)
+      const uploadResp = await fetch(`${apiBase}/sell/marketing/v1_beta/video/${videoId}/upload`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+          "Content-Type": (contentType as string) || "video/mp4",
+          ...(fileSize ? { "Content-Length": String(fileSize) } : {}),
+        },
+        body: videoFetchResp.body,
+      });
+      if (!uploadResp.ok && uploadResp.status !== 204) {
+        const e = await uploadResp.text();
+        throw new Error(`eBay video upload failed (${uploadResp.status}): ${e}`);
+      }
+      console.log(`upload_video: bytes uploaded for videoId=${videoId}, httpStatus=${uploadResp.status}`);
+
+      return new Response(JSON.stringify({ videoId, status: "PENDING" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // --- ACTION: Get eBay video processing status ---
+    if (action === "get_video_status") {
+      const { userToken, videoId } = payload;
+      if (!userToken) throw new Error("No eBay user token provided");
+      if (!videoId) throw new Error("No videoId provided");
+
+      const statusResp = await fetchWithTimeout(`${apiBase}/sell/marketing/v1_beta/video/${videoId}`, {
+        timeout: 10000,
+        headers: { Authorization: `Bearer ${userToken}`, "Accept-Language": "en-US" },
+      });
+      if (!statusResp.ok) {
+        const e = await statusResp.text();
+        throw new Error(`eBay get video status failed (${statusResp.status}): ${e}`);
+      }
+      const statusData = await statusResp.json();
+      console.log(`get_video_status: videoId=${videoId} status=${statusData.videoStatus}`);
+
+      return new Response(JSON.stringify({ videoId, status: statusData.videoStatus }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // --- ACTION: Publish a single draft to eBay ---
     if (action === "create_draft") {
       const {
@@ -2810,6 +2884,7 @@ serve(async (req) => {
         bestOfferAutoDeclinePrice,
         quantity: payloadQuantity,
         pricingMode,
+        ebayVideoId: payloadEbayVideoId,
       } = payload;
 
       if (!userToken) throw new Error("No eBay user token provided");
@@ -3207,6 +3282,12 @@ serve(async (req) => {
         (inventoryBody.product as Record<string, unknown>).aspects = aspects;
       }
 
+      // Add video if it has been uploaded and is LIVE on eBay
+      if (payloadEbayVideoId) {
+        (inventoryBody.product as Record<string, unknown>).videoIds = [String(payloadEbayVideoId)];
+        console.log(`create_draft: attaching ebayVideoId=${payloadEbayVideoId} to product.videoIds`);
+      }
+
       console.log(
         `create_draft: creating inventory item for sku=${sku}, condition=${conditionEnum} (raw=${rawCondition}), merchantLocationKey=${merchantLocationKey}`,
       );
@@ -3339,7 +3420,7 @@ serve(async (req) => {
         listingPrice: (() => {
           const rawQty = Number(payloadQuantity) || 1;
           const rawPrice = Number(listingPrice ?? 0);
-          return (pricingMode === 'total' && rawQty > 1) ? rawPrice / rawQty : rawPrice;
+          return (pricingMode === "total" && rawQty > 1) ? rawPrice / rawQty : rawPrice;
         })(),
         quantity: Number(payloadQuantity) || 1,
         condition: conditionEnum,
