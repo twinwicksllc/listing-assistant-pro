@@ -43,6 +43,16 @@ export function useAnalyzeCategorySelection({
     setShowCategoryConfirm(true);
   }, [customCategoryInput, setPendingCategoryId, setShowCategoryConfirm]);
 
+  const updateCustomCategoryInput = useCallback((rawValue: string) => {
+    setCustomCategoryInput(rawValue.replace(/\D/g, ""));
+  }, [setCustomCategoryInput]);
+
+  const handleCustomCategoryInputKeyDown = useCallback((key: string) => {
+    if (key === "Enter") {
+      confirmCustomCategoryInput();
+    }
+  }, [confirmCustomCategoryInput]);
+
   const cancelCustomCategoryMode = useCallback(() => {
     setIsCustomCategoryMode(false);
     setCustomCategoryInput("");
@@ -74,6 +84,8 @@ export function useAnalyzeCategorySelection({
     selectedSuggestedCategory,
     hasSelectedCategoryInSuggestions,
     confirmCustomCategoryInput,
+    updateCustomCategoryInput,
+    handleCustomCategoryInputKeyDown,
     cancelCustomCategoryMode,
     handleCategorySelectChange,
     handleCategoryDialogConfirm,

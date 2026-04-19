@@ -275,6 +275,8 @@ export default function AnalyzePage() {
     selectedSuggestedCategory,
     hasSelectedCategoryInSuggestions,
     confirmCustomCategoryInput,
+    updateCustomCategoryInput,
+    handleCustomCategoryInputKeyDown,
     cancelCustomCategoryMode,
     handleCategorySelectChange,
     handleCategoryDialogConfirm,
@@ -595,12 +597,8 @@ export default function AnalyzePage() {
                         inputMode="numeric"
                         placeholder="e.g. 39455 for Wheat Penny"
                         value={customCategoryInput}
-                        onChange={(e) => setCustomCategoryInput(e.target.value.replace(/\D/g, ""))}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            confirmCustomCategoryInput();
-                          }
-                        }}
+                        onChange={(e) => updateCustomCategoryInput(e.target.value)}
+                        onKeyDown={(e) => handleCustomCategoryInputKeyDown(e.key)}
                         className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       />
                       <div className="flex gap-2">
