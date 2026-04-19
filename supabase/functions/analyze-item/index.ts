@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { captureException, initSentry } from "../_helpers/sentry.ts";
 import { extractImagePayloads, toOpenAiImageContentParts } from "../_helpers/imageParsing.ts";
+import { fetchCategoryMetadata } from "../_helpers/categoryLookupClient.ts";
 import type { Domain, IdentificationResult } from "../_helpers/pipelineContracts.ts";
 
 const corsHeaders = {
@@ -851,68 +852,29 @@ serve(async (req: Request) => {
       const targetCategoryId = lockedCategoryId || null;
       if (targetCategoryId) {
         fetchedMetadataCategoryId = targetCategoryId;
-        const _aspectsUrl = Deno.env.get("SUPABASE_URL");
-        const _aspectsKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-        if (_aspectsUrl && _aspectsKey) {
-          try {
-            const aspectsResp = await fetch(
-              `${_aspectsUrl}/functions/v1/category-lookup`,
-              {
-                method: "POST",
-                headers: {
-                  "Authorization": `Bearer ${_aspectsKey}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  action: "aspects",
-                  categoryId: targetCategoryId,
-                }),
-              },
-            );
-            if (aspectsResp.ok) {
-              categoryAspects = await aspectsResp.json();
-              console.log(
-                `[${invocationId}] analyze-item: fetched ${
-                  categoryAspects.aspects?.length || 0
-                } aspects for category ${targetCategoryId}`,
-              );
-            }
-          } catch (aspectErr) {
-            console.warn(
-              `[${invocationId}] analyze-item: aspects fetch failed (non-blocking):`,
-              aspectErr,
+        try {
+          const metadata = await fetchCategoryMetadata(targetCategoryId);
+          categoryAspects = metadata.aspects;
+          categoryConditions = metadata.conditions;
+          if (categoryAspects) {
+            console.log(
+              `[${invocationId}] analyze-item: fetched ${
+                categoryAspects.aspects?.length || 0
+              } aspects for category ${targetCategoryId}`,
             );
           }
-
-          try {
-            const conditionsResp = await fetch(
-              `${_aspectsUrl}/functions/v1/category-lookup`,
-              {
-                method: "POST",
-                headers: {
-                  "Authorization": `Bearer ${_aspectsKey}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  action: "conditions",
-                  categoryId: targetCategoryId,
-                }),
-              },
-            );
-            if (conditionsResp.ok) {
-              categoryConditions = await conditionsResp.json();
-              console.log(
-                `[${invocationId}] analyze-item: fetched ${
-                  categoryConditions.conditions?.length || 0
-                } conditions for category ${targetCategoryId}`,
-              );
-            }
-          } catch (condErr) {
-            console.warn(
-              `[${invocationId}] analyze-item: conditions fetch failed (non-blocking):`,
-              condErr,
+          if (categoryConditions) {
+            console.log(
+              `[${invocationId}] analyze-item: fetched ${
+                categoryConditions.conditions?.length || 0
+              } conditions for category ${targetCategoryId}`,
             );
           }
+        } catch (metadataErr) {
+          console.warn(
+            `[${invocationId}] analyze-item: metadata fetch failed (non-blocking):`,
+            metadataErr,
+          );
         }
       }
     }
