@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, Send, Tag, Crown, Download, FileSpreadsheet, Sheet, ShieldCheck, AlertTriangle, Check, X as XIcon, Lock, UserCircle, DollarSign, Gavel, ShoppingCart } from "lucide-react";
-import PricingCard from "@/components/PricingCard";
+import { ArrowLeft, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, Send, Tag, Crown, Download, FileSpreadsheet, Sheet, ShieldCheck, AlertTriangle, Check, X as XIcon, Lock, UserCircle, DollarSign, Gavel } from "lucide-react";
 import PriceRecommenderCard from "@/components/PriceRecommenderCard";
 import CogsInput from "@/components/CogsInput";
 import CategoryConfirmDialog from "@/components/CategoryConfirmDialog";
@@ -10,17 +9,16 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { ItemSpecifics, ListingFormat } from "@/types/listing";
 import { getConditionsForCategory } from "@/types/listing";
-import { useAuth, PLANS } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { exportListing, type ExportPlatform, type ExportFormat } from "@/lib/exportCSV";
 import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
-import { uploadListingImages, uploadListingImage } from "@/lib/imageUpload";
+import { uploadListingImages } from "@/lib/imageUpload";
 import { EbayPolicySelector } from "@/components/EbayPolicySelector";
 import type { SelectedPolicies } from "@/types/ebay-policies";
-import EbayIntegrationBanner from "@/components/EbayIntegrationBanner";
 import { VideoUploadInput } from "@/components/VideoUploadInput";
 
 export default function AnalyzePage() {
-  const { canAnalyze, canPublish, isPro, isShop, isUnlimited, isPaid, usage, recordUsage, isOwner, isLister, currentPlanLimits, planFeatures, currentPlan, user } = useAuth();
+  const { canAnalyze, canPublish, usage, recordUsage, isOwner, currentPlanLimits, planFeatures, currentPlan, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const { addDraft } = useDrafts();
@@ -50,16 +48,7 @@ export default function AnalyzePage() {
   const [isSlabbed, setIsSlabbed] = useState(false);
   const [gradeConfirmed, setGradeConfirmed] = useState(false);
   const [meltValue, setMeltValue] = useState<number | null>(null);
-  const [pricingNotes, setPricingNotes] = useState<string>("");
   const [spotPrices, setSpotPrices] = useState<{ gold: number; silver: number; platinum: number } | null>(null);
-  const [competitorData, setCompetitorData] = useState<{
-    competitorCount: number;
-    avgPrice: number;
-    minPrice: number;
-    maxPrice: number;
-    medianPrice: number;
-    fromCache: boolean;
-  } | null>(null);
   const [consignor, setConsignor] = useState("");
   const [cogs, setCogs] = useState<number | undefined>(undefined);
   const [includeAiFooter, setIncludeAiFooter] = useState(true);
@@ -93,7 +82,6 @@ export default function AnalyzePage() {
     paymentPolicyId: null,
     returnPolicyId: null,
   });
-  const [dismissedEbayBanner, setDismissedEbayBanner] = useState(false);
 
   // Listing format and price — separate from AI pricing research (priceMin/priceMax
   // are read-only AI suggestions; these are what actually gets submitted to eBay)
@@ -211,8 +199,6 @@ export default function AnalyzePage() {
       setIsSlabbed(data.isSlabbed ?? false);
       setMeltValue(data.meltValue ?? null);
       setSpotPrices(data.spotPrices ?? null);
-      setCompetitorData(data.competitorData ?? null);
-      setPricingNotes(data.pricingNotes || "");
       setGradeConfirmed(false);
       setDomain(data.domain || "general");
       // Pre-fill listing price with AI midpoint as a starting suggestion
@@ -221,7 +207,7 @@ export default function AnalyzePage() {
       setAuctionStartPrice(parseFloat((data.priceMin || 0).toFixed(2)) || 0);
       setGenerated(true);
       // OQ-12: recordUsage removed — analyze-item edge function inserts server-side usage row
-    } catch (err: unknown) {
+    } catch (err: any) {
       console.error("Analysis error:", err);
       toast.error(err.message || "Failed to analyze item. Please try again.");
     } finally {
@@ -492,7 +478,7 @@ export default function AnalyzePage() {
 
       // Success — navigate back to capture page for the next item
       navigate("/home");
-    } catch (err: unknown) {
+    } catch (err: any) {
       console.error("Publish error:", err);
       toast.error(err.message || "Failed to publish to eBay.");
     } finally {
@@ -514,12 +500,6 @@ export default function AnalyzePage() {
       </header>
 
       <div className="px-4 pt-4 max-w-lg mx-auto space-y-4">
-        {!dismissedEbayBanner && (
-          <EbayIntegrationBanner 
-            onDismiss={() => setDismissedEbayBanner(true)}
-            className="mb-4"
-          />
-        )}
         {/* Image carousel */}
         <div className="relative rounded-xl overflow-hidden border border-border aspect-square bg-secondary">
           <img src={imageUrls[activePhoto]} alt={`Item photo ${activePhoto + 1}`} className="w-full h-full object-cover" />
@@ -772,7 +752,7 @@ export default function AnalyzePage() {
                           {isSuggested && !isRequired && <span className="text-[9px] text-primary/60 uppercase tracking-wide">opt</span>}
                         </span>
                         <input
-                          value={value || ""}
+                          value={(value as string) || ""}
                           onChange={(e) => setItemSpecifics(prev => ({ ...prev, [key]: e.target.value }))}
                           className="text-xs text-foreground text-right bg-transparent border-none focus:outline-none focus:ring-0 max-w-[55%]"
                         />
