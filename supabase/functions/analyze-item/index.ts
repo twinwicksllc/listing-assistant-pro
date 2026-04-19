@@ -1400,7 +1400,7 @@ Seller's note: "${voiceNote}"`;
                     description: {
                       type: "string",
                       description:
-                        "SEO-friendly, sales-oriented eBay description. Use plain text and markdown only (e.g. **bold**, bullet points with '- ', line breaks with newlines). Do NOT use HTML tags like <p>, <strong>, <br>, <ul>, or <li>. The system will convert markdown to HTML automatically before publishing to eBay.",
+                        "SEO-friendly, sales-oriented eBay description. REQUIRED FORMAT: Use markdown for proper structure:\n\n## Main Heading\nIntroduction paragraph (2-3 sentences max). Use **bold** for key item names.\n\n## Specifications (or Item Details)\n- Year: value\n- Metal: value\n- Condition: value\n(continue with 3-5 bullet points)\n\n## Condition Details\nDetailed paragraph describing condition, wear, or grading.\n\n## Description\nFull narrative description and any relevant history.\n\n## (Optional) Additional Notes\nAny final details.\n\nRULES: Use only markdown (e.g. **bold**, ## headers, - bullet points, newlines). Do NOT use HTML tags like <p>, <strong>, <br>, <ul>, or <li>. System will convert to HTML. Each section must be preceded by a ## header on its own line. Use 2+ spaces between sections for readability.",
                     },
                     price: {
                       type: "object",
