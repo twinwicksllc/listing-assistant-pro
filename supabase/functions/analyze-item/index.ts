@@ -42,6 +42,43 @@ function computeNextResetAt(resetDay: number | null): string | null {
     .toISOString();
 }
 
+function isCoinDomainCategory(
+  categoryId: string | null | undefined,
+  categoryName: string | null | undefined,
+  breadcrumb: string | null | undefined,
+): boolean {
+  if (!categoryId) return false;
+
+  const categoryText = `${categoryName || ""} ${breadcrumb || ""}`
+    .toLowerCase();
+
+  if (
+    /(coins?\b|paper money|bullion|exonumia|ancient|medieval|numis)/i.test(
+      categoryText,
+    )
+  ) {
+    return true;
+  }
+
+  return ["45243", "532", "173685"].includes(categoryId);
+}
+
+function isCategoryCompatibleWithDomain(
+  domain: string | null | undefined,
+  categoryId: string | null | undefined,
+  categoryName: string | null | undefined,
+  breadcrumb: string | null | undefined,
+): boolean {
+  if (!domain || !categoryId) return true;
+
+  switch (domain) {
+    case "coins_bullion":
+      return isCoinDomainCategory(categoryId, categoryName, breadcrumb);
+    default:
+      return true;
+  }
+}
+
 serve(async (req: Request) => {
   const startTime = Date.now();
   const invocationId = crypto.randomUUID().slice(0, 8);
@@ -625,6 +662,7 @@ serve(async (req: Request) => {
     let lockedCategoryName: string | null = null;
     let lockedBreadcrumb: string | null = null;
     let lookupAlternatives: any[] = [];
+    let fetchedMetadataCategoryId: string | null = null;
 
     // If the user explicitly provided a category ID, use it as an absolute lock.
     // Skip the lookup pipeline entirely — the user's choice always wins.
@@ -675,16 +713,34 @@ serve(async (req: Request) => {
               groundedVerifyData.isLeaf === true &&
               groundedVerifyData.valid !== false
             ) {
-              // Grounded leaf verified — use as a strong (but not absolute) lock
-              lockedCategoryId = prePassResult.groundedCategoryId;
-              lockedCategoryName = groundedVerifyData.categoryName || "";
-              lockedBreadcrumb = groundedVerifyData.breadcrumb ||
+              const groundedCategoryName = groundedVerifyData.categoryName || "";
+              const groundedBreadcrumb = groundedVerifyData.breadcrumb ||
                 groundedVerifyData.categoryName || "";
-              categoryHints +=
-                `\n- **GROUNDED CATEGORY** (verified leaf from live Google Search): **${lockedCategoryId}** — ${lockedBreadcrumb}. This was found by searching eBay\'s current 2026 taxonomy. USE THIS CATEGORY unless you have strong evidence it is incorrect.`;
-              console.log(
-                `[${invocationId}] GROUNDED LOCK: category ${lockedCategoryId} (${lockedBreadcrumb}) verified as leaf via Pre-Pass 0`,
-              );
+
+              if (
+                isCategoryCompatibleWithDomain(
+                  identification.domain,
+                  prePassResult.groundedCategoryId,
+                  groundedCategoryName,
+                  groundedBreadcrumb,
+                )
+              ) {
+                // Grounded leaf verified — use as a strong (but not absolute) lock
+                lockedCategoryId = prePassResult.groundedCategoryId;
+                lockedCategoryName = groundedCategoryName;
+                lockedBreadcrumb = groundedBreadcrumb;
+                categoryHints +=
+                  `\n- **GROUNDED CATEGORY** (verified leaf from live Google Search): **${lockedCategoryId}** — ${lockedBreadcrumb}. This was found by searching eBay\'s current 2026 taxonomy. USE THIS CATEGORY unless you have strong evidence it is incorrect.`;
+                console.log(
+                  `[${invocationId}] GROUNDED LOCK: category ${lockedCategoryId} (${lockedBreadcrumb}) verified as leaf via Pre-Pass 0`,
+                );
+              } else {
+                categoryHints +=
+                  `\n- GROUNDING HINT REJECTED AS LOCK: **${prePassResult.groundedCategoryId}** — ${groundedBreadcrumb}. This verified leaf does not match resolved domain ${identification.domain}.`;
+                console.warn(
+                  `[${invocationId}] Grounded category ${prePassResult.groundedCategoryId} rejected for domain ${identification.domain}: ${groundedBreadcrumb}`,
+                );
+              }
             } else {
               // Not a valid leaf — downgrade to a strong hint
               categoryHints +=
@@ -753,8 +809,14 @@ serve(async (req: Request) => {
                 const isLockable = score >= 88 && isVerifiedLeaf &&
                   (source === "ebay_api" || source.includes("user_verified") ||
                     source.includes("db_exact"));
+                const isDomainCompatible = isCategoryCompatibleWithDomain(
+                  identification.domain,
+                  lookupData.categoryId,
+                  lookupData.categoryName,
+                  lookupData.breadcrumb,
+                );
 
-                if (isLockable) {
+                if (isLockable && isDomainCompatible) {
                   lockedCategoryId = lookupData.categoryId;
                   lockedCategoryName = lookupData.categoryName || "";
                   lockedBreadcrumb = lookupData.breadcrumb ||
@@ -766,6 +828,13 @@ serve(async (req: Request) => {
                   );
                 } else {
                   // Not locked — provide as strong hint
+                  if (isLockable && !isDomainCompatible) {
+                    console.warn(
+                      `analyze-item: rejecting deterministic lock ${lookupData.categoryId} for domain ${identification.domain} (${
+                        lookupData.breadcrumb || lookupData.categoryName
+                      })`,
+                    );
+                  }
                   categoryHints += `\n- BEST MATCH (score=${score}, source=${source}): **${lookupData.categoryId}** — ${
                     lookupData.breadcrumb || lookupData.categoryName
                   }. Use this as primary category unless the item clearly belongs elsewhere.`;
@@ -815,6 +884,7 @@ serve(async (req: Request) => {
     {
       const targetCategoryId = lockedCategoryId || null;
       if (targetCategoryId) {
+        fetchedMetadataCategoryId = targetCategoryId;
         const _aspectsUrl = Deno.env.get("SUPABASE_URL");
         const _aspectsKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
         if (_aspectsUrl && _aspectsKey) {
@@ -1651,6 +1721,23 @@ Seller's note: "${voiceNote}"`;
     // If invalid, try to reselect from alternatives or lookup suggestions.
     try {
       if (listing.ebayCategoryId) {
+        if (
+          lockedCategoryId &&
+          !isCategoryCompatibleWithDomain(
+            identification.domain,
+            lockedCategoryId,
+            lockedCategoryName,
+            lockedBreadcrumb,
+          )
+        ) {
+          console.warn(
+            `analyze-item: releasing incompatible lock ${lockedCategoryId} for domain ${identification.domain}`,
+          );
+          lockedCategoryId = null;
+          lockedCategoryName = null;
+          lockedBreadcrumb = null;
+        }
+
         // If we had a deterministic lock, the category is already verified
         if (lockedCategoryId && listing.ebayCategoryId !== lockedCategoryId) {
           // AI overrode the locked category — force it back (#3)
@@ -1968,6 +2055,71 @@ Seller's note: "${voiceNote}"`;
       );
     }
     // --- end post-lookup ---
+
+    // --- Resync metadata to the final category so UI aspects match the chosen category ---
+    if (
+      listing.ebayCategoryId &&
+      listing.ebayCategoryId !== fetchedMetadataCategoryId
+    ) {
+      const _metadataUrl = Deno.env.get("SUPABASE_URL");
+      const _metadataKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (_metadataUrl && _metadataKey) {
+        try {
+          const aspectsResp = await fetch(
+            `${_metadataUrl}/functions/v1/category-lookup`,
+            {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${_metadataKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                action: "aspects",
+                categoryId: listing.ebayCategoryId,
+              }),
+            },
+          );
+          if (aspectsResp.ok) {
+            categoryAspects = await aspectsResp.json();
+          }
+        } catch (aspectErr) {
+          console.warn(
+            `[${invocationId}] analyze-item: final-category aspects fetch failed (non-blocking):`,
+            aspectErr,
+          );
+        }
+
+        try {
+          const conditionsResp = await fetch(
+            `${_metadataUrl}/functions/v1/category-lookup`,
+            {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${_metadataKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                action: "conditions",
+                categoryId: listing.ebayCategoryId,
+              }),
+            },
+          );
+          if (conditionsResp.ok) {
+            categoryConditions = await conditionsResp.json();
+          }
+        } catch (condErr) {
+          console.warn(
+            `[${invocationId}] analyze-item: final-category conditions fetch failed (non-blocking):`,
+            condErr,
+          );
+        }
+
+        fetchedMetadataCategoryId = listing.ebayCategoryId;
+        console.log(
+          `[${invocationId}] analyze-item: resynced metadata to final category ${listing.ebayCategoryId}`,
+        );
+      }
+    }
 
     // --- Auto-persist new category to DB via category-lookup (gated) (#2) ---
     // Uses category-lookup "store" action which enforces:

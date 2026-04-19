@@ -45,6 +45,35 @@ export interface PromptContext {
   } | null;
 }
 
+function buildGeneralPrompt(ctx: PromptContext): string {
+  return `You are a professional eBay listing expert.
+
+Analyze all uploaded images as a single item and generate a precise listing.
+
+### CORE RULES
+1. Use only visible evidence plus the seller note if provided.
+2. Title must be 80 characters or fewer.
+3. ${pricingBlock(ctx)}
+4. Prefer the provided eBay category guidance when available.
+5. Fill required item specifics first, then recommended specifics if visible.
+${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}`;
+}
+
+export function buildSystemPrompt(domain: Domain, ctx: PromptContext): string {
+  switch (domain) {
+    case "coins_bullion":
+      return buildCoinBullionPrompt(ctx);
+    case "trading_cards":
+      return buildTradingCardsPrompt(ctx);
+    case "jewelry":
+    case "electronics":
+    case "vintage_clothing":
+    case "general":
+    default:
+      return buildGeneralPrompt(ctx);
+  }
+}
+
 // ─── Shared context blocks ────────────────────────────────────────────────────
 
 function pricingBlock(ctx: PromptContext): string {
