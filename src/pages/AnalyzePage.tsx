@@ -19,6 +19,8 @@ import { useAnalyzePublish } from "@/hooks/useAnalyzePublish";
 import { useAnalyzeGeneration } from "@/hooks/useAnalyzeGeneration";
 import { useAnalyzeSave } from "@/hooks/useAnalyzeSave";
 import { useAnalyzeCategorySelection } from "@/hooks/useAnalyzeCategorySelection";
+import { useAnalyzeExport } from "@/hooks/useAnalyzeExport";
+import { useAnalyzePolicyToken } from "@/hooks/useAnalyzePolicyToken";
 
 export default function AnalyzePage() {
   const { canAnalyze, canPublish, usage, recordUsage, isOwner, currentPlanLimits, planFeatures, currentPlan, user } = useAuth();
@@ -77,7 +79,6 @@ export default function AnalyzePage() {
   } | null>(null);
 
   // eBay business policies — selected by the user on this page
-  const [ebayTokenForPolicies, setEbayTokenForPolicies] = useState<string | null>(null);
   const [selectedPolicies, setSelectedPolicies] = useState<SelectedPolicies>({
     fulfillmentPolicyId: null,
     paymentPolicyId: null,
@@ -292,21 +293,26 @@ export default function AnalyzePage() {
     setEbayCategoryId,
   });
 
-  // Fetch the stored eBay token once when analysis results are shown
-  // so the EbayPolicySelector can load policies without waiting for publish
-  useEffect(() => {
-    if (!generated || !user?.id) return;
-    let cancelled = false;
-    (async () => {
-      const token = await loadPolicyToken();
-      if (!cancelled) {
-        setEbayTokenForPolicies(token);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [generated, user?.id, loadPolicyToken]);
+  const { downloadLabel, handleExport } = useAnalyzeExport({
+    exportPlatform,
+    exportFormat,
+    title,
+    description,
+    priceMin,
+    priceMax,
+    imageUrls,
+    ebayCategoryId,
+    itemSpecifics,
+    condition,
+    selectedPolicies,
+    recordUsage,
+  });
+
+  const { ebayTokenForPolicies } = useAnalyzePolicyToken({
+    generated,
+    userId: user?.id,
+    loadPolicyToken,
+  });
 
   // Auto-trigger AI analysis on mount — skip the redundant "Generate Listing" step
   useEffect(() => { handleGenerate(); }, []); // mount-only intentional
@@ -966,29 +972,11 @@ export default function AnalyzePage() {
               </div>
 
               <button
-                onClick={() => {
-                  exportListing(exportPlatform, exportFormat, {
-                    title,
-                    description,
-                    priceMin,
-                    priceMax,
-                    imageUrls: imageUrls,
-                    ebayCategoryId,
-                    itemSpecifics,
-                    condition,
-                    fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId ?? undefined,
-                    paymentPolicyId: selectedPolicies.paymentPolicyId ?? undefined,
-                    returnPolicyId: selectedPolicies.returnPolicyId ?? undefined,
-                  });
-                  recordUsage("export");
-                  const platformLabel = exportPlatform === "ebay_file_exchange" ? "eBay" : "Facebook";
-                  const formatLabel = exportFormat === "csv" ? "CSV" : exportFormat === "excel" ? "Excel" : "Google Sheets";
-                  toast.success(`${platformLabel} listing exported as ${formatLabel}`);
-                }}
+                onClick={handleExport}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-secondary text-foreground font-semibold text-sm transition-all hover:bg-secondary/80 active:scale-[0.98]"
               >
                 <Download className="w-4 h-4" />
-                Download {exportFormat === "csv" ? "CSV" : exportFormat === "excel" ? "Excel" : "Sheets"}
+                Download {downloadLabel}
               </button>
             </div>
 
@@ -1047,4 +1035,4 @@ export default function AnalyzePage() {
       />
     </div>
   );
-}}
+}
