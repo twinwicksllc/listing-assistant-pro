@@ -494,6 +494,8 @@ export default function AnalyzePage() {
 
   // Filter out empty item specifics for display
   const displaySpecifics = Object.entries(itemSpecifics).filter(([, v]) => v && v.trim() !== "");
+  const selectedSuggestedCategory = suggestedCategories.find((c) => c.categoryId === ebayCategoryId);
+  const hasSelectedCategoryInSuggestions = !!selectedSuggestedCategory;
 
   return (
     <div className="min-h-screen bg-background pb-8">
@@ -685,16 +687,16 @@ export default function AnalyzePage() {
                         ) : (
                           <option value="">No category selected</option>
                         )}
-                        {ebayCategoryId && !suggestedCategories.find(c => c.categoryId === ebayCategoryId) && (
+                        {ebayCategoryId && !hasSelectedCategoryInSuggestions && (
                           <option value={ebayCategoryId}>
                             {getEbayCategoryBreadcrumb(ebayCategoryId) || `Category #${ebayCategoryId}`}
                           </option>
                         )}
                         <option value="__custom__">✏️ Enter custom category ID...</option>
                       </select>
-                      {suggestedCategories.find(c => c.categoryId === ebayCategoryId)?.reason && (
+                      {selectedSuggestedCategory?.reason && (
                         <p className="text-[10px] text-muted-foreground italic px-1">
-                          {suggestedCategories.find(c => c.categoryId === ebayCategoryId)?.reason}
+                          {selectedSuggestedCategory.reason}
                         </p>
                       )}
                     </>
