@@ -61,6 +61,9 @@ export function useDrafts() {
           // Precious metal content
           metalType: d.metal_type || 'none',
           metalWeightOz: Number(d.metal_weight_oz) || 0,
+          // Multi-quantity
+          quantity: d.quantity ?? 1,
+          pricingMode: (d.pricing_mode as 'per_item' | 'total') ?? 'per_item',
         }))
       );
     }
@@ -101,6 +104,9 @@ export function useDrafts() {
       // Precious metal content
       metal_type: draft.metalType || 'none',
       metal_weight_oz: draft.metalWeightOz ?? 0,
+      // Multi-quantity
+      quantity: draft.quantity ?? 1,
+      pricing_mode: draft.pricingMode ?? 'per_item',
       // Cost of Goods Sold
       cogs: draft.cogs ?? null,
       cogs_source: draft.cogsSource ?? null,
@@ -161,6 +167,9 @@ export function useDrafts() {
     if (updates.lastPublishError !== undefined)       patch.last_publish_error = updates.lastPublishError || null;
     if (updates.metalType !== undefined)               patch.metal_type = updates.metalType;
     if (updates.metalWeightOz !== undefined)           patch.metal_weight_oz = updates.metalWeightOz;
+    // Multi-quantity
+    if (updates.quantity !== undefined)                patch.quantity = updates.quantity;
+    if (updates.pricingMode !== undefined)             patch.pricing_mode = updates.pricingMode;
     // Cost of Goods Sold
     if (updates.cogs !== undefined)                    patch.cogs = updates.cogs ?? null;
     if (updates.cogsSource !== undefined)              patch.cogs_source = updates.cogsSource ?? null;

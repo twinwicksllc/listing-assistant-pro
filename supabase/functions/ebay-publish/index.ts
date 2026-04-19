@@ -1757,6 +1757,7 @@ function buildFixedPriceOffer(params: {
   sku: string;
   description: string;
   listingPrice: number;
+  quantity?: number;
   condition: string;
   conditionDescription: string;
   ebayCategoryId?: string;
@@ -1806,7 +1807,7 @@ function buildFixedPriceOffer(params: {
     marketplaceId: "EBAY_US",
     format: "FIXED_PRICE",
     listingDescription: params.description,
-    availableQuantity: 1,
+    availableQuantity: params.quantity && params.quantity > 1 ? params.quantity : 1,
     listingDuration: FIXED_PRICE_DURATION,
     merchantLocationKey: params.merchantLocationKey,
     pricingSummary: {
@@ -2807,6 +2808,8 @@ serve(async (req) => {
         bestOfferEnabled,
         bestOfferAutoAcceptPrice,
         bestOfferAutoDeclinePrice,
+        quantity: payloadQuantity,
+        pricingMode,
       } = payload;
 
       if (!userToken) throw new Error("No eBay user token provided");
@@ -3333,7 +3336,12 @@ serve(async (req) => {
       const offerBody = buildFixedPriceOffer({
         sku,
         description: htmlDescription,
-        listingPrice: Number(listingPrice ?? 0),
+        listingPrice: (() => {
+          const rawQty = Number(payloadQuantity) || 1;
+          const rawPrice = Number(listingPrice ?? 0);
+          return (pricingMode === 'total' && rawQty > 1) ? rawPrice / rawQty : rawPrice;
+        })(),
+        quantity: Number(payloadQuantity) || 1,
         condition: conditionEnum,
         conditionDescription: conditionDesc,
         ebayCategoryId: finalCategoryId || undefined,
