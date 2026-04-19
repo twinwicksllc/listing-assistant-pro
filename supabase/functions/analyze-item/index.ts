@@ -1782,33 +1782,95 @@ Seller's note: "${voiceNote}"`;
               // "Coins & Paper Money" is in the right domain for coins_bullion items.
               const COINS_PAPER_MONEY_IDS = new Set([
                 // Bullion
-                "178906","39489","177652","177653","166679","3361","3360",
-                "261064","261068","261069","261070","261071","261072","261073","261074","261075","261076",
-                "166680","166681",
+                "178906",
+                "39489",
+                "177652",
+                "177653",
+                "166679",
+                "3361",
+                "3360",
+                "261064",
+                "261068",
+                "261069",
+                "261070",
+                "261071",
+                "261072",
+                "261073",
+                "261074",
+                "261075",
+                "261076",
+                "166680",
+                "166681",
                 // US Coins
-                "253","39464","11980","11981","41102","11973","41099","11971","39455","41084",
-                "41109","526","11116","11118","40149","40150","40151","40152","40153","40154",
-                "40155","40156","40157","40158","40159","40160","41111","164743",
+                "253",
+                "39464",
+                "11980",
+                "11981",
+                "41102",
+                "11973",
+                "41099",
+                "11971",
+                "39455",
+                "41084",
+                "41109",
+                "526",
+                "11116",
+                "11118",
+                "40149",
+                "40150",
+                "40151",
+                "40152",
+                "40153",
+                "40154",
+                "40155",
+                "40156",
+                "40157",
+                "40158",
+                "40159",
+                "40160",
+                "41111",
+                "164743",
                 // US Gold Coins
-                "40161","40162","40163","40164","40165","40166","40167",
+                "40161",
+                "40162",
+                "40163",
+                "40164",
+                "40165",
+                "40166",
+                "40167",
                 // World Coins
-                "45243","40196","40197","40198","40199","40200","40201","40202","11063",
+                "45243",
+                "40196",
+                "40197",
+                "40198",
+                "40199",
+                "40200",
+                "40201",
+                "40202",
+                "11063",
                 // Paper Money
-                "3411","45244",
+                "3411",
+                "45244",
                 // Ancient / Medieval
-                "532","173685",
+                "532",
+                "173685",
                 // Exonumia
-                "19167","19168","19169",
+                "19167",
+                "19168",
+                "19169",
               ]);
 
               // Categories that are in the completely wrong domain for a coin
               const KNOWN_WRONG_DOMAIN_FOR_COINS = new Set([
                 "261186", // Books & Magazines > Books ← the exact bug we're fixing
-                "268",    // Books & Magazines (parent)
-                "9355","112529","177","179", // Electronics
-                "11450",  // Clothing
-                "550",    // Art
-                "1",      // Collectibles (too broad — coins should be more specific)
+                "268", // Books & Magazines (parent)
+                "9355",
+                "112529",
+                "177",
+                "179", // Electronics
+                "11450", // Clothing
+                "550", // Art
+                "1", // Collectibles (too broad — coins should be more specific)
               ]);
 
               // Override AI's category if any of these conditions hold:
@@ -1837,8 +1899,7 @@ Seller's note: "${voiceNote}"`;
               const postLookupIsStrong = postScore >= 80 && postIsLeaf;
 
               // Domain mismatch: Pass 1 said coins_bullion but AI chose a Books/Electronics/etc. category
-              const isDomainMismatch =
-                identification.domain === "coins_bullion" &&
+              const isDomainMismatch = identification.domain === "coins_bullion" &&
                 !COINS_PAPER_MONEY_IDS.has(listing.ebayCategoryId) &&
                 (KNOWN_WRONG_DOMAIN_FOR_COINS.has(listing.ebayCategoryId) ||
                   (postLookupData.breadcrumb || "").toLowerCase().includes("coins"));
