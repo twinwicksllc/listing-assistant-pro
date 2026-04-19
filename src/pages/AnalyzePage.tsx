@@ -18,6 +18,7 @@ import { VideoUploadInput } from "@/components/VideoUploadInput";
 import { useAnalyzePublish } from "@/hooks/useAnalyzePublish";
 import { useAnalyzeGeneration } from "@/hooks/useAnalyzeGeneration";
 import { useAnalyzeSave } from "@/hooks/useAnalyzeSave";
+import { useAnalyzeCategorySelection } from "@/hooks/useAnalyzeCategorySelection";
 
 export default function AnalyzePage() {
   const { canAnalyze, canPublish, usage, recordUsage, isOwner, currentPlanLimits, planFeatures, currentPlan, user } = useAuth();
@@ -272,6 +273,25 @@ export default function AnalyzePage() {
     onSaved: () => navigate("/drafts"),
   });
 
+  const {
+    selectedSuggestedCategory,
+    hasSelectedCategoryInSuggestions,
+    confirmCustomCategoryInput,
+    cancelCustomCategoryMode,
+    handleCategorySelectChange,
+    handleCategoryDialogConfirm,
+    handleCategoryDialogCancel,
+  } = useAnalyzeCategorySelection({
+    ebayCategoryId,
+    suggestedCategories,
+    customCategoryInput,
+    setCustomCategoryInput,
+    setPendingCategoryId,
+    setShowCategoryConfirm,
+    setIsCustomCategoryMode,
+    setEbayCategoryId,
+  });
+
   // Fetch the stored eBay token once when analysis results are shown
   // so the EbayPolicySelector can load policies without waiting for publish
   useEffect(() => {
@@ -298,43 +318,6 @@ export default function AnalyzePage() {
 
   // Filter out empty item specifics for display
   const displaySpecifics = Object.entries(itemSpecifics).filter(([, v]) => v && v.trim() !== "");
-  const selectedSuggestedCategory = suggestedCategories.find((c) => c.categoryId === ebayCategoryId);
-  const hasSelectedCategoryInSuggestions = !!selectedSuggestedCategory;
-
-  const confirmCustomCategoryInput = () => {
-    const trimmed = customCategoryInput.trim();
-    if (!trimmed) return;
-    setPendingCategoryId(trimmed);
-    setShowCategoryConfirm(true);
-  };
-
-  const cancelCustomCategoryMode = () => {
-    setIsCustomCategoryMode(false);
-    setCustomCategoryInput("");
-  };
-
-  const handleCategorySelectChange = (value: string) => {
-    if (value === "__custom__") {
-      setIsCustomCategoryMode(true);
-      setCustomCategoryInput("");
-      return;
-    }
-    setEbayCategoryId(value);
-    setCustomCategoryInput("");
-  };
-
-  const handleCategoryDialogConfirm = (categoryId: string) => {
-    setEbayCategoryId(categoryId);
-    setCustomCategoryInput("");
-    setShowCategoryConfirm(false);
-    toast.success(`Category ${categoryId} confirmed`);
-  };
-
-  const handleCategoryDialogCancel = () => {
-    setShowCategoryConfirm(false);
-    setPendingCategoryId("");
-    // Don't reset customCategoryInput — user might want to try a different ID
-  };
 
   return (
     <div className="min-h-screen bg-background pb-8">
