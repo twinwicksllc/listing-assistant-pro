@@ -1383,12 +1383,12 @@ Seller's note: "${voiceNote}"`;
                     categoryId: {
                       type: "string",
                       description:
-                        "eBay leaf category ID. ALL IDs below are VERIFIED LEAF categories. COINS: Morgan Dollars=39464, Peace Dollars=11980, Eisenhower Dollars=11981, Kennedy Half=41102, Franklin Half=11973, Walking Liberty Half=41099, Barber Half=11971, Wheat Penny=39455, US Proof Sets=41109, US Mint Sets=526, Ancient Coins=532, Medieval Coins=173685. BULLION: Gold Bars/Rounds=178906, Silver Bars/Rounds=39489, Gold Coins (bullion)=177652, Silver Coins (bullion)=177653, Copper/Other Bullion=166679, Other Silver Bullion=3361. TRADING CARDS: Sports Card Singles=261328, Sports Card Lots=261329, Sports Card Sets=261330, Sealed Card Packs=261331, Sealed Card Boxes=261332, CCG Individual Cards (Pokemon/MTG/Yu-Gi-Oh)=183454, Non-Sport Card Singles=183050. TOYS: LEGO Complete Sets=19006, Action Figures=261068, Beanie Babies Retired=440, Jellycat=158786, Other Stuffed Animals=230, Jigsaw Puzzles=19183, Diecast Cars=180506, Board Games=180349, Collectible Figures/Bobbleheads=149372. ELECTRONICS: Smartphones=9355, Headphones=112529. JEWELRY: Wristwatches=31387. For items not listed above, describe the item clearly and the system will find the correct leaf category via eBay's API. NEVER use broad parent IDs like 253, 11118, 213, 246, 182, 1, 550, or 64482.",
+                        "eBay leaf category ID. ALL IDs below are VERIFIED LEAF categories. COINS US: Morgan Dollars=39464, Peace Dollars=11980, Eisenhower Dollars=11981, Kennedy Half=41102, Franklin Half=11973, Walking Liberty Half=41099, Barber Half=11971, Wheat Penny=39455, US Proof Sets=41109, US Mint Sets=526, Ancient Coins=532, Medieval Coins=173685. BULLION (use ONLY for items sold primarily for precious metal content — e.g. generic silver rounds, metal bars, American Silver/Gold Eagles sold as bullion): Gold Bars/Rounds=178906, Silver Bars/Rounds=39489, Gold Coins (bullion)=177652, Silver Coins (bullion)=177653, Copper/Other Bullion=166679, Other Silver Bullion=3361. WORLD COINS (non-US coins — use for ANY coin issued by a non-US government mint, especially collectibles and certified/graded coins): Canada=40196, Mexico=40197, Great Britain=40198, Australia=40199, Germany=40200, World Coins (all other countries including China, Japan, Asia, Europe, etc.)=45243. CRITICAL WORLD COIN RULES: Chinese Panda coins, Chinese Lunar series (Year of the Pig/Rat/Ox/Tiger/Dragon/etc.), any Chinese Yuan/commemorative coin, Japanese Yen commemoratives, any NGC/PCGS/ANACS-certified coin from a non-US mint = ALWAYS use World Coins (45243 or country-specific), NEVER bullion categories. A coin in a grading slab with a foreign country name on the label is a WORLD COIN, not bullion. FORBIDDEN CATEGORY RULE: NEVER assign any coin, currency, or bullion item to category 261186 (Books) or any category outside Coins & Paper Money. If unsure about a coin's origin, always default to 45243 (World Coins) before guessing any non-coin category. TRADING CARDS: Sports Card Singles=261328, Sports Card Lots=261329, Sports Card Sets=261330, Sealed Card Packs=261331, Sealed Card Boxes=261332, CCG Individual Cards (Pokemon/MTG/Yu-Gi-Oh)=183454, Non-Sport Card Singles=183050. TOYS: LEGO Complete Sets=19006, Action Figures=261068, Beanie Babies Retired=440, Jellycat=158786, Other Stuffed Animals=230, Jigsaw Puzzles=19183, Diecast Cars=180506, Board Games=180349, Collectible Figures/Bobbleheads=149372. ELECTRONICS: Smartphones=9355, Headphones=112529. JEWELRY: Wristwatches=31387. For items not listed above, describe the item clearly and the system will find the correct leaf category via eBay's API. NEVER use broad parent IDs like 253, 11118, 213, 246, 182, 1, 550, or 64482.",
                     },
                     alternativeCategoryIds: {
                       type: "array",
                       description:
-                        "Up to 2 alternative eBay category IDs that would also be appropriate. Provide different but valid categories.",
+                        "Up to 2 alternative eBay category IDs that would also be appropriate. Must be from the same domain as the primary (e.g. if item is a coin, alternatives must also be coin/bullion/world-coin categories — NEVER suggest a Books or non-Coins category as an alternative for a coin).",
                       items: { type: "string" },
                       maxItems: 2,
                     },
@@ -1777,9 +1777,46 @@ Seller's note: "${voiceNote}"`;
               const postSource = postLookupData.source || "";
               const postIsLeaf = postLookupData.verifiedLeaf === true;
 
-              // Override AI's category if:
-              // 1. The post-lookup found a verified leaf with high confidence, OR
+              // ── Define known Coins & Paper Money leaf IDs (and their tree prefix) ──
+              // Any category that starts with these IDs or whose breadcrumb contains
+              // "Coins & Paper Money" is in the right domain for coins_bullion items.
+              const COINS_PAPER_MONEY_IDS = new Set([
+                // Bullion
+                "178906","39489","177652","177653","166679","3361","3360",
+                "261064","261068","261069","261070","261071","261072","261073","261074","261075","261076",
+                "166680","166681",
+                // US Coins
+                "253","39464","11980","11981","41102","11973","41099","11971","39455","41084",
+                "41109","526","11116","11118","40149","40150","40151","40152","40153","40154",
+                "40155","40156","40157","40158","40159","40160","41111","164743",
+                // US Gold Coins
+                "40161","40162","40163","40164","40165","40166","40167",
+                // World Coins
+                "45243","40196","40197","40198","40199","40200","40201","40202","11063",
+                // Paper Money
+                "3411","45244",
+                // Ancient / Medieval
+                "532","173685",
+                // Exonumia
+                "19167","19168","19169",
+              ]);
+
+              // Categories that are in the completely wrong domain for a coin
+              const KNOWN_WRONG_DOMAIN_FOR_COINS = new Set([
+                "261186", // Books & Magazines > Books ← the exact bug we're fixing
+                "268",    // Books & Magazines (parent)
+                "9355","112529","177","179", // Electronics
+                "11450",  // Clothing
+                "550",    // Art
+                "1",      // Collectibles (too broad — coins should be more specific)
+              ]);
+
+              // Override AI's category if any of these conditions hold:
+              // 1. The post-lookup found a verified leaf with high confidence
               // 2. The AI's current category is a known non-leaf parent
+              // 3. DOMAIN MISMATCH: the identified domain is coins_bullion but the AI
+              //    picked a category outside the Coins & Paper Money tree.
+              //    In this case, ANY live lookup result is more trustworthy than the AI's pick.
               const KNOWN_PARENT_CATEGORIES = new Set([
                 "253",
                 "11118",
@@ -1796,16 +1833,22 @@ Seller's note: "${voiceNote}"`;
                 "64482",
                 "220",
               ]);
-              const aiCategoryIsParent = KNOWN_PARENT_CATEGORIES.has(
-                listing.ebayCategoryId,
-              );
+              const aiCategoryIsParent = KNOWN_PARENT_CATEGORIES.has(listing.ebayCategoryId);
               const postLookupIsStrong = postScore >= 80 && postIsLeaf;
 
-              if (aiCategoryIsParent || postLookupIsStrong) {
+              // Domain mismatch: Pass 1 said coins_bullion but AI chose a Books/Electronics/etc. category
+              const isDomainMismatch =
+                identification.domain === "coins_bullion" &&
+                !COINS_PAPER_MONEY_IDS.has(listing.ebayCategoryId) &&
+                (KNOWN_WRONG_DOMAIN_FOR_COINS.has(listing.ebayCategoryId) ||
+                  (postLookupData.breadcrumb || "").toLowerCase().includes("coins"));
+
+              if (aiCategoryIsParent || postLookupIsStrong || isDomainMismatch) {
                 console.log(
                   `analyze-item: POST-LOOKUP override: AI picked ${listing.ebayCategoryId}, ` +
                     `post-lookup found ${postLookupData.categoryId} (${postLookupData.categoryName}, ` +
-                    `score=${postScore}, source=${postSource}, leaf=${postIsLeaf}, aiWasParent=${aiCategoryIsParent})`,
+                    `score=${postScore}, source=${postSource}, leaf=${postIsLeaf}, ` +
+                    `aiWasParent=${aiCategoryIsParent}, domainMismatch=${isDomainMismatch})`,
                 );
                 listing.ebayCategoryId = postLookupData.categoryId;
                 listing.categoryId = postLookupData.categoryId;
@@ -1837,6 +1880,22 @@ Seller's note: "${voiceNote}"`;
                   lookupAlternatives = postLookupData.alternatives;
                 }
               }
+            } else if (
+              // Post-lookup returned nothing (or low confidence), BUT domain mismatch is clear —
+              // last-resort: the AI picked a wrong-domain category for a coin item.
+              // Fall back to the safest known world-coin category rather than leaving Books/Electronics.
+              identification.domain === "coins_bullion" &&
+              listing.ebayCategoryId &&
+              (["261186", "268"].includes(listing.ebayCategoryId) ||
+                (!listing.ebayCategoryId.match(/^(3[0-9]|4[0-9]|1[0-9]|2[0-9]|45243|532|173685)/) &&
+                  parseInt(listing.ebayCategoryId) > 200000))
+            ) {
+              console.warn(
+                `analyze-item: DOMAIN-MISMATCH SAFETY: coins_bullion item but AI returned category ${listing.ebayCategoryId} ` +
+                  `and post-lookup found nothing — forcing fallback to World Coins (45243)`,
+              );
+              listing.ebayCategoryId = "45243";
+              listing.categoryId = "45243";
             }
           }
         }

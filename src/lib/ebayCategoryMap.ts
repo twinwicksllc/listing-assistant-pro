@@ -59,6 +59,8 @@ export const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
 
   // --- Bullion (other) ---
   "3360": "Coins & Paper Money > Bullion > Gold > Other",  // For grain bars, flakes, nuggets
+  "177652": "Coins & Paper Money > Bullion > Gold > Coins",   // Gold bullion coins (AI prompt ID)
+  "177653": "Coins & Paper Money > Bullion > Silver > Coins", // Silver bullion coins (AI prompt ID)
   "261064": "Coins & Paper Money > Bullion > Gold > Coins",
   "261068": "Coins & Paper Money > Bullion > Silver > Coins",
   "261069": "Coins & Paper Money > Bullion > Silver > Bars & Rounds",
@@ -82,6 +84,9 @@ export const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
   "40198":  "Coins & Paper Money > Coins: World > Great Britain",
   "40199":  "Coins & Paper Money > Coins: World > Australia",
   "40200":  "Coins & Paper Money > Coins: World > Germany",
+  "40201":  "Coins & Paper Money > Coins: World > France",
+  "40202":  "Coins & Paper Money > Coins: World > Other",
+  "11063":  "Coins & Paper Money > Coins: World > Asia",
 
   // --- Paper Money ---
   "3411":   "Coins & Paper Money > Paper Money: US",
@@ -166,6 +171,10 @@ export const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
   "2993":   "Clothing, Shoes & Accessories > Vintage > Unisex Vintage Accessories > Belts",
   "1059":   "Clothing, Shoes & Accessories > Men's Clothing > Shirts",
   "185100": "Clothing, Shoes & Accessories > Women's Clothing > Dresses",
+
+  // ─── Books (mapped so wrong-category bugs are visible in breadcrumb display) ─
+  "261186": "Books & Magazines > Books",
+  "268":    "Books & Magazines",
 };
 
 /**
