@@ -75,6 +75,10 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
   const [paymentPolicyId, setPaymentPolicyId]         = useState(draft.paymentPolicyId ?? "");
   const [returnPolicyId, setReturnPolicyId]           = useState(draft.returnPolicyId ?? "");
 
+  // Multi-quantity (Fixed Price only)
+  const [quantity, setQuantity] = useState(draft.quantity ?? 1);
+  const [pricingMode, setPricingMode] = useState<'per_item' | 'total'>(draft.pricingMode ?? 'per_item');
+
   const [saving, setSaving] = useState(false);
 
   const displaySpecifics = Object.entries(itemSpecifics).filter(([, v]) => v !== undefined);
@@ -219,6 +223,8 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
       fulfillmentPolicyId: fulfillmentPolicyId || undefined,
       paymentPolicyId:     paymentPolicyId     || undefined,
       returnPolicyId:      returnPolicyId      || undefined,
+      quantity: quantity > 1 ? quantity : 1,
+      pricingMode,
     };
 
     const ok = await updateDraft(draft.id, updates);
@@ -333,6 +339,52 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
                 className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
+
+            {/* Quantity — Fixed Price only */}
+            {listingFormat === "FIXED_PRICE" && (
+              <div className="space-y-2">
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Quantity Available</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={quantity}
+                    onChange={(e) => {
+                      const q = Math.max(1, Math.floor(parseFloat(e.target.value) || 1));
+                      setQuantity(q);
+                      if (q === 1) setPricingMode('per_item');
+                    }}
+                    className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+                {quantity > 1 && (
+                  <div className="space-y-1 pl-1">
+                    <label className="text-xs text-muted-foreground">Listing price is…</label>
+                    <div className="flex gap-2">
+                      {(['per_item', 'total'] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() => setPricingMode(mode)}
+                          className={`flex-1 py-2 rounded-lg text-xs font-medium border transition-colors ${
+                            pricingMode === mode
+                              ? 'border-primary bg-primary/10 text-primary'
+                              : 'border-border bg-card text-muted-foreground hover:border-primary/40'
+                          }`}
+                        >
+                          {mode === 'per_item' ? 'Per item' : 'Total for all'}
+                        </button>
+                      ))}
+                    </div>
+                    {pricingMode === 'total' && listingPrice > 0 && (
+                      <p className="text-xs text-muted-foreground pt-0.5">
+                        eBay will list at <span className="font-medium text-foreground">${(listingPrice / quantity).toFixed(2)}</span> per item
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Auction Duration — only shown for AUCTION format */}
             {listingFormat === "AUCTION" && (

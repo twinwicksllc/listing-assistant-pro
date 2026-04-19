@@ -157,6 +157,10 @@ export interface ListingDraft {
   bestOfferAutoAcceptPrice?: number;   // Optional: auto-accept offers >= this price
   bestOfferAutoDeclinePrice?: number;  // Optional: auto-decline offers <= this price
 
+  // Multi-quantity support (FIXED_PRICE only)
+  quantity?: number;                 // How many units are available (default 1)
+  pricingMode?: 'per_item' | 'total'; // Whether listingPrice is per-item or total for all units
+
   // Cost of Goods Sold — what the seller paid to acquire this item
   cogs?: number;             // purchase cost in USD
   cogsSource?: string;       // 'manual' | 'import' | 'consignor_split'

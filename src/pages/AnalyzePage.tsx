@@ -107,6 +107,10 @@ export default function AnalyzePage() {
   const [bestOfferAutoAcceptPrice, setBestOfferAutoAcceptPrice] = useState<number>(0);
   const [bestOfferAutoDeclinePrice, setBestOfferAutoDeclinePrice] = useState<number>(0);
 
+  // Multi-quantity (Fixed Price only)
+  const [quantity, setQuantity] = useState(1);
+  const [pricingMode, setPricingMode] = useState<'per_item' | 'total'>('per_item');
+
   // Fetch the stored eBay token once when analysis results are shown
   // so the EbayPolicySelector can load policies without waiting for publish
   useEffect(() => {
@@ -259,6 +263,8 @@ export default function AnalyzePage() {
       bestOfferEnabled: bestOfferEnabled || undefined,
       bestOfferAutoAcceptPrice: bestOfferEnabled && bestOfferAutoAcceptPrice > 0 ? bestOfferAutoAcceptPrice : undefined,
       bestOfferAutoDeclinePrice: bestOfferEnabled && bestOfferAutoDeclinePrice > 0 ? bestOfferAutoDeclinePrice : undefined,
+      quantity: quantity > 1 ? quantity : undefined,
+      pricingMode: quantity > 1 ? pricingMode : undefined,
     });
     if (success) {
       toast.success("Draft saved!");
@@ -353,6 +359,8 @@ export default function AnalyzePage() {
           bestOfferEnabled: bestOfferEnabled || undefined,
           bestOfferAutoAcceptPrice: bestOfferEnabled && bestOfferAutoAcceptPrice > 0 ? bestOfferAutoAcceptPrice : undefined,
           bestOfferAutoDeclinePrice: bestOfferEnabled && bestOfferAutoDeclinePrice > 0 ? bestOfferAutoDeclinePrice : undefined,
+          quantity: quantity > 1 ? quantity : undefined,
+          pricingMode: quantity > 1 ? pricingMode : undefined,
         }));
         window.location.href = data.authUrl;
         return;
@@ -381,6 +389,8 @@ export default function AnalyzePage() {
           bestOfferEnabled: bestOfferEnabled || undefined,
           bestOfferAutoAcceptPrice: bestOfferEnabled && bestOfferAutoAcceptPrice > 0 ? bestOfferAutoAcceptPrice : undefined,
           bestOfferAutoDeclinePrice: bestOfferEnabled && bestOfferAutoDeclinePrice > 0 ? bestOfferAutoDeclinePrice : undefined,
+          quantity: quantity > 1 ? quantity : undefined,
+          pricingMode: quantity > 1 ? pricingMode : undefined,
         },
       });
 
@@ -942,6 +952,52 @@ export default function AnalyzePage() {
                       onChange={(e) => setListingPrice(parseFloat(e.target.value) || 0)}
                       className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     />
+                  </div>
+
+                  {/* Quantity — Fixed Price only */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 space-y-1">
+                        <label className="text-xs text-muted-foreground">Quantity Available</label>
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={quantity}
+                          onChange={(e) => {
+                            const q = Math.max(1, Math.floor(parseFloat(e.target.value) || 1));
+                            setQuantity(q);
+                            if (q === 1) setPricingMode('per_item');
+                          }}
+                          className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                      </div>
+                    </div>
+                    {quantity > 1 && (
+                      <div className="space-y-1 pl-1">
+                        <label className="text-xs text-muted-foreground">Listing price is…</label>
+                        <div className="flex gap-2">
+                          {(['per_item', 'total'] as const).map((mode) => (
+                            <button
+                              key={mode}
+                              onClick={() => setPricingMode(mode)}
+                              className={`flex-1 py-2 rounded-lg text-xs font-medium border transition-colors ${
+                                pricingMode === mode
+                                  ? 'border-primary bg-primary/10 text-primary'
+                                  : 'border-border bg-card text-muted-foreground hover:border-primary/40'
+                              }`}
+                            >
+                              {mode === 'per_item' ? 'Per item' : 'Total for all'}
+                            </button>
+                          ))}
+                        </div>
+                        {pricingMode === 'total' && listingPrice > 0 && (
+                          <p className="text-xs text-muted-foreground pt-0.5">
+                            eBay will list at <span className="font-medium text-foreground">${(listingPrice / quantity).toFixed(2)}</span> per item
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Best Offer toggle */}
