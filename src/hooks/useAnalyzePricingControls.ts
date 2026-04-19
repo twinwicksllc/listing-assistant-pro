@@ -62,6 +62,10 @@ export function useAnalyzePricingControls({
     if (q === 1) setPricingMode("per_item");
   }, [setPricingMode, setQuantity]);
 
+  const selectPricingMode = useCallback((mode: "per_item" | "total") => {
+    setPricingMode(mode);
+  }, [setPricingMode]);
+
   const toggleAuctionBuyItNow = useCallback((enabled: boolean) => {
     setAuctionBuyItNowEnabled(enabled);
   }, [setAuctionBuyItNowEnabled]);
@@ -78,6 +82,7 @@ export function useAnalyzePricingControls({
     updateListingPriceFromInput,
     updateAuctionStartPriceFromInput,
     updateQuantityFromInput,
+    selectPricingMode,
     toggleAuctionBuyItNow,
     updateAuctionBuyItNowFromInput,
   };

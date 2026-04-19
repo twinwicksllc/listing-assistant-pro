@@ -319,6 +319,7 @@ export default function AnalyzePage() {
     updateListingPriceFromInput,
     updateAuctionStartPriceFromInput,
     updateQuantityFromInput,
+    selectPricingMode,
     toggleAuctionBuyItNow,
     updateAuctionBuyItNowFromInput,
   } = useAnalyzePricingControls({
@@ -828,7 +829,7 @@ export default function AnalyzePage() {
                           {(['per_item', 'total'] as const).map((mode) => (
                             <button
                               key={mode}
-                              onClick={() => setPricingMode(mode)}
+                              onClick={() => selectPricingMode(mode)}
                               className={`flex-1 py-2 rounded-lg text-xs font-medium border transition-colors ${
                                 pricingMode === mode
                                   ? 'border-primary bg-primary/10 text-primary'
