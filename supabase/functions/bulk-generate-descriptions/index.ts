@@ -152,32 +152,36 @@ serve(async (req: Request) => {
           .toLowerCase()
           .replace(/\b\w/g, (c) => c.toUpperCase());
 
-        const prompt = `Write a compelling eBay listing description for this item.
+        const prompt = `Write a compelling eBay listing description for this item. I want a HUMAN-sounding description that is professional but conversational. Imagine you are an enthusiastic eBay seller.
 
 Title: ${row.title}
 Condition: ${conditionLabel}
 Item Specifics: ${specificsText}
 
-Structure your description using these FOUR sections:
+Structure your description using these ## Markdown headers:
 
-1. OPENING (1-2 sentences): Direct, conversational hook. Lead with the best feature or an honest note about condition. Use "You're looking at...", "Here's a great...", or "Let's be honest..." as openers. Do NOT start with the item title.
+## Overview
+1-3 sentences. Start with a direct hook like "Up for sale is...", "You're looking at...", or "If you're looking for...". Explain what the item is and what makes it a great pick.
 
-2. WHAT YOU'RE GETTING (bullet list using - ):
-   - List the key facts: year/model, condition, specs, what's included
-   - Be specific to what's provided above - do not invent details
+## Quick Specs
+Use a bulleted list (-) for:
+- Weight/Metal (if applicable)
+- Design/Feature highlights
+- Condition details (be honest about wear/scuffs)
+- What's included (capsule, case, etc.)
 
-3. WHY IT WORKS (2-3 sentences): Honest appeal - who is this for and why does it stand out? Historical note, rarity, or practical value. Be SPECIFIC to this item.
+## The Details
+2-4 sentences explaining WHY this item matters. Mention the design details on the obverse/reverse. If there's a historical or patriotic motif, mention why it’s a nice addition to a collection.
 
-4. Bottom line: (always labeled exactly "Bottom line:") One closing sentence with your honest take on value and who should buy this.
+## Bottom Line
+One closing sentence on value or who this is for. Start with "Bottom Line:".
 
 TONE RULES:
-- Write like a knowledgeable seller talking to a fellow enthusiast, not a corporate email
-- Use contractions naturally ("it's", "you're", "here's")
-- Be honest about condition - builds trust and reduces returns
-- Max 400 words total
-- Plain text only, no HTML
-- AVOID these phrases: "comprises", "showcases", "features exceptional", "museum-quality", "elevate your collection", "delve into", "in the realm of"
-- Do NOT include the title as a heading`;
+- Use contractions ("It's", "You're") to sound natural.
+- Be honest about condition.
+- AVOID "AI slop" like: "Discover", "Elevate your collection", "Unveil", "Showcases", "Whether you're a seasoned...", "In the realm of", "Features exceptional".
+- No HTML, use plain Markdown.
+- Keep it under 300 words.`;
 
         const response = await fetch(
           "https://api.openai.com/v1/chat/completions",
