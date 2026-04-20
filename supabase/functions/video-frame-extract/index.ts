@@ -12,6 +12,11 @@ type ExtractRequest = {
   videoUrl?: string;
   maxFrames?: number;
   strategy?: string;
+  frames?: Array<{
+    dataUrl: string;
+    timestampSec: number;
+    score: number;
+  }>;
 };
 
 function makeMockFrameDataUrl(label: string): string {
@@ -30,6 +35,28 @@ function makeMockFrameDataUrl(label: string): string {
 </svg>`;
 
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function decodeDataUrl(dataUrl: string): { bytes: Uint8Array; mimeType: string } {
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) {
+    throw new Error("Invalid frame data URL format.");
+  }
+
+  const mimeType = match[1] || "image/jpeg";
+  const base64 = match[2];
+  const raw = atob(base64);
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) {
+    bytes[i] = raw.charCodeAt(i);
+  }
+  return { bytes, mimeType };
+}
+
+function extensionForMime(mimeType: string): string {
+  if (mimeType.includes("png")) return "png";
+  if (mimeType.includes("webp")) return "webp";
+  return "jpg";
 }
 
 serve(async (req: Request) => {
@@ -65,34 +92,70 @@ serve(async (req: Request) => {
     const videoUrl = body.videoUrl?.trim();
     const maxFrames = Math.max(1, Math.min(12, body.maxFrames ?? 6));
     const strategy = body.strategy ?? "scene_change";
+    const incomingFrames = Array.isArray(body.frames) ? body.frames.slice(0, maxFrames) : [];
 
-    if (!videoUrl) {
+    if (!videoUrl && incomingFrames.length === 0) {
       return new Response(
-        JSON.stringify({ error: "videoUrl is required" }),
+        JSON.stringify({ error: "videoUrl or frames payload is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    // Slice 1 scaffold:
-    // Return deterministic mock frames so frontend integration can be wired
-    // before real ffmpeg/worker extraction lands.
-    const frames = Array.from({ length: Math.min(maxFrames, 6) }).map((_, idx) => ({
-      url: makeMockFrameDataUrl(`Frame ${idx + 1}`),
-      timestampSec: Number((idx * 1.2 + 0.8).toFixed(1)),
-      score: Number((0.94 - idx * 0.03).toFixed(2)),
-    }));
+    let frames: Array<{ url: string; timestampSec: number; score: number }> = [];
+    let mocked = false;
+
+    if (incomingFrames.length > 0) {
+      for (let idx = 0; idx < incomingFrames.length; idx++) {
+        const frame = incomingFrames[idx];
+        if (!frame?.dataUrl) continue;
+
+        const { bytes, mimeType } = decodeDataUrl(frame.dataUrl);
+        const ext = extensionForMime(mimeType);
+        const path = `listing-video-frames/${userId}/${crypto.randomUUID()}-frame-${idx + 1}.${ext}`;
+
+        const { error: uploadError } = await svc.storage
+          .from("listing-images")
+          .upload(path, bytes, {
+            contentType: mimeType,
+            upsert: false,
+          });
+
+        if (uploadError) {
+          throw new Error(`Failed to store extracted frame ${idx + 1}: ${uploadError.message}`);
+        }
+
+        const { data: publicData } = svc.storage.from("listing-images").getPublicUrl(path);
+        frames.push({
+          url: publicData.publicUrl,
+          timestampSec: Number(frame.timestampSec ?? idx),
+          score: Number(frame.score ?? 0.5),
+        });
+      }
+    }
+
+    // Fallback mock mode for compatibility if caller did not send frame payload yet.
+    if (frames.length === 0) {
+      mocked = true;
+      frames = Array.from({ length: Math.min(maxFrames, 6) }).map((_, idx) => ({
+        url: makeMockFrameDataUrl(`Frame ${idx + 1}`),
+        timestampSec: Number((idx * 1.2 + 0.8).toFixed(1)),
+        score: Number((0.94 - idx * 0.03).toFixed(2)),
+      }));
+    }
 
     return new Response(
       JSON.stringify({
         frames,
         meta: {
           strategy,
-          mocked: true,
+          mocked,
           userId,
           durationSec: 8.4,
-          framesExamined: 24,
+          framesExamined: incomingFrames.length > 0 ? incomingFrames.length : 24,
           framesSelected: frames.length,
-          message: "Slice 1 mock response. Real extraction worker will be added in Slice 2.",
+          message: mocked
+            ? "Mock fallback response (no frame payload provided)."
+            : "Frames persisted to Supabase storage.",
         },
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
