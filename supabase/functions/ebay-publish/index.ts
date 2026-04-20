@@ -1621,7 +1621,7 @@ function markdownToHtml(markdown: string): string {
   const labelPattern = bulletLabels.join("|");
   // Replace " - Label:" with "\n- Label:" when not at start of line
   html = html.replace(
-    new RegExp(`(?!^|\n)(\s*-\s*)(${labelPattern})`, "g"),
+    new RegExp(`(?!^|\n)(\\s*-\\s*)(${labelPattern})`, "g"),
     "\n- $2",
   );
 
@@ -3229,7 +3229,7 @@ serve(async (req) => {
       // Resolve imageUrl: eBay rejects base64 data: URLs (errorId 25721).
       // Upload to Supabase Storage if needed to get a public HTTPS URL.
       // Support multiple images: prefer `imageUrls` array if provided, else fall back to singular `imageUrl` for compatibility.
-      let resolvedImageUrls: string[] = [];
+      const resolvedImageUrls: string[] = [];
       const incomingImageUrls = Array.isArray(imageUrls) && imageUrls.length > 0
         ? imageUrls
         : (imageUrl ? [imageUrl as string] : []);
@@ -3698,7 +3698,7 @@ serve(async (req) => {
           } else if (isSellerLimitError) {
             // Extract the human-readable portion of the seller limit message
             const rawMsg: string = firstError?.message ?? "";
-            const limitMatch = rawMsg.match(/You can list up to ([\$\d,\.]+) more[^.]*\./i);
+            const limitMatch = rawMsg.match(/You can list up to ([$\d,.]+) more[^.]*\./i);
             const remaining = limitMatch ? limitMatch[1] : null;
             userFriendlyError = remaining
               ? `Your eBay account has reached its monthly selling limit. You have ${remaining} of listing capacity remaining this month. Visit eBay's Selling Limits page to request an increase.`

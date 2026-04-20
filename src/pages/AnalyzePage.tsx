@@ -5,17 +5,28 @@ import PriceRecommenderCard from "@/components/PriceRecommenderCard";
 import CogsInput from "@/components/CogsInput";
 import CategoryConfirmDialog from "@/components/CategoryConfirmDialog";
 import { useDrafts } from "@/hooks/useDrafts";
-import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import type { ItemSpecifics, ListingFormat } from "@/types/listing";
-import { getConditionsForCategory } from "@/types/listing";
+import type { ItemSpecifics } from "@/types/listing";
 import { useAuth } from "@/contexts/AuthContext";
-import { exportListing, type ExportPlatform, type ExportFormat } from "@/lib/exportCSV";
 import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
-import { uploadListingImages } from "@/lib/imageUpload";
 import { EbayPolicySelector } from "@/components/EbayPolicySelector";
 import type { SelectedPolicies } from "@/types/ebay-policies";
 import { VideoUploadInput } from "@/components/VideoUploadInput";
+import { useAnalyzePublish } from "@/hooks/useAnalyzePublish";
+import { useAnalyzeGeneration } from "@/hooks/useAnalyzeGeneration";
+import { useAnalyzeSave } from "@/hooks/useAnalyzeSave";
+import { useAnalyzeCategorySelection } from "@/hooks/useAnalyzeCategorySelection";
+import { useAnalyzeExport } from "@/hooks/useAnalyzeExport";
+import { useAnalyzePolicyToken } from "@/hooks/useAnalyzePolicyToken";
+import { useAnalyzePublishPayload } from "@/hooks/useAnalyzePublishPayload";
+import { useAnalyzeExportPreferences } from "@/hooks/useAnalyzeExportPreferences";
+import { useAnalyzeImageCarousel } from "@/hooks/useAnalyzeImageCarousel";
+import { useAnalyzePricingControls } from "@/hooks/useAnalyzePricingControls";
+import { useAnalyzeVideoHandlers } from "@/hooks/useAnalyzeVideoHandlers";
+import { useAnalyzeBestOfferControls } from "@/hooks/useAnalyzeBestOfferControls";
+import { useAnalyzeConditionOptions } from "@/hooks/useAnalyzeConditionOptions";
+import { useAnalyzeGradeControls } from "@/hooks/useAnalyzeGradeControls";
+import { useAnalyzeListingFieldHandlers } from "@/hooks/useAnalyzeListingFieldHandlers";
 
 export default function AnalyzePage() {
   const { canAnalyze, canPublish, usage, recordUsage, isOwner, currentPlanLimits, planFeatures, currentPlan, user } = useAuth();
@@ -28,21 +39,20 @@ export default function AnalyzePage() {
   const voiceNote: string = state?.voiceNote || "";
 
   const [generated, setGenerated] = useState(false);
-  const [generating, setGenerating] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priceMin, setPriceMin] = useState(0);
   const [priceMax, setPriceMax] = useState(0);
-  const [activePhoto, setActivePhoto] = useState(0);
-  const [publishing, setPublishing] = useState(false);
+  const { activePhoto, selectPhoto, goToNextPhoto, goToPreviousPhoto } =
+    useAnalyzeImageCarousel(imageUrls.length);
   const [metalType, setMetalType] = useState<string>("none");
   const [metalWeightOz, setMetalWeightOz] = useState<number>(0);
   const [ebayCategoryId, setEbayCategoryId] = useState<string>("");
   const [suggestedCategories, setSuggestedCategories] = useState<Array<{ categoryId: string; categoryName: string; reason: string; breadcrumb?: string }>>([]);
   const [itemSpecifics, setItemSpecifics] = useState<ItemSpecifics>({});
   const [condition, setCondition] = useState<string>("USED_EXCELLENT");
-  const [exportPlatform, setExportPlatform] = useState<ExportPlatform>("ebay_file_exchange");
-  const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
+  const { exportPlatform, exportFormat, setExportPlatform, setExportFormat } =
+    useAnalyzeExportPreferences();
   const [suggestedGrade, setSuggestedGrade] = useState<string>("");
   const [gradingRationale, setGradingRationale] = useState<string>("");
   const [isSlabbed, setIsSlabbed] = useState(false);
@@ -76,7 +86,6 @@ export default function AnalyzePage() {
   } | null>(null);
 
   // eBay business policies — selected by the user on this page
-  const [ebayTokenForPolicies, setEbayTokenForPolicies] = useState<string | null>(null);
   const [selectedPolicies, setSelectedPolicies] = useState<SelectedPolicies>({
     fulfillmentPolicyId: null,
     paymentPolicyId: null,
@@ -106,114 +115,272 @@ export default function AnalyzePage() {
   const [ebayVideoStatus, setEbayVideoStatus] = useState<string | null>(null);
   const videoIsProcessing = !!ebayVideoId && ebayVideoStatus !== "LIVE" && ebayVideoStatus !== "FAILED";
 
-  // Fetch the stored eBay token once when analysis results are shown
-  // so the EbayPolicySelector can load policies without waiting for publish
-  useEffect(() => {
-    if (!generated || !user?.id) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data } = await supabase.functions.invoke("ebay-publish", {
-          body: { action: "get_stored_token", userId: user.id },
-        });
-        if (!cancelled) {
-          setEbayTokenForPolicies(data?.token ?? localStorage.getItem("ebay-user-token"));
-        }
-      } catch {
-        if (!cancelled) setEbayTokenForPolicies(localStorage.getItem("ebay-user-token"));
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [generated, user?.id]);
-
   const AI_FOOTER = "\n\n---\nListing generated by Teckstart AI Assistant. All details should be verified by the buyer.";
   const getDescriptionWithFooter = () => includeAiFooter ? description + AI_FOOTER : description;
 
-  const handleGenerate = async () => {
-    if (!canAnalyze) {
-      toast.error(`Monthly analysis limit reached (${currentPlanLimits.analysisLimit}). Upgrade for more listings.`);
-      navigate("/billing");
-      return;
+  const { buildPublishPayload } = useAnalyzePublishPayload({
+    title,
+    descriptionWithFooter: getDescriptionWithFooter(),
+    listingFormat,
+    listingPrice,
+    auctionStartPrice,
+    auctionBuyItNowEnabled,
+    auctionBuyItNow,
+    condition,
+    ebayCategoryId,
+    itemSpecifics,
+    selectedPolicies,
+    bestOfferEnabled,
+    bestOfferAutoAcceptPrice,
+    bestOfferAutoDeclinePrice,
+    quantity,
+    pricingMode,
+    ebayVideoId,
+    ebayVideoStatus,
+  });
+
+  const handlePublishSuccess = async (data: any) => {
+    await recordUsage("ebay_publish");
+
+    // Persist COGS to listing_cogs so the Listings detail modal and Profit Report
+    // can show cost/margin data even after this session ends.
+    if (cogs != null && user?.id && (data.sku || data.listingId)) {
+      try {
+        await (supabase as any).from("listing_cogs").insert({
+          user_id: user.id,
+          ebay_sku: data.sku ?? null,
+          ebay_listing_id: data.listingId ?? null,
+          title,
+          cogs,
+          cogs_source: "manual",
+        });
+      } catch (cogsErr) {
+        console.warn("Failed to persist COGS after direct publish:", cogsErr);
+      }
     }
-    setGenerating(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("analyze-item", {
-        body: { images: imageUrls, voiceNote, ...(ebayCategoryId ? { categoryId: ebayCategoryId } : {}) },
-      });
 
-      if (error) {
-        if (error.status === 429) {
-          toast.error("Monthly AI analysis limit reached. Upgrade to Pro or Unlimited.");
-          navigate("/settings?tab=billing");
-          setGenerating(false);
-          return;
-        }
-        throw new Error(error.message || "Analysis failed");
-      }
-      
-      if (data?.error) {
-        // Starter tier without eBay account connected
-        if (data.error === "ebay_account_required") {
-          toast.error("Connect an eBay account to start generating listings", {
-            description: "The free tier requires an active eBay connection.",
-            action: {
-              label: "Connect",
-              onClick: () => navigate("/settings"),
-            },
-          });
-          setGenerating(false);
-          return;
-        }
-        if (data.error.includes("limit")) {
-          toast.error(data.error);
-          navigate("/settings?tab=billing");
-          setGenerating(false);
-          return;
-        }
-        throw new Error(data.error);
-      }
-
-      // Extract metadata if available
-      if (data._meta) {
-        setAnalysisMeta(data._meta);
-      }
-      if (data._ebayMetadata) {
-        setEbayMetadata(data._ebayMetadata);
-      } else {
-        setEbayMetadata(null);
-      }
-
-      setTitle((data.title || "").slice(0, 80));
-      setDescription(data.description || "");
-      setPriceMin(data.priceMin || 0);
-      setPriceMax(data.priceMax || 0);
-      setMetalType(data.metalType || "none");
-      setMetalWeightOz(data.metalWeightOz || 0);
-      setEbayCategoryId(data.ebayCategoryId || "");
-      setIsCustomCategoryMode(false);
-      setSuggestedCategories(data.suggestedCategories || []);
-      setItemSpecifics(data.itemSpecifics || {});
-      setCondition(data.condition || "USED_EXCELLENT");
-      setSuggestedGrade(data.suggestedGrade || "");
-      setGradingRationale(data.gradingRationale || "");
-      setIsSlabbed(data.isSlabbed ?? false);
-      setMeltValue(data.meltValue ?? null);
-      setSpotPrices(data.spotPrices ?? null);
-      setGradeConfirmed(false);
-      setDomain(data.domain || "general");
-      // Pre-fill listing price with AI midpoint as a starting suggestion
-      const aiMid = ((data.priceMin || 0) + (data.priceMax || data.priceMin || 0)) / 2;
-      setListingPrice(parseFloat(aiMid.toFixed(2)) || 0);
-      setAuctionStartPrice(parseFloat((data.priceMin || 0).toFixed(2)) || 0);
-      setGenerated(true);
-      // OQ-12: recordUsage removed — analyze-item edge function inserts server-side usage row
-    } catch (err: any) {
-      console.error("Analysis error:", err);
-      toast.error(err.message || "Failed to analyze item. Please try again.");
-    } finally {
-      setGenerating(false);
-    }
+    navigate("/home");
   };
+
+  const { publishing, handlePublish, loadPolicyToken } = useAnalyzePublish({
+    canPublish,
+    publishLimit: currentPlanLimits.publishLimit,
+    userId: user?.id,
+    imageUrls,
+    itemSpecifics,
+    ebayMetadata,
+    buildPublishPayload,
+    onRequireBilling: () => navigate("/billing"),
+    onPublishSuccess: handlePublishSuccess,
+  });
+
+  const handleAnalyzeSuccess = (data: any) => {
+    if (data._meta) {
+      setAnalysisMeta(data._meta);
+    }
+    if (data._ebayMetadata) {
+      setEbayMetadata(data._ebayMetadata);
+    } else {
+      setEbayMetadata(null);
+    }
+
+    setTitle((data.title || "").slice(0, 80));
+    setDescription(data.description || "");
+    setPriceMin(data.priceMin || 0);
+    setPriceMax(data.priceMax || 0);
+    setMetalType(data.metalType || "none");
+    setMetalWeightOz(data.metalWeightOz || 0);
+    setEbayCategoryId(data.ebayCategoryId || "");
+    setIsCustomCategoryMode(false);
+    setSuggestedCategories(data.suggestedCategories || []);
+    setItemSpecifics(data.itemSpecifics || {});
+    setCondition(data.condition || "USED_EXCELLENT");
+    setSuggestedGrade(data.suggestedGrade || "");
+    setGradingRationale(data.gradingRationale || "");
+    setIsSlabbed(data.isSlabbed ?? false);
+    setMeltValue(data.meltValue ?? null);
+    setSpotPrices(data.spotPrices ?? null);
+    setGradeConfirmed(false);
+    setDomain(data.domain || "general");
+
+    // Pre-fill listing price with AI midpoint as a starting suggestion
+    const aiMid = ((data.priceMin || 0) + (data.priceMax || data.priceMin || 0)) / 2;
+    setListingPrice(parseFloat(aiMid.toFixed(2)) || 0);
+    setAuctionStartPrice(parseFloat((data.priceMin || 0).toFixed(2)) || 0);
+    setGenerated(true);
+  };
+
+  const { generating, handleGenerate } = useAnalyzeGeneration({
+    canAnalyze,
+    analysisLimit: currentPlanLimits.analysisLimit,
+    imageUrls,
+    voiceNote,
+    ebayCategoryId,
+    onRequireBilling: () => navigate("/billing"),
+    onRequireSettings: () => navigate("/settings?tab=billing"),
+    onSuccess: handleAnalyzeSuccess,
+  });
+
+  const buildDraftPayload = (uploadedUrls: string[]) => ({
+    id: crypto.randomUUID(),
+    imageUrl: uploadedUrls[0],
+    imageUrls: uploadedUrls,
+    title,
+    description: getDescriptionWithFooter(),
+    priceMin,
+    priceMax,
+    listingPrice: listingPrice > 0
+      ? listingPrice
+      : auctionStartPrice > 0
+      ? auctionStartPrice
+      : parseFloat(((priceMin + priceMax) / 2).toFixed(2)),
+    listingFormat,
+    createdAt: new Date(),
+    ebayCategoryId,
+    ebayCategoryBreadcrumb: getEbayCategoryBreadcrumb(ebayCategoryId),
+    itemSpecifics,
+    condition,
+    consignor,
+    cogs: cogs ?? undefined,
+    cogsSource: cogs != null ? "manual" : undefined,
+    fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId ?? undefined,
+    paymentPolicyId: selectedPolicies.paymentPolicyId ?? undefined,
+    returnPolicyId: selectedPolicies.returnPolicyId ?? undefined,
+    metalType: metalType !== "none" ? metalType : undefined,
+    metalWeightOz: metalWeightOz > 0 ? metalWeightOz : undefined,
+    bestOfferEnabled: bestOfferEnabled || undefined,
+    bestOfferAutoAcceptPrice: bestOfferEnabled && bestOfferAutoAcceptPrice > 0
+      ? bestOfferAutoAcceptPrice
+      : undefined,
+    bestOfferAutoDeclinePrice: bestOfferEnabled && bestOfferAutoDeclinePrice > 0
+      ? bestOfferAutoDeclinePrice
+      : undefined,
+    quantity: quantity > 1 ? quantity : undefined,
+    pricingMode: quantity > 1 ? pricingMode : undefined,
+    videoUrl: videoUrl ?? undefined,
+    ebayVideoId: ebayVideoId ?? undefined,
+    ebayVideoStatus: ebayVideoStatus ?? undefined,
+  });
+
+  const { handleSave } = useAnalyzeSave({
+    userId: user?.id,
+    imageUrls,
+    addDraft,
+    buildDraftPayload,
+    onSaved: () => navigate("/drafts"),
+  });
+
+  const {
+    selectedSuggestedCategory,
+    hasSelectedCategoryInSuggestions,
+    confirmCustomCategoryInput,
+    updateCustomCategoryInput,
+    handleCustomCategoryInputKeyDown,
+    cancelCustomCategoryMode,
+    handleCategorySelectChange,
+    handleCategoryDialogConfirm,
+    handleCategoryDialogCancel,
+  } = useAnalyzeCategorySelection({
+    ebayCategoryId,
+    suggestedCategories,
+    customCategoryInput,
+    setCustomCategoryInput,
+    setPendingCategoryId,
+    setShowCategoryConfirm,
+    setIsCustomCategoryMode,
+    setEbayCategoryId,
+  });
+
+  const { downloadLabel, handleExport } = useAnalyzeExport({
+    exportPlatform,
+    exportFormat,
+    title,
+    description,
+    priceMin,
+    priceMax,
+    imageUrls,
+    ebayCategoryId,
+    itemSpecifics,
+    condition,
+    selectedPolicies,
+    recordUsage,
+  });
+
+  const { ebayTokenForPolicies } = useAnalyzePolicyToken({
+    generated,
+    userId: user?.id,
+    loadPolicyToken,
+  });
+
+  const {
+    listingPriceForCogs,
+    applyRecommendedPrice,
+    selectFixedPriceFormat,
+    selectAuctionFormat,
+    updateListingPriceFromInput,
+    updateAuctionStartPriceFromInput,
+    updateQuantityFromInput,
+    selectPricingMode,
+    toggleAuctionBuyItNow,
+    updateAuctionBuyItNowFromInput,
+  } = useAnalyzePricingControls({
+    listingPrice,
+    auctionStartPrice,
+    priceMin,
+    priceMax,
+    setListingPrice,
+    setAuctionStartPrice,
+    setListingFormat,
+    setQuantity,
+    setPricingMode,
+    setAuctionBuyItNowEnabled,
+    setAuctionBuyItNow,
+  });
+
+  const { onVideoReady, onVideoRemoved, onVideoStatusChange } = useAnalyzeVideoHandlers({
+    setEbayVideoId,
+    setVideoUrl,
+    setEbayVideoStatus,
+  });
+
+  const {
+    toggleBestOffer,
+    updateBestOfferAutoAccept,
+    updateBestOfferAutoDecline,
+  } = useAnalyzeBestOfferControls({
+    setBestOfferEnabled,
+    setBestOfferAutoAcceptPrice,
+    setBestOfferAutoDeclinePrice,
+  });
+
+  const { conditionOptions, updateCondition } = useAnalyzeConditionOptions({
+    ebayMetadata,
+    ebayCategoryId,
+    domain,
+    setCondition,
+  });
+
+  const { acceptSuggestedGrade, dismissSuggestedGrade, undoGradeConfirmation } =
+    useAnalyzeGradeControls({
+      setGradeConfirmed,
+      setItemSpecifics,
+      setSuggestedGrade,
+      setGradingRationale,
+    });
+
+  const {
+    updateTitle,
+    updateDescription,
+    toggleAiFooter,
+    updateConsignor,
+    updateItemSpecificValue,
+  } = useAnalyzeListingFieldHandlers({
+    setTitle,
+    setDescription,
+    setIncludeAiFooter,
+    setConsignor,
+    setItemSpecifics,
+  });
 
   // Auto-trigger AI analysis on mount — skip the redundant "Generate Listing" step
   useEffect(() => { handleGenerate(); }, []); // mount-only intentional
@@ -222,269 +389,6 @@ export default function AnalyzePage() {
     navigate("/home");
     return null;
   }
-
-  const handleSave = async () => {
-    // Upload base64 images to Supabase Storage so the draft stores a public URL.
-    // eBay (and other platforms) require real HTTPS URLs — data: URLs are rejected.
-    let uploadedUrls = imageUrls;
-    if (user?.id) {
-      uploadedUrls = await uploadListingImages(imageUrls, user.id);
-    }
-    const success = await addDraft({
-      id: crypto.randomUUID(),
-      imageUrl: uploadedUrls[0],
-      imageUrls: uploadedUrls,
-      title,
-      description: getDescriptionWithFooter(),
-      priceMin,
-      priceMax,
-      listingPrice: listingPrice > 0 ? listingPrice : auctionStartPrice > 0 ? auctionStartPrice : parseFloat(((priceMin + priceMax) / 2).toFixed(2)),
-      listingFormat: listingFormat as ListingFormat,
-      createdAt: new Date(),
-      ebayCategoryId,
-      ebayCategoryBreadcrumb: getEbayCategoryBreadcrumb(ebayCategoryId),
-      itemSpecifics,
-      condition,
-      consignor,
-      cogs: cogs ?? undefined,
-      cogsSource: cogs != null ? "manual" : undefined,
-      fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId ?? undefined,
-      paymentPolicyId: selectedPolicies.paymentPolicyId ?? undefined,
-      returnPolicyId: selectedPolicies.returnPolicyId ?? undefined,
-      metalType: metalType !== "none" ? metalType : undefined,
-      metalWeightOz: metalWeightOz > 0 ? metalWeightOz : undefined,
-      bestOfferEnabled: bestOfferEnabled || undefined,
-      bestOfferAutoAcceptPrice: bestOfferEnabled && bestOfferAutoAcceptPrice > 0 ? bestOfferAutoAcceptPrice : undefined,
-      bestOfferAutoDeclinePrice: bestOfferEnabled && bestOfferAutoDeclinePrice > 0 ? bestOfferAutoDeclinePrice : undefined,
-      quantity: quantity > 1 ? quantity : undefined,
-      pricingMode: quantity > 1 ? pricingMode : undefined,
-      videoUrl: videoUrl ?? undefined,
-      ebayVideoId: ebayVideoId ?? undefined,
-      ebayVideoStatus: ebayVideoStatus ?? undefined,
-    });
-    if (success) {
-      toast.success("Draft saved!");
-      navigate("/drafts");
-    }
-  };
-
-  const handlePublish = async () => {
-    if (!canPublish) {
-      toast.error(`Monthly publish limit reached (${currentPlanLimits.publishLimit}). Upgrade for more listings.`);
-      navigate("/billing");
-      return;
-    }
-    // Validate required eBay aspects before attempting publish
-    if (ebayMetadata?.requiredAspects && ebayMetadata.requiredAspects.length > 0) {
-      const missingRequired = ebayMetadata.requiredAspects.filter(
-        (aspect) => !itemSpecifics[aspect] || String(itemSpecifics[aspect]).trim() === ""
-      );
-      if (missingRequired.length > 0) {
-        toast.error(`Missing required eBay fields: ${missingRequired.join(", ")}`, {
-          description: "Fill in these fields above before publishing.",
-          duration: 6000,
-        });
-        return;
-      }
-    }
-    setPublishing(true);
-    try {
-      // Token lookup order mirrors usePublishDraft:
-      // 1. Server-side stored token in Supabase profiles (secure, preferred)
-      // 2. localStorage fallback for backwards compatibility
-      let ebayToken: string | null = null;
-      let postalCode: string | null = null;
-      let city: string | null = null;
-
-      if (user?.id) {
-        try {
-          const { data: tokenData } = await supabase.functions.invoke("ebay-publish", {
-            body: { action: "get_stored_token", userId: user.id },
-          });
-          if (tokenData?.token) {
-            ebayToken = tokenData.token;
-            postalCode = tokenData.postalCode ?? null;
-            city = tokenData.city ?? null;
-            console.log("AnalyzePage: retrieved stored token data", {
-              hasToken: !!tokenData.token,
-              postalCode,
-              city,
-            });
-          } else {
-            // Token retrieval failed, but we can still get postal_code from database
-            // This happens when eBay token is expired but profile is set
-            postalCode = tokenData?.postalCode ?? null;
-            city = tokenData?.city ?? null;
-            console.log("AnalyzePage: no token but got location data from database", {
-              postalCode,
-              city,
-            });
-          }
-        } catch (e) {
-          console.error("AnalyzePage: get_stored_token error", e);
-          // fall through to localStorage
-        }
-      }
-      if (!ebayToken) {
-        ebayToken = localStorage.getItem("ebay-user-token");
-      }
-
-      if (!ebayToken) {
-        const { data, error } = await supabase.functions.invoke("ebay-publish", {
-          body: { action: "get_auth_url" },
-        });
-        if (error || data?.error) throw new Error(data?.error || error?.message || "Failed to get auth URL");
-
-        // Store all image URLs in pending listing so we can resume publish with full images after auth
-        localStorage.setItem("pending_listing", JSON.stringify({
-          title,
-          description: getDescriptionWithFooter(),
-          listingFormat,
-          listingPrice,
-          auctionStartPrice,
-          auctionBuyItNow: auctionBuyItNowEnabled ? auctionBuyItNow : null,
-          imageUrls: imageUrls,
-          ebayCategoryId,
-          itemSpecifics,
-          condition,
-          postalCode: postalCode || undefined,
-          city: city || undefined,
-          fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId,
-          paymentPolicyId: selectedPolicies.paymentPolicyId,
-          returnPolicyId: selectedPolicies.returnPolicyId,
-          bestOfferEnabled: bestOfferEnabled || undefined,
-          bestOfferAutoAcceptPrice: bestOfferEnabled && bestOfferAutoAcceptPrice > 0 ? bestOfferAutoAcceptPrice : undefined,
-          bestOfferAutoDeclinePrice: bestOfferEnabled && bestOfferAutoDeclinePrice > 0 ? bestOfferAutoDeclinePrice : undefined,
-          quantity: quantity > 1 ? quantity : undefined,
-          pricingMode: quantity > 1 ? pricingMode : undefined,
-          ebayVideoId: ebayVideoStatus === "LIVE" ? ebayVideoId : undefined,
-        }));
-        window.location.href = data.authUrl;
-        return;
-      }
-
-      const { data, error } = await supabase.functions.invoke("ebay-publish", {
-        body: {
-          action: "create_draft",
-          userToken: ebayToken,
-          postalCode: postalCode || undefined,
-          city: city || undefined,
-          title,
-          description: getDescriptionWithFooter(),
-          listingFormat,
-          listingPrice,
-          auctionStartPrice,
-          auctionBuyItNow: auctionBuyItNowEnabled ? auctionBuyItNow : null,
-          // Upload all images and pass the array to the server so the final eBay payload includes every image.
-          imageUrls: user?.id ? await uploadListingImages(imageUrls, user.id) : imageUrls,
-          condition,
-          ebayCategoryId,
-          itemSpecifics,
-          fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId || undefined,
-          paymentPolicyId: selectedPolicies.paymentPolicyId || undefined,
-          returnPolicyId: selectedPolicies.returnPolicyId || undefined,
-          bestOfferEnabled: bestOfferEnabled || undefined,
-          bestOfferAutoAcceptPrice: bestOfferEnabled && bestOfferAutoAcceptPrice > 0 ? bestOfferAutoAcceptPrice : undefined,
-          bestOfferAutoDeclinePrice: bestOfferEnabled && bestOfferAutoDeclinePrice > 0 ? bestOfferAutoDeclinePrice : undefined,
-          quantity: quantity > 1 ? quantity : undefined,
-          pricingMode: quantity > 1 ? pricingMode : undefined,
-          ebayVideoId: ebayVideoStatus === "LIVE" ? ebayVideoId : undefined,
-        },
-      });
-
-      if (error || data?.error) {
-        // Only treat as session expired if it's a real auth failure (not a publish policy error).
-        // publishFailed=true means the offer was created but eBay rejected it for policy reasons
-        // (e.g. errorId 25019 grade policy) — those errors can contain "401" in the error body text
-        // but are NOT token expiry issues. We only clear the token for true 401 auth failures.
-        const isPublishPolicyError = data?.publishFailed === true;
-        const isTokenExpiry = !isPublishPolicyError && (
-          data?.error?.includes("401 ") ||
-          data?.error === "401" ||
-          (data?.error?.includes("expired") && !data?.error?.includes("code has expired")) ||
-          error?.message?.includes("401")
-        );
-        if (isTokenExpiry) {
-          // Clear stale token from both storage locations
-          localStorage.removeItem("ebay-user-token");
-          toast.error("eBay session expired. Please reconnect eBay in Settings.");
-          return;
-        }
-        // Missing business policies — guide user to Seller Hub
-        if (data?.missingPolicies) {
-          toast.error("eBay business policies not configured", {
-            description: data.error,
-            action: {
-              label: "Open Seller Hub",
-              onClick: () => window.open("https://www.ebay.com/sh/ovw/policies", "_blank"),
-            },
-            duration: 10000,
-          });
-          return;
-        }
-        // Offer created but publish step failed — extract clean eBay error message
-        if (data?.publishFailed) {
-          if (data?.isTransientError) {
-            // eBay 500 / transient server error — prompt user to retry
-            toast.error("eBay is temporarily unavailable", {
-              description: data.error as string,
-              action: {
-                label: "Retry",
-                onClick: handlePublish,
-              },
-              duration: 12000,
-            });
-          } else {
-            toast.error("eBay rejected the listing", {
-              description: data.error as string,
-              duration: 10000,
-            });
-          }
-          return;
-        }
-        throw new Error(data?.error || error?.message || "Publish failed");
-      }
-
-      const successMsg = data.listingId
-        ? `Listing published live on eBay! (ID: ${data.listingId})`
-        : `Listing created on eBay (Offer ID: ${data.offerId})`;
-      toast.success(successMsg, {
-        description: data.affiliateUrl
-          ? `Affiliate link ready — share it to earn EPN commissions.`
-          : undefined,
-        action: data.affiliateUrl
-          ? { label: "Copy Link", onClick: () => navigator.clipboard.writeText(data.affiliateUrl) }
-          : undefined,
-        duration: 5000,
-      });
-      await recordUsage("ebay_publish");
-
-      // Persist COGS to listing_cogs so the Listings detail modal and Profit Report
-      // can show cost/margin data even after this session ends.
-      if (cogs != null && user?.id && (data.sku || data.listingId)) {
-        try {
-          await supabase.from("listing_cogs").insert({
-            user_id: user.id,
-            ebay_sku: data.sku ?? null,
-            ebay_listing_id: data.listingId ?? null,
-            title,
-            cogs,
-            cogs_source: "manual",
-          });
-        } catch (cogsErr) {
-          console.warn("Failed to persist COGS after direct publish:", cogsErr);
-        }
-      }
-
-      // Success — navigate back to capture page for the next item
-      navigate("/home");
-    } catch (err: any) {
-      console.error("Publish error:", err);
-      toast.error(err.message || "Failed to publish to eBay.");
-    } finally {
-      setPublishing(false);
-    }
-  };
 
   // Filter out empty item specifics for display
   const displaySpecifics = Object.entries(itemSpecifics).filter(([, v]) => v && v.trim() !== "");
@@ -506,13 +410,13 @@ export default function AnalyzePage() {
           {imageUrls.length > 1 && (
             <>
               <button
-                onClick={() => setActivePhoto((p) => (p - 1 + imageUrls.length) % imageUrls.length)}
+                onClick={goToPreviousPhoto}
                 className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-background/70 backdrop-blur-sm flex items-center justify-center text-foreground hover:bg-background/90 transition-colors"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <button
-                onClick={() => setActivePhoto((p) => (p + 1) % imageUrls.length)}
+                onClick={goToNextPhoto}
                 className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-background/70 backdrop-blur-sm flex items-center justify-center text-foreground hover:bg-background/90 transition-colors"
               >
                 <ChevronRight className="w-4 h-4" />
@@ -521,7 +425,7 @@ export default function AnalyzePage() {
                 {imageUrls.map((_, i) => (
                   <button
                     key={i}
-                    onClick={() => setActivePhoto(i)}
+                    onClick={() => selectPhoto(i)}
                     className={`w-2 h-2 rounded-full transition-colors ${i === activePhoto ? "bg-primary" : "bg-background/60"}`}
                   />
                 ))}
@@ -536,7 +440,7 @@ export default function AnalyzePage() {
             {imageUrls.map((url, i) => (
               <button
                 key={i}
-                onClick={() => setActivePhoto(i)}
+                onClick={() => selectPhoto(i)}
                 className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-colors ${i === activePhoto ? "border-primary" : "border-border"}`}
               >
                 <img src={url} alt={`Thumb ${i + 1}`} className="w-full h-full object-cover" />
@@ -611,7 +515,7 @@ export default function AnalyzePage() {
               </div>
               <input
                 value={title}
-                onChange={(e) => setTitle(e.target.value.slice(0, 80))}
+                onChange={(e) => updateTitle(e.target.value)}
                 className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
@@ -620,7 +524,7 @@ export default function AnalyzePage() {
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Item Description</label>
               <textarea
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => updateDescription(e.target.value)}
                 rows={5}
                 className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
               />
@@ -628,7 +532,7 @@ export default function AnalyzePage() {
                 <input
                   type="checkbox"
                   checked={includeAiFooter}
-                  onChange={(e) => setIncludeAiFooter(e.target.checked)}
+                  onChange={(e) => toggleAiFooter(e.target.checked)}
                   className="h-4 w-4 rounded border-border text-primary focus:ring-ring accent-primary"
                 />
                 <span className="text-xs text-muted-foreground">
@@ -654,16 +558,7 @@ export default function AnalyzePage() {
                     <>
                       <select
                         value={ebayCategoryId}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === "__custom__") {
-                            setIsCustomCategoryMode(true);
-                            setCustomCategoryInput("");
-                          } else {
-                            setEbayCategoryId(val);
-                            setCustomCategoryInput("");
-                          }
-                        }}
+                        onChange={(e) => handleCategorySelectChange(e.target.value)}
                         className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       >
                         {suggestedCategories.length > 0 ? (
@@ -679,16 +574,16 @@ export default function AnalyzePage() {
                         ) : (
                           <option value="">No category selected</option>
                         )}
-                        {ebayCategoryId && !suggestedCategories.find(c => c.categoryId === ebayCategoryId) && (
+                        {ebayCategoryId && !hasSelectedCategoryInSuggestions && (
                           <option value={ebayCategoryId}>
                             {getEbayCategoryBreadcrumb(ebayCategoryId) || `Category #${ebayCategoryId}`}
                           </option>
                         )}
                         <option value="__custom__">✏️ Enter custom category ID...</option>
                       </select>
-                      {suggestedCategories.find(c => c.categoryId === ebayCategoryId)?.reason && (
+                      {selectedSuggestedCategory?.reason && (
                         <p className="text-[10px] text-muted-foreground italic px-1">
-                          {suggestedCategories.find(c => c.categoryId === ebayCategoryId)?.reason}
+                          {selectedSuggestedCategory.reason}
                         </p>
                       )}
                     </>
@@ -701,37 +596,20 @@ export default function AnalyzePage() {
                         inputMode="numeric"
                         placeholder="e.g. 39455 for Wheat Penny"
                         value={customCategoryInput}
-                        onChange={(e) => setCustomCategoryInput(e.target.value.replace(/\D/g, ""))}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            const v = customCategoryInput.trim();
-                            if (v) {
-                              setPendingCategoryId(v);
-                              setShowCategoryConfirm(true);
-                            }
-                          }
-                        }}
+                        onChange={(e) => updateCustomCategoryInput(e.target.value)}
+                        onKeyDown={(e) => handleCustomCategoryInputKeyDown(e.key)}
                         className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       />
                       <div className="flex gap-2">
                         <button
-                          onClick={() => {
-                            const v = customCategoryInput.trim();
-                            if (v) {
-                              setPendingCategoryId(v);
-                              setShowCategoryConfirm(true);
-                            }
-                          }}
+                          onClick={confirmCustomCategoryInput}
                           disabled={!customCategoryInput.trim()}
                           className="flex-1 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 font-medium transition-colors"
                         >
                           Confirm ID
                         </button>
                         <button
-                          onClick={() => {
-                            setIsCustomCategoryMode(false);
-                            setCustomCategoryInput("");
-                          }}
+                          onClick={cancelCustomCategoryMode}
                           className="flex-1 py-1.5 text-xs rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 font-medium transition-colors"
                         >
                           Cancel
@@ -753,7 +631,7 @@ export default function AnalyzePage() {
                         </span>
                         <input
                           value={(value as string) || ""}
-                          onChange={(e) => setItemSpecifics(prev => ({ ...prev, [key]: e.target.value }))}
+                          onChange={(e) => updateItemSpecificValue(key, e.target.value)}
                           className="text-xs text-foreground text-right bg-transparent border-none focus:outline-none focus:ring-0 max-w-[55%]"
                         />
                       </div>
@@ -765,17 +643,12 @@ export default function AnalyzePage() {
                   <span className="text-xs font-medium text-muted-foreground">Condition</span>
                   <select
                     value={condition}
-                    onChange={(e) => setCondition(e.target.value)}
+                    onChange={(e) => updateCondition(e.target.value)}
                     className="text-xs text-foreground bg-transparent border-none focus:outline-none cursor-pointer text-right"
                   >
-                    {ebayMetadata?.allowedConditions && ebayMetadata.allowedConditions.length > 0
-                      ? ebayMetadata.allowedConditions.map((c) => (
-                          <option key={c} value={c}>{c}</option>
-                        ))
-                      : getConditionsForCategory(ebayCategoryId || undefined, domain, getEbayCategoryBreadcrumb(ebayCategoryId) || undefined).map((opt) => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
-                        ))
-                    }
+                    {conditionOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -820,23 +693,14 @@ export default function AnalyzePage() {
                   {!gradeConfirmed ? (
                     <div className="flex gap-2">
                       <button
-                        onClick={() => {
-                          setGradeConfirmed(true);
-                          setItemSpecifics(prev => ({ ...prev, Grade: suggestedGrade }));
-                          toast.success(`Grade ${suggestedGrade} applied to item specifics`);
-                        }}
+                        onClick={() => acceptSuggestedGrade(suggestedGrade)}
                         className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold transition-all hover:opacity-90 active:scale-[0.98]"
                       >
                         <Check className="w-3.5 h-3.5" />
                         Accept Grade
                       </button>
                       <button
-                        onClick={() => {
-                          setSuggestedGrade("");
-                          setGradingRationale("");
-                          setItemSpecifics(prev => ({ ...prev, Grade: "Ungraded" }));
-                          toast("Grade dismissed — set to Ungraded");
-                        }}
+                        onClick={dismissSuggestedGrade}
                         className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-secondary text-foreground text-xs font-semibold transition-all hover:bg-secondary/80 active:scale-[0.98]"
                       >
                         <XIcon className="w-3.5 h-3.5" />
@@ -845,10 +709,7 @@ export default function AnalyzePage() {
                     </div>
                   ) : (
                     <button
-                      onClick={() => {
-                        setGradeConfirmed(false);
-                        setItemSpecifics(prev => ({ ...prev, Grade: "Ungraded" }));
-                      }}
+                      onClick={undoGradeConfirmation}
                       className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
                     >
                       Undo confirmation
@@ -867,7 +728,7 @@ export default function AnalyzePage() {
               </div>
               <input
                 value={consignor}
-                onChange={(e) => setConsignor(e.target.value)}
+                onChange={(e) => updateConsignor(e.target.value)}
                 placeholder="Who does this item belong to?"
                 className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
@@ -876,7 +737,7 @@ export default function AnalyzePage() {
             {/* Item Cost (COGS) */}
             <CogsInput
               cogs={cogs}
-              listingPrice={listingPrice > 0 ? listingPrice : auctionStartPrice > 0 ? auctionStartPrice : (priceMin + priceMax) / 2}
+              listingPrice={listingPriceForCogs}
               onChange={setCogs}
               disabled={!planFeatures.hasCogsTracking}
             />
@@ -891,10 +752,7 @@ export default function AnalyzePage() {
               metalWeightOz={planFeatures.hasMeltProtection && metalType !== "none" ? metalWeightOz : undefined}
               meltValue={planFeatures.hasMeltProtection && metalType !== "none" ? meltValue : null}
               spotPrices={planFeatures.hasMeltProtection && metalType !== "none" ? spotPrices : null}
-              onApplyPrice={(price) => {
-                setListingPrice(price);
-                setAuctionStartPrice(price);
-              }}
+              onApplyPrice={applyRecommendedPrice}
             />
 
             {/* Listing Format + Price */}
@@ -907,7 +765,7 @@ export default function AnalyzePage() {
               {/* Format selector */}
               <div className="flex gap-2">
                 <button
-                  onClick={() => setListingFormat("FIXED_PRICE")}
+                  onClick={selectFixedPriceFormat}
                   className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium border transition-colors ${
                     listingFormat === "FIXED_PRICE"
                       ? "border-primary bg-primary/10 text-primary"
@@ -918,7 +776,7 @@ export default function AnalyzePage() {
                   Buy It Now
                 </button>
                 <button
-                  onClick={() => setListingFormat("AUCTION")}
+                  onClick={selectAuctionFormat}
                   className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium border transition-colors ${
                     listingFormat === "AUCTION"
                       ? "border-primary bg-primary/10 text-primary"
@@ -941,7 +799,7 @@ export default function AnalyzePage() {
                       step="0.01"
                       value={listingPrice || ""}
                       placeholder="0.00"
-                      onChange={(e) => setListingPrice(parseFloat(e.target.value) || 0)}
+                      onChange={(e) => updateListingPriceFromInput(e.target.value)}
                       className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </div>
@@ -956,11 +814,7 @@ export default function AnalyzePage() {
                           min="1"
                           step="1"
                           value={quantity}
-                          onChange={(e) => {
-                            const q = Math.max(1, Math.floor(parseFloat(e.target.value) || 1));
-                            setQuantity(q);
-                            if (q === 1) setPricingMode('per_item');
-                          }}
+                          onChange={(e) => updateQuantityFromInput(e.target.value)}
                           className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                       </div>
@@ -972,7 +826,7 @@ export default function AnalyzePage() {
                           {(['per_item', 'total'] as const).map((mode) => (
                             <button
                               key={mode}
-                              onClick={() => setPricingMode(mode)}
+                              onClick={() => selectPricingMode(mode)}
                               className={`flex-1 py-2 rounded-lg text-xs font-medium border transition-colors ${
                                 pricingMode === mode
                                   ? 'border-primary bg-primary/10 text-primary'
@@ -997,7 +851,7 @@ export default function AnalyzePage() {
                     <input
                       type="checkbox"
                       checked={bestOfferEnabled}
-                      onChange={(e) => setBestOfferEnabled(e.target.checked)}
+                      onChange={(e) => toggleBestOffer(e.target.checked)}
                       className="h-4 w-4 rounded border-border accent-primary"
                     />
                     <span className="text-xs text-muted-foreground">Accept Best Offers from buyers</span>
@@ -1017,7 +871,7 @@ export default function AnalyzePage() {
                           step="0.01"
                           value={bestOfferAutoAcceptPrice || ""}
                           placeholder="Leave blank to review manually"
-                          onChange={(e) => setBestOfferAutoAcceptPrice(parseFloat(e.target.value) || 0)}
+                          onChange={(e) => updateBestOfferAutoAccept(e.target.value)}
                           className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                       </div>
@@ -1032,7 +886,7 @@ export default function AnalyzePage() {
                           step="0.01"
                           value={bestOfferAutoDeclinePrice || ""}
                           placeholder="Leave blank to review manually"
-                          onChange={(e) => setBestOfferAutoDeclinePrice(parseFloat(e.target.value) || 0)}
+                          onChange={(e) => updateBestOfferAutoDecline(e.target.value)}
                           className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                       </div>
@@ -1052,7 +906,7 @@ export default function AnalyzePage() {
                       step="0.01"
                       value={auctionStartPrice || ""}
                       placeholder="0.00"
-                      onChange={(e) => setAuctionStartPrice(parseFloat(e.target.value) || 0)}
+                      onChange={(e) => updateAuctionStartPriceFromInput(e.target.value)}
                       className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </div>
@@ -1060,7 +914,7 @@ export default function AnalyzePage() {
                     <input
                       type="checkbox"
                       checked={auctionBuyItNowEnabled}
-                      onChange={(e) => setAuctionBuyItNowEnabled(e.target.checked)}
+                      onChange={(e) => toggleAuctionBuyItNow(e.target.checked)}
                       className="h-4 w-4 rounded border-border accent-primary"
                     />
                     <span className="text-xs text-muted-foreground">Add Buy It Now price to auction</span>
@@ -1074,7 +928,7 @@ export default function AnalyzePage() {
                         step="0.01"
                         value={auctionBuyItNow || ""}
                         placeholder="0.00"
-                        onChange={(e) => setAuctionBuyItNow(parseFloat(e.target.value) || 0)}
+                        onChange={(e) => updateAuctionBuyItNowFromInput(e.target.value)}
                         className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       />
                     </div>
@@ -1101,17 +955,9 @@ export default function AnalyzePage() {
               <VideoUploadInput
                 title={title}
                 userToken={ebayTokenForPolicies}
-                onVideoReady={(id, url) => {
-                  setEbayVideoId(id);
-                  setVideoUrl(url);
-                  setEbayVideoStatus("LIVE");
-                }}
-                onVideoRemoved={() => {
-                  setEbayVideoId(null);
-                  setVideoUrl(null);
-                  setEbayVideoStatus(null);
-                }}
-                onStatusChange={(status) => setEbayVideoStatus(status)}
+                onVideoReady={onVideoReady}
+                onVideoRemoved={onVideoRemoved}
+                onStatusChange={onVideoStatusChange}
               />
             )}
 
@@ -1158,29 +1004,11 @@ export default function AnalyzePage() {
               </div>
 
               <button
-                onClick={() => {
-                  exportListing(exportPlatform, exportFormat, {
-                    title,
-                    description,
-                    priceMin,
-                    priceMax,
-                    imageUrls: imageUrls,
-                    ebayCategoryId,
-                    itemSpecifics,
-                    condition,
-                    fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId ?? undefined,
-                    paymentPolicyId: selectedPolicies.paymentPolicyId ?? undefined,
-                    returnPolicyId: selectedPolicies.returnPolicyId ?? undefined,
-                  });
-                  recordUsage("export");
-                  const platformLabel = exportPlatform === "ebay_file_exchange" ? "eBay" : "Facebook";
-                  const formatLabel = exportFormat === "csv" ? "CSV" : exportFormat === "excel" ? "Excel" : "Google Sheets";
-                  toast.success(`${platformLabel} listing exported as ${formatLabel}`);
-                }}
+                onClick={handleExport}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-secondary text-foreground font-semibold text-sm transition-all hover:bg-secondary/80 active:scale-[0.98]"
               >
                 <Download className="w-4 h-4" />
-                Download {exportFormat === "csv" ? "CSV" : exportFormat === "excel" ? "Excel" : "Sheets"}
+                Download {downloadLabel}
               </button>
             </div>
 
@@ -1234,17 +1062,8 @@ export default function AnalyzePage() {
         open={showCategoryConfirm}
         categoryId={pendingCategoryId}
         suggestedCategories={suggestedCategories}
-        onConfirm={(categoryId) => {
-          setEbayCategoryId(categoryId);
-          setCustomCategoryInput("");
-          setShowCategoryConfirm(false);
-          toast.success(`Category ${categoryId} confirmed`);
-        }}
-        onCancel={() => {
-          setShowCategoryConfirm(false);
-          setPendingCategoryId("");
-          // Don't reset customCategoryInput — user might want to try a different ID
-        }}
+        onConfirm={handleCategoryDialogConfirm}
+        onCancel={handleCategoryDialogCancel}
       />
     </div>
   );

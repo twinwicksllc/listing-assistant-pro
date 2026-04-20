@@ -205,8 +205,11 @@ async function main() {
 
   const results: TestResult[] = [];
   for (const testCase of fixtures.cases) {
-    process.stdout?.write?.(`  Testing ${testCase.id}...`) ??
+    if (process.stdout?.write) {
+      process.stdout.write(`  Testing ${testCase.id}...`);
+    } else {
       console.log(`  Testing ${testCase.id}...`);
+    }
     const result = await runTest(testCase, baseUrl, serviceKey);
     console.log(
       ` ${result.match ? "✓" : "✗"} (${result.latencyMs}ms) ${result.candidateSource || "?"}`,
