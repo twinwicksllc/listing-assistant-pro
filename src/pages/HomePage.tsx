@@ -50,6 +50,7 @@ export default function HomePage() {
   const { signOut, recordUsage, planFeatures } = useAuth();
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const [stagedImages, setStagedImages] = useState<string[]>([]);
@@ -117,11 +118,21 @@ export default function HomePage() {
     localStorage.setItem(TOUR_KEY, "true");
   };
 
+  const openVideoFlow = useCallback(() => {
+    navigate("/analyze", { state: { imageUrls: [], voiceNote, videoOnly: true } });
+  }, [navigate, voiceNote]);
+
   const validateAndStageFiles = useCallback((files: FileList | File[] | null) => {
     if (!files) return;
     const fileArr = Array.from(files);
 
     fileArr.forEach((file) => {
+      if (file.type.startsWith("video/")) {
+        toast.info("Video uploads use the Analyze video flow. Opening video upload...");
+        openVideoFlow();
+        return;
+      }
+
       if (!ACCEPTED_TYPES.includes(file.type)) {
         toast.error(`"${file.name}" is not a supported format (JPG, PNG, WebP, GIF, MP4, MOV, WebM)`);
         return;
@@ -139,7 +150,7 @@ export default function HomePage() {
       };
       reader.readAsDataURL(file);
     });
-  }, []);
+  }, [openVideoFlow]);
 
   const removeImage = (index: number) => {
     setStagedImages((prev) => prev.filter((_, i) => i !== index));
@@ -184,6 +195,10 @@ export default function HomePage() {
 
   const handleGalleryUpload = () => {
     galleryInputRef.current?.click();
+  };
+
+  const handleVideoUpload = () => {
+    videoInputRef.current?.click();
   };
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -357,6 +372,14 @@ export default function HomePage() {
                 {isMobile ? "Upload from Gallery" : "Browse Files"}
               </button>
 
+              <button
+                onClick={handleVideoUpload}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-primary/30 bg-primary/5 text-primary text-sm font-medium transition-colors hover:bg-primary/10"
+              >
+                <Camera className="w-4 h-4" />
+                Start with Video
+              </button>
+
               {/* Bulk Listing shortcut */}
               <button
                 onClick={() => navigate("/bulk")}
@@ -528,6 +551,14 @@ export default function HomePage() {
                 Process Now
                 <ArrowRight className="w-4 h-4" />
               </button>
+
+              <button
+                onClick={handleVideoUpload}
+                className="w-full md:w-auto md:px-6 flex items-center justify-center gap-2 py-3 rounded-xl border border-border bg-card text-foreground font-medium text-sm transition-all hover:border-primary/40"
+              >
+                <Camera className="w-4 h-4" />
+                Use Video Instead
+              </button>
             </div>
           )}
         </div>
@@ -549,6 +580,20 @@ export default function HomePage() {
         multiple
         className="hidden"
         onChange={handleFileInputChange}
+      />
+      <input
+        ref={videoInputRef}
+        type="file"
+        accept="video/mp4,video/quicktime,video/webm"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            toast.info("Video-first flow opened. Upload your video in Analyze.");
+            openVideoFlow();
+          }
+          e.target.value = "";
+        }}
       />
 
       

@@ -36,6 +36,7 @@ export default function AnalyzePage() {
 
   const state = location.state as any;
   const imageUrls: string[] = state?.imageUrls ?? (state?.imageUrl ? [state.imageUrl] : []);
+  const videoOnlyMode = !!state?.videoOnly && imageUrls.length === 0;
   const voiceNote: string = state?.voiceNote || "";
 
   const [generated, setGenerated] = useState(false);
@@ -383,15 +384,71 @@ export default function AnalyzePage() {
   });
 
   // Auto-trigger AI analysis on mount — skip the redundant "Generate Listing" step
-  useEffect(() => { handleGenerate(); }, []); // mount-only intentional
+  useEffect(() => {
+    if (imageUrls.length > 0) {
+      handleGenerate();
+    }
+  }, []); // mount-only intentional
 
-  if (imageUrls.length === 0) {
+  if (imageUrls.length === 0 && !videoOnlyMode) {
     navigate("/home");
     return null;
   }
 
   // Filter out empty item specifics for display
   const displaySpecifics = Object.entries(itemSpecifics).filter(([, v]) => v && v.trim() !== "");
+
+  if (videoOnlyMode) {
+    return (
+      <div className="min-h-screen bg-background pb-8">
+        <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-3">
+          <button onClick={() => navigate("/home")} className="text-muted-foreground hover:text-foreground transition-colors">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <h1 className="font-semibold text-foreground">Analyze Item</h1>
+          <span className="ml-auto text-xs text-muted-foreground">Video-first</span>
+        </header>
+
+        <div className="px-4 pt-4 max-w-lg mx-auto space-y-4">
+          <div className="rounded-xl border border-border bg-card p-4 space-y-2">
+            <p className="text-sm font-semibold text-foreground">Upload a Video</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              You can attach a video here for your listing media. AI item identification still needs photos today.
+              We are planning automatic key-frame extraction so video-only uploads can run identification in a future release.
+            </p>
+          </div>
+
+          {ebayTokenForPolicies ? (
+            <VideoUploadInput
+              title={title}
+              userToken={ebayTokenForPolicies}
+              onVideoReady={onVideoReady}
+              onVideoRemoved={onVideoRemoved}
+              onStatusChange={onVideoStatusChange}
+            />
+          ) : (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              Connect eBay in Settings to upload a video.
+            </div>
+          )}
+
+          {videoIsProcessing && (
+            <p className="text-xs text-center text-amber-600">
+              <Loader2 className="inline w-3 h-3 animate-spin mr-1" />
+              Video is processing on eBay. You can save a draft and publish when it becomes LIVE.
+            </p>
+          )}
+
+          <button
+            onClick={() => navigate("/home")}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-secondary text-foreground font-medium text-sm hover:bg-secondary/80"
+          >
+            Back to Capture
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background pb-8">
