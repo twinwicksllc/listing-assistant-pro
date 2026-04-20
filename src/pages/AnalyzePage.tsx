@@ -5,7 +5,6 @@ import PriceRecommenderCard from "@/components/PriceRecommenderCard";
 import CogsInput from "@/components/CogsInput";
 import CategoryConfirmDialog from "@/components/CategoryConfirmDialog";
 import { useDrafts } from "@/hooks/useDrafts";
-import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { ItemSpecifics } from "@/types/listing";
 import { useAuth } from "@/contexts/AuthContext";
