@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Crown, Zap, Loader2, ExternalLink, ArrowLeft, Store, Sparkles } from "lucide-react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth, PLANS, PlanKey } from "@/contexts/AuthContext";
@@ -6,6 +6,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import BottomNav from "@/components/BottomNav";
 import teckstartLogo from "@/assets/teckstart-logo.png";
+
+type FreeCreditStatus = {
+  tier: "starter" | "pro" | "unlimited";
+  creditsUsed: number;
+  creditsRemaining: number | null;
+  creditsResetAt: string | null;
+  limitReached: boolean;
+};
 
 export default function BillingPage() {
   const navigate = useNavigate();
@@ -16,9 +24,46 @@ export default function BillingPage() {
   } = useAuth();
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [freeCreditStatus, setFreeCreditStatus] = useState<FreeCreditStatus | null>(null);
+  const [freeCreditsLoading, setFreeCreditsLoading] = useState(false);
 
   const success = searchParams.get("success");
   const canceled = searchParams.get("canceled");
+
+  useEffect(() => {
+    let active = true;
+
+    const fetchFreeCreditStatus = async () => {
+      if (currentPlan !== "free") {
+        if (active) setFreeCreditStatus(null);
+        return;
+      }
+
+      setFreeCreditsLoading(true);
+      try {
+        const { data, error } = await supabase.functions.invoke("get-free-credits", {
+          body: {},
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        if (active && data && typeof data === "object") {
+          setFreeCreditStatus(data as FreeCreditStatus);
+        }
+      } catch (err) {
+        console.warn("Failed to load free-tier credit status", err);
+      } finally {
+        if (active) setFreeCreditsLoading(false);
+      }
+    };
+
+    fetchFreeCreditStatus();
+    return () => {
+      active = false;
+    };
+  }, [currentPlan]);
 
   if (success) {
     setTimeout(() => refreshSubscription(), 2000);
@@ -108,14 +153,20 @@ export default function BillingPage() {
                 {currentPlan === "free" ? "AI Analyses (Rolling)" : "AI Analyses"}
               </p>
               <p className="text-lg font-bold text-foreground">
-                {usage.aiAnalysis}
+                {currentPlan === "free" && freeCreditStatus
+                  ? freeCreditStatus.creditsUsed
+                  : usage.aiAnalysis}
                 <span className="text-xs font-normal text-muted-foreground">
                   {" "}/ {currentPlanLimits.analysisLimit === Infinity ? "∞" : currentPlanLimits.analysisLimit}
                 </span>
               </p>
               {currentPlan === "free" && (
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  Resets monthly (rolling window)
+                  {freeCreditsLoading
+                    ? "Loading reset date..."
+                    : freeCreditStatus?.creditsResetAt
+                    ? `Resets ${new Date(freeCreditStatus.creditsResetAt).toLocaleDateString()}`
+                    : "Resets monthly (rolling window)"}
                 </p>
               )}
             </div>
@@ -129,10 +180,13 @@ export default function BillingPage() {
               </p>
             </div>
           </div>
-          {currentPlan === "free" && usage.aiAnalysis >= currentPlanLimits.analysisLimit && (
+          {currentPlan === "free" && (freeCreditStatus?.limitReached || usage.aiAnalysis >= currentPlanLimits.analysisLimit) && (
             <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
               <p className="text-xs font-medium text-amber-900 dark:text-amber-100">
-                🔄 Rolling window credits exhausted. They will reset on the 1st of each month.
+                🔄 Rolling window credits exhausted.
+                {freeCreditStatus?.creditsResetAt
+                  ? ` Credits reset on ${new Date(freeCreditStatus.creditsResetAt).toLocaleDateString()}.`
+                  : ""}
               </p>
             </div>
           )}
