@@ -1,0 +1,192 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Max-Age": "86400",
+};
+
+type ExtractRequest = {
+  videoUrl?: string;
+  maxFrames?: number;
+  strategy?: string;
+  telemetry?: {
+    source?: string;
+    extractionMs?: number;
+    framesGenerated?: number;
+    reason?: string | null;
+    userAgent?: string;
+  };
+  frames?: Array<{
+    dataUrl: string;
+    timestampSec: number;
+    score: number;
+  }>;
+};
+
+function makeMockFrameDataUrl(label: string): string {
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+  </defs>
+  <rect width="960" height="540" fill="url(#bg)" />
+  <rect x="30" y="30" width="900" height="480" rx="18" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="3" />
+  <text x="480" y="260" text-anchor="middle" fill="#ffffff" font-size="38" font-family="Arial, sans-serif" font-weight="700">${label}</text>
+  <text x="480" y="305" text-anchor="middle" fill="#e2e8f0" font-size="20" font-family="Arial, sans-serif">Mock extracted frame (Slice 1 scaffold)</text>
+</svg>`;
+
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function decodeDataUrl(dataUrl: string): { bytes: Uint8Array; mimeType: string } {
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) {
+    throw new Error("Invalid frame data URL format.");
+  }
+
+  const mimeType = match[1] || "image/jpeg";
+  const base64 = match[2];
+  const raw = atob(base64);
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) {
+    bytes[i] = raw.charCodeAt(i);
+  }
+  return { bytes, mimeType };
+}
+
+function extensionForMime(mimeType: string): string {
+  if (mimeType.includes("png")) return "png";
+  if (mimeType.includes("webp")) return "webp";
+  return "jpg";
+}
+
+serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
+  try {
+    const svc = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      { auth: { persistSession: false } },
+    );
+
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Authentication required" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const { data: ud } = await svc.auth.getUser(authHeader.replace("Bearer ", ""));
+    const userId = ud?.user?.id;
+    if (!userId) {
+      return new Response(
+        JSON.stringify({ error: "Authentication required" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const body = (await req.json()) as ExtractRequest;
+    const videoUrl = body.videoUrl?.trim();
+    const maxFrames = Math.max(1, Math.min(12, body.maxFrames ?? 6));
+    const strategy = body.strategy ?? "scene_change";
+    const telemetry = body.telemetry ?? {};
+    const incomingFrames = Array.isArray(body.frames) ? body.frames.slice(0, maxFrames) : [];
+
+    if (!videoUrl && incomingFrames.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "videoUrl or frames payload is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    let frames: Array<{ url: string; timestampSec: number; score: number }> = [];
+    let mocked = false;
+
+    if (incomingFrames.length > 0) {
+      for (let idx = 0; idx < incomingFrames.length; idx++) {
+        const frame = incomingFrames[idx];
+        if (!frame?.dataUrl) continue;
+
+        const { bytes, mimeType } = decodeDataUrl(frame.dataUrl);
+        const ext = extensionForMime(mimeType);
+        const path = `listing-video-frames/${userId}/${crypto.randomUUID()}-frame-${idx + 1}.${ext}`;
+
+        const { error: uploadError } = await svc.storage
+          .from("listing-images")
+          .upload(path, bytes, {
+            contentType: mimeType,
+            upsert: false,
+          });
+
+        if (uploadError) {
+          throw new Error(`Failed to store extracted frame ${idx + 1}: ${uploadError.message}`);
+        }
+
+        const { data: publicData } = svc.storage.from("listing-images").getPublicUrl(path);
+        frames.push({
+          url: publicData.publicUrl,
+          timestampSec: Number(frame.timestampSec ?? idx),
+          score: Number(frame.score ?? 0.5),
+        });
+      }
+    }
+
+    console.log("video-frame-extract telemetry", {
+      userId,
+      strategy,
+      source: telemetry.source ?? "unknown",
+      extractionMs: telemetry.extractionMs ?? null,
+      framesGenerated: telemetry.framesGenerated ?? incomingFrames.length,
+      reason: telemetry.reason ?? null,
+      userAgent: telemetry.userAgent ?? null,
+      incomingFrameCount: incomingFrames.length,
+      persistedFrameCount: frames.length,
+      mocked,
+    });
+
+    // Fallback mock mode for compatibility if caller did not send frame payload yet.
+    if (frames.length === 0) {
+      mocked = true;
+      frames = Array.from({ length: Math.min(maxFrames, 6) }).map((_, idx) => ({
+        url: makeMockFrameDataUrl(`Frame ${idx + 1}`),
+        timestampSec: Number((idx * 1.2 + 0.8).toFixed(1)),
+        score: Number((0.94 - idx * 0.03).toFixed(2)),
+      }));
+    }
+
+    return new Response(
+      JSON.stringify({
+        frames,
+        meta: {
+          strategy,
+          mocked,
+          extractionMode: mocked ? "mock_fallback" : "client_persisted",
+          userId,
+          durationSec: 8.4,
+          framesExamined: incomingFrames.length > 0 ? incomingFrames.length : 24,
+          framesSelected: frames.length,
+          message: mocked
+            ? "Mock fallback response (no frame payload provided)."
+            : "Frames persisted to Supabase storage.",
+        },
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  } catch (err) {
+    console.error("video-frame-extract error:", err);
+    return new Response(
+      JSON.stringify({ error: err instanceof Error ? err.message : "Unexpected error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+});
