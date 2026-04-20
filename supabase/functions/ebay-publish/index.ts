@@ -3698,7 +3698,7 @@ serve(async (req) => {
           } else if (isSellerLimitError) {
             // Extract the human-readable portion of the seller limit message
             const rawMsg: string = firstError?.message ?? "";
-              const limitMatch = rawMsg.match(/You can list up to ([$\d,.]+) more[^.]*\./i);
+            const limitMatch = rawMsg.match(/You can list up to ([$\d,.]+) more[^.]*\./i);
             const remaining = limitMatch ? limitMatch[1] : null;
             userFriendlyError = remaining
               ? `Your eBay account has reached its monthly selling limit. You have ${remaining} of listing capacity remaining this month. Visit eBay's Selling Limits page to request an increase.`
