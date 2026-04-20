@@ -1,15 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { captureException, initSentry } from "../_helpers/sentry.ts";
-import { extractImagePayloads, toOpenAiImageContentParts } from "../_helpers/imageParsing.ts";
-import { callCategoryLookup, fetchCategoryMetadata } from "../_helpers/categoryLookupClient.ts";
-import {
-  isCategoryCompatibleWithDomain,
-  isCoinDomainMismatch,
-  isKnownParentCategory,
-  shouldForceWorldCoinsFallback,
-} from "../_helpers/categoryResolution.ts";
-import type { Domain, IdentificationResult } from "../_helpers/pipelineContracts.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,6 +14,13 @@ const corsHeaders = {
 async function ensureTableExists() {
   // No-op for now - category-lookup will initialize the table
   return;
+}
+
+function parseImageDataUrl(dataUrl: string) {
+  const base64Data = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
+  const mimeMatch = dataUrl.match(/^data:(image\/\w+);/);
+  const mimeType = mimeMatch ? mimeMatch[1] : "image/jpeg";
+  return { base64Data, mimeType };
 }
 
 function computeNextResetAt(resetDay: number | null): string | null {
@@ -42,6 +40,43 @@ function computeNextResetAt(resetDay: number | null): string | null {
   const daysInNextMonth = new Date(nextYear, nm + 1, 0).getDate();
   return new Date(nextYear, nm, Math.min(resetDay, daysInNextMonth))
     .toISOString();
+}
+
+function isCoinDomainCategory(
+  categoryId: string | null | undefined,
+  categoryName: string | null | undefined,
+  breadcrumb: string | null | undefined,
+): boolean {
+  if (!categoryId) return false;
+
+  const categoryText = `${categoryName || ""} ${breadcrumb || ""}`
+    .toLowerCase();
+
+  if (
+    /(coins?\b|paper money|bullion|exonumia|ancient|medieval|numis)/i.test(
+      categoryText,
+    )
+  ) {
+    return true;
+  }
+
+  return ["45243", "532", "173685"].includes(categoryId);
+}
+
+function isCategoryCompatibleWithDomain(
+  domain: string | null | undefined,
+  categoryId: string | null | undefined,
+  categoryName: string | null | undefined,
+  breadcrumb: string | null | undefined,
+): boolean {
+  if (!domain || !categoryId) return true;
+
+  switch (domain) {
+    case "coins_bullion":
+      return isCoinDomainCategory(categoryId, categoryName, breadcrumb);
+    default:
+      return true;
+  }
 }
 
 serve(async (req: Request) => {
@@ -347,7 +382,21 @@ serve(async (req: Request) => {
     // Sends ALL images to determine domain, item name, and keywords.
     // Results are used to improve the pre-lookup query and route to the correct
     // domain-specific prompt for Pass 2.
-    let identification: IdentificationResult = {
+    type Domain =
+      | "coins_bullion"
+      | "trading_cards"
+      | "jewelry"
+      | "electronics"
+      | "vintage_clothing"
+      | "general";
+    interface Identification {
+      domain: Domain;
+      itemName: string;
+      keywords: string[];
+      isMetal: boolean;
+      metalType: "gold" | "silver" | "platinum" | "none";
+    }
+    let identification: Identification = {
       domain: "general",
       itemName: "item",
       keywords: [],
@@ -357,7 +406,13 @@ serve(async (req: Request) => {
     try {
       // Use ALL images for Pass 1 — critical for items where key details
       // (slab labels, reverses, mint marks) may not appear in the first photo
-      const pass1Images = toOpenAiImageContentParts(imageList);
+      const pass1Images = imageList.map((img) => {
+        const { base64Data, mimeType } = parseImageDataUrl(img);
+        return {
+          type: "image_url",
+          image_url: { url: `data:${mimeType};base64,${base64Data}` },
+        };
+      });
       const pass1VoiceHint = voiceNote ? `\nSeller note: "${voiceNote.slice(0, 200)}"` : "";
       const pass1Resp = await fetch(
         "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
@@ -407,7 +462,7 @@ serve(async (req: Request) => {
                 itemName: String(parsed.itemName).slice(0, 120),
                 keywords: Array.isArray(parsed.keywords) ? parsed.keywords.slice(0, 7).map(String) : [],
                 isMetal: Boolean(parsed.isMetal),
-                metalType: (parsed.metalType ?? "none") as IdentificationResult["metalType"],
+                metalType: (parsed.metalType ?? "none") as Identification["metalType"],
               };
               console.log(
                 `[${invocationId}] ✓ Pass 1 identification succeeded:`,
@@ -505,10 +560,15 @@ serve(async (req: Request) => {
       );
 
       // Build base64 + mime lists for pre-pass (parse from data URLs) — use ALL images
-      const {
-        base64List: prePassBase64List,
-        mimeList: prePassMimeList,
-      } = extractImagePayloads(imageList);
+      const prePassBase64List: string[] = [];
+      const prePassMimeList: string[] = [];
+      for (const img of imageList) {
+        const ppBase64 = img.includes(",") ? img.split(",")[1] : img;
+        const ppMimeMatch = img.match(/^data:(image\/\w+);/);
+        const ppMimeType = ppMimeMatch ? ppMimeMatch[1] : "image/jpeg";
+        prePassBase64List.push(ppBase64);
+        prePassMimeList.push(ppMimeType);
+      }
 
       // Use real domain + item name from Pass 1 (not a heuristic guess)
       prePassResult = await runAgenticPrePass(
@@ -541,10 +601,14 @@ serve(async (req: Request) => {
       const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
       if (OPENAI_API_KEY) {
         const { runSlabOcr } = await import("../_helpers/slabOcr.ts");
-        const {
-          base64List: ocrBase64List,
-          mimeList: ocrMimeList,
-        } = extractImagePayloads(imageList);
+        const ocrBase64List: string[] = [];
+        const ocrMimeList: string[] = [];
+        for (const img of imageList) {
+          const b64 = img.includes(",") ? img.split(",")[1] : img;
+          const mimeMatch = img.match(/^data:(image\/\w+);/);
+          ocrBase64List.push(b64);
+          ocrMimeList.push(mimeMatch ? mimeMatch[1] : "image/jpeg");
+        }
         console.log(
           `[${invocationId}] Calling Slab OCR with ${ocrBase64List.length} images (domain=${identification.domain})`,
         );
@@ -619,51 +683,72 @@ serve(async (req: Request) => {
     // Priority: user lock > grounded verified leaf > deterministic DB > AI hint
     if (!userCategoryId && prePassResult?.groundedCategoryId) {
       try {
-        const groundedVerifyResp = await callCategoryLookup("verify", {
-          categoryId: prePassResult.groundedCategoryId,
-        });
-        if (groundedVerifyResp.ok) {
-          const groundedVerifyData = groundedVerifyResp.data || {};
-
-          if (
-            groundedVerifyData.isLeaf === true &&
-            groundedVerifyData.valid !== false
-          ) {
-            const groundedCategoryName = groundedVerifyData.categoryName || "";
-            const groundedBreadcrumb = groundedVerifyData.breadcrumb ||
-              groundedVerifyData.categoryName || "";
+        const _groundedVerifyUrl = Deno.env.get("SUPABASE_URL");
+        const _groundedVerifyKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (_groundedVerifyUrl && _groundedVerifyKey) {
+          const groundedVerifyResp = await fetch(
+            `${_groundedVerifyUrl}/functions/v1/category-lookup`,
+            {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${_groundedVerifyKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                action: "verify",
+                categoryId: prePassResult.groundedCategoryId,
+              }),
+            },
+          );
+          if (groundedVerifyResp.ok) {
+            const groundedVerifyText = await groundedVerifyResp.text();
+            let groundedVerifyData: any;
+            try {
+              groundedVerifyData = JSON.parse(groundedVerifyText);
+            } catch {
+              groundedVerifyData = {};
+            }
 
             if (
-              isCategoryCompatibleWithDomain(
-                identification.domain,
-                prePassResult.groundedCategoryId,
-                groundedCategoryName,
-                groundedBreadcrumb,
-              )
+              groundedVerifyData.isLeaf === true &&
+              groundedVerifyData.valid !== false
             ) {
-              // Grounded leaf verified — use as a strong (but not absolute) lock
-              lockedCategoryId = prePassResult.groundedCategoryId;
-              lockedCategoryName = groundedCategoryName;
-              lockedBreadcrumb = groundedBreadcrumb;
-              categoryHints +=
-                `\n- **GROUNDED CATEGORY** (verified leaf from live Google Search): **${lockedCategoryId}** — ${lockedBreadcrumb}. This was found by searching eBay's current 2026 taxonomy. USE THIS CATEGORY unless you have strong evidence it is incorrect.`;
-              console.log(
-                `[${invocationId}] GROUNDED LOCK: category ${lockedCategoryId} (${lockedBreadcrumb}) verified as leaf via Pre-Pass 0`,
-              );
+              const groundedCategoryName = groundedVerifyData.categoryName || "";
+              const groundedBreadcrumb = groundedVerifyData.breadcrumb ||
+                groundedVerifyData.categoryName || "";
+
+              if (
+                isCategoryCompatibleWithDomain(
+                  identification.domain,
+                  prePassResult.groundedCategoryId,
+                  groundedCategoryName,
+                  groundedBreadcrumb,
+                )
+              ) {
+                // Grounded leaf verified — use as a strong (but not absolute) lock
+                lockedCategoryId = prePassResult.groundedCategoryId;
+                lockedCategoryName = groundedCategoryName;
+                lockedBreadcrumb = groundedBreadcrumb;
+                categoryHints +=
+                  `\n- **GROUNDED CATEGORY** (verified leaf from live Google Search): **${lockedCategoryId}** — ${lockedBreadcrumb}. This was found by searching eBay\'s current 2026 taxonomy. USE THIS CATEGORY unless you have strong evidence it is incorrect.`;
+                console.log(
+                  `[${invocationId}] GROUNDED LOCK: category ${lockedCategoryId} (${lockedBreadcrumb}) verified as leaf via Pre-Pass 0`,
+                );
+              } else {
+                categoryHints +=
+                  `\n- GROUNDING HINT REJECTED AS LOCK: **${prePassResult.groundedCategoryId}** — ${groundedBreadcrumb}. This verified leaf does not match resolved domain ${identification.domain}.`;
+                console.warn(
+                  `[${invocationId}] Grounded category ${prePassResult.groundedCategoryId} rejected for domain ${identification.domain}: ${groundedBreadcrumb}`,
+                );
+              }
             } else {
+              // Not a valid leaf — downgrade to a strong hint
               categoryHints +=
-                `\n- GROUNDING HINT REJECTED AS LOCK: **${prePassResult.groundedCategoryId}** — ${groundedBreadcrumb}. This verified leaf does not match resolved domain ${identification.domain}.`;
-              console.warn(
-                `[${invocationId}] Grounded category ${prePassResult.groundedCategoryId} rejected for domain ${identification.domain}: ${groundedBreadcrumb}`,
+                `\n- GROUNDING HINT (unverified leaf): **${prePassResult.groundedCategoryId}** (from live Google Search — use as hint, verify before locking).`;
+              console.log(
+                `[${invocationId}] Grounded category ${prePassResult.groundedCategoryId} NOT a verified leaf (isLeaf=${groundedVerifyData.isLeaf}) — using as hint only`,
               );
             }
-          } else {
-            // Not a valid leaf — downgrade to a strong hint
-            categoryHints +=
-              `\n- GROUNDING HINT (unverified leaf): **${prePassResult.groundedCategoryId}** (from live Google Search — use as hint, verify before locking).`;
-            console.log(
-              `[${invocationId}] Grounded category ${prePassResult.groundedCategoryId} NOT a verified leaf (isLeaf=${groundedVerifyData.isLeaf}) — using as hint only`,
-            );
           }
         }
       } catch (groundedLookupErr) {
@@ -684,92 +769,101 @@ serve(async (req: Request) => {
         const searchQuery = (pass1Query !== "item" ? pass1Query : voiceNote) ||
           "";
         if (searchQuery.trim().length > 2) {
-          const lookupResp = await callCategoryLookup("lookup", {
-            itemType: searchQuery,
-          });
-          if (lookupResp.ok) {
-            const lookupData = lookupResp.data;
-
-            if (lookupData && lookupData.found) {
-              const score = lookupData.effectiveScore ||
-                lookupData.confidence || 0;
-              const isVerifiedLeaf = lookupData.verifiedLeaf !== false;
-              const source = lookupData.source || "";
-
-              // Deterministic lock: high-confidence verified result (#3)
-              // Lock if: score >= 88 AND (source is eBay API or user-verified DB exact)
-              const isLockable = score >= 88 && isVerifiedLeaf &&
-                (source === "ebay_api" || source.includes("user_verified") ||
-                  source.includes("db_exact"));
-              const isDomainCompatible = isCategoryCompatibleWithDomain(
-                identification.domain,
-                lookupData.categoryId,
-                lookupData.categoryName,
-                lookupData.breadcrumb,
-              );
-
-              if (isLockable && isDomainCompatible) {
-                lockedCategoryId = lookupData.categoryId;
-                lockedCategoryName = lookupData.categoryName || "";
-                lockedBreadcrumb = lookupData.breadcrumb ||
-                  lookupData.categoryName || "";
-                categoryHints +=
-                  `\n- **LOCKED CATEGORY** (verified, high-confidence): **${lockedCategoryId}** — ${lockedBreadcrumb}. YOU MUST USE THIS CATEGORY ID. Do not override.`;
-                console.log(
-                  `analyze-item: DETERMINISTIC LOCK on category ${lockedCategoryId} (score=${score}, source=${source})`,
+          const _lookupUrl = Deno.env.get("SUPABASE_URL");
+          const _lookupKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+          if (_lookupUrl && _lookupKey) {
+            const lookupResp = await fetch(
+              `${_lookupUrl}/functions/v1/category-lookup`,
+              {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${_lookupKey}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  action: "lookup",
+                  itemType: searchQuery,
+                }),
+              },
+            );
+            if (lookupResp.ok) {
+              const lookupText = await lookupResp.text();
+              let lookupData: any;
+              try {
+                lookupData = JSON.parse(lookupText);
+              } catch {
+                console.warn(
+                  `analyze-item: category pre-lookup returned invalid JSON (length=${lookupText.length})`,
                 );
-              } else {
-                // Not locked — provide as strong hint
-                if (isLockable && !isDomainCompatible) {
-                  console.warn(
-                    `analyze-item: rejecting deterministic lock ${lookupData.categoryId} for domain ${identification.domain} (${
-                      lookupData.breadcrumb || lookupData.categoryName
-                    })`,
-                  );
-                }
-                categoryHints += `\n- BEST MATCH (score=${score}, source=${source}): **${lookupData.categoryId}** — ${
-                  lookupData.breadcrumb || lookupData.categoryName
-                }. Use this as primary category unless the item clearly belongs elsewhere.`;
+                lookupData = null;
               }
 
-              // Collect alternatives for fallback
-              if (
-                lookupData.alternatives && lookupData.alternatives.length > 0
-              ) {
-                lookupAlternatives = lookupData.alternatives;
-                categoryHints += "\n- ALTERNATIVE CATEGORIES:";
-                for (const alt of lookupData.alternatives.slice(0, 3)) {
-                  categoryHints += `\n  * **${alt.categoryId}** — ${alt.breadcrumb || alt.categoryName} (score=${
-                    alt.score || "?"
-                  })`;
+              if (lookupData && lookupData.found) {
+                const score = lookupData.effectiveScore ||
+                  lookupData.confidence || 0;
+                const isVerifiedLeaf = lookupData.verifiedLeaf !== false;
+                const source = lookupData.source || "";
+
+                // Deterministic lock: high-confidence verified result (#3)
+                // Lock if: score >= 88 AND (source is eBay API or user-verified DB exact)
+                const isLockable = score >= 88 && isVerifiedLeaf &&
+                  (source === "ebay_api" || source.includes("user_verified") ||
+                    source.includes("db_exact"));
+                const isDomainCompatible = isCategoryCompatibleWithDomain(
+                  identification.domain,
+                  lookupData.categoryId,
+                  lookupData.categoryName,
+                  lookupData.breadcrumb,
+                );
+
+                if (isLockable && isDomainCompatible) {
+                  lockedCategoryId = lookupData.categoryId;
+                  lockedCategoryName = lookupData.categoryName || "";
+                  lockedBreadcrumb = lookupData.breadcrumb ||
+                    lookupData.categoryName || "";
+                  categoryHints +=
+                    `\n- **LOCKED CATEGORY** (verified, high-confidence): **${lockedCategoryId}** — ${lockedBreadcrumb}. YOU MUST USE THIS CATEGORY ID. Do not override.`;
+                  console.log(
+                    `analyze-item: DETERMINISTIC LOCK on category ${lockedCategoryId} (score=${score}, source=${source})`,
+                  );
+                } else {
+                  // Not locked — provide as strong hint
+                  if (isLockable && !isDomainCompatible) {
+                    console.warn(
+                      `analyze-item: rejecting deterministic lock ${lookupData.categoryId} for domain ${identification.domain} (${
+                        lookupData.breadcrumb || lookupData.categoryName
+                      })`,
+                    );
+                  }
+                  categoryHints += `\n- BEST MATCH (score=${score}, source=${source}): **${lookupData.categoryId}** — ${
+                    lookupData.breadcrumb || lookupData.categoryName
+                  }. Use this as primary category unless the item clearly belongs elsewhere.`;
                 }
-              }
-            } else if (
-              lookupData && lookupData.topCandidates &&
-              lookupData.topCandidates.length > 0
-            ) {
-              // Circuit breaker fired — no candidate passed threshold (#9)
-              categoryHints += "\n- LOW-CONFIDENCE CANDIDATES (use your best judgment):";
-              for (const c of lookupData.topCandidates) {
-                categoryHints += `\n  * **${c.categoryId}** — ${c.breadcrumb || c.categoryName} (score=${
-                  c.score || "?"
-                })`;
-              }
-              lookupAlternatives = lookupData.topCandidates;
-            } else {
-              // No winner from lookup pipeline — ask eBay suggestions directly at runtime.
-              const suggestResp = await callCategoryLookup("suggest", {
-                query: searchQuery,
-              });
-              if (suggestResp.ok) {
-                const suggestions = suggestResp.data?.suggestions || [];
-                if (suggestions.length > 0) {
-                  lookupAlternatives = suggestions;
-                  categoryHints += "\n- EBAY RUNTIME SUGGESTIONS (official taxonomy):";
-                  for (const s of suggestions.slice(0, 3)) {
-                    categoryHints += `\n  * **${s.categoryId}** — ${s.breadcrumb || s.categoryName}`;
+
+                // Collect alternatives for fallback
+                if (
+                  lookupData.alternatives && lookupData.alternatives.length > 0
+                ) {
+                  lookupAlternatives = lookupData.alternatives;
+                  categoryHints += "\n- ALTERNATIVE CATEGORIES:";
+                  for (const alt of lookupData.alternatives.slice(0, 3)) {
+                    categoryHints += `\n  * **${alt.categoryId}** — ${alt.breadcrumb || alt.categoryName} (score=${
+                      alt.score || "?"
+                    })`;
                   }
                 }
+              } else if (
+                lookupData && lookupData.topCandidates &&
+                lookupData.topCandidates.length > 0
+              ) {
+                // Circuit breaker fired — no candidate passed threshold (#9)
+                categoryHints += "\n- LOW-CONFIDENCE CANDIDATES (use your best judgment):";
+                for (const c of lookupData.topCandidates) {
+                  categoryHints += `\n  * **${c.categoryId}** — ${c.breadcrumb || c.categoryName} (score=${
+                    c.score || "?"
+                  })`;
+                }
+                lookupAlternatives = lookupData.topCandidates;
               }
             }
           }
@@ -791,29 +885,68 @@ serve(async (req: Request) => {
       const targetCategoryId = lockedCategoryId || null;
       if (targetCategoryId) {
         fetchedMetadataCategoryId = targetCategoryId;
-        try {
-          const metadata = await fetchCategoryMetadata(targetCategoryId);
-          categoryAspects = metadata.aspects;
-          categoryConditions = metadata.conditions;
-          if (categoryAspects) {
-            console.log(
-              `[${invocationId}] analyze-item: fetched ${
-                categoryAspects.aspects?.length || 0
-              } aspects for category ${targetCategoryId}`,
+        const _aspectsUrl = Deno.env.get("SUPABASE_URL");
+        const _aspectsKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (_aspectsUrl && _aspectsKey) {
+          try {
+            const aspectsResp = await fetch(
+              `${_aspectsUrl}/functions/v1/category-lookup`,
+              {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${_aspectsKey}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  action: "aspects",
+                  categoryId: targetCategoryId,
+                }),
+              },
+            );
+            if (aspectsResp.ok) {
+              categoryAspects = await aspectsResp.json();
+              console.log(
+                `[${invocationId}] analyze-item: fetched ${
+                  categoryAspects.aspects?.length || 0
+                } aspects for category ${targetCategoryId}`,
+              );
+            }
+          } catch (aspectErr) {
+            console.warn(
+              `[${invocationId}] analyze-item: aspects fetch failed (non-blocking):`,
+              aspectErr,
             );
           }
-          if (categoryConditions) {
-            console.log(
-              `[${invocationId}] analyze-item: fetched ${
-                categoryConditions.conditions?.length || 0
-              } conditions for category ${targetCategoryId}`,
+
+          try {
+            const conditionsResp = await fetch(
+              `${_aspectsUrl}/functions/v1/category-lookup`,
+              {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${_aspectsKey}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  action: "conditions",
+                  categoryId: targetCategoryId,
+                }),
+              },
+            );
+            if (conditionsResp.ok) {
+              categoryConditions = await conditionsResp.json();
+              console.log(
+                `[${invocationId}] analyze-item: fetched ${
+                  categoryConditions.conditions?.length || 0
+                } conditions for category ${targetCategoryId}`,
+              );
+            }
+          } catch (condErr) {
+            console.warn(
+              `[${invocationId}] analyze-item: conditions fetch failed (non-blocking):`,
+              condErr,
             );
           }
-        } catch (metadataErr) {
-          console.warn(
-            `[${invocationId}] analyze-item: metadata fetch failed (non-blocking):`,
-            metadataErr,
-          );
         }
       }
     }
@@ -1066,11 +1199,17 @@ ${
 
 Use the \`create_listing\` tool to return the final structured data.`;
     // The _promoteSystemPrompt above is the fallback template — actual systemPrompt is built above.
-     
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     void _promoteSystemPrompt;
 
     // Build content array with all images + text prompt
-    const contentParts: any[] = toOpenAiImageContentParts(imageList);
+    const contentParts: any[] = imageList.map((img) => {
+      const { base64Data, mimeType } = parseImageDataUrl(img);
+      return {
+        type: "image_url",
+        image_url: { url: `data:${mimeType};base64,${base64Data}` },
+      };
+    });
 
     let userText = `I've provided ${imageList.length} photo${
       imageList.length > 1 ? "s" : ""
@@ -1462,7 +1601,7 @@ Seller's note: "${voiceNote}"`;
       if (listing.title) {
         const titleBefore = listing.title as string;
         listing.title = titleBefore
-            .replace(/^NOVELTY\s*[/&]?\s*FANTASY\s*REPLICA\s*/i, "")
+          .replace(/^NOVELTY\s*[\/&]?\s*FANTASY\s*REPLICA\s*/i, "")
           .replace(/^NOVELTY\s*REPLICA\s*/i, "")
           .replace(/^NOVELTY\s+/i, "")
           .replace(/^FANTASY\s*REPLICA\s*/i, "")
@@ -1496,7 +1635,7 @@ Seller's note: "${voiceNote}"`;
           )
           // Format 3: "This is a NOVELTY / FANTASY item..." paragraph
           .replace(
-              /This is a NOVELTY[\s/&]*FANTASY[^]*?(?:\n\n|selling\.)/gi,
+            /This is a NOVELTY[\s\/&]*FANTASY[^]*?(?:\n\n|selling\.)/gi,
             "",
           )
           // Format 4: "This listing is for a NOVELTY..."
@@ -1610,72 +1749,68 @@ Seller's note: "${voiceNote}"`;
           listing.categoryId = lockedCategoryId;
         } else if (!lockedCategoryId) {
           // No lock — verify the AI's choice via category-lookup
-          const verifyResp = await callCategoryLookup("verify", {
-            categoryId: listing.ebayCategoryId,
-          });
-          if (verifyResp.ok) {
-            const verifyData = verifyResp.data || {};
-            const aiDomainMismatch = isCoinDomainMismatch(
-              identification.domain,
-              listing.ebayCategoryId,
-              verifyData?.breadcrumb || "",
+          const _verifyUrl = Deno.env.get("SUPABASE_URL");
+          const _verifyKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+          if (_verifyUrl && _verifyKey) {
+            const verifyResp = await fetch(
+              `${_verifyUrl}/functions/v1/category-lookup`,
+              {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${_verifyKey}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  action: "verify",
+                  categoryId: listing.ebayCategoryId,
+                }),
+              },
             );
-            if (verifyData.isLeaf === false || verifyData.valid === false) {
-              console.warn(
-                `analyze-item: AI category ${listing.ebayCategoryId} is NOT a valid leaf — attempting reselect`,
-              );
+            if (verifyResp.ok) {
+              let verifyData: any;
+              try {
+                const verifyText = await verifyResp.text();
+                verifyData = JSON.parse(verifyText);
+              } catch {
+                console.warn(
+                  "analyze-item: category verify returned invalid JSON",
+                );
+                verifyData = {};
+              }
+              if (verifyData.isLeaf === false || verifyData.valid === false) {
+                console.warn(
+                  `analyze-item: AI category ${listing.ebayCategoryId} is NOT a valid leaf — attempting reselect`,
+                );
 
-              // Try alternatives from lookup
-              let reselected = false;
-              if (lookupAlternatives && lookupAlternatives.length > 0) {
-                for (const alt of lookupAlternatives) {
-                  if (alt.categoryId !== listing.ebayCategoryId) {
-                    console.log(
-                      `analyze-item: reselecting to alternative ${alt.categoryId} (${
-                        alt.categoryName || alt.breadcrumb
-                      })`,
-                    );
-                    listing.ebayCategoryId = alt.categoryId;
-                    listing.categoryId = alt.categoryId;
-                    reselected = true;
-                    break;
+                // Try alternatives from lookup
+                let reselected = false;
+                if (lookupAlternatives && lookupAlternatives.length > 0) {
+                  for (const alt of lookupAlternatives) {
+                    if (alt.categoryId !== listing.ebayCategoryId) {
+                      console.log(
+                        `analyze-item: reselecting to alternative ${alt.categoryId} (${
+                          alt.categoryName || alt.breadcrumb
+                        })`,
+                      );
+                      listing.ebayCategoryId = alt.categoryId;
+                      listing.categoryId = alt.categoryId;
+                      reselected = true;
+                      break;
+                    }
                   }
                 }
-              }
 
-              // Try suggestedCategories if no alternative worked
-              if (!reselected && listing.suggestedCategories?.length > 1) {
-                const fallback = listing.suggestedCategories[1];
-                if (fallback?.categoryId) {
-                  console.log(
-                    `analyze-item: reselecting to suggested category ${fallback.categoryId}`,
-                  );
-                  listing.ebayCategoryId = fallback.categoryId;
-                  listing.categoryId = fallback.categoryId;
+                // Try suggestedCategories if no alternative worked
+                if (!reselected && listing.suggestedCategories?.length > 1) {
+                  const fallback = listing.suggestedCategories[1];
+                  if (fallback?.categoryId) {
+                    console.log(
+                      `analyze-item: reselecting to suggested category ${fallback.categoryId}`,
+                    );
+                    listing.ebayCategoryId = fallback.categoryId;
+                    listing.categoryId = fallback.categoryId;
+                  }
                 }
-              }
-            } else if (aiDomainMismatch && lookupAlternatives?.length) {
-              // AI category is leaf-valid but clearly wrong for the identified domain.
-              // Prefer the first domain-compatible eBay suggestion from lookup alternatives.
-              const compatibleAlt = lookupAlternatives.find((alt: any) =>
-                alt?.categoryId &&
-                alt.categoryId !== listing.ebayCategoryId &&
-                isCategoryCompatibleWithDomain(
-                  identification.domain,
-                  alt.categoryId,
-                  alt.categoryName,
-                  alt.breadcrumb,
-                )
-              );
-
-              if (compatibleAlt?.categoryId) {
-                console.warn(
-                  `analyze-item: DOMAIN-MISMATCH RESELECT: AI ${listing.ebayCategoryId} -> ${compatibleAlt.categoryId} (${
-                    compatibleAlt.breadcrumb || compatibleAlt.categoryName
-                  })`,
-                );
-                listing.ebayCategoryId = compatibleAlt.categoryId;
-                listing.categoryId = compatibleAlt.categoryId;
               }
             }
           }
@@ -1697,86 +1832,219 @@ Seller's note: "${voiceNote}"`;
     // leaf category with high confidence.
     try {
       if (!lockedCategoryId && listing.title) {
-        const postLookupResp = await callCategoryLookup("lookup", {
-          itemType: listing.title,
-        });
-        if (postLookupResp.ok) {
-          const postLookupData: any = postLookupResp.data ?? {};
-          if (!postLookupResp.data) {
-            console.warn("analyze-item: post-lookup returned invalid JSON");
-          }
-          if (postLookupData.found && postLookupData.verifiedLeaf !== false) {
-            const postScore = postLookupData.effectiveScore ||
-              postLookupData.confidence || 0;
-            const postSource = postLookupData.source || "";
-            const postIsLeaf = postLookupData.verifiedLeaf === true;
-
-            // Override AI's category if any of these conditions hold:
-            // 1. The post-lookup found a verified leaf with high confidence
-            // 2. The AI's current category is a known non-leaf parent
-            // 3. Domain mismatch for coins_bullion
-            const aiCategoryIsParent = isKnownParentCategory(
-              listing.ebayCategoryId,
-            );
-            const postLookupIsStrong = postScore >= 80 && postIsLeaf;
-            const isDomainMismatch = isCoinDomainMismatch(
-              identification.domain,
-              listing.ebayCategoryId,
-              postLookupData.breadcrumb || "",
-            );
-
-            if (aiCategoryIsParent || postLookupIsStrong || isDomainMismatch) {
-              console.log(
-                `analyze-item: POST-LOOKUP override: AI picked ${listing.ebayCategoryId}, ` +
-                  `post-lookup found ${postLookupData.categoryId} (${postLookupData.categoryName}, ` +
-                  `score=${postScore}, source=${postSource}, leaf=${postIsLeaf}, ` +
-                  `aiWasParent=${aiCategoryIsParent}, domainMismatch=${isDomainMismatch})`,
-              );
-              listing.ebayCategoryId = postLookupData.categoryId;
-              listing.categoryId = postLookupData.categoryId;
-
-              // Update suggestedCategories to put post-lookup winner first
-              if (listing.suggestedCategories) {
-                listing.suggestedCategories.unshift({
-                  categoryId: postLookupData.categoryId,
-                  categoryName: postLookupData.categoryName,
-                  breadcrumb: postLookupData.breadcrumb ||
-                    postLookupData.categoryName,
-                  reason: `Post-lookup verified (score=${postScore}, source=${postSource})`,
-                });
-                // Dedupe
-                const seenIds = new Set<string>();
-                listing.suggestedCategories = listing.suggestedCategories
-                  .filter((s: any) => {
-                    if (seenIds.has(s.categoryId)) return false;
-                    seenIds.add(s.categoryId);
-                    return true;
-                  }).slice(0, 3);
-              }
-
-              // Also update alternatives for any future reselection
-              if (
-                postLookupData.alternatives &&
-                postLookupData.alternatives.length > 0
-              ) {
-                lookupAlternatives = postLookupData.alternatives;
-              }
+        const _postLookupUrl = Deno.env.get("SUPABASE_URL");
+        const _postLookupKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (_postLookupUrl && _postLookupKey) {
+          const postLookupResp = await fetch(
+            `${_postLookupUrl}/functions/v1/category-lookup`,
+            {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${_postLookupKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                action: "lookup",
+                itemType: listing.title,
+              }),
+            },
+          );
+          if (postLookupResp.ok) {
+            let postLookupData: any;
+            try {
+              const postLookupText = await postLookupResp.text();
+              postLookupData = JSON.parse(postLookupText);
+            } catch {
+              console.warn("analyze-item: post-lookup returned invalid JSON");
+              postLookupData = {};
             }
-          } else if (
-            // Post-lookup returned nothing (or low confidence), BUT domain mismatch is clear —
-            // last-resort: the AI picked a wrong-domain category for a coin item.
-            // Fall back to the safest known world-coin category rather than leaving Books/Electronics.
-            shouldForceWorldCoinsFallback(
-              identification.domain,
-              listing.ebayCategoryId,
-            )
-          ) {
-            console.warn(
-              `analyze-item: DOMAIN-MISMATCH SAFETY: coins_bullion item but AI returned category ${listing.ebayCategoryId} ` +
-                `and post-lookup found nothing — forcing fallback to World Coins (45243)`,
-            );
-            listing.ebayCategoryId = "45243";
-            listing.categoryId = "45243";
+            if (postLookupData.found && postLookupData.verifiedLeaf !== false) {
+              const postScore = postLookupData.effectiveScore ||
+                postLookupData.confidence || 0;
+              const postSource = postLookupData.source || "";
+              const postIsLeaf = postLookupData.verifiedLeaf === true;
+
+              // ── Define known Coins & Paper Money leaf IDs (and their tree prefix) ──
+              // Any category that starts with these IDs or whose breadcrumb contains
+              // "Coins & Paper Money" is in the right domain for coins_bullion items.
+              const COINS_PAPER_MONEY_IDS = new Set([
+                // Bullion
+                "178906",
+                "39489",
+                "177652",
+                "177653",
+                "166679",
+                "3361",
+                "3360",
+                "261064",
+                "261068",
+                "261069",
+                "261070",
+                "261071",
+                "261072",
+                "261073",
+                "261074",
+                "261075",
+                "261076",
+                "166680",
+                "166681",
+                // US Coins
+                "253",
+                "39464",
+                "11980",
+                "11981",
+                "41102",
+                "11973",
+                "41099",
+                "11971",
+                "39455",
+                "41084",
+                "41109",
+                "526",
+                "11116",
+                "11118",
+                "40149",
+                "40150",
+                "40151",
+                "40152",
+                "40153",
+                "40154",
+                "40155",
+                "40156",
+                "40157",
+                "40158",
+                "40159",
+                "40160",
+                "41111",
+                "164743",
+                // US Gold Coins
+                "40161",
+                "40162",
+                "40163",
+                "40164",
+                "40165",
+                "40166",
+                "40167",
+                // World Coins
+                "45243",
+                "40196",
+                "40197",
+                "40198",
+                "40199",
+                "40200",
+                "40201",
+                "40202",
+                "11063",
+                // Paper Money
+                "3411",
+                "45244",
+                // Ancient / Medieval
+                "532",
+                "173685",
+                // Exonumia
+                "19167",
+                "19168",
+                "19169",
+              ]);
+
+              // Categories that are in the completely wrong domain for a coin
+              const KNOWN_WRONG_DOMAIN_FOR_COINS = new Set([
+                "261186", // Books & Magazines > Books ← the exact bug we're fixing
+                "268", // Books & Magazines (parent)
+                "9355",
+                "112529",
+                "177",
+                "179", // Electronics
+                "11450", // Clothing
+                "550", // Art
+                "1", // Collectibles (too broad — coins should be more specific)
+              ]);
+
+              // Override AI's category if any of these conditions hold:
+              // 1. The post-lookup found a verified leaf with high confidence
+              // 2. The AI's current category is a known non-leaf parent
+              // 3. DOMAIN MISMATCH: the identified domain is coins_bullion but the AI
+              //    picked a category outside the Coins & Paper Money tree.
+              //    In this case, ANY live lookup result is more trustworthy than the AI's pick.
+              const KNOWN_PARENT_CATEGORIES = new Set([
+                "253",
+                "11118",
+                "11233",
+                "261076",
+                "261074",
+                "261075",
+                "293",
+                "1",
+                "550",
+                "631",
+                "20713",
+                "11450",
+                "64482",
+                "220",
+              ]);
+              const aiCategoryIsParent = KNOWN_PARENT_CATEGORIES.has(listing.ebayCategoryId);
+              const postLookupIsStrong = postScore >= 80 && postIsLeaf;
+
+              // Domain mismatch: Pass 1 said coins_bullion but AI chose a Books/Electronics/etc. category
+              const isDomainMismatch = identification.domain === "coins_bullion" &&
+                !COINS_PAPER_MONEY_IDS.has(listing.ebayCategoryId) &&
+                (KNOWN_WRONG_DOMAIN_FOR_COINS.has(listing.ebayCategoryId) ||
+                  (postLookupData.breadcrumb || "").toLowerCase().includes("coins"));
+
+              if (aiCategoryIsParent || postLookupIsStrong || isDomainMismatch) {
+                console.log(
+                  `analyze-item: POST-LOOKUP override: AI picked ${listing.ebayCategoryId}, ` +
+                    `post-lookup found ${postLookupData.categoryId} (${postLookupData.categoryName}, ` +
+                    `score=${postScore}, source=${postSource}, leaf=${postIsLeaf}, ` +
+                    `aiWasParent=${aiCategoryIsParent}, domainMismatch=${isDomainMismatch})`,
+                );
+                listing.ebayCategoryId = postLookupData.categoryId;
+                listing.categoryId = postLookupData.categoryId;
+
+                // Update suggestedCategories to put post-lookup winner first
+                if (listing.suggestedCategories) {
+                  listing.suggestedCategories.unshift({
+                    categoryId: postLookupData.categoryId,
+                    categoryName: postLookupData.categoryName,
+                    breadcrumb: postLookupData.breadcrumb ||
+                      postLookupData.categoryName,
+                    reason: `Post-lookup verified (score=${postScore}, source=${postSource})`,
+                  });
+                  // Dedupe
+                  const seenIds = new Set<string>();
+                  listing.suggestedCategories = listing.suggestedCategories
+                    .filter((s: any) => {
+                      if (seenIds.has(s.categoryId)) return false;
+                      seenIds.add(s.categoryId);
+                      return true;
+                    }).slice(0, 3);
+                }
+
+                // Also update alternatives for any future reselection
+                if (
+                  postLookupData.alternatives &&
+                  postLookupData.alternatives.length > 0
+                ) {
+                  lookupAlternatives = postLookupData.alternatives;
+                }
+              }
+            } else if (
+              // Post-lookup returned nothing (or low confidence), BUT domain mismatch is clear —
+              // last-resort: the AI picked a wrong-domain category for a coin item.
+              // Fall back to the safest known world-coin category rather than leaving Books/Electronics.
+              identification.domain === "coins_bullion" &&
+              listing.ebayCategoryId &&
+              (["261186", "268"].includes(listing.ebayCategoryId) ||
+                (!listing.ebayCategoryId.match(/^(3[0-9]|4[0-9]|1[0-9]|2[0-9]|45243|532|173685)/) &&
+                  parseInt(listing.ebayCategoryId) > 200000))
+            ) {
+              console.warn(
+                `analyze-item: DOMAIN-MISMATCH SAFETY: coins_bullion item but AI returned category ${listing.ebayCategoryId} ` +
+                  `and post-lookup found nothing — forcing fallback to World Coins (45243)`,
+              );
+              listing.ebayCategoryId = "45243";
+              listing.categoryId = "45243";
+            }
           }
         }
       }
@@ -1793,18 +2061,62 @@ Seller's note: "${voiceNote}"`;
       listing.ebayCategoryId &&
       listing.ebayCategoryId !== fetchedMetadataCategoryId
     ) {
-      try {
-        const metadata = await fetchCategoryMetadata(listing.ebayCategoryId);
-        categoryAspects = metadata.aspects;
-        categoryConditions = metadata.conditions;
+      const _metadataUrl = Deno.env.get("SUPABASE_URL");
+      const _metadataKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (_metadataUrl && _metadataKey) {
+        try {
+          const aspectsResp = await fetch(
+            `${_metadataUrl}/functions/v1/category-lookup`,
+            {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${_metadataKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                action: "aspects",
+                categoryId: listing.ebayCategoryId,
+              }),
+            },
+          );
+          if (aspectsResp.ok) {
+            categoryAspects = await aspectsResp.json();
+          }
+        } catch (aspectErr) {
+          console.warn(
+            `[${invocationId}] analyze-item: final-category aspects fetch failed (non-blocking):`,
+            aspectErr,
+          );
+        }
+
+        try {
+          const conditionsResp = await fetch(
+            `${_metadataUrl}/functions/v1/category-lookup`,
+            {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${_metadataKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                action: "conditions",
+                categoryId: listing.ebayCategoryId,
+              }),
+            },
+          );
+          if (conditionsResp.ok) {
+            categoryConditions = await conditionsResp.json();
+          }
+        } catch (condErr) {
+          console.warn(
+            `[${invocationId}] analyze-item: final-category conditions fetch failed (non-blocking):`,
+            condErr,
+          );
+        }
+
         fetchedMetadataCategoryId = listing.ebayCategoryId;
         console.log(
           `[${invocationId}] analyze-item: resynced metadata to final category ${listing.ebayCategoryId}`,
-        );
-      } catch (metadataErr) {
-        console.warn(
-          `[${invocationId}] analyze-item: final-category metadata fetch failed (non-blocking):`,
-          metadataErr,
         );
       }
     }
@@ -1841,14 +2153,27 @@ Seller's note: "${voiceNote}"`;
             const catBreadcrumb = listing.suggestedCategories?.[0]?.breadcrumb || null;
 
             // Use category-lookup store action (applies leaf/active gates + quarantine)
-            const storeResp = await callCategoryLookup("store", {
-              itemType: titleWords,
-              categoryId: listing.ebayCategoryId,
-              categoryName: catName,
-              breadcrumb: catBreadcrumb,
-              verificationSource: "ai_auto",
-            });
-            if (storeResp.ok) {
+            const _storeUrl = Deno.env.get("SUPABASE_URL");
+            const _storeKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+            if (_storeUrl && _storeKey) {
+              await fetch(
+                `${_storeUrl}/functions/v1/category-lookup`,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${_storeKey}`,
+                  },
+                  body: JSON.stringify({
+                    action: "store",
+                    itemType: titleWords,
+                    categoryId: listing.ebayCategoryId,
+                    categoryName: catName,
+                    breadcrumb: catBreadcrumb,
+                    verificationSource: "ai_auto",
+                  }),
+                },
+              );
               console.log(
                 `analyze-item: submitted category ${listing.ebayCategoryId} for "${titleWords}" to category-lookup store (gated)`,
               );
@@ -1877,10 +2202,14 @@ Seller's note: "${voiceNote}"`;
       );
 
       // Build image lists for the detail extractor — use ALL images
-      const {
-        base64List: detailBase64List,
-        mimeList: detailMimeList,
-      } = extractImagePayloads(imageList);
+      const detailBase64List: string[] = [];
+      const detailMimeList: string[] = [];
+      for (const img of imageList) {
+        const detB64 = img.includes(",") ? img.split(",")[1] : img;
+        const detMimeMatch = img.match(/^data:(image\/\w+);/);
+        detailBase64List.push(detB64);
+        detailMimeList.push(detMimeMatch ? detMimeMatch[1] : "image/jpeg");
+      }
 
       const detailResult = await extractKeyDetails(
         GEMINI_API_KEY,
