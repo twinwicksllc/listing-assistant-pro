@@ -125,21 +125,7 @@ serve(async (req: Request) => {
     const LIMITS = { starter: FREE_LIMIT, pro: PRO_LIMIT, unlimited: Infinity };
     const limit = LIMITS[tier];
 
-    if (usageCount >= limit) {
-      return new Response(
-        JSON.stringify({
-          error: "usage_limit_reached",
-          creditsUsed: usageCount,
-          creditsRemaining: 0,
-          creditsResetAt: computeNextResetAt(orgResetDay),
-          tier,
-        }),
-        {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
+    const limitReached = tier !== "unlimited" && usageCount >= limit;
 
     // Successfully returning credit status
     const creditsRemaining = tier === "starter"
@@ -149,10 +135,12 @@ serve(async (req: Request) => {
       : null;
 
     const responseData = {
+      error: limitReached ? "usage_limit_reached" : null,
       tier,
       creditsUsed: usageCount,
       creditsRemaining,
       creditsResetAt: tier === "starter" ? computeNextResetAt(orgResetDay) : null,
+      limitReached,
       ebayConnected: false, // Placeholder: check profiles.ebay_access_token in full impl
     };
 
