@@ -2378,11 +2378,18 @@ serve(async (req) => {
         const _identitySupabaseUrl = Deno.env.get("SUPABASE_URL");
         const _identityServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
         const _stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
+        const identityBase = ebayEnv === "production" ? "https://apiz.ebay.com" : "https://apiz.sandbox.ebay.com";
 
         const identityRes = await fetch(
-          "https://apiz.ebay.com/commerce/identity/v1/user/",
+          `${identityBase}/commerce/identity/v1/user/`,
           { headers: { Authorization: `Bearer ${tokenData.access_token}` } },
         );
+        if (!identityRes.ok) {
+          const identityErrText = await identityRes.text();
+          throw new Error(
+            `Identity API failed (${identityRes.status}): ${identityErrText}`,
+          );
+        }
         const identity = await identityRes.json();
         const newUsername = identity?.userId ?? identity?.username ?? null;
         const accountType = (identity?.accountType ?? "")?.toLowerCase() ??

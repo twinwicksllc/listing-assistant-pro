@@ -5,6 +5,22 @@
 
 set -e
 
+PASS_COUNT=0
+FAIL_COUNT=0
+
+check_grep() {
+    local description=$1
+    local pattern=$2
+    local file=$3
+    if grep -q "$pattern" "$file"; then
+        echo "✅ $description"
+        PASS_COUNT=$((PASS_COUNT + 1))
+    else
+        echo "❌ $description"
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+    fi
+}
+
 echo "🧪 Phase 2 Testing - eBay Account Gate & Per-Org Quota System"
 echo "=============================================================="
 echo ""
@@ -30,79 +46,23 @@ invoke_function() {
 echo "📋 Test 1: Verify analyze-item code changes"
 echo "---"
 
-# Check if computeNextResetAt helper exists
-if grep -q "function computeNextResetAt" supabase/functions/analyze-item/index.ts; then
-    echo "✅ computeNextResetAt() helper function found"
-else
-    echo "❌ computeNextResetAt() helper function NOT found"
-fi
-
-# Check if eBay gate logic exists
-if grep -q "ebay_account_required" supabase/functions/analyze-item/index.ts; then
-    echo "✅ eBay account gate logic found"
-else
-    echo "❌ eBay account gate logic NOT found"
-fi
-
-# Check if per-org quota logic exists
-if grep -q "Per-Org Rolling-Window" supabase/functions/analyze-item/index.ts; then
-    echo "✅ Per-org rolling-window quota logic found"
-else
-    echo "❌ Per-org rolling-window quota logic NOT found"
-fi
-
-# Check if ANALYSIS_LIMIT is set to 6 for Starter
-if grep -q "ANALYSIS_LIMIT = tier === \"pro\" ? 50 : 6" supabase/functions/analyze-item/index.ts; then
-    echo "✅ Starter tier limit set to 6 (not 5)"
-else
-    echo "❌ Starter tier limit NOT set to 6"
-fi
-
-# Check if creditsUsed calculation is correct
-if grep -q "const creditsUsed = currentUsageCount + 1" supabase/functions/analyze-item/index.ts; then
-    echo "✅ creditsUsed calculated from currentUsageCount (not random)"
-else
-    echo "❌ creditsUsed calculation NOT correct"
-fi
-
-# Check if _meta object is returned
-if grep -q "_meta:" supabase/functions/analyze-item/index.ts; then
-    echo "✅ _meta object returned in response"
-else
-    echo "❌ _meta object NOT found in response"
-fi
+check_grep "computeNextResetAt() helper function found" "function computeNextResetAt" "supabase/functions/analyze-item/index.ts"
+check_grep "eBay account gate logic found" "ebay_account_required" "supabase/functions/analyze-item/index.ts"
+check_grep "Per-org rolling-window quota logic found" "Per-Org Rolling-Window" "supabase/functions/analyze-item/index.ts"
+check_grep "Starter tier limit set to 6 (not 5)" "ANALYSIS_LIMIT = tier === \"pro\" ? 50 : 6" "supabase/functions/analyze-item/index.ts"
+check_grep "creditsUsed calculated from currentUsageCount (not random)" "const creditsUsed = currentUsageCount + 1" "supabase/functions/analyze-item/index.ts"
+check_grep "_meta object returned in response" "_meta:" "supabase/functions/analyze-item/index.ts"
 
 echo ""
 echo "📋 Test 2: Verify ebay-publish code changes"
 echo "---"
 
-# Check if Identity API call exists
-if grep -q "Identity API Call" supabase/functions/ebay-publish/index.ts; then
-    echo "✅ Identity API call logic found"
-else
-    echo "❌ Identity API call logic NOT found"
-fi
-
-# Check if one-account rule exists
-if grep -q "One-Account Rule" supabase/functions/ebay-publish/index.ts; then
-    echo "✅ One-account enforcement rule found"
-else
-    echo "❌ One-account enforcement rule NOT found"
-fi
-
-# Check if ebay_username is stored
-if grep -q "ebay_username" supabase/functions/ebay-publish/index.ts; then
-    echo "✅ eBay username storage logic found"
-else
-    echo "❌ eBay username storage logic NOT found"
-fi
-
-# Check if ebay_account_type is stored
-if grep -q "ebay_account_type" supabase/functions/ebay-publish/index.ts; then
-    echo "✅ eBay account type storage logic found"
-else
-    echo "❌ eBay account type storage logic NOT found"
-fi
+check_grep "Identity API call logic found" "Identity API Call" "supabase/functions/ebay-publish/index.ts"
+check_grep "One-account enforcement rule found" "One-Account Rule" "supabase/functions/ebay-publish/index.ts"
+check_grep "eBay username storage logic found" "ebay_username" "supabase/functions/ebay-publish/index.ts"
+check_grep "eBay account type storage logic found" "ebay_account_type" "supabase/functions/ebay-publish/index.ts"
+check_grep "Identity endpoint switches by EBAY_ENVIRONMENT" "identityBase = ebayEnv === \"production\" ? \"https://apiz.ebay.com\" : \"https://apiz.sandbox.ebay.com\"" "supabase/functions/ebay-publish/index.ts"
+check_grep "Identity API non-OK guard exists" "Identity API failed" "supabase/functions/ebay-publish/index.ts"
 
 echo ""
 echo "📋 Test 3: Verify edge function endpoints are accessible"
@@ -141,26 +101,35 @@ echo ""
 echo "📋 Test 4: Check for TypeScript compilation errors"
 echo "---"
 
-# Simple check: make sure there are no obvious syntax errors by checking imports
 if grep -q "import { serve }" supabase/functions/analyze-item/index.ts && \
    grep -q "import { createClient }" supabase/functions/analyze-item/index.ts; then
     echo "✅ analyze-item has required imports"
+    PASS_COUNT=$((PASS_COUNT + 1))
 else
     echo "❌ analyze-item missing required imports"
+    FAIL_COUNT=$((FAIL_COUNT + 1))
 fi
 
 if grep -q "import { serve }" supabase/functions/ebay-publish/index.ts && \
    grep -q "import { createClient }" supabase/functions/ebay-publish/index.ts; then
     echo "✅ ebay-publish has required imports"
+    PASS_COUNT=$((PASS_COUNT + 1))
 else
     echo "❌ ebay-publish missing required imports"
+    FAIL_COUNT=$((FAIL_COUNT + 1))
 fi
 
 echo ""
-echo "📋 Summary: Code Changes Verified ✅"
+echo "📋 Summary"
 echo "---"
-echo "All Phase 2 code changes are in place. The edge functions will need to be"
-echo "deployed to Supabase for full end-to-end testing."
+echo "Passed checks: $PASS_COUNT"
+echo "Failed checks: $FAIL_COUNT"
+if [ "$FAIL_COUNT" -gt 0 ]; then
+    echo "Phase 2 validation FAILED. Fix required checks before deploy."
+    exit 1
+fi
+echo "All required Phase 2 code checks passed."
+echo "The edge functions still need deployment for full end-to-end verification."
 echo ""
 echo "Next steps:"
 echo "1. Deploy functions: supabase functions deploy"
