@@ -12,6 +12,13 @@ type ExtractRequest = {
   videoUrl?: string;
   maxFrames?: number;
   strategy?: string;
+  telemetry?: {
+    source?: string;
+    extractionMs?: number;
+    framesGenerated?: number;
+    reason?: string | null;
+    userAgent?: string;
+  };
   frames?: Array<{
     dataUrl: string;
     timestampSec: number;
@@ -92,6 +99,7 @@ serve(async (req: Request) => {
     const videoUrl = body.videoUrl?.trim();
     const maxFrames = Math.max(1, Math.min(12, body.maxFrames ?? 6));
     const strategy = body.strategy ?? "scene_change";
+    const telemetry = body.telemetry ?? {};
     const incomingFrames = Array.isArray(body.frames) ? body.frames.slice(0, maxFrames) : [];
 
     if (!videoUrl && incomingFrames.length === 0) {
@@ -133,6 +141,19 @@ serve(async (req: Request) => {
       }
     }
 
+    console.log("video-frame-extract telemetry", {
+      userId,
+      strategy,
+      source: telemetry.source ?? "unknown",
+      extractionMs: telemetry.extractionMs ?? null,
+      framesGenerated: telemetry.framesGenerated ?? incomingFrames.length,
+      reason: telemetry.reason ?? null,
+      userAgent: telemetry.userAgent ?? null,
+      incomingFrameCount: incomingFrames.length,
+      persistedFrameCount: frames.length,
+      mocked,
+    });
+
     // Fallback mock mode for compatibility if caller did not send frame payload yet.
     if (frames.length === 0) {
       mocked = true;
@@ -149,6 +170,7 @@ serve(async (req: Request) => {
         meta: {
           strategy,
           mocked,
+          extractionMode: mocked ? "mock_fallback" : "client_persisted",
           userId,
           durationSec: 8.4,
           framesExamined: incomingFrames.length > 0 ? incomingFrames.length : 24,
