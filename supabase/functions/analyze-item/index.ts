@@ -1469,7 +1469,7 @@ Seller's note: "${voiceNote}"`;
                     description: {
                       type: "string",
                       description:
-                        "SEO-friendly, sales-oriented eBay description. REQUIRED FORMAT: Use markdown for proper structure:\n\n## Main Heading\nIntroduction paragraph (2-3 sentences max). Use **bold** for key item names.\n\n## Specifications (or Item Details)\n- Year: value\n- Metal: value\n- Condition: value\n(continue with 3-5 bullet points)\n\n## Condition Details\nDetailed paragraph describing condition, wear, or grading.\n\n## Description\nFull narrative description and any relevant history.\n\n## (Optional) Additional Notes\nAny final details.\n\nRULES: Use only markdown (e.g. **bold**, ## headers, - bullet points, newlines). Do NOT use HTML tags like <p>, <strong>, <br>, <ul>, or <li>. System will convert to HTML. Each section must be preceded by a ## header on its own line. Use 2+ spaces between sections for readability.",
+                        "Write a natural, human-sounding eBay description in plain text. Do NOT output section headers or labels such as 'Opening Hook', 'Quick Specs', 'What Sets It Apart', 'Closing Statement', 'Overview', 'Specifications', or any markdown heading markers. Do NOT use HTML. Keep it concise and readable: 2-5 short paragraphs and optional simple bullet lines. Mention condition honestly, what is included, and specific visual details from the photos. Avoid robotic marketing language.",
                     },
                     price: {
                       type: "object",
@@ -1690,18 +1690,23 @@ Seller's note: "${voiceNote}"`;
         .replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, "")
         .replace(/\u{1F6A8}/gu, "") // police car light emoji specifically
         .replace(/[—–]/g, "-") // em-dash and en-dash -> hyphen
-        .replace(/\s+/g, " ")
         .trim();
 
       // Strip markdown formatting that was used by AI internally but shouldn't be in eBay description
       // PRESERVE content, remove only markdown syntax
       listing.description = listing.description
-        .replace(/^#+\s+/gm, "") // Remove markdown header markers (##, ###) but keep the header text
+        .replace(/^#+\s+/gm, "") // Remove header markers, keep header text
         .replace(/\*\*(.+?)\*\*/g, "$1") // Remove bold markdown (**text** -> text)
         .replace(/\*(.+?)\*/g, "$1") // Remove italic markdown (*text* -> text)
         .replace(/`(.+?)`/g, "$1") // Remove inline code markdown (`code` -> code)
-        .replace(/^\s*[-*+]\s+/gm, "") // Remove markdown bullet point markers but keep text
-        .replace(/\n{3,}/g, "\n\n") // Clean up excessive blank lines
+        .replace(/^\s*[-*+]\s+/gm, "") // Remove markdown bullet points
+        // Remove common AI section labels that leak into final text.
+        .replace(
+          /^\s*(?:opening\s*hook|what'?s\s*included|why\s*buy\s*this\s*item|what\s*sets\s*it\s*apart|key\s*details\s*(?:and\s*facts)?|condition\s*details|closing\s*statement|overall\s*condition|why\s*buy\s*this\s*lot|overview|additional\s*notes?)\s*[:\-–—]?\s*/gim,
+          "",
+        )
+        .replace(/[ \t]+/g, " ") // Collapse spaces/tabs without flattening newlines
+        .replace(/\n{3,}/g, "\n\n") // Clean up excessive newlines
         .trim();
 
       if (listing.description !== descBefore) {
