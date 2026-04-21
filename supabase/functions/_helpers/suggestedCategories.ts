@@ -163,6 +163,9 @@ const _LEGACY_BOOTSTRAP_BREADCRUMBS: Record<string, string> = {
 let _ebayTokenCache: { token: string; base: string } | null = null;
 
 async function getEbayAppToken(): Promise<{ token: string; base: string } | null> {
+  // Guard: Deno only (not available in Node.js test environments)
+  if (typeof Deno === "undefined") return null;
+
   if (_ebayTokenCache) return _ebayTokenCache;
   const clientId = Deno.env.get("EBAY_CLIENT_ID");
   const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
