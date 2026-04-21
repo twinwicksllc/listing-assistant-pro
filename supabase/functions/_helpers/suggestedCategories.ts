@@ -168,9 +168,7 @@ async function getEbayAppToken(): Promise<{ token: string; base: string } | null
   const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
   const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "production";
   if (!clientId || !clientSecret) return null;
-  const base = ebayEnv === "production"
-    ? "https://api.ebay.com"
-    : "https://api.sandbox.ebay.com";
+  const base = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
   try {
     const resp = await fetch(`${base}/identity/v1/oauth2/token`, {
       method: "POST",
@@ -185,7 +183,9 @@ async function getEbayAppToken(): Promise<{ token: string; base: string } | null
     if (!json.access_token) return null;
     _ebayTokenCache = { token: json.access_token, base };
     return _ebayTokenCache;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -204,14 +204,25 @@ async function fetchLiveBreadcrumb(cid: string, svc: any): Promise<string | null
     let resp: Response;
     try {
       resp = await fetch(
-        `${ebay.base}/commerce/taxonomy/v1/category_tree/0/get_category_subtree?category_id=${encodeURIComponent(currentId)}`,
+        `${ebay.base}/commerce/taxonomy/v1/category_tree/0/get_category_subtree?category_id=${
+          encodeURIComponent(currentId)
+        }`,
         { headers: { "Authorization": `Bearer ${ebay.token}` } },
       );
-    } catch { break; }
-    if (resp.status === 404) { if (depth === 0) return null; break; }
+    } catch {
+      break;
+    }
+    if (resp.status === 404) {
+      if (depth === 0) return null;
+      break;
+    }
     if (!resp.ok) break;
     let json: any;
-    try { json = await resp.json(); } catch { break; }
+    try {
+      json = await resp.json();
+    } catch {
+      break;
+    }
     const node = json?.categorySubtreeNode;
     if (!node?.category) break;
     parts.unshift(node.category.categoryName as string);

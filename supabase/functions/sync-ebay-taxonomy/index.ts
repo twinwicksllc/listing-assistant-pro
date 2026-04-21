@@ -19,12 +19,11 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 const CATEGORY_TREE_ID = "0"; // EBAY_US
-const BATCH_SIZE = 300;        // rows per upsert call
+const BATCH_SIZE = 300; // rows per upsert call
 
 // ── eBay token ────────────────────────────────────────────────────────────────
 
@@ -36,9 +35,7 @@ async function getEbayAppToken(): Promise<
   const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "production";
   if (!clientId || !clientSecret) return null;
 
-  const base = ebayEnv === "production"
-    ? "https://api.ebay.com"
-    : "https://api.sandbox.ebay.com";
+  const base = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
   const tokenUrl = `${base}/identity/v1/oauth2/token`;
 
   const resp = await fetch(tokenUrl, {
@@ -140,8 +137,7 @@ serve(async (req: Request) => {
   console.log("[sync-ebay-taxonomy] ✅ eBay token acquired");
 
   // ── 2. Fetch full category tree ───────────────────────────────────────────
-  const treeUrl =
-    `${ebay.base}/commerce/taxonomy/v1/category_tree/${CATEGORY_TREE_ID}`;
+  const treeUrl = `${ebay.base}/commerce/taxonomy/v1/category_tree/${CATEGORY_TREE_ID}`;
   console.log(`[sync-ebay-taxonomy] 📡 fetching ${treeUrl}`);
 
   const treeResp = await fetch(treeUrl, {
@@ -160,7 +156,11 @@ serve(async (req: Request) => {
     );
   }
 
-  console.log(`[sync-ebay-taxonomy] 📥 tree response received (${treeResp.headers.get("content-length") ?? "?"} bytes). Parsing...`);
+  console.log(
+    `[sync-ebay-taxonomy] 📥 tree response received (${
+      treeResp.headers.get("content-length") ?? "?"
+    } bytes). Parsing...`,
+  );
   const treeJson = await treeResp.json();
   const fetchMs = Date.now() - startMs;
   console.log(`[sync-ebay-taxonomy] ✅ tree parsed in ${fetchMs}ms`);
