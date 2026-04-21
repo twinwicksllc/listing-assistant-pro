@@ -36,6 +36,9 @@ verify_jwt = false
 [functions.category-lookup]
 verify_jwt = false
 
+[functions.sync-ebay-taxonomy]
+verify_jwt = false
+
 [functions.competitor-prices-cron]
 verify_jwt = false
 

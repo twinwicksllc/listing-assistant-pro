@@ -1692,9 +1692,21 @@ Seller's note: "${voiceNote}"`;
         .replace(/[—–]/g, "-") // em-dash and en-dash -> hyphen
         .replace(/\s+/g, " ")
         .trim();
+
+      // Strip markdown formatting that was used by AI internally but shouldn't be in eBay description
+      // Remove markdown headers (## HeaderName, ### SubHeader, etc.) but keep the content
+      listing.description = listing.description
+        .replace(/^#+\s+.+$/gm, "") // Remove header lines
+        .replace(/\n{3,}/g, "\n\n") // Clean up excessive newlines
+        .replace(/\*\*(.+?)\*\*/g, "$1") // Remove bold markdown (**text** -> text)
+        .replace(/\*(.+?)\*/g, "$1") // Remove italic markdown (*text* -> text)
+        .replace(/`(.+?)`/g, "$1") // Remove inline code markdown (`code` -> code)
+        .replace(/^\s*[-*+]\s+/gm, "") // Remove markdown bullet points
+        .trim();
+
       if (listing.description !== descBefore) {
         console.log(
-          `[${invocationId}] ProfessionalTone: cleaned description (removed emojis/dashes)`,
+          `[${invocationId}] ProfessionalTone: cleaned description (removed emojis/dashes/markdown)`,
         );
       }
     }

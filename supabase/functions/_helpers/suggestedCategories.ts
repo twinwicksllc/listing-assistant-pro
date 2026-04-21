@@ -1,9 +1,26 @@
 /**
- * Broad eBay category breadcrumb map — covers coins, collectibles, toys, electronics, etc.
- * Used server-side to provide breadcrumb names when building suggestedCategories.
- * When a category ID is NOT in this map, we fall back to the DB category_mappings table.
+ * suggestedCategories.ts — server-side breadcrumb resolution
+ *
+ * Provides `buildSuggestedCategories(listing, svc)` which turns the AI's raw
+ * category IDs into display-ready objects with full breadcrumb strings.
+ *
+ * Breadcrumb resolution order (no hardcoded maps — ever):
+ *  1. ebay_taxonomy_cache  — seeded weekly by sync-ebay-taxonomy cron
+ *  2. category_mappings    — legacy item-type→category DB records
+ *  3. Live eBay getCategorySubtree API — last-resort fallback; auto-caches result
+ *  4. null → caller renders "Category #<id>" label
+ *
+ * The weekly sync-ebay-taxonomy job covers ALL ~5 000 eBay US leaf categories
+ * so tiers 3 and 4 should only fire for brand-new categories or on the very
+ * first run before the sync has ever executed.
  */
-const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
+
+// ---------------------------------------------------------------------------
+// DEPRECATED: hardcoded map retained only as an emergency bootstrap reference.
+// After running sync-ebay-taxonomy at least once this entire object is unused.
+// DO NOT ADD NEW ENTRIES HERE — run the sync job instead.
+// ---------------------------------------------------------------------------
+const _LEGACY_BOOTSTRAP_BREADCRUMBS: Record<string, string> = {
   // ── Coins & Bullion ──────────────────────────────────────────────────────
   "178906": "Coins & Paper Money > Bullion > Gold > Bars & Rounds",
   "39489": "Coins & Paper Money > Bullion > Silver > Bars & Rounds",
@@ -31,6 +48,7 @@ const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
   "40155": "Coins & Paper Money > Coins: US > Pennies > Lincoln Wheat (1909-1958)",
   "40156": "Coins & Paper Money > Coins: US > Half Dollars > Kennedy (1964-Now)",
   "40157": "Coins & Paper Money > Coins: US > Half Dollars > Franklin (1948-1963)",
+  "39461": "Coins & Paper Money > Coins: US > Half Dollars > Commemorative",
   "40158": "Coins & Paper Money > Coins: US > Dollars > Sacagawea/Native American",
   "40159": "Coins & Paper Money > Coins: US > Dollars > Presidential",
   "40160": "Coins & Paper Money > Coins: US > Dollars > Susan B. Anthony",
@@ -139,6 +157,107 @@ const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
   "261": "Collectibles > Holiday & Seasonal > Christmas",
   "14339": "Collectibles > Banks, Registers & Vending > Still Banks",
 };
+// ── END LEGACY MAP ──────────────────────────────────────────────────────────
+
+// ── eBay App Token (lazy, cached per-module-invocation) ──────────────────────
+let _ebayTokenCache: { token: string; base: string } | null = null;
+
+async function getEbayAppToken(): Promise<{ token: string; base: string } | null> {
+  // Guard: Deno only (not available in Node.js test environments)
+  if (typeof Deno === "undefined") return null;
+
+  if (_ebayTokenCache) return _ebayTokenCache;
+  const clientId = Deno.env.get("EBAY_CLIENT_ID");
+  const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
+  const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "production";
+  if (!clientId || !clientSecret) return null;
+  const base = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
+  try {
+    const resp = await fetch(`${base}/identity/v1/oauth2/token`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
+    });
+    if (!resp.ok) return null;
+    const json = await resp.json();
+    if (!json.access_token) return null;
+    _ebayTokenCache = { token: json.access_token, base };
+    return _ebayTokenCache;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Live eBay getCategorySubtree fallback: walks up parentCategoryTreeNodeHref to
+ * reconstruct the full breadcrumb. Result is written to ebay_taxonomy_cache so
+ * subsequent lookups hit the DB instead of calling the API again.
+ */
+async function fetchLiveBreadcrumb(cid: string, svc: any): Promise<string | null> {
+  const ebay = await getEbayAppToken();
+  if (!ebay) return null;
+
+  const parts: string[] = [];
+  let currentId = cid;
+
+  for (let depth = 0; depth < 8; depth++) {
+    let resp: Response;
+    try {
+      resp = await fetch(
+        `${ebay.base}/commerce/taxonomy/v1/category_tree/0/get_category_subtree?category_id=${
+          encodeURIComponent(currentId)
+        }`,
+        { headers: { "Authorization": `Bearer ${ebay.token}` } },
+      );
+    } catch {
+      break;
+    }
+    if (resp.status === 404) {
+      if (depth === 0) return null;
+      break;
+    }
+    if (!resp.ok) break;
+    let json: any;
+    try {
+      json = await resp.json();
+    } catch {
+      break;
+    }
+    const node = json?.categorySubtreeNode;
+    if (!node?.category) break;
+    parts.unshift(node.category.categoryName as string);
+    const parentHref: string | undefined = node.parentCategoryTreeNodeHref;
+    if (!parentHref) break;
+    const match = parentHref.match(/category_id=(\d+)/);
+    if (!match) break;
+    const parentId = match[1];
+    if (parentId === currentId) break;
+    currentId = parentId;
+  }
+
+  if (parts.length === 0) return null;
+  const breadcrumb = parts.join(" > ");
+
+  // Cache the result so future calls are instant
+  if (svc) {
+    try {
+      await svc.from("ebay_taxonomy_cache").upsert(
+        {
+          category_id: cid,
+          category_name: parts[parts.length - 1],
+          breadcrumb,
+          is_leaf: true,
+          synced_at: new Date().toISOString(),
+        },
+        { onConflict: "category_id" },
+      );
+    } catch (_) { /* cache write failure is non-fatal */ }
+  }
+  return breadcrumb;
+}
 
 /**
  * Extracts the last segment (leaf name) from a breadcrumb string.
@@ -149,22 +268,45 @@ function leafName(breadcrumb: string): string {
   return parts[parts.length - 1] || breadcrumb;
 }
 
-// Helper: look up breadcrumb for a category ID — DB first, then hardcoded map
+/**
+ * Resolve breadcrumb for a category ID.
+ *
+ * Resolution order:
+ *  1. ebay_taxonomy_cache  — written by weekly sync-ebay-taxonomy cron
+ *  2. category_mappings    — legacy per-item-type records from category-lookup
+ *  3. Live eBay API        — getCategorySubtree walk; result is auto-cached
+ *  4. Legacy bootstrap map — only until the first sync has run (deprecated)
+ */
 async function lookupBreadcrumb(cid: string, svc: any): Promise<string | null> {
-  // 1. Try DB (has dynamic breadcrumbs from eBay getCategorySuggestions)
+  // Tier 1: taxonomy cache (primary source after first sync)
   if (svc) {
+    try {
+      const { data: row } = await svc
+        .from("ebay_taxonomy_cache")
+        .select("breadcrumb")
+        .eq("category_id", cid)
+        .maybeSingle();
+      if (row?.breadcrumb) return row.breadcrumb as string;
+    } catch (_) { /* ignore */ }
+
+    // Tier 2: legacy category_mappings
     try {
       const { data: row } = await svc
         .from("category_mappings")
         .select("breadcrumb, category_name")
         .eq("ebay_category_id", cid)
         .maybeSingle();
-      if (row?.breadcrumb) return row.breadcrumb;
-      if (row?.category_name) return row.category_name;
+      if (row?.breadcrumb) return row.breadcrumb as string;
+      if (row?.category_name) return row.category_name as string;
     } catch (_) { /* ignore */ }
   }
-  // 2. Fall back to hardcoded map
-  return EBAY_CATEGORY_BREADCRUMBS[cid] || null;
+
+  // Tier 3: live eBay API (also seeds DB for next time)
+  const live = await fetchLiveBreadcrumb(cid, svc);
+  if (live) return live;
+
+  // Tier 4: legacy bootstrap map (only fires before the first sync has ever run)
+  return _LEGACY_BOOTSTRAP_BREADCRUMBS[cid] ?? null;
 }
 
 export async function buildSuggestedCategories(listing: any, svc: any) {
@@ -172,7 +314,7 @@ export async function buildSuggestedCategories(listing: any, svc: any) {
   const seen = new Set<string>();
   const finalSuggestions: any[] = [];
 
-  // Start with AI-provided primary category (ebayCategoryId)
+  // 1. AI-provided primary category
   if (listing.ebayCategoryId) {
     const cid = normalizeId(listing.ebayCategoryId);
     seen.add(cid);
@@ -180,12 +322,12 @@ export async function buildSuggestedCategories(listing: any, svc: any) {
     finalSuggestions.push({
       categoryId: cid,
       categoryName: breadcrumb ? leafName(breadcrumb) : null,
-      breadcrumb: breadcrumb,
+      breadcrumb,
       reason: "Primary category from AI",
     });
   }
 
-  // Add AI-provided alternative categories
+  // 2. AI-provided alternative categories
   if (Array.isArray(listing.alternativeCategoryIds)) {
     for (const altId of listing.alternativeCategoryIds) {
       const cid = normalizeId(altId);
@@ -195,39 +337,39 @@ export async function buildSuggestedCategories(listing: any, svc: any) {
       finalSuggestions.push({
         categoryId: cid,
         categoryName: breadcrumb ? leafName(breadcrumb) : null,
-        breadcrumb: breadcrumb,
+        breadcrumb,
         reason: "Alternative from AI",
       });
       if (finalSuggestions.length >= 3) break;
     }
   }
 
-  // Add any existing suggestions (legacy support)
+  // 3. Any categories already on listing.suggestedCategories (legacy / pass-through)
   if (Array.isArray(listing.suggestedCategories)) {
     for (const s of listing.suggestedCategories) {
       const cid = normalizeId(s?.categoryId);
       if (!cid || seen.has(cid)) continue;
       seen.add(cid);
-      const breadcrumb = await lookupBreadcrumb(cid, svc) || s.breadcrumb ||
-        null;
+      // Prefer live DB lookup, but accept any breadcrumb upstream already resolved
+      const breadcrumb = (await lookupBreadcrumb(cid, svc)) ?? s.breadcrumb ?? null;
       finalSuggestions.push({
         categoryId: cid,
-        categoryName: breadcrumb ? leafName(breadcrumb) : (s.categoryName || null),
-        breadcrumb: breadcrumb,
-        reason: s.reason || "AI suggestion",
+        categoryName: breadcrumb ? leafName(breadcrumb) : (s.categoryName ?? null),
+        breadcrumb,
+        reason: s.reason ?? "AI suggestion",
       });
       if (finalSuggestions.length >= 3) break;
     }
   }
 
-  // Backfill: ensure every suggestion has at least a breadcrumb or categoryName
+  // Backfill: ensure every suggestion has at least something to display
   for (let i = 0; i < finalSuggestions.length; i++) {
-    if (!finalSuggestions[i].breadcrumb && !finalSuggestions[i].categoryName) {
-      finalSuggestions[i].categoryName = `Category #${finalSuggestions[i].categoryId}`;
+    const s = finalSuggestions[i];
+    if (!s.breadcrumb && !s.categoryName) {
+      s.categoryName = `Category #${s.categoryId}`;
     }
-    // If we still don't have a breadcrumb but have a categoryName, make it the breadcrumb
-    if (!finalSuggestions[i].breadcrumb) {
-      finalSuggestions[i].breadcrumb = finalSuggestions[i].categoryName;
+    if (!s.breadcrumb) {
+      s.breadcrumb = s.categoryName;
     }
   }
 

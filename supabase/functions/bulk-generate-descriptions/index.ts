@@ -152,7 +152,8 @@ serve(async (req: Request) => {
           .toLowerCase()
           .replace(/\b\w/g, (c) => c.toUpperCase());
 
-        const prompt = `Write a compelling eBay listing description for this item. I want a HUMAN-sounding description that is professional but conversational. Imagine you are an enthusiastic eBay seller.
+        const prompt =
+          `Write a compelling eBay listing description for this item. I want a HUMAN-sounding description that is professional but conversational. Imagine you are an enthusiastic eBay seller.
 
 Title: ${row.title}
 Condition: ${conditionLabel}
