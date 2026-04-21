@@ -1701,7 +1701,10 @@ Seller's note: "${voiceNote}"`;
         .replace(/`(.+?)`/g, "$1") // Remove inline code markdown (`code` -> code)
         .replace(/^\s*[-*+]\s+/gm, "") // Remove markdown bullet points
         // Remove common AI section labels that leak into final text.
-        .replace(/^\s*(?:opening\s*hook|what'?s\s*included|why\s*buy\s*this\s*item|what\s*sets\s*it\s*apart|key\s*details\s*(?:and\s*facts)?|condition\s*details|closing\s*statement|overall\s*condition|why\s*buy\s*this\s*lot|overview|additional\s*notes?)\s*[:\-–—]?\s*/gim, "")
+        .replace(
+          /^\s*(?:opening\s*hook|what'?s\s*included|why\s*buy\s*this\s*item|what\s*sets\s*it\s*apart|key\s*details\s*(?:and\s*facts)?|condition\s*details|closing\s*statement|overall\s*condition|why\s*buy\s*this\s*lot|overview|additional\s*notes?)\s*[:\-–—]?\s*/gim,
+          "",
+        )
         .replace(/[ \t]+/g, " ") // Collapse spaces/tabs without flattening newlines
         .replace(/\n{3,}/g, "\n\n") // Clean up excessive newlines
         .trim();
