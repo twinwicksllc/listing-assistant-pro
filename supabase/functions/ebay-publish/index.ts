@@ -2180,7 +2180,7 @@ serve(async (req) => {
 
     const clientId = Deno.env.get("EBAY_CLIENT_ID");
     const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
-    const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
+    const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "production";
 
     // Environment diagnostic log — emitted on every invocation to aid debugging.
     // Masks secrets: shows only first 8 chars of clientId, booleans for secrets.
