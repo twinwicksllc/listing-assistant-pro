@@ -2232,7 +2232,7 @@ serve(async (req) => {
     const tokenUrl = ebayUrl(
       ebayEnv === "production"
         ? "https://api.ebay.com/identity/v1/oauth2/token"
-        : "https://api.sandbox.ebay.com/identity/v1/oauth2/token"
+        : "https://api.sandbox.ebay.com/identity/v1/oauth2/token",
     );
 
     // If proxy is configured, apiBase already routes through the proxy so ALL
