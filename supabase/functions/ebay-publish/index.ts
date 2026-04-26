@@ -1996,7 +1996,7 @@ async function ensureInventoryLocation(
     `${apiBase}/sell/inventory/v1/location/${merchantLocationKey}`,
     {
       method: "POST",
-      headers: {
+      headers: proxyHeaders({
         Authorization: `Bearer ${userToken}`,
         "Content-Type": "application/json",
         "Content-Language": "en-US",
@@ -2004,7 +2004,7 @@ async function ensureInventoryLocation(
         // Deno's runtime auto-injects the system locale when omitted,
         // sending an invalid value that eBay rejects with errorId 25709.
         "Accept-Language": "en-US",
-      },
+      }),
       body: JSON.stringify(locationBody),
       timeout: 15000,
     },
@@ -2040,10 +2040,10 @@ async function ensureInventoryLocation(
       `${apiBase}/sell/inventory/v1/location/${merchantLocationKey}`,
       {
         method: "DELETE",
-        headers: {
+        headers: proxyHeaders({
           Authorization: `Bearer ${userToken}`,
           "Accept-Language": "en-US",
-        },
+        }),
         timeout: 15000,
       },
     );
@@ -2056,12 +2056,12 @@ async function ensureInventoryLocation(
         `${apiBase}/sell/inventory/v1/location/${merchantLocationKey}`,
         {
           method: "POST",
-          headers: {
+          headers: proxyHeaders({
             Authorization: `Bearer ${userToken}`,
             "Content-Type": "application/json",
             "Content-Language": "en-US",
             "Accept-Language": "en-US",
-          },
+          }),
           body: JSON.stringify(locationBody),
           timeout: 15000,
         },
@@ -2094,12 +2094,12 @@ async function ensureInventoryLocation(
       `${apiBase}/sell/inventory/v1/location/${fallbackKey}`,
       {
         method: "POST",
-        headers: {
+        headers: proxyHeaders({
           Authorization: `Bearer ${userToken}`,
           "Content-Type": "application/json",
           "Content-Language": "en-US",
           "Accept-Language": "en-US",
-        },
+        }),
         body: JSON.stringify(locationBody),
         timeout: 15000,
       },
@@ -2204,11 +2204,46 @@ serve(async (req) => {
       throw new Error("eBay API credentials not configured");
     }
 
-    const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
+    // EBAY_PROXY_URL: optional Cloudflare Worker proxy URL (e.g. https://ebay-proxy.yourname.workers.dev)
+    // Set this in Supabase Edge Function secrets if api.ebay.com is unreachable from your region.
+    // The proxy routes /api/* -> api.ebay.com, /sandbox/* -> api.sandbox.ebay.com,
+    //                  /apiz/* -> apiz.ebay.com, /apiz-sandbox/* -> apiz.sandbox.ebay.com
+    const proxyUrl = Deno.env.get("EBAY_PROXY_URL")?.replace(/\/$/, "") ?? null;
+    const proxySecret = Deno.env.get("EBAY_PROXY_SECRET") ?? null;
+
+    // Helper: rewrite an eBay URL to go through the proxy if configured
+    function ebayUrl(url: string): string {
+      if (!proxyUrl) return url;
+      return url
+        .replace("https://apiz.sandbox.ebay.com", `${proxyUrl}/apiz-sandbox`)
+        .replace("https://apiz.ebay.com", `${proxyUrl}/apiz`)
+        .replace("https://api.sandbox.ebay.com", `${proxyUrl}/sandbox`)
+        .replace("https://api.ebay.com", `${proxyUrl}/api`);
+    }
+
+    // Helper: add proxy secret header when proxy is configured
+    function proxyHeaders(base: Record<string, string> = {}): Record<string, string> {
+      if (!proxyUrl || !proxySecret) return base;
+      return { ...base, "X-Proxy-Secret": proxySecret };
+    }
+
+    const _apiBaseRaw = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
     const authBase = ebayEnv === "production" ? "https://auth.ebay.com" : "https://auth.sandbox.ebay.com";
-    const tokenUrl = ebayEnv === "production"
-      ? "https://api.ebay.com/identity/v1/oauth2/token"
-      : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
+    const tokenUrl = ebayUrl(
+      ebayEnv === "production"
+        ? "https://api.ebay.com/identity/v1/oauth2/token"
+        : "https://api.sandbox.ebay.com/identity/v1/oauth2/token"
+    );
+
+    // If proxy is configured, apiBase already routes through the proxy so ALL
+    // existing `${apiBase}/...` calls are automatically proxied without changes.
+    const apiBase = ebayUrl(_apiBaseRaw);
+
+    console.log("ebay-publish urls:", {
+      proxyConfigured: !!proxyUrl,
+      tokenUrl,
+      apiBase,
+    });
 
     // --- ACTION: Get OAuth consent URL ---
     if (action === "get_auth_url") {
@@ -2265,10 +2300,10 @@ serve(async (req) => {
       const resp = await fetchWithTimeout(tokenUrl, {
         method: "POST",
         timeout: 15000,
-        headers: {
+        headers: proxyHeaders({
           Authorization: `Basic ${credentials}`,
           "Content-Type": "application/x-www-form-urlencoded",
-        },
+        }),
         body: new URLSearchParams({
           grant_type: "authorization_code",
           code,
@@ -2381,8 +2416,8 @@ serve(async (req) => {
         const identityBase = ebayEnv === "production" ? "https://apiz.ebay.com" : "https://apiz.sandbox.ebay.com";
 
         const identityRes = await fetch(
-          `${identityBase}/commerce/identity/v1/user/`,
-          { headers: { Authorization: `Bearer ${tokenData.access_token}` } },
+          ebayUrl(`${identityBase}/commerce/identity/v1/user/`),
+          { headers: proxyHeaders({ Authorization: `Bearer ${tokenData.access_token}` }) },
         );
         if (!identityRes.ok) {
           const identityErrText = await identityRes.text();
@@ -2542,10 +2577,10 @@ serve(async (req) => {
       const refreshResp = await fetchWithTimeout(tokenUrl, {
         method: "POST",
         timeout: 15000,
-        headers: {
+        headers: proxyHeaders({
           Authorization: `Basic ${credentials}`,
           "Content-Type": "application/x-www-form-urlencoded",
-        },
+        }),
         body: new URLSearchParams({
           grant_type: "refresh_token",
           refresh_token: data.ebay_refresh_token,
@@ -2699,10 +2734,10 @@ serve(async (req) => {
           const refreshResp = await fetchWithTimeout(tokenUrl, {
             method: "POST",
             timeout: 15000,
-            headers: {
+            headers: proxyHeaders({
               Authorization: `Basic ${credentials}`,
               "Content-Type": "application/x-www-form-urlencoded",
-            },
+            }),
             body: new URLSearchParams({
               grant_type: "refresh_token",
               refresh_token: data.ebay_refresh_token,
@@ -2799,10 +2834,10 @@ serve(async (req) => {
       if (!videoUrl) throw new Error("No videoUrl provided");
 
       // Step 1: Create the video entity in eBay
-      const createResp = await fetchWithTimeout(`${apiBase}/sell/marketing/v1_beta/video`, {
+      const createResp = await fetchWithTimeout(ebayUrl(`${apiBase}/sell/marketing/v1_beta/video`), {
         method: "POST",
         timeout: 15000,
-        headers: { Authorization: `Bearer ${userToken}`, "Content-Type": "application/json" },
+        headers: proxyHeaders({ Authorization: `Bearer ${userToken}`, "Content-Type": "application/json" }),
         body: JSON.stringify({ title: videoTitle || "Item Video", size: Number(fileSize) || 0 }),
       });
       if (!createResp.ok) {
@@ -2821,13 +2856,13 @@ serve(async (req) => {
       }
 
       // Step 3: Upload bytes to eBay (no short timeout — large files may take minutes)
-      const uploadResp = await fetch(`${apiBase}/sell/marketing/v1_beta/video/${videoId}/upload`, {
+      const uploadResp = await fetch(ebayUrl(`${apiBase}/sell/marketing/v1_beta/video/${videoId}/upload`), {
         method: "PUT",
-        headers: {
+        headers: proxyHeaders({
           Authorization: `Bearer ${userToken}`,
           "Content-Type": (contentType as string) || "video/mp4",
           ...(fileSize ? { "Content-Length": String(fileSize) } : {}),
-        },
+        }),
         body: videoFetchResp.body,
       });
       if (!uploadResp.ok && uploadResp.status !== 204) {
@@ -2847,9 +2882,9 @@ serve(async (req) => {
       if (!userToken) throw new Error("No eBay user token provided");
       if (!videoId) throw new Error("No videoId provided");
 
-      const statusResp = await fetchWithTimeout(`${apiBase}/sell/marketing/v1_beta/video/${videoId}`, {
+      const statusResp = await fetchWithTimeout(ebayUrl(`${apiBase}/sell/marketing/v1_beta/video/${videoId}`), {
         timeout: 10000,
-        headers: { Authorization: `Bearer ${userToken}`, "Accept-Language": "en-US" },
+        headers: proxyHeaders({ Authorization: `Bearer ${userToken}`, "Accept-Language": "en-US" }),
       });
       if (!statusResp.ok) {
         const e = await statusResp.text();
@@ -3203,12 +3238,12 @@ serve(async (req) => {
       // Deno's runtime auto-injects the system locale when this header is omitted,
       // sending an invalid value that eBay rejects with errorId 25709.
       // Explicitly providing "en-US" overrides Deno's injected value.
-      const authHeaders = {
+      const authHeaders = proxyHeaders({
         Authorization: `Bearer ${userToken}`,
         "Content-Type": "application/json",
         "Content-Language": "en-US",
         "Accept-Language": "en-US",
-      };
+      });
 
       // Step 1: Ensure inventory location exists before creating the item.
       // The item's shipToLocationAvailability references this location by key,
@@ -3918,12 +3953,12 @@ serve(async (req) => {
       // Deno's runtime auto-injects the system locale when this header is omitted,
       // sending an invalid value that eBay rejects with errorId 25709.
       // Explicitly providing "en-US" overrides Deno's injected value.
-      const authHeaders = {
+      const authHeaders = proxyHeaders({
         Authorization: `Bearer ${resolvedToken}`,
         "Content-Type": "application/json",
         "Content-Language": "en-US",
         "Accept-Language": "en-US",
-      };
+      });
 
       // Fetch each policy type independently so one failure doesn't kill all three.
       // Returns { policies, error } — error is non-null if the fetch failed.
