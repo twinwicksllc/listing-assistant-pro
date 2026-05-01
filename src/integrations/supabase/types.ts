@@ -151,31 +151,37 @@ export type Database = {
       gemini_usage: {
         Row: {
           completion_tokens: number
+          cost_usd: number
           created_at: string
           function_name: string
           id: string
           model: string
           prompt_tokens: number
+          provider: string
           total_tokens: number
           user_id: string | null
         }
         Insert: {
           completion_tokens?: number
+          cost_usd?: number
           created_at?: string
           function_name: string
           id?: string
           model: string
           prompt_tokens?: number
+          provider?: string
           total_tokens?: number
           user_id?: string | null
         }
         Update: {
           completion_tokens?: number
+          cost_usd?: number
           created_at?: string
           function_name?: string
           id?: string
           model?: string
           prompt_tokens?: number
+          provider?: string
           total_tokens?: number
           user_id?: string | null
         }
