@@ -48,12 +48,20 @@ async function fetchWithTimeout(
  * Run GPT-4o Vision OCR on slab label(s) in the provided images.
  * Returns null if OCR fails or no slab is detected (caller should proceed normally).
  */
+export interface SlabOcrUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  costUsd: number;
+}
+
 export async function runSlabOcr(
   openAiApiKey: string,
   base64Images: string[], // base64-encoded image data (no data: prefix)
   mimeTypes: string[], // corresponding MIME types e.g. "image/jpeg"
   invocationId: string,
-): Promise<SlabOcrResult | null> {
+  userId?: string | null, // optional: for OpenAI user attribution + usage logging
+): Promise<(SlabOcrResult & { _usage?: SlabOcrUsage }) | null> {
   const label = `[${invocationId}][SlabOCR]`;
 
   if (!openAiApiKey) {
@@ -103,9 +111,12 @@ Return ONLY valid JSON, no markdown, no explanation:
   "rawLabelText": "full verbatim text from label" | null
 }`;
 
-  const requestBody = {
+  const requestBody: Record<string, unknown> = {
     model: "gpt-4o",
     max_tokens: 500,
+    // user field: correlates this request to a user in OpenAI usage dashboard
+    // format: "uid_<supabase_user_id>" — lets us attribute spend per user
+    ...(userId ? { user: `uid_${userId}` } : {}),
     messages: [
       {
         role: "system",
@@ -160,6 +171,13 @@ Return ONLY valid JSON, no markdown, no explanation:
 
     const parsed = JSON.parse(content) as SlabOcrResult;
 
+    // Capture token usage for logging
+    const promptTokens = data.usage?.prompt_tokens ?? 0;
+    const completionTokens = data.usage?.completion_tokens ?? 0;
+    const totalTokens = data.usage?.total_tokens ?? 0;
+    // GPT-4o pricing: $2.50/1M input tokens, $10.00/1M output tokens
+    const costUsd = (promptTokens * 0.0000025) + (completionTokens * 0.000010);
+
     console.log(`${label} OCR result:`, {
       isSlabbed: parsed.isSlabbed,
       grader: parsed.grader,
@@ -168,9 +186,14 @@ Return ONLY valid JSON, no markdown, no explanation:
       grade: parsed.grade,
       certNumber: parsed.certNumber,
       coinName: parsed.coinName,
+      tokens: totalTokens,
+      costUsd: costUsd.toFixed(6),
     });
 
-    return parsed;
+    return {
+      ...parsed,
+      _usage: { promptTokens, completionTokens, totalTokens, costUsd },
+    };
   } catch (err) {
     console.warn(`${label} Slab OCR failed (non-blocking):`, String(err));
     return null;

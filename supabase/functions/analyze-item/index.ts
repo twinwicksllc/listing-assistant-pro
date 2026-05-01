@@ -621,10 +621,26 @@ serve(async (req: Request) => {
           ocrBase64List,
           ocrMimeList,
           invocationId,
+          userId, // pass userId for OpenAI user attribution
         );
         console.log(
           `[${invocationId}] Slab OCR result: isSlabbed=${slabOcrResult?.isSlabbed}, grader=${slabOcrResult?.grader}, year=${slabOcrResult?.year}, grade=${slabOcrResult?.grade}, certNumber=${slabOcrResult?.certNumber}`,
         );
+        // Log OpenAI usage for cost tracking (non-blocking)
+        if (slabOcrResult?._usage) {
+          svc.from("gemini_usage").insert({
+            user_id: userId,
+            function_name: "analyze-item/slab-ocr",
+            model: "gpt-4o",
+            provider: "openai",
+            prompt_tokens: slabOcrResult._usage.promptTokens,
+            completion_tokens: slabOcrResult._usage.completionTokens,
+            total_tokens: slabOcrResult._usage.totalTokens,
+            cost_usd: slabOcrResult._usage.costUsd,
+          }).then(() => {}).catch((e: unknown) =>
+            console.warn(`[${invocationId}] Failed to log OpenAI slab OCR usage:`, String(e))
+          );
+        }
         if (slabOcrResult?.isSlabbed) {
           console.log(
             `[${invocationId}] Slab OCR: detected slab, grader=${slabOcrResult.grader}, year=${slabOcrResult.year}, grade=${slabOcrResult.grade}, certNumber=${slabOcrResult.certNumber}`,
