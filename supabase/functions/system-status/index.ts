@@ -95,7 +95,10 @@ serve(async (req) => {
       estimatedCost: 0,
       inputTokens: 0,
       outputTokens: 0,
-      byFunction: {} as Record<string, { calls: number; cost: number; inputTokens: number; outputTokens: number }>,
+      byFunction: {} as Record<
+        string,
+        { calls: number; cost: number; inputTokens: number; outputTokens: number }
+      >,
       last30DaysCost: [] as any[],
     };
     const openaiUsage = {
@@ -104,7 +107,10 @@ serve(async (req) => {
       inputTokens: 0,
       outputTokens: 0,
       estimatedCost: 0,
-      byFunction: {} as Record<string, { calls: number; cost: number; inputTokens: number; outputTokens: number }>,
+      byFunction: {} as Record<
+        string,
+        { calls: number; cost: number; inputTokens: number; outputTokens: number }
+      >,
       byUser: [] as { userId: string; calls: number; cost: number }[],
       last30Days: [] as any[],
       last30DaysCost: [] as any[],
@@ -142,19 +148,30 @@ serve(async (req) => {
 
         // --- Gemini stats ---
         geminiUsage.totalCalls = geminiRows.length;
-        const inputTokens = geminiRows.reduce((sum: number, r: any) => sum + (r.prompt_tokens || 0), 0);
-        const outputTokens = geminiRows.reduce((sum: number, r: any) => sum + (r.completion_tokens || 0), 0);
+        const inputTokens = geminiRows.reduce(
+          (sum: number, r: any) => sum + (r.prompt_tokens || 0),
+          0,
+        );
+        const outputTokens = geminiRows.reduce(
+          (sum: number, r: any) => sum + (r.completion_tokens || 0),
+          0,
+        );
         geminiUsage.inputTokens = inputTokens;
         geminiUsage.outputTokens = outputTokens;
         geminiUsage.totalTokens = inputTokens + outputTokens;
         geminiUsage.estimatedCost = geminiRows.reduce((sum: number, r: any) => sum + rowCost(r), 0);
 
         // Gemini: Group by day
-        const byDay: Record<string, { calls: number; tokens: number; cost: number; inputTokens: number; outputTokens: number }> = {};
+        const byDay: Record<
+          string,
+          { calls: number; tokens: number; cost: number; inputTokens: number; outputTokens: number }
+        > = {};
         for (const row of geminiRows) {
           const day = row.created_at.split("T")[0];
           const cost = rowCost(row);
-          if (!byDay[day]) byDay[day] = { calls: 0, tokens: 0, cost: 0, inputTokens: 0, outputTokens: 0 };
+          if (!byDay[day]) {
+            byDay[day] = { calls: 0, tokens: 0, cost: 0, inputTokens: 0, outputTokens: 0 };
+          }
           byDay[day].calls++;
           byDay[day].tokens += row.total_tokens || 0;
           byDay[day].cost += cost;
@@ -167,10 +184,15 @@ serve(async (req) => {
         geminiUsage.last30DaysCost = geminiUsage.last30Days;
 
         // Gemini: Group by function
-        const byFunction: Record<string, { calls: number; cost: number; inputTokens: number; outputTokens: number }> = {};
+        const byFunction: Record<
+          string,
+          { calls: number; cost: number; inputTokens: number; outputTokens: number }
+        > = {};
         for (const row of geminiRows) {
           const func = row.function_name || "unknown";
-          if (!byFunction[func]) byFunction[func] = { calls: 0, cost: 0, inputTokens: 0, outputTokens: 0 };
+          if (!byFunction[func]) {
+            byFunction[func] = { calls: 0, cost: 0, inputTokens: 0, outputTokens: 0 };
+          }
           byFunction[func].calls++;
           byFunction[func].cost += rowCost(row);
           byFunction[func].inputTokens += row.prompt_tokens || 0;
@@ -180,17 +202,28 @@ serve(async (req) => {
 
         // --- OpenAI stats ---
         openaiUsage.totalCalls = openaiRows.length;
-        openaiUsage.inputTokens = openaiRows.reduce((sum: number, r: any) => sum + (r.prompt_tokens || 0), 0);
-        openaiUsage.outputTokens = openaiRows.reduce((sum: number, r: any) => sum + (r.completion_tokens || 0), 0);
+        openaiUsage.inputTokens = openaiRows.reduce(
+          (sum: number, r: any) => sum + (r.prompt_tokens || 0),
+          0,
+        );
+        openaiUsage.outputTokens = openaiRows.reduce(
+          (sum: number, r: any) => sum + (r.completion_tokens || 0),
+          0,
+        );
         openaiUsage.totalTokens = openaiUsage.inputTokens + openaiUsage.outputTokens;
         openaiUsage.estimatedCost = openaiRows.reduce((sum: number, r: any) => sum + rowCost(r), 0);
 
         // OpenAI: Group by day
-        const oaiByDay: Record<string, { calls: number; tokens: number; cost: number; inputTokens: number; outputTokens: number }> = {};
+        const oaiByDay: Record<
+          string,
+          { calls: number; tokens: number; cost: number; inputTokens: number; outputTokens: number }
+        > = {};
         for (const row of openaiRows) {
           const day = row.created_at.split("T")[0];
           const cost = rowCost(row);
-          if (!oaiByDay[day]) oaiByDay[day] = { calls: 0, tokens: 0, cost: 0, inputTokens: 0, outputTokens: 0 };
+          if (!oaiByDay[day]) {
+            oaiByDay[day] = { calls: 0, tokens: 0, cost: 0, inputTokens: 0, outputTokens: 0 };
+          }
           oaiByDay[day].calls++;
           oaiByDay[day].tokens += row.total_tokens || 0;
           oaiByDay[day].cost += cost;
@@ -203,10 +236,15 @@ serve(async (req) => {
         openaiUsage.last30DaysCost = openaiUsage.last30Days;
 
         // OpenAI: Group by function
-        const oaiByFunction: Record<string, { calls: number; cost: number; inputTokens: number; outputTokens: number }> = {};
+        const oaiByFunction: Record<
+          string,
+          { calls: number; cost: number; inputTokens: number; outputTokens: number }
+        > = {};
         for (const row of openaiRows) {
           const func = row.function_name || "unknown";
-          if (!oaiByFunction[func]) oaiByFunction[func] = { calls: 0, cost: 0, inputTokens: 0, outputTokens: 0 };
+          if (!oaiByFunction[func]) {
+            oaiByFunction[func] = { calls: 0, cost: 0, inputTokens: 0, outputTokens: 0 };
+          }
           oaiByFunction[func].calls++;
           oaiByFunction[func].cost += rowCost(row);
           oaiByFunction[func].inputTokens += row.prompt_tokens || 0;
