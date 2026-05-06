@@ -598,8 +598,8 @@ serve(async (req: Request) => {
     // Non-blocking: failure leaves slabOcrResult = null, pipeline continues.
     let slabOcrResult: Awaited<ReturnType<typeof import("../_helpers/slabOcr.ts").runSlabOcr>> = null;
     try {
-      const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-      if (OPENAI_API_KEY) {
+      const NEW_OPENAI_API_KEY = Deno.env.get("NEW_OPENAI_API_KEY");
+      if (NEW_OPENAI_API_KEY) {
         const { runSlabOcr } = await import("../_helpers/slabOcr.ts");
         const ocrBase64List: string[] = [];
         const ocrMimeList: string[] = [];
@@ -613,7 +613,7 @@ serve(async (req: Request) => {
           `[${invocationId}] Calling Slab OCR with ${ocrBase64List.length} images (domain=${identification.domain})`,
         );
         slabOcrResult = await runSlabOcr(
-          OPENAI_API_KEY,
+          NEW_OPENAI_API_KEY,
           ocrBase64List,
           ocrMimeList,
           invocationId,
@@ -645,7 +645,7 @@ serve(async (req: Request) => {
         }
       } else {
         console.warn(
-          `[${invocationId}] Slab OCR: OPENAI_API_KEY not set — skipping`,
+          `[${invocationId}] Slab OCR: NEW_OPENAI_API_KEY not set — skipping`,
         );
       }
     } catch (ocrErr) {

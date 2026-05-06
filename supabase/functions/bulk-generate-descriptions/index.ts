@@ -125,7 +125,7 @@ serve(async (req: Request) => {
       );
     }
 
-    const openAiKey = Deno.env.get("OPENAI_API_KEY");
+    const openAiKey = Deno.env.get("NEW_OPENAI_API_KEY");
     if (!openAiKey) {
       return new Response(
         JSON.stringify({ error: "OpenAI API not configured" }),

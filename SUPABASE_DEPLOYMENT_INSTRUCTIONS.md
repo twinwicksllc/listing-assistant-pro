@@ -133,7 +133,7 @@ Expected response (dry-run):
 Both functions use the following Supabase environment variables automatically:
 - `SUPABASE_URL` (auto-injected)
 - `SUPABASE_SERVICE_ROLE_KEY` (auto-injected)
-- `OPENAI_API_KEY` (already configured for existing `analyze-item` function)
+- `NEW_OPENAI_API_KEY` (already configured for existing `analyze-item` function)
 
 No additional env vars required for the new functions.
 
