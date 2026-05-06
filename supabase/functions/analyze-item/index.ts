@@ -663,16 +663,14 @@ serve(async (req: Request) => {
             `\`${invocationId}\` Slab OCR: no slab detected (isSlabbed=\${slabOcrResult?.isSlabbed || "false"}, grader=\${slabOcrResult?.grader || "null"})`,
           );
         }
+      } else if (!NEW_OPENAI_API_KEY) {
+        console.warn(
+          `[${invocationId}] Slab OCR: NEW_OPENAI_API_KEY not set — skipping`,
+        );
       } else {
-        if (!Deno.env.get("NEW_OPENAI_API_KEY")) {
-          console.warn(
-            `[${invocationId}] Slab OCR: NEW_OPENAI_API_KEY not set — skipping`,
-          );
-        } else {
-          console.log(
-            `[${invocationId}] Slab OCR: skipped (domain=${identification.domain} is not slab-eligible)`,
-          );
-        }
+        console.log(
+          `[${invocationId}] Slab OCR skipped for domain="${identification.domain}" (eligible: coins_bullion|general)`,
+        );
       }
     } catch (ocrErr) {
       console.warn(
