@@ -63,8 +63,10 @@ export async function runSlabOcr(
   userId?: string | null, // optional: for OpenAI user attribution + usage logging
 ): Promise<(SlabOcrResult & { _usage?: SlabOcrUsage }) | null> {
   const label = `[${invocationId}][SlabOCR]`;
+  const configuredProxyUrl = Deno.env.get("OPENAI_PROXY_URL")?.trim();
+  const usingProxy = Boolean(configuredProxyUrl);
 
-  if (!openAiApiKey) {
+  if (!usingProxy && !openAiApiKey) {
     console.warn(`${label} No OpenAI API key — skipping slab OCR`);
     return null;
   }
@@ -137,17 +139,24 @@ Return ONLY valid JSON, no markdown, no explanation:
   };
 
   try {
+    const openAiEndpoint = configuredProxyUrl ||
+      "https://api.openai.com/v1/chat/completions";
+    const openAiProxyAuthToken = Deno.env.get("OPENAI_PROXY_AUTH_TOKEN")?.trim();
+
     console.log(
-      `${label} Calling GPT-4o Vision for slab label OCR (${imagesToSend.length} images)`,
+      `${label} Calling GPT-4o Vision for slab label OCR (${imagesToSend.length} images) endpoint=${openAiEndpoint}`,
     );
 
     const resp = await fetchWithTimeout(
-      "https://api.openai.com/v1/chat/completions",
+      openAiEndpoint,
       {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${openAiApiKey}`,
           "Content-Type": "application/json",
+          ...(usingProxy ? {} : { "Authorization": `Bearer ${openAiApiKey}` }),
+          ...(openAiProxyAuthToken
+            ? { "X-Proxy-Auth": openAiProxyAuthToken }
+            : {}),
         },
         body: JSON.stringify(requestBody),
       },

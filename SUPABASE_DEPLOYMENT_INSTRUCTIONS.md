@@ -135,6 +135,10 @@ Both functions use the following Supabase environment variables automatically:
 - `SUPABASE_SERVICE_ROLE_KEY` (auto-injected)
 - `NEW_OPENAI_API_KEY` (already configured for existing `analyze-item` function)
 
+Optional for static-egress OpenAI proxy routing:
+- `OPENAI_PROXY_URL` (e.g. `https://<proxy-domain>/v1/chat/completions`)
+- `OPENAI_PROXY_AUTH_TOKEN` (shared secret header sent as `X-Proxy-Auth`)
+
 No additional env vars required for the new functions.
 
 ---

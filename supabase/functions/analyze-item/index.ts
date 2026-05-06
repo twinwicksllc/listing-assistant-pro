@@ -599,11 +599,13 @@ serve(async (req: Request) => {
     let slabOcrResult: Awaited<ReturnType<typeof import("../_helpers/slabOcr.ts").runSlabOcr>> = null;
     try {
       const NEW_OPENAI_API_KEY = Deno.env.get("NEW_OPENAI_API_KEY");
+      const OPENAI_PROXY_URL = Deno.env.get("OPENAI_PROXY_URL")?.trim();
+      const _hasOpenAiPath = Boolean(NEW_OPENAI_API_KEY || OPENAI_PROXY_URL);
       // Domain guard: only run for coins_bullion (definite slabs) and general
       // (Pass 1 mis-classifications). Skip trading_cards, jewelry, electronics,
       // vintage_clothing to avoid unnecessary GPT-4o spend (~$0.038/call).
       const _slabOcrEligible = identification.domain === "coins_bullion" || identification.domain === "general";
-      if (NEW_OPENAI_API_KEY && _slabOcrEligible) {
+      if (_hasOpenAiPath && _slabOcrEligible) {
         const { runSlabOcr } = await import("../_helpers/slabOcr.ts");
         const ocrBase64List: string[] = [];
         const ocrMimeList: string[] = [];
@@ -617,7 +619,7 @@ serve(async (req: Request) => {
           `[${invocationId}] Calling Slab OCR with ${ocrBase64List.length} images (domain=${identification.domain}, eligible=true)`,
         );
         slabOcrResult = await runSlabOcr(
-          NEW_OPENAI_API_KEY,
+          NEW_OPENAI_API_KEY ?? "",
           ocrBase64List,
           ocrMimeList,
           invocationId,
@@ -663,9 +665,9 @@ serve(async (req: Request) => {
             `\`${invocationId}\` Slab OCR: no slab detected (isSlabbed=\${slabOcrResult?.isSlabbed || "false"}, grader=\${slabOcrResult?.grader || "null"})`,
           );
         }
-      } else if (!NEW_OPENAI_API_KEY) {
+      } else if (!_hasOpenAiPath) {
         console.warn(
-          `[${invocationId}] Slab OCR: NEW_OPENAI_API_KEY not set — skipping`,
+          `[${invocationId}] Slab OCR: no OpenAI route configured (set NEW_OPENAI_API_KEY or OPENAI_PROXY_URL) — skipping`,
         );
       } else {
         console.log(
