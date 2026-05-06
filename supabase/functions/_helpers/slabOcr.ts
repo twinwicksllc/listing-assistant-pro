@@ -154,9 +154,7 @@ Return ONLY valid JSON, no markdown, no explanation:
         headers: {
           "Content-Type": "application/json",
           ...(usingProxy ? {} : { "Authorization": `Bearer ${openAiApiKey}` }),
-          ...(openAiProxyAuthToken
-            ? { "X-Proxy-Auth": openAiProxyAuthToken }
-            : {}),
+          ...(openAiProxyAuthToken ? { "X-Proxy-Auth": openAiProxyAuthToken } : {}),
         },
         body: JSON.stringify(requestBody),
       },

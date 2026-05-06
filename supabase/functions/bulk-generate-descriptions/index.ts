@@ -196,9 +196,7 @@ TONE RULES:
             headers: {
               "Content-Type": "application/json",
               ...(usingProxy ? {} : { Authorization: `Bearer ${openAiKey}` }),
-              ...(openAiProxyAuthToken
-                ? { "X-Proxy-Auth": openAiProxyAuthToken }
-                : {}),
+              ...(openAiProxyAuthToken ? { "X-Proxy-Auth": openAiProxyAuthToken } : {}),
             },
             body: JSON.stringify({
               model: "gpt-4o-mini",
