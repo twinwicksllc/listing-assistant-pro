@@ -125,8 +125,12 @@ serve(async (req: Request) => {
       );
     }
 
+    const configuredProxyUrl = Deno.env.get("OPENAI_PROXY_URL")?.trim();
+    const openAiEndpoint = configuredProxyUrl ||
+      "https://api.openai.com/v1/chat/completions";
+    const usingProxy = Boolean(configuredProxyUrl);
     const openAiKey = Deno.env.get("NEW_OPENAI_API_KEY");
-    if (!openAiKey) {
+    if (!usingProxy && !openAiKey) {
       return new Response(
         JSON.stringify({ error: "OpenAI API not configured" }),
         {
@@ -135,6 +139,7 @@ serve(async (req: Request) => {
         },
       );
     }
+    const openAiProxyAuthToken = Deno.env.get("OPENAI_PROXY_AUTH_TOKEN")?.trim();
 
     const results: DescriptionResult[] = [];
 
@@ -185,12 +190,15 @@ TONE RULES:
 - Keep it under 300 words.`;
 
         const response = await fetch(
-          "https://api.openai.com/v1/chat/completions",
+          openAiEndpoint,
           {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${openAiKey}`,
               "Content-Type": "application/json",
+              ...(usingProxy ? {} : { Authorization: `Bearer ${openAiKey}` }),
+              ...(openAiProxyAuthToken
+                ? { "X-Proxy-Auth": openAiProxyAuthToken }
+                : {}),
             },
             body: JSON.stringify({
               model: "gpt-4o-mini",
