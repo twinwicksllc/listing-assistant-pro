@@ -194,6 +194,8 @@ TONE RULES:
             },
             body: JSON.stringify({
               model: "gpt-4o-mini",
+              // user field: correlates requests to a user in OpenAI usage dashboard
+              ...(userId ? { user: `uid_${userId}` } : {}),
               messages: [
                 {
                   role: "system",
@@ -223,6 +225,28 @@ TONE RULES:
           throw new Error(`Failed to parse OpenAI response: ${e}`);
         }
         const description = data.choices?.[0]?.message?.content?.trim() ?? "";
+
+        // Log OpenAI usage for cost tracking (non-blocking fire-and-forget)
+        const oaiUsage = data.usage;
+        if (oaiUsage) {
+          const promptTokens = oaiUsage.prompt_tokens ?? 0;
+          const completionTokens = oaiUsage.completion_tokens ?? 0;
+          const totalTokens = oaiUsage.total_tokens ?? 0;
+          // gpt-4o-mini pricing: $0.15/1M input, $0.60/1M output
+          const costUsd = (promptTokens * 0.00000015) + (completionTokens * 0.00000060);
+          svc.from("gemini_usage").insert({
+            user_id: userId,
+            function_name: "bulk-generate-descriptions",
+            model: "gpt-4o-mini",
+            provider: "openai",
+            prompt_tokens: promptTokens,
+            completion_tokens: completionTokens,
+            total_tokens: totalTokens,
+            cost_usd: costUsd,
+          }).then(() => {}).catch((e: unknown) =>
+            console.warn("Failed to log OpenAI bulk-descriptions usage:", String(e))
+          );
+        }
 
         results.push({ rowIndex: row.rowIndex, description });
 

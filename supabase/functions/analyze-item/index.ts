@@ -592,14 +592,18 @@ serve(async (req: Request) => {
     }
     // ─── END PRE-PASS 0 ─────────────────────────────────────────────────────────
 
-    // ─── SLAB OCR: GPT-4o Vision label reading (ALL domains) ──────────────────
+    // ─── SLAB OCR: GPT-4o Vision label reading (coins_bullion + general domains only) ──────────────────
     // Runs BEFORE Pass 2 so the correct year/grade/cert are injected as ground
     // truth into the Gemini prompt. Eliminates year misreads at the source.
     // Non-blocking: failure leaves slabOcrResult = null, pipeline continues.
     let slabOcrResult: Awaited<ReturnType<typeof import("../_helpers/slabOcr.ts").runSlabOcr>> = null;
     try {
       const NEW_OPENAI_API_KEY = Deno.env.get("NEW_OPENAI_API_KEY");
-      if (NEW_OPENAI_API_KEY) {
+      // Domain guard: only run for coins_bullion (definite slabs) and general
+      // (Pass 1 mis-classifications). Skip trading_cards, jewelry, electronics,
+      // vintage_clothing to avoid unnecessary GPT-4o spend (~$0.038/call).
+      const _slabOcrEligible = identification.domain === "coins_bullion" || identification.domain === "general";
+      if (NEW_OPENAI_API_KEY && _slabOcrEligible) {
         const { runSlabOcr } = await import("../_helpers/slabOcr.ts");
         const ocrBase64List: string[] = [];
         const ocrMimeList: string[] = [];
@@ -610,17 +614,33 @@ serve(async (req: Request) => {
           ocrMimeList.push(mimeMatch ? mimeMatch[1] : "image/jpeg");
         }
         console.log(
-          `[${invocationId}] Calling Slab OCR with ${ocrBase64List.length} images (domain=${identification.domain})`,
+          `[${invocationId}] Calling Slab OCR with ${ocrBase64List.length} images (domain=${identification.domain}, eligible=true)`,
         );
         slabOcrResult = await runSlabOcr(
           NEW_OPENAI_API_KEY,
           ocrBase64List,
           ocrMimeList,
           invocationId,
+          userId, // pass userId for OpenAI user attribution
         );
         console.log(
           `[${invocationId}] Slab OCR result: isSlabbed=${slabOcrResult?.isSlabbed}, grader=${slabOcrResult?.grader}, year=${slabOcrResult?.year}, grade=${slabOcrResult?.grade}, certNumber=${slabOcrResult?.certNumber}`,
         );
+        // Log OpenAI usage for cost tracking (non-blocking)
+        if (slabOcrResult?._usage) {
+          svc.from("gemini_usage").insert({
+            user_id: userId,
+            function_name: "analyze-item/slab-ocr",
+            model: "gpt-4o",
+            provider: "openai",
+            prompt_tokens: slabOcrResult._usage.promptTokens,
+            completion_tokens: slabOcrResult._usage.completionTokens,
+            total_tokens: slabOcrResult._usage.totalTokens,
+            cost_usd: slabOcrResult._usage.costUsd,
+          }).then(() => {}).catch((e: unknown) =>
+            console.warn(`[${invocationId}] Failed to log OpenAI slab OCR usage:`, String(e))
+          );
+        }
         if (slabOcrResult?.isSlabbed) {
           console.log(
             `[${invocationId}] Slab OCR: detected slab, grader=${slabOcrResult.grader}, year=${slabOcrResult.year}, grade=${slabOcrResult.grade}, certNumber=${slabOcrResult.certNumber}`,
@@ -644,9 +664,15 @@ serve(async (req: Request) => {
           );
         }
       } else {
-        console.warn(
-          `[${invocationId}] Slab OCR: NEW_OPENAI_API_KEY not set — skipping`,
-        );
+        if (!Deno.env.get("NEW_OPENAI_API_KEY")) {
+          console.warn(
+            `[${invocationId}] Slab OCR: NEW_OPENAI_API_KEY not set — skipping`,
+          );
+        } else {
+          console.log(
+            `[${invocationId}] Slab OCR: skipped (domain=${identification.domain} is not slab-eligible)`,
+          );
+        }
       }
     } catch (ocrErr) {
       console.warn(
