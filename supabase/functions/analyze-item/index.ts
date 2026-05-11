@@ -1720,19 +1720,21 @@ Seller's note: "${voiceNote}"`;
 
       // Strip markdown formatting that was used by AI internally but shouldn't be in eBay description
       // PRESERVE content, remove only markdown syntax
+      // IMPORTANT: Preserve required format labels: "Quick Specs:", "Historical Note:", "Quick Details:", "Why It Matters:"
       listing.description = listing.description
-        .replace(/^#+\s+/gm, "") // Remove header markers, keep header text
+        .replace(/^#+\s+/gm, "") // Remove header markers (##, ###, etc.), keep header text
         .replace(/\*\*(.+?)\*\*/g, "$1") // Remove bold markdown (**text** -> text)
         .replace(/\*(.+?)\*/g, "$1") // Remove italic markdown (*text* -> text)
         .replace(/`(.+?)`/g, "$1") // Remove inline code markdown (`code` -> code)
-        .replace(/^\s*[-*+]\s+/gm, "") // Remove markdown bullet points
-        // Remove common AI section labels that leak into final text.
+        .replace(/^\s*[-*+]\s+/gm, "") // Remove markdown bullet points (but not hyphens in text)
+        // Remove unwanted AI section labels that leak into final text
+        // EXCLUDING: "Quick Specs", "Historical Note", "Quick Details", "Why It Matters" (required format elements)
         .replace(
-          /^\s*(?:opening\s*hook|what'?s\s*included|why\s*buy\s*this\s*item|what\s*sets\s*it\s*apart|key\s*details\s*(?:and\s*facts)?|condition\s*details|closing\s*statement|overall\s*condition|why\s*buy\s*this\s*lot|overview|additional\s*notes?)\s*[:\-–—]?\s*/gim,
+          /^\s*(?:opening\s*hook|what'?s\s*included|why\s*buy\s*this\s*item|what\s*sets\s*it\s*apart|key\s*details\s*(?:and\s*facts)?|condition\s*details|closing\s*statement|overview|specifications|additional\s*notes?|key\s*specs|material\s*and\s*condition|what\s*makes\s*this|item\s*highlights|product\s*overview|condition\s*assessment)\s*[:\-–—]?\s*/gim,
           "",
         )
-        .replace(/[ \t]+/g, " ") // Collapse spaces/tabs without flattening newlines
-        .replace(/\n{3,}/g, "\n\n") // Clean up excessive newlines
+        .replace(/[ \t]+/g, " ") // Collapse multiple spaces/tabs without flattening newlines
+        .replace(/\n{3,}/g, "\n\n") // Clean up excessive blank lines
         .trim();
 
       if (listing.description !== descBefore) {
