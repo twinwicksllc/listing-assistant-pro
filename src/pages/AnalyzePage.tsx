@@ -6,7 +6,7 @@ import CogsInput from "@/components/CogsInput";
 import CategoryConfirmDialog from "@/components/CategoryConfirmDialog";
 import { useDrafts } from "@/hooks/useDrafts";
 import { supabase } from "@/integrations/supabase/client";
-import type { ItemSpecifics } from "@/types/listing";
+import type { ItemSpecifics, CoinConditionDetail } from "@/types/listing";
 import { useAuth } from "@/contexts/AuthContext";
 import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
 import { EbayPolicySelector } from "@/components/EbayPolicySelector";
@@ -58,6 +58,7 @@ export default function AnalyzePage() {
   const [gradingRationale, setGradingRationale] = useState<string>("");
   const [isSlabbed, setIsSlabbed] = useState(false);
   const [gradeConfirmed, setGradeConfirmed] = useState(false);
+  const [coinConditionDetail, setCoinConditionDetail] = useState<CoinConditionDetail | null>(null);
   const [meltValue, setMeltValue] = useState<number | null>(null);
   const [spotPrices, setSpotPrices] = useState<{ gold: number; silver: number; platinum: number } | null>(null);
   const [consignor, setConsignor] = useState("");
@@ -204,6 +205,7 @@ export default function AnalyzePage() {
     setSuggestedGrade(data.suggestedGrade || "");
     setGradingRationale(data.gradingRationale || "");
     setIsSlabbed(data.isSlabbed ?? false);
+    setCoinConditionDetail(data.coinConditionDetail ?? null);
     setMeltValue(data.meltValue ?? null);
     setSpotPrices(data.spotPrices ?? null);
     setGradeConfirmed(false);

@@ -248,6 +248,39 @@ ${spotLine}
 - G → USED_ACCEPTABLE
 - Damaged/holed/bent → FOR_PARTS_OR_NOT_WORKING
 
+### eBay NEW COIN CONDITION REQUIREMENTS (MANDATORY — June 2026 enforcement)
+eBay now requires structured condition details for ALL coins in categories: Coins: US (253), Coins: World (256), Coins: Canada (3377), Coins: Ancient (4733), Coins: Medieval (18466), and every leaf category beneath them. Listings without this data will be blocked starting Early July 2026.
+
+You MUST populate the \`coinConditionDetail\` field in every coin listing. Use one of the two formats below based on whether the coin is graded:
+
+**FOR GRADED COINS** (coin is in a PCGS, NGC, ANACS, ICG, CAC, or ICCS slab — \`isSlabbed: true\`):
+Set \`coinConditionDetail\` to a JSON object with:
+- \`type\`: "graded"
+- \`gradingCompany\`: one of "PCGS" | "NGC" | "ANACS" | "ICG" | "CAC" | "ICCS"
+- \`grade\`: full grade string as printed on slab label (e.g. "MS 65", "PR 70 DCAM", "AU 58")
+- \`certificationNumber\`: cert number from slab label (string, include if visible; omit only if not visible)
+
+Example: \`{"type":"graded","gradingCompany":"PCGS","grade":"MS 65","certificationNumber":"12345678"}\`
+
+**FOR UNGRADED/RAW COINS** (no professional slab — \`isSlabbed: false\`):
+Set \`coinConditionDetail\` to a JSON object with:
+- \`type\`: "raw"
+- \`rawCondition\`: one of the four eBay-standardized condition tiers (MUST be exact string):
+  - "Uncirculated" — No wear from circulation; sharp details; most/all original mint luster remains (minor handling marks OK)
+  - "Extremely Fine to About Uncirculated" — Light wear on highest design points; most details sharp; some original luster may remain in protected areas
+  - "Fine to Very Fine" — Noticeable circulation wear; major design elements still clear; fine details may be softened
+  - "Below Fine" — Heavy circulation wear; major and minor design elements may be faint; date or key features may be difficult to read or missing
+
+**CONDITION ASSESSMENT GUIDANCE (raw coins):**
+- Consider wear, surface preservation, luster, strike detail, and any visible damage/alterations
+- The MOST SIGNIFICANT issue determines the overall tier — be conservative, err on the side of caution
+- Heavily cleaned, scratched, corroded, or damaged coins should be graded lower regardless of underlying detail
+- Clearly disclose any damage/issues in the description (scratches, cleaning, rim damage, corrosion)
+- A coin with proof-like surfaces but circulation wear → assign based on wear level
+- For bullion bars/rounds: use "Uncirculated" if new/unhandled; "Extremely Fine to About Uncirculated" if minor surface marks
+
+**NEVER leave \`coinConditionDetail\` null for any coin in US, World, Canada, Ancient, or Medieval categories.**
+
 ### DATA FORMATTING (STRICT)
 - Fineness: decimal only (e.g., "0.999", "0.900", "0.9167"). Never "99.9%".
 - Grade: space-separated (e.g., "MS 65"). Omit Grade field entirely if uncertified.

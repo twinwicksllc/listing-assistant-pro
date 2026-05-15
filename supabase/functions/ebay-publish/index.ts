@@ -2144,6 +2144,367 @@ async function ensureInventoryLocation(
   );
 }
 
+// ================================================================
+// COIN CONDITION DESCRIPTORS (eBay June 2026 mandate)
+// ================================================================
+// eBay Inventory API v1.18.5 added conditionDescriptors support for:
+//   253 - Coins: US, 256 - Coins: World, 3377 - Coins: Canada,
+//   4733 - Coins: Ancient, 18466 - Coins: Medieval
+// (and all leaf categories beneath them)
+//
+// conditionDescriptors format:
+//   { name: "<numericDescriptorId>", values: ["<numericValueId>"], additionalInfo?: "<certNum>" }
+//
+// Descriptor IDs and value IDs are fetched at runtime from eBay's
+// getItemConditionPolicies Metadata API (app token; cached per invocation).
+// ================================================================
+
+/** Top-level coin parent category IDs that require conditionDescriptors */
+const COIN_CONDITION_DESCRIPTOR_PARENT_IDS = new Set([
+  "253", // Coins: US
+  "256", // Coins: World
+  "3377", // Coins: Canada
+  "4733", // Coins: Ancient
+  "18466", // Coins: Medieval
+]);
+
+/** In-memory per-invocation cache for coin condition descriptor lookup results */
+const _coinDescriptorCache: Map<
+  string,
+  Array<{ descriptorId: string; descriptorName: string; values: Array<{ id: string; name: string }> }>
+> = new Map();
+
+/**
+ * Fetches coin condition descriptor IDs for a given leaf category from eBay's
+ * getItemConditionPolicies Metadata API. Returns an array of descriptor objects
+ * with their IDs and possible values, or null if the fetch fails.
+ *
+ * Uses an app-level OAuth token (client_credentials grant).
+ * Results are cached in-memory for the current function invocation.
+ */
+async function fetchCoinConditionDescriptors(
+  categoryId: string,
+  clientId: string,
+  clientSecret: string,
+  apiBase: string,
+): Promise<
+  Array<{
+    descriptorId: string;
+    descriptorName: string;
+    values: Array<{ id: string; name: string }>;
+    mode?: string; // "FREE_TEXT" for certification number
+  }> | null
+> {
+  const cacheKey = `${apiBase}:${categoryId}`;
+  if (_coinDescriptorCache.has(cacheKey)) {
+    return _coinDescriptorCache.get(cacheKey)!;
+  }
+
+  try {
+    // Get app token for Metadata API
+    const tokenUrl = apiBase.includes("sandbox")
+      ? "https://api.sandbox.ebay.com/identity/v1/oauth2/token"
+      : "https://api.ebay.com/identity/v1/oauth2/token";
+    const credentials = btoa(`${clientId}:${clientSecret}`);
+    const tokenResp = await fetchWithTimeout(tokenUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${credentials}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
+      timeout: 8000,
+    });
+    if (!tokenResp.ok) {
+      console.warn(
+        `fetchCoinConditionDescriptors: app token failed (${tokenResp.status})`,
+      );
+      return null;
+    }
+    const tokenData = await tokenResp.json();
+    const appToken = tokenData.access_token;
+    if (!appToken) return null;
+
+    // Call Metadata API for this category
+    const metaBase = apiBase.includes("sandbox")
+      ? "https://api.sandbox.ebay.com"
+      : "https://api.ebay.com";
+    const encodedFilter = encodeURIComponent(`categoryIds:{${categoryId}}`);
+    const metaResp = await fetchWithTimeout(
+      `${metaBase}/sell/metadata/v1/marketplace/EBAY_US/get_item_condition_policies?filter=${encodedFilter}`,
+      {
+        headers: {
+          Authorization: `Bearer ${appToken}`,
+          "Accept-Language": "en-US",
+        },
+        timeout: 10000,
+      },
+    );
+    if (!metaResp.ok) {
+      console.warn(
+        `fetchCoinConditionDescriptors: metadata API failed (${metaResp.status}) for category ${categoryId}`,
+      );
+      return null;
+    }
+
+    const metaData = await metaResp.json();
+    const policies = metaData?.itemConditionPolicies ?? [];
+
+    // Find the policy for our category (or a descendant leaf)
+    // Collect all unique condition descriptors across all itemConditions
+    const descriptorMap: Map<
+      string,
+      {
+        descriptorId: string;
+        descriptorName: string;
+        mode?: string;
+        values: Map<string, string>;
+      }
+    > = new Map();
+
+    for (const policy of policies) {
+      for (const cond of (policy.itemConditions ?? [])) {
+        for (const desc of (cond.conditionDescriptors ?? [])) {
+          const id = String(desc.conditionDescriptorId ?? "");
+          const name = String(desc.conditionDescriptorName ?? "");
+          const mode = desc.conditionDescriptorConstraint?.mode as string | undefined;
+          if (!id) continue;
+
+          if (!descriptorMap.has(id)) {
+            descriptorMap.set(id, {
+              descriptorId: id,
+              descriptorName: name,
+              mode,
+              values: new Map(),
+            });
+          }
+          const entry = descriptorMap.get(id)!;
+          for (const val of (desc.conditionDescriptorValues ?? [])) {
+            const valId = String(val.conditionDescriptorValueId ?? "");
+            const valName = String(val.conditionDescriptorValueName ?? "");
+            if (valId) entry.values.set(valId, valName);
+          }
+        }
+      }
+    }
+
+    const result = Array.from(descriptorMap.values()).map((d) => ({
+      descriptorId: d.descriptorId,
+      descriptorName: d.descriptorName,
+      mode: d.mode,
+      values: Array.from(d.values.entries()).map(([id, name]) => ({ id, name })),
+    }));
+
+    console.log(
+      `fetchCoinConditionDescriptors: found ${result.length} descriptors for category ${categoryId}:`,
+      result.map((d) => `${d.descriptorName}(${d.descriptorId})`).join(", "),
+    );
+
+    _coinDescriptorCache.set(cacheKey, result);
+    return result;
+  } catch (e) {
+    console.warn(`fetchCoinConditionDescriptors: error for category ${categoryId}:`, e);
+    return null;
+  }
+}
+
+/**
+ * CoinConditionDetail type (mirrors pipelineContracts.ts — kept local to avoid shared imports)
+ */
+interface CoinConditionDetailGraded {
+  type: "graded";
+  gradingCompany: string;
+  grade: string;
+  certificationNumber?: string;
+}
+interface CoinConditionDetailRaw {
+  type: "raw";
+  rawCondition: string;
+}
+type CoinConditionDetail = CoinConditionDetailGraded | CoinConditionDetailRaw;
+
+/**
+ * Builds the conditionDescriptors array for the eBay Inventory API PUT body.
+ *
+ * For GRADED coins:
+ *   - Finds the "Grader" descriptor and maps gradingCompany → numeric value ID
+ *   - Finds the grade descriptor(s) and maps grade string → numeric value ID
+ *   - Adds certificationNumber via additionalInfo on the cert number descriptor
+ *
+ * For RAW coins:
+ *   - Finds the "Coin Condition" descriptor and maps rawCondition → numeric value ID
+ *
+ * Returns null if IDs cannot be resolved (graceful degradation — listing proceeds without).
+ */
+function buildCoinConditionDescriptors(
+  detail: CoinConditionDetail,
+  descriptors: Array<{
+    descriptorId: string;
+    descriptorName: string;
+    mode?: string;
+    values: Array<{ id: string; name: string }>;
+  }>,
+): Array<{ name: string; values?: string[]; additionalInfo?: string }> | null {
+  const result: Array<{ name: string; values?: string[]; additionalInfo?: string }> = [];
+
+  if (detail.type === "graded") {
+    const graded = detail as CoinConditionDetailGraded;
+
+    // Find Grader descriptor (name contains "Grader" or "grader")
+    const graderDesc = descriptors.find(
+      (d) => d.descriptorName.toLowerCase().includes("grader"),
+    );
+    if (!graderDesc) {
+      console.warn("buildCoinConditionDescriptors: Grader descriptor not found");
+      return null;
+    }
+    // Match grading company (case-insensitive prefix match)
+    const companyLower = graded.gradingCompany.toLowerCase();
+    const graderValue = graderDesc.values.find(
+      (v) => v.name.toLowerCase().includes(companyLower) ||
+        companyLower.includes(v.name.toLowerCase().split(" ")[0]),
+    );
+    if (!graderValue) {
+      console.warn(
+        `buildCoinConditionDescriptors: no value ID for gradingCompany="${graded.gradingCompany}"`,
+      );
+      return null;
+    }
+    result.push({ name: graderDesc.descriptorId, values: [graderValue.id] });
+
+    // Find grade descriptor(s) — may be "Number Grade", "Letter Grade", or combined
+    // eBay coins require Number Grade + Letter Grade separately (unlike trading cards which use a single grade)
+    // Grade string examples: "MS 65", "PR 70 DCAM", "AU 58", "F 15"
+    const gradeStr = graded.grade ?? "";
+    const gradeParts = gradeStr.trim().split(/\s+/);
+    const letterPart = gradeParts[0] ?? ""; // e.g. "MS", "PR", "AU", "VF", "F"
+    const numberPart = gradeParts[1] ?? ""; // e.g. "65", "70", "58", "15"
+    const suffixPart = gradeParts.slice(2).join(" "); // e.g. "DCAM", "CAMEO", "RD"
+
+    const numberGradeDesc = descriptors.find(
+      (d) =>
+        d.descriptorName.toLowerCase().includes("number grade") ||
+        d.descriptorName.toLowerCase() === "grade",
+    );
+    const letterGradeDesc = descriptors.find(
+      (d) => d.descriptorName.toLowerCase().includes("letter grade"),
+    );
+
+    if (numberGradeDesc && numberPart) {
+      // Try to match numeric grade value exactly, then partial
+      const numVal = numberGradeDesc.values.find(
+        (v) => v.name === numberPart || v.name.startsWith(numberPart),
+      );
+      if (numVal) {
+        result.push({ name: numberGradeDesc.descriptorId, values: [numVal.id] });
+      } else {
+        console.warn(
+          `buildCoinConditionDescriptors: no value ID for number grade="${numberPart}"`,
+        );
+      }
+    }
+
+    if (letterGradeDesc && letterPart) {
+      // Match letter grade: "MS"→"Mint State", "PR"→"Proof", "AU"→"About Uncirculated", etc.
+      const letterGradeAliases: Record<string, string[]> = {
+        "MS": ["mint state", "ms"],
+        "PR": ["proof", "pf", "pr"],
+        "PF": ["proof", "pf", "pr"],
+        "AU": ["about uncirculated", "au"],
+        "EF": ["extremely fine", "ef", "xf"],
+        "XF": ["extremely fine", "ef", "xf"],
+        "VF": ["very fine", "vf"],
+        "F": ["fine", "f"],
+        "VG": ["very good", "vg"],
+        "G": ["good", "g"],
+        "AG": ["about good", "ag"],
+        "FR": ["fair", "fr"],
+        "PO": ["poor", "po"],
+        "SP": ["specimen", "sp"],
+        "SMS": ["special mint set", "sms"],
+        "DCAM": ["deep cameo", "dcam"],
+        "CAM": ["cameo", "cam"],
+      };
+      const aliases = letterGradeAliases[letterPart.toUpperCase()] ?? [
+        letterPart.toLowerCase(),
+      ];
+      // Also try suffix as additional modifier (e.g. DCAM)
+      if (suffixPart) {
+        const suffixAliases = letterGradeAliases[suffixPart.toUpperCase()];
+        if (suffixAliases) aliases.push(...suffixAliases);
+      }
+      const letterVal = letterGradeDesc.values.find(
+        (v) =>
+          aliases.some((alias) => v.name.toLowerCase().includes(alias)) ||
+          v.name.toLowerCase() === letterPart.toLowerCase(),
+      );
+      if (letterVal) {
+        result.push({ name: letterGradeDesc.descriptorId, values: [letterVal.id] });
+      } else {
+        console.warn(
+          `buildCoinConditionDescriptors: no value ID for letter grade="${letterPart}"`,
+        );
+      }
+    }
+
+    // Certification number — FREE_TEXT mode, goes in additionalInfo
+    if (graded.certificationNumber) {
+      const certDesc = descriptors.find(
+        (d) =>
+          d.descriptorName.toLowerCase().includes("certification") ||
+          d.mode === "FREE_TEXT",
+      );
+      if (certDesc) {
+        result.push({
+          name: certDesc.descriptorId,
+          additionalInfo: graded.certificationNumber.slice(0, 30),
+        });
+      }
+    }
+
+    return result.length > 0 ? result : null;
+  } else {
+    // RAW coin
+    const raw = detail as CoinConditionDetailRaw;
+
+    // Find "Coin Condition" descriptor
+    const coinCondDesc = descriptors.find(
+      (d) =>
+        d.descriptorName.toLowerCase().includes("coin condition") ||
+        d.descriptorName.toLowerCase().includes("condition"),
+    );
+    if (!coinCondDesc) {
+      console.warn("buildCoinConditionDescriptors: Coin Condition descriptor not found");
+      return null;
+    }
+
+    // Map eBay standardized tier to value ID (case-insensitive prefix match)
+    const rawCondLower = raw.rawCondition.toLowerCase();
+    const condValue = coinCondDesc.values.find(
+      (v) => v.name.toLowerCase().includes(rawCondLower.split(" ")[0]) ||
+        rawCondLower.includes(v.name.toLowerCase().split(" ")[0]),
+    );
+    if (!condValue) {
+      // Try broader match
+      const condValueBroad = coinCondDesc.values.find(
+        (v) => rawCondLower.includes(v.name.toLowerCase()) ||
+          v.name.toLowerCase().includes(rawCondLower),
+      );
+      if (!condValueBroad) {
+        console.warn(
+          `buildCoinConditionDescriptors: no value ID for rawCondition="${raw.rawCondition}"`,
+        );
+        return null;
+      }
+      result.push({ name: coinCondDesc.descriptorId, values: [condValueBroad.id] });
+      return result;
+    }
+
+    result.push({ name: coinCondDesc.descriptorId, values: [condValue.id] });
+    return result;
+  }
+}
+
 serve(async (req) => {
   initSentry();
 
@@ -3294,6 +3655,73 @@ serve(async (req) => {
         (inventoryBody.product as Record<string, unknown>).videoIds = [String(payloadEbayVideoId)];
         console.log(`create_draft: attaching ebayVideoId=${payloadEbayVideoId} to product.videoIds`);
       }
+
+      // ── eBay June 2026 Coin Condition Descriptors ─────────────────────────
+      // Extract coinConditionDetail stored under itemSpecifics._coinConditionDetail
+      // and translate it to the numeric conditionDescriptors array required by
+      // the eBay Inventory API v1.18.5 for coin categories.
+      const rawItemSpecifics = (
+        itemSpecifics && typeof itemSpecifics === "object" ? itemSpecifics : {}
+      ) as Record<string, unknown>;
+      const coinConditionDetailRaw = rawItemSpecifics._coinConditionDetail as
+        | CoinConditionDetail
+        | null
+        | undefined;
+
+      // Check if this category is under a coin parent that requires descriptors.
+      // We check both the final category and its ancestors via the treeType.
+      const isCoinDescriptorCategory =
+        treeType === "coin" &&
+        (COIN_CONDITION_DESCRIPTOR_PARENT_IDS.has(finalCategoryId) ||
+          // Most leaf categories will not be in the parent set, but coins always have treeType "coin"
+          // and the Metadata API will return descriptors for all eligible leaf categories.
+          treeType === "coin");
+
+      if (coinConditionDetailRaw && isCoinDescriptorCategory && clientId && clientSecret) {
+        try {
+          console.log(
+            `create_draft: fetching coin condition descriptors for category ${finalCategoryId}, type=${coinConditionDetailRaw.type}`,
+          );
+          const descriptors = await fetchCoinConditionDescriptors(
+            finalCategoryId,
+            clientId,
+            clientSecret,
+            apiBase,
+          );
+          if (descriptors && descriptors.length > 0) {
+            const conditionDescriptors = buildCoinConditionDescriptors(
+              coinConditionDetailRaw,
+              descriptors,
+            );
+            if (conditionDescriptors && conditionDescriptors.length > 0) {
+              inventoryBody.conditionDescriptors = conditionDescriptors;
+              console.log(
+                `create_draft: added ${conditionDescriptors.length} conditionDescriptors for coin category ${finalCategoryId}:`,
+                JSON.stringify(conditionDescriptors),
+              );
+            } else {
+              console.warn(
+                `create_draft: buildCoinConditionDescriptors returned null/empty for category ${finalCategoryId} — proceeding without conditionDescriptors (may generate warning 25126)`,
+              );
+            }
+          } else {
+            console.warn(
+              `create_draft: no condition descriptors found for category ${finalCategoryId} — proceeding without (may generate warning 25126)`,
+            );
+          }
+        } catch (cdErr) {
+          // Non-fatal: log and continue — eBay will return warning 25126 but listing still publishes
+          console.warn(
+            `create_draft: error building coin conditionDescriptors (non-fatal):`,
+            cdErr,
+          );
+        }
+      } else if (coinConditionDetailRaw && treeType === "coin") {
+        console.log(
+          `create_draft: coinConditionDetail present but skipping descriptor fetch (missing clientId/clientSecret or not coin category)`,
+        );
+      }
+      // ── End Coin Condition Descriptors ──────────────────────────────────
 
       console.log(
         `create_draft: creating inventory item for sku=${sku}, condition=${conditionEnum} (raw=${rawCondition}), merchantLocationKey=${merchantLocationKey}`,

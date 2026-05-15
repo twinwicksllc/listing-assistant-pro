@@ -15,6 +15,31 @@ export interface ItemSpecifics {
   [key: string]: string | undefined;
 }
 
+/**
+ * eBay June 2026 structured coin condition requirement.
+ * Required for all coins in Coins: US (253), Coins: World (256),
+ * Coins: Canada (3377), Coins: Ancient (4733), Coins: Medieval (18466),
+ * and every leaf category beneath them.
+ */
+export type CoinConditionDetail =
+  | {
+      type: "graded";
+      gradingCompany: "PCGS" | "NGC" | "ANACS" | "ICG" | "CAC" | "ICCS";
+      /** Full grade string as on slab label, e.g. "MS 65", "PR 70 DCAM" */
+      grade: string;
+      /** Cert number — include when visible */
+      certificationNumber?: string;
+    }
+  | {
+      type: "raw";
+      /** eBay standardized condition tier for ungraded coins */
+      rawCondition:
+        | "Uncirculated"
+        | "Extremely Fine to About Uncirculated"
+        | "Fine to Very Fine"
+        | "Below Fine";
+    };
+
 export type ListingFormat = "FIXED_PRICE" | "AUCTION";
 
 // Auction duration options for eBay listings
@@ -174,6 +199,13 @@ export interface ListingDraft {
   // Precious metal content (used for melt-value floor alerts)
   metalType?: string;        // "gold" | "silver" | "platinum" | "none"
   metalWeightOz?: number;    // troy oz of precious metal content
+
+  /**
+   * eBay June 2026 structured coin condition requirement.
+   * Required for coins in US/World/Canada/Ancient/Medieval categories.
+   * Stored in item_specifics under the reserved key "_coinConditionDetail".
+   */
+  coinConditionDetail?: CoinConditionDetail | null;
 
   // eBay publish lifecycle tracking
   publishStatus?: PublishStatus;
