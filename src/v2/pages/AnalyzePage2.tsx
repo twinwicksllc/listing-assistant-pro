@@ -12,7 +12,7 @@ import CategoryConfirmDialog from "@/components/CategoryConfirmDialog";
 import { useDrafts } from "@/hooks/useDrafts";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import type { ItemSpecifics, ListingFormat } from "@/types/listing";
+import type { ItemSpecifics, ListingFormat, CoinConditionDetail } from "@/types/listing";
 import { getConditionsForCategory } from "@/types/listing";
 import { useAuth, PLANS } from "@/contexts/AuthContext";
 import { exportListing, type ExportPlatform, type ExportFormat } from "@/lib/exportCSV";
@@ -372,6 +372,7 @@ export default function AnalyzePage2() {
   const [meltValue, setMeltValue] = useState<number | null>(null);
   const [pricingNotes, setPricingNotes] = useState<string>("");
   const [spotPrices, setSpotPrices] = useState<{ gold: number; silver: number; platinum: number } | null>(null);
+  const [coinConditionDetail, setCoinConditionDetail] = useState<CoinConditionDetail | null>(null);
   const [competitorData, setCompetitorData] = useState<{
     competitorCount: number; avgPrice: number; minPrice: number;
     maxPrice: number; medianPrice: number; fromCache: boolean;
@@ -477,6 +478,7 @@ export default function AnalyzePage2() {
       setSuggestedGrade(data.suggestedGrade || "");
       setGradingRationale(data.gradingRationale || "");
       setIsSlabbed(data.isSlabbed ?? false);
+      setCoinConditionDetail(data.coinConditionDetail ?? null);
       setMeltValue(data.meltValue ?? null);
       setSpotPrices(data.spotPrices ?? null);
       setCompetitorData(data.competitorData ?? null);
@@ -528,6 +530,7 @@ export default function AnalyzePage2() {
       returnPolicyId: selectedPolicies.returnPolicyId ?? undefined,
       metalType: metalType !== "none" ? metalType : undefined,
       metalWeightOz: metalWeightOz > 0 ? metalWeightOz : undefined,
+      coinConditionDetail: coinConditionDetail ?? undefined,
       bestOfferEnabled: bestOfferEnabled || undefined,
       bestOfferAutoAcceptPrice: bestOfferEnabled && bestOfferAutoAcceptPrice > 0 ? bestOfferAutoAcceptPrice : undefined,
       bestOfferAutoDeclinePrice: bestOfferEnabled && bestOfferAutoDeclinePrice > 0 ? bestOfferAutoDeclinePrice : undefined,

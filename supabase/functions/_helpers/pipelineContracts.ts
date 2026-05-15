@@ -6,6 +6,23 @@ export type Domain =
   | "vintage_clothing"
   | "general";
 
+/** eBay June 2026 structured coin condition requirement */
+export type CoinConditionDetail =
+  | {
+    type: "graded";
+    gradingCompany: "PCGS" | "NGC" | "ANACS" | "ICG" | "CAC" | "ICCS";
+    grade: string; // e.g. "MS 65", "PR 70 DCAM"
+    certificationNumber?: string;
+  }
+  | {
+    type: "raw";
+    rawCondition:
+      | "Uncirculated"
+      | "Extremely Fine to About Uncirculated"
+      | "Fine to Very Fine"
+      | "Below Fine";
+  };
+
 export interface IdentificationResult {
   domain: Domain;
   itemName: string;
@@ -70,4 +87,6 @@ export interface ListingAssemblyResult {
   itemSpecifics: Record<string, unknown>;
   priceMin: number;
   priceMax: number;
+  /** eBay June 2026 structured coin condition — required for all US/World/Canada/Ancient/Medieval coins */
+  coinConditionDetail?: CoinConditionDetail | null;
 }
