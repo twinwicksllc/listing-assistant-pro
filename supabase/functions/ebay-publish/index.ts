@@ -1355,13 +1355,13 @@ function normalizeConditionForCategory(
   const condition = LEGACY_CONDITION_MAP[rawCondition] ?? rawCondition;
 
   // Use provided tree type or fall back to hardcoded ID sets
-  const treeType = categoryTreeType ||
+  const resolvedCategoryTreeType = categoryTreeType ||
     detectCategoryTreeSync(categoryId ?? "", itemType);
 
-  const isCoin = treeType === "coin";
-  const isBullion = treeType === "bullion";
-  const isTradingCard = treeType === "trading_card";
-  const isCollectible = treeType === "collectible";
+  const isCoin = resolvedCategoryTreeType === "coin";
+  const isBullion = resolvedCategoryTreeType === "bullion";
+  const isTradingCard = resolvedCategoryTreeType === "trading_card";
+  const isCollectible = resolvedCategoryTreeType === "collectible";
 
   if (isCoin) {
     // Coins & Paper Money category tree uses USED_* condition family, NOT *_REFURBISHED.
@@ -3254,6 +3254,7 @@ serve(async (req) => {
         quantity: payloadQuantity,
         pricingMode,
         ebayVideoId: payloadEbayVideoId,
+        packageWeightAndSize: payloadPackageWeightAndSize,
       } = payload;
 
       if (!userToken) throw new Error("No eBay user token provided");
@@ -3446,7 +3447,7 @@ serve(async (req) => {
       // If dynamic didn't work, fall back to hardcoded rules
       if (!dynamicRuleApplied) {
         if (!CATEGORY_ASPECT_RULES[categoryForAspects]) {
-          const treeType = detectCategoryTreeSync(
+          const ruleTreeType = detectCategoryTreeSync(
             categoryForAspects,
             undefined,
           );
@@ -3456,7 +3457,7 @@ serve(async (req) => {
               `create_draft: no category ID provided, using empty aspect rule`,
             );
             categoryForAspects = "__empty__";
-          } else if (treeType === "coin" || treeType === "bullion") {
+          } else if (ruleTreeType === "coin" || ruleTreeType === "bullion") {
             // Known coin/bullion type not in CATEGORY_ASPECT_RULES — use empty rule.
             // 253 (US Coins General) is a non-leaf parent and causes eBay errorId 25003.
             console.warn(
@@ -3534,6 +3535,89 @@ serve(async (req) => {
         ? (itemSpecifics as Record<string, unknown>).Type as string | undefined
         : undefined;
 
+      // Build package weight for calculated-shipping policies.
+      // eBay may reject publish with errorId 25020 when weight is missing.
+      const toPositiveNumber = (v: unknown): number | null => {
+        const n = Number(v);
+        return Number.isFinite(n) && n > 0 ? n : null;
+      };
+
+      const inferWeightLbFromSpecifics = (
+        specifics: unknown,
+      ): number | null => {
+        if (!specifics || typeof specifics !== "object") return null;
+        const rec = specifics as Record<string, unknown>;
+        const raw = String(
+          rec["Precious Metal Content per Unit"] ??
+            rec["Total Precious Metal Content"] ??
+            rec["Weight"] ??
+            "",
+        )
+          .trim()
+          .toLowerCase();
+        if (!raw) return null;
+
+        const ozMatch = raw.match(/([0-9]+(?:\.[0-9]+)?)\s*(oz|ounce|ounces|troy\s*oz|toz)\b/);
+        if (ozMatch) {
+          // Add light packaging buffer and enforce a sane minimum.
+          const oz = Number(ozMatch[1]);
+          const lb = Math.max(0.125, (oz + 1.0) / 16);
+          return Number(lb.toFixed(3));
+        }
+
+        const gMatch = raw.match(/([0-9]+(?:\.[0-9]+)?)\s*(g|gram|grams)\b/);
+        if (gMatch) {
+          const grams = Number(gMatch[1]);
+          const oz = grams * 0.0352739619;
+          const lb = Math.max(0.125, (oz + 1.0) / 16);
+          return Number(lb.toFixed(3));
+        }
+
+        const lbMatch = raw.match(/([0-9]+(?:\.[0-9]+)?)\s*(lb|lbs|pound|pounds)\b/);
+        if (lbMatch) {
+          const lb = Number(lbMatch[1]);
+          return Number(Math.max(0.125, lb).toFixed(3));
+        }
+
+        return null;
+      };
+
+      let packageWeightAndSize: Record<string, unknown> | null = null;
+      if (payloadPackageWeightAndSize && typeof payloadPackageWeightAndSize === "object") {
+        const incoming = payloadPackageWeightAndSize as Record<string, unknown>;
+        const incomingWeight = incoming.weight && typeof incoming.weight === "object"
+          ? (incoming.weight as Record<string, unknown>)
+          : null;
+        const incomingValue = toPositiveNumber(incomingWeight?.value);
+        if (incomingValue) {
+          packageWeightAndSize = {
+            ...incoming,
+            weight: {
+              ...(incomingWeight || {}),
+              value: incomingValue,
+              unit: String(incomingWeight?.unit || "POUND").toUpperCase(),
+            },
+          };
+        }
+      }
+
+      if (!packageWeightAndSize) {
+        const inferredLb = inferWeightLbFromSpecifics(itemSpecifics) ?? 0.25;
+        packageWeightAndSize = {
+          weight: {
+            value: inferredLb,
+            unit: "POUND",
+          },
+        };
+      }
+
+      // Resolve category tree type once in function scope so all downstream
+      // condition/category logic can safely reuse it.
+      const categoryTreeType = detectCategoryTreeSync(
+        finalCategoryId ?? "",
+        itemType,
+      );
+
       // Map internal condition string to numeric conditionId
       // eBay Inventory API accepts ConditionEnum strings, but many categories
       // also require the numeric conditionId. We send both for maximum compatibility.
@@ -3544,6 +3628,7 @@ serve(async (req) => {
         rawCondition,
         finalCategoryId,
         itemType,
+        categoryTreeType,
       );
       const conditionEnum = normalizedCondition;
       const conditionId = CONDITION_ID_MAP[conditionEnum] ?? 3000;
@@ -3636,6 +3721,7 @@ serve(async (req) => {
         },
         condition: conditionEnum,
         conditionDescription: conditionDesc,
+        packageWeightAndSize,
         availability: {
           // shipToLocationAvailability: use only the top-level quantity.
           // availabilityDistributions is for multi-warehouse sellers and causes
@@ -3731,6 +3817,7 @@ serve(async (req) => {
         JSON.stringify({
           condition: conditionEnum,
           conditionDescription: conditionDesc,
+          packageWeightAndSize,
         }),
       );
 
