@@ -134,17 +134,35 @@ serve(async (req) => {
       }
 
       case "invoice.payment_succeeded": {
-        // Payment recovered after past_due — restore active status
+        // Re-fetch the full subscription from Stripe so all fields
+        // (period_end, product_id, price_id, status) stay current rather
+        // than only patching the status column.
         const invoice = event.data.object as Stripe.Invoice;
         const subId = typeof invoice.subscription === "string"
           ? invoice.subscription
           : (invoice.subscription as any)?.id;
-        if (subId) {
-          logStep("Payment recovered, marking active", { subId });
-          await supabase
-            .from("subscriptions")
-            .update({ status: "active", updated_at: new Date().toISOString() })
-            .eq("stripe_sub_id", subId);
+        const custId = typeof invoice.customer === "string"
+          ? invoice.customer
+          : (invoice.customer as any)?.id;
+        if (subId && custId) {
+          logStep("Payment recovered, re-fetching subscription from Stripe", {
+            subId,
+          });
+          const sub = await stripe.subscriptions.retrieve(subId);
+          const userId = await resolveUserId(supabase, custId);
+          if (userId) {
+            await upsertSubscription(supabase, sub, userId, custId);
+          } else {
+            // Fallback: patch status only if we cannot resolve the user
+            logStep("Could not resolve user, patching status only", { custId });
+            await supabase
+              .from("subscriptions")
+              .update({
+                status: "active",
+                updated_at: new Date().toISOString(),
+              })
+              .eq("stripe_sub_id", subId);
+          }
         }
         break;
       }

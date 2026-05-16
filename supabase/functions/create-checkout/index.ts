@@ -12,7 +12,7 @@ const corsHeaders = {
 const VALID_PRICES = [
   "price_1T8lVU4bX0d1SiThMDayhDj5", // Starter $19/mo
   "price_1T8mZ84bX0d1SiThFgvRubiN", // Pro $49/mo
-  "price_SHOP_PLACEHOLDER", // Shop $99/mo  TODO: replace with real ID
+  "price_1TXYjd4bX0d1SiThDb4YQhjR", // Shop $99/mo
 ];
 
 serve(async (req) => {
@@ -83,6 +83,9 @@ serve(async (req) => {
         .eq("id", user.id);
     }
 
+    // Use a hardcoded app URL to prevent open-redirect via a crafted Origin header
+    const appUrl =
+      Deno.env.get("APP_URL") ?? "https://listing-assistant-pro.vercel.app";
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       // client_reference_id lets the webhook reliably identify the user
@@ -90,8 +93,8 @@ serve(async (req) => {
       client_reference_id: user.id,
       line_items: [{ price: priceId, quantity: 1 }],
       mode: "subscription",
-      success_url: `${req.headers.get("origin")}/billing?success=true`,
-      cancel_url: `${req.headers.get("origin")}/billing?canceled=true`,
+      success_url: `${appUrl}/billing?success=true`,
+      cancel_url: `${appUrl}/billing?canceled=true`,
     });
 
     return new Response(JSON.stringify({ url: session.url }), {
