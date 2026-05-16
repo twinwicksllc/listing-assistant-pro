@@ -141,9 +141,7 @@ serve(async (req) => {
         const subId = typeof invoice.subscription === "string"
           ? invoice.subscription
           : (invoice.subscription as any)?.id;
-        const custId = typeof invoice.customer === "string"
-          ? invoice.customer
-          : (invoice.customer as any)?.id;
+        const custId = typeof invoice.customer === "string" ? invoice.customer : (invoice.customer as any)?.id;
         if (subId && custId) {
           logStep("Payment recovered, re-fetching subscription from Stripe", {
             subId,
