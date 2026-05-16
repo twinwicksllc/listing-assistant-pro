@@ -1,9 +1,9 @@
 import type { BulkRow, BulkRowState, BulkValidationIssue } from "@/types/bulk-listing";
-import { EBAY_CONDITION_ID_MAP } from "@/types/listing";
+import { SUPPORTED_CONDITION_VALUES } from "@/types/listing";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-const VALID_CONDITIONS = Object.keys(EBAY_CONDITION_ID_MAP);
+const VALID_CONDITIONS = [...SUPPORTED_CONDITION_VALUES];
 
 const VALID_FORMATS = ["FIXED_PRICE", "AUCTION"];
 
@@ -71,7 +71,7 @@ export function validateRow(row: BulkRow): BulkRowState {
   } else if (!VALID_CONDITIONS.includes(row.condition.trim().toUpperCase())) {
     errors.push({
       field: "condition",
-      message: `Invalid condition "${row.condition}". Use: NEW, USED_EXCELLENT, USED_VERY_GOOD, USED_GOOD, USED_ACCEPTABLE, etc.`,
+      message: `Invalid condition "${row.condition}". Use a supported eBay condition such as NEW, USED_EXCELLENT, CERTIFIED_REFURBISHED, DIGITAL_GOOD, REMANUFACTURED, or DAMAGED.`,
       severity: "error",
     });
   }

@@ -9,8 +9,17 @@ import {
 } from "lucide-react";
 import PriceRecommenderCard from "@/components/PriceRecommenderCard";
 import CogsInput from "@/components/CogsInput";
+import { isCoinConditionDetailComplete } from "@/types/listing";
 import type { ItemSpecifics, CoinConditionDetail } from "@/types/listing";
 import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
+
+const COIN_GRADING_COMPANIES = ["PCGS", "NGC", "ANACS", "ICG", "CAC", "ICCS"] as const;
+const COIN_RAW_CONDITIONS = [
+  "Uncirculated",
+  "Extremely Fine to About Uncirculated",
+  "Fine to Very Fine",
+  "Below Fine",
+] as const;
 
 interface SuggestedCategory {
   categoryId: string;
@@ -73,6 +82,10 @@ interface ListingFieldsProps {
   condition: string;
   conditionOptions: ConditionOption[];
   updateCondition: (v: string) => void;
+  coinConditionDetail: CoinConditionDetail | null;
+  coinConditionDetailRequired: boolean;
+  updateCoinConditionDetail: (detail: CoinConditionDetail) => void;
+  setCoinConditionDetailType: (type: "graded" | "raw") => void;
   // Grade
   suggestedGrade: string;
   isSlabbed: boolean;
@@ -128,6 +141,10 @@ export function ListingFields({
   condition,
   conditionOptions,
   updateCondition,
+  coinConditionDetail,
+  coinConditionDetailRequired,
+  updateCoinConditionDetail,
+  setCoinConditionDetailType,
   suggestedGrade,
   isSlabbed,
   domain,
@@ -151,6 +168,15 @@ export function ListingFields({
   applyRecommendedPrice,
   onNavigateToBilling,
 }: ListingFieldsProps) {
+  const coinConditionType = coinConditionDetail?.type ?? (isSlabbed ? "graded" : "raw");
+  const gradedDetail = coinConditionDetail?.type === "graded"
+    ? coinConditionDetail
+    : { type: "graded" as const, gradingCompany: "PCGS" as const, grade: "", certificationNumber: "" };
+  const rawDetail = coinConditionDetail?.type === "raw"
+    ? coinConditionDetail
+    : { type: "raw" as const, rawCondition: "Uncirculated" as const };
+  const coinConditionComplete = isCoinConditionDetailComplete(coinConditionDetail);
+
   return (
     <div className="space-y-4">
       {/* Credit tracking info for free tier */}
@@ -219,7 +245,7 @@ export function ListingFields({
       </div>
 
       {/* Item Specifics + Category + Condition */}
-      {displaySpecifics.length > 0 && (
+      {(displaySpecifics.length > 0 || coinConditionDetailRequired) && (
         <div className="space-y-2">
           <div className="flex items-center gap-1.5">
             <Tag className="w-3.5 h-3.5 text-primary" />
@@ -298,30 +324,32 @@ export function ListingFields({
           </div>
 
           {/* Specifics table */}
-          <div className="bg-card border border-border rounded-lg divide-y divide-border">
-            {displaySpecifics.map(([key, value]) => {
-              const isRequired = ebayMetadata?.requiredAspects?.includes(key);
-              const isSuggested = ebayMetadata?.suggestedAspects?.includes(key);
-              return (
-                <div key={key} className="flex items-center justify-between px-3 py-2">
-                  <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                    {key}
-                    {isRequired && (
-                      <span className="text-[9px] font-semibold text-red-500 uppercase tracking-wide">req</span>
-                    )}
-                    {isSuggested && !isRequired && (
-                      <span className="text-[9px] text-primary/60 uppercase tracking-wide">opt</span>
-                    )}
-                  </span>
-                  <input
-                    value={(value as string) || ""}
-                    onChange={(e) => updateItemSpecificValue(key, e.target.value)}
-                    className="text-xs text-foreground text-right bg-transparent border-none focus:outline-none focus:ring-0 max-w-[55%]"
-                  />
-                </div>
-              );
-            })}
-          </div>
+          {displaySpecifics.length > 0 && (
+            <div className="bg-card border border-border rounded-lg divide-y divide-border">
+              {displaySpecifics.map(([key, value]) => {
+                const isRequired = ebayMetadata?.requiredAspects?.includes(key);
+                const isSuggested = ebayMetadata?.suggestedAspects?.includes(key);
+                return (
+                  <div key={key} className="flex items-center justify-between px-3 py-2">
+                    <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                      {key}
+                      {isRequired && (
+                        <span className="text-[9px] font-semibold text-red-500 uppercase tracking-wide">req</span>
+                      )}
+                      {isSuggested && !isRequired && (
+                        <span className="text-[9px] text-primary/60 uppercase tracking-wide">opt</span>
+                      )}
+                    </span>
+                    <input
+                      value={(value as string) || ""}
+                      onChange={(e) => updateItemSpecificValue(key, e.target.value)}
+                      className="text-xs text-foreground text-right bg-transparent border-none focus:outline-none focus:ring-0 max-w-[55%]"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Condition */}
           <div className="flex items-center justify-between bg-card border border-border rounded-lg px-3 py-2">
@@ -338,6 +366,115 @@ export function ListingFields({
               ))}
             </select>
           </div>
+
+          {coinConditionDetailRequired && (
+            <div className="space-y-3 rounded-xl border border-border bg-card p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Coin Condition Details</p>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Required by eBay for Coins & Paper Money listings.
+                  </p>
+                </div>
+                <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                  Required
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCoinConditionDetailType("graded")}
+                  className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${coinConditionType === "graded" ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:text-foreground"}`}
+                >
+                  Graded coin
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCoinConditionDetailType("raw")}
+                  className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${coinConditionType === "raw" ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:text-foreground"}`}
+                >
+                  Raw coin
+                </button>
+              </div>
+
+              {coinConditionType === "graded" ? (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="space-y-1">
+                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Grading Company</span>
+                      <select
+                        value={gradedDetail.gradingCompany}
+                        onChange={(e) => updateCoinConditionDetail({
+                          type: "graded",
+                          gradingCompany: e.target.value as CoinConditionDetail & { type: "graded" }["gradingCompany"],
+                          grade: gradedDetail.grade,
+                          certificationNumber: gradedDetail.certificationNumber?.trim() || undefined,
+                        })}
+                        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                      >
+                        {COIN_GRADING_COMPANIES.map((company) => (
+                          <option key={company} value={company}>{company}</option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="space-y-1">
+                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Grade</span>
+                      <input
+                        value={gradedDetail.grade}
+                        onChange={(e) => updateCoinConditionDetail({
+                          type: "graded",
+                          gradingCompany: gradedDetail.gradingCompany,
+                          grade: e.target.value,
+                          certificationNumber: gradedDetail.certificationNumber?.trim() || undefined,
+                        })}
+                        placeholder="MS 65"
+                        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                    </label>
+                  </div>
+
+                  <label className="space-y-1 block">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Certification Number</span>
+                    <input
+                      value={gradedDetail.certificationNumber ?? ""}
+                      onChange={(e) => updateCoinConditionDetail({
+                        type: "graded",
+                        gradingCompany: gradedDetail.gradingCompany,
+                        grade: gradedDetail.grade,
+                        certificationNumber: e.target.value.trim() || undefined,
+                      })}
+                      placeholder="Optional if not visible"
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </label>
+                </div>
+              ) : (
+                <label className="space-y-1 block">
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Raw Coin Condition</span>
+                  <select
+                    value={rawDetail.rawCondition}
+                    onChange={(e) => updateCoinConditionDetail({
+                      type: "raw",
+                      rawCondition: e.target.value as CoinConditionDetail & { type: "raw" }["rawCondition"],
+                    })}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    {COIN_RAW_CONDITIONS.map((rawCondition) => (
+                      <option key={rawCondition} value={rawCondition}>{rawCondition}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              {!coinConditionComplete && (
+                <p className="text-[11px] text-amber-700">
+                  Complete these fields before publishing this coin listing.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
 

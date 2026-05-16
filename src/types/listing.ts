@@ -59,21 +59,46 @@ export type PublishStatus = "draft" | "publishing" | "published" | "failed";
 export const EBAY_CONDITION_ID_MAP: Record<string, number> = {
   NEW: 1000,
   LIKE_NEW: 2750,                   // Like New / Open Box
+  VERY_GOOD: 3000,                  // Trading cards / media
+  GOOD: 4000,
+  ACCEPTABLE: 5000,
   NEW_OTHER: 1500,                  // New Other (without tags)
   NEW_WITH_DEFECTS: 1750,           // New with defects
   CERTIFIED_REFURBISHED: 2000,
+  EXCELLENT_REFURBISHED: 2010,
+  VERY_GOOD_REFURBISHED: 2020,
+  GOOD_REFURBISHED: 2030,
   SELLER_REFURBISHED: 2500,
   USED_EXCELLENT: 3000,             // AU-50 to XF-45 (lightly circulated)
   USED_VERY_GOOD: 4000,             // VF-20 to VF-35 (moderately circulated)
   USED_GOOD: 5000,                  // F-12 to VG-10 (heavily circulated)
   USED_ACCEPTABLE: 6000,            // G-4 to G-6 (heavily worn)
   FOR_PARTS_OR_NOT_WORKING: 7000,
+  PRE_OWNED_GOOD: 3000,
+  PRE_OWNED_FAIR: 5000,
+  PRE_OWNED_POOR: 6000,
 };
+
+export const SPECIAL_CONDITION_VALUES = [
+  "DIGITAL_GOOD",
+  "CERTIFIED_PRE_OWNED",
+  "REMANUFACTURED",
+  "RETREAD",
+  "DAMAGED",
+] as const;
+
+export const SUPPORTED_CONDITION_VALUES = [
+  ...Object.keys(EBAY_CONDITION_ID_MAP),
+  ...SPECIAL_CONDITION_VALUES,
+] as const;
 
 // Human-readable labels for condition values
 export const CONDITION_LABELS: Record<string, string> = {
   NEW: "New / Uncirculated",
   LIKE_NEW: "Like New",
+  VERY_GOOD: "Very Good",
+  GOOD: "Good",
+  ACCEPTABLE: "Acceptable",
   NEW_OTHER: "New Other (without tags)",
   NEW_WITH_DEFECTS: "New with Defects",
   CERTIFIED_REFURBISHED: "Certified Refurbished",
@@ -90,6 +115,11 @@ export const CONDITION_LABELS: Record<string, string> = {
   EXCELLENT_REFURBISHED: "Used – Excellent (lightly used/circulated)",
   VERY_GOOD_REFURBISHED: "Used – Very Good (moderate wear)",
   GOOD_REFURBISHED: "Used – Good (heavy wear)",
+  DIGITAL_GOOD: "Digital Good",
+  CERTIFIED_PRE_OWNED: "Certified pre-owned",
+  REMANUFACTURED: "Remanufactured",
+  RETREAD: "Retread",
+  DAMAGED: "Damaged",
 };
 
 export type ConditionOption = { value: string; label: string };
@@ -98,6 +128,164 @@ export type ConditionOption = { value: string; label: string };
 const COIN_CATEGORY_IDS = new Set(["11981","39464","11980","11971","41099","41102","11973","39455","41084","11950","41111","166679","41109","526","253","45243","39471","39472","39473","39474","39475"]);
 const BULLION_CATEGORY_IDS = new Set(["178906","39489","3361","532","173685"]);
 const TRADING_CARD_CATEGORY_IDS = new Set(["261328","183454","2536","19107","64482","213"]);
+
+const GENERAL_MARKETPLACE_CONDITION_OPTIONS: ConditionOption[] = [
+  { value: "NEW", label: "New" },
+  { value: "USED_EXCELLENT", label: "Used" },
+  { value: "CERTIFIED_REFURBISHED", label: "Certified - Refurbished" },
+  { value: "EXCELLENT_REFURBISHED", label: "Excellent - Refurbished" },
+  { value: "VERY_GOOD_REFURBISHED", label: "Very Good - Refurbished" },
+  { value: "GOOD_REFURBISHED", label: "Good - Refurbished" },
+];
+
+const BOOK_CONDITION_OPTIONS: ConditionOption[] = [
+  { value: "NEW", label: "Brand new" },
+  { value: "LIKE_NEW", label: "Like new" },
+  { value: "USED_VERY_GOOD", label: "Very good" },
+  { value: "USED_GOOD", label: "Good" },
+  { value: "USED_ACCEPTABLE", label: "Acceptable" },
+];
+
+const BUSINESS_CONDITION_OPTIONS: ConditionOption[] = [
+  { value: "NEW", label: "New" },
+  { value: "NEW_OTHER", label: "New - open box" },
+  { value: "CERTIFIED_REFURBISHED", label: "Certified refurbished" },
+  { value: "SELLER_REFURBISHED", label: "Seller refurbished" },
+  { value: "USED_EXCELLENT", label: "Used" },
+  { value: "FOR_PARTS_OR_NOT_WORKING", label: "For parts or not working" },
+];
+
+const ELECTRONICS_CONDITION_OPTIONS: ConditionOption[] = [
+  { value: "NEW", label: "New" },
+  { value: "LIKE_NEW", label: "Open box" },
+  { value: "CERTIFIED_REFURBISHED", label: "Certified - Refurbished" },
+  { value: "EXCELLENT_REFURBISHED", label: "Excellent - Refurbished" },
+  { value: "VERY_GOOD_REFURBISHED", label: "Very Good - Refurbished" },
+  { value: "GOOD_REFURBISHED", label: "Good - Refurbished" },
+  { value: "SELLER_REFURBISHED", label: "Seller refurbished" },
+  { value: "USED_EXCELLENT", label: "Used" },
+  { value: "FOR_PARTS_OR_NOT_WORKING", label: "For parts or not working" },
+];
+
+const CLOTHING_CONDITION_OPTIONS: ConditionOption[] = [
+  { value: "NEW", label: "New with tags" },
+  { value: "NEW_OTHER", label: "New without tags" },
+  { value: "NEW_WITH_DEFECTS", label: "New with imperfections" },
+  { value: "USED_EXCELLENT", label: "Pre-owned - Excellent" },
+  { value: "PRE_OWNED_GOOD", label: "Pre-owned - Good" },
+  { value: "PRE_OWNED_FAIR", label: "Pre-owned - Fair" },
+];
+
+const SHOES_CONDITION_OPTIONS: ConditionOption[] = [
+  { value: "NEW", label: "New with box" },
+  { value: "NEW_OTHER", label: "New without box" },
+  { value: "NEW_WITH_DEFECTS", label: "New with defects" },
+  { value: "USED_EXCELLENT", label: "Pre-owned - Excellent" },
+  { value: "PRE_OWNED_GOOD", label: "Pre-owned - Good" },
+  { value: "PRE_OWNED_FAIR", label: "Pre-owned - Fair" },
+];
+
+const JEWELRY_SPORTING_CONDITION_OPTIONS: ConditionOption[] = [
+  { value: "NEW", label: "New with tags" },
+  { value: "NEW_OTHER", label: "New without tags" },
+  { value: "NEW_WITH_DEFECTS", label: "New with defects" },
+  { value: "USED_EXCELLENT", label: "Pre-owned - Excellent" },
+  { value: "PRE_OWNED_GOOD", label: "Pre-owned - Good" },
+  { value: "PRE_OWNED_FAIR", label: "Pre-owned - Fair" },
+  { value: "CERTIFIED_REFURBISHED", label: "Certified - Refurbished" },
+  { value: "EXCELLENT_REFURBISHED", label: "Excellent - Refurbished" },
+  { value: "VERY_GOOD_REFURBISHED", label: "Very Good - Refurbished" },
+  { value: "GOOD_REFURBISHED", label: "Good - Refurbished" },
+];
+
+const UNDERWEAR_CONDITION_OPTIONS: ConditionOption[] = [
+  { value: "NEW", label: "New with tags" },
+  { value: "NEW_OTHER", label: "New without tags" },
+  { value: "NEW_WITH_DEFECTS", label: "New with defects" },
+];
+
+const MEDIA_CONDITION_OPTIONS: ConditionOption[] = [
+  { value: "NEW", label: "Brand new" },
+  { value: "LIKE_NEW", label: "Like new" },
+  { value: "VERY_GOOD", label: "Very good" },
+  { value: "GOOD", label: "Good" },
+  { value: "ACCEPTABLE", label: "Acceptable" },
+  { value: "CERTIFIED_REFURBISHED", label: "Certified - Refurbished" },
+  { value: "EXCELLENT_REFURBISHED", label: "Excellent - Refurbished" },
+  { value: "VERY_GOOD_REFURBISHED", label: "Very Good - Refurbished" },
+  { value: "GOOD_REFURBISHED", label: "Good - Refurbished" },
+];
+
+const HEALTH_BEAUTY_CONDITION_OPTIONS: ConditionOption[] = [
+  { value: "NEW", label: "New" },
+  { value: "LIKE_NEW", label: "Open box" },
+  { value: "USED_EXCELLENT", label: "Used" },
+  { value: "FOR_PARTS_OR_NOT_WORKING", label: "For parts or not working" },
+  { value: "CERTIFIED_REFURBISHED", label: "Certified - Refurbished" },
+  { value: "EXCELLENT_REFURBISHED", label: "Excellent - Refurbished" },
+  { value: "VERY_GOOD_REFURBISHED", label: "Very Good - Refurbished" },
+  { value: "GOOD_REFURBISHED", label: "Good - Refurbished" },
+];
+
+const MOTOR_VEHICLE_CONDITION_OPTIONS: ConditionOption[] = [
+  { value: "NEW", label: "New" },
+  { value: "CERTIFIED_PRE_OWNED", label: "Certified pre-owned" },
+  { value: "USED_EXCELLENT", label: "Used" },
+];
+
+const MOTOR_PARTS_CONDITION_OPTIONS: ConditionOption[] = [
+  { value: "NEW", label: "New" },
+  { value: "NEW_OTHER", label: "New other (see details)" },
+  { value: "REMANUFACTURED", label: "Remanufactured" },
+  { value: "USED_EXCELLENT", label: "Used" },
+  { value: "FOR_PARTS_OR_NOT_WORKING", label: "For parts or not working" },
+];
+
+const TIRE_CONDITION_OPTIONS: ConditionOption[] = [
+  { value: "NEW", label: "New" },
+  { value: "RETREAD", label: "Retread" },
+  { value: "USED_EXCELLENT", label: "Used" },
+  { value: "DAMAGED", label: "Damaged" },
+];
+
+const NFT_CONDITION_OPTIONS: ConditionOption[] = [
+  { value: "DIGITAL_GOOD", label: "Digital Good" },
+];
+
+export function getConditionLabel(condition: string): string {
+  if (!condition) return "";
+  if (CONDITION_LABELS[condition]) return CONDITION_LABELS[condition];
+
+  return condition
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+export function isCoinConditionDetailRequired(
+  categoryId: string | undefined,
+  domain: string | undefined,
+  breadcrumb: string | undefined,
+): boolean {
+  return Boolean(
+    (categoryId && COIN_CATEGORY_IDS.has(categoryId))
+      || domain === "coins_bullion"
+      || (breadcrumb && /coins?:\s*(us|world|canada|ancient|medieval)|coins?\s*&\s*paper money/i.test(breadcrumb)),
+  );
+}
+
+export function isCoinConditionDetailComplete(
+  detail: CoinConditionDetail | null | undefined,
+): boolean {
+  if (!detail) return false;
+
+  if (detail.type === "graded") {
+    return Boolean(detail.gradingCompany && detail.grade.trim());
+  }
+
+  return Boolean(detail.rawCondition);
+}
 
 /**
  * Returns the condition options that make sense for a given category/domain.
@@ -109,6 +297,7 @@ export function getConditionsForCategory(
   domain: string | undefined,
   breadcrumb: string | undefined,
 ): ConditionOption[] {
+  const normalizedBreadcrumb = breadcrumb?.toLowerCase() ?? "";
   const isCoin = (categoryId && COIN_CATEGORY_IDS.has(categoryId))
     || domain === "coins_bullion"
     || (breadcrumb && /coin|paper money|currency|dollar|quarter|dime|nickel|penny|half eagle|double eagle|sovereign|bullion/i.test(breadcrumb));
@@ -137,6 +326,62 @@ export function getConditionsForCategory(
       { value: "GOOD",          label: "Good (moderate play wear)" },
       { value: "ACCEPTABLE",    label: "Acceptable (heavy wear)" },
     ];
+  }
+
+  if (/books|magazines/.test(normalizedBreadcrumb)) {
+    return BOOK_CONDITION_OPTIONS;
+  }
+
+  if (/business\s*&\s*industrial/.test(normalizedBreadcrumb)) {
+    return BUSINESS_CONDITION_OPTIONS;
+  }
+
+  if (/cameras|cell phones|computers|electronics|home\s*&\s*garden|musical instruments|headphones|portable audio|video game consoles|smart home/.test(normalizedBreadcrumb)) {
+    return ELECTRONICS_CONDITION_OPTIONS;
+  }
+
+  if (/clothing, shoes\s*&\s*accessories\s*>\s*clothing/.test(normalizedBreadcrumb)) {
+    return CLOTHING_CONDITION_OPTIONS;
+  }
+
+  if (/clothing, shoes\s*&\s*accessories\s*>\s*shoes/.test(normalizedBreadcrumb)) {
+    return SHOES_CONDITION_OPTIONS;
+  }
+
+  if (/clothing, shoes\s*&\s*accessories\s*>\s*(jewelry\s*&\s*watches|sporting goods)/.test(normalizedBreadcrumb)) {
+    return JEWELRY_SPORTING_CONDITION_OPTIONS;
+  }
+
+  if (/clothing, shoes\s*&\s*accessories\s*>\s*underwear/.test(normalizedBreadcrumb)) {
+    return UNDERWEAR_CONDITION_OPTIONS;
+  }
+
+  if (/movies|music|video games/.test(normalizedBreadcrumb)) {
+    return MEDIA_CONDITION_OPTIONS;
+  }
+
+  if (/motors\s*:\s*cars\s*&\s*trucks/.test(normalizedBreadcrumb)) {
+    return MOTOR_VEHICLE_CONDITION_OPTIONS;
+  }
+
+  if (/motors\s*:\s*parts\s*&\s*accessories/.test(normalizedBreadcrumb)) {
+    return MOTOR_PARTS_CONDITION_OPTIONS;
+  }
+
+  if (/tires/.test(normalizedBreadcrumb)) {
+    return TIRE_CONDITION_OPTIONS;
+  }
+
+  if (/non-fungible tokens|nft/.test(normalizedBreadcrumb)) {
+    return NFT_CONDITION_OPTIONS;
+  }
+
+  if (/health\s*&\s*beauty/.test(normalizedBreadcrumb)) {
+    return HEALTH_BEAUTY_CONDITION_OPTIONS;
+  }
+
+  if (/baby|collectibles|crafts|dolls\s*&\s*bears|pet supplies|toys\s*&\s*hobbies/.test(normalizedBreadcrumb)) {
+    return GENERAL_MARKETPLACE_CONDITION_OPTIONS;
   }
 
   // General / electronics / clothing / collectibles

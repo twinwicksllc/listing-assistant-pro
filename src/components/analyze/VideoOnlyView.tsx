@@ -10,6 +10,7 @@ interface ExtractedFrame {
 interface VideoOnlyViewProps {
   ebayTokenForPolicies: string | null;
   title: string;
+  initialVideoFile?: File;
   videoIsProcessing: boolean;
   videoUrl: string | null;
   extractingFrames: boolean;
@@ -29,6 +30,7 @@ interface VideoOnlyViewProps {
 export function VideoOnlyView({
   ebayTokenForPolicies,
   title,
+  initialVideoFile,
   videoIsProcessing,
   videoUrl,
   extractingFrames,
@@ -67,6 +69,7 @@ export function VideoOnlyView({
           <VideoUploadInput
             title={title}
             userToken={ebayTokenForPolicies}
+            initialFile={initialVideoFile}
             onVideoReady={onVideoReady}
             onVideoRemoved={onVideoRemoved}
             onStatusChange={onVideoStatusChange}

@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
-import { getConditionsForCategory } from "@/types/listing";
+import { getConditionLabel, getConditionsForCategory } from "@/types/listing";
 
 interface EbayMetadata {
   allowedConditions: string[];
@@ -26,7 +26,7 @@ export function useAnalyzeConditionOptions({
 }: UseAnalyzeConditionOptionsParams) {
   const conditionOptions = useMemo<ConditionOption[]>(() => {
     if (ebayMetadata?.allowedConditions && ebayMetadata.allowedConditions.length > 0) {
-      return ebayMetadata.allowedConditions.map((c) => ({ value: c, label: c }));
+      return ebayMetadata.allowedConditions.map((c) => ({ value: c, label: getConditionLabel(c) }));
     }
 
     return getConditionsForCategory(

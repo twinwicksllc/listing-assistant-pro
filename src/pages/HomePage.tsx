@@ -118,8 +118,15 @@ export default function HomePage() {
     localStorage.setItem(TOUR_KEY, "true");
   };
 
-  const openVideoFlow = useCallback(() => {
-    navigate("/analyze", { state: { imageUrls: [], voiceNote, videoOnly: true } });
+  const openVideoFlow = useCallback((selectedVideoFile?: File) => {
+    navigate("/analyze", {
+      state: {
+        imageUrls: [],
+        voiceNote,
+        videoOnly: true,
+        selectedVideoFile,
+      },
+    });
   }, [navigate, voiceNote]);
 
   const validateAndStageFiles = useCallback((files: FileList | File[] | null) => {
@@ -129,7 +136,7 @@ export default function HomePage() {
     fileArr.forEach((file) => {
       if (file.type.startsWith("video/")) {
         toast.info("Video uploads use the Analyze video flow. Opening video upload...");
-        openVideoFlow();
+        openVideoFlow(file);
         return;
       }
 
@@ -360,7 +367,7 @@ export default function HomePage() {
                     : "Upload images or drag & drop to generate your eBay listing"}
                 </p>
                 <p className="text-muted-foreground/60 text-xs">
-                  JPG, PNG, WebP, GIF, MP4, MOV · Max {MAX_FILE_SIZE_MB}MB per file
+                  Photos: JPG, PNG, WebP, GIF up to {MAX_FILE_SIZE_MB}MB each. Videos upload in the next step.
                 </p>
               </div>
 
@@ -590,7 +597,7 @@ export default function HomePage() {
           const file = e.target.files?.[0];
           if (file) {
             toast.info("Video-first flow opened. Upload your video in Analyze.");
-            openVideoFlow();
+            openVideoFlow(file);
           }
           e.target.value = "";
         }}

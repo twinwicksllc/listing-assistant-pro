@@ -131,6 +131,94 @@ function convertEbayAspectsToRule(aspects: any[]): AspectRule {
   return { required, preferred, defaults };
 }
 
+const _categoryConditionCache: Map<
+  string,
+  Array<{ conditionId: number; conditionDescription: string }>
+> = new Map();
+
+function normalizeConditionDescriptorToEnum(value: string | undefined | null): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+
+  const lowered = raw.toLowerCase();
+  const aliases: Record<string, string> = {
+    "brand new": "NEW",
+    "new": "NEW",
+    "new other (see details)": "NEW_OTHER",
+    "new-open box": "NEW_OTHER",
+    "new open box": "NEW_OTHER",
+    "open box": "LIKE_NEW",
+    "like new": "LIKE_NEW",
+    "used": "USED_EXCELLENT",
+    "very good": "USED_VERY_GOOD",
+    "good": "USED_GOOD",
+    "acceptable": "USED_ACCEPTABLE",
+    "for parts or not working": "FOR_PARTS_OR_NOT_WORKING",
+    "certified refurbished": "CERTIFIED_REFURBISHED",
+    "excellent refurbished": "EXCELLENT_REFURBISHED",
+    "very good refurbished": "VERY_GOOD_REFURBISHED",
+    "good refurbished": "GOOD_REFURBISHED",
+    "seller refurbished": "SELLER_REFURBISHED",
+    "pre-owned good": "PRE_OWNED_GOOD",
+    "pre-owned fair": "PRE_OWNED_FAIR",
+    "pre-owned poor": "PRE_OWNED_POOR",
+    "digital good": "DIGITAL_GOOD",
+    "certified pre-owned": "CERTIFIED_PRE_OWNED",
+    "remanufactured": "REMANUFACTURED",
+    "retread": "RETREAD",
+    "damaged": "DAMAGED",
+    "graded": "LIKE_NEW",
+    "ungraded": "GOOD",
+  };
+
+  return aliases[lowered] ?? raw.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "");
+}
+
+async function fetchDynamicCategoryConditions(
+  categoryId: string,
+): Promise<Array<{ conditionId: number; conditionDescription: string }>> {
+  if (_categoryConditionCache.has(categoryId)) {
+    return _categoryConditionCache.get(categoryId) ?? [];
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !supabaseServiceKey) return [];
+
+  try {
+    const resp = await fetch(`${supabaseUrl}/functions/v1/category-lookup`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${supabaseServiceKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ action: "conditions", categoryId }),
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.warn(`fetchDynamicCategoryConditions: category-lookup error ${resp.status} for ${categoryId}: ${errText}`);
+      return [];
+    }
+
+    const data = await resp.json();
+    const conditions = Array.isArray(data?.conditions)
+      ? data.conditions
+        .map((condition: any) => ({
+          conditionId: Number(condition.conditionId),
+          conditionDescription: String(condition.conditionDescription ?? "").trim(),
+        }))
+        .filter((condition: { conditionId: number; conditionDescription: string }) => Number.isFinite(condition.conditionId) && condition.conditionDescription)
+      : [];
+
+    _categoryConditionCache.set(categoryId, conditions);
+    return conditions;
+  } catch (err) {
+    console.warn(`fetchDynamicCategoryConditions: error for ${categoryId}:`, err);
+    return [];
+  }
+}
+
 // ================================================================
 // CATEGORY TREE DETECTION (replaces hardcoded ID sets)
 // ================================================================
@@ -1303,6 +1391,11 @@ const CONDITION_DESCRIPTIONS: Record<string, string> = {
   PRE_OWNED_GOOD: "Lightly circulated. Shows minimal wear on high points only.",
   PRE_OWNED_FAIR: "Heavily circulated. All major features visible but worn.",
   PRE_OWNED_POOR: "Heavily worn but identifiable. Outline and major features visible.",
+  DIGITAL_GOOD: "Digital asset delivered electronically.",
+  CERTIFIED_PRE_OWNED: "Certified pre-owned item meeting manufacturer or seller program standards.",
+  REMANUFACTURED: "Properly rebuilt and restored to full working order.",
+  RETREAD: "Used tire with professionally replaced tread.",
+  DAMAGED: "Damaged item that may require repair or service.",
 };
 
 const LEGACY_CONDITION_MAP: Record<string, string> = {
@@ -1339,6 +1432,16 @@ const LEGACY_CONDITION_MAP: Record<string, string> = {
   "good": "USED_GOOD",
   "acceptable": "USED_ACCEPTABLE",
   "like new": "LIKE_NEW",
+  "Digital Good": "DIGITAL_GOOD",
+  "digital good": "DIGITAL_GOOD",
+  "Certified pre-owned": "CERTIFIED_PRE_OWNED",
+  "certified pre-owned": "CERTIFIED_PRE_OWNED",
+  "Remanufactured": "REMANUFACTURED",
+  "remanufactured": "REMANUFACTURED",
+  "Retread": "RETREAD",
+  "retread": "RETREAD",
+  "Damaged": "DAMAGED",
+  "damaged": "DAMAGED",
 };
 
 // Condition normalization now uses both hardcoded fallback sets (from top of file)
@@ -1388,7 +1491,8 @@ function normalizeConditionForCategory(
         PRE_OWNED_FAIR: "USED_ACCEPTABLE",
         PRE_OWNED_POOR: "FOR_PARTS_OR_NOT_WORKING",
       };
-      const mapped = fallbackMap[condition] ?? "USED_EXCELLENT";
+      // For raw/ungraded or unknown coin conditions, default to USED_VERY_GOOD.
+      const mapped = fallbackMap[condition] ?? "USED_VERY_GOOD";
       console.log(
         `normalizeConditionForCategory: coin category ${categoryId} — ${condition} -> ${mapped}`,
       );
@@ -3630,11 +3734,27 @@ serve(async (req) => {
         itemType,
         categoryTreeType,
       );
-      const conditionEnum = normalizedCondition;
-      const conditionId = CONDITION_ID_MAP[conditionEnum] ?? 3000;
-      const conditionDesc = CONDITION_DESCRIPTIONS[conditionEnum] ??
+      let conditionEnum = normalizedCondition;
+      let conditionId = CONDITION_ID_MAP[conditionEnum];
+      let effectiveConditionEnum = conditionEnum;
+      let conditionDesc = CONDITION_DESCRIPTIONS[conditionEnum] ??
         conditionEnum.replace(/_/g, " ").toLowerCase()
           .replace(/\b\w/g, (c: string) => c.toUpperCase());
+
+      if ((!conditionId || ["DIGITAL_GOOD", "CERTIFIED_PRE_OWNED", "REMANUFACTURED", "RETREAD", "DAMAGED"].includes(conditionEnum)) && finalCategoryId) {
+        const dynamicConditions = await fetchDynamicCategoryConditions(finalCategoryId);
+        const matchedCondition = dynamicConditions.find((candidate) =>
+          normalizeConditionDescriptorToEnum(candidate.conditionDescription) === conditionEnum
+        );
+        if (matchedCondition) {
+          conditionId = matchedCondition.conditionId;
+          conditionDesc = matchedCondition.conditionDescription;
+          conditionEnum = normalizeConditionDescriptorToEnum(matchedCondition.conditionDescription) || conditionEnum;
+        }
+      }
+
+      conditionId = conditionId ?? 3000;
+      let effectiveConditionId = conditionId;
 
       console.log(
         `create_draft: condition normalization - rawCondition=${rawCondition}, normalized=${normalizedCondition}, conditionId=${conditionId}, categoryId=${finalCategoryId}, corrected=${corrected}`,
@@ -3756,12 +3876,12 @@ serve(async (req) => {
         | undefined;
 
       // Check if this category is under a coin parent that requires descriptors.
-      // We check both the final category and its ancestors via the treeType.
-      const isCoinDescriptorCategory = treeType === "coin" &&
+      // We check both the final category and its ancestors via the resolved category tree type.
+      const isCoinDescriptorCategory = categoryTreeType === "coin" &&
         (COIN_CONDITION_DESCRIPTOR_PARENT_IDS.has(finalCategoryId) ||
-          // Most leaf categories will not be in the parent set, but coins always have treeType "coin"
+          // Most leaf categories will not be in the parent set, but coins always have categoryTreeType "coin"
           // and the Metadata API will return descriptors for all eligible leaf categories.
-          treeType === "coin");
+          categoryTreeType === "coin");
 
       if (coinConditionDetailRaw && isCoinDescriptorCategory && clientId && clientSecret) {
         try {
@@ -3802,7 +3922,7 @@ serve(async (req) => {
             cdErr,
           );
         }
-      } else if (coinConditionDetailRaw && treeType === "coin") {
+      } else if (coinConditionDetailRaw && categoryTreeType === "coin") {
         console.log(
           `create_draft: coinConditionDetail present but skipping descriptor fetch (missing clientId/clientSecret or not coin category)`,
         );
@@ -4059,7 +4179,7 @@ serve(async (req) => {
       // set on the inventory item (root level). Sending extra body fields causes
       // unexpected behavior. POST with no body is the correct usage.
       // Reference: https://developer.ebay.com/api-docs/sell/inventory/resources/offer/methods/publishOffer
-      const publishResp = await fetchWithTimeout(
+      let publishResp = await fetchWithTimeout(
         `${apiBase}/sell/inventory/v1/offer/${offerId}/publish`,
         {
           method: "POST",
@@ -4067,6 +4187,123 @@ serve(async (req) => {
           headers: authHeaders,
         },
       );
+
+      // Auto-recovery for eBay errorId 25021 (invalid CONDITION_ID for category).
+      // Some coin categories reject specific USED_* variants at publish-time even if
+      // inventory/offer creation succeeded. Retry with safer fallbacks before failing.
+      if (!publishResp.ok) {
+        const firstErrText = await publishResp.text();
+        let isConditionIdError = false;
+        try {
+          const parsed = JSON.parse(firstErrText);
+          const errs: Array<{ errorId?: number; message?: string }> = parsed?.errors ?? [];
+          isConditionIdError = errs.some((e) =>
+            e.errorId === 25021 || /CONDITION_ID|condition id is invalid/i.test(e.message ?? "")
+          );
+        } catch {
+          isConditionIdError = /CONDITION_ID|condition id is invalid/i.test(firstErrText);
+        }
+
+        if (isConditionIdError && offerId) {
+          const candidates = categoryTreeType === "coin"
+            ? ["USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE", "NEW"]
+            : categoryTreeType === "bullion"
+            ? ["NEW", "USED_GOOD"]
+            : ["GOOD", "ACCEPTABLE", "LIKE_NEW", "NEW"];
+
+          const retryConditions = candidates.filter((c) => c !== effectiveConditionEnum);
+
+          console.warn(
+            `create_draft: publish failed with invalid condition for category ${finalCategoryId}; retrying with fallbacks: ${retryConditions.join(", ")}`,
+          );
+
+          for (const retryCondition of retryConditions) {
+            const retryDescription = CONDITION_DESCRIPTIONS[retryCondition] ??
+              retryCondition.replace(/_/g, " ").toLowerCase()
+                .replace(/\b\w/g, (ch: string) => ch.toUpperCase());
+
+            const retryInventoryBody: Record<string, unknown> = {
+              ...inventoryBody,
+              condition: retryCondition,
+              conditionDescription: retryDescription,
+            };
+
+            const invRetryResp = await fetchWithTimeout(
+              `${apiBase}/sell/inventory/v1/inventory_item/${sku}`,
+              {
+                method: "PUT",
+                timeout: 15000,
+                headers: authHeaders,
+                body: JSON.stringify(retryInventoryBody),
+              },
+            );
+
+            if (!invRetryResp.ok) {
+              const invRetryErr = await invRetryResp.text();
+              console.warn(
+                `create_draft: retry inventory update failed for condition=${retryCondition}: ${invRetryResp.status} ${invRetryErr.slice(0, 200)}`,
+              );
+              continue;
+            }
+
+            const retryOfferBody: Record<string, unknown> = {
+              ...(offerBody as Record<string, unknown>),
+              condition: retryCondition,
+              conditionDescription: retryDescription,
+            };
+
+            const offerRetryResp = await fetchWithTimeout(
+              `${apiBase}/sell/inventory/v1/offer/${offerId}`,
+              {
+                method: "PUT",
+                timeout: 15000,
+                headers: authHeaders,
+                body: JSON.stringify(retryOfferBody),
+              },
+            );
+
+            if (!offerRetryResp.ok) {
+              const offerRetryErr = await offerRetryResp.text();
+              console.warn(
+                `create_draft: retry offer update failed for condition=${retryCondition}: ${offerRetryResp.status} ${offerRetryErr.slice(0, 200)}`,
+              );
+              continue;
+            }
+
+            const publishRetryResp = await fetchWithTimeout(
+              `${apiBase}/sell/inventory/v1/offer/${offerId}/publish`,
+              {
+                method: "POST",
+                timeout: 15000,
+                headers: authHeaders,
+              },
+            );
+
+            if (publishRetryResp.ok) {
+              publishResp = publishRetryResp;
+              effectiveConditionEnum = retryCondition;
+              effectiveConditionId = CONDITION_ID_MAP[retryCondition] ?? 3000;
+              console.log(
+                `create_draft: publish retry succeeded with condition=${effectiveConditionEnum} (id=${effectiveConditionId})`,
+              );
+              break;
+            }
+
+            const publishRetryErr = await publishRetryResp.text();
+            console.warn(
+              `create_draft: publish retry failed for condition=${retryCondition}: ${publishRetryResp.status} ${publishRetryErr.slice(0, 200)}`,
+            );
+            publishResp = publishRetryResp;
+          }
+        } else {
+          // Preserve original failed response body for downstream handling.
+          publishResp = new Response(firstErrText, {
+            status: publishResp.status,
+            statusText: publishResp.statusText,
+            headers: publishResp.headers,
+          });
+        }
+      }
 
       if (!publishResp.ok) {
         const errText = await publishResp.text();
@@ -4082,7 +4319,7 @@ serve(async (req) => {
           sku,
         );
         console.error(
-          `create_draft: publish failed with condition=${conditionEnum} (id=${conditionId}), category=${finalCategoryId}, format=${listingFormat}`,
+          `create_draft: publish failed with condition=${effectiveConditionEnum} (id=${effectiveConditionId}), category=${finalCategoryId}, format=${listingFormat}`,
         );
         // Deficiency #8: Demote category mapping on publish failure
         // IMPORTANT: Only demote for errors that indicate a genuinely bad category
@@ -4107,6 +4344,7 @@ serve(async (req) => {
           25004, // Category not supported
           21916585, // Category requires item specifics
           25017, // Leaf category required
+          25021, // Invalid condition id for selected category
           // NOTE: 25002 intentionally excluded — handled below with message-text check
         ]);
         let shouldDemote = false;
@@ -4214,12 +4452,20 @@ serve(async (req) => {
         try {
           const firstError = parsedErrJson?.errors?.[0];
           const errorId = firstError?.errorId;
+          const rawMsg = String(firstError?.message ?? "");
+          const policyBlockText = `${rawMsg} ${errText}`;
+          const isPolicyBlocked = /norfed liberty dollars|counterfeit coins policy|not permitted on ebay|do not attempt to relist/i
+            .test(policyBlockText);
+
+          if (isPolicyBlocked) {
+            userFriendlyError =
+              "eBay blocked this listing due to policy restrictions (NORFED Liberty Dollars / Counterfeit Coins policy). This item type cannot be listed on eBay. Please choose a different item.";
+          } else
           if (publishResp.status === 500 || errorId === 25001) {
             userFriendlyError =
               "eBay is experiencing a temporary issue. Please wait a minute and try publishing again. Your listing details are saved.";
           } else if (isSellerLimitError) {
             // Extract the human-readable portion of the seller limit message
-            const rawMsg: string = firstError?.message ?? "";
             const limitMatch = rawMsg.match(/You can list up to ([$\d,.]+) more[^.]*\./i);
             const remaining = limitMatch ? limitMatch[1] : null;
             userFriendlyError = remaining
