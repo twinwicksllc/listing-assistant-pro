@@ -34,6 +34,29 @@ import { PolicyAndVideo } from "@/components/analyze/PolicyAndVideo";
 import { ExportSection } from "@/components/analyze/ExportSection";
 import { ActionButtons } from "@/components/analyze/ActionButtons";
 
+
+// Sanitise AI responses that occasionally return HTML tags instead of markdown
+function htmlToPlainMarkdown(text: string): string {
+  if (!text) return text;
+  if (!/<[a-z][\s\S]*>/i.test(text)) return text;
+  return text
+    .replace(/<strong>(.*?)<\/strong>/gi, "**$1**")
+    .replace(/<b>(.*?)<\/b>/gi, "**$1**")
+    .replace(/<em>(.*?)<\/em>/gi, "*$1*")
+    .replace(/<i>(.*?)<\/i>/gi, "*$1*")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>\s*<p>/gi, "\n\n")
+    .replace(/<p>/gi, "")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<ul>/gi, "")
+    .replace(/<\/ul>/gi, "")
+    .replace(/<li>(.*?)<\/li>/gi, "- $1\n")
+    .replace(/<h[1-3]>(.*?)<\/h[1-3]>/gi, "**$1**\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export default function AnalyzePage() {
   const { canAnalyze, canPublish, usage, recordUsage, isOwner, currentPlanLimits, planFeatures, currentPlan, user } = useAuth();
   const location = useLocation();
@@ -182,7 +205,7 @@ export default function AnalyzePage() {
       setEbayMetadata(null);
     }
     setTitle((data.title || "").slice(0, 80));
-    setDescription(data.description || "");
+    setDescription(htmlToPlainMarkdown(data.description || ""));
     setPriceMin(data.priceMin || 0);
     setPriceMax(data.priceMax || 0);
     setMetalType(data.metalType || "none");
