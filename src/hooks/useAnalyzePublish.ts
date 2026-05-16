@@ -69,7 +69,7 @@ export function useAnalyzePublish({
     return tokenData.token ?? localStorage.getItem("ebay-user-token");
   }, [fetchStoredTokenData, userId]);
 
-  const handlePublish = async () => {
+  const handlePublish = useCallback(async () => {
     if (!canPublish) {
       toast.error(`Monthly publish limit reached (${publishLimit}). Upgrade for more listings.`);
       onRequireBilling();
@@ -191,7 +191,9 @@ export function useAnalyzePublish({
               description: data.error as string,
               action: {
                 label: "Retry",
-                onClick: handlePublish,
+                // Reference the stable memoized function so the retry always
+                // uses the latest closure rather than a stale one.
+                onClick: () => handlePublish(),
               },
               duration: 12000,
             });
@@ -228,7 +230,18 @@ export function useAnalyzePublish({
     } finally {
       setPublishing(false);
     }
-  };
+  }, [
+    canPublish,
+    publishLimit,
+    userId,
+    imageUrls,
+    itemSpecifics,
+    ebayMetadata,
+    buildPublishPayload,
+    onRequireBilling,
+    onPublishSuccess,
+    fetchStoredTokenData,
+  ]);
 
   return {
     publishing,

@@ -233,18 +233,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
+    const since = startOfMonth.toISOString();
 
-    const { data, error } = await supabase
-      .from("usage_tracking")
-      .select("action_type")
-      .gte("created_at", startOfMonth.toISOString());
+    // Use server-side COUNT to avoid loading all rows client-side.
+    const [analysisResult, publishResult] = await Promise.all([
+      supabase
+        .from("usage_tracking")
+        .select("id", { count: "exact", head: true })
+        .eq("action_type", "ai_analysis")
+        .gte("created_at", since),
+      supabase
+        .from("usage_tracking")
+        .select("id", { count: "exact", head: true })
+        .eq("action_type", "ebay_publish")
+        .gte("created_at", since),
+    ]);
 
-    if (!error && data) {
-      setUsage({
-        aiAnalysis: data.filter((r: any) => r.action_type === "ai_analysis").length,
-        ebayPublish: data.filter((r: any) => r.action_type === "ebay_publish").length,
-      });
-    }
+    setUsage({
+      aiAnalysis: analysisResult.count ?? 0,
+      ebayPublish: publishResult.count ?? 0,
+    });
   }, []);
 
   const recordUsage = useCallback(async (actionType: "ai_analysis" | "ebay_publish" | "optimize" | "export") => {
@@ -285,12 +293,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => authSub.unsubscribe();
   }, [refreshSubscription, refreshUsage, refreshOrg]);
 
-  // Refresh subscription every 60s
+  // Poll subscription status: every 60 s for paid users, every 5 min for free users.
+  // This keeps paid status fresh while cutting Stripe edge-function calls for free users.
   useEffect(() => {
     if (!session) return;
-    const interval = setInterval(refreshSubscription, 60000);
+    const intervalMs = subscription.subscribed ? 60_000 : 300_000;
+    const interval = setInterval(refreshSubscription, intervalMs);
     return () => clearInterval(interval);
-  }, [session, refreshSubscription]);
+  }, [session, subscription.subscribed, refreshSubscription]);
 
   // ─── Derived tier values ──────────────────────────────────────────────────
   const isAdmin = ADMIN_EMAILS.includes(session?.user?.email ?? "");
