@@ -2226,9 +2226,7 @@ async function fetchCoinConditionDescriptors(
     if (!appToken) return null;
 
     // Call Metadata API for this category
-    const metaBase = apiBase.includes("sandbox")
-      ? "https://api.sandbox.ebay.com"
-      : "https://api.ebay.com";
+    const metaBase = apiBase.includes("sandbox") ? "https://api.sandbox.ebay.com" : "https://api.ebay.com";
     const encodedFilter = encodeURIComponent(`categoryIds:{${categoryId}}`);
     const metaResp = await fetchWithTimeout(
       `${metaBase}/sell/metadata/v1/marketplace/EBAY_US/get_item_condition_policies?filter=${encodedFilter}`,
@@ -2361,7 +2359,8 @@ function buildCoinConditionDescriptors(
     // Match grading company (case-insensitive prefix match)
     const companyLower = graded.gradingCompany.toLowerCase();
     const graderValue = graderDesc.values.find(
-      (v) => v.name.toLowerCase().includes(companyLower) ||
+      (v) =>
+        v.name.toLowerCase().includes(companyLower) ||
         companyLower.includes(v.name.toLowerCase().split(" ")[0]),
     );
     if (!graderValue) {
@@ -2481,13 +2480,15 @@ function buildCoinConditionDescriptors(
     // Map eBay standardized tier to value ID (case-insensitive prefix match)
     const rawCondLower = raw.rawCondition.toLowerCase();
     const condValue = coinCondDesc.values.find(
-      (v) => v.name.toLowerCase().includes(rawCondLower.split(" ")[0]) ||
+      (v) =>
+        v.name.toLowerCase().includes(rawCondLower.split(" ")[0]) ||
         rawCondLower.includes(v.name.toLowerCase().split(" ")[0]),
     );
     if (!condValue) {
       // Try broader match
       const condValueBroad = coinCondDesc.values.find(
-        (v) => rawCondLower.includes(v.name.toLowerCase()) ||
+        (v) =>
+          rawCondLower.includes(v.name.toLowerCase()) ||
           v.name.toLowerCase().includes(rawCondLower),
       );
       if (!condValueBroad) {
@@ -3670,8 +3671,7 @@ serve(async (req) => {
 
       // Check if this category is under a coin parent that requires descriptors.
       // We check both the final category and its ancestors via the treeType.
-      const isCoinDescriptorCategory =
-        treeType === "coin" &&
+      const isCoinDescriptorCategory = treeType === "coin" &&
         (COIN_CONDITION_DESCRIPTOR_PARENT_IDS.has(finalCategoryId) ||
           // Most leaf categories will not be in the parent set, but coins always have treeType "coin"
           // and the Metadata API will return descriptors for all eligible leaf categories.

@@ -1517,30 +1517,27 @@ Seller's note: "${voiceNote}"`;
                       type: "object",
                       description:
                         "REQUIRED for all coins in US/World/Canada/Ancient/Medieval categories (eBay June 2026 mandate). " +
-                        "For GRADED coins (isSlabbed=true): {\"type\":\"graded\",\"gradingCompany\":\"PCGS|NGC|ANACS|ICG|CAC|ICCS\",\"grade\":\"MS 65\",\"certificationNumber\":\"12345678\"}. " +
-                        "For RAW/UNGRADED coins (isSlabbed=false): {\"type\":\"raw\",\"rawCondition\":\"Uncirculated|Extremely Fine to About Uncirculated|Fine to Very Fine|Below Fine\"}.",
+                        'For GRADED coins (isSlabbed=true): {"type":"graded","gradingCompany":"PCGS|NGC|ANACS|ICG|CAC|ICCS","grade":"MS 65","certificationNumber":"12345678"}. ' +
+                        'For RAW/UNGRADED coins (isSlabbed=false): {"type":"raw","rawCondition":"Uncirculated|Extremely Fine to About Uncirculated|Fine to Very Fine|Below Fine"}.',
                       properties: {
                         type: {
                           type: "string",
                           enum: ["graded", "raw"],
-                          description:
-                            "\"graded\" for certified slab coins; \"raw\" for ungraded coins",
+                          description: '"graded" for certified slab coins; "raw" for ungraded coins',
                         },
                         gradingCompany: {
                           type: "string",
                           enum: ["PCGS", "NGC", "ANACS", "ICG", "CAC", "ICCS"],
-                          description:
-                            "Grading company — ONLY for graded/slabbed coins",
+                          description: "Grading company — ONLY for graded/slabbed coins",
                         },
                         grade: {
                           type: "string",
                           description:
-                            "Full grade as printed on slab (e.g. \"MS 65\", \"PR 70 DCAM\", \"AU 58\") — ONLY for graded coins",
+                            'Full grade as printed on slab (e.g. "MS 65", "PR 70 DCAM", "AU 58") — ONLY for graded coins',
                         },
                         certificationNumber: {
                           type: "string",
-                          description:
-                            "Cert number from slab label — ONLY for graded coins; include if visible",
+                          description: "Cert number from slab label — ONLY for graded coins; include if visible",
                         },
                         rawCondition: {
                           type: "string",
@@ -1550,8 +1547,7 @@ Seller's note: "${voiceNote}"`;
                             "Fine to Very Fine",
                             "Below Fine",
                           ],
-                          description:
-                            "eBay standardized condition tier — ONLY for raw/ungraded coins",
+                          description: "eBay standardized condition tier — ONLY for raw/ungraded coins",
                         },
                       },
                       required: ["type"],
