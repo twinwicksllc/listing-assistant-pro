@@ -14,14 +14,13 @@ backups/
 *.local
 
 # Environment / secrets — never commit real keys
+.env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 .env.production
 .env.development
-# Note: .env is committed intentionally (contains only public VITE_ vars)
-# If it ever contains secrets, move them to .env.local (gitignored above)
 # Supabase local secrets
 supabase/.env
 supabase/.env.local
@@ -34,7 +33,7 @@ supabase/functions/.env
 .DS_Store
 *.suo
 *.ntvs*
-*.njsproj
+*.nzsproj
 *.sln
 *.sw?
 supabase/.temp/
