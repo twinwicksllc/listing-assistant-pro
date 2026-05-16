@@ -1388,7 +1388,8 @@ function normalizeConditionForCategory(
         PRE_OWNED_FAIR: "USED_ACCEPTABLE",
         PRE_OWNED_POOR: "FOR_PARTS_OR_NOT_WORKING",
       };
-      const mapped = fallbackMap[condition] ?? "USED_EXCELLENT";
+      // For raw/ungraded or unknown coin conditions, default to USED_VERY_GOOD.
+      const mapped = fallbackMap[condition] ?? "USED_VERY_GOOD";
       console.log(
         `normalizeConditionForCategory: coin category ${categoryId} — ${condition} -> ${mapped}`,
       );
@@ -3632,6 +3633,8 @@ serve(async (req) => {
       );
       const conditionEnum = normalizedCondition;
       const conditionId = CONDITION_ID_MAP[conditionEnum] ?? 3000;
+      let effectiveConditionEnum = conditionEnum;
+      let effectiveConditionId = conditionId;
       const conditionDesc = CONDITION_DESCRIPTIONS[conditionEnum] ??
         conditionEnum.replace(/_/g, " ").toLowerCase()
           .replace(/\b\w/g, (c: string) => c.toUpperCase());
@@ -3756,12 +3759,12 @@ serve(async (req) => {
         | undefined;
 
       // Check if this category is under a coin parent that requires descriptors.
-      // We check both the final category and its ancestors via the treeType.
-      const isCoinDescriptorCategory = treeType === "coin" &&
+      // We check both the final category and its ancestors via the resolved category tree type.
+      const isCoinDescriptorCategory = categoryTreeType === "coin" &&
         (COIN_CONDITION_DESCRIPTOR_PARENT_IDS.has(finalCategoryId) ||
-          // Most leaf categories will not be in the parent set, but coins always have treeType "coin"
+          // Most leaf categories will not be in the parent set, but coins always have categoryTreeType "coin"
           // and the Metadata API will return descriptors for all eligible leaf categories.
-          treeType === "coin");
+          categoryTreeType === "coin");
 
       if (coinConditionDetailRaw && isCoinDescriptorCategory && clientId && clientSecret) {
         try {
@@ -3802,7 +3805,7 @@ serve(async (req) => {
             cdErr,
           );
         }
-      } else if (coinConditionDetailRaw && treeType === "coin") {
+      } else if (coinConditionDetailRaw && categoryTreeType === "coin") {
         console.log(
           `create_draft: coinConditionDetail present but skipping descriptor fetch (missing clientId/clientSecret or not coin category)`,
         );
@@ -4059,7 +4062,7 @@ serve(async (req) => {
       // set on the inventory item (root level). Sending extra body fields causes
       // unexpected behavior. POST with no body is the correct usage.
       // Reference: https://developer.ebay.com/api-docs/sell/inventory/resources/offer/methods/publishOffer
-      const publishResp = await fetchWithTimeout(
+      let publishResp = await fetchWithTimeout(
         `${apiBase}/sell/inventory/v1/offer/${offerId}/publish`,
         {
           method: "POST",
@@ -4067,6 +4070,123 @@ serve(async (req) => {
           headers: authHeaders,
         },
       );
+
+      // Auto-recovery for eBay errorId 25021 (invalid CONDITION_ID for category).
+      // Some coin categories reject specific USED_* variants at publish-time even if
+      // inventory/offer creation succeeded. Retry with safer fallbacks before failing.
+      if (!publishResp.ok) {
+        const firstErrText = await publishResp.text();
+        let isConditionIdError = false;
+        try {
+          const parsed = JSON.parse(firstErrText);
+          const errs: Array<{ errorId?: number; message?: string }> = parsed?.errors ?? [];
+          isConditionIdError = errs.some((e) =>
+            e.errorId === 25021 || /CONDITION_ID|condition id is invalid/i.test(e.message ?? "")
+          );
+        } catch {
+          isConditionIdError = /CONDITION_ID|condition id is invalid/i.test(firstErrText);
+        }
+
+        if (isConditionIdError && offerId) {
+          const candidates = categoryTreeType === "coin"
+            ? ["USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE", "NEW"]
+            : categoryTreeType === "bullion"
+            ? ["NEW", "USED_GOOD"]
+            : ["GOOD", "ACCEPTABLE", "LIKE_NEW", "NEW"];
+
+          const retryConditions = candidates.filter((c) => c !== effectiveConditionEnum);
+
+          console.warn(
+            `create_draft: publish failed with invalid condition for category ${finalCategoryId}; retrying with fallbacks: ${retryConditions.join(", ")}`,
+          );
+
+          for (const retryCondition of retryConditions) {
+            const retryDescription = CONDITION_DESCRIPTIONS[retryCondition] ??
+              retryCondition.replace(/_/g, " ").toLowerCase()
+                .replace(/\b\w/g, (ch: string) => ch.toUpperCase());
+
+            const retryInventoryBody: Record<string, unknown> = {
+              ...inventoryBody,
+              condition: retryCondition,
+              conditionDescription: retryDescription,
+            };
+
+            const invRetryResp = await fetchWithTimeout(
+              `${apiBase}/sell/inventory/v1/inventory_item/${sku}`,
+              {
+                method: "PUT",
+                timeout: 15000,
+                headers: authHeaders,
+                body: JSON.stringify(retryInventoryBody),
+              },
+            );
+
+            if (!invRetryResp.ok) {
+              const invRetryErr = await invRetryResp.text();
+              console.warn(
+                `create_draft: retry inventory update failed for condition=${retryCondition}: ${invRetryResp.status} ${invRetryErr.slice(0, 200)}`,
+              );
+              continue;
+            }
+
+            const retryOfferBody: Record<string, unknown> = {
+              ...(offerBody as Record<string, unknown>),
+              condition: retryCondition,
+              conditionDescription: retryDescription,
+            };
+
+            const offerRetryResp = await fetchWithTimeout(
+              `${apiBase}/sell/inventory/v1/offer/${offerId}`,
+              {
+                method: "PUT",
+                timeout: 15000,
+                headers: authHeaders,
+                body: JSON.stringify(retryOfferBody),
+              },
+            );
+
+            if (!offerRetryResp.ok) {
+              const offerRetryErr = await offerRetryResp.text();
+              console.warn(
+                `create_draft: retry offer update failed for condition=${retryCondition}: ${offerRetryResp.status} ${offerRetryErr.slice(0, 200)}`,
+              );
+              continue;
+            }
+
+            const publishRetryResp = await fetchWithTimeout(
+              `${apiBase}/sell/inventory/v1/offer/${offerId}/publish`,
+              {
+                method: "POST",
+                timeout: 15000,
+                headers: authHeaders,
+              },
+            );
+
+            if (publishRetryResp.ok) {
+              publishResp = publishRetryResp;
+              effectiveConditionEnum = retryCondition;
+              effectiveConditionId = CONDITION_ID_MAP[retryCondition] ?? 3000;
+              console.log(
+                `create_draft: publish retry succeeded with condition=${effectiveConditionEnum} (id=${effectiveConditionId})`,
+              );
+              break;
+            }
+
+            const publishRetryErr = await publishRetryResp.text();
+            console.warn(
+              `create_draft: publish retry failed for condition=${retryCondition}: ${publishRetryResp.status} ${publishRetryErr.slice(0, 200)}`,
+            );
+            publishResp = publishRetryResp;
+          }
+        } else {
+          // Preserve original failed response body for downstream handling.
+          publishResp = new Response(firstErrText, {
+            status: publishResp.status,
+            statusText: publishResp.statusText,
+            headers: publishResp.headers,
+          });
+        }
+      }
 
       if (!publishResp.ok) {
         const errText = await publishResp.text();
@@ -4082,7 +4202,7 @@ serve(async (req) => {
           sku,
         );
         console.error(
-          `create_draft: publish failed with condition=${conditionEnum} (id=${conditionId}), category=${finalCategoryId}, format=${listingFormat}`,
+          `create_draft: publish failed with condition=${effectiveConditionEnum} (id=${effectiveConditionId}), category=${finalCategoryId}, format=${listingFormat}`,
         );
         // Deficiency #8: Demote category mapping on publish failure
         // IMPORTANT: Only demote for errors that indicate a genuinely bad category
@@ -4107,6 +4227,7 @@ serve(async (req) => {
           25004, // Category not supported
           21916585, // Category requires item specifics
           25017, // Leaf category required
+          25021, // Invalid condition id for selected category
           // NOTE: 25002 intentionally excluded — handled below with message-text check
         ]);
         let shouldDemote = false;
