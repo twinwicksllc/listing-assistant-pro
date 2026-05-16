@@ -1,6 +1,6 @@
 {
-  "name": "Teckstart Listing Assistant Pro",
-  "short_name": "Teckstart",
+  "name": "ListCreator by Teckstart",
+  "short_name": "ListCreator",
   "description": "AI-powered eBay listing creation for coins, bullion, and collectibles",
   "start_url": "/",
   "scope": "/",
