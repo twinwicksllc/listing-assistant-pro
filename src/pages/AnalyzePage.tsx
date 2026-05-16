@@ -1,17 +1,13 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, Send, Tag, Crown, Download, FileSpreadsheet, Sheet, ShieldCheck, AlertTriangle, Check, X as XIcon, Lock, UserCircle, DollarSign, Gavel } from "lucide-react";
-import PriceRecommenderCard from "@/components/PriceRecommenderCard";
-import CogsInput from "@/components/CogsInput";
+import { ArrowLeft, Sparkles, Loader2, Crown } from "lucide-react";
 import CategoryConfirmDialog from "@/components/CategoryConfirmDialog";
 import { useDrafts } from "@/hooks/useDrafts";
 import { supabase } from "@/integrations/supabase/client";
 import type { ItemSpecifics, CoinConditionDetail } from "@/types/listing";
 import { useAuth } from "@/contexts/AuthContext";
 import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
-import { EbayPolicySelector } from "@/components/EbayPolicySelector";
 import type { SelectedPolicies } from "@/types/ebay-policies";
-import { VideoUploadInput } from "@/components/VideoUploadInput";
 import { useAnalyzePublish } from "@/hooks/useAnalyzePublish";
 import { useAnalyzeGeneration } from "@/hooks/useAnalyzeGeneration";
 import { useAnalyzeSave } from "@/hooks/useAnalyzeSave";
@@ -27,6 +23,16 @@ import { useAnalyzeBestOfferControls } from "@/hooks/useAnalyzeBestOfferControls
 import { useAnalyzeConditionOptions } from "@/hooks/useAnalyzeConditionOptions";
 import { useAnalyzeGradeControls } from "@/hooks/useAnalyzeGradeControls";
 import { useAnalyzeListingFieldHandlers } from "@/hooks/useAnalyzeListingFieldHandlers";
+import { useVideoFrameExtraction } from "@/hooks/useVideoFrameExtraction";
+
+// Sub-components
+import { VideoOnlyView } from "@/components/analyze/VideoOnlyView";
+import { ImageCarousel } from "@/components/analyze/ImageCarousel";
+import { ListingFields } from "@/components/analyze/ListingFields";
+import { ListingFormatPrice } from "@/components/analyze/ListingFormatPrice";
+import { PolicyAndVideo } from "@/components/analyze/PolicyAndVideo";
+import { ExportSection } from "@/components/analyze/ExportSection";
+import { ActionButtons } from "@/components/analyze/ActionButtons";
 
 export default function AnalyzePage() {
   const { canAnalyze, canPublish, usage, recordUsage, isOwner, currentPlanLimits, planFeatures, currentPlan, user } = useAuth();
@@ -68,62 +74,53 @@ export default function AnalyzePage() {
   const [pendingCategoryId, setPendingCategoryId] = useState<string>("");
   const [customCategoryInput, setCustomCategoryInput] = useState<string>("");
   const [isCustomCategoryMode, setIsCustomCategoryMode] = useState(false);
-
-  // Domain from Pass 1 AI identification — used to conditionally show domain-specific UI
   const [domain, setDomain] = useState<string>("general");
-
-  // eBay metadata returned by analyze-item when real aspects/conditions data was fetched
   const [ebayMetadata, setEbayMetadata] = useState<{
     requiredAspects: string[];
     suggestedAspects: string[];
     allowedConditions: string[];
   } | null>(null);
-
-  // Phase 2: Credit tracking metadata from analyze-item response
   const [analysisMeta, setAnalysisMeta] = useState<{
     tier: string;
     creditsUsed: number;
     creditsRemaining: number;
     creditsResetAt: string;
   } | null>(null);
-
-  // eBay business policies — selected by the user on this page
   const [selectedPolicies, setSelectedPolicies] = useState<SelectedPolicies>({
     fulfillmentPolicyId: null,
     paymentPolicyId: null,
     returnPolicyId: null,
   });
-
-  // Listing format and price — separate from AI pricing research (priceMin/priceMax
-  // are read-only AI suggestions; these are what actually gets submitted to eBay)
   const [listingFormat, setListingFormat] = useState<"FIXED_PRICE" | "AUCTION">("FIXED_PRICE");
   const [listingPrice, setListingPrice] = useState(0);
   const [auctionStartPrice, setAuctionStartPrice] = useState(0);
   const [auctionBuyItNowEnabled, setAuctionBuyItNowEnabled] = useState(false);
   const [auctionBuyItNow, setAuctionBuyItNow] = useState(0);
-
-  // Best Offer (Fixed Price only)
   const [bestOfferEnabled, setBestOfferEnabled] = useState(false);
   const [bestOfferAutoAcceptPrice, setBestOfferAutoAcceptPrice] = useState<number>(0);
   const [bestOfferAutoDeclinePrice, setBestOfferAutoDeclinePrice] = useState<number>(0);
-
-  // Multi-quantity (Fixed Price only)
   const [quantity, setQuantity] = useState(1);
-  const [pricingMode, setPricingMode] = useState<'per_item' | 'total'>('per_item');
-
-  // Video upload (optional — eBay Video API)
+  const [pricingMode, setPricingMode] = useState<"per_item" | "total">("per_item");
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [ebayVideoId, setEbayVideoId] = useState<string | null>(null);
   const [ebayVideoStatus, setEbayVideoStatus] = useState<string | null>(null);
   const videoIsProcessing = !!ebayVideoId && ebayVideoStatus !== "LIVE" && ebayVideoStatus !== "FAILED";
-  const [extractingFrames, setExtractingFrames] = useState(false);
-  const [extractedFrames, setExtractedFrames] = useState<Array<{ url: string; timestampSec: number; score: number }>>([]);
-  const [extractedFrameDataUrls, setExtractedFrameDataUrls] = useState<string[]>([]);
-  const [extractFramesMessage, setExtractFramesMessage] = useState<string>("");
-  const [extractFramesErrorCode, setExtractFramesErrorCode] = useState<string | null>(null);
 
   const AI_FOOTER = "\n\n---\nListing generated by Teckstart AI Assistant. All details should be verified by the buyer.";
-  const getDescriptionWithFooter = () => includeAiFooter ? description + AI_FOOTER : description;
+  const getDescriptionWithFooter = () => (includeAiFooter ? description + AI_FOOTER : description);
+
+  // ── Hooks ──────────────────────────────────────────────────────────────────────────
+
+  const {
+    extractingFrames,
+    extractedFrames,
+    extractedFrameDataUrls,
+    extractFramesMessage,
+    extractFramesErrorCode,
+    handleExtractFrames,
+    handleExtractFramesFallback,
+    handleAnalyzeExtractedFrames,
+  } = useVideoFrameExtraction({ videoUrl, voiceNote });
 
   const { buildPublishPayload } = useAnalyzePublishPayload({
     title,
@@ -148,9 +145,6 @@ export default function AnalyzePage() {
 
   const handlePublishSuccess = async (data: any) => {
     await recordUsage("ebay_publish");
-
-    // Persist COGS to listing_cogs so the Listings detail modal and Profit Report
-    // can show cost/margin data even after this session ends.
     if (cogs != null && user?.id && (data.sku || data.listingId)) {
       try {
         await (supabase as any).from("listing_cogs").insert({
@@ -165,7 +159,6 @@ export default function AnalyzePage() {
         console.warn("Failed to persist COGS after direct publish:", cogsErr);
       }
     }
-
     navigate("/home");
   };
 
@@ -182,15 +175,12 @@ export default function AnalyzePage() {
   });
 
   const handleAnalyzeSuccess = (data: any) => {
-    if (data._meta) {
-      setAnalysisMeta(data._meta);
-    }
+    if (data._meta) setAnalysisMeta(data._meta);
     if (data._ebayMetadata) {
       setEbayMetadata(data._ebayMetadata);
     } else {
       setEbayMetadata(null);
     }
-
     setTitle((data.title || "").slice(0, 80));
     setDescription(data.description || "");
     setPriceMin(data.priceMin || 0);
@@ -210,8 +200,6 @@ export default function AnalyzePage() {
     setSpotPrices(data.spotPrices ?? null);
     setGradeConfirmed(false);
     setDomain(data.domain || "general");
-
-    // Pre-fill listing price with AI midpoint as a starting suggestion
     const aiMid = ((data.priceMin || 0) + (data.priceMax || data.priceMin || 0)) / 2;
     setListingPrice(parseFloat(aiMid.toFixed(2)) || 0);
     setAuctionStartPrice(parseFloat((data.priceMin || 0).toFixed(2)) || 0);
@@ -237,11 +225,8 @@ export default function AnalyzePage() {
     description: getDescriptionWithFooter(),
     priceMin,
     priceMax,
-    listingPrice: listingPrice > 0
-      ? listingPrice
-      : auctionStartPrice > 0
-      ? auctionStartPrice
-      : parseFloat(((priceMin + priceMax) / 2).toFixed(2)),
+    listingPrice:
+      listingPrice > 0 ? listingPrice : auctionStartPrice > 0 ? auctionStartPrice : parseFloat(((priceMin + priceMax) / 2).toFixed(2)),
     listingFormat,
     createdAt: new Date(),
     ebayCategoryId,
@@ -257,12 +242,8 @@ export default function AnalyzePage() {
     metalType: metalType !== "none" ? metalType : undefined,
     metalWeightOz: metalWeightOz > 0 ? metalWeightOz : undefined,
     bestOfferEnabled: bestOfferEnabled || undefined,
-    bestOfferAutoAcceptPrice: bestOfferEnabled && bestOfferAutoAcceptPrice > 0
-      ? bestOfferAutoAcceptPrice
-      : undefined,
-    bestOfferAutoDeclinePrice: bestOfferEnabled && bestOfferAutoDeclinePrice > 0
-      ? bestOfferAutoDeclinePrice
-      : undefined,
+    bestOfferAutoAcceptPrice: bestOfferEnabled && bestOfferAutoAcceptPrice > 0 ? bestOfferAutoAcceptPrice : undefined,
+    bestOfferAutoDeclinePrice: bestOfferEnabled && bestOfferAutoDeclinePrice > 0 ? bestOfferAutoDeclinePrice : undefined,
     quantity: quantity > 1 ? quantity : undefined,
     pricingMode: quantity > 1 ? pricingMode : undefined,
     videoUrl: videoUrl ?? undefined,
@@ -351,232 +332,12 @@ export default function AnalyzePage() {
     setEbayVideoStatus,
   });
 
-  const extractFramesClientSide = async (
-    sourceVideoUrl: string,
-    maxFrames: number,
-  ): Promise<Array<{ dataUrl: string; timestampSec: number; score: number }>> => {
-    const video = document.createElement("video");
-    video.crossOrigin = "anonymous";
-    video.muted = true;
-    video.playsInline = true;
-    video.preload = "metadata";
-    video.src = sourceVideoUrl;
-
-    await new Promise<void>((resolve, reject) => {
-      const onLoadedMetadata = () => {
-        cleanup();
-        resolve();
-      };
-      const onError = () => {
-        cleanup();
-        reject(new Error("Could not load video metadata for frame extraction."));
-      };
-      const cleanup = () => {
-        video.removeEventListener("loadedmetadata", onLoadedMetadata);
-        video.removeEventListener("error", onError);
-      };
-      video.addEventListener("loadedmetadata", onLoadedMetadata);
-      video.addEventListener("error", onError);
+  const { toggleBestOffer, updateBestOfferAutoAccept, updateBestOfferAutoDecline } =
+    useAnalyzeBestOfferControls({
+      setBestOfferEnabled,
+      setBestOfferAutoAcceptPrice,
+      setBestOfferAutoDeclinePrice,
     });
-
-    const duration = Number.isFinite(video.duration) ? video.duration : 0;
-    if (duration <= 0) {
-      throw new Error("Video duration is invalid for frame extraction.");
-    }
-
-    const frameCount = Math.max(3, Math.min(maxFrames, 8));
-    const start = Math.min(0.5, duration * 0.1);
-    const end = Math.max(start, duration - 0.5);
-    const step = frameCount > 1 ? (end - start) / (frameCount - 1) : 0;
-
-    const canvas = document.createElement("canvas");
-    const targetWidth = 960;
-    const sourceWidth = Math.max(1, video.videoWidth || 1280);
-    const sourceHeight = Math.max(1, video.videoHeight || 720);
-    const targetHeight = Math.max(1, Math.round((targetWidth * sourceHeight) / sourceWidth));
-    canvas.width = targetWidth;
-    canvas.height = targetHeight;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      throw new Error("Unable to initialize extraction canvas.");
-    }
-
-    const frames: Array<{ dataUrl: string; timestampSec: number; score: number }> = [];
-
-    for (let i = 0; i < frameCount; i++) {
-      const timestampSec = Number((start + i * step).toFixed(2));
-
-      await new Promise<void>((resolve, reject) => {
-        const onSeeked = () => {
-          cleanup();
-          resolve();
-        };
-        const onError = () => {
-          cleanup();
-          reject(new Error("Failed while seeking video for frame extraction."));
-        };
-        const cleanup = () => {
-          video.removeEventListener("seeked", onSeeked);
-          video.removeEventListener("error", onError);
-        };
-        video.addEventListener("seeked", onSeeked, { once: true });
-        video.addEventListener("error", onError, { once: true });
-        video.currentTime = Math.min(duration, Math.max(0, timestampSec));
-      });
-
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
-      frames.push({
-        dataUrl,
-        timestampSec,
-        score: Number((0.96 - i * 0.03).toFixed(2)),
-      });
-    }
-
-    return frames;
-  };
-
-  const mapExtractError = (err: any): { code: string; message: string } => {
-    const raw = String(err?.message || err || "").toLowerCase();
-    if (raw.includes("tainted") || raw.includes("cross-origin") || raw.includes("securityerror")) {
-      return {
-        code: "cors_tainted_canvas",
-        message:
-          "Video frame extraction was blocked by browser security policy. Try re-uploading, or use photo capture as fallback.",
-      };
-    }
-    if (raw.includes("metadata")) {
-      return {
-        code: "metadata_load_failed",
-        message: "Could not read video metadata. Please try a different video file.",
-      };
-    }
-    if (raw.includes("seek")) {
-      return {
-        code: "seek_failed",
-        message: "Frame seeking failed during extraction. Retry, or use photo capture for now.",
-      };
-    }
-    return {
-      code: "extract_failed",
-      message: err?.message || "Frame extraction failed.",
-    };
-  };
-
-  const handleExtractFrames = async () => {
-    if (!videoUrl) {
-      setExtractFramesMessage("Upload a video first. Once it is ready, you can extract frames for AI.");
-      return;
-    }
-
-    setExtractingFrames(true);
-    setExtractFramesMessage("");
-    setExtractFramesErrorCode(null);
-    try {
-      const startedAt = performance.now();
-      const clientFrames = await extractFramesClientSide(videoUrl, 6);
-      setExtractedFrameDataUrls(clientFrames.map((f) => f.dataUrl));
-      const extractionMs = Math.round(performance.now() - startedAt);
-
-      const { data, error } = await supabase.functions.invoke("video-frame-extract", {
-        body: {
-          videoUrl,
-          maxFrames: 6,
-          strategy: "scene_change",
-          frames: clientFrames,
-          telemetry: {
-            source: "client-canvas",
-            extractionMs,
-            framesGenerated: clientFrames.length,
-            userAgent: navigator.userAgent,
-          },
-        },
-      });
-
-      if (error) throw error;
-
-      const frames = Array.isArray(data?.frames)
-        ? data.frames.filter((f: any) => typeof f?.url === "string")
-        : [];
-
-      setExtractedFrames(frames);
-      setExtractFramesMessage(
-        frames.length > 0
-          ? `Extracted ${frames.length} frame${frames.length !== 1 ? "s" : ""}. Ready for AI identification.`
-          : "No frames returned.",
-      );
-    } catch (err: any) {
-      const mapped = mapExtractError(err);
-      setExtractFramesErrorCode(mapped.code);
-      setExtractFramesMessage(mapped.message);
-      setExtractedFrames([]);
-      setExtractedFrameDataUrls([]);
-    } finally {
-      setExtractingFrames(false);
-    }
-  };
-
-  const handleExtractFramesFallback = async () => {
-    if (!videoUrl) return;
-
-    setExtractingFrames(true);
-    setExtractFramesMessage("");
-    try {
-      const { data, error } = await supabase.functions.invoke("video-frame-extract", {
-        body: {
-          videoUrl,
-          maxFrames: 6,
-          strategy: "scene_change",
-          telemetry: {
-            source: "fallback-no-frames",
-            reason: extractFramesErrorCode,
-            userAgent: navigator.userAgent,
-          },
-        },
-      });
-
-      if (error) throw error;
-
-      const frames = Array.isArray(data?.frames)
-        ? data.frames.filter((f: any) => typeof f?.url === "string")
-        : [];
-      setExtractedFrames(frames);
-      setExtractedFrameDataUrls([]);
-      setExtractFramesMessage(
-        "Fallback frame set generated. For best AI quality, use photo capture or retry extraction.",
-      );
-      setExtractFramesErrorCode(null);
-    } catch (err: any) {
-      setExtractFramesMessage(err?.message || "Fallback extraction failed.");
-    } finally {
-      setExtractingFrames(false);
-    }
-  };
-
-  const handleAnalyzeExtractedFrames = () => {
-    if (extractedFrameDataUrls.length === 0) {
-      setExtractFramesMessage("Extract frames first before running AI identification.");
-      return;
-    }
-
-    navigate("/analyze", {
-      state: {
-        imageUrls: extractedFrameDataUrls,
-        voiceNote,
-        fromVideoExtraction: true,
-      },
-    });
-  };
-
-  const {
-    toggleBestOffer,
-    updateBestOfferAutoAccept,
-    updateBestOfferAutoDecline,
-  } = useAnalyzeBestOfferControls({
-    setBestOfferEnabled,
-    setBestOfferAutoAcceptPrice,
-    setBestOfferAutoDeclinePrice,
-  });
 
   const { conditionOptions, updateCondition } = useAnalyzeConditionOptions({
     ebayMetadata,
@@ -593,219 +354,81 @@ export default function AnalyzePage() {
       setGradingRationale,
     });
 
-  const {
-    updateTitle,
-    updateDescription,
-    toggleAiFooter,
-    updateConsignor,
-    updateItemSpecificValue,
-  } = useAnalyzeListingFieldHandlers({
-    setTitle,
-    setDescription,
-    setIncludeAiFooter,
-    setConsignor,
-    setItemSpecifics,
-  });
+  const { updateTitle, updateDescription, toggleAiFooter, updateConsignor, updateItemSpecificValue } =
+    useAnalyzeListingFieldHandlers({
+      setTitle,
+      setDescription,
+      setIncludeAiFooter,
+      setConsignor,
+      setItemSpecifics,
+    });
 
-  // Auto-trigger AI analysis on mount — skip the redundant "Generate Listing" step
+  // Auto-trigger AI analysis on mount
   useEffect(() => {
     if (imageUrls.length > 0) {
       handleGenerate();
     }
   }, []); // mount-only intentional
 
+  // ── Guards ─────────────────────────────────────────────────────────────────────────
+
   if (imageUrls.length === 0 && !videoOnlyMode) {
     navigate("/home");
     return null;
   }
 
-  // Filter out empty item specifics for display
-  const displaySpecifics = Object.entries(itemSpecifics).filter(([, v]) => v && v.trim() !== "");
+  const displaySpecifics = Object.entries(itemSpecifics).filter(([, v]) => v && (v as string).trim() !== "");
+
+  // ── Video-only early return ──────────────────────────────────────────────────────────────
 
   if (videoOnlyMode) {
     return (
-      <div className="min-h-screen bg-background pb-8">
-        <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-3">
-          <button onClick={() => navigate("/home")} className="text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <h1 className="font-semibold text-foreground">Analyze Item</h1>
-          <span className="ml-auto text-xs text-muted-foreground">Video-first</span>
-        </header>
-
-        <div className="px-4 pt-4 max-w-lg mx-auto space-y-4">
-          <div className="rounded-xl border border-border bg-card p-4 space-y-2">
-            <p className="text-sm font-semibold text-foreground">Upload a Video</p>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              You can attach a video here for your listing media. AI item identification still needs photos today.
-              We are planning automatic key-frame extraction so video-only uploads can run identification in a future release.
-            </p>
-          </div>
-
-          {ebayTokenForPolicies ? (
-            <VideoUploadInput
-              title={title}
-              userToken={ebayTokenForPolicies}
-              onVideoReady={onVideoReady}
-              onVideoRemoved={onVideoRemoved}
-              onStatusChange={onVideoStatusChange}
-            />
-          ) : (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-              Connect eBay in Settings to upload a video.
-            </div>
-          )}
-
-          {videoIsProcessing && (
-            <p className="text-xs text-center text-amber-600">
-              <Loader2 className="inline w-3 h-3 animate-spin mr-1" />
-              Video is processing on eBay. You can save a draft and publish when it becomes LIVE.
-            </p>
-          )}
-
-          <div className="rounded-xl border border-border bg-card p-3 space-y-2">
-            <p className="text-xs font-medium text-foreground">AI Frame Extraction</p>
-            <p className="text-xs text-muted-foreground">
-              Extract representative frames from the uploaded video so AI identification can run without photos.
-            </p>
-            <button
-              type="button"
-              onClick={handleExtractFrames}
-              disabled={extractingFrames || !videoUrl}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium disabled:opacity-60"
-            >
-              {extractingFrames ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Extracting Frames...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4" />
-                  Extract Frames for AI
-                </>
-              )}
-            </button>
-
-            {!videoUrl && (
-              <p className="text-[11px] text-amber-600">Upload a video and wait for readiness to enable extraction.</p>
-            )}
-
-            {extractFramesMessage && (
-              <p className="text-[11px] text-muted-foreground">{extractFramesMessage}</p>
-            )}
-
-            {extractFramesErrorCode && (
-              <div className="flex flex-col gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={handleExtractFramesFallback}
-                  disabled={extractingFrames}
-                  className="w-full py-2 rounded-lg border border-border bg-card text-foreground text-xs font-medium hover:border-primary/40 disabled:opacity-60"
-                >
-                  Use Fallback Frame Set
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigate("/home")}
-                  className="w-full py-2 rounded-lg border border-border bg-card text-foreground text-xs font-medium hover:border-primary/40"
-                >
-                  Use Photo Capture Instead
-                </button>
-              </div>
-            )}
-
-            {extractedFrameDataUrls.length > 0 && (
-              <button
-                type="button"
-                onClick={handleAnalyzeExtractedFrames}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-secondary text-foreground text-sm font-medium hover:bg-secondary/80"
-              >
-                <Sparkles className="w-4 h-4" />
-                Run AI Identification with Extracted Frames
-              </button>
-            )}
-
-            {extractedFrames.length > 0 && (
-              <div className="grid grid-cols-3 gap-2 pt-1">
-                {extractedFrames.map((frame, idx) => (
-                  <div key={`${frame.timestampSec}-${idx}`} className="rounded-md overflow-hidden border border-border bg-secondary">
-                    <img src={frame.url} alt={`Extracted frame ${idx + 1}`} className="w-full aspect-video object-cover" />
-                    <div className="px-1.5 py-1 text-[10px] text-muted-foreground">
-                      {frame.timestampSec.toFixed(1)}s • {Math.round(frame.score * 100)}%
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <button
-            onClick={() => navigate("/home")}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-secondary text-foreground font-medium text-sm hover:bg-secondary/80"
-          >
-            Back to Capture
-          </button>
-        </div>
-      </div>
+      <VideoOnlyView
+        ebayTokenForPolicies={ebayTokenForPolicies}
+        title={title}
+        videoIsProcessing={videoIsProcessing}
+        videoUrl={videoUrl}
+        extractingFrames={extractingFrames}
+        extractedFrames={extractedFrames}
+        extractedFrameDataUrls={extractedFrameDataUrls}
+        extractFramesMessage={extractFramesMessage}
+        extractFramesErrorCode={extractFramesErrorCode}
+        onVideoReady={onVideoReady}
+        onVideoRemoved={onVideoRemoved}
+        onVideoStatusChange={onVideoStatusChange}
+        onExtractFrames={handleExtractFrames}
+        onExtractFramesFallback={handleExtractFramesFallback}
+        onAnalyzeExtractedFrames={handleAnalyzeExtractedFrames}
+        onBack={() => navigate("/home")}
+      />
     );
   }
+
+  // ── Main render ────────────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-background pb-8">
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-3">
-        <button onClick={() => navigate("/home")} className="text-muted-foreground hover:text-foreground transition-colors">
+        <button
+          onClick={() => navigate("/home")}
+          className="text-muted-foreground hover:text-foreground transition-colors"
+        >
           <ArrowLeft className="w-5 h-5" />
         </button>
         <h1 className="font-semibold text-foreground">Analyze Item</h1>
-        <span className="ml-auto text-xs text-muted-foreground">{imageUrls.length} photo{imageUrls.length !== 1 && "s"}</span>
+        <span className="ml-auto text-xs text-muted-foreground">
+          {imageUrls.length} photo{imageUrls.length !== 1 && "s"}
+        </span>
       </header>
 
       <div className="px-4 pt-4 max-w-lg mx-auto space-y-4">
-        {/* Image carousel */}
-        <div className="relative rounded-xl overflow-hidden border border-border aspect-square bg-secondary">
-          <img src={imageUrls[activePhoto]} alt={`Item photo ${activePhoto + 1}`} className="w-full h-full object-cover" />
-          {imageUrls.length > 1 && (
-            <>
-              <button
-                onClick={goToPreviousPhoto}
-                className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-background/70 backdrop-blur-sm flex items-center justify-center text-foreground hover:bg-background/90 transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button
-                onClick={goToNextPhoto}
-                className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-background/70 backdrop-blur-sm flex items-center justify-center text-foreground hover:bg-background/90 transition-colors"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
-                {imageUrls.map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => selectPhoto(i)}
-                    className={`w-2 h-2 rounded-full transition-colors ${i === activePhoto ? "bg-primary" : "bg-background/60"}`}
-                  />
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Thumbnail strip */}
-        {imageUrls.length > 1 && (
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {imageUrls.map((url, i) => (
-              <button
-                key={i}
-                onClick={() => selectPhoto(i)}
-                className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-colors ${i === activePhoto ? "border-primary" : "border-border"}`}
-              >
-                <img src={url} alt={`Thumb ${i + 1}`} className="w-full h-full object-cover" />
-              </button>
-            ))}
-          </div>
-        )}
+        <ImageCarousel
+          imageUrls={imageUrls}
+          activePhoto={activePhoto}
+          onSelectPhoto={selectPhoto}
+          onGoToPreviousPhoto={goToPreviousPhoto}
+          onGoToNextPhoto={goToNextPhoto}
+        />
 
         {generating && !generated ? (
           <div className="space-y-2">
@@ -818,7 +441,6 @@ export default function AnalyzePage() {
             </p>
           </div>
         ) : !generated ? (
-          // Analysis failed — let user retry
           <div className="space-y-2">
             <button
               onClick={handleGenerate}
@@ -831,7 +453,10 @@ export default function AnalyzePage() {
             <p className="text-center text-xs text-muted-foreground">
               {usage.aiAnalysis}/{currentPlanLimits.analysisLimit} analyses used this month
               {!canAnalyze && (
-                <button onClick={() => navigate("/billing")} className="ml-1 text-primary hover:underline inline-flex items-center gap-0.5">
+                <button
+                  onClick={() => navigate("/billing")}
+                  className="ml-1 text-primary hover:underline inline-flex items-center gap-0.5"
+                >
                   <Crown className="w-3 h-3" /> Upgrade
                 </button>
               )}
@@ -839,583 +464,110 @@ export default function AnalyzePage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Credit tracking info for free tier */}
-            {analysisMeta && currentPlan === "starter" && (
-              <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-blue-900 dark:text-blue-100">Free Tier Credits</p>
-                    <p className="text-sm font-bold text-blue-900 dark:text-blue-100 mt-0.5">
-                      {analysisMeta.creditsRemaining} / {analysisMeta.creditsUsed + analysisMeta.creditsRemaining}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-blue-700 dark:text-blue-300">
-                      {analysisMeta.creditsRemaining === 0 ? "Limit reached" : `${analysisMeta.creditsRemaining} remaining`}
-                    </p>
-                    <p className="text-[10px] text-blue-600 dark:text-blue-400 mt-1">
-                      Resets {new Date(analysisMeta.creditsResetAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-                {analysisMeta.creditsRemaining <= 2 && analysisMeta.creditsRemaining > 0 && (
-                  <p className="text-xs text-blue-700 dark:text-blue-300">
-                    💡 Running low on credits — upgrade to Pro for unlimited analyses
-                  </p>
-                )}
-              </div>
-            )}
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">eBay Title</label>
-                <span className="text-xs text-muted-foreground">{title.length}/80</span>
-              </div>
-              <input
-                value={title}
-                onChange={(e) => updateTitle(e.target.value)}
-                className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Item Description</label>
-              <textarea
-                value={description}
-                onChange={(e) => updateDescription(e.target.value)}
-                rows={5}
-                className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-              />
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={includeAiFooter}
-                  onChange={(e) => toggleAiFooter(e.target.checked)}
-                  className="h-4 w-4 rounded border-border text-primary focus:ring-ring accent-primary"
-                />
-                <span className="text-xs text-muted-foreground">
-                  Append AI disclosure footer
-                </span>
-              </label>
-              {includeAiFooter && (
-                <p className="text-[10px] text-muted-foreground italic bg-muted rounded-md px-2.5 py-1.5">
-                  "Listing generated by Teckstart AI Assistant. All details should be verified by the buyer."
-                </p>
-              )}
-            </div>
-            {displaySpecifics.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-1.5">
-                  <Tag className="w-3.5 h-3.5 text-primary" />
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">eBay Item Specifics</label>
-                </div>
-                {/* Category selector — top 3 AI suggestions + manual override */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">eBay Category</label>
-                  {!isCustomCategoryMode ? (
-                    <>
-                      <select
-                        value={ebayCategoryId}
-                        onChange={(e) => handleCategorySelectChange(e.target.value)}
-                        className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                      >
-                        {suggestedCategories.length > 0 ? (
-                          suggestedCategories.map((cat) => {
-                            // Always prioritize breadcrumb, then use frontend map as fallback
-                            const displayBreadcrumb = cat.breadcrumb || getEbayCategoryBreadcrumb(cat.categoryId) || cat.categoryName || `Category #${cat.categoryId}`;
-                            return (
-                              <option key={cat.categoryId} value={cat.categoryId}>
-                                {displayBreadcrumb}
-                              </option>
-                            );
-                          })
-                        ) : (
-                          <option value="">No category selected</option>
-                        )}
-                        {ebayCategoryId && !hasSelectedCategoryInSuggestions && (
-                          <option value={ebayCategoryId}>
-                            {getEbayCategoryBreadcrumb(ebayCategoryId) || `Category #${ebayCategoryId}`}
-                          </option>
-                        )}
-                        <option value="__custom__">✏️ Enter custom category ID...</option>
-                      </select>
-                      {selectedSuggestedCategory?.reason && (
-                        <p className="text-[10px] text-muted-foreground italic px-1">
-                          {selectedSuggestedCategory.reason}
-                        </p>
-                      )}
-                    </>
-                  ) : (
-                    <div className="space-y-2 p-3 bg-card border border-primary rounded-lg">
-                      <p className="text-[10px] font-medium text-muted-foreground">Enter custom eBay category ID</p>
-                      <input
-                        autoFocus
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="e.g. 39455 for Wheat Penny"
-                        value={customCategoryInput}
-                        onChange={(e) => updateCustomCategoryInput(e.target.value)}
-                        onKeyDown={(e) => handleCustomCategoryInputKeyDown(e.key)}
-                        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          onClick={confirmCustomCategoryInput}
-                          disabled={!customCategoryInput.trim()}
-                          className="flex-1 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 font-medium transition-colors"
-                        >
-                          Confirm ID
-                        </button>
-                        <button
-                          onClick={cancelCustomCategoryMode}
-                          className="flex-1 py-1.5 text-xs rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 font-medium transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="bg-card border border-border rounded-lg divide-y divide-border">
-                  {displaySpecifics.map(([key, value]) => {
-                    const isRequired = ebayMetadata?.requiredAspects?.includes(key);
-                    const isSuggested = ebayMetadata?.suggestedAspects?.includes(key);
-                    return (
-                      <div key={key} className="flex items-center justify-between px-3 py-2">
-                        <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                          {key}
-                          {isRequired && <span className="text-[9px] font-semibold text-red-500 uppercase tracking-wide">req</span>}
-                          {isSuggested && !isRequired && <span className="text-[9px] text-primary/60 uppercase tracking-wide">opt</span>}
-                        </span>
-                        <input
-                          value={(value as string) || ""}
-                          onChange={(e) => updateItemSpecificValue(key, e.target.value)}
-                          className="text-xs text-foreground text-right bg-transparent border-none focus:outline-none focus:ring-0 max-w-[55%]"
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-{/* Condition */}
-                <div className="flex items-center justify-between bg-card border border-border rounded-lg px-3 py-2">
-                  <span className="text-xs font-medium text-muted-foreground">Condition</span>
-                  <select
-                    value={condition}
-                    onChange={(e) => updateCondition(e.target.value)}
-                    className="text-xs text-foreground bg-transparent border-none focus:outline-none cursor-pointer text-right"
-                  >
-                    {conditionOptions.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
-
-            {/* AI Suggested Grade — only relevant for coin/card domains */}
-            {suggestedGrade && !isSlabbed && (domain === "coins_bullion" || domain === "trading_cards") && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">AI-Estimated Grade</label>
-                </div>
-
-                <div className={`bg-card border rounded-xl p-4 space-y-3 ${gradeConfirmed ? "border-primary" : "border-accent"}`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-2xl font-bold text-foreground">{suggestedGrade}</span>
-                    {gradeConfirmed ? (
-                      <span className="flex items-center gap-1 text-xs font-medium text-primary bg-primary/10 px-2 py-1 rounded-full">
-                        <Check className="w-3 h-3" /> Confirmed
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-xs font-medium text-accent-foreground bg-accent px-2 py-1 rounded-full">
-                        <AlertTriangle className="w-3 h-3" /> Pending
-                      </span>
-                    )}
-                  </div>
-
-                  {gradingRationale && (
-                    <div className="bg-muted/50 rounded-lg p-3">
-                      <p className="text-xs font-medium text-muted-foreground mb-1">Grading Rationale</p>
-                      <p className="text-xs text-foreground leading-relaxed">{gradingRationale}</p>
-                    </div>
-                  )}
-
-                  <div className="flex items-start gap-2 bg-accent/30 rounded-lg p-2.5">
-                    <AlertTriangle className="w-3.5 h-3.5 text-accent-foreground flex-shrink-0 mt-0.5" />
-                    <p className="text-[10px] text-accent-foreground leading-relaxed">
-                      <strong>Disclaimer:</strong> This is an AI-estimated grade based on photo analysis only. It is NOT a substitute for professional grading by PCGS, NGC, or other certification services. Actual grade may differ.
-                    </p>
-                  </div>
-
-                  {!gradeConfirmed ? (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => acceptSuggestedGrade(suggestedGrade)}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold transition-all hover:opacity-90 active:scale-[0.98]"
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                        Accept Grade
-                      </button>
-                      <button
-                        onClick={dismissSuggestedGrade}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-secondary text-foreground text-xs font-semibold transition-all hover:bg-secondary/80 active:scale-[0.98]"
-                      >
-                        <XIcon className="w-3.5 h-3.5" />
-                        Dismiss
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={undoGradeConfirmation}
-                      className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
-                    >
-                      Undo confirmation
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Consignor */}
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1.5">
-                <UserCircle className="w-3.5 h-3.5 text-primary" />
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Consignor</label>
-                <span className="text-[10px] text-muted-foreground/60 ml-auto">Optional</span>
-              </div>
-              <input
-                value={consignor}
-                onChange={(e) => updateConsignor(e.target.value)}
-                placeholder="Who does this item belong to?"
-                className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-
-            {/* Item Cost (COGS) */}
-            <CogsInput
-              cogs={cogs}
-              listingPrice={listingPriceForCogs}
-              onChange={setCogs}
-              disabled={!planFeatures.hasCogsTracking}
-            />
-
-            {/* Smart Price Recommender */}
-            <PriceRecommenderCard
+            <ListingFields
+              analysisMeta={analysisMeta}
+              currentPlan={currentPlan}
               title={title}
+              updateTitle={updateTitle}
+              description={description}
+              updateDescription={updateDescription}
+              includeAiFooter={includeAiFooter}
+              toggleAiFooter={toggleAiFooter}
+              displaySpecifics={displaySpecifics}
+              ebayMetadata={ebayMetadata}
+              updateItemSpecificValue={updateItemSpecificValue}
+              ebayCategoryId={ebayCategoryId}
+              suggestedCategories={suggestedCategories}
+              isCustomCategoryMode={isCustomCategoryMode}
+              customCategoryInput={customCategoryInput}
+              hasSelectedCategoryInSuggestions={hasSelectedCategoryInSuggestions}
+              selectedSuggestedCategory={selectedSuggestedCategory}
+              handleCategorySelectChange={handleCategorySelectChange}
+              updateCustomCategoryInput={updateCustomCategoryInput}
+              handleCustomCategoryInputKeyDown={handleCustomCategoryInputKeyDown}
+              confirmCustomCategoryInput={confirmCustomCategoryInput}
+              cancelCustomCategoryMode={cancelCustomCategoryMode}
               condition={condition}
+              conditionOptions={conditionOptions}
+              updateCondition={updateCondition}
+              suggestedGrade={suggestedGrade}
+              isSlabbed={isSlabbed}
+              domain={domain}
+              gradeConfirmed={gradeConfirmed}
+              gradingRationale={gradingRationale}
+              acceptSuggestedGrade={acceptSuggestedGrade}
+              dismissSuggestedGrade={dismissSuggestedGrade}
+              undoGradeConfirmation={undoGradeConfirmation}
+              consignor={consignor}
+              updateConsignor={updateConsignor}
+              cogs={cogs}
+              setCogs={setCogs}
+              planFeatures={planFeatures}
+              listingPriceForCogs={listingPriceForCogs}
               priceMin={priceMin}
               priceMax={priceMax}
-              metalType={planFeatures.hasMeltProtection && metalType !== "none" ? metalType : undefined}
-              metalWeightOz={planFeatures.hasMeltProtection && metalType !== "none" ? metalWeightOz : undefined}
-              meltValue={planFeatures.hasMeltProtection && metalType !== "none" ? meltValue : null}
-              spotPrices={planFeatures.hasMeltProtection && metalType !== "none" ? spotPrices : null}
-              onApplyPrice={applyRecommendedPrice}
+              metalType={metalType}
+              metalWeightOz={metalWeightOz}
+              meltValue={meltValue}
+              spotPrices={spotPrices}
+              applyRecommendedPrice={applyRecommendedPrice}
+              onNavigateToBilling={() => navigate("/billing")}
             />
 
-            {/* Listing Format + Price */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-1.5">
-                <DollarSign className="w-3.5 h-3.5 text-primary" />
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Listing Format & Price</label>
-              </div>
+            <ListingFormatPrice
+              listingFormat={listingFormat}
+              onSelectFixedPrice={selectFixedPriceFormat}
+              onSelectAuction={selectAuctionFormat}
+              listingPrice={listingPrice}
+              onUpdateListingPrice={updateListingPriceFromInput}
+              quantity={quantity}
+              onUpdateQuantity={updateQuantityFromInput}
+              pricingMode={pricingMode}
+              onSelectPricingMode={selectPricingMode}
+              bestOfferEnabled={bestOfferEnabled}
+              onToggleBestOffer={toggleBestOffer}
+              bestOfferAutoAcceptPrice={bestOfferAutoAcceptPrice}
+              onUpdateBestOfferAutoAccept={updateBestOfferAutoAccept}
+              bestOfferAutoDeclinePrice={bestOfferAutoDeclinePrice}
+              onUpdateBestOfferAutoDecline={updateBestOfferAutoDecline}
+              auctionStartPrice={auctionStartPrice}
+              onUpdateAuctionStartPrice={updateAuctionStartPriceFromInput}
+              auctionBuyItNowEnabled={auctionBuyItNowEnabled}
+              onToggleAuctionBuyItNow={toggleAuctionBuyItNow}
+              auctionBuyItNow={auctionBuyItNow}
+              onUpdateAuctionBuyItNow={updateAuctionBuyItNowFromInput}
+            />
 
-              {/* Format selector */}
-              <div className="flex gap-2">
-                <button
-                  onClick={selectFixedPriceFormat}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium border transition-colors ${
-                    listingFormat === "FIXED_PRICE"
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border bg-card text-muted-foreground hover:border-primary/40"
-                  }`}
-                >
-                  <DollarSign className="w-3.5 h-3.5" />
-                  Buy It Now
-                </button>
-                <button
-                  onClick={selectAuctionFormat}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium border transition-colors ${
-                    listingFormat === "AUCTION"
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border bg-card text-muted-foreground hover:border-primary/40"
-                  }`}
-                >
-                  <Gavel className="w-3.5 h-3.5" />
-                  Auction
-                </button>
-              </div>
+            <PolicyAndVideo
+              ebayTokenForPolicies={ebayTokenForPolicies}
+              title={title}
+              publishing={publishing}
+              onPoliciesSelected={setSelectedPolicies}
+              onVideoReady={onVideoReady}
+              onVideoRemoved={onVideoRemoved}
+              onVideoStatusChange={onVideoStatusChange}
+            />
 
-              {/* Buy It Now — single price + Best Offer */}
-              {listingFormat === "FIXED_PRICE" && (
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">Listing Price ($)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={listingPrice || ""}
-                      placeholder="0.00"
-                      onChange={(e) => updateListingPriceFromInput(e.target.value)}
-                      className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                    />
-                  </div>
+            <ExportSection
+              exportPlatform={exportPlatform}
+              onSetExportPlatform={setExportPlatform}
+              exportFormat={exportFormat}
+              onSetExportFormat={setExportFormat}
+              downloadLabel={downloadLabel}
+              onExport={handleExport}
+            />
 
-                  {/* Quantity — Fixed Price only */}
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 space-y-1">
-                        <label className="text-xs text-muted-foreground">Quantity Available</label>
-                        <input
-                          type="number"
-                          min="1"
-                          step="1"
-                          value={quantity}
-                          onChange={(e) => updateQuantityFromInput(e.target.value)}
-                          className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                        />
-                      </div>
-                    </div>
-                    {quantity > 1 && (
-                      <div className="space-y-1 pl-1">
-                        <label className="text-xs text-muted-foreground">Listing price is…</label>
-                        <div className="flex gap-2">
-                          {(['per_item', 'total'] as const).map((mode) => (
-                            <button
-                              key={mode}
-                              onClick={() => selectPricingMode(mode)}
-                              className={`flex-1 py-2 rounded-lg text-xs font-medium border transition-colors ${
-                                pricingMode === mode
-                                  ? 'border-primary bg-primary/10 text-primary'
-                                  : 'border-border bg-card text-muted-foreground hover:border-primary/40'
-                              }`}
-                            >
-                              {mode === 'per_item' ? 'Per item' : 'Total for all'}
-                            </button>
-                          ))}
-                        </div>
-                        {pricingMode === 'total' && listingPrice > 0 && (
-                          <p className="text-xs text-muted-foreground pt-0.5">
-                            eBay will list at <span className="font-medium text-foreground">${(listingPrice / quantity).toFixed(2)}</span> per item
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Best Offer toggle */}
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={bestOfferEnabled}
-                      onChange={(e) => toggleBestOffer(e.target.checked)}
-                      className="h-4 w-4 rounded border-border accent-primary"
-                    />
-                    <span className="text-xs text-muted-foreground">Accept Best Offers from buyers</span>
-                  </label>
-
-                  {/* Best Offer threshold prices — optional */}
-                  {bestOfferEnabled && (
-                    <div className="space-y-2 pl-6 border-l-2 border-primary/20">
-                      <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">
-                          Auto-Accept Price ($)
-                          <span className="ml-1 text-muted-foreground/60 italic">optional — auto-accept offers at or above this</span>
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={bestOfferAutoAcceptPrice || ""}
-                          placeholder="Leave blank to review manually"
-                          onChange={(e) => updateBestOfferAutoAccept(e.target.value)}
-                          className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">
-                          Auto-Decline Price ($)
-                          <span className="ml-1 text-muted-foreground/60 italic">optional — auto-decline offers at or below this</span>
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={bestOfferAutoDeclinePrice || ""}
-                          placeholder="Leave blank to review manually"
-                          onChange={(e) => updateBestOfferAutoDecline(e.target.value)}
-                          className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Auction — starting bid + optional Buy It Now */}
-              {listingFormat === "AUCTION" && (
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">Starting Bid ($)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={auctionStartPrice || ""}
-                      placeholder="0.00"
-                      onChange={(e) => updateAuctionStartPriceFromInput(e.target.value)}
-                      className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                    />
-                  </div>
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={auctionBuyItNowEnabled}
-                      onChange={(e) => toggleAuctionBuyItNow(e.target.checked)}
-                      className="h-4 w-4 rounded border-border accent-primary"
-                    />
-                    <span className="text-xs text-muted-foreground">Add Buy It Now price to auction</span>
-                  </label>
-                  {auctionBuyItNowEnabled && (
-                    <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">Buy It Now Price ($)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={auctionBuyItNow || ""}
-                        placeholder="0.00"
-                        onChange={(e) => updateAuctionBuyItNowFromInput(e.target.value)}
-                        className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* eBay Business Policies */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">eBay Business Policies</label>
-              </div>
-              <EbayPolicySelector
-                userToken={ebayTokenForPolicies}
-                onPoliciesSelected={setSelectedPolicies}
-                disabled={publishing}
-              />
-            </div>
-
-            {/* Video Upload (optional) */}
-            {ebayTokenForPolicies && (
-              <VideoUploadInput
-                title={title}
-                userToken={ebayTokenForPolicies}
-                onVideoReady={onVideoReady}
-                onVideoRemoved={onVideoRemoved}
-                onStatusChange={onVideoStatusChange}
-              />
-            )}
-
-            {/* Export */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-1.5">
-                <Download className="w-3.5 h-3.5 text-primary" />
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Export Listing</label>
-              </div>
-
-              {/* Platform toggle */}
-              <div className="flex gap-2">
-                {([["ebay_file_exchange", "eBay File Exchange"], ["facebook_marketplace", "Facebook Marketplace"]] as const).map(([key, label]) => (
-                  <button
-                    key={key}
-                    onClick={() => setExportPlatform(key)}
-                    className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors border ${
-                      exportPlatform === key
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border bg-card text-muted-foreground hover:border-primary/40"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Format toggle */}
-              <div className="flex gap-2">
-                {([["csv", "CSV", Download], ["excel", "Excel (.xlsx)", FileSpreadsheet], ["google_sheets", "Google Sheets", Sheet]] as const).map(([key, label, Icon]) => (
-                  <button
-                    key={key}
-                    onClick={() => setExportFormat(key)}
-                    className={`flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-xs font-medium transition-colors border ${
-                      exportFormat === key
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border bg-card text-muted-foreground hover:border-primary/40"
-                    }`}
-                  >
-                    <Icon className="w-3 h-3" />
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              <button
-                onClick={handleExport}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-secondary text-foreground font-semibold text-sm transition-all hover:bg-secondary/80 active:scale-[0.98]"
-              >
-                <Download className="w-4 h-4" />
-                Download {downloadLabel}
-              </button>
-            </div>
-
-            {/* Action buttons */}
-            <div className="space-y-2">
-              <button
-                onClick={handleSave}
-                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-success text-success-foreground font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98]"
-              >
-                <Save className="w-4 h-4" />
-                Save Draft
-              </button>
-
-              {isOwner ? (
-                <button
-                  onClick={handlePublish}
-                  disabled={publishing || videoIsProcessing}
-                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
-                >
-                  {publishing ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Publishing...
-                    </>
-                  ) : (
-                    <>
-                      <Send className="w-4 h-4" />
-                      Publish Live to eBay
-                    </>
-                  )}
-                </button>
-              ) : (
-                <div className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-muted text-muted-foreground font-semibold text-sm">
-                  <Lock className="w-4 h-4" />
-                  Publishing restricted to account owner
-                </div>
-              )}
-              {videoIsProcessing && (
-                <p className="text-xs text-center text-amber-600">
-                  <Loader2 className="inline w-3 h-3 animate-spin mr-1" />
-                  Video is processing on eBay — save as draft now and publish once it's ready.
-                </p>
-              )}
-            </div>
+            <ActionButtons
+              onSave={handleSave}
+              onPublish={handlePublish}
+              publishing={publishing}
+              videoIsProcessing={videoIsProcessing}
+              isOwner={isOwner}
+            />
           </div>
         )}
       </div>
 
-      {/* Category Confirmation Dialog */}
       <CategoryConfirmDialog
         open={showCategoryConfirm}
         categoryId={pendingCategoryId}
