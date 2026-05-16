@@ -43,8 +43,8 @@ export default defineConfig(({ mode }) => ({
         ],
       },
       manifest: {
-        name: "Teckstart Listing Assistant",
-        short_name: "Teckstart",
+        name: "ListCreator by Teckstart",
+        short_name: "ListCreator",
         description: "AI-powered eBay listing creation for coins, bullion, and collectibles",
         theme_color: "#1d6fe0",
         background_color: "#f7f9fc",
