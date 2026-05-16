@@ -4335,12 +4335,20 @@ serve(async (req) => {
         try {
           const firstError = parsedErrJson?.errors?.[0];
           const errorId = firstError?.errorId;
+          const rawMsg = String(firstError?.message ?? "");
+          const policyBlockText = `${rawMsg} ${errText}`;
+          const isPolicyBlocked = /norfed liberty dollars|counterfeit coins policy|not permitted on ebay|do not attempt to relist/i
+            .test(policyBlockText);
+
+          if (isPolicyBlocked) {
+            userFriendlyError =
+              "eBay blocked this listing due to policy restrictions (NORFED Liberty Dollars / Counterfeit Coins policy). This item type cannot be listed on eBay. Please choose a different item.";
+          } else
           if (publishResp.status === 500 || errorId === 25001) {
             userFriendlyError =
               "eBay is experiencing a temporary issue. Please wait a minute and try publishing again. Your listing details are saved.";
           } else if (isSellerLimitError) {
             // Extract the human-readable portion of the seller limit message
-            const rawMsg: string = firstError?.message ?? "";
             const limitMatch = rawMsg.match(/You can list up to ([$\d,.]+) more[^.]*\./i);
             const remaining = limitMatch ? limitMatch[1] : null;
             userFriendlyError = remaining
