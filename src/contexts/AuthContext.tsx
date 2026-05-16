@@ -2,8 +2,8 @@ import { createContext, useContext, useEffect, useState, useCallback, ReactNode 
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
-// ─── 4-Tier Plan Configuration ──────────────────────────────────────────────
-// Stripe product/price IDs are placeholders — update with real values after
+// âââ 4-Tier Plan Configuration âââââââââââââââââââââââââââââââââââââââââââââââ
+// Stripe product/price IDs are placeholders â update with real values after
 // creating them in the Stripe Dashboard.
 export const PLANS = {
   free: {
@@ -221,7 +221,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         productId: data.product_id ?? null,
         subscriptionEnd: data.subscription_end ?? null,
         status: data.status ?? null,
-        cancelAtPeriodEnd: data.cancel_at_period_end 3� false,
+        cancelAtPeriodEnd: data.cancel_at_period_end ?? false,
         loading: false,
       });
     } catch {
@@ -302,7 +302,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [session, subscription.subscribed, refreshSubscription]);
 
-  // ─── Derived tier values ──────────────────────────────────────────────────
+  // âââ Derived tier values ââââââââââââââââââââââââââââââââââââââââââââââââââ
   const isAdmin = ADMIN_EMAILS.includes(session?.user?.email ?? "");
   const isActivePaid = subscription.subscribed || subscription.status === "trialing";
 
@@ -341,7 +341,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     publishLimit: PLANS[resolvedPlan].publishLimit,
   };
 
-  // Usage gates — Shop plan uses soft threshold (warn but don't hard-block)
+  // Usage gates â Shop plan uses soft threshold (warn but don't hard-block)
   const finalCanAnalyze = usage.aiAnalysis < currentPlanLimits.analysisLimit;
   const finalCanPublish = usage.ebayPublish < currentPlanLimits.publishLimit;
 
