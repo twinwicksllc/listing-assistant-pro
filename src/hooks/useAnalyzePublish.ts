@@ -15,6 +15,8 @@ interface UseAnalyzePublishParams {
   imageUrls: string[];
   itemSpecifics: ItemSpecifics;
   ebayMetadata: EbayMetadata | null;
+  coinConditionDetailRequired: boolean;
+  coinConditionDetailComplete: boolean;
   buildPublishPayload: (args: {
     imageUrlsForPayload: string[];
     postalCode?: string | null;
@@ -37,6 +39,8 @@ export function useAnalyzePublish({
   imageUrls,
   itemSpecifics,
   ebayMetadata,
+  coinConditionDetailRequired,
+  coinConditionDetailComplete,
   buildPublishPayload,
   onRequireBilling,
   onPublishSuccess,
@@ -87,6 +91,14 @@ export function useAnalyzePublish({
         });
         return;
       }
+    }
+
+    if (coinConditionDetailRequired && !coinConditionDetailComplete) {
+      toast.error("Missing required coin condition details", {
+        description: "eBay now requires structured condition details for coin listings. Re-run analysis or complete the coin condition details before publishing.",
+        duration: 8000,
+      });
+      return;
     }
 
     setPublishing(true);
@@ -237,6 +249,8 @@ export function useAnalyzePublish({
     imageUrls,
     itemSpecifics,
     ebayMetadata,
+    coinConditionDetailRequired,
+    coinConditionDetailComplete,
     buildPublishPayload,
     onRequireBilling,
     onPublishSuccess,

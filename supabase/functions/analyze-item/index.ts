@@ -1275,9 +1275,9 @@ Seller's note: "${voiceNote}"`;
       1500: "NEW_OTHER",
       1750: "NEW_WITH_DEFECTS",
       2000: "CERTIFIED_REFURBISHED",
-      2010: "CERTIFIED_REFURBISHED",
-      2020: "CERTIFIED_REFURBISHED",
-      2030: "CERTIFIED_REFURBISHED",
+      2010: "EXCELLENT_REFURBISHED",
+      2020: "VERY_GOOD_REFURBISHED",
+      2030: "GOOD_REFURBISHED",
       2500: "SELLER_REFURBISHED",
       2750: "LIKE_NEW",
       3000: "USED_EXCELLENT",
@@ -1286,13 +1286,43 @@ Seller's note: "${voiceNote}"`;
       6000: "USED_ACCEPTABLE",
       7000: "FOR_PARTS_OR_NOT_WORKING",
     };
+    const CONDITION_DESCRIPTION_TO_ENUM: Record<string, string> = {
+      "brand new": "NEW",
+      "new": "NEW",
+      "new-open box": "NEW_OTHER",
+      "new-open-box": "NEW_OTHER",
+      "new open box": "NEW_OTHER",
+      "open box": "LIKE_NEW",
+      "like new": "LIKE_NEW",
+      "used": "USED_EXCELLENT",
+      "very good": "USED_VERY_GOOD",
+      "good": "USED_GOOD",
+      "acceptable": "USED_ACCEPTABLE",
+      "for parts or not working": "FOR_PARTS_OR_NOT_WORKING",
+      "certified refurbished": "CERTIFIED_REFURBISHED",
+      "excellent refurbished": "EXCELLENT_REFURBISHED",
+      "very good refurbished": "VERY_GOOD_REFURBISHED",
+      "good refurbished": "GOOD_REFURBISHED",
+      "seller refurbished": "SELLER_REFURBISHED",
+      "pre-owned good": "PRE_OWNED_GOOD",
+      "pre-owned fair": "PRE_OWNED_FAIR",
+      "pre-owned poor": "PRE_OWNED_POOR",
+      "digital good": "DIGITAL_GOOD",
+      "certified pre-owned": "CERTIFIED_PRE_OWNED",
+      "remanufactured": "REMANUFACTURED",
+      "retread": "RETREAD",
+      "damaged": "DAMAGED",
+      "graded": "LIKE_NEW",
+      "ungraded": "GOOD",
+    };
     const conditionEnum: string[] = categoryConditions?.conditions?.length > 0
       ? [
         ...new Set(
           categoryConditions.conditions.map((c: any) => {
             const id = Number(c.conditionId);
             return CONDITION_ID_TO_ENUM[id] ??
-              String(c.conditionDescription ?? c.conditionId).toUpperCase().replace(/\s+/g, "_");
+              CONDITION_DESCRIPTION_TO_ENUM[String(c.conditionDescription ?? "").trim().toLowerCase()] ??
+              String(c.conditionDescription ?? c.conditionId).toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "");
           }),
         ),
       ]

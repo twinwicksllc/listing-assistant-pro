@@ -5,11 +5,17 @@ import { useAuth } from "@/contexts/AuthContext";
 
 type UploadStatus = "idle" | "uploading_storage" | "uploading_ebay" | "processing" | "live" | "failed";
 
+const ACCEPTED_VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm", "video/x-msvideo"];
+const MAX_VIDEO_SIZE_MB = 500;
+const MAX_VIDEO_SIZE_BYTES = MAX_VIDEO_SIZE_MB * 1024 * 1024;
+
 interface VideoUploadInputProps {
   /** Used as the eBay video title */
   title: string;
   /** eBay user token — needed to upload to the eBay Video API */
   userToken: string | null;
+  /** Optional file selected before arriving at this screen */
+  initialFile?: File;
   /** Pre-existing values from a saved draft (triggers polling on mount if non-LIVE) */
   initialVideoId?: string;
   initialVideoStatus?: string;
@@ -23,6 +29,7 @@ interface VideoUploadInputProps {
 export function VideoUploadInput({
   title,
   userToken,
+  initialFile,
   initialVideoId,
   initialVideoStatus,
   initialVideoUrl,
@@ -51,6 +58,7 @@ export function VideoUploadInput({
   // Track current videoId in a ref so the polling interval sees the latest value
   const videoIdRef = useRef<string | null>(initialVideoId ?? null);
   const videoUrlRef = useRef<string | null>(initialVideoUrl ?? null);
+  const autoUploadKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     videoIdRef.current = videoId;
@@ -114,9 +122,20 @@ export function VideoUploadInput({
     }, 15_000); // poll every 15 s
   };
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const uploadFile = async (file: File) => {
     if (!file) return;
+
+    if (!ACCEPTED_VIDEO_TYPES.includes(file.type)) {
+      setErrorMsg("Unsupported video format. Use MP4, MOV, WebM, or AVI.");
+      setStatus("failed");
+      return;
+    }
+
+    if (file.size > MAX_VIDEO_SIZE_BYTES) {
+      setErrorMsg(`Video exceeds ${MAX_VIDEO_SIZE_MB}MB limit.`);
+      setStatus("failed");
+      return;
+    }
 
     const token = userToken ?? localStorage.getItem("ebay-user-token");
     if (!token) {
@@ -182,6 +201,22 @@ export function VideoUploadInput({
     }
   };
 
+  useEffect(() => {
+    if (!initialFile || status !== "idle") return;
+
+    const fileKey = `${initialFile.name}:${initialFile.size}:${initialFile.lastModified}`;
+    if (autoUploadKeyRef.current === fileKey) return;
+
+    autoUploadKeyRef.current = fileKey;
+    void uploadFile(initialFile);
+  }, [initialFile, status]);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await uploadFile(file);
+  };
+
   const handleRemove = () => {
     stopPolling();
     setStatus("idle");
@@ -224,7 +259,7 @@ export function VideoUploadInput({
           className="w-full flex items-center gap-2 py-2.5 px-3 rounded-lg border border-dashed border-border text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors text-xs"
         >
           <Video className="w-4 h-4 flex-shrink-0" />
-          <span>Add optional video (MP4 / MOV — max ~500 MB)</span>
+          <span>Add optional video (MP4 / MOV / WebM / AVI — max 500 MB)</span>
         </button>
       ) : (
         <div className="flex items-center gap-2 py-2.5 px-3 rounded-lg border border-border bg-card text-xs">

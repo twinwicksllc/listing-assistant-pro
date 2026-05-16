@@ -38,8 +38,8 @@ export function useAnalyzeExport({
     [exportFormat],
   );
 
-  const handleExport = () => {
-    exportListing(exportPlatform, exportFormat, {
+  const handleExport = async () => {
+    await exportListing(exportPlatform, exportFormat, {
       title,
       description,
       priceMin,
@@ -53,7 +53,7 @@ export function useAnalyzeExport({
       returnPolicyId: selectedPolicies.returnPolicyId ?? undefined,
     });
 
-    recordUsage("export");
+    await recordUsage("export");
 
     const platformLabel = exportPlatform === "ebay_file_exchange" ? "eBay" : "Facebook";
     const formatLabel = exportFormat === "csv"

@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import type { ItemSpecifics } from "@/types/listing";
+import type { CoinConditionDetail, ItemSpecifics } from "@/types/listing";
 import type { SelectedPolicies } from "@/types/ebay-policies";
 
 interface UseAnalyzePublishPayloadParams {
@@ -13,6 +13,7 @@ interface UseAnalyzePublishPayloadParams {
   condition: string;
   ebayCategoryId: string;
   itemSpecifics: ItemSpecifics;
+  coinConditionDetail: CoinConditionDetail | null;
   selectedPolicies: SelectedPolicies;
   bestOfferEnabled: boolean;
   bestOfferAutoAcceptPrice: number;
@@ -34,6 +35,7 @@ export function useAnalyzePublishPayload({
   condition,
   ebayCategoryId,
   itemSpecifics,
+  coinConditionDetail,
   selectedPolicies,
   bestOfferEnabled,
   bestOfferAutoAcceptPrice,
@@ -51,7 +53,12 @@ export function useAnalyzePublishPayload({
     imageUrlsForPayload: string[];
     postalCode?: string | null;
     city?: string | null;
-  }) => ({
+  }) => {
+    const publishItemSpecifics = coinConditionDetail
+      ? { ...(itemSpecifics as Record<string, unknown>), _coinConditionDetail: coinConditionDetail }
+      : itemSpecifics;
+
+    return {
     title,
     description: descriptionWithFooter,
     listingFormat,
@@ -61,7 +68,7 @@ export function useAnalyzePublishPayload({
     imageUrls: imageUrlsForPayload,
     condition,
     ebayCategoryId,
-    itemSpecifics,
+    itemSpecifics: publishItemSpecifics,
     postalCode: postalCode || undefined,
     city: city || undefined,
     fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId || undefined,
@@ -73,7 +80,8 @@ export function useAnalyzePublishPayload({
     quantity: quantity > 1 ? quantity : undefined,
     pricingMode: quantity > 1 ? pricingMode : undefined,
     ebayVideoId: ebayVideoStatus === "LIVE" ? ebayVideoId : undefined,
-  }), [
+    };
+  }, [
     title,
     descriptionWithFooter,
     listingFormat,
@@ -84,6 +92,7 @@ export function useAnalyzePublishPayload({
     condition,
     ebayCategoryId,
     itemSpecifics,
+    coinConditionDetail,
     selectedPolicies.fulfillmentPolicyId,
     selectedPolicies.paymentPolicyId,
     selectedPolicies.returnPolicyId,

@@ -131,6 +131,94 @@ function convertEbayAspectsToRule(aspects: any[]): AspectRule {
   return { required, preferred, defaults };
 }
 
+const _categoryConditionCache: Map<
+  string,
+  Array<{ conditionId: number; conditionDescription: string }>
+> = new Map();
+
+function normalizeConditionDescriptorToEnum(value: string | undefined | null): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+
+  const lowered = raw.toLowerCase();
+  const aliases: Record<string, string> = {
+    "brand new": "NEW",
+    "new": "NEW",
+    "new other (see details)": "NEW_OTHER",
+    "new-open box": "NEW_OTHER",
+    "new open box": "NEW_OTHER",
+    "open box": "LIKE_NEW",
+    "like new": "LIKE_NEW",
+    "used": "USED_EXCELLENT",
+    "very good": "USED_VERY_GOOD",
+    "good": "USED_GOOD",
+    "acceptable": "USED_ACCEPTABLE",
+    "for parts or not working": "FOR_PARTS_OR_NOT_WORKING",
+    "certified refurbished": "CERTIFIED_REFURBISHED",
+    "excellent refurbished": "EXCELLENT_REFURBISHED",
+    "very good refurbished": "VERY_GOOD_REFURBISHED",
+    "good refurbished": "GOOD_REFURBISHED",
+    "seller refurbished": "SELLER_REFURBISHED",
+    "pre-owned good": "PRE_OWNED_GOOD",
+    "pre-owned fair": "PRE_OWNED_FAIR",
+    "pre-owned poor": "PRE_OWNED_POOR",
+    "digital good": "DIGITAL_GOOD",
+    "certified pre-owned": "CERTIFIED_PRE_OWNED",
+    "remanufactured": "REMANUFACTURED",
+    "retread": "RETREAD",
+    "damaged": "DAMAGED",
+    "graded": "LIKE_NEW",
+    "ungraded": "GOOD",
+  };
+
+  return aliases[lowered] ?? raw.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "");
+}
+
+async function fetchDynamicCategoryConditions(
+  categoryId: string,
+): Promise<Array<{ conditionId: number; conditionDescription: string }>> {
+  if (_categoryConditionCache.has(categoryId)) {
+    return _categoryConditionCache.get(categoryId) ?? [];
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !supabaseServiceKey) return [];
+
+  try {
+    const resp = await fetch(`${supabaseUrl}/functions/v1/category-lookup`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${supabaseServiceKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ action: "conditions", categoryId }),
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.warn(`fetchDynamicCategoryConditions: category-lookup error ${resp.status} for ${categoryId}: ${errText}`);
+      return [];
+    }
+
+    const data = await resp.json();
+    const conditions = Array.isArray(data?.conditions)
+      ? data.conditions
+        .map((condition: any) => ({
+          conditionId: Number(condition.conditionId),
+          conditionDescription: String(condition.conditionDescription ?? "").trim(),
+        }))
+        .filter((condition: { conditionId: number; conditionDescription: string }) => Number.isFinite(condition.conditionId) && condition.conditionDescription)
+      : [];
+
+    _categoryConditionCache.set(categoryId, conditions);
+    return conditions;
+  } catch (err) {
+    console.warn(`fetchDynamicCategoryConditions: error for ${categoryId}:`, err);
+    return [];
+  }
+}
+
 // ================================================================
 // CATEGORY TREE DETECTION (replaces hardcoded ID sets)
 // ================================================================
@@ -1303,6 +1391,11 @@ const CONDITION_DESCRIPTIONS: Record<string, string> = {
   PRE_OWNED_GOOD: "Lightly circulated. Shows minimal wear on high points only.",
   PRE_OWNED_FAIR: "Heavily circulated. All major features visible but worn.",
   PRE_OWNED_POOR: "Heavily worn but identifiable. Outline and major features visible.",
+  DIGITAL_GOOD: "Digital asset delivered electronically.",
+  CERTIFIED_PRE_OWNED: "Certified pre-owned item meeting manufacturer or seller program standards.",
+  REMANUFACTURED: "Properly rebuilt and restored to full working order.",
+  RETREAD: "Used tire with professionally replaced tread.",
+  DAMAGED: "Damaged item that may require repair or service.",
 };
 
 const LEGACY_CONDITION_MAP: Record<string, string> = {
@@ -1339,6 +1432,16 @@ const LEGACY_CONDITION_MAP: Record<string, string> = {
   "good": "USED_GOOD",
   "acceptable": "USED_ACCEPTABLE",
   "like new": "LIKE_NEW",
+  "Digital Good": "DIGITAL_GOOD",
+  "digital good": "DIGITAL_GOOD",
+  "Certified pre-owned": "CERTIFIED_PRE_OWNED",
+  "certified pre-owned": "CERTIFIED_PRE_OWNED",
+  "Remanufactured": "REMANUFACTURED",
+  "remanufactured": "REMANUFACTURED",
+  "Retread": "RETREAD",
+  "retread": "RETREAD",
+  "Damaged": "DAMAGED",
+  "damaged": "DAMAGED",
 };
 
 // Condition normalization now uses both hardcoded fallback sets (from top of file)
@@ -3631,13 +3734,27 @@ serve(async (req) => {
         itemType,
         categoryTreeType,
       );
-      const conditionEnum = normalizedCondition;
-      const conditionId = CONDITION_ID_MAP[conditionEnum] ?? 3000;
+      let conditionEnum = normalizedCondition;
+      let conditionId = CONDITION_ID_MAP[conditionEnum];
       let effectiveConditionEnum = conditionEnum;
-      let effectiveConditionId = conditionId;
-      const conditionDesc = CONDITION_DESCRIPTIONS[conditionEnum] ??
+      let conditionDesc = CONDITION_DESCRIPTIONS[conditionEnum] ??
         conditionEnum.replace(/_/g, " ").toLowerCase()
           .replace(/\b\w/g, (c: string) => c.toUpperCase());
+
+      if ((!conditionId || ["DIGITAL_GOOD", "CERTIFIED_PRE_OWNED", "REMANUFACTURED", "RETREAD", "DAMAGED"].includes(conditionEnum)) && finalCategoryId) {
+        const dynamicConditions = await fetchDynamicCategoryConditions(finalCategoryId);
+        const matchedCondition = dynamicConditions.find((candidate) =>
+          normalizeConditionDescriptorToEnum(candidate.conditionDescription) === conditionEnum
+        );
+        if (matchedCondition) {
+          conditionId = matchedCondition.conditionId;
+          conditionDesc = matchedCondition.conditionDescription;
+          conditionEnum = normalizeConditionDescriptorToEnum(matchedCondition.conditionDescription) || conditionEnum;
+        }
+      }
+
+      conditionId = conditionId ?? 3000;
+      let effectiveConditionId = conditionId;
 
       console.log(
         `create_draft: condition normalization - rawCondition=${rawCondition}, normalized=${normalizedCondition}, conditionId=${conditionId}, categoryId=${finalCategoryId}, corrected=${corrected}`,

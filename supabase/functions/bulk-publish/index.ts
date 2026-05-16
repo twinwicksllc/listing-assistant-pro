@@ -50,6 +50,9 @@ interface BulkPublishResult {
 const CONDITION_ID_MAP: Record<string, number> = {
   NEW: 1000,
   LIKE_NEW: 2750,
+  VERY_GOOD: 3000,
+  GOOD: 4000,
+  ACCEPTABLE: 5000,
   NEW_OTHER: 1500,
   NEW_WITH_DEFECTS: 1750,
   CERTIFIED_REFURBISHED: 2000,
@@ -57,11 +60,142 @@ const CONDITION_ID_MAP: Record<string, number> = {
   VERY_GOOD_REFURBISHED: 2020,
   GOOD_REFURBISHED: 2030,
   SELLER_REFURBISHED: 2500,
+  USED_EXCELLENT: 3000,
+  USED_VERY_GOOD: 4000,
+  USED_GOOD: 5000,
+  USED_ACCEPTABLE: 6000,
   PRE_OWNED_GOOD: 3000,
   PRE_OWNED_FAIR: 5000,
   PRE_OWNED_POOR: 6000,
   FOR_PARTS_OR_NOT_WORKING: 7000,
 };
+
+const LEGACY_CONDITION_MAP: Record<string, string> = {
+  EXCELLENT_REFURBISHED: "USED_EXCELLENT",
+  VERY_GOOD_REFURBISHED: "USED_VERY_GOOD",
+  GOOD_REFURBISHED: "USED_VERY_GOOD",
+  PRE_OWNED_GOOD: "USED_EXCELLENT",
+  PRE_OWNED_FAIR: "USED_GOOD",
+  PRE_OWNED_POOR: "USED_ACCEPTABLE",
+  "New": "NEW",
+  "New other (see details)": "NEW_OTHER",
+  "New with defects": "NEW_WITH_DEFECTS",
+  "Certified refurbished": "CERTIFIED_REFURBISHED",
+  "Seller refurbished": "SELLER_REFURBISHED",
+  "Like New": "LIKE_NEW",
+  "Used": "USED_EXCELLENT",
+  "Very Good": "USED_VERY_GOOD",
+  "Good": "USED_GOOD",
+  "Acceptable": "USED_ACCEPTABLE",
+  "For parts or not working": "FOR_PARTS_OR_NOT_WORKING",
+  "Digital Good": "DIGITAL_GOOD",
+  "Certified pre-owned": "CERTIFIED_PRE_OWNED",
+  "Remanufactured": "REMANUFACTURED",
+  "Retread": "RETREAD",
+  "Damaged": "DAMAGED",
+};
+
+function normalizeConditionDescriptorToEnum(value: string | undefined | null): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+
+  const lowered = raw.toLowerCase();
+  const aliases: Record<string, string> = {
+    "brand new": "NEW",
+    "new": "NEW",
+    "new other (see details)": "NEW_OTHER",
+    "new-open box": "NEW_OTHER",
+    "new open box": "NEW_OTHER",
+    "open box": "LIKE_NEW",
+    "like new": "LIKE_NEW",
+    "used": "USED_EXCELLENT",
+    "very good": "USED_VERY_GOOD",
+    "good": "USED_GOOD",
+    "acceptable": "USED_ACCEPTABLE",
+    "for parts or not working": "FOR_PARTS_OR_NOT_WORKING",
+    "certified refurbished": "CERTIFIED_REFURBISHED",
+    "excellent refurbished": "EXCELLENT_REFURBISHED",
+    "very good refurbished": "VERY_GOOD_REFURBISHED",
+    "good refurbished": "GOOD_REFURBISHED",
+    "seller refurbished": "SELLER_REFURBISHED",
+    "pre-owned good": "PRE_OWNED_GOOD",
+    "pre-owned fair": "PRE_OWNED_FAIR",
+    "pre-owned poor": "PRE_OWNED_POOR",
+    "digital good": "DIGITAL_GOOD",
+    "certified pre-owned": "CERTIFIED_PRE_OWNED",
+    "remanufactured": "REMANUFACTURED",
+    "retread": "RETREAD",
+    "damaged": "DAMAGED",
+  };
+
+  return aliases[lowered] ?? raw.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "");
+}
+
+async function fetchDynamicCategoryConditions(
+  categoryId: string,
+): Promise<Array<{ conditionId: number; conditionDescription: string }>> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !supabaseServiceKey) return [];
+
+  try {
+    const resp = await fetchWithTimeout(
+      `${supabaseUrl}/functions/v1/category-lookup`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${supabaseServiceKey}`,
+          "Content-Type": "application/json",
+        },
+        timeout: 10000,
+        body: JSON.stringify({ action: "conditions", categoryId }),
+      },
+    );
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    return Array.isArray(data?.conditions)
+      ? data.conditions
+        .map((condition: any) => ({
+          conditionId: Number(condition.conditionId),
+          conditionDescription: String(condition.conditionDescription ?? "").trim(),
+        }))
+        .filter((condition: { conditionId: number; conditionDescription: string }) => Number.isFinite(condition.conditionId) && condition.conditionDescription)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+async function resolveConditionForCategory(
+  rawCondition: string,
+  categoryId: string,
+): Promise<{ conditionEnum: string; conditionId: number; conditionDescription: string }> {
+  const normalized = LEGACY_CONDITION_MAP[rawCondition] ?? rawCondition;
+  let conditionEnum = normalized;
+  let conditionId = CONDITION_ID_MAP[conditionEnum];
+  let conditionDescription = conditionEnum
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char: string) => char.toUpperCase());
+
+  if ((!conditionId || ["DIGITAL_GOOD", "CERTIFIED_PRE_OWNED", "REMANUFACTURED", "RETREAD", "DAMAGED"].includes(conditionEnum)) && categoryId) {
+    const dynamicConditions = await fetchDynamicCategoryConditions(categoryId);
+    const match = dynamicConditions.find((candidate) =>
+      normalizeConditionDescriptorToEnum(candidate.conditionDescription) === conditionEnum,
+    );
+    if (match) {
+      conditionId = match.conditionId;
+      conditionDescription = match.conditionDescription;
+      conditionEnum = normalizeConditionDescriptorToEnum(match.conditionDescription) || conditionEnum;
+    }
+  }
+
+  return {
+    conditionEnum,
+    conditionId: conditionId ?? 3000,
+    conditionDescription,
+  };
+}
 
 async function fetchWithTimeout(
   url: string,
@@ -309,8 +443,12 @@ serve(async (req: Request) => {
         }
 
         // Condition normalization
-        const conditionEnum = Object.keys(CONDITION_ID_MAP).includes(row.condition) ? row.condition : "PRE_OWNED_GOOD";
-        const conditionId = CONDITION_ID_MAP[conditionEnum] ?? 3000;
+        const resolvedCondition = await resolveConditionForCategory(
+          row.condition || "USED_EXCELLENT",
+          row.categoryId,
+        );
+        const conditionEnum = resolvedCondition.conditionEnum;
+        const conditionId = resolvedCondition.conditionId;
 
         // Build inventory item
         const imageUrls = (row.imageUrls ?? []).filter((u) => u?.startsWith("http")).slice(0, 8);
@@ -329,10 +467,7 @@ serve(async (req: Request) => {
               : {}),
           },
           condition: conditionEnum,
-          conditionDescription: conditionEnum
-            .replace(/_/g, " ")
-            .toLowerCase()
-            .replace(/\b\w/g, (c: string) => c.toUpperCase()),
+          conditionDescription: resolvedCondition.conditionDescription,
           availability: {
             shipToLocationAvailability: { quantity: row.quantity || 1 },
           },
