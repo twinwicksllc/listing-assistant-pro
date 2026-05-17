@@ -316,6 +316,10 @@ export default function AnalyzePage() {
     setItemSpecifics,
     setCoinConditionDetail,
     setCondition,
+    // Clear stale required/suggested aspect metadata immediately on category change
+    // so the publish validation doesn't block on the OLD category's required fields
+    // while useAnalyzeCategoryAspects fetches the new category's aspects async.
+    setEbayMetadata,
   });
 
   const { downloadLabel, handleExport } = useAnalyzeExport({
