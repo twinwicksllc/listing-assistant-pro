@@ -1,5 +1,8 @@
 import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
+import { deriveDomainFromCategory } from "@/types/listing";
+import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
+import type { CoinConditionDetail, ItemSpecifics } from "@/types/listing";
 
 interface SuggestedCategory {
   categoryId: string;
@@ -17,6 +20,11 @@ interface UseAnalyzeCategorySelectionParams {
   setShowCategoryConfirm: (value: boolean) => void;
   setIsCustomCategoryMode: (value: boolean) => void;
   setEbayCategoryId: (value: string) => void;
+  // Category-change side-effect callbacks
+  setDomain: (value: string) => void;
+  setItemSpecifics: (value: ItemSpecifics) => void;
+  setCoinConditionDetail: (value: CoinConditionDetail | null) => void;
+  setCondition: (value: string) => void;
 }
 
 export function useAnalyzeCategorySelection({
@@ -28,6 +36,10 @@ export function useAnalyzeCategorySelection({
   setShowCategoryConfirm,
   setIsCustomCategoryMode,
   setEbayCategoryId,
+  setDomain,
+  setItemSpecifics,
+  setCoinConditionDetail,
+  setCondition,
 }: UseAnalyzeCategorySelectionParams) {
   const selectedSuggestedCategory = useMemo(
     () => suggestedCategories.find((c) => c.categoryId === ebayCategoryId),
@@ -68,12 +80,52 @@ export function useAnalyzeCategorySelection({
     setCustomCategoryInput("");
   }, [setCustomCategoryInput, setEbayCategoryId, setIsCustomCategoryMode]);
 
+  /**
+   * Called when the user confirms a category override (custom ID or suggestion switch).
+   * In addition to updating the category ID, this refreshes all domain-dependent state
+   * so that condition options, item specifics, and the coin condition panel all match
+   * the newly selected category — preventing stale coin fields from appearing on
+   * non-coin categories and vice versa.
+   */
   const handleCategoryDialogConfirm = useCallback((categoryId: string) => {
     setEbayCategoryId(categoryId);
     setCustomCategoryInput("");
     setShowCategoryConfirm(false);
-    toast.success(`Category ${categoryId} confirmed`);
-  }, [setCustomCategoryInput, setEbayCategoryId, setShowCategoryConfirm]);
+
+    // --- Refresh domain-dependent state for the new category ---
+    const breadcrumb = getEbayCategoryBreadcrumb(categoryId);
+    const newDomain = deriveDomainFromCategory(categoryId, breadcrumb);
+    setDomain(newDomain);
+
+    // Clear coin condition detail if the new category is not a coin category
+    const isCoinDomain = newDomain === "coins_bullion";
+    if (!isCoinDomain) {
+      setCoinConditionDetail(null);
+    }
+
+    // Clear stale item specifics — they were built for the old category.
+    // Keep any user-edited free-text fields that are category-agnostic.
+    setItemSpecifics({});
+
+    // Reset condition to a sensible default for the new domain
+    if (isCoinDomain) {
+      setCondition("NEW");
+    } else if (newDomain === "trading_cards") {
+      setCondition("LIKE_NEW");
+    } else {
+      setCondition("USED_EXCELLENT");
+    }
+
+    toast.success(`Category updated to ${categoryId} — item specifics refreshed`);
+  }, [
+    setEbayCategoryId,
+    setCustomCategoryInput,
+    setShowCategoryConfirm,
+    setDomain,
+    setCoinConditionDetail,
+    setItemSpecifics,
+    setCondition,
+  ]);
 
   const handleCategoryDialogCancel = useCallback(() => {
     setShowCategoryConfirm(false);

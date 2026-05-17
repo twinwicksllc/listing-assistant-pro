@@ -311,6 +311,10 @@ export default function AnalyzePage() {
     setShowCategoryConfirm,
     setIsCustomCategoryMode,
     setEbayCategoryId,
+    setDomain,
+    setItemSpecifics,
+    setCoinConditionDetail,
+    setCondition,
   });
 
   const { downloadLabel, handleExport } = useAnalyzeExport({

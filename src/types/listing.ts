@@ -263,6 +263,30 @@ export function getConditionLabel(condition: string): string {
     .join(" ");
 }
 
+/**
+ * Derives the domain string from a category ID + optional breadcrumb.
+ * Used when the user manually overrides the eBay category so that domain-
+ * dependent UI (coin condition panel, condition options, item specifics) can
+ * be refreshed to match the new category without re-running AI analysis.
+ */
+export function deriveDomainFromCategory(
+  categoryId: string | undefined,
+  breadcrumb: string | undefined,
+): string {
+  if (!categoryId) return "general";
+  if (COIN_CATEGORY_IDS.has(categoryId)) return "coins_bullion";
+  if (BULLION_CATEGORY_IDS.has(categoryId)) return "coins_bullion";
+  if (TRADING_CARD_CATEGORY_IDS.has(categoryId)) return "trading_cards";
+  // Breadcrumb-based fallback for IDs not in our hardcoded sets
+  if (breadcrumb) {
+    const bc = breadcrumb.toLowerCase();
+    if (/coins?|paper money|currency|bullion|numismatic/i.test(bc)) return "coins_bullion";
+    if (/trading card|sports card|pokemon|magic.*gathering|yu-?gi/i.test(bc)) return "trading_cards";
+    if (/vintage clothing|apparel|fashion/i.test(bc)) return "vintage_clothing";
+  }
+  return "general";
+}
+
 export function isCoinConditionDetailRequired(
   categoryId: string | undefined,
   domain: string | undefined,
