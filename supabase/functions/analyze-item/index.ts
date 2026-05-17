@@ -1312,18 +1312,26 @@ Seller's note: "${voiceNote}"`;
       "remanufactured": "REMANUFACTURED",
       "retread": "RETREAD",
       "damaged": "DAMAGED",
-      "graded": "LIKE_NEW",
-      "ungraded": "GOOD",
+      "graded": "NEW",       // eBay "Graded" conditionDescription → closest valid enum
+      "ungraded": "USED_VERY_GOOD", // eBay "Ungraded" conditionDescription → VF (safe default for raw coins)
     };
+
+    // eBay returns non-enum conditionDescription strings for some categories (e.g. "Ungraded",
+    // "Graded") that are NOT valid Inventory API condition enum values. We must never let these
+    // pass through to the AI's allowed enum list or the publish call will fail with errorId 2004.
+    const INVALID_CONDITION_STRINGS = new Set(["UNGRADED", "GRADED"]);
+
     const conditionEnum: string[] = categoryConditions?.conditions?.length > 0
       ? [
         ...new Set(
           categoryConditions.conditions.map((c: any) => {
             const id = Number(c.conditionId);
-            return CONDITION_ID_TO_ENUM[id] ??
+            const mapped = CONDITION_ID_TO_ENUM[id] ??
               CONDITION_DESCRIPTION_TO_ENUM[String(c.conditionDescription ?? "").trim().toLowerCase()] ??
               String(c.conditionDescription ?? c.conditionId).toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "");
-          }),
+            // Drop any non-enum strings that would cause eBay errorId 2004 on publish
+            return INVALID_CONDITION_STRINGS.has(mapped.toUpperCase()) ? null : mapped;
+          }).filter(Boolean),
         ),
       ]
       : [
