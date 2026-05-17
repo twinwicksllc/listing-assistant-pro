@@ -25,6 +25,7 @@ import { useAnalyzeConditionOptions } from "@/hooks/useAnalyzeConditionOptions";
 import { useAnalyzeGradeControls } from "@/hooks/useAnalyzeGradeControls";
 import { useAnalyzeListingFieldHandlers } from "@/hooks/useAnalyzeListingFieldHandlers";
 import { useVideoFrameExtraction } from "@/hooks/useVideoFrameExtraction";
+import { useAnalyzeCategoryAspects } from "@/hooks/useAnalyzeCategoryAspects";
 
 // Sub-components
 import { VideoOnlyView } from "@/components/analyze/VideoOnlyView";
@@ -429,6 +430,18 @@ export default function AnalyzePage() {
     }
   }, []); // mount-only intentional
 
+  // Fetch + seed eBay aspects when the category changes after initial analysis
+  // (e.g. user overrides AI category). Seeds itemSpecifics with empty rows for
+  // required/suggested aspects so they appear as editable fields in the UI.
+  useAnalyzeCategoryAspects({
+    ebayCategoryId,
+    generated,
+    itemSpecifics,
+    setItemSpecifics,
+    setEbayMetadata,
+    currentEbayMetadata: ebayMetadata,
+  });
+
   // ── Guards ─────────────────────────────────────────────────────────────────────────
 
   if (imageUrls.length === 0 && !videoOnlyMode) {
@@ -436,7 +449,12 @@ export default function AnalyzePage() {
     return null;
   }
 
-  const displaySpecifics = Object.entries(itemSpecifics).filter(([, v]) => v && (v as string).trim() !== "");
+  // Show all item specifics entries — including empty ones seeded from eBay aspects
+  // so the user can see and fill in required/suggested fields for the new category.
+  // We only exclude the internal _coinConditionDetail key (prefixed with _).
+  const displaySpecifics = Object.entries(itemSpecifics).filter(
+    ([k, v]) => !k.startsWith("_") && (v !== null && v !== undefined),
+  );
 
   // ── Video-only early return ──────────────────────────────────────────────────────────────
 
