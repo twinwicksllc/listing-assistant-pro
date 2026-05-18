@@ -167,7 +167,7 @@ function normalizeConditionDescriptorToEnum(value: string | undefined | null): s
     "remanufactured": "REMANUFACTURED",
     "retread": "RETREAD",
     "damaged": "DAMAGED",
-    "graded": "NEW",       // eBay "Graded" description → NEW (graded/certified coin)
+    "graded": "USED_EXCELLENT", // eBay "Graded" description → condition accepted in coin categories
     "ungraded": "USED_VERY_GOOD", // eBay "Ungraded" description → USED_VERY_GOOD (safe raw coin default)
   };
 
@@ -1370,7 +1370,7 @@ const CONDITION_DESCRIPTIONS: Record<string, string> = {
   NEW: "Uncirculated coin or brand new item in original packaging.",
   NEW_OTHER: "New without original packaging or tags.",
   NEW_WITH_DEFECTS: "New item with minor cosmetic defects.",
-  LIKE_NEW: "Like new condition.",
+  LIKE_NEW: "Professionally graded and encapsulated coin.", // Used as conditionDescription for graded coins (LIKE_NEW = 2750 = Graded)
   CERTIFIED_REFURBISHED: "Professionally refurbished and certified to work like new.",
   SELLER_REFURBISHED: "Seller-refurbished item in good working condition.",
   // USED_* — correct conditions for Coins & Paper Money category tree
@@ -1464,8 +1464,8 @@ function normalizeConditionForCategory(
   itemType: string | undefined = undefined,
   categoryTreeType: CategoryTreeType | undefined = undefined,
 ): { condition: string; corrected: boolean } {
-  // Apply legacy migration first
-  const condition = LEGACY_CONDITION_MAP[rawCondition] ?? rawCondition;
+  // Apply legacy migration first (case-insensitive using normalizeConditionDescriptorToEnum)
+  const condition = normalizeConditionDescriptorToEnum(rawCondition);
 
   // Use provided tree type or fall back to hardcoded ID sets
   const resolvedCategoryTreeType = categoryTreeType ||
@@ -1477,31 +1477,37 @@ function normalizeConditionForCategory(
   const isCollectible = resolvedCategoryTreeType === "collectible";
 
   if (isCoin) {
-    // Coins & Paper Money category tree uses USED_* condition family, NOT *_REFURBISHED.
+    // eBay Inventory API for Coins & Paper Money:
+    // LIKE_NEW (2750) = "Graded"   — professionally graded/slabbed coins (NGC, PCGS, etc.)
+    // USED_VERY_GOOD (4000) = "Ungraded" — raw/circulated coins
+    // Reference: https://developer.ebay.com/api-docs/sell/static/metadata/condition-id-values.html
+    // "For trading cards or coins, the numeric identifier 2750 indicates that the item is graded."
+    // "For trading cards or coins, the numeric identifier 4000 indicates that the item is ungraded."
     const validCoinConditions = new Set([
-      "NEW", // MS-60 to MS-70 (uncirculated) and slabbed/certified
-      "USED_EXCELLENT", // AU-50 to XF-45 (lightly circulated)
-      "USED_VERY_GOOD", // VF-20 to VF-35 (moderately circulated)
-      "USED_GOOD", // F-12 to VG-10 (heavily circulated)
-      "USED_ACCEPTABLE", // G-4 to G-6 (heavily worn but identifiable)
-      "FOR_PARTS_OR_NOT_WORKING", // Damaged/holed/bent only
+      "LIKE_NEW",              // 2750 = Graded (NGC/PCGS/etc. slabbed coins)
+      "USED_VERY_GOOD",        // 4000 = Ungraded (raw/circulated coins)
+      "FOR_PARTS_OR_NOT_WORKING", // 7000 = Damaged/holed/bent
     ]);
 
     if (!validCoinConditions.has(condition)) {
       const fallbackMap: Record<string, string> = {
-        LIKE_NEW: "NEW",
-        NEW_OTHER: "NEW",
-        NEW_WITH_DEFECTS: "USED_GOOD",
-        CERTIFIED_REFURBISHED: "NEW",
-        SELLER_REFURBISHED: "USED_GOOD",
-        EXCELLENT_REFURBISHED: "USED_EXCELLENT",
+        NEW: "LIKE_NEW",
+        NEW_OTHER: "LIKE_NEW",
+        NEW_WITH_DEFECTS: "USED_VERY_GOOD",
+        CERTIFIED_REFURBISHED: "LIKE_NEW",
+        SELLER_REFURBISHED: "USED_VERY_GOOD",
+        EXCELLENT_REFURBISHED: "LIKE_NEW",
         VERY_GOOD_REFURBISHED: "USED_VERY_GOOD",
-        GOOD_REFURBISHED: "USED_EXCELLENT",
-        PRE_OWNED_GOOD: "USED_EXCELLENT",
-        PRE_OWNED_FAIR: "USED_ACCEPTABLE",
-        PRE_OWNED_POOR: "FOR_PARTS_OR_NOT_WORKING",
+        GOOD_REFURBISHED: "USED_VERY_GOOD",
+        PRE_OWNED_GOOD: "USED_VERY_GOOD",
+        PRE_OWNED_FAIR: "USED_VERY_GOOD",
+        PRE_OWNED_POOR: "USED_VERY_GOOD",
+        USED_EXCELLENT: "USED_VERY_GOOD",
+        USED_GOOD: "USED_VERY_GOOD",
+        USED_ACCEPTABLE: "USED_VERY_GOOD",
+        GOOD: "USED_VERY_GOOD",
+        ACCEPTABLE: "USED_VERY_GOOD",
       };
-      // For raw/ungraded or unknown coin conditions, default to USED_VERY_GOOD.
       const mapped = fallbackMap[condition] ?? "USED_VERY_GOOD";
       console.log(
         `normalizeConditionForCategory: coin category ${categoryId} — ${condition} -> ${mapped}`,
@@ -2497,6 +2503,7 @@ function buildCoinConditionDescriptors(
     const numberGradeDesc = descriptors.find(
       (d) =>
         d.descriptorName.toLowerCase().includes("number grade") ||
+        d.descriptorName.toLowerCase().includes("numerical grade") ||
         d.descriptorName.toLowerCase() === "grade",
     );
     const letterGradeDesc = descriptors.find(

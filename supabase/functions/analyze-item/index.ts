@@ -1275,9 +1275,9 @@ Seller's note: "${voiceNote}"`;
       1500: "NEW_OTHER",
       1750: "NEW_WITH_DEFECTS",
       2000: "CERTIFIED_REFURBISHED",
-      2010: "EXCELLENT_REFURBISHED",
-      2020: "VERY_GOOD_REFURBISHED",
-      2030: "GOOD_REFURBISHED",
+      2010: "CERTIFIED_REFURBISHED",
+      2020: "CERTIFIED_REFURBISHED",
+      2030: "CERTIFIED_REFURBISHED",
       2500: "SELLER_REFURBISHED",
       2750: "LIKE_NEW",
       3000: "USED_EXCELLENT",
@@ -1312,7 +1312,7 @@ Seller's note: "${voiceNote}"`;
       "remanufactured": "REMANUFACTURED",
       "retread": "RETREAD",
       "damaged": "DAMAGED",
-      "graded": "NEW",       // eBay "Graded" conditionDescription → closest valid enum
+      "graded": "USED_EXCELLENT", // eBay "Graded" conditionDescription → condition accepted in coin categories
       "ungraded": "USED_VERY_GOOD", // eBay "Ungraded" conditionDescription → VF (safe default for raw coins)
     };
 
@@ -1320,7 +1320,6 @@ Seller's note: "${voiceNote}"`;
     // "Graded") that are NOT valid Inventory API condition enum values. We must never let these
     // pass through to the AI's allowed enum list or the publish call will fail with errorId 2004.
     const INVALID_CONDITION_STRINGS = new Set(["UNGRADED", "GRADED"]);
-
     const conditionEnum: string[] = categoryConditions?.conditions?.length > 0
       ? [
         ...new Set(
@@ -1551,45 +1550,6 @@ Seller's note: "${voiceNote}"`;
                       enum: ["gold", "silver", "platinum", "none"],
                     },
                     metalWeightOz: { type: "number" },
-                    coinConditionDetail: {
-                      type: "object",
-                      description:
-                        "REQUIRED for all coins in US/World/Canada/Ancient/Medieval categories (eBay June 2026 mandate). " +
-                        'For GRADED coins (isSlabbed=true): {"type":"graded","gradingCompany":"PCGS|NGC|ANACS|ICG|CAC|ICCS","grade":"MS 65","certificationNumber":"12345678"}. ' +
-                        'For RAW/UNGRADED coins (isSlabbed=false): {"type":"raw","rawCondition":"Uncirculated|Extremely Fine to About Uncirculated|Fine to Very Fine|Below Fine"}.',
-                      properties: {
-                        type: {
-                          type: "string",
-                          enum: ["graded", "raw"],
-                          description: '"graded" for certified slab coins; "raw" for ungraded coins',
-                        },
-                        gradingCompany: {
-                          type: "string",
-                          enum: ["PCGS", "NGC", "ANACS", "ICG", "CAC", "ICCS"],
-                          description: "Grading company — ONLY for graded/slabbed coins",
-                        },
-                        grade: {
-                          type: "string",
-                          description:
-                            'Full grade as printed on slab (e.g. "MS 65", "PR 70 DCAM", "AU 58") — ONLY for graded coins',
-                        },
-                        certificationNumber: {
-                          type: "string",
-                          description: "Cert number from slab label — ONLY for graded coins; include if visible",
-                        },
-                        rawCondition: {
-                          type: "string",
-                          enum: [
-                            "Uncirculated",
-                            "Extremely Fine to About Uncirculated",
-                            "Fine to Very Fine",
-                            "Below Fine",
-                          ],
-                          description: "eBay standardized condition tier — ONLY for raw/ungraded coins",
-                        },
-                      },
-                      required: ["type"],
-                    },
                   },
                   required: [
                     "title",
@@ -1601,7 +1561,6 @@ Seller's note: "${voiceNote}"`;
                     "isSlabbed",
                     "metalType",
                     "metalWeightOz",
-                    "coinConditionDetail",
                   ],
                   additionalProperties: false,
                 },
@@ -2549,7 +2508,6 @@ Seller's note: "${voiceNote}"`;
       "suggestedGrade",
       "packageWeightAndSize",
       "domain",
-      "coinConditionDetail",
       // Agentic Pre-Pass 0 fields (available on all tiers — no pricing info)
       "market_analysis",
       "grounded_category_id",
