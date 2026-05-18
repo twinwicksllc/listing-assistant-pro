@@ -167,8 +167,8 @@ function normalizeConditionDescriptorToEnum(value: string | undefined | null): s
     "remanufactured": "REMANUFACTURED",
     "retread": "RETREAD",
     "damaged": "DAMAGED",
-    "graded": "LIKE_NEW",       // 2750 = Graded (per eBay condition ID docs)
-    "ungraded": "USED_VERY_GOOD", // 4000 = Ungraded (per eBay condition ID docs)
+    "graded": "USED_EXCELLENT", // eBay "Graded" description → condition accepted in coin categories
+    "ungraded": "USED_VERY_GOOD", // eBay "Ungraded" description → USED_VERY_GOOD (safe raw coin default)
   };
 
   return aliases[lowered] ?? raw.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "");
@@ -1442,6 +1442,16 @@ const LEGACY_CONDITION_MAP: Record<string, string> = {
   "retread": "RETREAD",
   "Damaged": "DAMAGED",
   "damaged": "DAMAGED",
+
+  // eBay returns "Ungraded" / "Graded" as conditionDescription strings for some coin
+  // categories (e.g. 3377 Coins: Canada, 3379, etc.). These are NOT valid Inventory API
+  // condition enum values and will cause errorId 2004 "Could not serialize field [condition]".
+  // Map to the closest valid USED_* coin condition.
+  "Ungraded": "USED_VERY_GOOD",
+  "ungraded": "USED_VERY_GOOD",
+  "UNGRADED": "USED_VERY_GOOD",
+  "Graded": "NEW",
+  "GRADED": "NEW",
 };
 
 // Condition normalization now uses both hardcoded fallback sets (from top of file)

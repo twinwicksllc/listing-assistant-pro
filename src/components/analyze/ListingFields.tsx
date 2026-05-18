@@ -245,7 +245,7 @@ export function ListingFields({
       </div>
 
       {/* Item Specifics + Category + Condition */}
-      {(displaySpecifics.length > 0 || coinConditionDetailRequired) && (
+      {(displaySpecifics.length > 0 || coinConditionDetailRequired || !!ebayCategoryId) && (
         <div className="space-y-2">
           <div className="flex items-center gap-1.5">
             <Tag className="w-3.5 h-3.5 text-primary" />

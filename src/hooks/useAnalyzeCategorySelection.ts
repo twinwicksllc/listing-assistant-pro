@@ -1,11 +1,20 @@
 import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
+import { deriveDomainFromCategory } from "@/types/listing";
+import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
+import type { CoinConditionDetail, ItemSpecifics } from "@/types/listing";
 
 interface SuggestedCategory {
   categoryId: string;
   categoryName: string;
   reason: string;
   breadcrumb?: string;
+}
+
+interface EbayMetadata {
+  requiredAspects: string[];
+  suggestedAspects: string[];
+  allowedConditions: string[];
 }
 
 interface UseAnalyzeCategorySelectionParams {
@@ -17,6 +26,13 @@ interface UseAnalyzeCategorySelectionParams {
   setShowCategoryConfirm: (value: boolean) => void;
   setIsCustomCategoryMode: (value: boolean) => void;
   setEbayCategoryId: (value: string) => void;
+  // Category-change side-effect callbacks
+  setDomain: (value: string) => void;
+  setItemSpecifics: (value: ItemSpecifics) => void;
+  setCoinConditionDetail: (value: CoinConditionDetail | null) => void;
+  setCondition: (value: string) => void;
+  /** Clear stale required/suggested aspects from the old category */
+  setEbayMetadata: (meta: EbayMetadata | null) => void;
 }
 
 export function useAnalyzeCategorySelection({
@@ -28,6 +44,11 @@ export function useAnalyzeCategorySelection({
   setShowCategoryConfirm,
   setIsCustomCategoryMode,
   setEbayCategoryId,
+  setDomain,
+  setItemSpecifics,
+  setCoinConditionDetail,
+  setCondition,
+  setEbayMetadata,
 }: UseAnalyzeCategorySelectionParams) {
   const selectedSuggestedCategory = useMemo(
     () => suggestedCategories.find((c) => c.categoryId === ebayCategoryId),
@@ -58,22 +79,121 @@ export function useAnalyzeCategorySelection({
     setCustomCategoryInput("");
   }, [setCustomCategoryInput, setIsCustomCategoryMode]);
 
+  /**
+   * Called when the user picks a category from the dropdown (not the custom-ID dialog).
+   * Applies the same full state refresh as handleCategoryDialogConfirm so that:
+   *   - Stale item specifics from the previous category are cleared
+   *   - Stale ebayMetadata (requiredAspects / suggestedAspects) from the previous
+   *     category are cleared immediately — preventing the "Missing required eBay
+   *     fields: Sport" (or similar) toast from firing for the OLD category's fields
+   *     while useAnalyzeCategoryAspects is still fetching aspects for the new one.
+   *   - Domain and condition are reset to sensible defaults for the new category.
+   * useAnalyzeCategoryAspects will re-populate ebayMetadata once its async fetch
+   * for the new category ID completes.
+   */
   const handleCategorySelectChange = useCallback((value: string) => {
     if (value === "__custom__") {
       setIsCustomCategoryMode(true);
       setCustomCategoryInput("");
       return;
     }
+
+    // Same as handleCategoryDialogConfirm but without the confirm-dialog step
     setEbayCategoryId(value);
     setCustomCategoryInput("");
-  }, [setCustomCategoryInput, setEbayCategoryId, setIsCustomCategoryMode]);
 
+    // Derive new domain from the selected category
+    const breadcrumb = getEbayCategoryBreadcrumb(value);
+    const newDomain = deriveDomainFromCategory(value, breadcrumb);
+    setDomain(newDomain);
+
+    // Clear coin condition detail if switching away from a coin category
+    const isCoinDomain = newDomain === "coins_bullion";
+    if (!isCoinDomain) {
+      setCoinConditionDetail(null);
+    }
+
+    // Clear stale item specifics — they were built for the old category.
+    // useAnalyzeCategoryAspects will re-seed the correct fields for the new category.
+    setItemSpecifics({});
+
+    // *** KEY FIX: clear stale requiredAspects / suggestedAspects immediately.
+    // If we leave the old metadata in place the publish-time validation will fire
+    // "Missing required eBay fields: Sport" (or whatever the OLD category required)
+    // even after the user has correctly switched to a coin/bullion category.
+    // useAnalyzeCategoryAspects will repopulate this once the async fetch finishes.
+    setEbayMetadata(null);
+
+    // Reset condition to a sensible default for the new domain
+    if (isCoinDomain) {
+      setCondition("NEW");
+    } else if (newDomain === "trading_cards") {
+      setCondition("LIKE_NEW");
+    } else {
+      setCondition("USED_EXCELLENT");
+    }
+  }, [
+    setCustomCategoryInput,
+    setEbayCategoryId,
+    setIsCustomCategoryMode,
+    setDomain,
+    setCoinConditionDetail,
+    setItemSpecifics,
+    setEbayMetadata,
+    setCondition,
+  ]);
+
+  /**
+   * Called when the user confirms a category override (custom ID or suggestion switch).
+   * In addition to updating the category ID, this refreshes all domain-dependent state
+   * so that condition options, item specifics, and the coin condition panel all match
+   * the newly selected category — preventing stale coin fields from appearing on
+   * non-coin categories and vice versa.
+   */
   const handleCategoryDialogConfirm = useCallback((categoryId: string) => {
     setEbayCategoryId(categoryId);
     setCustomCategoryInput("");
     setShowCategoryConfirm(false);
-    toast.success(`Category ${categoryId} confirmed`);
-  }, [setCustomCategoryInput, setEbayCategoryId, setShowCategoryConfirm]);
+
+    // --- Refresh domain-dependent state for the new category ---
+    const breadcrumb = getEbayCategoryBreadcrumb(categoryId);
+    const newDomain = deriveDomainFromCategory(categoryId, breadcrumb);
+    setDomain(newDomain);
+
+    // Clear coin condition detail if the new category is not a coin category
+    const isCoinDomain = newDomain === "coins_bullion";
+    if (!isCoinDomain) {
+      setCoinConditionDetail(null);
+    }
+
+    // Clear stale item specifics — they were built for the old category.
+    // Keep any user-edited free-text fields that are category-agnostic.
+    setItemSpecifics({});
+
+    // Clear stale required/suggested aspect metadata — the new category's aspects
+    // will be populated by useAnalyzeCategoryAspects once its fetch completes.
+    setEbayMetadata(null);
+
+    // Reset condition to a sensible default for the new domain
+    if (isCoinDomain) {
+      setCondition("NEW");
+    } else if (newDomain === "trading_cards") {
+      setCondition("LIKE_NEW");
+    } else {
+      setCondition("USED_EXCELLENT");
+    }
+
+    toast.success(`Category updated to ${categoryId} — item specifics refreshed`);
+  }, [
+    setEbayCategoryId,
+    setCustomCategoryInput,
+    setShowCategoryConfirm,
+    setDomain,
+    setCoinConditionDetail,
+    setItemSpecifics,
+    setEbayMetadata,
+    setCondition,
+  ]);
 
   const handleCategoryDialogCancel = useCallback(() => {
     setShowCategoryConfirm(false);
