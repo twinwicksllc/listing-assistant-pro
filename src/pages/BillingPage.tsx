@@ -15,6 +15,8 @@ type FreeCreditStatus = {
   limitReached: boolean;
 };
 
+type BillingCycle = "monthly" | "annual";
+
 export default function BillingPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -26,6 +28,7 @@ export default function BillingPage() {
   const [portalLoading, setPortalLoading] = useState(false);
   const [freeCreditStatus, setFreeCreditStatus] = useState<FreeCreditStatus | null>(null);
   const [freeCreditsLoading, setFreeCreditsLoading] = useState(false);
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
 
   const success = searchParams.get("success");
   const canceled = searchParams.get("canceled");
@@ -73,16 +76,17 @@ export default function BillingPage() {
     setCheckoutLoading(planKey);
     try {
       const plan = PLANS[planKey];
-      if (!("priceId" in plan)) throw new Error("No price configured for this plan");
+      if (!("monthlyPriceId" in plan)) throw new Error("No price configured for this plan");
+      const priceId = billingCycle === "annual" ? plan.annualPriceId : plan.monthlyPriceId;
       const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { priceId: plan.priceId },
+        body: { priceId },
       });
       if (error) throw error;
       if (data?.url) {
-        window.open(data.url, "_blank");
+        window.location.href = data.url;
       }
     } catch (err: unknown) {
-      toast.error(err.message || "Failed to start checkout");
+      toast.error((err as Error).message || "Failed to start checkout");
     } finally {
       setCheckoutLoading(null);
     }
@@ -94,10 +98,10 @@ export default function BillingPage() {
       const { data, error } = await supabase.functions.invoke("customer-portal");
       if (error) throw error;
       if (data?.url) {
-        window.open(data.url, "_blank");
+        window.location.href = data.url;
       }
     } catch (err: unknown) {
-      toast.error(err.message || "Failed to open billing portal");
+      toast.error((err as Error).message || "Failed to open billing portal");
     } finally {
       setPortalLoading(false);
     }
@@ -108,7 +112,7 @@ export default function BillingPage() {
   const currentTierIndex = tierOrder.indexOf(currentPlan);
 
   // Icon per plan
-  const planIcons: Record<PlanKey, typeof Sparkles> = {
+  const planIcons: Record<PlanKey, React.ElementType> = {
     free: Sparkles,
     starter: Crown,
     pro: Zap,
@@ -116,52 +120,46 @@ export default function BillingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-24">
-      <header className="px-5 pt-12 pb-4 md:px-8 lg:px-12">
-        <div className="max-w-5xl mx-auto flex items-center gap-2">
-          <button onClick={() => navigate("/home")} className="text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft className="w-5 h-5" />
+    <div className="min-h-screen bg-background pb-20">
+      <div className="max-w-4xl mx-auto px-4 py-6">
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-6">
+          <button onClick={() => navigate(-1)} className="p-2 rounded-lg hover:bg-muted transition-colors">
+            <ArrowLeft className="h-5 w-5" />
           </button>
-          <img src={teckstartLogo} alt="Teckstart" className="h-12 w-auto" />
-          <div>
-            <h1 className="text-lg font-bold text-foreground">Billing</h1>
-            <p className="text-xs text-muted-foreground">Manage your subscription</p>
-          </div>
+          <img src={teckstartLogo} alt="Logo" className="h-8 w-8" />
+          <h1 className="text-2xl font-bold">Plans & Billing</h1>
         </div>
-      </header>
 
-      <div className="px-5 md:px-8 lg:px-12 max-w-5xl mx-auto space-y-6">
         {success && (
-          <div className="bg-primary/10 border border-primary/30 rounded-xl p-4 text-sm text-primary font-medium">
+          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
             🎉 Your subscription is being activated...
           </div>
         )}
         {canceled && (
-          <div className="bg-muted border border-border rounded-xl p-4 text-sm text-muted-foreground">
+          <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
             Checkout was canceled. You can upgrade anytime.
           </div>
         )}
 
         {/* Current usage */}
-        <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-foreground">
+        <div className="mb-6 p-4 bg-muted/50 rounded-xl border">
+          <h2 className="text-sm font-semibold mb-3">
             {currentPlan === "free" ? "Rolling Window Credits" : "This Month's Usage"}
           </h2>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">
+          <div className="flex gap-6 text-sm">
+            <div>
+              <span className="text-muted-foreground">
                 {currentPlan === "free" ? "AI Analyses (Rolling)" : "AI Analyses"}
-              </p>
-              <p className="text-lg font-bold text-foreground">
+              </span>
+              <p className="font-semibold">
                 {currentPlan === "free" && freeCreditStatus
                   ? freeCreditStatus.creditsUsed
-                  : usage.aiAnalysis}
-                <span className="text-xs font-normal text-muted-foreground">
-                  {" "}/ {currentPlanLimits.analysisLimit === Infinity ? "∞" : currentPlanLimits.analysisLimit}
-                </span>
+                  : usage.aiAnalysis}{" "}
+                / {currentPlanLimits.analysisLimit === Infinity ? "∞" : currentPlanLimits.analysisLimit}
               </p>
               {currentPlan === "free" && (
-                <p className="text-[10px] text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   {freeCreditsLoading
                     ? "Loading reset date..."
                     : freeCreditStatus?.creditsResetAt
@@ -170,86 +168,94 @@ export default function BillingPage() {
                 </p>
               )}
             </div>
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">eBay Publishes</p>
-              <p className="text-lg font-bold text-foreground">
-                {usage.ebayPublish}
-                <span className="text-xs font-normal text-muted-foreground">
-                  {" "}/ {currentPlanLimits.publishLimit === Infinity ? "∞" : currentPlanLimits.publishLimit}
-                </span>
+            <div>
+              <span className="text-muted-foreground">eBay Publishes</span>
+              <p className="font-semibold">
+                {usage.ebayPublish}{" "}
+                / {currentPlanLimits.publishLimit === Infinity ? "∞" : currentPlanLimits.publishLimit}
               </p>
             </div>
           </div>
           {currentPlan === "free" && (freeCreditStatus?.limitReached || usage.aiAnalysis >= currentPlanLimits.analysisLimit) && (
-            <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-              <p className="text-xs font-medium text-amber-900 dark:text-amber-100">
-                🔄 Rolling window credits exhausted.
-                {freeCreditStatus?.creditsResetAt
-                  ? ` Credits reset on ${new Date(freeCreditStatus.creditsResetAt).toLocaleDateString()}.`
-                  : ""}
-              </p>
-            </div>
+            <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              🔄 Rolling window credits exhausted.
+              {freeCreditStatus?.creditsResetAt
+                ? ` Credits reset on ${new Date(freeCreditStatus.creditsResetAt).toLocaleDateString()}.`
+                : ""}
+            </p>
           )}
         </div>
 
         {/* Free tier requirements info */}
         {currentPlan === "free" && (
-          <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-xl p-4 space-y-2">
-            <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100">Free Tier Requirements</h3>
-            <ul className="text-xs text-blue-800 dark:text-blue-200 space-y-1.5">
-              <li className="flex items-start gap-2">
-                <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
-                <span><strong>eBay Account Required:</strong> You must connect an active eBay account to generate listings</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
-                <span><strong>Rolling Window:</strong> 6 analyses per month, resets on the same day each month</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
-                <span><strong>One Account Per Org:</strong> You can only link one eBay account to your organization</span>
-              </li>
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm">
+            <h3 className="font-semibold mb-2">Free Tier Requirements</h3>
+            <ul className="space-y-1 text-blue-800">
+              <li>✓ <strong>eBay Account Required:</strong> You must connect an active eBay account to generate listings</li>
+              <li>✓ <strong>Rolling Window:</strong> 6 analyses per month, resets on the same day each month</li>
+              <li>✓ <strong>One Account Per Org:</strong> You can only link one eBay account to your organization</li>
             </ul>
-            <Link to="/settings" className="inline-flex items-center gap-2 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 mt-2">
-              Go to Settings
-              <span>→</span>
+            <Link to="/settings" className="inline-flex items-center gap-1 mt-2 text-blue-700 font-medium hover:underline text-xs">
+              Go to Settings <span>→</span>
             </Link>
           </div>
         )}
 
-        {/* Plans Grid */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* Billing Cycle Toggle */}
+        <div className="flex items-center justify-center mb-6">
+          <div className="flex items-center gap-1 p-1 bg-muted rounded-xl">
+            <button
+              onClick={() => setBillingCycle("monthly")}
+              className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${
+                billingCycle === "monthly"
+                  ? "bg-background shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Monthly
+            </button>
+            <button
+              onClick={() => setBillingCycle("annual")}
+              className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-all ${
+                billingCycle === "annual"
+                  ? "bg-background shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Annual
+              <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">
+                2 months free
+              </span>
+            </button>
+          </div>
+        </div>
 
+        {/* Plans Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* ── Free ── */}
           <PlanCard
-            name="Free"
-            price="Free"
+            name={PLANS.free.name}
+            price="$0"
             period=""
-            icon={Sparkles}
+            annualPrice=""
+            icon={planIcons.free}
             isCurrent={currentPlan === "free"}
-            features={[
-              "6 listings / month",
-              "Basic item recognition",
-              "Draft saving",
-            ]}
+            features={["6 AI analyses/mo", "6 eBay publishes/mo", "eBay account required"]}
             currentPlan={currentPlan}
             planKey="free"
             tierOrder={tierOrder}
+            billingCycle={billingCycle}
           />
 
           {/* ── Starter ── */}
           <PlanCard
-            name="Starter"
+            name={PLANS.starter.name}
             price="$19"
             period="/mo"
-            icon={Crown}
+            annualPrice="$190/yr"
+            icon={planIcons.starter}
             isCurrent={currentPlan === "starter"}
-            features={[
-              "25 listings / month",
-              "Basic AI enhancement",
-              "Draft saving",
-              "eBay publishing",
-            ]}
+            features={["25 AI analyses/mo", "25 eBay publishes/mo", "Basic AI enhancement"]}
             currentPlan={currentPlan}
             planKey="starter"
             tierOrder={tierOrder}
@@ -258,25 +264,19 @@ export default function BillingPage() {
             checkoutLoading={checkoutLoading}
             portalLoading={portalLoading}
             subscriptionEnd={subscription.subscriptionEnd}
+            billingCycle={billingCycle}
           />
 
           {/* ── Pro ── */}
           <PlanCard
-            name="Pro"
+            name={PLANS.pro.name}
             price="$49"
             period="/mo"
-            icon={Zap}
+            annualPrice="$490/yr"
+            icon={planIcons.pro}
             isCurrent={currentPlan === "pro"}
             badge="Most Popular"
-            features={[
-              "200 listings / month",
-              "Full AI enhancement",
-              "Voice notes",
-              "Melt value protection",
-              "Listing analytics",
-              "eBay sold comps",
-              "True profit tracking (COGS)",
-            ]}
+            features={["200 AI analyses/mo", "200 eBay publishes/mo", "Full AI enhancement", "Voice notes", "Melt protection", "COGS tracking"]}
             currentPlan={currentPlan}
             planKey="pro"
             tierOrder={tierOrder}
@@ -285,25 +285,18 @@ export default function BillingPage() {
             checkoutLoading={checkoutLoading}
             portalLoading={portalLoading}
             subscriptionEnd={subscription.subscriptionEnd}
+            billingCycle={billingCycle}
           />
 
           {/* ── Shop ── */}
           <PlanCard
-            name="Shop"
+            name={PLANS.shop.name}
             price="$99"
             period="/mo"
-            icon={Store}
+            annualPrice="$990/yr"
+            icon={planIcons.shop}
             isCurrent={currentPlan === "shop"}
-            badge="Best Value"
-            features={[
-              "~1,200 listings / month",
-              "Full AI & analytics",
-              "Voice notes",
-              "Melt value protection",
-              "Team / multi-user org",
-              "True profit tracking (COGS) + P&L report",
-              "Priority support",
-            ]}
+            features={["1,200 AI analyses/mo", "1,200 eBay publishes/mo", "Full AI enhancement", "Voice notes", "Melt protection", "Team / org features", "COGS tracking"]}
             currentPlan={currentPlan}
             planKey="shop"
             tierOrder={tierOrder}
@@ -312,21 +305,22 @@ export default function BillingPage() {
             checkoutLoading={checkoutLoading}
             portalLoading={portalLoading}
             subscriptionEnd={subscription.subscriptionEnd}
+            billingCycle={billingCycle}
           />
         </div>
       </div>
-
       <BottomNav />
     </div>
   );
 }
 
-// ─── Reusable Plan Card Component ──────────────────────────────────────────
+// ─── Reusable Plan Card Component ───────────────────────────────────────────────────────
 
 interface PlanCardProps {
   name: string;
   price: string;
   period: string;
+  annualPrice: string;
   icon: React.ElementType;
   isCurrent: boolean;
   badge?: string;
@@ -334,6 +328,7 @@ interface PlanCardProps {
   currentPlan: PlanKey;
   planKey: PlanKey;
   tierOrder: PlanKey[];
+  billingCycle: BillingCycle;
   onUpgrade?: () => void;
   onManage?: () => void;
   checkoutLoading?: string | null;
@@ -342,8 +337,8 @@ interface PlanCardProps {
 }
 
 function PlanCard({
-  name, price, period, icon: Icon, isCurrent, badge, features,
-  currentPlan, planKey, tierOrder,
+  name, price, period, annualPrice, icon: Icon, isCurrent, badge, features,
+  currentPlan, planKey, tierOrder, billingCycle,
   onUpgrade, onManage, checkoutLoading, portalLoading, subscriptionEnd,
 }: PlanCardProps) {
   const currentIndex = tierOrder.indexOf(currentPlan);
@@ -352,35 +347,44 @@ function PlanCard({
   const isDowngrade = thisIndex < currentIndex;
   const isPaidPlan = planKey !== "free";
 
+  const displayPrice = isPaidPlan && billingCycle === "annual" ? annualPrice : `${price}${period}`;
+  const monthlyEquiv = isPaidPlan && billingCycle === "annual"
+    ? `(~${price.replace("$", "$")}${period} billed annually)`
+    : null;
+
   return (
-    <div className={`bg-card border rounded-xl p-5 space-y-4 relative overflow-hidden ${
-      isCurrent ? "border-primary ring-2 ring-primary/20" : "border-border"
-    }`}>
+    <div
+      className={`relative flex flex-col rounded-2xl border p-5 transition-shadow ${
+        isCurrent ? "border-primary ring-1 ring-primary shadow-md" : "border-border hover:shadow-sm"
+      }`}
+    >
       {badge && !isCurrent && (
-        <span className="absolute top-3 right-3 text-[10px] font-semibold bg-primary text-primary-foreground px-2 py-0.5 rounded-full uppercase tracking-wider">
+        <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-xs font-semibold px-3 py-0.5 rounded-full">
           {badge}
         </span>
       )}
       {isCurrent && (
-        <span className="text-[10px] font-semibold text-primary uppercase tracking-wider">
+        <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-green-500 text-white text-xs font-semibold px-3 py-0.5 rounded-full">
           Your Plan
         </span>
       )}
 
-      <div className="flex items-center gap-2">
-        <Icon className="w-5 h-5 text-primary" />
-        <h3 className="text-lg font-bold text-foreground">{name}</h3>
+      <div className="flex items-center gap-2 mb-3">
+        <Icon className="h-5 w-5 text-primary" />
+        <h3 className="font-bold text-base">{name}</h3>
       </div>
 
-      <p className="text-2xl font-bold text-foreground">
-        {price}
-        {period && <span className="text-sm font-normal text-muted-foreground">{period}</span>}
-      </p>
+      <div className="mb-1">
+        <span className="text-2xl font-extrabold">{displayPrice}</span>
+      </div>
+      {monthlyEquiv && (
+        <p className="text-xs text-muted-foreground mb-3">{monthlyEquiv}</p>
+      )}
 
-      <ul className="space-y-2">
+      <ul className="space-y-1.5 mb-4 flex-1">
         {features.map((f) => (
-          <li key={f} className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Check className="w-4 h-4 text-primary flex-shrink-0" />
+          <li key={f} className="flex items-start gap-1.5 text-xs text-muted-foreground">
+            <Check className="h-3.5 w-3.5 text-green-500 mt-0.5 shrink-0" />
             {f}
           </li>
         ))}
@@ -388,56 +392,49 @@ function PlanCard({
 
       {/* Actions */}
       {isCurrent && isPaidPlan ? (
-        <div className="space-y-2 pt-2">
+        <div className="space-y-2">
           <p className="text-xs text-muted-foreground">
             Renews {subscriptionEnd ? new Date(subscriptionEnd).toLocaleDateString() : "—"}
           </p>
           <button
             onClick={onManage}
             disabled={portalLoading}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-secondary text-foreground text-sm font-medium hover:bg-secondary/80 transition-colors disabled:opacity-60"
+            className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg border text-sm font-medium hover:bg-muted transition-colors disabled:opacity-60"
           >
-            {portalLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink className="w-4 h-4" />}
+            {portalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
             Manage Subscription
           </button>
         </div>
       ) : isCurrent && !isPaidPlan ? (
-        <div className="pt-2">
-          <span className="text-xs text-muted-foreground">Current plan</span>
-        </div>
+        <div className="py-2 text-center text-sm text-muted-foreground font-medium">Current plan</div>
       ) : isUpgrade && isPaidPlan ? (
-        <div className="space-y-3 pt-2">
+        <div className="space-y-2">
           <button
             onClick={onUpgrade}
-            disabled={checkoutLoading !== null}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
+            disabled={!!checkoutLoading}
+            className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-60"
           >
-            {checkoutLoading === planKey ? <Loader2 className="w-4 h-4 animate-spin" /> : <Icon className="w-4 h-4" />}
+            {checkoutLoading === planKey ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             Upgrade to {name}
           </button>
-          <div className="bg-muted/50 rounded-lg p-3 space-y-2">
-            <p className="text-xs text-muted-foreground">
-              <span className="font-semibold">Refund Policy:</span> Prorated refunds allowed within 30 days of purchase.
-            </p>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-              <span>By proceeding, you agree to our</span>
-              <Link to="/terms" className="text-primary hover:underline font-medium">Terms</Link>
-              <span>and</span>
-              <Link to="/privacy" className="text-primary hover:underline font-medium">Privacy Policy</Link>
-            </div>
-          </div>
+          <p className="text-xs text-muted-foreground text-center">
+            Refund Policy: Prorated refunds allowed within 30 days of purchase.
+          </p>
+          <p className="text-xs text-muted-foreground text-center">
+            By proceeding, you agree to our{" "}
+            <Link to="/terms" className="underline">Terms</Link> and{" "}
+            <Link to="/privacy" className="underline">Privacy Policy</Link>
+          </p>
         </div>
       ) : isDowngrade ? (
-        <div className="pt-2">
-          <button
-            onClick={onManage}
-            disabled={portalLoading}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-border text-muted-foreground text-sm font-medium hover:bg-secondary/50 transition-colors disabled:opacity-60"
-          >
-            {portalLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            Downgrade
-          </button>
-        </div>
+        <button
+          onClick={onManage}
+          disabled={portalLoading}
+          className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg border text-sm font-medium hover:bg-muted transition-colors disabled:opacity-60"
+        >
+          {portalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          Downgrade
+        </button>
       ) : null}
     </div>
   );
