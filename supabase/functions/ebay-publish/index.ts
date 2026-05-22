@@ -167,8 +167,8 @@ function normalizeConditionDescriptorToEnum(value: string | undefined | null): s
     "remanufactured": "REMANUFACTURED",
     "retread": "RETREAD",
     "damaged": "DAMAGED",
-    "graded": "USED_EXCELLENT", // eBay "Graded" description → condition accepted in coin categories
-    "ungraded": "USED_VERY_GOOD", // eBay "Ungraded" description → USED_VERY_GOOD (safe raw coin default)
+    "graded": "LIKE_NEW", // 2750 = Graded (per eBay condition ID docs)
+    "ungraded": "USED_VERY_GOOD", // 4000 = Ungraded (per eBay condition ID docs)
   };
 
   return aliases[lowered] ?? raw.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "");
@@ -197,7 +197,9 @@ async function fetchDynamicCategoryConditions(
 
     if (!resp.ok) {
       const errText = await resp.text();
-      console.warn(`fetchDynamicCategoryConditions: category-lookup error ${resp.status} for ${categoryId}: ${errText}`);
+      console.warn(
+        `fetchDynamicCategoryConditions: category-lookup error ${resp.status} for ${categoryId}: ${errText}`,
+      );
       return [];
     }
 
@@ -208,7 +210,9 @@ async function fetchDynamicCategoryConditions(
           conditionId: Number(condition.conditionId),
           conditionDescription: String(condition.conditionDescription ?? "").trim(),
         }))
-        .filter((condition: { conditionId: number; conditionDescription: string }) => Number.isFinite(condition.conditionId) && condition.conditionDescription)
+        .filter((condition: { conditionId: number; conditionDescription: string }) =>
+          Number.isFinite(condition.conditionId) && condition.conditionDescription
+        )
       : [];
 
     _categoryConditionCache.set(categoryId, conditions);
@@ -1484,8 +1488,8 @@ function normalizeConditionForCategory(
     // "For trading cards or coins, the numeric identifier 2750 indicates that the item is graded."
     // "For trading cards or coins, the numeric identifier 4000 indicates that the item is ungraded."
     const validCoinConditions = new Set([
-      "LIKE_NEW",              // 2750 = Graded (NGC/PCGS/etc. slabbed coins)
-      "USED_VERY_GOOD",        // 4000 = Ungraded (raw/circulated coins)
+      "LIKE_NEW", // 2750 = Graded (NGC/PCGS/etc. slabbed coins)
+      "USED_VERY_GOOD", // 4000 = Ungraded (raw/circulated coins)
       "FOR_PARTS_OR_NOT_WORKING", // 7000 = Damaged/holed/bent
     ]);
 
@@ -3758,7 +3762,11 @@ serve(async (req) => {
         conditionEnum.replace(/_/g, " ").toLowerCase()
           .replace(/\b\w/g, (c: string) => c.toUpperCase());
 
-      if ((!conditionId || ["DIGITAL_GOOD", "CERTIFIED_PRE_OWNED", "REMANUFACTURED", "RETREAD", "DAMAGED"].includes(conditionEnum)) && finalCategoryId) {
+      if (
+        (!conditionId ||
+          ["DIGITAL_GOOD", "CERTIFIED_PRE_OWNED", "REMANUFACTURED", "RETREAD", "DAMAGED"].includes(conditionEnum)) &&
+        finalCategoryId
+      ) {
         const dynamicConditions = await fetchDynamicCategoryConditions(finalCategoryId);
         const matchedCondition = dynamicConditions.find((candidate) =>
           normalizeConditionDescriptorToEnum(candidate.conditionDescription) === conditionEnum
@@ -4231,7 +4239,9 @@ serve(async (req) => {
           const retryConditions = candidates.filter((c) => c !== effectiveConditionEnum);
 
           console.warn(
-            `create_draft: publish failed with invalid condition for category ${finalCategoryId}; retrying with fallbacks: ${retryConditions.join(", ")}`,
+            `create_draft: publish failed with invalid condition for category ${finalCategoryId}; retrying with fallbacks: ${
+              retryConditions.join(", ")
+            }`,
           );
 
           for (const retryCondition of retryConditions) {
@@ -4258,7 +4268,9 @@ serve(async (req) => {
             if (!invRetryResp.ok) {
               const invRetryErr = await invRetryResp.text();
               console.warn(
-                `create_draft: retry inventory update failed for condition=${retryCondition}: ${invRetryResp.status} ${invRetryErr.slice(0, 200)}`,
+                `create_draft: retry inventory update failed for condition=${retryCondition}: ${invRetryResp.status} ${
+                  invRetryErr.slice(0, 200)
+                }`,
               );
               continue;
             }
@@ -4282,7 +4294,9 @@ serve(async (req) => {
             if (!offerRetryResp.ok) {
               const offerRetryErr = await offerRetryResp.text();
               console.warn(
-                `create_draft: retry offer update failed for condition=${retryCondition}: ${offerRetryResp.status} ${offerRetryErr.slice(0, 200)}`,
+                `create_draft: retry offer update failed for condition=${retryCondition}: ${offerRetryResp.status} ${
+                  offerRetryErr.slice(0, 200)
+                }`,
               );
               continue;
             }
@@ -4308,7 +4322,9 @@ serve(async (req) => {
 
             const publishRetryErr = await publishRetryResp.text();
             console.warn(
-              `create_draft: publish retry failed for condition=${retryCondition}: ${publishRetryResp.status} ${publishRetryErr.slice(0, 200)}`,
+              `create_draft: publish retry failed for condition=${retryCondition}: ${publishRetryResp.status} ${
+                publishRetryErr.slice(0, 200)
+              }`,
             );
             publishResp = publishRetryResp;
           }
@@ -4471,14 +4487,14 @@ serve(async (req) => {
           const errorId = firstError?.errorId;
           const rawMsg = String(firstError?.message ?? "");
           const policyBlockText = `${rawMsg} ${errText}`;
-          const isPolicyBlocked = /norfed liberty dollars|counterfeit coins policy|not permitted on ebay|do not attempt to relist/i
-            .test(policyBlockText);
+          const isPolicyBlocked =
+            /norfed liberty dollars|counterfeit coins policy|not permitted on ebay|do not attempt to relist/i
+              .test(policyBlockText);
 
           if (isPolicyBlocked) {
             userFriendlyError =
               "eBay blocked this listing due to policy restrictions (NORFED Liberty Dollars / Counterfeit Coins policy). This item type cannot be listed on eBay. Please choose a different item.";
-          } else
-          if (publishResp.status === 500 || errorId === 25001) {
+          } else if (publishResp.status === 500 || errorId === 25001) {
             userFriendlyError =
               "eBay is experiencing a temporary issue. Please wait a minute and try publishing again. Your listing details are saved.";
           } else if (isSellerLimitError) {
