@@ -94,7 +94,9 @@ const PLANS = [
   {
     name: "Free",
     price: "Free",
+    annualPrice: "Free",
     period: "",
+    annualPeriod: "",
     features: ["6 listings / month", "Photo identification", "Draft saving"],
     cta: "Get Started Free",
     highlight: false,
@@ -102,7 +104,10 @@ const PLANS = [
   {
     name: "Starter",
     price: "$19",
+    annualPrice: "$190",
     period: "/mo",
+    annualPeriod: "/yr",
+    annualNote: "~$15.83/mo",
     features: ["25 listings / month", "Full listing generation", "eBay publishing", "Draft saving"],
     cta: "Start Listing",
     highlight: false,
@@ -110,7 +115,10 @@ const PLANS = [
   {
     name: "Pro",
     price: "$49",
+    annualPrice: "$490",
     period: "/mo",
+    annualPeriod: "/yr",
+    annualNote: "~$40.83/mo",
     features: ["200 listings / month", "Full AI enhancement", "Voice notes", "Melt value protection", "Competitor pricing"],
     cta: "Go Pro",
     highlight: true,
@@ -119,17 +127,23 @@ const PLANS = [
   {
     name: "Shop",
     price: "$99",
+    annualPrice: "$990",
     period: "/mo",
+    annualPeriod: "/yr",
+    annualNote: "~$82.50/mo",
     features: ["~1,200 listings / month", "Everything in Pro", "Multi-user access", "Priority support"],
     cta: "Open Shop",
     highlight: false,
   },
 ];
 
+type BillingCycle = "monthly" | "annual";
+
 export default function LandingPage() {
   const navigate = useNavigate();
   const { ref: statsRef, inView: statsInView } = useInView();
   const { ref: featuresRef, inView: featuresInView } = useInView(0.1);
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
 
   const listingsCount = useCounter(1200, 1800, statsInView);
   const timeSaved = useCounter(94, 1200, statsInView);
@@ -218,7 +232,7 @@ export default function LandingPage() {
             {[...Array(5)].map((_, i) => (
               <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
             ))}
-            <span className="text-xs text-muted-foreground ml-2">Trusted by resellers, dealers & collectors</span>
+            <span className="text-xs text-muted-foreground ml-2">Trusted by resellers, dealers &amp; collectors</span>
           </div>
         </div>
 
@@ -358,7 +372,7 @@ export default function LandingPage() {
                   <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{step.desc}</p>
                 </div>
                 {i < STEPS.length - 1 && (
-                  <div className="absolute left-[2.35rem] mt-14 w-px h-6 bg-border" style={{ position: "relative", marginLeft: "-3.85rem", marginTop: "3.5rem" }} />
+                  <div style={{ position: "relative", marginLeft: "-3.85rem", marginTop: "3.5rem" }} />
                 )}
               </div>
             ))}
@@ -369,64 +383,103 @@ export default function LandingPage() {
       {/* ── PRICING ── */}
       <section className="py-20 px-5">
         <div className="max-w-4xl mx-auto">
-          <div className="text-center space-y-3 mb-12">
+          <div className="text-center space-y-3 mb-8">
             <h2 className="text-2xl sm:text-3xl font-extrabold text-foreground">Simple, transparent pricing</h2>
             <p className="text-sm text-muted-foreground">Start free. Upgrade when your volume grows.</p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {PLANS.map((plan) => (
-              <div
-                key={plan.name}
-                className="relative rounded-xl border p-5 space-y-5 flex flex-col"
-                style={plan.highlight ? {
-                  borderColor: "#0076B6",
-                  boxShadow: "0 0 0 2px rgba(0,118,182,0.15)",
-                  backgroundColor: "rgba(0,118,182,0.03)"
-                } : {
-                  borderColor: "hsl(var(--border))",
-                  backgroundColor: "hsl(var(--card))"
-                }}
+
+          {/* Billing cycle toggle */}
+          <div className="flex items-center justify-center mb-10">
+            <div className="flex items-center p-1 rounded-full border border-border bg-card">
+              <button
+                onClick={() => setBillingCycle("monthly")}
+                className={`px-5 py-2 rounded-full text-sm font-semibold transition-all ${
+                  billingCycle === "monthly"
+                    ? "text-white"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                style={billingCycle === "monthly" ? { backgroundColor: "#0076B6" } : {}}
               >
-                {plan.badge && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 text-white text-[10px] font-bold px-3 py-1 rounded-full"
-                       style={{ backgroundColor: "#0076B6" }}>
-                    {plan.badge}
-                  </div>
-                )}
-                <div>
-                  <h3 className="font-bold text-foreground">{plan.name}</h3>
-                  <div className="flex items-baseline gap-0.5 mt-1">
-                    <span className="text-2xl font-extrabold text-foreground">{plan.price}</span>
-                    <span className="text-sm text-muted-foreground">{plan.period}</span>
-                  </div>
-                </div>
-                <ul className="space-y-2 flex-1">
-                  {plan.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2 text-xs text-muted-foreground">
-                      <Check className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: "#0076B6" }} />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  onClick={() => navigate("/signup")}
-                  className="w-full py-2.5 rounded-lg text-sm font-semibold transition-all active:scale-95"
+                Monthly
+              </button>
+              <button
+                onClick={() => setBillingCycle("annual")}
+                className={`px-5 py-2 rounded-full text-sm font-semibold transition-all flex items-center gap-2 ${
+                  billingCycle === "annual"
+                    ? "text-white"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                style={billingCycle === "annual" ? { backgroundColor: "#0076B6" } : {}}
+              >
+                Annual
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500 text-white">
+                  2 months free
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {PLANS.map((plan) => {
+              const displayPrice = billingCycle === "annual" ? plan.annualPrice : plan.price;
+              const displayPeriod = billingCycle === "annual" ? plan.annualPeriod : plan.period;
+              return (
+                <div
+                  key={plan.name}
+                  className="relative rounded-xl border p-5 space-y-5 flex flex-col"
                   style={plan.highlight ? {
-                    backgroundColor: "#0076B6",
-                    color: "#fff",
-                    boxShadow: "0 4px 14px rgba(0,118,182,0.25)"
+                    borderColor: "#0076B6",
+                    boxShadow: "0 0 0 2px rgba(0,118,182,0.15)",
+                    backgroundColor: "rgba(0,118,182,0.03)"
                   } : {
-                    border: "1px solid hsl(var(--border))",
-                    backgroundColor: "transparent",
-                    color: "hsl(var(--foreground))"
+                    borderColor: "hsl(var(--border))",
+                    backgroundColor: "hsl(var(--card))"
                   }}
-                  onMouseEnter={e => { if (!plan.highlight) (e.target as HTMLButtonElement).style.backgroundColor = "hsl(var(--secondary))"; }}
-                  onMouseLeave={e => { if (!plan.highlight) (e.target as HTMLButtonElement).style.backgroundColor = "transparent"; }}
                 >
-                  {plan.cta}
-                </button>
-              </div>
-            ))}
+                  {plan.badge && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 text-white text-[10px] font-bold px-3 py-1 rounded-full"
+                         style={{ backgroundColor: "#0076B6" }}>
+                      {plan.badge}
+                    </div>
+                  )}
+                  <div>
+                    <h3 className="font-bold text-foreground">{plan.name}</h3>
+                    <div className="flex items-baseline gap-0.5 mt-1">
+                      <span className="text-2xl font-extrabold text-foreground">{displayPrice}</span>
+                      <span className="text-sm text-muted-foreground">{displayPeriod}</span>
+                    </div>
+                    {billingCycle === "annual" && plan.annualNote && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{plan.annualNote}</p>
+                    )}
+                  </div>
+                  <ul className="space-y-2 flex-1">
+                    {plan.features.map((f) => (
+                      <li key={f} className="flex items-start gap-2 text-xs text-muted-foreground">
+                        <Check className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: "#0076B6" }} />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    onClick={() => navigate("/signup")}
+                    className="w-full py-2.5 rounded-lg text-sm font-semibold transition-all active:scale-95"
+                    style={plan.highlight ? {
+                      backgroundColor: "#0076B6",
+                      color: "#fff",
+                      boxShadow: "0 4px 14px rgba(0,118,182,0.25)"
+                    } : {
+                      border: "1px solid hsl(var(--border))",
+                      backgroundColor: "transparent",
+                      color: "hsl(var(--foreground))"
+                    }}
+                    onMouseEnter={e => { if (!plan.highlight) (e.target as HTMLButtonElement).style.backgroundColor = "hsl(var(--secondary))"; }}
+                    onMouseLeave={e => { if (!plan.highlight) (e.target as HTMLButtonElement).style.backgroundColor = "transparent"; }}
+                  >
+                    {plan.cta}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
