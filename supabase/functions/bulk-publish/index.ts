@@ -159,7 +159,9 @@ async function fetchDynamicCategoryConditions(
           conditionId: Number(condition.conditionId),
           conditionDescription: String(condition.conditionDescription ?? "").trim(),
         }))
-        .filter((condition: { conditionId: number; conditionDescription: string }) => Number.isFinite(condition.conditionId) && condition.conditionDescription)
+        .filter((condition: { conditionId: number; conditionDescription: string }) =>
+          Number.isFinite(condition.conditionId) && condition.conditionDescription
+        )
       : [];
   } catch {
     return [];
@@ -178,10 +180,14 @@ async function resolveConditionForCategory(
     .toLowerCase()
     .replace(/\b\w/g, (char: string) => char.toUpperCase());
 
-  if ((!conditionId || ["DIGITAL_GOOD", "CERTIFIED_PRE_OWNED", "REMANUFACTURED", "RETREAD", "DAMAGED"].includes(conditionEnum)) && categoryId) {
+  if (
+    (!conditionId ||
+      ["DIGITAL_GOOD", "CERTIFIED_PRE_OWNED", "REMANUFACTURED", "RETREAD", "DAMAGED"].includes(conditionEnum)) &&
+    categoryId
+  ) {
     const dynamicConditions = await fetchDynamicCategoryConditions(categoryId);
     const match = dynamicConditions.find((candidate) =>
-      normalizeConditionDescriptorToEnum(candidate.conditionDescription) === conditionEnum,
+      normalizeConditionDescriptorToEnum(candidate.conditionDescription) === conditionEnum
     );
     if (match) {
       conditionId = match.conditionId;

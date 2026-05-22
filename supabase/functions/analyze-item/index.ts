@@ -1327,7 +1327,10 @@ Seller's note: "${voiceNote}"`;
             const id = Number(c.conditionId);
             const mapped = CONDITION_ID_TO_ENUM[id] ??
               CONDITION_DESCRIPTION_TO_ENUM[String(c.conditionDescription ?? "").trim().toLowerCase()] ??
-              String(c.conditionDescription ?? c.conditionId).toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "");
+              String(c.conditionDescription ?? c.conditionId).toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(
+                /^_|_$/g,
+                "",
+              );
             // Drop any non-enum strings that would cause eBay errorId 2004 on publish
             return INVALID_CONDITION_STRINGS.has(mapped.toUpperCase()) ? null : mapped;
           }).filter(Boolean),
