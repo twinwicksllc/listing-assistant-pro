@@ -2,13 +2,12 @@ import { createContext, useContext, useEffect, useState, useCallback, ReactNode 
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
-// âââ 4-Tier Plan Configuration âââââââââââââââââââââââââââââââââââââââââââââââ
-// Stripe product/price IDs are placeholders â update with real values after
-// creating them in the Stripe Dashboard.
+// ─── 4-Tier Plan Configuration ────────────────────────────────────────────────
 export const PLANS = {
   free: {
     name: "Free",
     price: 0,
+    annualPrice: 0,
     publishLimit: 6,
     analysisLimit: 6,
     hasAiEnhancement: false,
@@ -21,11 +20,13 @@ export const PLANS = {
   starter: {
     name: "Starter",
     price: 19,
+    annualPrice: 190,
     publishLimit: 25,
     analysisLimit: 25,
-    priceId: "price_1T8lVU4bX0d1SiThMDayhDj5",   // TODO: confirm or replace
-    productId: "prod_U6zUiC1SYuPrGU",              // TODO: confirm or replace
-    hasAiEnhancement: true,   // basic AI enhancement
+    monthlyPriceId: "price_1TZk8U4bX0d1SiThgIiUlzAr",
+    annualPriceId: "price_1TZkAr4bX0d1SiTh8jxboBc2",
+    productId: "prod_UYrsrRiqPYCk2X",
+    hasAiEnhancement: true, // basic AI enhancement
     hasVoiceNotes: false,
     hasMeltProtection: false,
     hasListingAnalytics: false,
@@ -35,30 +36,34 @@ export const PLANS = {
   pro: {
     name: "Pro",
     price: 49,
+    annualPrice: 490,
     publishLimit: 200,
     analysisLimit: 200,
-    priceId: "price_1T8mZ84bX0d1SiThFgvRubiN",    // TODO: confirm or replace
-    productId: "prod_U70aT1KvuI2uDx",              // TODO: confirm or replace
-    hasAiEnhancement: true,   // full AI enhancement
+    monthlyPriceId: "price_1TZkOW4bX0d1SiThIDhoOJal",
+    annualPriceId: "price_1TZkOW4bX0d1SiThdi4v5heZ",
+    productId: "prod_UYs8zHougAYzo6",
+    hasAiEnhancement: true, // full AI enhancement
     hasVoiceNotes: true,
     hasMeltProtection: true,
     hasListingAnalytics: true,
     hasOrgFeature: false,
-    hasCogsTracking: true,    // COGS tracking + Profit Report
+    hasCogsTracking: true, // COGS tracking + Profit Report
   },
   shop: {
     name: "Shop",
     price: 99,
-    publishLimit: 1200,       // soft threshold
-    analysisLimit: 1200,      // soft threshold
-    priceId: "price_1TXYjd4bX0d1SiThDb4YQhjR",
+    annualPrice: 990,
+    publishLimit: 1200, // soft threshold
+    analysisLimit: 1200, // soft threshold
+    monthlyPriceId: "price_1TXYjd4bX0d1SiThDb4YQhjR",
+    annualPriceId: "price_1TZkGC4bX0d1SiTh7LLQesy7",
     productId: "prod_UWbxnGJYfqTrLz",
-    hasAiEnhancement: true,   // full AI enhancement
+    hasAiEnhancement: true, // full AI enhancement
     hasVoiceNotes: true,
     hasMeltProtection: true,
     hasListingAnalytics: true,
     hasOrgFeature: true,
-    hasCogsTracking: true,    // COGS tracking + Profit Report
+    hasCogsTracking: true, // COGS tracking + Profit Report
   },
 } as const;
 
@@ -73,8 +78,8 @@ interface SubscriptionState {
   subscribed: boolean;
   productId: string | null;
   subscriptionEnd: string | null;
-  status: string | null;           // 'active' | 'trialing' | 'past_due' | 'canceled' | null
-  cancelAtPeriodEnd: boolean;      // true = will cancel at end of billing period
+  status: string | null; // 'active' | 'trialing' | 'past_due' | 'canceled' | null
+  cancelAtPeriodEnd: boolean; // true = will cancel at end of billing period
   loading: boolean;
 }
 
@@ -96,7 +101,7 @@ interface PlanFeatures {
   hasMeltProtection: boolean;
   hasListingAnalytics: boolean;
   hasOrgFeature: boolean;
-  hasCogsTracking: boolean;  // True profit / COGS tracking + Profit Report page
+  hasCogsTracking: boolean; // True profit / COGS tracking + Profit Report page
 }
 
 interface AuthContextType {
@@ -302,7 +307,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [session, subscription.subscribed, refreshSubscription]);
 
-  // âââ Derived tier values ââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── Derived tier values ────────────────────────────────────────────────────
   const isAdmin = ADMIN_EMAILS.includes(session?.user?.email ?? "");
   const isActivePaid = subscription.subscribed || subscription.status === "trialing";
 
@@ -341,7 +346,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     publishLimit: PLANS[resolvedPlan].publishLimit,
   };
 
-  // Usage gates â Shop plan uses soft threshold (warn but don't hard-block)
+  // Usage gates — Shop plan uses soft threshold (warn but don't hard-block)
   const finalCanAnalyze = usage.aiAnalysis < currentPlanLimits.analysisLimit;
   const finalCanPublish = usage.ebayPublish < currentPlanLimits.publishLimit;
 
