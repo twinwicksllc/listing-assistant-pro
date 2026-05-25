@@ -20,47 +20,58 @@ export const test = base.extend<{ testUser: TestUser }>({
 export { expect };
 
 export async function signUp(page: Page, user: TestUser) {
-  await page.goto('/');
-  await page.click('text=Sign Up');
-  
-  // Wait for auth modal/page to load
+  await page.goto('/signup');
   await page.waitForLoadState('networkidle');
-  
-  // Fill signup form (adjust selectors based on your auth UI)
+
+  // Fill signup form
+  await page.fill('input[placeholder*="Your name"]', 'QA E2E User');
   await page.fill('input[placeholder*="email"]', user.email);
   await page.fill('input[placeholder*="password"]', user.password);
   await page.click('button:has-text("Create Account")');
-  
-  // Wait for redirect to dashboard
-  await page.waitForURL('**/dashboard');
+
+  // New auth flow can either sign in immediately or ask for email verification.
+  await Promise.race([
+    page.waitForURL('**/home', { timeout: 15_000 }),
+    page.waitForSelector('text=Check your email', { timeout: 15_000 }),
+  ]);
 }
 
 export async function login(page: Page, user: TestUser) {
-  await page.goto('/');
-  await page.click('text=Log In');
-  
+  await page.goto('/login');
   await page.waitForLoadState('networkidle');
-  await page.fill('input[placeholder*="email"]', user.email);
-  await page.fill('input[placeholder*="password"]', user.password);
-  await page.click('button:has-text("Log In")');
-  
-  await page.waitForURL('**/dashboard');
+
+  // Some environments land on /landing first; route into the auth form explicitly.
+  const emailInput = page.locator('input[type="email"]').first();
+  const hasEmailInput = await emailInput.isVisible({ timeout: 3_000 }).catch(() => false);
+  if (!hasEmailInput) {
+    await page.getByRole('button', { name: 'Sign In' }).first().click();
+  }
+
+  await page.waitForURL(/\/login|\/home/, { timeout: 15_000 });
+  if (page.url().includes('/home')) {
+    return;
+  }
+
+  await emailInput.fill(user.email);
+  await page.locator('input[type="password"]').first().fill(user.password);
+  await page.click('button:has-text("Sign In")');
+
+  await page.waitForURL('**/home');
 }
 
 export async function uploadTestPhoto(
   page: Page,
   photoType: 'coin' | 'electronics' | 'clothing',
 ) {
-  // Navigate to analyze page
-  await page.click('a:has-text("Analyze")');
-  await page.waitForURL('**/analyze');
-  
-  // Upload photo via file input
+  // Navigate to home upload page.
+  await page.goto('/home');
+
+  // Upload photo via hidden gallery input.
   const filePath = getTestPhotoPath(photoType);
-  await page.locator('input[type="file"]').setInputFiles(filePath);
-  
-  // Wait for upload to complete
-  await page.waitForSelector('[data-testid="photo-uploaded"]', { timeout: 10_000 });
+  await page.locator('input[type="file"][multiple]').first().setInputFiles(filePath);
+
+  // Wait until the upload flow exposes the process action.
+  await page.getByRole('button', { name: 'Process Now' }).waitFor({ timeout: 15_000 });
 }
 
 export async function generateListing(page: Page, options?: { title?: string }) {
