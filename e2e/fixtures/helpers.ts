@@ -37,26 +37,35 @@ export async function signUp(page: Page, user: TestUser) {
 }
 
 export async function login(page: Page, user: TestUser) {
-  await page.goto('/login');
-  await page.waitForLoadState('networkidle');
+  await page.goto('/login', { waitUntil: 'domcontentloaded' });
 
-  // Some environments land on /landing first; route into the auth form explicitly.
   const emailInput = page.locator('input[type="email"]').first();
-  const hasEmailInput = await emailInput.isVisible({ timeout: 3_000 }).catch(() => false);
+  let hasEmailInput = await emailInput.isVisible({ timeout: 5_000 }).catch(() => false);
+
+  // Some CI runs can land on /landing due route timing. Click any visible sign-in CTA, then retry /login.
   if (!hasEmailInput) {
-    await page.getByRole('button', { name: 'Sign In' }).first().click();
+    const landingSignIn = page
+      .locator('button:has-text("Sign In"),button:has-text("Sign in"),a:has-text("Sign In"),a:has-text("Sign in")')
+      .first();
+
+    const hasLandingSignIn = await landingSignIn.isVisible({ timeout: 5_000 }).catch(() => false);
+    if (hasLandingSignIn) {
+      await landingSignIn.click({ timeout: 5_000 });
+    }
+
+    await page.goto('/login', { waitUntil: 'domcontentloaded' });
+    hasEmailInput = await emailInput.isVisible({ timeout: 10_000 }).catch(() => false);
   }
 
-  await page.waitForURL(/\/login|\/home/, { timeout: 15_000 });
-  if (page.url().includes('/home')) {
-    return;
+  if (!hasEmailInput) {
+    throw new Error(`Login form not found at URL: ${page.url()}`);
   }
 
   await emailInput.fill(user.email);
   await page.locator('input[type="password"]').first().fill(user.password);
-  await page.click('button:has-text("Sign In")');
+  await page.getByRole('button', { name: /sign in/i }).first().click({ timeout: 10_000 });
 
-  await page.waitForURL('**/home');
+  await page.waitForURL(/\/home/, { timeout: 15_000 });
 }
 
 export async function uploadTestPhoto(
