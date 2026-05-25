@@ -282,29 +282,32 @@ async function detectCategoryTree(
   return "other";
 }
 
-// Hardcoded ID sets kept as fallback for detectCategoryTree
+// Hardcoded ID sets kept as fallback for detectCategoryTree.
+// NOTE: Only LEAF categories are included here (no parent category IDs like 253, 256, 3377, 4733, 18466).
+// Parent categories are detected dynamically via breadcrumb patterns (e.g., "Coins: US", "Coins: World").
+// eBay Metadata API and descriptor fetching work with actual leaf category IDs.
 const HARDCODED_COIN_CATEGORY_IDS = new Set([
-  "11981",
-  "39464",
-  "11980",
-  "11971",
-  "41099",
-  "41102",
-  "11973",
-  "39455",
-  "41084",
-  "11950",
-  "41111",
-  "166679",
-  "41109",
-  "526",
-  "253",
-  "45243",
-  "39471",
-  "39472",
-  "39473",
-  "39474",
-  "39475",
+  // Existing known leaf categories
+  "11981",  // Wheat Pennies
+  "39464",  // Lincoln Cents
+  "11980",  // Jefferson Nickels
+  "11971",  // Roosevelt Dimes
+  "41099",  // Washington Quarters
+  "41102",  // State Quarters
+  "11973",  // Kennedy Half Dollars
+  "39455",  // Dollar Coins
+  "41084",  // US Gold Coins
+  "11950",  // US Silver Coins
+  "41111",  // Coin Sets
+  "166679", // US Coin Proof Sets
+  "41109",  // US Coin Proof Sets (variant)
+  "526",    // Paper Money
+  "45243",  // World Coins
+  "39471",  // Canadian Coins
+  "39472",  // Ancient Coins
+  "39473",  // Medieval Coins
+  "39474",  // Bullion Coins
+  "39475",  // Commemorative Coins
 ]);
 const HARDCODED_BULLION_CATEGORY_IDS = new Set([
   "178906",
@@ -336,8 +339,10 @@ const HARDCODED_COLLECTIBLE_CATEGORY_IDS = new Set([
 // (Composition, Fineness, Denomination, Material).
 // Prevents coin-specific aspects from leaking to non-coin categories.
 // ================================================================
+// Only leaf categories allowed to receive coin-specific fixed values (Composition, Fineness, Denomination, Material).
+// Parent IDs like 253, 256, 3377, 4733, 18466 are not included; descendant detection via breadcrumbs will handle them.
 const COIN_FIXED_VALUES_ALLOWED_IDS = new Set([
-  // Coins
+  // Coins (leaf categories only)
   "11981",
   "39464",
   "11980",
@@ -351,9 +356,13 @@ const COIN_FIXED_VALUES_ALLOWED_IDS = new Set([
   "41111",
   "41109",
   "526",
-  "253",
   "45243",
-  // Bullion
+  "39471",
+  "39472",
+  "39473",
+  "39474",
+  "39475",
+  // Bullion (leaf categories only)
   "178906",
   "39489",
   "3361",
@@ -3888,10 +3897,10 @@ serve(async (req) => {
         console.log(`create_draft: attaching ebayVideoId=${payloadEbayVideoId} to product.videoIds`);
       }
 
-      // ── eBay June 2026 Coin Condition Descriptors ─────────────────────────
+      // ── eBay June 2026 Coin Condition Descriptors (MANDATORY) ──────────────────
       // Extract coinConditionDetail stored under itemSpecifics._coinConditionDetail
       // and translate it to the numeric conditionDescriptors array required by
-      // the eBay Inventory API v1.18.5 for coin categories.
+      // the eBay Inventory API v1.18.5 for coin categories (253, 256, 3377, 4733, 18466 and all descendants).
       const rawItemSpecifics = (
         itemSpecifics && typeof itemSpecifics === "object" ? itemSpecifics : {}
       ) as Record<string, unknown>;
@@ -3900,18 +3909,24 @@ serve(async (req) => {
         | null
         | undefined;
 
-      // Check if this category is under a coin parent that requires descriptors.
-      // We check both the final category and its ancestors via the resolved category tree type.
-      const isCoinDescriptorCategory = categoryTreeType === "coin" &&
-        (COIN_CONDITION_DESCRIPTOR_PARENT_IDS.has(finalCategoryId) ||
-          // Most leaf categories will not be in the parent set, but coins always have categoryTreeType "coin"
-          // and the Metadata API will return descriptors for all eligible leaf categories.
-          categoryTreeType === "coin");
+      // Coin categories MUST provide condition details per eBay June 2026 mandate.
+      // categoryTreeType="coin" is detected via breadcrumb patterns and includes all descendants
+      // of parent categories 253, 256, 3377, 4733, 18466.
+      const isCoinDescriptorCategory = categoryTreeType === "coin";
+
+      // VALIDATION: Coin listings are required to have condition details.
+      // This is mandatory for eBay compliance; proceeding without will cause rejection or warnings.
+      if (isCoinDescriptorCategory && !coinConditionDetailRaw) {
+        throw new Error(
+          `Coin listings in category ${finalCategoryId} require detailed condition information per eBay June 2026 mandate. ` +
+          `Please specify either a certified grade (PCGS, NGC, ANACS, ICG, CAC, ICCS) or a raw condition tier (Uncirculated, Extremely Fine, etc.) before publishing.`
+        );
+      }
 
       if (coinConditionDetailRaw && isCoinDescriptorCategory && clientId && clientSecret) {
         try {
           console.log(
-            `create_draft: fetching coin condition descriptors for category ${finalCategoryId}, type=${coinConditionDetailRaw.type}`,
+            `create_draft: MANDATORY: fetching coin condition descriptors for category ${finalCategoryId}, type=${coinConditionDetailRaw.type}`,
           );
           const descriptors = await fetchCoinConditionDescriptors(
             finalCategoryId,
@@ -3927,32 +3942,32 @@ serve(async (req) => {
             if (conditionDescriptors && conditionDescriptors.length > 0) {
               inventoryBody.conditionDescriptors = conditionDescriptors;
               console.log(
-                `create_draft: added ${conditionDescriptors.length} conditionDescriptors for coin category ${finalCategoryId}:`,
+                `create_draft: MANDATORY: added ${conditionDescriptors.length} conditionDescriptors for coin category ${finalCategoryId}:`,
                 JSON.stringify(conditionDescriptors),
               );
             } else {
-              console.warn(
-                `create_draft: buildCoinConditionDescriptors returned null/empty for category ${finalCategoryId} — proceeding without conditionDescriptors (may generate warning 25126)`,
+              // FAIL: Could not map user condition to eBay descriptor values.
+              // This is a data integrity issue, not a soft warning.
+              throw new Error(
+                `Could not map condition details (type: ${coinConditionDetailRaw.type}) to eBay descriptor values for category ${finalCategoryId}. ` +
+                `Verify the grade, company, or raw condition value is valid and try again.`
               );
             }
           } else {
-            console.warn(
-              `create_draft: no condition descriptors found for category ${finalCategoryId} — proceeding without (may generate warning 25126)`,
+            // FAIL: Metadata API returned no descriptors for this category.
+            // Without descriptors, the listing cannot comply with the mandate.
+            throw new Error(
+              `Unable to retrieve coin condition descriptors from eBay for category ${finalCategoryId}. ` +
+              `This may be a temporary service issue. Please try again or contact support.`
             );
           }
         } catch (cdErr) {
-          // Non-fatal: log and continue — eBay will return warning 25126 but listing still publishes
-          console.warn(
-            `create_draft: error building coin conditionDescriptors (non-fatal):`,
-            cdErr,
-          );
+          // Fatal: Coin condition descriptor error blocks the listing.
+          console.error(`create_draft: FATAL coin descriptor error:`, cdErr);
+          throw cdErr;
         }
-      } else if (coinConditionDetailRaw && categoryTreeType === "coin") {
-        console.log(
-          `create_draft: coinConditionDetail present but skipping descriptor fetch (missing clientId/clientSecret or not coin category)`,
-        );
       }
-      // ── End Coin Condition Descriptors ──────────────────────────────────
+      // ── End Coin Condition Descriptors (MANDATORY) ────────────────────────────
 
       console.log(
         `create_draft: creating inventory item for sku=${sku}, condition=${conditionEnum} (raw=${rawCondition}), merchantLocationKey=${merchantLocationKey}`,

@@ -124,8 +124,11 @@ export const CONDITION_LABELS: Record<string, string> = {
 
 export type ConditionOption = { value: string; label: string };
 
-// Category ID sets matching the publish function's detection logic
-const COIN_CATEGORY_IDS = new Set(["11981","39464","11980","11971","41099","41102","11973","39455","41084","11950","41111","166679","41109","526","253","45243","39471","39472","39473","39474","39475"]);
+// Category ID sets matching the publish function's detection logic.
+// NOTE: Only LEAF category IDs are included here (no parent IDs like 253, 256, 3377, 4733, 18466).
+// Parent categories are detected dynamically via breadcrumb patterns (e.g., "Coins: US", "Coins: World").
+// This ensures the category detection works with actual eBay leaf categories that can be published.
+const COIN_CATEGORY_IDS = new Set(["11981","39464","11980","11971","41099","41102","11973","39455","41084","11950","41111","166679","41109","526","45243","39471","39472","39473","39474","39475"]);
 const BULLION_CATEGORY_IDS = new Set(["178906","39489","3361","532","173685"]);
 const TRADING_CARD_CATEGORY_IDS = new Set(["261328","183454","2536","19107","64482","213"]);
 
