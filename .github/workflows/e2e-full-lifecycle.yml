@@ -37,6 +37,8 @@ jobs:
           BASE_URL: ${{ secrets.QA_BASE_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           EBAY_SANDBOX_API_KEY: ${{ secrets.EBAY_SANDBOX_API_KEY }}
           STRIPE_TEST_CARD: '4242424242424242'
       
