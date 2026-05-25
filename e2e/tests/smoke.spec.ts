@@ -1,4 +1,4 @@
-import { test, expect, signUp, login, uploadTestPhoto, generateListing, cleanup } from './helpers';
+import { test, expect, signUp, login, uploadTestPhoto, generateListing, cleanup } from '../fixtures/helpers';
 
 test.describe('PR Smoke Tests', () => {
   test.beforeEach(async ({ page, testUser }) => {
