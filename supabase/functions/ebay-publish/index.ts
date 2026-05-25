@@ -4063,12 +4063,35 @@ serve(async (req) => {
           console.log(
             `create_draft: MANDATORY: fetching coin condition descriptors for category ${finalCategoryId}, type=${coinConditionDetailRaw.type}`,
           );
-          const descriptors = await fetchCoinConditionDescriptors(
-            finalCategoryId,
-            clientId,
-            clientSecret,
-            apiBase,
-          );
+          
+          let descriptors: any[] | null = null;
+          let lastError: Error | null = null;
+          
+          // Retry logic: attempt up to 2 times for transient failures
+          for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+              descriptors = await fetchCoinConditionDescriptors(
+                finalCategoryId,
+                clientId,
+                clientSecret,
+                apiBase,
+              );
+              if (descriptors && descriptors.length > 0) {
+                break; // Success, exit retry loop
+              }
+            } catch (retryErr) {
+              lastError = retryErr as Error;
+              console.warn(
+                `create_draft: Metadata API attempt ${attempt} failed. ${attempt < 2 ? "Retrying..." : "Will fail after this attempt."}`,
+                lastError.message,
+              );
+              if (attempt < 2) {
+                // Wait 500ms before retry
+                await new Promise(resolve => setTimeout(resolve, 500));
+              }
+            }
+          }
+          
           if (descriptors && descriptors.length > 0) {
             const conditionDescriptors = buildCoinConditionDescriptors(
               coinConditionDetailRaw,
@@ -4089,16 +4112,26 @@ serve(async (req) => {
               );
             }
           } else {
-            // FAIL: Metadata API returned no descriptors for this category.
+            // FAIL: Metadata API returned no descriptors for this category after retries.
             // Without descriptors, the listing cannot comply with the mandate.
+            const errorDetail = lastError?.message || 'Unknown error';
             throw new Error(
-              `Unable to retrieve coin condition descriptors from eBay for category ${finalCategoryId}. ` +
+              `Unable to retrieve coin condition descriptors from eBay for category ${finalCategoryId} after 2 attempts. ` +
+              `Error: ${errorDetail}. ` +
               `This may be a temporary service issue. Please try again or contact support.`
             );
           }
         } catch (cdErr) {
           // Fatal: Coin condition descriptor error blocks the listing.
-          console.error(`create_draft: FATAL coin descriptor error:`, cdErr);
+          // Phase 3: Enhanced error logging for monitoring and debugging
+          const errorMessage = cdErr instanceof Error ? cdErr.message : String(cdErr);
+          console.error(`create_draft: FATAL coin descriptor error:`, {
+            message: errorMessage,
+            stack: cdErr instanceof Error ? cdErr.stack : undefined,
+            category: finalCategoryId,
+            conditionType: coinConditionDetailRaw?.type,
+            timestamp: new Date().toISOString(),
+          });
           throw cdErr;
         }
       }
