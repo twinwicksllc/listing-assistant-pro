@@ -12,7 +12,7 @@ export default defineConfig({
     ['list'],
   ],
   use: {
-    baseURL: process.env.BASE_URL || 'http://localhost:5173',
+    baseURL: process.env.BASE_URL || 'http://localhost:8080',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -23,9 +23,9 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: process.env.CI ? undefined : {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
+  webServer: {
+    command: 'npm run dev -- --host 0.0.0.0 --port 8080',
+    url: 'http://localhost:8080',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
