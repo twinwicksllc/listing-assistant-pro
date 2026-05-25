@@ -34,12 +34,18 @@ async function main() {
     }),
   });
 
-  if (response.ok || response.status === 409) {
+  if (response.ok) {
     console.log(`Test user ready: ${TEST_EMAIL}`);
     return;
   }
 
   const body = await response.text();
+
+  if (response.status === 422 && body.includes('email_exists')) {
+    console.log(`Test user already exists: ${TEST_EMAIL}`);
+    return;
+  }
+
   throw new Error(`Failed to create test user (${response.status}): ${body}`);
 }
 
