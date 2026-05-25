@@ -26,12 +26,20 @@ jobs:
       
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
+
+      - name: Setup test user in Supabase
+        run: node scripts/setup-test-user.js
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
       
       - name: Run smoke tests
         run: npx playwright test e2e/tests/smoke.spec.ts
         env:
-          BASE_URL: ${{ secrets.QA_BASE_URL || 'http://localhost:5173' }}
+          BASE_URL: ${{ secrets.QA_BASE_URL || 'http://localhost:8080' }}
           STRIPE_TEST_CARD: '4242424242424242'
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       
       - name: Upload test report
         if: always()
@@ -48,19 +56,15 @@ jobs:
           script: |
             const fs = require('fs');
             const resultsPath = './playwright-report/results.json';
-            
+
             if (fs.existsSync(resultsPath)) {
               const results = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
               const passed = results.stats.expected;
               const failed = results.stats.unexpected;
-              
-              const comment = `## 🧪 E2E Smoke Tests
-              
-✅ Passed: ${passed}
-❌ Failed: ${failed}
 
-[View detailed report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`;
-              
+              const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+              const comment = `## 🧪 E2E Smoke Tests\n\n✅ Passed: ${passed}\n❌ Failed: ${failed}\n\n[View detailed report](${runUrl})`;
+
               github.rest.issues.createComment({
                 issue_number: context.issue.number,
                 owner: context.repo.owner,
