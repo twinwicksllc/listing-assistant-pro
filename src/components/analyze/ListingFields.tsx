@@ -6,12 +6,19 @@ import {
   Check,
   X as XIcon,
   UserCircle,
+  AlertCircle,
 } from "lucide-react";
 import PriceRecommenderCard from "@/components/PriceRecommenderCard";
 import CogsInput from "@/components/CogsInput";
 import { isCoinConditionDetailComplete } from "@/types/listing";
 import type { ItemSpecifics, CoinConditionDetail } from "@/types/listing";
 import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
+import {
+  validateCoinConditionDetail,
+  formatValidationErrors,
+  describeCoinCondition,
+  isCoinConditionValid,
+} from "@/lib/coinConditionValidator";
 
 const COIN_GRADING_COMPANIES = ["PCGS", "NGC", "ANACS", "ICG", "CAC", "ICCS"] as const;
 const COIN_RAW_CONDITIONS = [
@@ -413,6 +420,7 @@ export function ListingFields({
                         })}
                         className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       >
+                        <option value="">— Select a grading company —</option>
                         {COIN_GRADING_COMPANIES.map((company) => (
                           <option key={company} value={company}>{company}</option>
                         ))}
@@ -432,6 +440,7 @@ export function ListingFields({
                         placeholder="MS 65"
                         className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       />
+                      <p className="text-[9px] text-muted-foreground italic">Format: &quot;MS 65&quot; or &quot;PR 70 DCAM&quot;</p>
                     </label>
                   </div>
 
@@ -449,29 +458,70 @@ export function ListingFields({
                       className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </label>
+
+                  {/* Real-time validation feedback for graded coins */}
+                  {coinConditionDetail && coinConditionDetail.type === "graded" && !isCoinConditionValid(coinConditionDetail) && (
+                    <div className="flex items-start gap-2 bg-red-50 dark:bg-red-950 rounded-lg p-2.5 border border-red-200 dark:border-red-800">
+                      <AlertCircle className="w-3.5 h-3.5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                      <div className="text-[10px] text-red-700 dark:text-red-300">
+                        {formatValidationErrors(
+                          validateCoinConditionDetail(coinConditionDetail).errors,
+                        ).split("\n").map((line, i) => (
+                          <div key={i}>{line}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <label className="space-y-1 block">
-                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Raw Coin Condition</span>
-                  <select
-                    value={rawDetail.rawCondition}
-                    onChange={(e) => updateCoinConditionDetail({
-                      type: "raw",
-                      rawCondition: e.target.value as CoinConditionDetail & { type: "raw" }["rawCondition"],
-                    })}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    {COIN_RAW_CONDITIONS.map((rawCondition) => (
-                      <option key={rawCondition} value={rawCondition}>{rawCondition}</option>
-                    ))}
-                  </select>
-                </label>
+                <div className="space-y-2">
+                  <label className="space-y-1 block">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Raw Coin Condition</span>
+                    <select
+                      value={rawDetail.rawCondition}
+                      onChange={(e) => updateCoinConditionDetail({
+                        type: "raw",
+                        rawCondition: e.target.value as CoinConditionDetail & { type: "raw" }["rawCondition"],
+                      })}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="">— Select a condition tier —</option>
+                      {COIN_RAW_CONDITIONS.map((rawCondition) => (
+                        <option key={rawCondition} value={rawCondition}>{rawCondition}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  {/* Real-time validation feedback for raw coins */}
+                  {coinConditionDetail && coinConditionDetail.type === "raw" && !isCoinConditionValid(coinConditionDetail) && (
+                    <div className="flex items-start gap-2 bg-red-50 dark:bg-red-950 rounded-lg p-2.5 border border-red-200 dark:border-red-800">
+                      <AlertCircle className="w-3.5 h-3.5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                      <div className="text-[10px] text-red-700 dark:text-red-300">
+                        {formatValidationErrors(
+                          validateCoinConditionDetail(coinConditionDetail).errors,
+                        ).split("\n").map((line, i) => (
+                          <div key={i}>{line}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
 
-              {!coinConditionComplete && (
-                <p className="text-[11px] text-amber-700">
-                  Complete these fields before publishing this coin listing.
-                </p>
+              {!coinConditionComplete ? (
+                <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-950 rounded-lg p-2.5 border border-amber-200 dark:border-amber-800">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-amber-700 dark:text-amber-300">
+                    Complete these fields before publishing this coin listing.
+                  </p>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2 bg-green-50 dark:bg-green-950 rounded-lg p-2.5 border border-green-200 dark:border-green-800">
+                  <Check className="w-3.5 h-3.5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-green-700 dark:text-green-300">
+                    ✓ {describeCoinCondition(coinConditionDetail!)} — Ready to publish
+                  </p>
+                </div>
               )}
             </div>
           )}
