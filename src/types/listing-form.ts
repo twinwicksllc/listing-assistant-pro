@@ -1,5 +1,7 @@
 import { z } from "zod";
 import type { SelectedPolicies } from "./ebay-policies";
+import type { CoinConditionDetail } from "./listing";
+import { isCoinConditionDetailRequired, isCoinConditionDetailComplete } from "./listing";
 
 /**
  * Validation schema for listing form submission
@@ -54,6 +56,9 @@ export const listingFormSchema = z
       .refine((val) => val !== null, {
         message: "Return policy is required",
       }),
+    // Coin condition details (required at publish time for coin categories)
+    coinConditionDetail: z.any().optional(),
+    coinConditionDetailRequired: z.boolean().optional(),
   })
   .superRefine((data, ctx) => {
     // Conditional validation for listing price based on format
@@ -85,9 +90,50 @@ export const listingFormSchema = z
         });
       }
     }
+    // eBay June 2026 Coin Condition Mandate: Strict validation at form level
+    if (data.coinConditionDetailRequired && !isCoinConditionDetailComplete(data.coinConditionDetail)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["coinConditionDetail"],
+        message:
+          "Coin condition details are REQUIRED for this category per eBay June 2026 mandate. " +
+          "Specify graded (PCGS/NGC/ANACS/ICG/CAC/ICCS with grade) or ungraded (standardized condition tier).",
+      });
+    }
   });
 
 export type ListingFormData = z.infer<typeof listingFormSchema>;
+
+/**
+ * Validates coin condition payload at publish time.
+ * Ensures graded coins have valid company (PCGS/NGC/etc.) and grade.
+ * Ensures raw coins have one of 4 standardized eBay tiers.
+ */
+export const validateCoinConditionPayload = (
+  coinCondition: CoinConditionDetail | null | undefined,
+  isCoinCategory: boolean,
+): { valid: boolean; error?: string } => {
+  if (!isCoinCategory) return { valid: true };
+  if (!coinCondition) {
+    return { valid: false, error: "Coin listing requires condition details (graded or ungraded)." };
+  }
+  if (!isCoinConditionDetailComplete(coinCondition)) {
+    return { valid: false, error: "Coin condition is incomplete. Fill all required fields." };
+  }
+  if (coinCondition.type === "graded") {
+    const allowed = ["PCGS", "NGC", "ANACS", "ICG", "CAC", "ICCS"];
+    if (!allowed.includes(coinCondition.gradingCompany)) {
+      return { valid: false, error: `Invalid grading company: ${coinCondition.gradingCompany}` };
+    }
+  }
+  if (coinCondition.type === "raw") {
+    const allowed = ["Uncirculated", "Extremely Fine to About Uncirculated", "Fine to Very Fine", "Below Fine"];
+    if (!allowed.includes(coinCondition.rawCondition)) {
+      return { valid: false, error: `Invalid raw condition: ${coinCondition.rawCondition}` };
+    }
+  }
+  return { valid: true };
+};
 
 /**
  * Helper to check if all policies are selected
