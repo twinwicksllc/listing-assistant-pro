@@ -33,6 +33,7 @@ jobs:
           # Repair any remote migrations that no longer exist locally
           # (marks them as reverted so db push doesn't complain)
           supabase migration repair --status reverted 20260324000000 || true
+          supabase migration repair --status reverted 20260524000000 || true
           
           # Then push migrations (include-all handles missing historical migrations)
           supabase db push --yes --include-all
