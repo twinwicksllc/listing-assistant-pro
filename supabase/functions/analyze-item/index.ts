@@ -2612,6 +2612,16 @@ Seller's note: "${voiceNote}"`;
       // Agentic Pre-Pass 0 fields (new — additive, backward compatible)
       ...agenticFields,
       ...(ebayMetadata ? { _ebayMetadata: ebayMetadata } : {}),
+      // Slab OCR results for frontend auto-population of coin condition details
+      ...(slabOcrResult?.isSlabbed && slabOcrResult?.grader
+        ? {
+          slabOcrData: {
+            grader: slabOcrResult.grader,
+            grade: slabOcrResult.grade,
+            certNumber: slabOcrResult.certNumber,
+          },
+        }
+        : {}),
       _meta: {
         tier,
         creditsUsed: creditsUsed,
