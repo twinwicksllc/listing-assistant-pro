@@ -411,12 +411,12 @@ export function ListingFields({
                     <label className="space-y-1">
                       <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Grading Company</span>
                       <select
-                        value={gradedDetail.gradingCompany}
+                        value={coinConditionDetail?.type === "graded" ? coinConditionDetail.gradingCompany : ""}
                         onChange={(e) => updateCoinConditionDetail({
                           type: "graded",
                           gradingCompany: e.target.value as CoinConditionDetail & { type: "graded" }["gradingCompany"],
-                          grade: gradedDetail.grade,
-                          certificationNumber: gradedDetail.certificationNumber?.trim() || undefined,
+                          grade: coinConditionDetail?.type === "graded" ? coinConditionDetail.grade : "",
+                          certificationNumber: coinConditionDetail?.type === "graded" ? coinConditionDetail.certificationNumber : undefined,
                         })}
                         className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       >
@@ -430,12 +430,12 @@ export function ListingFields({
                     <label className="space-y-1">
                       <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Grade</span>
                       <input
-                        value={gradedDetail.grade}
+                        value={coinConditionDetail?.type === "graded" ? coinConditionDetail.grade : ""}
                         onChange={(e) => updateCoinConditionDetail({
                           type: "graded",
-                          gradingCompany: gradedDetail.gradingCompany,
+                          gradingCompany: coinConditionDetail?.type === "graded" ? coinConditionDetail.gradingCompany : "PCGS",
                           grade: e.target.value,
-                          certificationNumber: gradedDetail.certificationNumber?.trim() || undefined,
+                          certificationNumber: coinConditionDetail?.type === "graded" ? coinConditionDetail.certificationNumber : undefined,
                         })}
                         placeholder="MS 65"
                         className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
@@ -447,11 +447,11 @@ export function ListingFields({
                   <label className="space-y-1 block">
                     <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Certification Number</span>
                     <input
-                      value={gradedDetail.certificationNumber ?? ""}
+                      value={coinConditionDetail?.type === "graded" ? coinConditionDetail.certificationNumber ?? "" : ""}
                       onChange={(e) => updateCoinConditionDetail({
                         type: "graded",
-                        gradingCompany: gradedDetail.gradingCompany,
-                        grade: gradedDetail.grade,
+                        gradingCompany: coinConditionDetail?.type === "graded" ? coinConditionDetail.gradingCompany : "PCGS",
+                        grade: coinConditionDetail?.type === "graded" ? coinConditionDetail.grade : "",
                         certificationNumber: e.target.value.trim() || undefined,
                       })}
                       placeholder="Optional if not visible"
@@ -478,7 +478,7 @@ export function ListingFields({
                   <label className="space-y-1 block">
                     <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Raw Coin Condition</span>
                     <select
-                      value={rawDetail.rawCondition}
+                      value={coinConditionDetail?.type === "raw" ? coinConditionDetail.rawCondition : ""}
                       onChange={(e) => updateCoinConditionDetail({
                         type: "raw",
                         rawCondition: e.target.value as CoinConditionDetail & { type: "raw" }["rawCondition"],
