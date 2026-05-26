@@ -87,6 +87,76 @@ function deriveSearchQueryFallback(title: string): string {
   return tokens.slice(0, 6).join(" ");
 }
 
+function broadenSearchQuery(query: string): string {
+  const gradeNoise = new Set([
+    "pcgs",
+    "ngc",
+    "anacs",
+    "icg",
+    "cac",
+    "iccs",
+    "ms",
+    "pr",
+    "pf",
+    "au",
+    "xf",
+    "vf",
+    "f",
+    "bu",
+    "dcam",
+    "cameo",
+    "cert",
+    "certified",
+    "first",
+    "strike",
+    "releases",
+    "release",
+  ]);
+
+  const tokens = query
+    .toLowerCase()
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0)
+    .filter((t) => !gradeNoise.has(t))
+    .filter((t) => !/^\d{6,}$/.test(t))
+    .filter((t) => !/^(ms|pr|pf|au|xf|vf)\d{1,2}$/i.test(t));
+
+  return tokens.slice(0, 5).join(" ");
+}
+
+function buildSearchPlan(params: {
+  title: string;
+  geminiQuery: string | null;
+  heuristicQuery: string;
+  categoryId?: string;
+}): Array<{ query: string; categoryId?: string; strategy: string }> {
+  const { title, geminiQuery, heuristicQuery, categoryId } = params;
+
+  const uniqueQueries: string[] = [];
+  const pushQuery = (q: string | null | undefined) => {
+    const cleaned = (q ?? "").trim();
+    if (!cleaned) return;
+    if (!uniqueQueries.includes(cleaned)) uniqueQueries.push(cleaned);
+  };
+
+  pushQuery(geminiQuery);
+  pushQuery(heuristicQuery);
+  pushQuery(broadenSearchQuery(geminiQuery ?? ""));
+  pushQuery(broadenSearchQuery(heuristicQuery));
+  pushQuery(deriveSearchQueryFallback(title));
+
+  const plan: Array<{ query: string; categoryId?: string; strategy: string }> = [];
+  for (const query of uniqueQueries.slice(0, 4)) {
+    if (categoryId) {
+      plan.push({ query, categoryId, strategy: "with-category" });
+    }
+    plan.push({ query, categoryId: undefined, strategy: "without-category" });
+  }
+
+  return plan;
+}
+
 // ----------------------------------------------------------------
 // Gemini Flash — generate an optimised eBay search query.
 //
@@ -538,7 +608,8 @@ serve(async (req) => {
       );
     }
 
-    const searchQuery = geminiQuery ?? deriveSearchQueryFallback(title);
+    const heuristicQuery = deriveSearchQueryFallback(title);
+    const searchQuery = geminiQuery ?? heuristicQuery;
     const usedGemini = !!geminiQuery;
     console.log(
       `[ebay-competitor-search] Search query (${usedGemini ? "Gemini" : "heuristic"}): "${searchQuery}"`,
@@ -567,20 +638,52 @@ serve(async (req) => {
     // ------------------------------------------------------------------
     // Step 3 — Fetch from eBay Browse API
     // ------------------------------------------------------------------
-    const { prices, count } = await fetchEbayCompetitors({
-      token,
-      searchQuery,
+    const searchPlan = buildSearchPlan({
+      title,
+      geminiQuery,
+      heuristicQuery,
       categoryId,
-      ebayEnv,
     });
+
+    let prices: number[] = [];
+    let count = 0;
+    let chosenQuery = searchQuery;
+    let chosenCategoryId = categoryId;
+
+    for (const attempt of searchPlan) {
+      console.log(
+        `[ebay-competitor-search] Attempting search (${attempt.strategy}): "${attempt.query}" category=${
+          attempt.categoryId ?? "any"
+        }`,
+      );
+      const result = await fetchEbayCompetitors({
+        token,
+        searchQuery: attempt.query,
+        categoryId: attempt.categoryId,
+        ebayEnv,
+      });
+
+      if (result.prices.length > 0) {
+        prices = result.prices;
+        count = result.count;
+        chosenQuery = attempt.query;
+        chosenCategoryId = attempt.categoryId;
+        break;
+      }
+    }
 
     if (prices.length === 0) {
       console.log(
-        "[ebay-competitor-search] No prices found, returning empty response",
+        `[ebay-competitor-search] No prices found after ${searchPlan.length} attempts, returning empty response`,
       );
       return new Response(
         JSON.stringify({
           searchQuery,
+          attemptedQueries: searchPlan.map((a) => ({
+            query: a.query,
+            categoryId: a.categoryId ?? null,
+            strategy: a.strategy,
+          })),
           avgPrice: null,
           minPrice: null,
           maxPrice: null,
@@ -615,7 +718,7 @@ serve(async (req) => {
     console.log(
       `[ebay-competitor-search] Stats (after outlier removal): avg=$${avgPrice.toFixed(2)}, median=$${
         medianPrice.toFixed(2)
-      }, n=${cleanPrices.length} (raw: ${count})`,
+      }, n=${cleanPrices.length} (raw: ${count}, query="${chosenQuery}", category=${chosenCategoryId ?? "any"})`,
     );
 
     // ------------------------------------------------------------------
@@ -630,7 +733,7 @@ serve(async (req) => {
           .upsert({
             user_id: userId,
             ebay_listing_id: listingId,
-            search_query: searchQuery,
+            search_query: chosenQuery,
             gemini_search_query: geminiQuery ?? null,
             avg_price: Math.round(avgPrice * 100) / 100,
             min_price: minPrice,
@@ -660,6 +763,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         searchQuery,
+        finalSearchQuery: chosenQuery,
         geminiSearchQuery: geminiQuery,
         avgPrice: Math.round(avgPrice * 100) / 100,
         minPrice,
