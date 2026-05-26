@@ -206,12 +206,22 @@ function prePassBlock(ctx: PromptContext): string {
       );
     }
     if (ins.identificationCorrection) {
-      parts.push(
-        `⚠️  IDENTIFICATION CORRECTION: ${ins.identificationCorrection}`,
-      );
-      parts.push(
-        "The inspection found a discrepancy. Use the CORRECTED identification above — it is more accurate than first impression.",
-      );
+      const noveltyTerms = /\b(novelty|fantasy|tribute|replica|exonumia|not a real coin|not genuine)\b/i;
+      if (noveltyTerms.test(ins.identificationCorrection)) {
+        parts.push(
+          `⚠️  PRE-PASS IDENTIFICATION NOTE: ${ins.identificationCorrection}`,
+        );
+        parts.push(
+          "**OVERRIDE INSTRUCTION**: The pre-pass flagged this as novelty/fantasy/tribute. However, if you can see legal-tender markings (denomination, country name, national motto, mint attribution) on the coin, apply Rule 4 (CURRENT-DATED COIN VALIDITY CHECK) and treat this as a genuine government-issued coin. Only use the novelty classification if 'COPY', 'TRIBUTE', 'REPLICA', or explicit private-mint branding is physically visible on the coin itself.",
+        );
+      } else {
+        parts.push(
+          `⚠️  IDENTIFICATION CORRECTION: ${ins.identificationCorrection}`,
+        );
+        parts.push(
+          "The inspection found a discrepancy. Use the CORRECTED identification above — it is more accurate than first impression.",
+        );
+      }
     }
     parts.push("");
   }

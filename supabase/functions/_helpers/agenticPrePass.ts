@@ -444,6 +444,26 @@ async function runStageB(
     .map((t, i) => `${i + 1}. **${t.region}**: ${t.rationale}`)
     .join("\n");
 
+  // Coin-specific temporal guard: prevents Pre-Pass from generating false
+  // "novelty/fantasy" corrections for genuine current-year government coins.
+  const todayFormatted = new Date().toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  const thisYear = new Date().getFullYear();
+  const coinTemporalGuard = domain === "coins_bullion"
+    ? `\n\n**⚠️ CRITICAL COIN VALIDITY RULE — MANDATORY before writing identification_correction**:
+TODAY'S DATE: ${todayFormatted} (Year ${thisYear})
+The US Mint, Royal Canadian Mint, Perth Mint, Royal Mint (UK), and ALL major world mints produce REAL, LEGAL-TENDER coins every single year, including ${
+      thisYear - 1
+    }, ${thisYear}, and ${
+      thisYear + 1
+    }. A coin dated in these years is a GENUINE government-issued coin — NOT a novelty, fantasy, tribute round, or replica.
+FORBIDDEN: Do NOT set identification_correction to anything containing "novelty", "fantasy", "tribute", "replica", "exonumia", or "not a real coin" based solely on the coin's date or because you believe that year is "in the future." This applies to ALL coins — raw/ungraded in a capsule or holder, professionally slabbed, or loose.
+identification_correction should ONLY describe genuine misidentification errors such as: "This is a Peace Dollar, not a Morgan Dollar" or "Denomination is Half Dollar, not Silver Dollar." If no genuine misidentification exists, return null for identification_correction.`
+    : "";
+
   const systemInstruction = `You are an expert visual analyst performing an agentic inspection of a ${
     domain.replace("_", " ")
   } item for eBay listing purposes.
@@ -461,7 +481,7 @@ ${zoomInstructions}
 4. Notes any identification-critical findings (dates, mint marks, model numbers, hallmarks, labels)
 Use PIL, numpy, or opencv libraries available in the execution environment to crop and inspect image regions.
 
-**OBSERVE**: Based on the execution output, state your final findings.
+**OBSERVE**: Based on the execution output, state your final findings.${coinTemporalGuard}
 
 Return ONLY a single valid JSON object (no markdown, no code blocks):
 {
@@ -549,10 +569,25 @@ Return ONLY a single valid JSON object (no markdown, no code blocks):
   const confidenceBoost = typeof parsed.confidence_boost === "number"
     ? Math.min(100, Math.max(0, Math.round(parsed.confidence_boost)))
     : 0;
-  const identificationCorrection = typeof parsed.identification_correction === "string" &&
+  let identificationCorrection: string | undefined = typeof parsed.identification_correction === "string" &&
       parsed.identification_correction.trim().length > 5
     ? parsed.identification_correction.trim()
     : undefined;
+
+  // Safety filter: if the pre-pass erroneously classifies a current-year
+  // government coin as novelty/fantasy/tribute/replica based on its date,
+  // null out the correction so it never reaches Pass 2 as "authoritative".
+  if (domain === "coins_bullion" && identificationCorrection) {
+    const noveltyPattern = /\b(novelty|fantasy|tribute|replica|exonumia|not a real coin|not genuine|fake)\b/i;
+    if (noveltyPattern.test(identificationCorrection)) {
+      console.warn(
+        `${label}[StageB] ⚠️  Suppressed false novelty identification_correction for coins_bullion: "${
+          identificationCorrection.slice(0, 120)
+        }"`,
+      );
+      identificationCorrection = undefined;
+    }
+  }
 
   if (keyFindings.length <= 5 && zoomRegions.length === 0) {
     console.warn(`${label}[StageB] Inspection returned no meaningful findings`);
