@@ -288,26 +288,26 @@ async function detectCategoryTree(
 // eBay Metadata API and descriptor fetching work with actual leaf category IDs.
 const HARDCODED_COIN_CATEGORY_IDS = new Set([
   // Existing known leaf categories
-  "11981",  // Wheat Pennies
-  "39464",  // Lincoln Cents
-  "11980",  // Jefferson Nickels
-  "11971",  // Roosevelt Dimes
-  "41099",  // Washington Quarters
-  "41102",  // State Quarters
-  "11973",  // Kennedy Half Dollars
-  "39455",  // Dollar Coins
-  "41084",  // US Gold Coins
-  "11950",  // US Silver Coins
-  "41111",  // Coin Sets
+  "11981", // Wheat Pennies
+  "39464", // Lincoln Cents
+  "11980", // Jefferson Nickels
+  "11971", // Roosevelt Dimes
+  "41099", // Washington Quarters
+  "41102", // State Quarters
+  "11973", // Kennedy Half Dollars
+  "39455", // Dollar Coins
+  "41084", // US Gold Coins
+  "11950", // US Silver Coins
+  "41111", // Coin Sets
   "166679", // US Coin Proof Sets
-  "41109",  // US Coin Proof Sets (variant)
-  "526",    // Paper Money
-  "45243",  // World Coins
-  "39471",  // Canadian Coins
-  "39472",  // Ancient Coins
-  "39473",  // Medieval Coins
-  "39474",  // Bullion Coins
-  "39475",  // Commemorative Coins
+  "41109", // US Coin Proof Sets (variant)
+  "526", // Paper Money
+  "45243", // World Coins
+  "39471", // Canadian Coins
+  "39472", // Ancient Coins
+  "39473", // Medieval Coins
+  "39474", // Bullion Coins
+  "39475", // Commemorative Coins
 ]);
 const HARDCODED_BULLION_CATEGORY_IDS = new Set([
   "178906",
@@ -2314,7 +2314,7 @@ const _coinDescriptorCache: Map<
  *
  * Uses an app-level OAuth token (client_credentials grant).
  * Results are cached in-memory for the current function invocation.
- * 
+ *
  * Robust error handling with detailed logging for debugging API failures.
  */
 async function fetchCoinConditionDescriptors(
@@ -2344,7 +2344,7 @@ async function fetchCoinConditionDescriptors(
       ? "https://api.sandbox.ebay.com/identity/v1/oauth2/token"
       : "https://api.ebay.com/identity/v1/oauth2/token";
     const credentials = btoa(`${clientId}:${clientSecret}`);
-    
+
     console.log(`fetchCoinConditionDescriptors: requesting app token from ${tokenUrl}`);
     const tokenResp = await fetchWithTimeout(tokenUrl, {
       method: "POST",
@@ -2381,9 +2381,12 @@ async function fetchCoinConditionDescriptors(
     // Step 2: Call Metadata API for this category
     const metaBase = apiBase.includes("sandbox") ? "https://api.sandbox.ebay.com" : "https://api.ebay.com";
     const encodedFilter = encodeURIComponent(`categoryIds:{${categoryId}}`);
-    const metaUrl = `${metaBase}/sell/metadata/v1/marketplace/EBAY_US/get_item_condition_policies?filter=${encodedFilter}`;
-    
-    console.log(`fetchCoinConditionDescriptors: requesting condition policies from ${metaUrl.replace(encodedFilter, "...")}`);
+    const metaUrl =
+      `${metaBase}/sell/metadata/v1/marketplace/EBAY_US/get_item_condition_policies?filter=${encodedFilter}`;
+
+    console.log(
+      `fetchCoinConditionDescriptors: requesting condition policies from ${metaUrl.replace(encodedFilter, "...")}`,
+    );
     const metaResp = await fetchWithTimeout(metaUrl, {
       headers: {
         Authorization: `Bearer ${appToken}`,
@@ -2395,7 +2398,9 @@ async function fetchCoinConditionDescriptors(
     if (!metaResp.ok) {
       const metaErrText = await metaResp.text();
       console.error(
-        `fetchCoinConditionDescriptors: Metadata API request FAILED (${metaResp.status}) for category ${categoryId}: ${metaErrText.slice(0, 300)}`,
+        `fetchCoinConditionDescriptors: Metadata API request FAILED (${metaResp.status}) for category ${categoryId}: ${
+          metaErrText.slice(0, 300)
+        }`,
       );
       return null;
     }
@@ -2563,21 +2568,21 @@ function buildCoinConditionDescriptors(
     if (!allowedCompanies.includes(graded.gradingCompany)) {
       throw new Error(
         `Phase 2 Validation: Grading company "${graded.gradingCompany}" is not allowed. ` +
-        `Must be one of: ${allowedCompanies.join(", ")}`
+          `Must be one of: ${allowedCompanies.join(", ")}`,
       );
     }
 
     // Phase 2: Strict grade format validation
     if (!graded.grade || graded.grade.trim().length === 0) {
       throw new Error(
-        `Phase 2 Validation: Grade is required for graded coins. Format: LETTER_CODE + NUMBER (e.g., "MS 65")`
+        `Phase 2 Validation: Grade is required for graded coins. Format: LETTER_CODE + NUMBER (e.g., "MS 65")`,
       );
     }
     const gradeFormatRegex = /^[A-Z]{1,3}\s*\d{1,2}(\s+[A-Z]{2,})?$/;
     if (!gradeFormatRegex.test(graded.grade.trim())) {
       throw new Error(
         `Phase 2 Validation: Grade format is invalid: "${graded.grade}". ` +
-        `Must be LETTER_CODE + NUMBER (e.g., "MS 65", "PR 70 DCAM")`
+          `Must be LETTER_CODE + NUMBER (e.g., "MS 65", "PR 70 DCAM")`,
       );
     }
 
@@ -2588,7 +2593,7 @@ function buildCoinConditionDescriptors(
     if (!graderDesc) {
       console.error("buildCoinConditionDescriptors: Grader descriptor not found in eBay response");
       throw new Error(
-        `eBay Metadata API error: Grader descriptor not found for this category. Please try again.`
+        `eBay Metadata API error: Grader descriptor not found for this category. Please try again.`,
       );
     }
 
@@ -2602,7 +2607,7 @@ function buildCoinConditionDescriptors(
     if (!graderValue) {
       throw new Error(
         `eBay Metadata API error: No value ID found for grading company "${graded.gradingCompany}". ` +
-        `Available values: ${graderDesc.values.map((v) => v.name).join(", ")}`
+          `Available values: ${graderDesc.values.map((v) => v.name).join(", ")}`,
       );
     }
     result.push({ name: graderDesc.descriptorId, values: [graderValue.id] });
@@ -2616,7 +2621,7 @@ function buildCoinConditionDescriptors(
 
     console.log(
       `buildCoinConditionDescriptors [GRADED]: company=${graded.gradingCompany}, ` +
-      `grade_parsed={letter=${letterPart}, number=${numberPart}, suffix=${suffixPart}}`
+        `grade_parsed={letter=${letterPart}, number=${numberPart}, suffix=${suffixPart}}`,
     );
 
     // Find grade descriptors
@@ -2639,7 +2644,7 @@ function buildCoinConditionDescriptors(
       } else {
         console.warn(
           `buildCoinConditionDescriptors: no value ID for number grade="${numberPart}". ` +
-          `Available: ${numberGradeDesc.values.map((v) => v.name).join(", ")}`
+            `Available: ${numberGradeDesc.values.map((v) => v.name).join(", ")}`,
         );
       }
     }
@@ -2679,7 +2684,7 @@ function buildCoinConditionDescriptors(
       } else {
         console.warn(
           `buildCoinConditionDescriptors: no value ID for letter grade="${letterPart}". ` +
-          `Available: ${letterGradeDesc.values.map((v) => v.name).join(", ")}`
+            `Available: ${letterGradeDesc.values.map((v) => v.name).join(", ")}`,
         );
       }
     }
@@ -2714,7 +2719,7 @@ function buildCoinConditionDescriptors(
     if (!allowedTiers.includes(raw.rawCondition)) {
       throw new Error(
         `Phase 2 Validation: Raw condition "${raw.rawCondition}" is not allowed. ` +
-        `Must be one of:\n${allowedTiers.map((t) => `  - "${t}"`).join("\n")}`
+          `Must be one of:\n${allowedTiers.map((t) => `  - "${t}"`).join("\n")}`,
       );
     }
 
@@ -2727,13 +2732,13 @@ function buildCoinConditionDescriptors(
     if (!coinCondDesc) {
       console.error("buildCoinConditionDescriptors: Coin Condition descriptor not found in eBay response");
       throw new Error(
-        `eBay Metadata API error: Coin Condition descriptor not found for this category. Please try again.`
+        `eBay Metadata API error: Coin Condition descriptor not found for this category. Please try again.`,
       );
     }
 
     console.log(
       `buildCoinConditionDescriptors [RAW]: condition="${raw.rawCondition}", ` +
-      `available_values=[${coinCondDesc.values.map((v) => v.name).join(", ")}]`
+        `available_values=[${coinCondDesc.values.map((v) => v.name).join(", ")}]`,
     );
 
     // Map raw condition to descriptor value ID
@@ -2753,18 +2758,8 @@ function buildCoinConditionDescriptors(
       if (!condValueBroad) {
         throw new Error(
           `Phase 2 Validation: Unable to map raw condition "${raw.rawCondition}" to eBay descriptor values. ` +
-          `Available values: ${coinCondDesc.values.map((v) => v.name).join(", ")}`
+            `Available values: ${coinCondDesc.values.map((v) => v.name).join(", ")}`,
         );
-      }
-      result.push({ name: coinCondDesc.descriptorId, values: [condValueBroad.id] });
-      return result;
-    }
-
-    result.push({ name: coinCondDesc.descriptorId, values: [condValue.id] });
-    return result;
-  }
-}
-        return null;
       }
       result.push({ name: coinCondDesc.descriptorId, values: [condValueBroad.id] });
       return result;
@@ -4054,7 +4049,7 @@ serve(async (req) => {
       if (isCoinDescriptorCategory && !coinConditionDetailRaw) {
         throw new Error(
           `Coin listings in category ${finalCategoryId} require detailed condition information per eBay June 2026 mandate. ` +
-          `Please specify either a certified grade (PCGS, NGC, ANACS, ICG, CAC, ICCS) or a raw condition tier (Uncirculated, Extremely Fine, etc.) before publishing.`
+            `Please specify either a certified grade (PCGS, NGC, ANACS, ICG, CAC, ICCS) or a raw condition tier (Uncirculated, Extremely Fine, etc.) before publishing.`,
         );
       }
 
@@ -4063,10 +4058,10 @@ serve(async (req) => {
           console.log(
             `create_draft: MANDATORY: fetching coin condition descriptors for category ${finalCategoryId}, type=${coinConditionDetailRaw.type}`,
           );
-          
+
           let descriptors: any[] | null = null;
           let lastError: Error | null = null;
-          
+
           // Retry logic: attempt up to 2 times for transient failures
           for (let attempt = 1; attempt <= 2; attempt++) {
             try {
@@ -4082,16 +4077,18 @@ serve(async (req) => {
             } catch (retryErr) {
               lastError = retryErr as Error;
               console.warn(
-                `create_draft: Metadata API attempt ${attempt} failed. ${attempt < 2 ? "Retrying..." : "Will fail after this attempt."}`,
+                `create_draft: Metadata API attempt ${attempt} failed. ${
+                  attempt < 2 ? "Retrying..." : "Will fail after this attempt."
+                }`,
                 lastError.message,
               );
               if (attempt < 2) {
                 // Wait 500ms before retry
-                await new Promise(resolve => setTimeout(resolve, 500));
+                await new Promise((resolve) => setTimeout(resolve, 500));
               }
             }
           }
-          
+
           if (descriptors && descriptors.length > 0) {
             const conditionDescriptors = buildCoinConditionDescriptors(
               coinConditionDetailRaw,
@@ -4108,17 +4105,17 @@ serve(async (req) => {
               // This is a data integrity issue, not a soft warning.
               throw new Error(
                 `Could not map condition details (type: ${coinConditionDetailRaw.type}) to eBay descriptor values for category ${finalCategoryId}. ` +
-                `Verify the grade, company, or raw condition value is valid and try again.`
+                  `Verify the grade, company, or raw condition value is valid and try again.`,
               );
             }
           } else {
             // FAIL: Metadata API returned no descriptors for this category after retries.
             // Without descriptors, the listing cannot comply with the mandate.
-            const errorDetail = lastError?.message || 'Unknown error';
+            const errorDetail = lastError?.message || "Unknown error";
             throw new Error(
               `Unable to retrieve coin condition descriptors from eBay for category ${finalCategoryId} after 2 attempts. ` +
-              `Error: ${errorDetail}. ` +
-              `This may be a temporary service issue. Please try again or contact support.`
+                `Error: ${errorDetail}. ` +
+                `This may be a temporary service issue. Please try again or contact support.`,
             );
           }
         } catch (cdErr) {
