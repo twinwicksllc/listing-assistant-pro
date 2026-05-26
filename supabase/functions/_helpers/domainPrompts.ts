@@ -249,10 +249,11 @@ function buildCoinBullionPrompt(ctx: PromptContext): string {
 1. HOLISTIC ANALYSIS: Treat all uploaded images as a single item.
 2. **SLAB LABEL IS TRUTH**: If the coin is in a PCGS, NGC, ANACS, ICG, or ICCS certification slab, the PRINTED LABEL TEXT is the AUTHORITATIVE source for year, mint mark, denomination, grade, and certification number. Read the label FIRST and use its text as ground truth. Do NOT override the label year/mint with your own reading of the coin face. Common AI error: misreading "2026" as "2020", "2021", or "2024". The digit 6 has a tail curving down-left — it is NOT a 0 or 1. Read each digit on the label individually and carefully.
 3. ${currentYearStatement}
-4. ZERO SPECULATION: Only use visible evidence. If a mint mark or date is not visible, write "uncertain" or "not visible." **CRITICAL MINT MARK RULE**: NEVER assume Philadelphia mint by default. Philadelphia coins have NO mint mark — so "no mark visible" means either Philadelphia OR the mark is hidden/worn/off-frame. Always state the mint mark you can VISUALLY CONFIRM, or write "uncertain" if unclear. Do NOT infer Philadelphia just because you don't see a mark.
-5. NO NUMERICAL GRADING for uncertified coins. Use descriptive terms only (Circulated, Very Fine, Extremely Fine, About Uncirculated, Uncirculated). Numeric grades (MS-65, etc.) ONLY for coins in a PCGS, NGC, ANACS, ICG, CAC, or ICCS slab.
-6. Title ≤ 80 chars. Format: [Year] [Country] [Denomination] [Series] [Metal] [Weight] [Condition/Grade]
-7. PRICING: ${pricingBlock(ctx)}
+4. **AMERICAN SILVER EAGLE VALIDITY CHECK**: A 2026 (or current-year-range) American Silver Eagle is an official U.S. coin when legal-tender cues are present (e.g., "$1" denomination, "United States of America", "Liberty", "In God We Trust", or a U.S. Mint attribution). If these cues are visible, classify as a valid coin/bullion coin — NEVER label it as fantasy, novelty, tribute, or replica.
+5. ZERO SPECULATION: Only use visible evidence. If a mint mark or date is not visible, write "uncertain" or "not visible." **CRITICAL MINT MARK RULE**: NEVER assume Philadelphia mint by default. Philadelphia coins have NO mint mark — so "no mark visible" means either Philadelphia OR the mark is hidden/worn/off-frame. Always state the mint mark you can VISUALLY CONFIRM, or write "uncertain" if unclear. Do NOT infer Philadelphia just because you don't see a mark.
+6. NO NUMERICAL GRADING for uncertified coins. Use descriptive terms only (Circulated, Very Fine, Extremely Fine, About Uncirculated, Uncirculated). Numeric grades (MS-65, etc.) ONLY for coins in a PCGS, NGC, ANACS, ICG, CAC, or ICCS slab.
+7. Title ≤ 80 chars. Format: [Year] [Country] [Denomination] [Series] [Metal] [Weight] [Condition/Grade]
+8. PRICING: ${pricingBlock(ctx)}
 ${spotLine}
 
 ### CONDITION → eBay ENUM

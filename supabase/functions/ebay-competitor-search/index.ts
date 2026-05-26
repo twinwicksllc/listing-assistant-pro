@@ -130,7 +130,7 @@ function buildSearchPlan(params: {
   geminiQuery: string | null;
   heuristicQuery: string;
   categoryId?: string;
-}): Array<{ query: string; categoryId?: string; strategy: string }> {
+}): Array<{ query: string; categoryId?: string; strategy: string; filterMode: "fixed" | "any" }> {
   const { title, geminiQuery, heuristicQuery, categoryId } = params;
 
   const uniqueQueries: string[] = [];
@@ -146,12 +146,14 @@ function buildSearchPlan(params: {
   pushQuery(broadenSearchQuery(heuristicQuery));
   pushQuery(deriveSearchQueryFallback(title));
 
-  const plan: Array<{ query: string; categoryId?: string; strategy: string }> = [];
+  const plan: Array<{ query: string; categoryId?: string; strategy: string; filterMode: "fixed" | "any" }> = [];
   for (const query of uniqueQueries.slice(0, 4)) {
     if (categoryId) {
-      plan.push({ query, categoryId, strategy: "with-category" });
+      plan.push({ query, categoryId, strategy: "with-category-fixed", filterMode: "fixed" });
+      plan.push({ query, categoryId, strategy: "with-category-any", filterMode: "any" });
     }
-    plan.push({ query, categoryId: undefined, strategy: "without-category" });
+    plan.push({ query, categoryId: undefined, strategy: "without-category-fixed", filterMode: "fixed" });
+    plan.push({ query, categoryId: undefined, strategy: "without-category-any", filterMode: "any" });
   }
 
   return plan;
@@ -310,8 +312,9 @@ async function fetchEbayCompetitors(params: {
   searchQuery: string;
   categoryId?: string;
   ebayEnv: string;
+  filterMode?: "fixed" | "any";
 }): Promise<{ prices: number[]; count: number; raw: unknown[] }> {
-  const { token, searchQuery, categoryId, ebayEnv } = params;
+  const { token, searchQuery, categoryId, ebayEnv, filterMode = "fixed" } = params;
 
   const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
 
@@ -319,8 +322,11 @@ async function fetchEbayCompetitors(params: {
     q: searchQuery,
     limit: "50",
     sort: "price",
-    filter: "buyingOptions:{FIXED_PRICE}",
   });
+
+  if (filterMode === "fixed") {
+    searchParams.set("filter", "buyingOptions:{FIXED_PRICE}");
+  }
 
   if (categoryId) {
     searchParams.set("category_ids", categoryId);
@@ -328,7 +334,9 @@ async function fetchEbayCompetitors(params: {
 
   const url = `${apiBase}/buy/browse/v1/item_summary/search?${searchParams.toString()}`;
   console.log(
-    `[ebay-competitor-search] Browse API search: "${searchQuery}" (category: ${categoryId ?? "any"})`,
+    `[ebay-competitor-search] Browse API search: "${searchQuery}" (category: ${
+      categoryId ?? "any"
+    }, filterMode: ${filterMode})`,
   );
 
   let resp: Response | null = null;
@@ -661,6 +669,7 @@ serve(async (req) => {
         searchQuery: attempt.query,
         categoryId: attempt.categoryId,
         ebayEnv,
+        filterMode: attempt.filterMode,
       });
 
       if (result.prices.length > 0) {
@@ -683,6 +692,7 @@ serve(async (req) => {
             query: a.query,
             categoryId: a.categoryId ?? null,
             strategy: a.strategy,
+            filterMode: a.filterMode,
           })),
           avgPrice: null,
           minPrice: null,
