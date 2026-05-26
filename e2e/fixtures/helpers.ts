@@ -21,7 +21,14 @@ export { expect };
 
 export async function signUp(page: Page, user: TestUser) {
   await page.goto('/signup');
-  await page.waitForLoadState('networkidle');
+  
+  // Wait for the form to be ready (faster than networkidle which can hang)
+  await page.waitForLoadState('domcontentloaded');
+  
+  // Explicitly wait for form inputs to be visible
+  await page.waitForSelector('input[placeholder*="Your name"]', { timeout: 10_000 });
+  await page.waitForSelector('input[placeholder*="email"]', { timeout: 10_000 });
+  await page.waitForSelector('input[placeholder*="password"]', { timeout: 10_000 });
 
   // Fill signup form
   await page.fill('input[placeholder*="Your name"]', 'QA E2E User');
@@ -39,8 +46,15 @@ export async function signUp(page: Page, user: TestUser) {
 export async function login(page: Page, user: TestUser) {
   await page.goto('/login', { waitUntil: 'domcontentloaded' });
 
-  const emailInput = page.locator('input[type="email"]').first();
-  let hasEmailInput = await emailInput.isVisible({ timeout: 5_000 }).catch(() => false);
+  // If a valid session already exists, the app can redirect away from /login.
+  if (/\/(home|drafts|analyze|dashboard|billing)(\?|$)/.test(new URL(page.url()).pathname)) {
+    return;
+  }
+
+  const emailInput = page
+    .locator('input[type="email"], input[placeholder*="email" i], input[name="email"]')
+    .first();
+  let hasEmailInput = await emailInput.isVisible({ timeout: 10_000 }).catch(() => false);
 
   // Some CI runs can land on /landing due route timing. Click any visible sign-in CTA, then retry /login.
   if (!hasEmailInput) {
@@ -55,6 +69,10 @@ export async function login(page: Page, user: TestUser) {
 
     await page.goto('/login', { waitUntil: 'domcontentloaded' });
     hasEmailInput = await emailInput.isVisible({ timeout: 10_000 }).catch(() => false);
+
+    if (!hasEmailInput && /\/(home|drafts|analyze|dashboard|billing)(\?|$)/.test(new URL(page.url()).pathname)) {
+      return;
+    }
   }
 
   if (!hasEmailInput) {
@@ -62,7 +80,10 @@ export async function login(page: Page, user: TestUser) {
   }
 
   await emailInput.fill(user.email);
-  await page.locator('input[type="password"]').first().fill(user.password);
+  await page
+    .locator('input[type="password"], input[placeholder*="password" i], input[name="password"]')
+    .first()
+    .fill(user.password);
   await page.getByRole('button', { name: /sign in/i }).first().click({ timeout: 10_000 });
 
   await page.waitForURL(/\/home/, { timeout: 15_000 });
