@@ -15,4 +15,5 @@ SET
     'video/webm',
     'video/x-msvideo'
   ]
+WHERE id = 'listing-media';
 WHERE id = 'listing-images';
