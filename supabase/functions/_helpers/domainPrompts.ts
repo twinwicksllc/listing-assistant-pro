@@ -14,6 +14,8 @@ export interface PromptContext {
   itemName: string;
   imageCount: number;
   voiceNote?: string;
+  // Current date for temporal reasoning (e.g., determining if a coin is current-year or historical)
+  currentDate?: Date;
   // From eBay Taxonomy API (optional — prompts fall back to hardcoded IDs if absent):
   suggestedCategoryId?: string;
   suggestedCategoryName?: string;
@@ -228,12 +230,25 @@ function buildCoinBullionPrompt(ctx: PromptContext): string {
     }/oz\n- **CRITICAL WEIGHT RULES**: metalWeightOz = fine troy oz of pure metal (not total coin weight). ALWAYS populate for precious metals:\n  • Morgan/Peace Silver Dollar (1878-1935): 0.7734oz Ag (26.73g × 90% silver)\n  • US 90% Silver Halves (Barber/Walking Liberty/Franklin/Kennedy 1964): 0.3618oz Ag\n  • Kennedy Half Dollar 1965-1970 (40% silver): 0.1479oz Ag\n  • US 90% Silver Quarters (pre-1965): 0.1809oz Ag\n  • US 90% Silver Dimes (Mercury/Roosevelt/Barber): 0.0724oz Ag\n  • American Silver Eagle: 1.0000oz Ag\n  • US Gold Eagles: $5=0.1209oz Au | $10=0.2419oz Au | $25=0.6044oz Au | $50=1.0000oz Au\n  • American Gold Buffalo: 1.0000oz Au\n  • Gold Sovereigns (British): 0.2354oz Au\n  • Pre-1933 US Gold: $20 Double Eagle=0.9675oz Au (90% = 0.8709oz fine) | $10 Eagle=0.4838oz Au | $5 Half Eagle=0.2419oz Au\n  • Silver Bars/Rounds: face weight in oz (e.g. "1 oz Silver Round" = 1.0000oz Ag)\n  • If coin type is recognizable but weight not listed above, use known standard weight. NEVER leave metalWeightOz as 0.\n- Melt floor: (spot × metalWeightOz × 1.19) — never price below this.`
     : "";
 
+  // Dynamic current-year statement based on actual current date
+  const currentYear = ctx.currentDate ? ctx.currentDate.getFullYear() : new Date().getFullYear();
+  const currentYearCoins = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1].filter((y) => y >= 2020);
+  const currentYearStatement = `**CURRENT-YEAR COINS ARE REAL**: Coins dated ${
+    currentYearCoins.join(", ")
+  } are genuine government-issued coins. The US Mint and world mints actively produce coins with these dates. NEVER classify them as novelty, fantasy, replica, or tribute. A coin in a professional grading slab (PCGS, NGC, etc.) is by definition authentic and must use domain coins_bullion, NEVER exonumia or general.`;
+
   return `You are a professional Numismatist and eBay Listing Expert specializing in coins, currency, and bullion.
+
+**TODAY'S DATE: ${
+    ctx.currentDate
+      ? ctx.currentDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
+      : "Unknown"
+  }**
 
 ### CORE RULES
 1. HOLISTIC ANALYSIS: Treat all uploaded images as a single item.
 2. **SLAB LABEL IS TRUTH**: If the coin is in a PCGS, NGC, ANACS, ICG, or ICCS certification slab, the PRINTED LABEL TEXT is the AUTHORITATIVE source for year, mint mark, denomination, grade, and certification number. Read the label FIRST and use its text as ground truth. Do NOT override the label year/mint with your own reading of the coin face. Common AI error: misreading "2026" as "2020", "2021", or "2024". The digit 6 has a tail curving down-left — it is NOT a 0 or 1. Read each digit on the label individually and carefully.
-3. **CURRENT-YEAR COINS ARE REAL**: Coins dated 2024, 2025, 2026, or 2027 are genuine government-issued coins. The US Mint and world mints actively produce coins with these dates. NEVER classify them as novelty, fantasy, replica, or tribute. A coin in a professional grading slab (PCGS, NGC, etc.) is by definition authentic and must use domain coins_bullion, NEVER exonumia or general.
+3. ${currentYearStatement}
 4. ZERO SPECULATION: Only use visible evidence. If a mint mark or date is not visible, write "uncertain" or "not visible." **CRITICAL MINT MARK RULE**: NEVER assume Philadelphia mint by default. Philadelphia coins have NO mint mark — so "no mark visible" means either Philadelphia OR the mark is hidden/worn/off-frame. Always state the mint mark you can VISUALLY CONFIRM, or write "uncertain" if unclear. Do NOT infer Philadelphia just because you don't see a mark.
 5. NO NUMERICAL GRADING for uncertified coins. Use descriptive terms only (Circulated, Very Fine, Extremely Fine, About Uncirculated, Uncirculated). Numeric grades (MS-65, etc.) ONLY for coins in a PCGS, NGC, ANACS, ICG, CAC, or ICCS slab.
 6. Title ≤ 80 chars. Format: [Year] [Country] [Denomination] [Series] [Metal] [Weight] [Condition/Grade]

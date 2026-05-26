@@ -1053,6 +1053,7 @@ serve(async (req: Request) => {
         itemName: identification.itemName,
         imageCount: imageList.length,
         voiceNote: voiceNote || undefined,
+        currentDate: new Date(),
         suggestedCategoryId: lockedCategoryId ?? undefined,
         suggestedCategoryName: lockedCategoryName ?? undefined,
         spotPrices:
