@@ -208,6 +208,19 @@ export default function AnalyzePage() {
 
   const handleAnalyzeSuccess = (data: any) => {
     const nextCoinConditionDetail = data.coinConditionDetail ?? null;
+    
+    // If slab OCR successfully extracted grader/grade/cert number, use those to populate form
+    // This provides a fallback if Gemini didn't return coinConditionDetail
+    let coinConditionDetailToUse = nextCoinConditionDetail;
+    if (!coinConditionDetailToUse && data.slabOcrData?.grader && data.slabOcrData?.grade) {
+      coinConditionDetailToUse = {
+        type: "graded" as const,
+        gradingCompany: data.slabOcrData.grader as "PCGS" | "NGC" | "ANACS" | "ICG" | "CAC" | "ICCS",
+        grade: data.slabOcrData.grade,
+        certificationNumber: data.slabOcrData.certNumber || undefined,
+      };
+    }
+    
     if (data._meta) setAnalysisMeta(data._meta);
     if (data._ebayMetadata) {
       setEbayMetadata(data._ebayMetadata);
@@ -227,8 +240,8 @@ export default function AnalyzePage() {
     setCondition(data.condition || "USED_EXCELLENT");
     setSuggestedGrade(data.suggestedGrade || "");
     setGradingRationale(data.gradingRationale || "");
-    setIsSlabbed(nextCoinConditionDetail?.type === "graded" ? true : (data.isSlabbed ?? false));
-    setCoinConditionDetail(nextCoinConditionDetail);
+    setIsSlabbed(coinConditionDetailToUse?.type === "graded" ? true : (data.isSlabbed ?? false));
+    setCoinConditionDetail(coinConditionDetailToUse);
     setMeltValue(data.meltValue ?? null);
     setSpotPrices(data.spotPrices ?? null);
     setGradeConfirmed(false);
