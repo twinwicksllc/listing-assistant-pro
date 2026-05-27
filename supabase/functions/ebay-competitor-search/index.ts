@@ -307,13 +307,23 @@ async function getEbayAppToken(ebayEnv: string): Promise<string> {
 // Fetch competitor listings via eBay Browse API (modern, no quota issues).
 // Uses OAuth Bearer token — no hard 5,000 calls/day limit.
 // ----------------------------------------------------------------
+interface CompetitorItem {
+  title: string;
+  price: number;
+  currency: string;
+  condition: string;
+  itemId?: string;
+  itemUrl?: string | null;
+  imageUrl?: string | null;
+}
+
 async function fetchEbayCompetitors(params: {
   token: string;
   searchQuery: string;
   categoryId?: string;
   ebayEnv: string;
   filterMode?: "fixed" | "any";
-}): Promise<{ prices: number[]; count: number; raw: unknown[] }> {
+}): Promise<{ prices: number[]; count: number; raw: unknown[]; items: CompetitorItem[] }> {
   const { token, searchQuery, categoryId, ebayEnv, filterMode = "fixed" } = params;
 
   const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
@@ -392,14 +402,24 @@ async function fetchEbayCompetitors(params: {
 
   const items: any[] = json?.itemSummaries ?? [];
   const prices: number[] = [];
+  const structured: CompetitorItem[] = [];
 
   for (const item of items) {
     try {
       const priceVal = item?.price?.value ?? item?.currentPrice?.value;
       const price = parseFloat(String(priceVal ?? "0"));
-      if (!isNaN(price) && price > 0) {
-        prices.push(price);
-      }
+      if (isNaN(price) || price <= 0) continue;
+      prices.push(price);
+      structured.push({
+        title: String(item?.title ?? "").slice(0, 200),
+        price,
+        currency: String(item?.price?.currency ?? "USD"),
+        condition: String(item?.condition ?? "Pre-Owned"),
+        itemId: item?.itemId ? String(item.itemId) : undefined,
+        itemUrl: item?.itemWebUrl ?? null,
+        imageUrl: item?.image?.imageUrl ??
+          item?.thumbnailImages?.[0]?.imageUrl ?? null,
+      });
     } catch {
       // Skip malformed items
     }
@@ -409,7 +429,7 @@ async function fetchEbayCompetitors(params: {
     `[ebay-competitor-search] Found ${prices.length} priced items out of ${items.length} Browse API results`,
   );
 
-  return { prices, count: prices.length, raw: items };
+  return { prices, count: prices.length, raw: items, items: structured };
 }
 
 // ----------------------------------------------------------------
@@ -654,6 +674,7 @@ serve(async (req) => {
     });
 
     let prices: number[] = [];
+    let structuredItems: CompetitorItem[] = [];
     let count = 0;
     let chosenQuery = searchQuery;
     let chosenCategoryId = categoryId;
@@ -674,6 +695,7 @@ serve(async (req) => {
 
       if (result.prices.length > 0) {
         prices = result.prices;
+        structuredItems = result.items;
         count = result.count;
         chosenQuery = attempt.query;
         chosenCategoryId = attempt.categoryId;
@@ -770,6 +792,13 @@ serve(async (req) => {
 
     const cacheExpiresAt = new Date(Date.now() + CACHE_TTL_MS).toISOString();
 
+    // Filter structured items to the price-cleaned set so callers (e.g.
+    // PriceRecommenderCard) render only the comps that drove the stats.
+    const cleanSet = new Set(cleanPrices);
+    const cleanItems = structuredItems
+      .filter((it) => cleanSet.has(it.price))
+      .slice(0, 25);
+
     return new Response(
       JSON.stringify({
         searchQuery,
@@ -782,6 +811,7 @@ serve(async (req) => {
         priceDelta,
         competitorCount: cleanPrices.length,
         priceDistribution,
+        items: cleanItems,
         noData: false,
         fromCache: false,
         cacheExpiresAt,
