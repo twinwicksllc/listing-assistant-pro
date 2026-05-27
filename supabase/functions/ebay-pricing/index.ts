@@ -18,6 +18,87 @@ interface SoldItem {
 }
 
 // ----------------------------------------------------------------
+// Primary source: delegate to ebay-competitor-search, which uses
+// the official eBay Browse API with Gemini-optimised query +
+// multi-attempt broadening. Much higher recall than the Jina
+// scraper, especially for niche/coin queries like "1909-S VDB".
+// Returns [] on any failure so the caller can fall back to Jina.
+// ----------------------------------------------------------------
+async function fetchViaCompetitorSearch(
+  query: string,
+): Promise<SoldItem[]> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
+    Deno.env.get("SUPABASE_ANON_KEY");
+
+  if (!supabaseUrl || !serviceKey) {
+    console.warn(
+      "[ebay-pricing] SUPABASE_URL/key missing — skipping Browse API path",
+    );
+    return [];
+  }
+
+  try {
+    const resp = await fetch(
+      `${supabaseUrl}/functions/v1/ebay-competitor-search`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${serviceKey}`,
+          "apikey": serviceKey,
+        },
+        body: JSON.stringify({ title: query }),
+        signal: AbortSignal.timeout(20000),
+      },
+    );
+
+    if (!resp.ok) {
+      console.warn(
+        `[ebay-pricing] competitor-search returned ${resp.status} — falling back to Jina`,
+      );
+      return [];
+    }
+
+    const data = await resp.json();
+    if (data?.noData || !Array.isArray(data?.items) || data.items.length === 0) {
+      console.log(
+        `[ebay-pricing] competitor-search returned no items — falling back to Jina`,
+      );
+      return [];
+    }
+
+    const mapped: SoldItem[] = data.items
+      .map((it: any): SoldItem | null => {
+        const price = typeof it?.price === "number"
+          ? it.price
+          : parseFloat(String(it?.price ?? "0"));
+        if (!isFinite(price) || price <= 0) return null;
+        return {
+          title: String(it?.title ?? query),
+          price,
+          currency: String(it?.currency ?? "USD"),
+          condition: String(it?.condition ?? "Pre-Owned"),
+          itemId: it?.itemId ? String(it.itemId) : undefined,
+          itemUrl: it?.itemUrl ?? null,
+          imageUrl: it?.imageUrl ?? null,
+        };
+      })
+      .filter((x: SoldItem | null): x is SoldItem => x !== null);
+
+    console.log(
+      `[ebay-pricing] competitor-search yielded ${mapped.length} items (query="${data.finalSearchQuery ?? data.searchQuery}")`,
+    );
+    return mapped;
+  } catch (err) {
+    console.warn(
+      `[ebay-pricing] competitor-search threw: ${String(err)} — falling back to Jina`,
+    );
+    return [];
+  }
+}
+
+// ----------------------------------------------------------------
 // Scrape eBay completed/sold listings via Jina AI reader.
 // Jina converts the page to clean markdown, bypassing bot detection.
 // ----------------------------------------------------------------
@@ -142,7 +223,7 @@ function parseSoldItemsFromMarkdown(
   }
 
   // If structured parsing yielded results, return them (deduplicated by price+title)
-  if (items.length >= 2) {
+  if (items.length >= 1) {
     console.log(
       `[ebay-pricing] Parsed ${items.length} structured items from Jina`,
     );
@@ -172,7 +253,11 @@ function parseSoldItemsFromMarkdown(
     }));
   }
 
-  console.log(`[ebay-pricing] No sold items parsed from Jina content`);
+  console.log(
+    `[ebay-pricing] No sold items parsed from Jina content (preview: ${
+      content.slice(0, 400).replace(/\s+/g, " ")
+    })`,
+  );
   return [];
 }
 
@@ -290,28 +375,37 @@ serve(async (req) => {
     const searchQuery = deriveSearchQuery(query);
     console.log(`[ebay-pricing] Title: "${query}" → Search: "${searchQuery}"`);
 
-    // Scrape sold listings via Jina
-    let soldItems = await scrapeEbaySoldListings(searchQuery);
+    // Primary path: official eBay Browse API via ebay-competitor-search.
+    // Higher recall + Gemini-optimised query. Falls through to Jina on empty.
+    let soldItems: SoldItem[] = await fetchViaCompetitorSearch(query);
+    let source: "browse_api" | "jina" = soldItems.length > 0 ? "browse_api" : "jina";
 
-    // If not enough results with derived query, try with full query
-    if (soldItems.length < 3 && searchQuery !== query.toLowerCase()) {
-      console.log(
-        `[ebay-pricing] Only ${soldItems.length} results with derived query, trying fuller query...`,
-      );
-      const fullerQuery = query
-        .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, " ")
-        .split(/\s+/)
-        .filter((t: string) => t.length > 1)
-        .slice(0, 8)
-        .join(" ");
-      const moreItems = await scrapeEbaySoldListings(fullerQuery);
-      if (moreItems.length > soldItems.length) {
-        soldItems = moreItems;
+    if (soldItems.length === 0) {
+      // Fallback: scrape sold listings via Jina
+      soldItems = await scrapeEbaySoldListings(searchQuery);
+
+      // If not enough results with derived query, try with full query
+      if (soldItems.length < 3 && searchQuery !== query.toLowerCase()) {
+        console.log(
+          `[ebay-pricing] Only ${soldItems.length} Jina results with derived query, trying fuller query...`,
+        );
+        const fullerQuery = query
+          .toLowerCase()
+          .replace(/[^a-z0-9\s]/g, " ")
+          .split(/\s+/)
+          .filter((t: string) => t.length > 1)
+          .slice(0, 8)
+          .join(" ");
+        const moreItems = await scrapeEbaySoldListings(fullerQuery);
+        if (moreItems.length > soldItems.length) {
+          soldItems = moreItems;
+        }
       }
     }
 
-    console.log(`[ebay-pricing] Total sold items found: ${soldItems.length}`);
+    console.log(
+      `[ebay-pricing] Total items found: ${soldItems.length} (source=${source})`,
+    );
 
     // Remove statistical outliers before computing price stats
     soldItems = filterOutliers(soldItems);
@@ -370,6 +464,7 @@ serve(async (req) => {
         totalFound: soldItems.length,
         query: searchQuery,
         originalQuery: query,
+        source,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
