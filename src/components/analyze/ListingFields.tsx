@@ -616,6 +616,7 @@ export function ListingFields({
         listingPrice={listingPriceForCogs}
         onChange={setCogs}
         disabled={!planFeatures.hasCogsTracking}
+        domain={domain}
       />
 
       {/* Smart Price Recommender */}

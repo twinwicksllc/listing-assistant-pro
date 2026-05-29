@@ -1,11 +1,14 @@
 import { DollarSign, Lock, X, TrendingUp } from "lucide-react";
 
+const EBAY_COINS_FEE_RATE = 0.13;
+
 interface CogsInputProps {
   cogs: number | undefined;
   listingPrice: number;
   onChange: (cogs: number | undefined) => void;
-  disabled?: boolean;  // true for non-Pro users → show upgrade prompt
+  disabled?: boolean; // true for non-Pro users → show upgrade prompt
   className?: string;
+  domain?: string; // used to apply category-specific marketplace fees
 }
 
 export default function CogsInput({
@@ -14,9 +17,18 @@ export default function CogsInput({
   onChange,
   disabled = false,
   className = "",
+  domain,
 }: CogsInputProps) {
+  const isCoinsBullion = domain === "coins_bullion";
+  const ebayFee =
+    isCoinsBullion && listingPrice > 0
+      ? listingPrice * EBAY_COINS_FEE_RATE
+      : 0;
+
   const estProfit =
-    cogs != null && listingPrice > 0 ? listingPrice - cogs : null;
+    cogs != null && listingPrice > 0
+      ? listingPrice - cogs - ebayFee
+      : null;
   const margin =
     estProfit != null && listingPrice > 0
       ? (estProfit / listingPrice) * 100
@@ -97,23 +109,35 @@ export default function CogsInput({
 
           {/* Live profit preview */}
           {cogs != null && listingPrice > 0 && (
-            <div className="flex items-center gap-3 px-1">
-              <TrendingUp className="w-3 h-3 text-muted-foreground shrink-0" />
-              <span className={`text-xs font-medium ${profitColor}`}>
-                Est. Profit:{" "}
-                {estProfit != null
-                  ? `${estProfit >= 0 ? "+" : ""}$${estProfit.toFixed(2)}`
-                  : "—"}
-              </span>
-              {margin != null && (
-                <span className={`text-xs ${marginColor}`}>
-                  ({margin.toFixed(1)}% margin)
+            <div className="space-y-0.5 px-1">
+              <div className="flex items-center gap-3">
+                <TrendingUp className="w-3 h-3 text-muted-foreground shrink-0" />
+                <span className={`text-xs font-medium ${profitColor}`}>
+                  Est. Profit:{" "}
+                  {estProfit != null
+                    ? `${estProfit >= 0 ? "+" : ""}$${estProfit.toFixed(2)}`
+                    : "—"}
                 </span>
+                {margin != null && (
+                  <span className={`text-xs ${marginColor}`}>
+                    ({margin.toFixed(1)}% margin)
+                  </span>
+                )}
+              </div>
+              {isCoinsBullion && ebayFee > 0 && (
+                <p className="text-[11px] text-muted-foreground/70 pl-5">
+                  Includes 13% eBay fee (−${ebayFee.toFixed(2)})
+                </p>
               )}
             </div>
           )}
 
-          {/* Warning if cost exceeds listing price */}
+          {/* Warning if cost exceeds listing price after fees */}
+          {cogs != null && listingPrice > 0 && estProfit != null && estProfit < 0 && cogs <= listingPrice && isCoinsBullion && (
+            <p className="text-[11px] text-red-500 px-1">
+              ⚠ Loss after 13% eBay fee — consider raising your price.
+            </p>
+          )}
           {cogs != null && listingPrice > 0 && cogs > listingPrice && (
             <p className="text-[11px] text-red-500 px-1">
               ⚠ Cost exceeds listing price — you would lose money on this sale.
