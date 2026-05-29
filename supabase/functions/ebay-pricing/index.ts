@@ -70,9 +70,7 @@ async function fetchViaCompetitorSearch(
 
     const mapped: SoldItem[] = data.items
       .map((it: any): SoldItem | null => {
-        const price = typeof it?.price === "number"
-          ? it.price
-          : parseFloat(String(it?.price ?? "0"));
+        const price = typeof it?.price === "number" ? it.price : parseFloat(String(it?.price ?? "0"));
         if (!isFinite(price) || price <= 0) return null;
         return {
           title: String(it?.title ?? query),
@@ -87,7 +85,9 @@ async function fetchViaCompetitorSearch(
       .filter((x: SoldItem | null): x is SoldItem => x !== null);
 
     console.log(
-      `[ebay-pricing] competitor-search yielded ${mapped.length} items (query="${data.finalSearchQuery ?? data.searchQuery}")`,
+      `[ebay-pricing] competitor-search yielded ${mapped.length} items (query="${
+        data.finalSearchQuery ?? data.searchQuery
+      }")`,
     );
     return mapped;
   } catch (err) {
@@ -254,9 +254,7 @@ function parseSoldItemsFromMarkdown(
   }
 
   console.log(
-    `[ebay-pricing] No sold items parsed from Jina content (preview: ${
-      content.slice(0, 400).replace(/\s+/g, " ")
-    })`,
+    `[ebay-pricing] No sold items parsed from Jina content (preview: ${content.slice(0, 400).replace(/\s+/g, " ")})`,
   );
   return [];
 }
