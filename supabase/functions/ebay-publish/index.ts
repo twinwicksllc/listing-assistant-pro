@@ -2770,6 +2770,38 @@ function buildCoinConditionDescriptors(
   }
 }
 
+// ================================================================
+// SECURITY HELPER — caller-identity verification
+// ================================================================
+// Every action that reads or writes a user's eBay tokens (exchange_code,
+// refresh_token, get_stored_token) MUST call this before touching the DB.
+// It validates the caller's Supabase JWT and confirms the authenticated
+// user is the same person as the claimed userId payload field.
+// Without this check any logged-in user could read or overwrite any
+// other user's eBay tokens (IDOR).
+// ================================================================
+async function assertCallerOwnsUser(
+  req: Request,
+  claimedUserId: string,
+  supabaseUrl: string,
+  supabaseServiceKey: string,
+): Promise<void> {
+  const authHeader = req.headers.get("Authorization");
+  const jwt = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+  if (!jwt) {
+    throw new Error("Unauthorized: missing Authorization header for token action.");
+  }
+  // Validate the JWT using the service-role client (verifies against project JWT secret).
+  const sc = createClient(supabaseUrl, supabaseServiceKey);
+  const { data: { user }, error: authErr } = await sc.auth.getUser(jwt);
+  if (authErr || !user) {
+    throw new Error("Unauthorized: invalid or expired session token.");
+  }
+  if (user.id !== claimedUserId) {
+    throw new Error("Unauthorized: userId does not match the authenticated session.");
+  }
+}
+
 serve(async (req) => {
   initSentry();
 
@@ -2870,6 +2902,15 @@ serve(async (req) => {
     if (action === "exchange_code") {
       const { code, userId } = payload;
       if (!code) throw new Error("No authorization code provided");
+
+      // Security: verify the caller owns the userId they claim to be storing tokens for.
+      if (userId) {
+        const _ecUrl = Deno.env.get("SUPABASE_URL");
+        const _ecKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (_ecUrl && _ecKey) {
+          await assertCallerOwnsUser(req, String(userId), _ecUrl, _ecKey);
+        }
+      }
 
       const ruName = Deno.env.get("EBAY_RUNAME") ||
         Deno.env.get("EBAY_REDIRECT_URI");
@@ -3147,6 +3188,9 @@ serve(async (req) => {
         throw new Error("Supabase credentials not configured");
       }
 
+      // Security: verify the caller owns the userId before rotating their token.
+      await assertCallerOwnsUser(req, String(userId), supabaseUrl, supabaseServiceKey);
+
       const supabase = createClient(supabaseUrl, supabaseServiceKey);
       const { data, error } = await supabase
         .from("profiles")
@@ -3263,6 +3307,9 @@ serve(async (req) => {
       if (!supabaseUrl || !supabaseServiceKey) {
         throw new Error("Supabase credentials not configured");
       }
+
+      // Security: verify the caller owns the userId before returning their stored token.
+      await assertCallerOwnsUser(req, String(userId), supabaseUrl, supabaseServiceKey);
 
       const supabase = createClient(supabaseUrl, supabaseServiceKey);
       const { data, error } = await supabase
@@ -4108,14 +4155,21 @@ serve(async (req) => {
                   `Verify the grade, company, or raw condition value is valid and try again.`,
               );
             }
-          } else {
-            // FAIL: Metadata API returned no descriptors for this category after retries.
-            // Without descriptors, the listing cannot comply with the mandate.
-            const errorDetail = lastError?.message || "Unknown error";
+          } else if (lastError !== null) {
+            // FAIL: Metadata API calls threw exceptions — genuine transient failure.
+            // Distinguish this from the "API responded with 0 descriptors" case below.
             throw new Error(
               `Unable to retrieve coin condition descriptors from eBay for category ${finalCategoryId} after 2 attempts. ` +
-                `Error: ${errorDetail}. ` +
+                `Error: ${lastError.message}. ` +
                 `This may be a temporary service issue. Please try again or contact support.`,
+            );
+          } else {
+            // eBay Metadata API responded successfully but returned 0 condition descriptors
+            // for this category (e.g. Proof Sets 41109, 166679). This means the category is
+            // NOT subject to the June 2026 condition descriptor mandate — proceed without them.
+            console.log(
+              `create_draft: category ${finalCategoryId} returned 0 condition descriptors from eBay ` +
+                `Metadata API — not subject to the condition descriptor mandate, skipping.`,
             );
           }
         } catch (cdErr) {
