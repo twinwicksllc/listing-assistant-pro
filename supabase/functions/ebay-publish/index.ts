@@ -365,6 +365,7 @@ const COIN_FIXED_VALUES_ALLOWED_IDS = new Set([
   // Bullion (leaf categories only)
   "178906",
   "39489",
+  "3360",
   "3361",
   "532",
   "173685",
@@ -400,6 +401,18 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Fineness",
     ],
     defaults: {},
+    fixedValues: { "Composition": "Silver" },
+  },
+  // Silver Bars & Rounds (grain bar category; same Certification requirement as bullion)
+  "3360": {
+    required: ["Certification"],
+    preferred: [
+      "Shape",
+      "Precious Metal Content per Unit",
+      "Brand/Mint",
+      "Fineness",
+    ],
+    defaults: { "Certification": "Uncertified" },
     fixedValues: { "Composition": "Silver" },
   },
   // Other Silver Bullion
@@ -3798,6 +3811,34 @@ serve(async (req) => {
         `create_draft: aspects built for category ${finalCategoryId}:`,
         JSON.stringify(aspects, null, 2),
       );
+
+      // ── Coin-condition → Certification aspect bridge ────────────────────────
+      // If no Certification aspect was resolved (not in itemSpecifics, not in dynamic
+      // or hardcoded defaults), derive it from _coinConditionDetail.
+      // Covers any coin/bullion category where eBay requires Certification but the
+      // category-level defaults did not set it.
+      if (!aspects["Certification"]) {
+        const _bridgeIS = itemSpecifics && typeof itemSpecifics === "object"
+          ? (itemSpecifics as Record<string, unknown>)
+          : {};
+        const _ccd = _bridgeIS._coinConditionDetail as
+          | { type?: string; graded?: { company?: string } }
+          | null
+          | undefined;
+        if (_ccd) {
+          if (_ccd.type === "graded" && _ccd.graded?.company) {
+            aspects["Certification"] = [_ccd.graded.company];
+            console.log(
+              `create_draft: bridged Certification="${_ccd.graded.company}" from graded coin condition detail`,
+            );
+          } else if (_ccd.type === "raw") {
+            aspects["Certification"] = ["Uncertified"];
+            console.log(
+              `create_draft: bridged Certification="Uncertified" from raw coin condition detail`,
+            );
+          }
+        }
+      }
 
       // Get the final normalized certification value from aspects (already normalized above)
       const finalCertValue = aspects["Certification"]?.[0];
