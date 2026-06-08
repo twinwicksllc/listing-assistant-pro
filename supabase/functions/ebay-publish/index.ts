@@ -3909,12 +3909,18 @@ serve(async (req) => {
           .toLowerCase();
         if (!raw) return null;
 
+        // Max 3.9 lb — USPS Ground Coins and most coin shipping services cap at 4 lb.
+        // Precious metal content is used as a proxy for item weight, but large bars/lots
+        // can produce values that exceed service limits. We cap here to be safe; a UI
+        // weight field is the long-term solution.
+        const MAX_SHIP_LB = 3.9;
+
         const ozMatch = raw.match(/([0-9]+(?:\.[0-9]+)?)\s*(oz|ounce|ounces|troy\s*oz|toz)\b/);
         if (ozMatch) {
           // Add light packaging buffer and enforce a sane minimum.
           const oz = Number(ozMatch[1]);
           const lb = Math.max(0.125, (oz + 1.0) / 16);
-          return Number(lb.toFixed(3));
+          return Number(Math.min(MAX_SHIP_LB, lb).toFixed(3));
         }
 
         const gMatch = raw.match(/([0-9]+(?:\.[0-9]+)?)\s*(g|gram|grams)\b/);
@@ -3922,13 +3928,13 @@ serve(async (req) => {
           const grams = Number(gMatch[1]);
           const oz = grams * 0.0352739619;
           const lb = Math.max(0.125, (oz + 1.0) / 16);
-          return Number(lb.toFixed(3));
+          return Number(Math.min(MAX_SHIP_LB, lb).toFixed(3));
         }
 
         const lbMatch = raw.match(/([0-9]+(?:\.[0-9]+)?)\s*(lb|lbs|pound|pounds)\b/);
         if (lbMatch) {
           const lb = Number(lbMatch[1]);
-          return Number(Math.max(0.125, lb).toFixed(3));
+          return Number(Math.min(MAX_SHIP_LB, Math.max(0.125, lb)).toFixed(3));
         }
 
         return null;
@@ -3955,6 +3961,7 @@ serve(async (req) => {
 
       if (!packageWeightAndSize) {
         const inferredLb = inferWeightLbFromSpecifics(itemSpecifics) ?? 0.25;
+        console.log("[ebay-publish] inferred shipping weight lb:", inferredLb);
         packageWeightAndSize = {
           weight: {
             value: inferredLb,
