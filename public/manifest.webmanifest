@@ -1,13 +1,13 @@
 {
-  "name": "ListCreator by Teckstart",
-  "short_name": "ListCreator",
+  "name": "Sovereign Listing Suite",
+  "short_name": "SLS",
   "description": "AI-powered eBay listing creation for coins, bullion, and collectibles",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#1d6fe0",
-  "theme_color": "#1d6fe0",
+  "background_color": "#090C14",
+  "theme_color": "#090C14",
   "icons": [
     {
       "src": "/favicon.ico",
@@ -39,7 +39,10 @@
       "purpose": "maskable"
     }
   ],
-  "categories": ["business", "productivity"],
+  "categories": [
+    "business",
+    "productivity"
+  ],
   "screenshots": [
     {
       "src": "/pwa-icon-192.png",

@@ -1,8 +1,8 @@
 /*
  * theme.css — V2 Sleek Design System
  * ─────────────────────────────────────────────────────────────────────────────
- * Brand:    Teckstart Lister
- * Primary:  #0076B6  (Honolulu Blue)   → hsl(201, 100%, 36%)
+ * Brand:    Sovereign Listing Suite | Twin Wicks Digital Solutions
+ * Primary:  #5B5FD4  (Velvet Indigo)   → hsl(243, 54%, 57%)
  * Silver:   #B0B7BC  (Metallic Silver) → hsl(207, 6%, 71%)
  * BG:       #F8F9FA  (Off-White)
  *
@@ -31,9 +31,9 @@
     --v2-bg-muted:         210 14% 95%;         /* #EFF2F5 — light grey fill */
     --v2-bg-glass:         0 0% 100% / 0.72;    /* glass overlay */
 
-    --v2-primary:          201 100% 36%;        /* #0076B6 Honolulu Blue */
-    --v2-primary-hover:    201 100% 30%;        /* slightly darker on hover */
-    --v2-primary-light:    201 100% 95%;        /* very light blue tint */
+    --v2-primary:          243 54% 57%;        /* #5B5FD4 Velvet Indigo */
+    --v2-primary-hover:    243 54% 48%;         /* slightly darker on hover */
+    --v2-primary-light:    243 54% 94%;         /* very light indigo tint */
     --v2-primary-fg:       0 0% 100%;           /* white text on primary */
 
     --v2-silver:           207 6% 71%;          /* #B0B7BC Metallic Silver */
@@ -64,11 +64,11 @@
     /* ── Sidebar ────────────────────────────────────────────────────────────── */
     --v2-sidebar-w:        240px;
     --v2-sidebar-w-collapsed: 64px;
-    --v2-sidebar-bg:       201 100% 36%;        /* primary blue sidebar */
+    --v2-sidebar-bg:       243 38% 16%;         /* deep indigo sidebar — Sovereign */
     --v2-sidebar-fg:       0 0% 100%;           /* white text */
-    --v2-sidebar-hover:    201 100% 30%;
-    --v2-sidebar-active:   0 0% 100%;           /* white active item */
-    --v2-sidebar-active-bg: 201 100% 28%;       /* darker blue for active */
+    --v2-sidebar-hover:    243 38% 22%;
+    --v2-sidebar-active:   240 22% 90%;         /* near-white active item */
+    --v2-sidebar-active-bg: 243 38% 24%;        /* deeper indigo for active */
 
     /* ── Spacing & Radius ───────────────────────────────────────────────────── */
     --v2-radius:           12px;
@@ -281,7 +281,7 @@
 
 .v2-usage-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, hsl(var(--v2-primary)), hsl(201 100% 42%));
+  background: linear-gradient(90deg, hsl(var(--v2-primary)), hsl(243 54% 48%));
   border-radius: 9999px;
   transition: width 0.3s ease;
 }
