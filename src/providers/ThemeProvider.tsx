@@ -1,27 +1,15 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-
-export type Theme = "dark" | "light";
-
-interface ThemeContextValue {
-  theme: Theme;
-  toggleTheme: () => void;
-}
-
-const ThemeContext = createContext<ThemeContextValue>({
-  theme: "dark",
-  toggleTheme: () => {},
-});
-
-const STORAGE_KEY = "sls_theme";
+import { ThemeContext, THEME_STORAGE_KEY } from "./theme-context";
+import type { Theme } from "./theme-context";
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = localStorage.getItem(THEME_STORAGE_KEY);
       if (stored === "light" || stored === "dark") return stored as Theme;
     } catch {
-      // ignore — storage may be unavailable
+      // ignore — storage may be unavailable (e.g. private browsing)
     }
     return "dark";
   });
@@ -40,7 +28,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setTheme((prev) => {
       const next: Theme = prev === "dark" ? "light" : "dark";
       try {
-        localStorage.setItem(STORAGE_KEY, next);
+        localStorage.setItem(THEME_STORAGE_KEY, next);
       } catch {
         // ignore
       }
@@ -53,9 +41,4 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       {children}
     </ThemeContext.Provider>
   );
-}
-
-/** Returns the current theme and a toggle callback. */
-export function useTheme(): ThemeContextValue {
-  return useContext(ThemeContext);
 }

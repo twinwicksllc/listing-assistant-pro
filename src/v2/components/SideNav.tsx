@@ -20,7 +20,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import teckstartLogo from "@/assets/teckstart-logo.png";
 import { useAuth } from "@/contexts/AuthContext";
-import { useTheme } from "@/providers/ThemeProvider";
+import { useTheme } from "@/providers/useTheme";
 
 interface NavItem {
   path: string;
