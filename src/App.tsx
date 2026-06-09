@@ -10,6 +10,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import SupportModal from "@/components/SupportModal";
 import CookieConsent from "./components/CookieConsent";
 import { Loader2 } from "lucide-react";
+import { ThemeProvider } from "@/providers/ThemeProvider";
 
 // ── Public / auth pages (unchanged) ──────────────────────────────
 import LandingPage from "./pages/LandingPage";
@@ -57,6 +58,7 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <ErrorBoundary>
+    <ThemeProvider>
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <TooltipProvider>
@@ -107,6 +109,7 @@ const App = () => (
         </TooltipProvider>
       </AuthProvider>
     </QueryClientProvider>
+    </ThemeProvider>
   </ErrorBoundary>
 );
 
