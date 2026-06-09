@@ -2,7 +2,7 @@
  * SideNav — V2 Sidebar Navigation
  * 
  * Features:
- *   - Consistent Honolulu Blue (#0076B6) background
+ *   - Theme-aware sidebar (Vault Black / Deep Indigo) with dark/light toggle
  *   - Section-based collapsible navigation with v2-styled buttons
  *   - Support for owner-only sections (Money section)
  *   - Active state highlighting
@@ -15,10 +15,12 @@ import {
   TrendingUp, Zap, Receipt, DollarSign,
   ShoppingCart, Users, Settings,
   ChevronDown, ChevronUp, LogOut, Heart, LayoutList,
+  Sun, Moon,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import teckstartLogo from "@/assets/teckstart-logo.png";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/providers/ThemeProvider";
 
 interface NavItem {
   path: string;
@@ -76,14 +78,18 @@ function useNavSections(isOwner: boolean): NavSection[] {
 
 // ─── Component ─────────────────────────────────────────────────────────
 
-const SIDEBAR_BG = "#0076B6"; // Honolulu Blue
+// Sidebar is always dark-chrome — Vault Black (dark mode) or Deep Indigo (light mode)
+const DARK_SIDEBAR_BG  = "hsl(222,25%,4%)";   // Vault Black  — matches --sidebar-background in :root
+const LIGHT_SIDEBAR_BG = "hsl(243,38%,16%)";  // Deep Indigo  — matches --sidebar-background in .light
 const ACTIVE_BG = "rgba(255,255,255,0.15)";
-const HOVER_BG = "rgba(255,255,255,0.08)";
+const HOVER_BG  = "rgba(255,255,255,0.08)";
 
 export default function SideNav() {
   const location  = useLocation();
   const navigate  = useNavigate();
   const { isOwner, signOut, user, currentPlan } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+  const sidebarBg = theme === "dark" ? DARK_SIDEBAR_BG : LIGHT_SIDEBAR_BG;
   const sections  = useNavSections(isOwner);
 
   // All sections start expanded (per spec)
@@ -108,7 +114,7 @@ export default function SideNav() {
       style={{
         width: "var(--v2-sidebar-w, 240px)",
         minHeight: "100vh",
-        background: SIDEBAR_BG,
+        background: sidebarBg,
         display: "flex",
         flexDirection: "column",
         position: "fixed",
@@ -281,6 +287,50 @@ export default function SideNav() {
             </div>
           </div>
         </div>
+
+        {/* ─── Theme Toggle ───────────────────────────────────────────── */}
+        <button
+          onClick={toggleTheme}
+          title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "0.4375rem 0.75rem",
+            marginBottom: "0.5rem",
+            background: "rgba(255,255,255,0.08)",
+            border: "1px solid rgba(255,255,255,0.15)",
+            borderRadius: 8,
+            color: "rgba(255,255,255,0.85)",
+            fontSize: "0.8125rem",
+            fontWeight: 500,
+            cursor: "pointer",
+            transition: "all 0.15s",
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = "rgba(255,255,255,0.13)";
+            e.currentTarget.style.borderColor = "rgba(255,255,255,0.25)";
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = "rgba(255,255,255,0.08)";
+            e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)";
+          }}
+        >
+          <span style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+            {theme === "dark" ? <Moon size={13} /> : <Sun size={13} />}
+            {theme === "dark" ? "Dark" : "Light"}
+          </span>
+          <span style={{
+            background: "rgba(255,255,255,0.12)",
+            borderRadius: 4,
+            padding: "0.0625rem 0.375rem",
+            fontSize: "0.6875rem",
+            color: "rgba(255,255,255,0.55)",
+          }}>
+            toggle
+          </span>
+        </button>
 
         <button
           onClick={signOut}
