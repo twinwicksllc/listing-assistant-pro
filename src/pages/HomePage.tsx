@@ -17,7 +17,7 @@ const MAX_FILE_SIZE_MB = 20;
 const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
 const MAX_RECORDING_SEC = 10;
 
-const TOUR_KEY = "teckstart_tour_seen";
+const TOUR_KEY = "sls_tour_seen";
 
 const TOUR_STEPS: TourStep[] = [
   {
@@ -311,9 +311,9 @@ export default function HomePage() {
       {/* Header */}
       <header className="px-5 pt-12 pb-4 md:px-8 lg:px-12">
         <div className="max-w-3xl mx-auto flex items-center gap-2">
-          <img src={teckstartLogo} alt="Teckstart" className="h-12 w-auto" />
+          <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto" />
           <div className="flex-1">
-            <h1 className="text-lg font-bold text-foreground">Teckstart Listing Assistant</h1>
+            <h1 className="text-lg font-bold text-foreground">Sovereign Listing Suite</h1>
             <p className="text-xs text-muted-foreground">AI-powered eBay listings</p>
           </div>
           <button

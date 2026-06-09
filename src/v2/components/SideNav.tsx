@@ -130,7 +130,7 @@ export default function SideNav() {
       }}>
         <img
           src={teckstartLogo}
-          alt="Teckstart"
+          alt="Sovereign Listing Suite"
           style={{ height: 32, width: "auto", maxWidth: 120, flexShrink: 0, objectFit: "contain" }}
         />
       </div>

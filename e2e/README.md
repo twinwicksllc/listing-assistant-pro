@@ -32,7 +32,7 @@ INSERT INTO auth.users (
   confirmation_sent_at
 ) VALUES (
   'qa0000000000test',
-  'qa0000000000test@test.listcreatorbyteckstart.com',
+  'qa0000000000test@test.sovereignlistingsuite.com',
   crypt('QATest123!@#', gen_salt('bf')),
   now(),
   now(),
@@ -48,7 +48,7 @@ INSERT INTO public.profiles (
   plan
 ) VALUES (
   'qa0000000000test',
-  'qa0000000000test@test.listcreatorbyteckstart.com',
+  'qa0000000000test@test.sovereignlistingsuite.com',
   now(),
   NULL,
   'free'
@@ -78,7 +78,7 @@ Add these to **Settings → Secrets and variables → Actions**:
 
 | Secret | Value | Example |
 |--------|-------|---------|
-| `QA_BASE_URL` | Staging/preview URL | `https://qa.listcreatorbyteckstart.com` |
+| `QA_BASE_URL` | Staging/preview URL | `https://qa.sovereignlistingsuite.com` |
 | `SUPABASE_URL` | Supabase project URL | `https://your-project.supabase.co` |
 | `SUPABASE_ANON_KEY` | Supabase anon key | (from Settings → API in Supabase) |
 | `SUPABASE_SERVICE_KEY` | Supabase service key | (for cleanup functions) |
@@ -227,7 +227,7 @@ test('new feature test', async ({ page, testUser }) => {
 ## Next Steps
 
 1. **Verify eBay Sandbox:** Check if you have existing credentials
-2. **Create QA staging URL:** Set up `qa.listcreatorbyteckstart.com` (like your other project)
+2. **Create QA staging URL:** Set up `qa.sovereignlistingsuite.com` (like your other project)
 3. **Add GitHub Secrets:** Add all values from the table above
 4. **Create test photos:** Generate or upload sample images
 5. **Run locally:** `npx playwright test` to verify setup

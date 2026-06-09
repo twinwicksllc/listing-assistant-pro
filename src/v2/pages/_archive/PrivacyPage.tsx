@@ -25,7 +25,7 @@ export default function PrivacyPage() {
           <p>We use your data to: (a) provide and improve the Service; (b) process payments via Stripe; (c) communicate account-related information; (d) analyze usage patterns to improve features; (e) comply with legal obligations.</p>
 
           <h2>3. Stripe Payment Processing</h2>
-          <p>Payment processing is handled by Stripe, Inc. Stripe's collection and use of your payment data is governed by the <a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Stripe Privacy Policy</a>. When you provide payment information, it is transmitted directly to Stripe's PCI-DSS compliant servers. Teckstart does not have access to your full card details.</p>
+          <p>Payment processing is handled by Stripe, Inc. Stripe's collection and use of your payment data is governed by the <a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Stripe Privacy Policy</a>. When you provide payment information, it is transmitted directly to Stripe's PCI-DSS compliant servers. Sovereign Listing Suite does not have access to your full card details.</p>
 
           <h2>4. eBay Data Usage</h2>
           <p>When you connect your eBay account, we access the eBay API to: (a) publish and manage listings; (b) retrieve completed/sold item data for market pricing analysis; (c) fetch category and item-specifics metadata. eBay API tokens are stored encrypted in our database. We do not sell or share your eBay data with third parties. You may disconnect your eBay account at any time, after which we will cease accessing eBay data on your behalf and delete stored tokens within 30 days.</p>
@@ -40,10 +40,10 @@ export default function PrivacyPage() {
             <li><strong>Right to Data Portability:</strong> Receive your data in a structured, machine-readable format.</li>
             <li><strong>Right to Object:</strong> Object to processing based on legitimate interests.</li>
           </ul>
-          <p>Our legal bases for processing are: contract performance (providing the Service), legitimate interests (improving our platform), and consent (where applicable, such as cookies). To exercise your rights, contact <span className="text-primary">privacy@teckstart.com</span>.</p>
+          <p>Our legal bases for processing are: contract performance (providing the Service), legitimate interests (improving our platform), and consent (where applicable, such as cookies). To exercise your rights, contact <span className="text-primary">privacy@twinwicksds.com</span>.</p>
 
           <h2>6. CCPA Compliance (California Residents)</h2>
-          <p>Under the California Consumer Privacy Act, California residents have the right to: (a) know what personal information is collected; (b) request deletion of personal information; (c) opt out of the sale of personal information. <strong>Teckstart does not sell personal information.</strong> To submit a CCPA request, contact <span className="text-primary">privacy@teckstart.com</span>.</p>
+          <p>Under the California Consumer Privacy Act, California residents have the right to: (a) know what personal information is collected; (b) request deletion of personal information; (c) opt out of the sale of personal information. <strong>Sovereign Listing Suite does not sell personal information.</strong> To submit a CCPA request, contact <span className="text-primary">privacy@twinwicksds.com</span>.</p>
 
           <h2>7. Cookies &amp; Tracking</h2>
           <p>We use essential cookies for authentication and session management. We may use analytics cookies to understand usage patterns. You can manage cookie preferences through the consent banner shown on your first visit. Essential cookies cannot be disabled as they are necessary for the Service to function.</p>
@@ -61,7 +61,7 @@ export default function PrivacyPage() {
           <p>We may update this Privacy Policy periodically. We will notify you of material changes via email or in-app notification. The "Last updated" date at the top reflects the most recent revision.</p>
 
           <h2>12. Contact</h2>
-          <p>For privacy inquiries or data requests, contact us at <span className="text-primary">privacy@teckstart.com</span>.</p>
+          <p>For privacy inquiries or data requests, contact us at <span className="text-primary">privacy@twinwicksds.com</span>.</p>
         </div>
       </div>
       <LegalFooter />

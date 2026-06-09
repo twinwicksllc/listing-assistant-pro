@@ -10,7 +10,7 @@ export const test = base.extend<{ testUser: TestUser }>({
   testUser: async ({}, use) => {
     const timestamp = Date.now();
     const user: TestUser = {
-      email: `qa${timestamp}test@test.listcreatorbyteckstart.com`,
+      email: `qa${timestamp}test@test.sovereignlistingsuite.com`,
       password: 'QATest123!@#',
     };
     await use(user);

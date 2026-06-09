@@ -686,7 +686,7 @@ export default function SettingsPage2() {
           {!ebayConnected ? (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
               <p style={{ fontSize: "0.9375rem", color: "#6E7580" }}>
-                Authorize Teckstart to access your eBay account. You can revoke access at any time.
+                Authorize Sovereign Listing Suite to access your eBay account. You can revoke access at any time.
               </p>
               <button
                 onClick={handleConnectEbay}

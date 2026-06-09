@@ -41,7 +41,7 @@ export default function SignupPage() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
         <div className="w-full max-w-sm space-y-6 text-center">
-          <img src={teckstartLogo} alt="Teckstart" className="h-12 w-auto mx-auto" />
+          <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto mx-auto" />
           <div className="space-y-2">
             <h1 className="text-xl font-bold text-foreground">Check your email</h1>
             <p className="text-sm text-muted-foreground">
@@ -61,7 +61,7 @@ export default function SignupPage() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
       <div className="w-full max-w-sm space-y-8">
         <div className="flex flex-col items-center gap-2">
-          <img src={teckstartLogo} alt="Teckstart" className="h-12 w-auto" />
+          <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto" />
           <h1 className="text-xl font-bold text-foreground">Create your account</h1>
           <p className="text-sm text-muted-foreground">Start listing smarter with AI</p>
         </div>

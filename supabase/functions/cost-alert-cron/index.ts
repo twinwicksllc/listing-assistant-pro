@@ -108,9 +108,9 @@ serve(async (req) => {
             Authorization: `Bearer ${resendKey}`,
           },
           body: JSON.stringify({
-            from: "Teckstart Alerts <alerts@teckstart.com>",
+            from: "Sovereign Listing Suite Alerts <alerts@teckstart.com>",
             to: [ADMIN_EMAIL],
-            subject: `⚠️ Teckstart Cost Alert: $${totalCost.toFixed(2)} this month`,
+            subject: `⚠️ Sovereign Listing Suite Cost Alert: $${totalCost.toFixed(2)} this month`,
             html: `
               <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <h2 style="color: #dc2626; margin-bottom: 16px;">⚠️ Monthly AI Cost Alert</h2>
@@ -145,7 +145,7 @@ serve(async (req) => {
                 </div>
                 <p style="color: #6b7280; font-size: 14px;">Review usage patterns on the Admin Control Center or consider implementing additional rate limits.</p>
                 <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
-                <p style="color: #9ca3af; font-size: 12px;">This is an automated alert from Teckstart AI Assistant.</p>
+                <p style="color: #9ca3af; font-size: 12px;">This is an automated alert from Sovereign AI Assistant.</p>
               </div>
             `,
           }),
