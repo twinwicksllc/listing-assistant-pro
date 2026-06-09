@@ -1,7 +1,7 @@
 import { test, expect, login, uploadTestPhoto, generateListing } from '../fixtures/helpers';
 
 const QA_USER = {
-  email: 'qa0000000000test@test.listcreatorbyteckstart.com',
+  email: 'qa0000000000test@test.sovereignlistingsuite.com',
   password: 'QATest123!@#',
 };
 

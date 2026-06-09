@@ -89,7 +89,7 @@ export default function ResetPasswordPage() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
         <div className="flex flex-col items-center gap-4">
-          <img src={teckstartLogo} alt="Teckstart" className="h-12 w-auto" />
+          <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto" />
           <Loader2 className="w-6 h-6 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Verifying reset link...</p>
         </div>
@@ -101,7 +101,7 @@ export default function ResetPasswordPage() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
         <div className="w-full max-w-sm text-center space-y-4">
-          <img src={teckstartLogo} alt="Teckstart" className="h-12 w-auto mx-auto" />
+          <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto mx-auto" />
           <p className="text-sm text-muted-foreground">Invalid or expired reset link.</p>
           <button onClick={() => navigate("/forgot-password")} className="text-sm text-primary font-medium hover:underline">
             Request a new reset link
@@ -115,7 +115,7 @@ export default function ResetPasswordPage() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
       <div className="w-full max-w-sm space-y-8">
         <div className="flex flex-col items-center gap-2">
-          <img src={teckstartLogo} alt="Teckstart" className="h-12 w-auto" />
+          <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto" />
           <h1 className="text-xl font-bold text-foreground">Set new password</h1>
           <p className="text-sm text-muted-foreground">Choose a strong password for your account</p>
         </div>

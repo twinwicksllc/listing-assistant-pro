@@ -156,7 +156,7 @@ export default function LandingPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-background/90 backdrop-blur-md border-b border-border/50"
            style={{ boxShadow: "0 1px 0 0 rgba(0,0,0,0.06)" }}>
         <div className="max-w-5xl mx-auto px-5 h-14 flex items-center justify-between">
-          <img src={teckstartLogo} alt="Teckstart" className="h-12 w-auto" />
+          <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto" />
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate("/login")}
@@ -246,7 +246,7 @@ export default function LandingPage() {
               <div className="w-2 h-2 rounded-full bg-red-400" />
               <div className="w-2 h-2 rounded-full bg-amber-400" />
               <div className="w-2 h-2 rounded-full bg-green-400" />
-              <span className="text-xs text-muted-foreground ml-2 font-mono">lister.teckstart.com</span>
+              <span className="text-xs text-muted-foreground ml-2 font-mono">sls.twinwicksds.com</span>
             </div>
             {/* Mock listing result */}
             <div className="p-4 space-y-3">
@@ -512,13 +512,13 @@ export default function LandingPage() {
       {/* ── FOOTER ── */}
       <footer className="py-8 px-5 border-t border-border">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <img src={teckstartLogo} alt="Teckstart" className="h-12 w-auto opacity-70" />
+          <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto opacity-70" />
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <button onClick={() => navigate("/terms")} className="hover:text-foreground transition-colors">Terms</button>
             <button onClick={() => navigate("/privacy")} className="hover:text-foreground transition-colors">Privacy</button>
             <button onClick={() => navigate("/login")} className="hover:text-foreground transition-colors">Sign In</button>
           </div>
-          <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} Teckstart. All rights reserved.</p>
+          <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} Twin Wicks Digital Solutions. All rights reserved.</p>
         </div>
       </footer>
 

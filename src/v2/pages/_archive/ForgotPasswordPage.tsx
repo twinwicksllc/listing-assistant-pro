@@ -29,7 +29,7 @@ export default function ForgotPasswordPage() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
         <div className="w-full max-w-sm space-y-6 text-center">
-          <img src={teckstartLogo} alt="Teckstart" className="h-12 w-auto mx-auto" />
+          <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto mx-auto" />
           <h1 className="text-xl font-bold text-foreground">Check your email</h1>
           <p className="text-sm text-muted-foreground">
             If an account exists for <span className="font-medium text-foreground">{email}</span>, 
@@ -47,7 +47,7 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
       <div className="w-full max-w-sm space-y-8">
         <div className="flex flex-col items-center gap-2">
-          <img src={teckstartLogo} alt="Teckstart" className="h-12 w-auto" />
+          <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto" />
           <h1 className="text-xl font-bold text-foreground">Reset password</h1>
           <p className="text-sm text-muted-foreground">We'll send you a reset link</p>
         </div>

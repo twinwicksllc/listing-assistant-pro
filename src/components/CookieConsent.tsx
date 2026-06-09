@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { X } from "lucide-react";
 
-const COOKIE_KEY = "teckstart_cookie_consent";
+const COOKIE_KEY = "sls_cookie_consent";
 
 export default function CookieConsent() {
   const [visible, setVisible] = useState(false);

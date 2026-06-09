@@ -379,7 +379,7 @@ export default function SettingsPage() {
                 {!ebayConnected ? (
                   <div className="space-y-3">
                     <p className="text-sm text-muted-foreground">
-                      Authorize Teckstart to access your eBay account. You can revoke access at any time.
+                      Authorize Sovereign Listing Suite to access your eBay account. You can revoke access at any time.
                     </p>
                     <button
                       onClick={handleConnectEbay}
