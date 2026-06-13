@@ -207,6 +207,20 @@ export default function AnalyzePage() {
   });
 
   const handleAnalyzeSuccess = (data: any) => {
+    // Each successful analysis represents a new item. Reset manual item-level
+    // inputs so previous listing values do not bleed into the next one.
+    setConsignor("");
+    setCogs(undefined);
+    setBestOfferEnabled(false);
+    setBestOfferAutoAcceptPrice(0);
+    setBestOfferAutoDeclinePrice(0);
+    setQuantity(1);
+    setPricingMode("per_item");
+    setAuctionBuyItNowEnabled(false);
+    setAuctionBuyItNow(0);
+    setEbayVideoId(null);
+    setEbayVideoStatus(null);
+
     const nextCoinConditionDetail = data.coinConditionDetail ?? null;
     
     // If slab OCR successfully extracted grader/grade/cert number, use those to populate form

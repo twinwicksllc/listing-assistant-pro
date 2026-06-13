@@ -82,6 +82,8 @@ export default function HomePage() {
   useEffect(() => {
     if (stagedImages.length === 0 || imagesOptimized || optimizing) return;
 
+    const stagedSnapshot = stagedImages;
+
     // Clear previous timer
     if (autoOptimizeTimerRef.current) {
       clearTimeout(autoOptimizeTimerRef.current);
@@ -90,13 +92,24 @@ export default function HomePage() {
     // Set a debounce timer to wait for more files to be added
     autoOptimizeTimerRef.current = setTimeout(async () => {
       setOptimizing(true);
-      setOptimizeProgress({ done: 0, total: stagedImages.length });
+      setOptimizeProgress({ done: 0, total: stagedSnapshot.length });
       try {
-        const optimized = await optimizeImages(stagedImages, (done, total) => {
+        const optimized = await optimizeImages(stagedSnapshot, (done, total) => {
           setOptimizeProgress({ done, total });
         });
-        setStagedImages(optimized);
-        setImagesOptimized(true);
+        // Protect against stale async overwrite: if user added/removed photos
+        // while optimization was running, do not discard those changes.
+        let hasAdditionalImages = false;
+        setStagedImages((prev) => {
+          const snapshotStillPrefix = stagedSnapshot.every((img, i) => prev[i] === img);
+          if (!snapshotStillPrefix) {
+            return prev;
+          }
+          const extras = prev.slice(stagedSnapshot.length);
+          hasAdditionalImages = extras.length > 0;
+          return [...optimized, ...extras];
+        });
+        setImagesOptimized(!hasAdditionalImages);
         await recordUsage("optimize");
       } catch (err) {
         console.error("Auto-optimize error:", err);

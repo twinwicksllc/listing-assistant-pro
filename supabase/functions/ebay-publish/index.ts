@@ -1536,29 +1536,35 @@ function normalizeConditionForCategory(
       return { condition: "NEW", corrected: true };
     }
   } else if (isTradingCard) {
-    // Trading cards: eBay only allows LIKE_NEW, VERY_GOOD, GOOD, ACCEPTABLE (no NEW/1000)
+    // Trading cards: use Inventory API ConditionEnum values (USED_*).
+    // Sending VERY_GOOD/GOOD/ACCEPTABLE triggers eBay serialization errors.
     const validCardConditions = new Set([
-      "LIKE_NEW",
-      "VERY_GOOD",
-      "GOOD",
-      "ACCEPTABLE",
+      // Avoid LIKE_NEW by default: often treated as graded and can require
+      // Professional Grader/Grade specifics in card categories.
+      "USED_VERY_GOOD",
+      "USED_GOOD",
+      "USED_ACCEPTABLE",
     ]);
     if (!validCardConditions.has(condition)) {
       const fallbackMap: Record<string, string> = {
-        NEW: "LIKE_NEW",
-        NEW_OTHER: "LIKE_NEW",
-        NEW_WITH_DEFECTS: "GOOD",
-        USED_EXCELLENT: "LIKE_NEW",
-        USED_VERY_GOOD: "VERY_GOOD",
-        USED_GOOD: "GOOD",
-        USED_ACCEPTABLE: "ACCEPTABLE",
-        PRE_OWNED_GOOD: "GOOD",
-        PRE_OWNED_FAIR: "ACCEPTABLE",
-        PRE_OWNED_POOR: "ACCEPTABLE",
-        SELLER_REFURBISHED: "GOOD",
-        FOR_PARTS_OR_NOT_WORKING: "ACCEPTABLE",
+        NEW: "USED_VERY_GOOD",
+        NEW_OTHER: "USED_VERY_GOOD",
+        NEW_WITH_DEFECTS: "USED_GOOD",
+        VERY_GOOD: "USED_VERY_GOOD",
+        GOOD: "USED_GOOD",
+        ACCEPTABLE: "USED_ACCEPTABLE",
+        LIKE_NEW: "USED_VERY_GOOD",
+        USED_EXCELLENT: "USED_VERY_GOOD",
+        USED_VERY_GOOD: "USED_VERY_GOOD",
+        USED_GOOD: "USED_GOOD",
+        USED_ACCEPTABLE: "USED_ACCEPTABLE",
+        PRE_OWNED_GOOD: "USED_GOOD",
+        PRE_OWNED_FAIR: "USED_ACCEPTABLE",
+        PRE_OWNED_POOR: "USED_ACCEPTABLE",
+        SELLER_REFURBISHED: "USED_GOOD",
+        FOR_PARTS_OR_NOT_WORKING: "USED_ACCEPTABLE",
       };
-      const mapped = fallbackMap[condition] ?? "LIKE_NEW";
+      const mapped = fallbackMap[condition] ?? "USED_VERY_GOOD";
       console.log(
         `normalizeConditionForCategory: trading card category ${categoryId} — ${condition} -> ${mapped}`,
       );
@@ -1569,25 +1575,28 @@ function normalizeConditionForCategory(
     const validCollectibleConditions = new Set([
       "NEW",
       "LIKE_NEW",
-      "VERY_GOOD",
-      "GOOD",
-      "ACCEPTABLE",
+      "USED_VERY_GOOD",
+      "USED_GOOD",
+      "USED_ACCEPTABLE",
     ]);
     if (!validCollectibleConditions.has(condition)) {
       const fallbackMap: Record<string, string> = {
         NEW_OTHER: "NEW",
-        NEW_WITH_DEFECTS: "GOOD",
+        NEW_WITH_DEFECTS: "USED_GOOD",
+        VERY_GOOD: "USED_VERY_GOOD",
+        GOOD: "USED_GOOD",
+        ACCEPTABLE: "USED_ACCEPTABLE",
         USED_EXCELLENT: "LIKE_NEW",
-        USED_VERY_GOOD: "VERY_GOOD",
-        USED_GOOD: "GOOD",
-        USED_ACCEPTABLE: "ACCEPTABLE",
-        PRE_OWNED_GOOD: "GOOD",
-        PRE_OWNED_FAIR: "ACCEPTABLE",
-        PRE_OWNED_POOR: "ACCEPTABLE",
-        SELLER_REFURBISHED: "GOOD",
-        FOR_PARTS_OR_NOT_WORKING: "ACCEPTABLE",
+        USED_VERY_GOOD: "USED_VERY_GOOD",
+        USED_GOOD: "USED_GOOD",
+        USED_ACCEPTABLE: "USED_ACCEPTABLE",
+        PRE_OWNED_GOOD: "USED_GOOD",
+        PRE_OWNED_FAIR: "USED_ACCEPTABLE",
+        PRE_OWNED_POOR: "USED_ACCEPTABLE",
+        SELLER_REFURBISHED: "USED_GOOD",
+        FOR_PARTS_OR_NOT_WORKING: "USED_ACCEPTABLE",
       };
-      const mapped = fallbackMap[condition] ?? "GOOD";
+      const mapped = fallbackMap[condition] ?? "USED_GOOD";
       console.log(
         `normalizeConditionForCategory: collectible category ${categoryId} — ${condition} -> ${mapped}`,
       );
@@ -3852,7 +3861,25 @@ serve(async (req) => {
         const incomingWeight = incoming.weight && typeof incoming.weight === "object"
           ? (incoming.weight as Record<string, unknown>)
           : null;
+        const incomingDimensions = incoming.dimensions && typeof incoming.dimensions === "object"
+          ? (incoming.dimensions as Record<string, unknown>)
+          : (incoming.dimension && typeof incoming.dimension === "object"
+            ? (incoming.dimension as Record<string, unknown>)
+            : null);
         const incomingValue = toPositiveNumber(incomingWeight?.value);
+
+        const dimLength = toPositiveNumber(incomingDimensions?.length);
+        const dimWidth = toPositiveNumber(incomingDimensions?.width);
+        const dimHeight = toPositiveNumber(incomingDimensions?.height);
+        const normalizedDimensions = (dimLength && dimWidth && dimHeight)
+          ? {
+            length: dimLength,
+            width: dimWidth,
+            height: dimHeight,
+            unit: String(incomingDimensions?.unit || "INCH").toUpperCase(),
+          }
+          : null;
+
         if (incomingValue) {
           packageWeightAndSize = {
             ...incoming,
@@ -3861,6 +3888,7 @@ serve(async (req) => {
               value: incomingValue,
               unit: String(incomingWeight?.unit || "POUND").toUpperCase(),
             },
+            ...(normalizedDimensions ? { dimensions: normalizedDimensions } : {}),
           };
         }
       }
@@ -4015,6 +4043,23 @@ serve(async (req) => {
           },
         },
       };
+
+      // Trading card categories often require "Card Condition" as an aspect.
+      // If absent, derive it from the normalized condition enum.
+      if (categoryTreeType === "trading_card" && !aspects["Card Condition"]) {
+        const CARD_CONDITION_MAP: Record<string, string> = {
+          USED_VERY_GOOD: "Very Good",
+          USED_GOOD: "Good",
+          USED_ACCEPTABLE: "Poor",
+        };
+        const cardCond = CARD_CONDITION_MAP[effectiveConditionEnum];
+        if (cardCond) {
+          aspects["Card Condition"] = [cardCond];
+          console.log(
+            `create_draft: injected Card Condition="${cardCond}" for trading card category ${finalCategoryId} (condition=${effectiveConditionEnum})`,
+          );
+        }
+      }
 
       // Add aspects (item specifics) to the product
       if (Object.keys(aspects).length > 0) {
@@ -4414,7 +4459,7 @@ serve(async (req) => {
             ? ["USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE", "NEW"]
             : categoryTreeType === "bullion"
             ? ["NEW", "USED_GOOD"]
-            : ["GOOD", "ACCEPTABLE", "LIKE_NEW", "NEW"];
+            : ["USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE"];
 
           const retryConditions = candidates.filter((c) => c !== effectiveConditionEnum);
 

@@ -25,6 +25,8 @@ jobs:
 
       - name: Push Database Migrations
         run: |
+          set -euo pipefail
+
           # Apply migrations using Supabase CLI
           # First link the project using the access token
           
