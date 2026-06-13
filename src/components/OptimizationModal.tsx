@@ -581,6 +581,23 @@ export default function OptimizationModal({ open, onClose, listing, onPriceAppli
                   </div>
                 )}
 
+                {(result.noData || !result.market || (
+                  !result.market.avgSoldPrice &&
+                  !result.market.avgActivePrice &&
+                  result.market.soldCount === 0 &&
+                  result.market.activeCount === 0
+                )) && (
+                  <div className="flex items-start gap-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium">Limited pricing data right now.</p>
+                      <p className="text-amber-700">
+                        Competitor comps may be incomplete, but the title and description suggestions are still useful and can be applied confidently.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <Tabs defaultValue="pricing">
                   <TabsList className={`grid w-full ${result.descriptionSuggestion.suggestedDescription || result.descriptionSuggestion.issuesFound.length > 0 ? "grid-cols-4" : "grid-cols-3"}`}>
                     <TabsTrigger value="pricing" className="text-xs">
