@@ -8,6 +8,7 @@ const corsHeaders = {
 
 interface OptimizeListing {
   listingId: string;
+  userId?: string;
   title: string;
   currentPrice: number;
   description?: string;
@@ -95,7 +96,10 @@ async function getEbayAppToken(): Promise<string> {
 // Fetch market data for a listing via keyword-research function
 // ----------------------------------------------------------------
 async function fetchMarketData(
+  listingId: string,
+  userId: string | undefined,
   title: string,
+  currentPrice: number,
   categoryId?: string | null,
 ): Promise<MarketData | null> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -103,6 +107,60 @@ async function fetchMarketData(
   if (!supabaseUrl || !serviceKey) return null;
 
   try {
+    // Primary path: reuse the same competitor-search logic used by the dashboard
+    // so modal analysis aligns with competitor cards and cached snapshots.
+    const competitorResp = await fetch(
+      `${supabaseUrl}/functions/v1/ebay-competitor-search`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${serviceKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId,
+          listingId,
+          title,
+          categoryId,
+          yourPrice: currentPrice,
+        }),
+        signal: AbortSignal.timeout(20000),
+      },
+    );
+
+    if (competitorResp.ok) {
+      let competitorData: any;
+      try {
+        competitorData = await competitorResp.json();
+      } catch {
+        competitorData = null;
+      }
+
+      if (competitorData && !competitorData.error && !competitorData.noData) {
+        const activeCount = Number(competitorData.competitorCount ?? 0);
+        const competitionLevel: MarketData["competitionLevel"] = activeCount > 25
+          ? "high"
+          : activeCount > 8
+          ? "medium"
+          : "low";
+
+        return {
+          soldCount: 0,
+          activeCount,
+          avgSoldPrice: null,
+          minSoldPrice: null,
+          maxSoldPrice: null,
+          avgActivePrice: competitorData.avgPrice ?? null,
+          minActivePrice: competitorData.minPrice ?? null,
+          maxActivePrice: competitorData.maxPrice ?? null,
+          // competitor-search does not currently return sold/active ratio
+          sellThroughRate: 0,
+          competitionLevel,
+          demandSignal: "moderate",
+        };
+      }
+    }
+
     // Call the keyword-research function internally
     const resp = await fetch(`${supabaseUrl}/functions/v1/keyword-research`, {
       method: "POST",
@@ -111,7 +169,7 @@ async function fetchMarketData(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ query: title, categoryId }),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(45000),
     });
 
     if (!resp.ok) {
@@ -525,53 +583,43 @@ serve(async (req) => {
     );
 
     // Fetch market data (calls keyword-research internally)
-    const market = await fetchMarketData(listing.title, listing.categoryId);
+    const market = await fetchMarketData(
+      listing.listingId,
+      listing.userId,
+      listing.title,
+      listing.currentPrice,
+      listing.categoryId,
+    );
 
-    if (!market) {
-      // Return a minimal response with no suggestions if market data unavailable
-      return new Response(
-        JSON.stringify({
-          listingId: listing.listingId,
-          opportunityScore: 0,
-          flags: [],
-          priceSuggestion: {
-            suggestedPrice: null,
-            reasoning: "Market data temporarily unavailable. Try again in a moment.",
-            direction: "keep",
-            confidence: "low",
-            estimatedImpact: "Unknown",
-          },
-          titleSuggestion: {
-            suggestedTitle: null,
-            reasoning: "Market data unavailable — title analysis requires market context.",
-            issuesFound: [],
-            confidence: "low",
-          },
-          descriptionSuggestion: {
-            suggestedDescription: null,
-            reasoning: "Market data unavailable — description analysis skipped.",
-            issuesFound: [],
-            confidence: "low",
-          },
-          market: null,
-          noData: true,
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
+    // Continue analysis even when market fetch is unavailable so title/description
+    // optimization still works and the modal doesn't become a dead-end.
+    const fallbackMarket: MarketData = {
+      soldCount: 0,
+      activeCount: 0,
+      avgSoldPrice: null,
+      minSoldPrice: null,
+      maxSoldPrice: null,
+      avgActivePrice: null,
+      minActivePrice: null,
+      maxActivePrice: null,
+      sellThroughRate: 0,
+      competitionLevel: "medium",
+      demandSignal: "moderate",
+    };
+    const effectiveMarket = market ?? fallbackMarket;
 
     // Build suggestions
-    const priceSuggestion = buildPriceSuggestion(listing, market);
-    const titleSuggestion = buildTitleSuggestion(listing.title, market);
+    const priceSuggestion = buildPriceSuggestion(listing, effectiveMarket);
+    const titleSuggestion = buildTitleSuggestion(listing.title, effectiveMarket);
     const descriptionSuggestion = await buildDescriptionSuggestion(listing);
     const opportunityScore = calcOpportunityScore(
       listing,
-      market,
+      effectiveMarket,
       titleSuggestion.issuesFound.length,
     );
     const flags = buildFlags(
       listing,
-      market,
+      effectiveMarket,
       priceSuggestion,
       titleSuggestion.issuesFound.length,
     );
@@ -590,8 +638,8 @@ serve(async (req) => {
         priceSuggestion,
         titleSuggestion,
         descriptionSuggestion,
-        market,
-        noData: false,
+        market: effectiveMarket,
+        noData: market == null,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

@@ -472,6 +472,7 @@ export default function OptimizationModal({ open, onClose, listing, onPriceAppli
     if (open && listing && !result) {
       analyze({
         listingId: listing.listingId,
+        userId: user?.id,
         title: listing.title,
         currentPrice: listing.currentPrice,
         description: listing.description,

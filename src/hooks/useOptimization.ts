@@ -211,6 +211,7 @@ export function useOptimizeListing() {
   const analyze = useCallback(
     async (params: {
       listingId: string;
+      userId?: string;
       title: string;
       currentPrice: number;
       description?: string;
