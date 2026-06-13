@@ -4124,6 +4124,25 @@ serve(async (req) => {
         },
       };
 
+      // ── Trading card: inject Card Condition item specific (eBay errorId 40001) ────
+      // eBay requires "Card Condition" as an item specific for trading card categories
+      // even though the Sell form marks it optional. Derive from effectiveConditionEnum
+      // if the AI/user did not already supply it in itemSpecifics.
+      if (categoryTreeType === "trading_card" && !aspects["Card Condition"]) {
+        const CARD_CONDITION_MAP: Record<string, string> = {
+          USED_VERY_GOOD: "Very Good",
+          USED_GOOD: "Good",
+          USED_ACCEPTABLE: "Poor",
+        };
+        const cardCond = CARD_CONDITION_MAP[effectiveConditionEnum];
+        if (cardCond) {
+          aspects["Card Condition"] = [cardCond];
+          console.log(
+            `create_draft: injected Card Condition="${cardCond}" for trading card category ${finalCategoryId} (condition=${effectiveConditionEnum})`,
+          );
+        }
+      }
+
       // Add aspects (item specifics) to the product
       if (Object.keys(aspects).length > 0) {
         (inventoryBody.product as Record<string, unknown>).aspects = aspects;
