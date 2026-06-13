@@ -1517,8 +1517,8 @@ function normalizeConditionForCategory(
 
     if (!validCoinConditions.has(condition)) {
       const fallbackMap: Record<string, string> = {
-        NEW: "LIKE_NEW",
-        NEW_OTHER: "LIKE_NEW",
+        NEW: "USED_VERY_GOOD", // graded->ungraded downgrade; LIKE_NEW requires Professional Grader
+        NEW_OTHER: "USED_VERY_GOOD",
         NEW_WITH_DEFECTS: "USED_VERY_GOOD",
         CERTIFIED_REFURBISHED: "LIKE_NEW",
         SELLER_REFURBISHED: "USED_VERY_GOOD",
@@ -1556,20 +1556,22 @@ function normalizeConditionForCategory(
     // serialize field [condition]". Keep USED_* here; eBay resolves the display
     // label ("Very Good", "Good", etc.) from the category + enum combination.
     const validCardConditions = new Set([
-      "LIKE_NEW",
+      // LIKE_NEW removed: conditionId 2750 = Graded — requires Professional Grader
+      // (27501) and Grade item specifics (errorId 25064). Only allow ungraded.
       "USED_VERY_GOOD",
       "USED_GOOD",
       "USED_ACCEPTABLE",
     ]);
     if (!validCardConditions.has(condition)) {
       const fallbackMap: Record<string, string> = {
-        NEW: "LIKE_NEW",
-        NEW_OTHER: "LIKE_NEW",
+        NEW: "USED_VERY_GOOD", // graded->ungraded downgrade; LIKE_NEW requires Professional Grader
+        NEW_OTHER: "USED_VERY_GOOD",
         NEW_WITH_DEFECTS: "USED_GOOD",
         VERY_GOOD: "USED_VERY_GOOD", // legacy / already-remapped values
         GOOD: "USED_GOOD",
         ACCEPTABLE: "USED_ACCEPTABLE",
-        USED_EXCELLENT: "LIKE_NEW",
+        LIKE_NEW: "USED_VERY_GOOD", // graded->ungraded; avoids Professional Grader error
+        USED_EXCELLENT: "USED_VERY_GOOD", // LIKE_NEW requires grader aspects; cap at USED_VERY_GOOD
         USED_VERY_GOOD: "USED_VERY_GOOD",
         USED_GOOD: "USED_GOOD",
         USED_ACCEPTABLE: "USED_ACCEPTABLE",
@@ -1579,7 +1581,7 @@ function normalizeConditionForCategory(
         SELLER_REFURBISHED: "USED_GOOD",
         FOR_PARTS_OR_NOT_WORKING: "USED_ACCEPTABLE",
       };
-      const mapped = fallbackMap[condition] ?? "LIKE_NEW";
+      const mapped = fallbackMap[condition] ?? "USED_VERY_GOOD";
       console.log(
         `normalizeConditionForCategory: trading card category ${categoryId} — ${condition} -> ${mapped}`,
       );
@@ -4527,7 +4529,7 @@ serve(async (req) => {
             ? ["USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE", "NEW"]
             : categoryTreeType === "bullion"
             ? ["NEW", "USED_GOOD"]
-            : ["USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE", "LIKE_NEW", "NEW"];
+            : ["USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE"];
 
           const retryConditions = candidates.filter((c) => c !== effectiveConditionEnum);
 
