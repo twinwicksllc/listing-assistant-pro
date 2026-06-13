@@ -1566,7 +1566,7 @@ function normalizeConditionForCategory(
         NEW: "LIKE_NEW",
         NEW_OTHER: "LIKE_NEW",
         NEW_WITH_DEFECTS: "USED_GOOD",
-        VERY_GOOD: "USED_VERY_GOOD",    // legacy / already-remapped values
+        VERY_GOOD: "USED_VERY_GOOD", // legacy / already-remapped values
         GOOD: "USED_GOOD",
         ACCEPTABLE: "USED_ACCEPTABLE",
         USED_EXCELLENT: "LIKE_NEW",
@@ -1598,7 +1598,7 @@ function normalizeConditionForCategory(
       const fallbackMap: Record<string, string> = {
         NEW_OTHER: "NEW",
         NEW_WITH_DEFECTS: "USED_GOOD",
-        VERY_GOOD: "USED_VERY_GOOD",    // legacy / already-remapped values
+        VERY_GOOD: "USED_VERY_GOOD", // legacy / already-remapped values
         GOOD: "USED_GOOD",
         ACCEPTABLE: "USED_ACCEPTABLE",
         USED_EXCELLENT: "LIKE_NEW",
