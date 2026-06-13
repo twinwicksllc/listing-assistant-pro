@@ -1549,27 +1549,35 @@ function normalizeConditionForCategory(
       return { condition: "NEW", corrected: true };
     }
   } else if (isTradingCard) {
-    // Trading cards: eBay only allows LIKE_NEW, VERY_GOOD, GOOD, ACCEPTABLE (no NEW/1000)
+    // Trading cards: use standard eBay Inventory API ConditionEnum strings.
+    // Note: VERY_GOOD/GOOD/ACCEPTABLE are condition IDs 3000/5000/6000 for trading
+    // cards, but the Inventory API's ConditionEnum type only accepts USED_* and
+    // LIKE_NEW strings — sending "VERY_GOOD" causes errorId 2004 "Could not
+    // serialize field [condition]". Keep USED_* here; eBay resolves the display
+    // label ("Very Good", "Good", etc.) from the category + enum combination.
     const validCardConditions = new Set([
       "LIKE_NEW",
-      "VERY_GOOD",
-      "GOOD",
-      "ACCEPTABLE",
+      "USED_VERY_GOOD",
+      "USED_GOOD",
+      "USED_ACCEPTABLE",
     ]);
     if (!validCardConditions.has(condition)) {
       const fallbackMap: Record<string, string> = {
         NEW: "LIKE_NEW",
         NEW_OTHER: "LIKE_NEW",
-        NEW_WITH_DEFECTS: "GOOD",
+        NEW_WITH_DEFECTS: "USED_GOOD",
+        VERY_GOOD: "USED_VERY_GOOD",    // legacy / already-remapped values
+        GOOD: "USED_GOOD",
+        ACCEPTABLE: "USED_ACCEPTABLE",
         USED_EXCELLENT: "LIKE_NEW",
-        USED_VERY_GOOD: "VERY_GOOD",
-        USED_GOOD: "GOOD",
-        USED_ACCEPTABLE: "ACCEPTABLE",
-        PRE_OWNED_GOOD: "GOOD",
-        PRE_OWNED_FAIR: "ACCEPTABLE",
-        PRE_OWNED_POOR: "ACCEPTABLE",
-        SELLER_REFURBISHED: "GOOD",
-        FOR_PARTS_OR_NOT_WORKING: "ACCEPTABLE",
+        USED_VERY_GOOD: "USED_VERY_GOOD",
+        USED_GOOD: "USED_GOOD",
+        USED_ACCEPTABLE: "USED_ACCEPTABLE",
+        PRE_OWNED_GOOD: "USED_GOOD",
+        PRE_OWNED_FAIR: "USED_ACCEPTABLE",
+        PRE_OWNED_POOR: "USED_ACCEPTABLE",
+        SELLER_REFURBISHED: "USED_GOOD",
+        FOR_PARTS_OR_NOT_WORKING: "USED_ACCEPTABLE",
       };
       const mapped = fallbackMap[condition] ?? "LIKE_NEW";
       console.log(
@@ -1582,25 +1590,28 @@ function normalizeConditionForCategory(
     const validCollectibleConditions = new Set([
       "NEW",
       "LIKE_NEW",
-      "VERY_GOOD",
-      "GOOD",
-      "ACCEPTABLE",
+      "USED_VERY_GOOD",
+      "USED_GOOD",
+      "USED_ACCEPTABLE",
     ]);
     if (!validCollectibleConditions.has(condition)) {
       const fallbackMap: Record<string, string> = {
         NEW_OTHER: "NEW",
-        NEW_WITH_DEFECTS: "GOOD",
+        NEW_WITH_DEFECTS: "USED_GOOD",
+        VERY_GOOD: "USED_VERY_GOOD",    // legacy / already-remapped values
+        GOOD: "USED_GOOD",
+        ACCEPTABLE: "USED_ACCEPTABLE",
         USED_EXCELLENT: "LIKE_NEW",
-        USED_VERY_GOOD: "VERY_GOOD",
-        USED_GOOD: "GOOD",
-        USED_ACCEPTABLE: "ACCEPTABLE",
-        PRE_OWNED_GOOD: "GOOD",
-        PRE_OWNED_FAIR: "ACCEPTABLE",
-        PRE_OWNED_POOR: "ACCEPTABLE",
-        SELLER_REFURBISHED: "GOOD",
-        FOR_PARTS_OR_NOT_WORKING: "ACCEPTABLE",
+        USED_VERY_GOOD: "USED_VERY_GOOD",
+        USED_GOOD: "USED_GOOD",
+        USED_ACCEPTABLE: "USED_ACCEPTABLE",
+        PRE_OWNED_GOOD: "USED_GOOD",
+        PRE_OWNED_FAIR: "USED_ACCEPTABLE",
+        PRE_OWNED_POOR: "USED_ACCEPTABLE",
+        SELLER_REFURBISHED: "USED_GOOD",
+        FOR_PARTS_OR_NOT_WORKING: "USED_ACCEPTABLE",
       };
-      const mapped = fallbackMap[condition] ?? "GOOD";
+      const mapped = fallbackMap[condition] ?? "USED_GOOD";
       console.log(
         `normalizeConditionForCategory: collectible category ${categoryId} — ${condition} -> ${mapped}`,
       );
@@ -4516,7 +4527,7 @@ serve(async (req) => {
             ? ["USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE", "NEW"]
             : categoryTreeType === "bullion"
             ? ["NEW", "USED_GOOD"]
-            : ["GOOD", "ACCEPTABLE", "LIKE_NEW", "NEW"];
+            : ["USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE", "LIKE_NEW", "NEW"];
 
           const retryConditions = candidates.filter((c) => c !== effectiveConditionEnum);
 
