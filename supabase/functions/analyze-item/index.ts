@@ -2115,6 +2115,33 @@ Seller's note: "${voiceNote}"`;
         console.log(
           `[${invocationId}] analyze-item: resynced metadata to final category ${listing.ebayCategoryId}`,
         );
+
+        // Scrub AI-generated itemSpecifics that don't belong to the final category.
+        // When the category was corrected (e.g. from Action Figures → Silver Bullion),
+        // the AI may have already populated keys like "Type: Action Figure" or
+        // "Franchise: ..." that are meaningless/wrong for the real category.
+        // Keep only keys that exist in the final category's aspects (or are universal
+        // like Year/Mint/Grade which the coin prompt always adds).
+        if (
+          listing.itemSpecifics &&
+          categoryAspects?.aspects &&
+          categoryAspects.aspects.length > 0
+        ) {
+          const validAspectNames = new Set<string>(
+            categoryAspects.aspects.map((a: any) => a.name as string),
+          );
+          const scrubbedSpecifics: Record<string, unknown> = {};
+          for (const [key, value] of Object.entries(listing.itemSpecifics)) {
+            if (validAspectNames.has(key)) {
+              scrubbedSpecifics[key] = value;
+            } else {
+              console.log(
+                `[${invocationId}] analyze-item: scrubbing invalid itemSpecific "${key}" (not in final category ${listing.ebayCategoryId} aspects)`,
+              );
+            }
+          }
+          listing.itemSpecifics = scrubbedSpecifics;
+        }
       }
     }
 
