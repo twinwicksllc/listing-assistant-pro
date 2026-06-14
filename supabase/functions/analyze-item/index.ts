@@ -630,10 +630,11 @@ serve(async (req: Request) => {
                   `[${invocationId}] GROUNDED LOCK: category ${lockedCategoryId} (${lockedBreadcrumb}) verified as leaf via Pre-Pass 0`,
                 );
               } else {
-                categoryHints +=
-                  `\n- GROUNDING HINT REJECTED AS LOCK: **${prePassResult.groundedCategoryId}** — ${groundedBreadcrumb}. This verified leaf does not match resolved domain ${identification.domain}.`;
+                // Do NOT pass a domain-incompatible category as a hint — the AI
+                // would likely follow it and pick the wrong category (e.g. "Action
+                // Figures" for a silver bar because "Silver Eagle" keyword matched).
                 console.warn(
-                  `[${invocationId}] Grounded category ${prePassResult.groundedCategoryId} rejected for domain ${identification.domain}: ${groundedBreadcrumb}`,
+                  `[${invocationId}] Grounded category ${prePassResult.groundedCategoryId} rejected for domain ${identification.domain}: ${groundedBreadcrumb} — suppressing hint to avoid AI confusion`,
                 );
               }
             } else {
@@ -722,17 +723,21 @@ serve(async (req: Request) => {
                     `analyze-item: DETERMINISTIC LOCK on category ${lockedCategoryId} (score=${score}, source=${source})`,
                   );
                 } else {
-                  // Not locked — provide as strong hint
+                  // Not locked — but only pass as a hint if it is domain-compatible.
+                  // A domain-incompatible "BEST MATCH" hint (e.g. "Action Figures" for
+                  // a silver bar) would mislead the AI into picking the wrong category.
                   if (isLockable && !isDomainCompatible) {
                     console.warn(
                       `analyze-item: rejecting deterministic lock ${lookupData.categoryId} for domain ${identification.domain} (${
                         lookupData.breadcrumb || lookupData.categoryName
-                      })`,
+                      }) — suppressing hint to avoid AI confusion`,
                     );
+                  } else {
+                    categoryHints +=
+                      `\n- BEST MATCH (score=${score}, source=${source}): **${lookupData.categoryId}** — ${
+                        lookupData.breadcrumb || lookupData.categoryName
+                      }. Use this as primary category unless the item clearly belongs elsewhere.`;
                   }
-                  categoryHints += `\n- BEST MATCH (score=${score}, source=${source}): **${lookupData.categoryId}** — ${
-                    lookupData.breadcrumb || lookupData.categoryName
-                  }. Use this as primary category unless the item clearly belongs elsewhere.`;
                 }
 
                 // Collect alternatives for fallback
