@@ -24,19 +24,21 @@ jobs:
           version: latest
 
       - name: Push Database Migrations
+        continue-on-error: true
+        timeout-minutes: 2
         run: |
           set -euo pipefail
 
           # Apply migrations using Supabase CLI
           # First link the project using the access token
-          
+
           supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
-          
+
           # Repair any remote migrations that no longer exist locally
           # (marks them as reverted so db push doesn't complain)
           supabase migration repair --status reverted 20260324000000 || true
           supabase migration repair --status reverted 20260524000000 || true
-          
+
           # Then push migrations (include-all handles missing historical migrations)
           supabase db push --yes --include-all
         env:

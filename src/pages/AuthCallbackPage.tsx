@@ -103,7 +103,7 @@ export default function AuthCallbackPage() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
         <div className="flex flex-col items-center gap-4 max-w-md text-center">
-          <img src={teckstartLogo} alt="Teckstart" className="h-12 w-auto" />
+          <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto" />
           <div className="flex items-center gap-2 text-destructive">
             <AlertTriangle className="w-5 h-5" />
             <span className="font-medium">Authentication Error</span>
@@ -138,7 +138,7 @@ export default function AuthCallbackPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
       <div className="flex flex-col items-center gap-4">
-        <img src={teckstartLogo} alt="Teckstart" className="h-12 w-auto" />
+        <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto" />
         <Loader2 className="w-6 h-6 animate-spin text-primary" />
         <p className="text-sm text-muted-foreground">Signing you in...</p>
       </div>

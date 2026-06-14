@@ -22,6 +22,11 @@ interface UseAnalyzePublishPayloadParams {
   pricingMode: "per_item" | "total";
   ebayVideoId: string | null;
   ebayVideoStatus: string | null;
+  packageWeightLb: number;
+  packageWeightOz: number;
+  packageLengthIn: number;
+  packageWidthIn: number;
+  packageHeightIn: number;
 }
 
 export function useAnalyzePublishPayload({
@@ -44,6 +49,11 @@ export function useAnalyzePublishPayload({
   pricingMode,
   ebayVideoId,
   ebayVideoStatus,
+  packageWeightLb,
+  packageWeightOz,
+  packageLengthIn,
+  packageWidthIn,
+  packageHeightIn,
 }: UseAnalyzePublishPayloadParams) {
   const buildPublishPayload = useCallback(({
     imageUrlsForPayload,
@@ -80,6 +90,22 @@ export function useAnalyzePublishPayload({
     quantity: quantity > 1 ? quantity : undefined,
     pricingMode: quantity > 1 ? pricingMode : undefined,
     ebayVideoId: ebayVideoStatus === "LIVE" ? ebayVideoId : undefined,
+    packageWeightAndSize: (() => {
+      const totalLb = (packageWeightLb || 0) + (packageWeightOz || 0) / 16;
+      if (totalLb <= 0) return undefined;
+      const hasDims = packageLengthIn > 0 && packageWidthIn > 0 && packageHeightIn > 0;
+      return {
+        weight: { value: Number(totalLb.toFixed(4)), unit: "POUND" },
+        ...(hasDims ? {
+          dimensions: {
+            length: packageLengthIn,
+            width: packageWidthIn,
+            height: packageHeightIn,
+            unit: "INCH",
+          },
+        } : {}),
+      };
+    })(),
     };
   }, [
     title,
@@ -103,6 +129,11 @@ export function useAnalyzePublishPayload({
     pricingMode,
     ebayVideoStatus,
     ebayVideoId,
+    packageWeightLb,
+    packageWeightOz,
+    packageLengthIn,
+    packageWidthIn,
+    packageHeightIn,
   ]);
 
   return {

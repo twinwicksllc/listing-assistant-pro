@@ -5,7 +5,7 @@
  * Usage: node scripts/setup-test-user.js
  */
 
-const TEST_EMAIL = 'qa0000000000test@test.listcreatorbyteckstart.com';
+const TEST_EMAIL = 'qa0000000000test@test.sovereignlistingsuite.com';
 const TEST_PASSWORD = 'QATest123!@#';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;

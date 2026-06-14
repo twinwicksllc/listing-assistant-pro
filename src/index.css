@@ -2,55 +2,110 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/*
+ * Sovereign Listing Suite — Minted Standard Design System
+ * Brand:    Sovereign Listing Suite | Twin Wicks Digital Solutions
+ * Tagline:  The Art of the Asset. The Science of the Sale.
+ *
+ * Dark (default) : Obsidian / Midnight Slate / Velvet Indigo
+ * Light (.light) : Sovereign Pearl / White Card / Velvet Indigo
+ *
+ * All colors MUST be HSL.
+ */
 
 @layer base {
+  /* ── DARK: Minted Standard (default) ─────────────────────────── */
   :root {
-    --background: 210 20% 98%;
-    --foreground: 220 25% 10%;
+    --background: 222 23% 5%;
+    --foreground: 213 20% 88%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 220 25% 10%;
+    --card: 222 20% 9%;
+    --card-foreground: 213 20% 88%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 220 25% 10%;
+    --popover: 222 20% 11%;
+    --popover-foreground: 213 20% 88%;
 
-    --primary: 201 100% 36%;
+    --primary: 243 54% 57%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 220 25% 10%;
+    --secondary: 222 18% 14%;
+    --secondary-foreground: 213 20% 88%;
 
-    --muted: 220 14% 96%;
-    --muted-foreground: 220 10% 46%;
+    --muted: 222 18% 12%;
+    --muted-foreground: 215 14% 52%;
 
-    --accent: 145 63% 42%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 215 18% 60%;
+    --accent-foreground: 222 23% 5%;
 
-    --destructive: 0 84% 60%;
+    --destructive: 0 72% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 201 100% 36%;
+    --border: 220 18% 18%;
+    --input: 220 18% 16%;
+    --ring: 243 54% 57%;
 
-    --radius: 0.75rem;
+    --radius: 0.5rem;
 
     --success: 145 63% 42%;
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
 
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 201 100% 36%;
+    --sidebar-background: 222 25% 4%;
+    --sidebar-foreground: 213 18% 80%;
+    --sidebar-primary: 243 54% 57%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 20% 11%;
+    --sidebar-accent-foreground: 213 20% 88%;
+    --sidebar-border: 222 20% 13%;
+    --sidebar-ring: 243 54% 57%;
+  }
+
+  /* ── LIGHT: Sovereign Pearl ───────────────────────────────────── */
+  /* Same Velvet Indigo primary — brand color is consistent across themes. */
+  /* Deep indigo sidebar anchors the chrome to the Sovereign identity.     */
+  .light {
+    --background: 222 20% 96%;
+    --foreground: 222 30% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 30% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 30% 12%;
+
+    --primary: 243 54% 57%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 18% 91%;
+    --secondary-foreground: 222 30% 12%;
+
+    --muted: 220 18% 93%;
+    --muted-foreground: 220 14% 58%;
+
+    --accent: 243 42% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 70% 46%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 18% 86%;
+    --input: 220 20% 98%;
+    --ring: 243 54% 57%;
+
+    --success: 145 63% 38%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 46%;
+    --warning-foreground: 0 0% 100%;
+
+    --sidebar-background: 243 38% 16%;
+    --sidebar-foreground: 240 22% 84%;
+    --sidebar-primary: 243 54% 57%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 243 38% 22%;
+    --sidebar-accent-foreground: 240 22% 84%;
+    --sidebar-border: 243 30% 22%;
+    --sidebar-ring: 243 54% 57%;
   }
 }
 
@@ -66,5 +121,13 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, .font-sovereign {
+    font-family: 'Cinzel', Georgia, serif;
+    letter-spacing: 0.04em;
   }
 }

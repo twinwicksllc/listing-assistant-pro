@@ -890,11 +890,13 @@ export default function DashboardPage() {
   // COGS lookup map: ebayListingId or ebaySku → {cogs, listingPrice} for ProfitBadge
   // Combines COGS from drafts (preferred) with COGS from listing_cogs table (for published listings)
   const cogsByListing = useMemo(() => {
-    const map: Record<string, { cogs: number | undefined; listingPrice: number }> = {};
+    const map: Record<string, { cogs: number | undefined; listingPrice: number; domain?: string }> = {};
     
     // First, add from drafts (has authoritative listingPrice)
     for (const d of drafts) {
-      const entry = { cogs: d.cogs, listingPrice: d.listingPrice ?? 0 };
+      const breadcrumb = d.ebayCategoryBreadcrumb ?? "";
+      const domain = /coins?|bullion|gold bar|silver bar|precious metal/i.test(breadcrumb) ? "coins_bullion" : undefined;
+      const entry = { cogs: d.cogs, listingPrice: d.listingPrice ?? 0, domain };
       if (d.ebayListingId) map[d.ebayListingId] = entry;
       if (d.ebaySku)       map[d.ebaySku]       = entry;
     }
@@ -942,7 +944,7 @@ export default function DashboardPage() {
       <header className="px-5 pt-12 pb-4 md:px-8 lg:px-12">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <img src={teckstartLogo} alt="Teckstart" className="h-12 w-auto" />
+            <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto" />
             <div>
               <h1 className="text-lg font-bold text-foreground">Dashboard</h1>
               {ebayAccount ? (
@@ -1779,6 +1781,7 @@ export default function DashboardPage() {
                               <ProfitBadge
                                 listingPrice={cogsEntry.listingPrice || listing.price}
                                 cogs={cogsEntry.cogs}
+                                domain={cogsEntry.domain}
                                 size="sm"
                               />
                             ) : null;

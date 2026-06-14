@@ -365,6 +365,7 @@ const COIN_FIXED_VALUES_ALLOWED_IDS = new Set([
   // Bullion (leaf categories only)
   "178906",
   "39489",
+  "3360",
   "3361",
   "532",
   "173685",
@@ -400,6 +401,18 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Fineness",
     ],
     defaults: {},
+    fixedValues: { "Composition": "Silver" },
+  },
+  // Silver Bars & Rounds (grain bar category; same Certification requirement as bullion)
+  "3360": {
+    required: ["Certification"],
+    preferred: [
+      "Shape",
+      "Precious Metal Content per Unit",
+      "Brand/Mint",
+      "Fineness",
+    ],
+    defaults: { "Certification": "Uncertified" },
     fixedValues: { "Composition": "Silver" },
   },
   // Other Silver Bullion
@@ -1504,8 +1517,8 @@ function normalizeConditionForCategory(
 
     if (!validCoinConditions.has(condition)) {
       const fallbackMap: Record<string, string> = {
-        NEW: "LIKE_NEW",
-        NEW_OTHER: "LIKE_NEW",
+        NEW: "USED_VERY_GOOD", // graded->ungraded downgrade; LIKE_NEW requires Professional Grader
+        NEW_OTHER: "USED_VERY_GOOD",
         NEW_WITH_DEFECTS: "USED_VERY_GOOD",
         CERTIFIED_REFURBISHED: "LIKE_NEW",
         SELLER_REFURBISHED: "USED_VERY_GOOD",
@@ -1536,25 +1549,29 @@ function normalizeConditionForCategory(
       return { condition: "NEW", corrected: true };
     }
   } else if (isTradingCard) {
-    // Trading cards: use Inventory API ConditionEnum values (USED_*).
-    // Sending VERY_GOOD/GOOD/ACCEPTABLE triggers eBay serialization errors.
+    // Trading cards: use standard eBay Inventory API ConditionEnum strings.
+    // Note: VERY_GOOD/GOOD/ACCEPTABLE are condition IDs 3000/5000/6000 for trading
+    // cards, but the Inventory API's ConditionEnum type only accepts USED_* and
+    // LIKE_NEW strings — sending "VERY_GOOD" causes errorId 2004 "Could not
+    // serialize field [condition]". Keep USED_* here; eBay resolves the display
+    // label ("Very Good", "Good", etc.) from the category + enum combination.
     const validCardConditions = new Set([
-      // Avoid LIKE_NEW by default: often treated as graded and can require
-      // Professional Grader/Grade specifics in card categories.
+      // LIKE_NEW removed: conditionId 2750 = Graded — requires Professional Grader
+      // (27501) and Grade item specifics (errorId 25064). Only allow ungraded.
       "USED_VERY_GOOD",
       "USED_GOOD",
       "USED_ACCEPTABLE",
     ]);
     if (!validCardConditions.has(condition)) {
       const fallbackMap: Record<string, string> = {
-        NEW: "USED_VERY_GOOD",
+        NEW: "USED_VERY_GOOD", // graded->ungraded downgrade; LIKE_NEW requires Professional Grader
         NEW_OTHER: "USED_VERY_GOOD",
         NEW_WITH_DEFECTS: "USED_GOOD",
-        VERY_GOOD: "USED_VERY_GOOD",
+        VERY_GOOD: "USED_VERY_GOOD", // legacy / already-remapped values
         GOOD: "USED_GOOD",
         ACCEPTABLE: "USED_ACCEPTABLE",
-        LIKE_NEW: "USED_VERY_GOOD",
-        USED_EXCELLENT: "USED_VERY_GOOD",
+        LIKE_NEW: "USED_VERY_GOOD", // graded->ungraded; avoids Professional Grader error
+        USED_EXCELLENT: "USED_VERY_GOOD", // LIKE_NEW requires grader aspects; cap at USED_VERY_GOOD
         USED_VERY_GOOD: "USED_VERY_GOOD",
         USED_GOOD: "USED_GOOD",
         USED_ACCEPTABLE: "USED_ACCEPTABLE",
@@ -1583,7 +1600,7 @@ function normalizeConditionForCategory(
       const fallbackMap: Record<string, string> = {
         NEW_OTHER: "NEW",
         NEW_WITH_DEFECTS: "USED_GOOD",
-        VERY_GOOD: "USED_VERY_GOOD",
+        VERY_GOOD: "USED_VERY_GOOD", // legacy / already-remapped values
         GOOD: "USED_GOOD",
         ACCEPTABLE: "USED_ACCEPTABLE",
         USED_EXCELLENT: "LIKE_NEW",
@@ -2779,6 +2796,38 @@ function buildCoinConditionDescriptors(
   }
 }
 
+// ================================================================
+// SECURITY HELPER — caller-identity verification
+// ================================================================
+// Every action that reads or writes a user's eBay tokens (exchange_code,
+// refresh_token, get_stored_token) MUST call this before touching the DB.
+// It validates the caller's Supabase JWT and confirms the authenticated
+// user is the same person as the claimed userId payload field.
+// Without this check any logged-in user could read or overwrite any
+// other user's eBay tokens (IDOR).
+// ================================================================
+async function assertCallerOwnsUser(
+  req: Request,
+  claimedUserId: string,
+  supabaseUrl: string,
+  supabaseServiceKey: string,
+): Promise<void> {
+  const authHeader = req.headers.get("Authorization");
+  const jwt = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+  if (!jwt) {
+    throw new Error("Unauthorized: missing Authorization header for token action.");
+  }
+  // Validate the JWT using the service-role client (verifies against project JWT secret).
+  const sc = createClient(supabaseUrl, supabaseServiceKey);
+  const { data: { user }, error: authErr } = await sc.auth.getUser(jwt);
+  if (authErr || !user) {
+    throw new Error("Unauthorized: invalid or expired session token.");
+  }
+  if (user.id !== claimedUserId) {
+    throw new Error("Unauthorized: userId does not match the authenticated session.");
+  }
+}
+
 serve(async (req) => {
   initSentry();
 
@@ -2879,6 +2928,15 @@ serve(async (req) => {
     if (action === "exchange_code") {
       const { code, userId } = payload;
       if (!code) throw new Error("No authorization code provided");
+
+      // Security: verify the caller owns the userId they claim to be storing tokens for.
+      if (userId) {
+        const _ecUrl = Deno.env.get("SUPABASE_URL");
+        const _ecKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (_ecUrl && _ecKey) {
+          await assertCallerOwnsUser(req, String(userId), _ecUrl, _ecKey);
+        }
+      }
 
       const ruName = Deno.env.get("EBAY_RUNAME") ||
         Deno.env.get("EBAY_REDIRECT_URI");
@@ -3156,6 +3214,9 @@ serve(async (req) => {
         throw new Error("Supabase credentials not configured");
       }
 
+      // Security: verify the caller owns the userId before rotating their token.
+      await assertCallerOwnsUser(req, String(userId), supabaseUrl, supabaseServiceKey);
+
       const supabase = createClient(supabaseUrl, supabaseServiceKey);
       const { data, error } = await supabase
         .from("profiles")
@@ -3272,6 +3333,9 @@ serve(async (req) => {
       if (!supabaseUrl || !supabaseServiceKey) {
         throw new Error("Supabase credentials not configured");
       }
+
+      // Security: verify the caller owns the userId before returning their stored token.
+      await assertCallerOwnsUser(req, String(userId), supabaseUrl, supabaseServiceKey);
 
       const supabase = createClient(supabaseUrl, supabaseServiceKey);
       const { data, error } = await supabase
@@ -3761,6 +3825,34 @@ serve(async (req) => {
         JSON.stringify(aspects, null, 2),
       );
 
+      // ── Coin-condition → Certification aspect bridge ────────────────────────
+      // If no Certification aspect was resolved (not in itemSpecifics, not in dynamic
+      // or hardcoded defaults), derive it from _coinConditionDetail.
+      // Covers any coin/bullion category where eBay requires Certification but the
+      // category-level defaults did not set it.
+      if (!aspects["Certification"]) {
+        const _bridgeIS = itemSpecifics && typeof itemSpecifics === "object"
+          ? (itemSpecifics as Record<string, unknown>)
+          : {};
+        const _ccd = _bridgeIS._coinConditionDetail as
+          | { type?: string; graded?: { company?: string } }
+          | null
+          | undefined;
+        if (_ccd) {
+          if (_ccd.type === "graded" && _ccd.graded?.company) {
+            aspects["Certification"] = [_ccd.graded.company];
+            console.log(
+              `create_draft: bridged Certification="${_ccd.graded.company}" from graded coin condition detail`,
+            );
+          } else if (_ccd.type === "raw") {
+            aspects["Certification"] = ["Uncertified"];
+            console.log(
+              `create_draft: bridged Certification="Uncertified" from raw coin condition detail`,
+            );
+          }
+        }
+      }
+
       // Get the final normalized certification value from aspects (already normalized above)
       const finalCertValue = aspects["Certification"]?.[0];
 
@@ -3830,12 +3922,18 @@ serve(async (req) => {
           .toLowerCase();
         if (!raw) return null;
 
+        // Max 3.9 lb — USPS Ground Coins and most coin shipping services cap at 4 lb.
+        // Precious metal content is used as a proxy for item weight, but large bars/lots
+        // can produce values that exceed service limits. We cap here to be safe; a UI
+        // weight field is the long-term solution.
+        const MAX_SHIP_LB = 3.9;
+
         const ozMatch = raw.match(/([0-9]+(?:\.[0-9]+)?)\s*(oz|ounce|ounces|troy\s*oz|toz)\b/);
         if (ozMatch) {
           // Add light packaging buffer and enforce a sane minimum.
           const oz = Number(ozMatch[1]);
           const lb = Math.max(0.125, (oz + 1.0) / 16);
-          return Number(lb.toFixed(3));
+          return Number(Math.min(MAX_SHIP_LB, lb).toFixed(3));
         }
 
         const gMatch = raw.match(/([0-9]+(?:\.[0-9]+)?)\s*(g|gram|grams)\b/);
@@ -3843,13 +3941,13 @@ serve(async (req) => {
           const grams = Number(gMatch[1]);
           const oz = grams * 0.0352739619;
           const lb = Math.max(0.125, (oz + 1.0) / 16);
-          return Number(lb.toFixed(3));
+          return Number(Math.min(MAX_SHIP_LB, lb).toFixed(3));
         }
 
         const lbMatch = raw.match(/([0-9]+(?:\.[0-9]+)?)\s*(lb|lbs|pound|pounds)\b/);
         if (lbMatch) {
           const lb = Number(lbMatch[1]);
-          return Number(Math.max(0.125, lb).toFixed(3));
+          return Number(Math.min(MAX_SHIP_LB, Math.max(0.125, lb)).toFixed(3));
         }
 
         return null;
@@ -3895,6 +3993,7 @@ serve(async (req) => {
 
       if (!packageWeightAndSize) {
         const inferredLb = inferWeightLbFromSpecifics(itemSpecifics) ?? 0.25;
+        console.log("[ebay-publish] inferred shipping weight lb:", inferredLb);
         packageWeightAndSize = {
           weight: {
             value: inferredLb,
@@ -4044,8 +4143,10 @@ serve(async (req) => {
         },
       };
 
-      // Trading card categories often require "Card Condition" as an aspect.
-      // If absent, derive it from the normalized condition enum.
+      // ── Trading card: inject Card Condition item specific (eBay errorId 40001) ────
+      // eBay requires "Card Condition" as an item specific for trading card categories
+      // even though the Sell form marks it optional. Derive from effectiveConditionEnum
+      // if the AI/user did not already supply it in itemSpecifics.
       if (categoryTreeType === "trading_card" && !aspects["Card Condition"]) {
         const CARD_CONDITION_MAP: Record<string, string> = {
           USED_VERY_GOOD: "Very Good",
@@ -4153,14 +4254,21 @@ serve(async (req) => {
                   `Verify the grade, company, or raw condition value is valid and try again.`,
               );
             }
-          } else {
-            // FAIL: Metadata API returned no descriptors for this category after retries.
-            // Without descriptors, the listing cannot comply with the mandate.
-            const errorDetail = lastError?.message || "Unknown error";
+          } else if (lastError !== null) {
+            // FAIL: Metadata API calls threw exceptions — genuine transient failure.
+            // Distinguish this from the "API responded with 0 descriptors" case below.
             throw new Error(
               `Unable to retrieve coin condition descriptors from eBay for category ${finalCategoryId} after 2 attempts. ` +
-                `Error: ${errorDetail}. ` +
+                `Error: ${lastError.message}. ` +
                 `This may be a temporary service issue. Please try again or contact support.`,
+            );
+          } else {
+            // eBay Metadata API responded successfully but returned 0 condition descriptors
+            // for this category (e.g. Proof Sets 41109, 166679). This means the category is
+            // NOT subject to the June 2026 condition descriptor mandate — proceed without them.
+            console.log(
+              `create_draft: category ${finalCategoryId} returned 0 condition descriptors from eBay ` +
+                `Metadata API — not subject to the condition descriptor mandate, skipping.`,
             );
           }
         } catch (cdErr) {

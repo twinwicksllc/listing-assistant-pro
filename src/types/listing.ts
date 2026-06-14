@@ -472,6 +472,13 @@ export interface ListingDraft {
   metalType?: string;        // "gold" | "silver" | "platinum" | "none"
   metalWeightOz?: number;    // troy oz of precious metal content
 
+  // Package dimensions for eBay shipping (sent as packageWeightAndSize)
+  packageWeightLb?: number;  // whole-pound component of shipping weight
+  packageWeightOz?: number;  // oz component of shipping weight (0–15.99)
+  packageLengthIn?: number;  // package length in inches
+  packageWidthIn?: number;   // package width in inches
+  packageHeightIn?: number;  // package height in inches
+
   /**
    * eBay June 2026 structured coin condition requirement.
    * Required for coins in US/World/Canada/Ancient/Medieval categories.
