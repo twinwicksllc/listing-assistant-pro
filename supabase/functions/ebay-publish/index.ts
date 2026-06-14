@@ -3959,7 +3959,25 @@ serve(async (req) => {
         const incomingWeight = incoming.weight && typeof incoming.weight === "object"
           ? (incoming.weight as Record<string, unknown>)
           : null;
+        const incomingDimensions = incoming.dimensions && typeof incoming.dimensions === "object"
+          ? (incoming.dimensions as Record<string, unknown>)
+          : (incoming.dimension && typeof incoming.dimension === "object"
+            ? (incoming.dimension as Record<string, unknown>)
+            : null);
         const incomingValue = toPositiveNumber(incomingWeight?.value);
+
+        const dimLength = toPositiveNumber(incomingDimensions?.length);
+        const dimWidth = toPositiveNumber(incomingDimensions?.width);
+        const dimHeight = toPositiveNumber(incomingDimensions?.height);
+        const normalizedDimensions = (dimLength && dimWidth && dimHeight)
+          ? {
+            length: dimLength,
+            width: dimWidth,
+            height: dimHeight,
+            unit: String(incomingDimensions?.unit || "INCH").toUpperCase(),
+          }
+          : null;
+
         if (incomingValue) {
           packageWeightAndSize = {
             ...incoming,
@@ -3968,6 +3986,7 @@ serve(async (req) => {
               value: incomingValue,
               unit: String(incomingWeight?.unit || "POUND").toUpperCase(),
             },
+            ...(normalizedDimensions ? { dimensions: normalizedDimensions } : {}),
           };
         }
       }

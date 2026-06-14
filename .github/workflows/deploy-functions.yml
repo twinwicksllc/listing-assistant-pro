@@ -27,6 +27,8 @@ jobs:
         continue-on-error: true
         timeout-minutes: 2
         run: |
+          set -euo pipefail
+
           # Apply migrations using Supabase CLI
           # First link the project using the access token
 
