@@ -251,9 +251,24 @@ function PricingTab({
 // ----------------------------------------------------------------
 // Title Tab
 // ----------------------------------------------------------------
-function TitleTab({ result, listing }: { result: OptimizeListingResult; listing: NonNullable<Props["listing"]> }) {
+function TitleTab({
+  result,
+  listing,
+  editableTitle,
+  onEditableTitleChange,
+  onApplyTitle,
+  applying,
+}: {
+  result: OptimizeListingResult;
+  listing: NonNullable<Props["listing"]>;
+  editableTitle: string;
+  onEditableTitleChange: (value: string) => void;
+  onApplyTitle: () => void;
+  applying: boolean;
+}) {
   const { titleSuggestion } = result;
   const titleLen = listing.title.length;
+  const editableLen = editableTitle.length;
 
   return (
     <div className="space-y-4">
@@ -300,6 +315,31 @@ function TitleTab({ result, listing }: { result: OptimizeListingResult; listing:
         </div>
       )}
 
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Apply/Edit Title</p>
+          <span className={`text-xs font-medium ${editableLen > 80 ? "text-red-600" : editableLen < 30 ? "text-amber-600" : "text-emerald-600"}`}>
+            {editableLen}/80 chars
+          </span>
+        </div>
+        <textarea
+          value={editableTitle}
+          onChange={(e) => onEditableTitleChange(e.target.value)}
+          rows={3}
+          className="w-full rounded-lg border p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+          placeholder="Enter optimized title"
+        />
+        <div className="mt-2 flex gap-2">
+          <Button onClick={onApplyTitle} disabled={applying || editableTitle.trim().length === 0 || editableTitle.trim() === listing.title.trim()} className="flex-1">
+            {applying ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Applying…</>
+            ) : (
+              <><CheckCircle2 className="w-4 h-4 mr-2" /> Apply Title</>
+            )}
+          </Button>
+        </div>
+      </div>
+
       {/* Reasoning */}
       <div className="rounded-lg bg-muted/40 p-3 flex gap-2">
         <Type className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
@@ -322,7 +362,21 @@ function TitleTab({ result, listing }: { result: OptimizeListingResult; listing:
 // ----------------------------------------------------------------
 // Description Tab
 // ----------------------------------------------------------------
-function DescriptionTab({ result, listing }: { result: OptimizeListingResult; listing: NonNullable<Props["listing"]> }) {
+function DescriptionTab({
+  result,
+  listing,
+  editableDescription,
+  onEditableDescriptionChange,
+  onApplyDescription,
+  applying,
+}: {
+  result: OptimizeListingResult;
+  listing: NonNullable<Props["listing"]>;
+  editableDescription: string;
+  onEditableDescriptionChange: (value: string) => void;
+  onApplyDescription: () => void;
+  applying: boolean;
+}) {
   const { descriptionSuggestion } = result;
 
   return (
@@ -363,6 +417,30 @@ function DescriptionTab({ result, listing }: { result: OptimizeListingResult; li
           </div>
         </div>
       )}
+
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Apply/Edit Description</p>
+        <textarea
+          value={editableDescription}
+          onChange={(e) => onEditableDescriptionChange(e.target.value)}
+          rows={8}
+          className="w-full rounded-lg border p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+          placeholder="Enter optimized description"
+        />
+        <div className="mt-2 flex gap-2">
+          <Button
+            onClick={onApplyDescription}
+            disabled={applying || editableDescription.trim().length === 0 || editableDescription.trim() === (listing.description || "").trim()}
+            className="flex-1"
+          >
+            {applying ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Applying…</>
+            ) : (
+              <><CheckCircle2 className="w-4 h-4 mr-2" /> Apply Description</>
+            )}
+          </Button>
+        </div>
+      </div>
 
       {/* Reasoning */}
       <div className="rounded-lg bg-muted/40 p-3 flex gap-2">
@@ -463,10 +541,13 @@ function MarketTab({ result }: { result: OptimizeListingResult }) {
 // ----------------------------------------------------------------
 export default function OptimizationModal({ open, onClose, listing, onPriceApplied, userToken }: Props) {
   const { user } = useAuth();
-  const { analyze, applying, analyzing, applyPriceChange, dismissSuggestion } = useOptimizeListing();
+  const { analyze, applying, applyingContent, analyzing, applyPriceChange, applyContentChange, dismissSuggestion } = useOptimizeListing();
   const [result, setResult] = useState<OptimizeListingResult | null>(null);
   const [applied, setApplied] = useState(false);
+  const [contentApplied, setContentApplied] = useState(false);
   const [customPrice, setCustomPrice] = useState("");
+  const [editableTitle, setEditableTitle] = useState("");
+  const [editableDescription, setEditableDescription] = useState("");
 
   useEffect(() => {
     if (open && listing && !result) {
@@ -478,12 +559,27 @@ export default function OptimizationModal({ open, onClose, listing, onPriceAppli
         description: listing.description,
         categoryId: listing.categoryId,
         listingDate: listing.listingDate,
-      }).then(setResult);
+      }).then((analysis) => {
+        setResult(analysis);
+        if (!analysis) return;
+
+        setEditableTitle(
+          analysis.titleSuggestion.suggestedTitle?.trim() || listing.title || "",
+        );
+        setEditableDescription(
+          analysis.descriptionSuggestion.suggestedDescription?.trim() ||
+            listing.description ||
+            "",
+        );
+      });
     }
     if (!open) {
       setResult(null);
       setApplied(false);
+      setContentApplied(false);
       setCustomPrice("");
+      setEditableTitle("");
+      setEditableDescription("");
     }
   }, [open, listing]);
 
@@ -522,6 +618,34 @@ export default function OptimizationModal({ open, onClose, listing, onPriceAppli
       userId: user.id,
     });
     onClose();
+  };
+
+  const handleApplyContent = async (mode: "title" | "description" | "both") => {
+    if (!result || !listing || !user) return;
+
+    const originalTitle = listing.title || "";
+    const originalDescription = listing.description || "";
+    const titleToSend = mode === "description" ? originalTitle : editableTitle;
+    const descriptionToSend = mode === "title" ? originalDescription : editableDescription;
+
+    const success = await applyContentChange({
+      offerId: listing.offerId,
+      sku: listing.sku,
+      listingId: listing.listingId,
+      listingTitle: listing.title,
+      oldTitle: originalTitle,
+      newTitle: titleToSend,
+      oldDescription: originalDescription,
+      newDescription: descriptionToSend,
+      titleReasoning: result.titleSuggestion.reasoning,
+      descriptionReasoning: result.descriptionSuggestion.reasoning,
+      userId: user.id,
+      userToken,
+    });
+
+    if (success) {
+      setContentApplied(true);
+    }
   };
 
   return (
@@ -581,6 +705,13 @@ export default function OptimizationModal({ open, onClose, listing, onPriceAppli
                   </div>
                 )}
 
+                {contentApplied && (
+                  <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 rounded-lg p-3">
+                    <CheckCircle2 className="w-4 h-4" />
+                    Listing content updated successfully!
+                  </div>
+                )}
+
                 {(result.noData || !result.market || (
                   !result.market.avgSoldPrice &&
                   !result.market.avgActivePrice &&
@@ -629,12 +760,26 @@ export default function OptimizationModal({ open, onClose, listing, onPriceAppli
                   </TabsContent>
 
                   <TabsContent value="title" className="mt-4">
-                    <TitleTab result={result} listing={listing} />
+                    <TitleTab
+                      result={result}
+                      listing={listing}
+                      editableTitle={editableTitle}
+                      onEditableTitleChange={setEditableTitle}
+                      onApplyTitle={() => handleApplyContent("title")}
+                      applying={applyingContent}
+                    />
                   </TabsContent>
 
                   {(result.descriptionSuggestion.suggestedDescription || result.descriptionSuggestion.issuesFound.length > 0) && (
                     <TabsContent value="description" className="mt-4">
-                      <DescriptionTab result={result} listing={listing} />
+                      <DescriptionTab
+                        result={result}
+                        listing={listing}
+                        editableDescription={editableDescription}
+                        onEditableDescriptionChange={setEditableDescription}
+                        onApplyDescription={() => handleApplyContent("description")}
+                        applying={applyingContent}
+                      />
                     </TabsContent>
                   )}
 

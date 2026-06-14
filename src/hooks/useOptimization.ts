@@ -206,6 +206,7 @@ export function useRepriceRules() {
 export function useOptimizeListing() {
   const [analyzing, setAnalyzing] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [applyingContent, setApplyingContent] = useState(false);
   const { toast } = useToast();
 
   const analyze = useCallback(
@@ -321,7 +322,101 @@ export function useOptimizeListing() {
     []
   );
 
-  return { analyze, applying, analyzing, applyPriceChange, dismissSuggestion };
+  const applyContentChange = useCallback(
+    async (params: {
+      offerId: string | null;
+      sku: string;
+      listingId: string | null;
+      listingTitle: string;
+      oldTitle: string;
+      newTitle: string;
+      oldDescription: string;
+      newDescription: string;
+      titleReasoning: string;
+      descriptionReasoning: string;
+      userId: string;
+      userToken?: string | null;
+    }): Promise<boolean> => {
+      setApplyingContent(true);
+      try {
+        const trimmedTitle = params.newTitle.trim();
+        const trimmedDescription = params.newDescription.trim();
+        const titleChanged = trimmedTitle !== params.oldTitle.trim();
+        const descChanged = trimmedDescription !== params.oldDescription.trim();
+
+        if (!titleChanged && !descChanged) {
+          toast({ title: "No content changes to apply" });
+          return false;
+        }
+
+        const { data, error } = await supabase.functions.invoke("ebay-reprice", {
+          body: {
+            action: "update_content",
+            offerId: params.offerId,
+            sku: params.sku,
+            listingId: params.listingId,
+            userToken: params.userToken,
+            userId: params.userId,
+            newTitle: titleChanged ? trimmedTitle : undefined,
+            newDescription: descChanged ? trimmedDescription : undefined,
+          },
+        });
+
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        if (!data?.success) throw new Error(data?.error || "Update returned success=false");
+
+        if (titleChanged) {
+          await supabase.from("optimization_history").insert({
+            user_id: params.userId,
+            listing_id: params.listingId ?? params.sku,
+            listing_title: params.listingTitle,
+            optimization_type: "title",
+            old_value: params.oldTitle,
+            new_value: trimmedTitle,
+            reasoning: params.titleReasoning,
+            applied_by: "user",
+            result: "accepted",
+          });
+        }
+
+        if (descChanged) {
+          await supabase.from("optimization_history").insert({
+            user_id: params.userId,
+            listing_id: params.listingId ?? params.sku,
+            listing_title: params.listingTitle,
+            optimization_type: "description",
+            old_value: params.oldDescription,
+            new_value: trimmedDescription,
+            reasoning: params.descriptionReasoning,
+            applied_by: "user",
+            result: "accepted",
+          });
+        }
+
+        toast({ title: "Listing content updated", description: "Title/description changes were sent to eBay." });
+        return true;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("[useOptimizeListing] applyContentChange error:", msg);
+        toast({ title: "Failed to update listing content", description: msg, variant: "destructive" });
+        return false;
+      } finally {
+        setApplyingContent(false);
+      }
+    },
+    [toast],
+  );
+
+  return {
+    analyze,
+    applying,
+    applyingContent,
+    analyzing,
+    applyPriceChange,
+    applyContentChange,
+    dismissSuggestion,
+  };
 }
 
 // ================================================================
