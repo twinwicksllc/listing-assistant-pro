@@ -268,6 +268,24 @@ export function usePublishDraft() {
         returnPolicyId: draft.returnPolicyId ?? null,
         // Only attach video if it has fully processed — LIVE status required by eBay
         ebayVideoId: draft.ebayVideoStatus === "LIVE" ? (draft.ebayVideoId ?? null) : null,
+        // Quantity & pricing mode
+        quantity: (draft.quantity ?? 1) > 1 ? draft.quantity : undefined,
+        pricingMode: (draft.quantity ?? 1) > 1 ? (draft.pricingMode ?? 'per_item') : undefined,
+        // Package weight & dimensions
+        packageWeightAndSize: (() => {
+          const lb = draft.packageWeightLb ?? 0;
+          const oz = draft.packageWeightOz ?? 0;
+          const totalLb = lb + oz / 16;
+          if (totalLb <= 0) return undefined;
+          const l = draft.packageLengthIn ?? 0;
+          const w = draft.packageWidthIn ?? 0;
+          const h = draft.packageHeightIn ?? 0;
+          const hasDims = l > 0 && w > 0 && h > 0;
+          return {
+            weight: { value: Number(totalLb.toFixed(4)), unit: 'POUND' },
+            ...(hasDims ? { dimensions: { length: l, width: w, height: h, unit: 'INCH' } } : {}),
+          };
+        })(),
       };
 
       console.log(`publishWithRetry [attempt ${attempt}/${maxRetries}]: invoking ebay-publish`, {

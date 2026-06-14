@@ -66,6 +66,12 @@ export function useDrafts() {
           // Multi-quantity
           quantity: d.quantity ?? 1,
           pricingMode: (d.pricing_mode as 'per_item' | 'total') ?? 'per_item',
+          // Package dimensions
+          packageWeightLb: d.package_weight_lb != null ? Number(d.package_weight_lb) : undefined,
+          packageWeightOz: d.package_weight_oz != null ? Number(d.package_weight_oz) : undefined,
+          packageLengthIn: d.package_length_in != null ? Number(d.package_length_in) : undefined,
+          packageWidthIn: d.package_width_in != null ? Number(d.package_width_in) : undefined,
+          packageHeightIn: d.package_height_in != null ? Number(d.package_height_in) : undefined,
           // Video
           videoUrl: d.video_url || undefined,
           ebayVideoId: d.ebay_video_id || undefined,
@@ -115,6 +121,12 @@ export function useDrafts() {
       // Multi-quantity
       quantity: draft.quantity ?? 1,
       pricing_mode: draft.pricingMode ?? 'per_item',
+      // Package dimensions
+      package_weight_lb: draft.packageWeightLb ?? null,
+      package_weight_oz: draft.packageWeightOz ?? null,
+      package_length_in: draft.packageLengthIn ?? null,
+      package_width_in: draft.packageWidthIn ?? null,
+      package_height_in: draft.packageHeightIn ?? null,
       // Video
       video_url: draft.videoUrl ?? null,
       ebay_video_id: draft.ebayVideoId ?? null,
@@ -191,6 +203,12 @@ export function useDrafts() {
     // Multi-quantity
     if (updates.quantity !== undefined)                patch.quantity = updates.quantity;
     if (updates.pricingMode !== undefined)             patch.pricing_mode = updates.pricingMode;
+    // Package dimensions
+    if (updates.packageWeightLb !== undefined)         patch.package_weight_lb = updates.packageWeightLb ?? null;
+    if (updates.packageWeightOz !== undefined)         patch.package_weight_oz = updates.packageWeightOz ?? null;
+    if (updates.packageLengthIn !== undefined)         patch.package_length_in = updates.packageLengthIn ?? null;
+    if (updates.packageWidthIn !== undefined)          patch.package_width_in = updates.packageWidthIn ?? null;
+    if (updates.packageHeightIn !== undefined)         patch.package_height_in = updates.packageHeightIn ?? null;
     // Video
     if (updates.videoUrl !== undefined)                patch.video_url = updates.videoUrl ?? null;
     if (updates.ebayVideoId !== undefined)             patch.ebay_video_id = updates.ebayVideoId ?? null;
