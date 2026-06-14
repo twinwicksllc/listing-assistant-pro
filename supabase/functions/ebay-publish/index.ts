@@ -4138,7 +4138,7 @@ serve(async (req) => {
           // availabilityDistributions is for multi-warehouse sellers and causes
           // eBay error 25604 ("Availability not found") for standard single-location accounts.
           shipToLocationAvailability: {
-            quantity: 1,
+            quantity: Number(payloadQuantity) || 1,
           },
         },
       };
