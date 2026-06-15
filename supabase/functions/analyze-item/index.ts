@@ -2330,9 +2330,11 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
           const fallback: Record<string, unknown> = {};
           for (const [k, v] of Object.entries(listing.itemSpecifics)) {
             if (!toyKeys.has(k)) fallback[k] = v;
-            else {console.log(
+            else {
+              console.log(
                 `[${invocationId}] analyze-item: fallback-scrubbing "${k}" (aspects unavailable for ${listing.ebayCategoryId})`,
-              );}
+              );
+            }
           }
           listing.itemSpecifics = fallback;
         }
