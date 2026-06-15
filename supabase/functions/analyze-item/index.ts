@@ -67,6 +67,77 @@ function isCoinDomainCategory(
   return ["45243", "532", "173685"].includes(categoryId);
 }
 
+/**
+ * When the lookup pipeline fails to lock a category, derive one deterministically
+ * from Pass 1's domain + metalType + itemName.  This ensures that Pass 2 always
+ * receives the correct eBay aspects schema — eliminating the need for post-lookup
+ * correction and itemSpecifics regeneration in the common case.
+ */
+function resolveDomainFallbackCategory(
+  identification: Identification,
+): { categoryId: string; categoryName: string; breadcrumb: string } | null {
+  if (identification.domain !== "coins_bullion") return null;
+
+  const combined = `${identification.itemName ?? ""} ${(identification.keywords ?? []).join(" ")}`.toLowerCase();
+  const metal = identification.metalType ?? "none";
+
+  if (metal === "gold") {
+    if (/\bbar\b|\bingot\b|\bround\b/.test(combined)) {
+      return {
+        categoryId: "178906",
+        categoryName: "Gold Bars & Rounds",
+        breadcrumb: "Coins & Paper Money > Bullion > Gold > Bars & Rounds",
+      };
+    }
+    return {
+      categoryId: "177652",
+      categoryName: "Gold Bullion Coins",
+      breadcrumb: "Coins & Paper Money > Bullion > Gold > Coins",
+    };
+  }
+
+  if (metal === "platinum" || metal === "palladium") {
+    return {
+      categoryId: "261070",
+      categoryName: "Platinum & Palladium",
+      breadcrumb: "Coins & Paper Money > Bullion > Platinum & Palladium",
+    };
+  }
+
+  if (metal === "silver") {
+    // American Silver Eagle is a named US bullion coin
+    if (/american silver eagle|\base\b/.test(combined)) {
+      return {
+        categoryId: "41111",
+        categoryName: "American Silver Eagles",
+        breadcrumb: "Coins & Paper Money > Coins: US > Silver > American Silver Eagles",
+      };
+    }
+    if (/\bbar\b|\bingot\b|\bround\b/.test(combined)) {
+      return {
+        categoryId: "39489",
+        categoryName: "Silver Bars & Rounds",
+        breadcrumb: "Coins & Paper Money > Bullion > Silver > Bars & Rounds",
+      };
+    }
+    if (/morgan|peace|walking liberty|franklin|kennedy|barber|seated|bust/.test(combined)) {
+      return {
+        categoryId: "39465",
+        categoryName: "US Silver Dollars",
+        breadcrumb: "Coins & Paper Money > Coins: US > Dollars > Silver",
+      };
+    }
+    return {
+      categoryId: "177653",
+      categoryName: "Silver Bullion Coins",
+      breadcrumb: "Coins & Paper Money > Bullion > Silver > Coins",
+    };
+  }
+
+  // Domain is coins_bullion but metal unknown — safest general coin fallback
+  return { categoryId: "45243", categoryName: "World Coins", breadcrumb: "Coins & Paper Money > Coins: World" };
+}
+
 function isCategoryCompatibleWithDomain(
   domain: string | null | undefined,
   categoryId: string | null | undefined,
@@ -778,6 +849,27 @@ serve(async (req: Request) => {
       } // end if (!userCategoryId)
     }
     // ── End pre-lookup ─────────────────────────────────────────────────────────
+
+    // ── Domain-based category fallback ─────────────────────────────────────────
+    // If the lookup pipeline didn't produce a lock (e.g. eBay returned an Action
+    // Figures match for "Silver Eagle" and it was rightly suppressed), derive the
+    // category deterministically from what Pass 1 already knows: domain + metalType
+    // + item name.  This guarantees Pass 2 always has the correct eBay aspects
+    // schema, removing the need for post-lookup correction in the common case.
+    if (!lockedCategoryId && !userCategoryId) {
+      const fallback = resolveDomainFallbackCategory(identification);
+      if (fallback) {
+        lockedCategoryId = fallback.categoryId;
+        lockedCategoryName = fallback.categoryName;
+        lockedBreadcrumb = fallback.breadcrumb;
+        categoryHints +=
+          `\n- **DOMAIN-RESOLVED CATEGORY** (from item type + metal detection): **${fallback.categoryId}** — ${fallback.breadcrumb}. Override only if you have clear visual evidence the item belongs elsewhere.`;
+        console.log(
+          `[${invocationId}] Domain fallback lock: ${fallback.categoryId} (${fallback.breadcrumb}) — domain=${identification.domain}, metal=${identification.metalType}, item=${identification.itemName}`,
+        );
+      }
+    }
+    // ── End domain fallback ────────────────────────────────────────────────────
 
     // ── Fetch dynamic aspects and conditions for the chosen category ──────────
     let categoryAspects: any = null;
@@ -2116,31 +2208,135 @@ Seller's note: "${voiceNote}"`;
           `[${invocationId}] analyze-item: resynced metadata to final category ${listing.ebayCategoryId}`,
         );
 
-        // Scrub AI-generated itemSpecifics that don't belong to the final category.
-        // When the category was corrected (e.g. from Action Figures → Silver Bullion),
-        // the AI may have already populated keys like "Type: Action Figure" or
-        // "Franchise: ..." that are meaningless/wrong for the real category.
-        // Keep only keys that exist in the final category's aspects (or are universal
-        // like Year/Mint/Grade which the coin prompt always adds).
-        if (
-          listing.itemSpecifics &&
-          categoryAspects?.aspects &&
-          categoryAspects.aspects.length > 0
-        ) {
-          const validAspectNames = new Set<string>(
-            categoryAspects.aspects.map((a: any) => a.name as string),
-          );
-          const scrubbedSpecifics: Record<string, unknown> = {};
-          for (const [key, value] of Object.entries(listing.itemSpecifics)) {
-            if (validAspectNames.has(key)) {
-              scrubbedSpecifics[key] = value;
+        // --- Pass 2.5: Regenerate itemSpecifics for the corrected category ---
+        // The category changed after Pass 2, so the AI generated itemSpecifics
+        // against the wrong category's schema. Scrubbing is not enough — we need
+        // to regenerate from scratch using the correct category's aspects and the
+        // actual item data (images + title + description + identification).
+        if (categoryAspects?.aspects && categoryAspects.aspects.length > 0) {
+          try {
+            // Build the schema for the correct category's aspects
+            const regenSchema: any = {
+              type: "object",
+              properties: {} as Record<string, any>,
+              required: [] as string[],
+              additionalProperties: false,
+            };
+            for (const aspect of categoryAspects.aspects) {
+              const prop: any = {
+                type: "string",
+                description: aspect.required ? `REQUIRED: ${aspect.name}` : aspect.name,
+              };
+              if (Array.isArray(aspect.values) && aspect.values.length > 0 && aspect.values.length < 50) {
+                prop.enum = aspect.values;
+              }
+              regenSchema.properties[aspect.name] = prop;
+              if (aspect.required) regenSchema.required.push(aspect.name);
+            }
+
+            // Seed context: any values from the old itemSpecifics that are still
+            // valid for this category (Year, Certification, Grade, etc.)
+            const validAspectNames = new Set<string>(categoryAspects.aspects.map((a: any) => a.name as string));
+            const survivingSpecifics: Record<string, unknown> = {};
+            if (listing.itemSpecifics) {
+              for (const [k, v] of Object.entries(listing.itemSpecifics)) {
+                if (validAspectNames.has(k)) survivingSpecifics[k] = v;
+              }
+            }
+            const seedContext = Object.keys(survivingSpecifics).length > 0
+              ? `\n\nSome previously extracted values (may be correct, verify against the images):\n${
+                Object.entries(survivingSpecifics).map(([k, v]) => `  ${k}: ${v}`).join("\n")
+              }`
+              : "";
+
+            const regenContentParts: any[] = imageList.map((img) => {
+              const { base64Data, mimeType } = parseImageDataUrl(img);
+              return { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Data}` } };
+            });
+            regenContentParts.push({
+              type: "text",
+              text: `You are filling in eBay item specifics (attributes) for a listing.
+
+Title: ${listing.title}
+Description: ${(listing.description ?? "").slice(0, 400)}
+Category ID: ${listing.ebayCategoryId}
+Item type: ${identification.itemName}${seedContext}
+
+Using ONLY the schema provided in the JSON schema tool, fill in the item specifics accurately based on what you can see in the images and the item context above. Do not invent values — only fill in what you can confidently determine.`,
+            });
+
+            const regenResp = await fetch(
+              "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+              {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${GEMINI_API_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  model: "gemini-3.1-pro-preview",
+                  messages: [{ role: "user", content: regenContentParts }],
+                  tools: [
+                    {
+                      type: "function",
+                      function: {
+                        name: "setItemSpecifics",
+                        description: "Set the item specifics for this eBay listing",
+                        parameters: regenSchema,
+                      },
+                    },
+                  ],
+                  tool_choice: { type: "function", function: { name: "setItemSpecifics" } },
+                  temperature: 0.1,
+                }),
+              },
+            );
+
+            if (regenResp.ok) {
+              const regenData = await regenResp.json();
+              const regenCall = regenData?.choices?.[0]?.message?.tool_calls?.[0];
+              if (regenCall?.function?.arguments) {
+                const regenSpecifics = JSON.parse(regenCall.function.arguments);
+                listing.itemSpecifics = regenSpecifics;
+                console.log(
+                  `[${invocationId}] analyze-item: Pass 2.5 regenerated itemSpecifics for corrected category ${listing.ebayCategoryId}: ${
+                    JSON.stringify(Object.keys(regenSpecifics))
+                  }`,
+                );
+              }
             } else {
+              console.warn(
+                `[${invocationId}] analyze-item: Pass 2.5 itemSpecifics regen failed (${regenResp.status}), falling back to scrub`,
+              );
+              // Fallback: scrub invalid keys from old itemSpecifics
+              if (listing.itemSpecifics) {
+                listing.itemSpecifics = survivingSpecifics;
+              }
+            }
+          } catch (regenErr) {
+            console.warn(`[${invocationId}] analyze-item: Pass 2.5 regen error (non-blocking):`, regenErr);
+          }
+        } else if (listing.itemSpecifics) {
+          // Aspects unavailable — scrub known toy/collectible keys as best-effort fallback
+          const toyKeys = new Set([
+            "Type",
+            "Franchise",
+            "Product Line",
+            "Character Family",
+            "Genre",
+            "Theme",
+            "Subtheme",
+          ]);
+          const fallback: Record<string, unknown> = {};
+          for (const [k, v] of Object.entries(listing.itemSpecifics)) {
+            if (!toyKeys.has(k)) fallback[k] = v;
+            else {
               console.log(
-                `[${invocationId}] analyze-item: scrubbing invalid itemSpecific "${key}" (not in final category ${listing.ebayCategoryId} aspects)`,
+                `[${invocationId}] analyze-item: fallback-scrubbing "${k}" (aspects unavailable for ${listing.ebayCategoryId})`,
               );
             }
           }
-          listing.itemSpecifics = scrubbedSpecifics;
+          listing.itemSpecifics = fallback;
         }
       }
     }
