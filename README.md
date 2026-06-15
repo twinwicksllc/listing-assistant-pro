@@ -88,10 +88,69 @@ The app is configured for `lister.teckstart.com`. To use a custom domain:
 
 The app uses several Supabase Edge Functions:
 
-- `analyze-item`: Processes images with Gemini AI to generate listing data
+- `analyze-item`: Processes images with Gemini AI to generate listing data (see AI Analysis Pipeline below)
 - `ebay-pricing`: Fetches recent sold listings for price comparison
 - `spot-prices`: Fetches and caches live metal spot prices
 - `ebay-publish`: Publishes listings directly to eBay
+
+## AI Analysis Pipeline
+
+The `analyze-item` function implements a sophisticated multi-stage AI analysis pipeline to generate accurate eBay listings:
+
+### Stage 1: Item Identification (Pass 1)
+- Analyzes all images to identify item type, domain (coins/bullion vs. general collectibles), metal type, and keywords
+- Uses Gemini 3.1 Pro to extract reliable visual features
+- Results inform all downstream category and attribute selection
+
+### Stage 2: Category Resolution (Pre-Lookup + Domain Fallback)
+- **Pre-Lookup**: Uses Pass 1 keywords for eBay Taxonomy API lookup with multi-tier scoring (eBay API → user-verified DB → tier-based suggestions)
+- **Domain Fallback** (NEW): If pre-lookup fails or is suppressed (e.g., "Action Figures" returned for "Silver Eagle"), resolves category deterministically from item type + metal detection:
+  - Silver + American Silver Eagle → 41111 (ASE)
+  - Silver + bar/round/ingot → 39489 (Silver Bars & Rounds)
+  - Silver + morgan/peace/etc → 39465 (US Silver Dollars)
+  - Silver (generic) → 177653 (Silver Bullion Coins)
+  - Gold + bar/round → 178906 (Gold Bars & Rounds)
+  - Gold (generic) → 177652 (Gold Bullion Coins)
+  - Platinum/Palladium → 261070
+  - This guarantees Pass 2 receives the correct eBay category schema before AI generation
+
+### Stage 3: Aspects Fetch
+- Retrieves eBay's required and optional item specifics (aspects) for the resolved category
+- Caches aspects to minimize API calls
+- Provides the JSON schema for Pass 2 AI generation
+
+### Stage 4: Listing Generation (Pass 2)
+- Uses Gemini 3.1 Pro with domain-specific system prompt
+- Context includes: item images, identification results, competitor pricing, and category-specific requirements
+- Generates: title, description, condition, price range, metal weight, and **itemSpecifics** (attributes) matching the schema
+- All outputs match the correct category's aspect list (no more mismatched attributes)
+
+### Stage 5: Post-Lookup Verification (NEW)
+- If category wasn't locked in pre-lookup, uses AI-generated title for a second eBay Taxonomy lookup
+- Acts as verification/override if a better category was found based on the precise title
+- Applies metal-type compatibility checks to prevent cross-metal assignments (gold items in silver categories, etc.)
+
+### Stage 6: ItemSpecifics Regeneration (Pass 2.5 - NEW)
+- If category was corrected after Pass 2, itemSpecifics may have been generated against the wrong schema
+- Calls Gemini again with images + correct category schema to regenerate only the itemSpecifics
+- Ensures attributes match the actual final category (e.g., removes "Type: Action Figure" from silver bullion listings)
+- Falls back to surgical scrubbing if the regeneration call fails
+
+### Metal Type Enforcement
+- Metal type is detected in Pass 1 and validated throughout the pipeline
+- Guards prevent gold items from being categorized as silver (and vice versa)
+- All categorization decisions (pre-lookup lock, deterministic fallback, post-lookup override) validate metal-type compatibility
+- Composition itemSpecific is forced to match detected metal type
+
+### Result
+A complete, accurate eBay listing with:
+- Correct category ID
+- All required itemSpecifics populated
+- Professional title and description
+- Fair market pricing based on recent comps
+- Metal weight if bullion
+
+See tests in `src/test/analyze-item-category-fallback.test.ts` for domain fallback behavior.
 
 ## eBay Integration
 
