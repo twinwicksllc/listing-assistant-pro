@@ -14,6 +14,7 @@ async function fetchShippingLabelCosts(
   userToken: string,
   fromStr: string,
   toStr: string,
+  marketplaceId: string = "EBAY_US",
 ): Promise<Map<string, number>> {
   const labelCosts = new Map<string, number>();
 
@@ -23,7 +24,7 @@ async function fetchShippingLabelCosts(
     const ebayHeaders = {
       Authorization: `Bearer ${userToken}`,
       "Content-Type": "application/json",
-      "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+      "X-EBAY-C-MARKETPLACE-ID": marketplaceId,
     };
 
     // Filter for SHIPPING_LABEL transactions within the date range
@@ -83,6 +84,7 @@ async function fetchEbayFees(
   userToken: string,
   fromStr: string,
   toStr: string,
+  marketplaceId: string = "EBAY_US",
 ): Promise<Map<string, number>> {
   const feesMap = new Map<string, number>();
 
@@ -91,7 +93,7 @@ async function fetchEbayFees(
     const ebayHeaders = {
       Authorization: `Bearer ${userToken}`,
       "Content-Type": "application/json",
-      "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+      "X-EBAY-C-MARKETPLACE-ID": marketplaceId,
     };
 
     // Fetch all fee-type transactions in the date range.
@@ -319,12 +321,22 @@ async function processOrders(
 ): Promise<Response> {
   const rawOrders: any[] = ordersData.orders ?? [];
 
+  // Use the marketplace from the first order if possible, fallback to EBAY_US
+  const marketplaceId = rawOrders.length > 0 ? (rawOrders[0].marketplaceId ?? "EBAY_US") : "EBAY_US";
+
+  // Broaden the finances search range to catch fees that settled before or after the
+  // order creation/modification window. We go 15 days back from fromStr.
+  const fromDateMatch = fromStr.match(/^(\d{4}-\d{2}-\d{2})/);
+  const fromDateBase = fromDateMatch ? new Date(fromDateMatch[1]) : new Date();
+  const broaderFromDate = new Date(fromDateBase.getTime() - 15 * 24 * 60 * 60 * 1000);
+  const broaderFromStr = broaderFromDate.toISOString().replace(/\.\d{3}Z$/, "Z");
+
   // ── Fetch shipping label costs from eBay Finances API ─────────────────────────────
   // This gives us the actual cost the seller paid for labels purchased through eBay
   // Run both Finances API fetches in parallel for performance
   const [labelCosts, financeFees] = await Promise.all([
-    fetchShippingLabelCosts(userToken, fromStr, toStr),
-    fetchEbayFees(userToken, fromStr, toStr),
+    fetchShippingLabelCosts(userToken, broaderFromStr, toStr, marketplaceId),
+    fetchEbayFees(userToken, broaderFromStr, toStr, marketplaceId),
   ]);
 
   // ── Collect all SKUs and listing IDs for the COGS lookup ─────────────────
@@ -352,6 +364,13 @@ async function processOrders(
   for (const order of rawOrders) {
     const soldAt = order.creationDate ?? order.lastModifiedDate ?? toStr;
 
+    // First pass: calculate total order revenue for fee apportionment
+    let orderTotalValue = 0;
+    for (const line of order.lineItems ?? []) {
+      const q = Number(line.quantity ?? 1);
+      orderTotalValue += Number(line.lineItemCost?.value ?? 0) * q;
+    }
+
     for (const line of order.lineItems ?? []) {
       const sku = line.sku ?? null;
       const listingId = line.legacyItemId ?? null;
@@ -372,7 +391,16 @@ async function processOrders(
       // orders we apportion fees proportionally by line item sale value.
       // For single-line orders (the common case) this is just the full fee.
       const financesFeeForOrder = financeFees.get(order.orderId) ?? null;
-      const feeAmt = financesFeeForOrder !== null ? financesFeeForOrder : fallbackFeeAmt;
+
+      let feeAmt = 0;
+      if (financesFeeForOrder !== null) {
+        // Apportion fee based on this line's share of total order value
+        feeAmt = orderTotalValue > 0
+          ? (lineTotal / orderTotalValue) * financesFeeForOrder
+          : (financesFeeForOrder / (order.lineItems?.length || 1));
+      } else {
+        feeAmt = fallbackFeeAmt;
+      }
 
       if (sku) skuSet.add(sku);
       if (listingId) listingIdSet.add(listingId);
