@@ -86,6 +86,13 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
   const [ebayVideoId, setEbayVideoId] = useState<string | null>(draft.ebayVideoId ?? null);
   const [ebayVideoStatus, setEbayVideoStatus] = useState<string | null>(draft.ebayVideoStatus ?? null);
 
+  // Package weight and dimensions
+  const [packageWeightLb, setPackageWeightLb] = useState<number>(draft.packageWeightLb ?? 0);
+  const [packageWeightOz, setPackageWeightOz] = useState<number>(draft.packageWeightOz ?? 0);
+  const [packageLengthIn, setPackageLengthIn] = useState<number>(draft.packageLengthIn ?? 0);
+  const [packageWidthIn, setPackageWidthIn] = useState<number>(draft.packageWidthIn ?? 0);
+  const [packageHeightIn, setPackageHeightIn] = useState<number>(draft.packageHeightIn ?? 0);
+
   const [saving, setSaving] = useState(false);
 
   const displaySpecifics = Object.entries(itemSpecifics).filter(([, v]) => v !== undefined);
@@ -236,6 +243,11 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
       videoUrl: videoUrl ?? undefined,
       ebayVideoId: ebayVideoId ?? undefined,
       ebayVideoStatus: ebayVideoStatus ?? undefined,
+      packageWeightLb: packageWeightLb > 0 ? packageWeightLb : undefined,
+      packageWeightOz: packageWeightOz > 0 ? packageWeightOz : undefined,
+      packageLengthIn: packageLengthIn > 0 ? packageLengthIn : undefined,
+      packageWidthIn: packageWidthIn > 0 ? packageWidthIn : undefined,
+      packageHeightIn: packageHeightIn > 0 ? packageHeightIn : undefined,
     };
 
     const ok = await updateDraft(draft.id, updates);
@@ -660,6 +672,90 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
 
               </div>
             )}
+          </div>
+
+          {/* Package Weight & Dimensions */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-1.5">
+              <Truck className="w-3.5 h-3.5 text-primary" />
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Package Weight & Dimensions</label>
+              <span className="text-[10px] text-muted-foreground/60 ml-auto">Optional</span>
+            </div>
+
+            {/* Weight section */}
+            <div className="space-y-2">
+              <label className="text-xs text-muted-foreground">Weight</label>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    placeholder="Lbs"
+                    value={packageWeightLb || ""}
+                    onChange={(e) => setPackageWeightLb(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">Lbs</p>
+                </div>
+                <div className="flex-1">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    placeholder="Oz"
+                    value={packageWeightOz || ""}
+                    onChange={(e) => setPackageWeightOz(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">Oz</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Dimensions section */}
+            <div className="space-y-2">
+              <label className="text-xs text-muted-foreground">Dimensions (inches)</label>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    placeholder="Length"
+                    value={packageLengthIn || ""}
+                    onChange={(e) => setPackageLengthIn(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">L</p>
+                </div>
+                <div className="flex-1">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    placeholder="Width"
+                    value={packageWidthIn || ""}
+                    onChange={(e) => setPackageWidthIn(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">W</p>
+                </div>
+                <div className="flex-1">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    placeholder="Height"
+                    value={packageHeightIn || ""}
+                    onChange={(e) => setPackageHeightIn(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">H</p>
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground">eBay uses this to calculate shipping costs.</p>
+            </div>
           </div>
 
           {/* Video Upload (optional) */}
