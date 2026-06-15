@@ -58,6 +58,29 @@ jobs:
       - name: Lint functions
         run: deno lint --config supabase/functions/deno.json supabase/functions/
 
+  # E2E Smoke Tests: Verify critical user flows work end-to-end
+  e2e-smoke-tests:
+    name: E2E Smoke Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: 1.1.38
+      
+      - name: Install dependencies
+        run: bun install
+      
+      - name: Install Playwright browsers
+        run: bunx playwright install --with-deps
+      
+      - name: Run smoke tests
+        run: bun run test:e2e:smoke
+        continue-on-error: true
+
   # Integration tests require a local Supabase instance (Docker).
   # Standard GitHub Actions runners do not have Docker available, so these
   # tests are marked continue-on-error and excluded from the blocking summary.
@@ -85,7 +108,7 @@ jobs:
     name: Test Summary
     runs-on: ubuntu-latest
     if: always()
-    needs: [frontend-tests, functions-check, integration-tests]
+    needs: [frontend-tests, functions-check, e2e-smoke-tests, integration-tests]
     
     steps:
       - name: Check test results
@@ -96,6 +119,9 @@ jobs:
             exit 1
           fi
           echo "✅ All required tests passed"
+          if [ "${{ needs.e2e-smoke-tests.result }}" != "success" ]; then
+            echo "⚠️  E2E smoke tests did not fully complete (non-blocking)"
+          fi
           if [ "${{ needs.integration-tests.result }}" != "success" ]; then
             echo "⚠️  Integration tests skipped (require local Supabase/Docker)"
           fi
