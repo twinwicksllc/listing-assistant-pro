@@ -298,7 +298,7 @@ export function isCoinConditionDetailRequired(
   return Boolean(
     (categoryId && COIN_CATEGORY_IDS.has(categoryId))
       || domain === "coins_bullion"
-      || (breadcrumb && /coins?:\s*(us|world|canada|ancient|medieval)|coins?\s*&\s*paper money/i.test(breadcrumb)),
+      || (breadcrumb && /coin|paper money|currency|dollar|quarter|dime|nickel|penny|half eagle|double eagle|sovereign|bullion/i.test(breadcrumb)),
   );
 }
 
