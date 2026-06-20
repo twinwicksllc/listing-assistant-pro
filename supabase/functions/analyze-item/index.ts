@@ -2730,7 +2730,14 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
     const creditsResetAt = tier === "starter" ? computeNextResetAt(orgResetDay) : null;
 
     // Build eBay metadata so the frontend can use real aspects/conditions
-    const ebayMetadata = categoryAspects || categoryConditions
+    // isCoinCategory: true when the backend AI identified this as a coin/bullion domain.
+    // This is the single authoritative signal the frontend uses to show the Coin
+    // Condition Details panel — no hardcoded category-ID lists required.
+    const isCoinCategoryFlag = identification.domain === "coins_bullion";
+
+    // Build eBay metadata. Always emitted for coin listings so the frontend
+    // always receives isCoinCategory even if eBay returned no aspects/conditions.
+    const ebayMetadata = (categoryAspects || categoryConditions || isCoinCategoryFlag)
       ? {
         requiredAspects: categoryAspects?.aspects
           ?.filter((a: any) => a.required)
@@ -2738,9 +2745,17 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
         suggestedAspects: categoryAspects?.aspects
           ?.filter((a: any) => !a.required)
           .map((a: any) => a.name) ?? [],
-        allowedConditions: categoryConditions?.conditions?.map(
-          (c: any) => c.conditionDescription || String(c.conditionId),
-        ) ?? [],
+        // Strip eBay's non-enum conditionDescription strings ("Graded", "Ungraded")
+        // that are NOT valid eBay Inventory API condition values — they would cause
+        // publish errorId 2004. Frontend falls back to getConditionsForCategory()
+        // when this list is empty, which returns the proper coin condition tiers.
+        allowedConditions: (categoryConditions?.conditions ?? [])
+          .map((c: any) => c.conditionDescription || String(c.conditionId))
+          .filter((desc: string) => !/^(graded|ungraded)$/i.test(desc)),
+        // Authoritative coin-domain flag. Frontend uses this instead of maintaining
+        // a hardcoded category-ID allowlist that goes stale whenever eBay adds
+        // a new subcategory.
+        isCoinCategory: isCoinCategoryFlag,
       }
       : null;
 

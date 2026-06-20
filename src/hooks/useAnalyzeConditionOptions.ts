@@ -4,6 +4,11 @@ import { getConditionLabel, getConditionsForCategory } from "@/types/listing";
 
 interface EbayMetadata {
   allowedConditions: string[];
+  /** Authoritative flag from the backend — true when analyze-item determined
+   *  this listing belongs to the coins_bullion domain. When set, the condition
+   *  dropdown always uses the coin-appropriate tiers from getConditionsForCategory
+   *  regardless of what eBay's conditions API returned. */
+  isCoinCategory?: boolean;
 }
 
 interface UseAnalyzeConditionOptionsParams {
@@ -19,17 +24,18 @@ interface ConditionOption {
 }
 
 /**
- * AI analysis may return coin-internal labels ("UNGRADED", "GRADED") in
- * allowedConditions. These are not valid eBay Inventory API condition enums
- * and, if used directly, produce a dropdown locked to a single option while
- * also preventing the Coin Condition Details panel from collecting the
- * rawCondition tier required by eBay's June 2026 mandate.
- * When allowedConditions contains only these labels we fall through to
- * getConditionsForCategory so the user sees the full coin-appropriate
- * condition list (NEW, USED_VERY_GOOD, etc.).
+ * Decides which condition options to show in the dropdown.
+ *
+ * Priority order:
+ *  1. Backend isCoinCategory flag → always use coin-specific tiers
+ *  2. allowedConditions is empty / all eBay non-enum strings → coin tiers
+ *  3. allowedConditions has real eBay enum values → use them directly
+ *
+ * The backend now strips eBay's non-enum conditionDescription strings
+ * ("Graded", "Ungraded") before sending allowedConditions, so this hook
+ * receives either a clean list of enum values or an empty array.
+ * The case-insensitive guard below is kept as a belt-and-suspenders safety net.
  */
-const COIN_INTERNAL_LABELS = new Set(["UNGRADED", "GRADED", "ungraded", "graded"]);
-
 export function useAnalyzeConditionOptions({
   ebayMetadata,
   ebayCategoryId,
@@ -37,14 +43,23 @@ export function useAnalyzeConditionOptions({
   setCondition,
 }: UseAnalyzeConditionOptionsParams) {
   const conditionOptions = useMemo<ConditionOption[]>(() => {
+    // Backend-authoritative: coin domain always gets coin-specific tiers,
+    // no need to inspect allowedConditions at all.
+    if (ebayMetadata?.isCoinCategory) {
+      return getConditionsForCategory(
+        ebayCategoryId || undefined,
+        domain,
+        getEbayCategoryBreadcrumb(ebayCategoryId) || undefined,
+      );
+    }
+
     const allowed = ebayMetadata?.allowedConditions;
     const hasAllowed = Array.isArray(allowed) && allowed.length > 0;
 
-    // If allowedConditions only contains coin-internal labels ("UNGRADED" /
-    // "GRADED"), those are not valid eBay API enums — fall through so
-    // getConditionsForCategory returns the proper coin tier options instead.
+    // Safety net: if allowedConditions somehow still contains eBay's non-enum
+    // coin labels (any case), fall through to coin-specific tiers.
     const isOnlyCoinLabels =
-      hasAllowed && allowed!.every((c) => COIN_INTERNAL_LABELS.has(c));
+      hasAllowed && allowed!.every((c) => /^(ungraded|graded)$/i.test(c));
 
     if (hasAllowed && !isOnlyCoinLabels) {
       return allowed!.map((c) => ({ value: c, label: getConditionLabel(c) }));
@@ -55,7 +70,7 @@ export function useAnalyzeConditionOptions({
       domain,
       getEbayCategoryBreadcrumb(ebayCategoryId) || undefined,
     );
-  }, [domain, ebayCategoryId, ebayMetadata?.allowedConditions]);
+  }, [domain, ebayCategoryId, ebayMetadata?.allowedConditions, ebayMetadata?.isCoinCategory]);
 
   const updateCondition = useCallback((value: string) => {
     setCondition(value);
