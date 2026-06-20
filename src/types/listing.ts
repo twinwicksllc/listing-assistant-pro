@@ -313,12 +313,21 @@ export function isCoinConditionDetailRequired(
   categoryId: string | undefined,
   domain: string | undefined,
   breadcrumb: string | undefined,
+  /** Backend-authoritative flag from _ebayMetadata.isCoinCategory.
+   *  When truthy this short-circuits all local heuristics — no hardcoded
+   *  category-ID list maintenance needed for new eBay coin subcategories. */
+  isCoinCategoryFromBackend?: boolean,
 ): boolean {
-  return Boolean(
-    (categoryId && COIN_CATEGORY_IDS.has(categoryId))
-      || domain === "coins_bullion"
-      || (breadcrumb && /coin|paper money|currency|dollar|quarter|dime|nickel|penny|half eagle|double eagle|sovereign|bullion/i.test(breadcrumb)),
-  );
+  // 1. Backend said it's a coin — trust it unconditionally.
+  if (isCoinCategoryFromBackend) return true;
+  // 2. Backend domain signal (set by Pass-1 AI on every analysis).
+  if (domain === "coins_bullion") return true;
+  // 3. Local COIN_CATEGORY_IDS fallback — handles immediate UI updates when
+  //    the user manually changes the category before a new analysis runs.
+  if (categoryId && COIN_CATEGORY_IDS.has(categoryId)) return true;
+  // 4. Breadcrumb regex fallback — same manual-change use-case.
+  if (breadcrumb && /coin|paper money|currency|dollar|quarter|dime|nickel|penny|half eagle|double eagle|sovereign|bullion/i.test(breadcrumb)) return true;
+  return false;
 }
 
 export function isCoinConditionDetailComplete(
