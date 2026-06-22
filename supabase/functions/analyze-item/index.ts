@@ -54,7 +54,8 @@ function isCoinDomainCategory(
 ): boolean {
   if (!categoryId) return false;
 
-  const categoryText = `${categoryName || ""} ${breadcrumb || ""}`.toLowerCase();
+  const categoryText = `${categoryName || ""} ${breadcrumb || ""}`
+    .toLowerCase();
 
   if (
     /(coins?\b|paper money|bullion|exonumia|ancient|medieval|numis)/i.test(
@@ -120,7 +121,11 @@ function resolveDomainFallbackCategory(
         breadcrumb: "Coins & Paper Money > Bullion > Silver > Bars & Rounds",
       };
     }
-    if (/morgan|peace|walking liberty|franklin|kennedy|barber|seated|bust/.test(combined)) {
+    if (
+      /morgan|peace|walking liberty|franklin|kennedy|barber|seated|bust/.test(
+        combined,
+      )
+    ) {
       return {
         categoryId: "39465",
         categoryName: "US Silver Dollars",
@@ -135,7 +140,11 @@ function resolveDomainFallbackCategory(
   }
 
   // Domain is coins_bullion but metal unknown — safest general coin fallback
-  return { categoryId: "45243", categoryName: "World Coins", breadcrumb: "Coins & Paper Money > Coins: World" };
+  return {
+    categoryId: "45243",
+    categoryName: "World Coins",
+    breadcrumb: "Coins & Paper Money > Coins: World",
+  };
 }
 
 function isCategoryCompatibleWithDomain(
@@ -176,7 +185,8 @@ serve(async (req: Request) => {
     // Parse body first (can only call req.json() once)
     const body = await req.json();
     console.log(
-      `[${invocationId}] ✓ Body parsed: ${body.images?.length} images, voiceNote=${!!body.voiceNote}`,
+      `[${invocationId}] ✓ Body parsed: ${body.images?.length} images, voiceNote=${!!body
+        .voiceNote}`,
     );
 
     // --- Server-side usage limit enforcement ---
@@ -228,7 +238,9 @@ serve(async (req: Request) => {
     const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
     if (!isAdmin && STRIPE_SECRET_KEY && userEmail) {
       try {
-        const { default: Stripe } = await import("https://esm.sh/stripe@18.5.0");
+        const { default: Stripe } = await import(
+          "https://esm.sh/stripe@18.5.0"
+        );
         const stripe = new Stripe(STRIPE_SECRET_KEY, {
           apiVersion: "2025-08-27.basil",
         });
@@ -409,7 +421,8 @@ serve(async (req: Request) => {
     // --- End spot prices ---
 
     // Support both single image (legacy) and multiple images
-    const imageList: string[] = body.images ?? (body.imageBase64 ? [body.imageBase64] : []);
+    const imageList: string[] = body.images ??
+      (body.imageBase64 ? [body.imageBase64] : []);
     const voiceNote: string = body.voiceNote || "";
     // User-provided category override — if set, this is treated as an absolute lock
     // and the category-lookup pipeline is skipped entirely.
@@ -453,70 +466,35 @@ serve(async (req: Request) => {
       } | null;
     } | null = null;
 
-    // ─── PASS 1: Fast item identification ────────────────────────────────────
-    // Sends ALL images to determine domain, item name, and keywords.
-    // Results are used to improve the pre-lookup query and route to the correct
-    // domain-specific prompt for Pass 2.
-    let identification: Identification = {
-      domain: "general",
-      itemName: "item",
-      keywords: [],
-      isMetal: false,
-      metalType: "none",
-    };
-    identification = await runPass1Identification(
-      GEMINI_API_KEY,
+    // ─── STAGE 1 & 2: Modular Agent Controller ───────────────────────────────
+    // Replaces the old linear Pass 1 / Pre-Pass 0 / Slab OCR sequence with a
+    // modular Controller that handles Identification, Parallel Vision, and Grounding.
+    const { ListingAgentController } = await import(
+      "../_helpers/agent-system/controller.ts"
+    );
+    const controller = new ListingAgentController(GEMINI_API_KEY);
+
+    const agentResult = await controller.run({
+      invocationId,
+      userId,
       imageList,
       voiceNote,
-      invocationId,
-    );
+    });
 
-    // ─── FALLBACK: Detect metal type from voice note if Pass 1 failed ────────
-    // This ensures that if Gemini crashes, we can still detect precious metals
-    // mentioned in the seller's voice description
+    let identification = agentResult.identification;
+    prePassResult = agentResult.visualFindings
+      ? {
+        marketAnalysis: agentResult.marketReport?.marketAnalysis ?? null,
+        groundedCategoryId: agentResult.marketReport?.groundedCategoryId ??
+          null,
+        agenticInspection: agentResult.visualFindings,
+      }
+      : null;
+
+    // Apply voice note fallback for metal detection if necessary
     identification = applyVoiceNoteMetalFallback(identification, voiceNote);
-    // ─── END FALLBACK ────────────────────────────────────────────────────────
-    // ─── END PASS 1 ──────────────────────────────────────────────────────────
-    // ─── PRE-PASS 0: Agentic Grounding + Vision (runs AFTER Pass 1) ─────────────
-    // Now that Pass 1 has identified the item, run Pre-Pass 0 with the REAL
-    // domain and item name. This eliminates the old two-call pattern (heuristic
-    // guess → re-run with real name) and ensures grounding uses accurate data.
-    // Non-blocking: any failure leaves prePassResult = null, pipeline continues.
-    try {
-      const { runAgenticPrePass } = await import("../_helpers/agenticPrePass.ts");
 
-      // Build base64 + mime lists for pre-pass (parse from data URLs) — use ALL images
-      const prePassBase64List: string[] = [];
-      const prePassMimeList: string[] = [];
-      for (const img of imageList) {
-        const ppBase64 = img.includes(",") ? img.split(",")[1] : img;
-        const ppMimeMatch = img.match(/^data:(image\/\w+);/);
-        const ppMimeType = ppMimeMatch ? ppMimeMatch[1] : "image/jpeg";
-        prePassBase64List.push(ppBase64);
-        prePassMimeList.push(ppMimeType);
-      }
-
-      // Use real domain + item name from Pass 1 (not a heuristic guess)
-      prePassResult = await runAgenticPrePass(
-        GEMINI_API_KEY,
-        identification.domain as any,
-        identification.itemName,
-        prePassBase64List,
-        prePassMimeList,
-        invocationId,
-      );
-      if (prePassResult) {
-        console.log(
-          `[${invocationId}] Pre-Pass 0 completed with domain=${identification.domain}, item=${identification.itemName}`,
-        );
-      }
-    } catch (prePassErr) {
-      console.warn(
-        `[${invocationId}] Pre-Pass 0 outer catch (non-blocking):`,
-        String(prePassErr),
-      );
-    }
-    // ─── END PRE-PASS 0 ─────────────────────────────────────────────────────────
+    // ─── END MODULAR CONTROLLER ───────────────────────────────────────────────
 
     // ─── SLAB OCR: GPT-4o Vision label reading (coins_bullion + general domains only) ──────────────────
     // Runs BEFORE Pass 2 so the correct year/grade/cert are injected as ground
@@ -678,7 +656,8 @@ serve(async (req: Request) => {
               groundedVerifyData.isLeaf === true &&
               groundedVerifyData.valid !== false
             ) {
-              const groundedCategoryName = groundedVerifyData.categoryName || "";
+              const groundedCategoryName = groundedVerifyData.categoryName ||
+                "";
               const groundedBreadcrumb = groundedVerifyData.breadcrumb ||
                 groundedVerifyData.categoryName ||
                 "";
@@ -734,7 +713,8 @@ serve(async (req: Request) => {
         const pass1Query = identification.keywords.length > 0
           ? `${identification.itemName} ${identification.keywords.slice(0, 3).join(" ")}`
           : identification.itemName;
-        const searchQuery = (pass1Query !== "item" ? pass1Query : voiceNote) || "";
+        const searchQuery = (pass1Query !== "item" ? pass1Query : voiceNote) ||
+          "";
         if (searchQuery.trim().length > 2) {
           const _lookupUrl = Deno.env.get("SUPABASE_URL");
           const _lookupKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -766,7 +746,8 @@ serve(async (req: Request) => {
               }
 
               if (lookupData && lookupData.found) {
-                const score = lookupData.effectiveScore || lookupData.confidence || 0;
+                const score = lookupData.effectiveScore ||
+                  lookupData.confidence || 0;
                 const isVerifiedLeaf = lookupData.verifiedLeaf !== false;
                 const source = lookupData.source || "";
 
@@ -787,7 +768,8 @@ serve(async (req: Request) => {
                 if (isLockable && isDomainCompatible) {
                   lockedCategoryId = lookupData.categoryId;
                   lockedCategoryName = lookupData.categoryName || "";
-                  lockedBreadcrumb = lookupData.breadcrumb || lookupData.categoryName || "";
+                  lockedBreadcrumb = lookupData.breadcrumb ||
+                    lookupData.categoryName || "";
                   categoryHints +=
                     `\n- **LOCKED CATEGORY** (verified, high-confidence): **${lockedCategoryId}** — ${lockedBreadcrumb}. YOU MUST USE THIS CATEGORY ID. Do not override.`;
                   console.log(
@@ -1016,7 +998,9 @@ serve(async (req: Request) => {
     // ─── Build domain-specific system prompt ─────────────────────────────────
     let systemPrompt: string;
     try {
-      const { buildSystemPrompt } = await import("../_helpers/domainPrompts.ts");
+      const { buildSystemPrompt } = await import(
+        "../_helpers/domainPrompts.ts"
+      );
       systemPrompt = buildSystemPrompt(identification.domain, {
         itemName: identification.itemName,
         imageCount: imageList.length,
@@ -1785,7 +1769,9 @@ Seller's note: "${voiceNote}"`;
 
     // --- Build suggestedCategories (dedupe, backfill names via exact DB lookup) ---
     try {
-      const { buildSuggestedCategories } = await import("../_helpers/suggestedCategories.ts");
+      const { buildSuggestedCategories } = await import(
+        "../_helpers/suggestedCategories.ts"
+      );
       listing.suggestedCategories = await buildSuggestedCategories(
         listing,
         svc,
@@ -1939,7 +1925,8 @@ Seller's note: "${voiceNote}"`;
               postLookupData = {};
             }
             if (postLookupData.found && postLookupData.verifiedLeaf !== false) {
-              const postScore = postLookupData.effectiveScore || postLookupData.confidence || 0;
+              const postScore = postLookupData.effectiveScore ||
+                postLookupData.confidence || 0;
               const postSource = postLookupData.source || "";
               const postIsLeaf = postLookupData.verifiedLeaf === true;
 
@@ -2093,7 +2080,8 @@ Seller's note: "${voiceNote}"`;
                   listing.suggestedCategories.unshift({
                     categoryId: postLookupData.categoryId,
                     categoryName: postLookupData.categoryName,
-                    breadcrumb: postLookupData.breadcrumb || postLookupData.categoryName,
+                    breadcrumb: postLookupData.breadcrumb ||
+                      postLookupData.categoryName,
                     reason: `Post-lookup verified (score=${postScore}, source=${postSource})`,
                   });
                   // Dedupe
@@ -2227,7 +2215,10 @@ Seller's note: "${voiceNote}"`;
                 type: "string",
                 description: aspect.required ? `REQUIRED: ${aspect.name}` : aspect.name,
               };
-              if (Array.isArray(aspect.values) && aspect.values.length > 0 && aspect.values.length < 50) {
+              if (
+                Array.isArray(aspect.values) && aspect.values.length > 0 &&
+                aspect.values.length < 50
+              ) {
                 prop.enum = aspect.values;
               }
               regenSchema.properties[aspect.name] = prop;
@@ -2236,7 +2227,9 @@ Seller's note: "${voiceNote}"`;
 
             // Seed context: any values from the old itemSpecifics that are still
             // valid for this category (Year, Certification, Grade, etc.)
-            const validAspectNames = new Set<string>(categoryAspects.aspects.map((a: any) => a.name as string));
+            const validAspectNames = new Set<string>(
+              categoryAspects.aspects.map((a: any) => a.name as string),
+            );
             const survivingSpecifics: Record<string, unknown> = {};
             if (listing.itemSpecifics) {
               for (const [k, v] of Object.entries(listing.itemSpecifics)) {
@@ -2251,7 +2244,10 @@ Seller's note: "${voiceNote}"`;
 
             const regenContentParts: any[] = imageList.map((img) => {
               const { base64Data, mimeType } = parseImageDataUrl(img);
-              return { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Data}` } };
+              return {
+                type: "image_url",
+                image_url: { url: `data:${mimeType};base64,${base64Data}` },
+              };
             });
             regenContentParts.push({
               type: "text",
@@ -2286,7 +2282,10 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
                       },
                     },
                   ],
-                  tool_choice: { type: "function", function: { name: "setItemSpecifics" } },
+                  tool_choice: {
+                    type: "function",
+                    function: { name: "setItemSpecifics" },
+                  },
                   temperature: 0.1,
                 }),
               },
@@ -2294,7 +2293,8 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
 
             if (regenResp.ok) {
               const regenData = await regenResp.json();
-              const regenCall = regenData?.choices?.[0]?.message?.tool_calls?.[0];
+              const regenCall = regenData?.choices?.[0]?.message?.tool_calls
+                ?.[0];
               if (regenCall?.function?.arguments) {
                 const regenSpecifics = JSON.parse(regenCall.function.arguments);
                 listing.itemSpecifics = regenSpecifics;
@@ -2314,7 +2314,10 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
               }
             }
           } catch (regenErr) {
-            console.warn(`[${invocationId}] analyze-item: Pass 2.5 regen error (non-blocking):`, regenErr);
+            console.warn(
+              `[${invocationId}] analyze-item: Pass 2.5 regen error (non-blocking):`,
+              regenErr,
+            );
           }
         } else if (listing.itemSpecifics) {
           // Aspects unavailable — scrub known toy/collectible keys as best-effort fallback
@@ -2416,7 +2419,9 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
     //   • Jewelry: hallmarks, brand signatures, karat
     // Findings are AUTHORITATIVE and OVERRIDE the main model's output.
     try {
-      const { extractKeyDetails, applyDetailOverrides } = await import("../_helpers/detailExtractor.ts");
+      const { extractKeyDetails, applyDetailOverrides } = await import(
+        "../_helpers/detailExtractor.ts"
+      );
 
       // Build image lists for the detail extractor — use ALL images
       const detailBase64List: string[] = [];
@@ -2544,7 +2549,8 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
         }
       } else {
         console.log(
-          `[${invocationId}] Skipping post-AI competitor search (title=${!!listing.title}, userId=${!!userId})`,
+          `[${invocationId}] Skipping post-AI competitor search (title=${!!listing
+            .title}, userId=${!!userId})`,
         );
       }
     }

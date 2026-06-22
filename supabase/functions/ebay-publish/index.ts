@@ -288,71 +288,71 @@ async function detectCategoryTree(
 // eBay Metadata API and descriptor fetching work with actual leaf category IDs.
 const HARDCODED_COIN_CATEGORY_IDS = new Set([
   // ── US Coin parent / top-level ─────────────────────────────────────────────
-  "253",    // Coins: US (parent — all descendants are coins)
+  "253", // Coins: US (parent — all descendants are coins)
   // ── US Cents ───────────────────────────────────────────────────────────────
-  "11981",  // Wheat Pennies
-  "39464",  // Lincoln Cents (Memorial)
+  "11981", // Wheat Pennies
+  "39464", // Lincoln Cents (Memorial)
   // ── US Nickels ─────────────────────────────────────────────────────────────
-  "11980",  // Jefferson Nickels
-  "11116",  // Buffalo Nickels
-  "11118",  // Liberty Head Nickels
-  "11063",  // Shield Nickels
+  "11980", // Jefferson Nickels
+  "11116", // Buffalo Nickels
+  "11118", // Liberty Head Nickels
+  "11063", // Shield Nickels
   // ── US Dimes ───────────────────────────────────────────────────────────────
-  "11971",  // Roosevelt Dimes
-  "40149",  // Dimes (parent/generic)
-  "40150",  // Dimes (type 2)
-  "40151",  // Mercury Dimes (1916–1945)
-  "40152",  // Barber Dimes (1892–1916)
-  "40153",  // Seated Liberty Dimes (1837–1891)
-  "40154",  // Early American Dimes
-  "40155",  // Dimes (variant 5)
-  "40156",  // Dimes (variant 6)
-  "40157",  // Dimes (variant 7)
-  "40158",  // Dimes (variant 8)
-  "40159",  // Dimes (variant 9)
-  "40160",  // Dimes (variant 10)
-  "40161",  // Dimes (variant 11)
-  "40162",  // Dimes (variant 12)
-  "40163",  // Dimes (variant 13)
-  "40164",  // Dimes (variant 14)
-  "40165",  // Dimes (variant 15)
-  "40166",  // Dimes (variant 16)
-  "40167",  // Dimes (variant 17)
-  "41090",  // Dimes (AI-resolved parent category — observed in Mercury dime listings)
+  "11971", // Roosevelt Dimes
+  "40149", // Dimes (parent/generic)
+  "40150", // Dimes (type 2)
+  "40151", // Mercury Dimes (1916–1945)
+  "40152", // Barber Dimes (1892–1916)
+  "40153", // Seated Liberty Dimes (1837–1891)
+  "40154", // Early American Dimes
+  "40155", // Dimes (variant 5)
+  "40156", // Dimes (variant 6)
+  "40157", // Dimes (variant 7)
+  "40158", // Dimes (variant 8)
+  "40159", // Dimes (variant 9)
+  "40160", // Dimes (variant 10)
+  "40161", // Dimes (variant 11)
+  "40162", // Dimes (variant 12)
+  "40163", // Dimes (variant 13)
+  "40164", // Dimes (variant 14)
+  "40165", // Dimes (variant 15)
+  "40166", // Dimes (variant 16)
+  "40167", // Dimes (variant 17)
+  "41090", // Dimes (AI-resolved parent category — observed in Mercury dime listings)
   // ── US Quarters ────────────────────────────────────────────────────────────
-  "41099",  // Washington Quarters
-  "41102",  // State Quarters
-  "40196",  // Quarters (variant)
-  "40197",  // Quarters (variant)
-  "40198",  // Quarters (variant)
-  "40199",  // Quarters (variant)
-  "40200",  // Quarters (variant)
-  "40201",  // Quarters (variant)
-  "40202",  // Quarters (variant)
+  "41099", // Washington Quarters
+  "41102", // State Quarters
+  "40196", // Quarters (variant)
+  "40197", // Quarters (variant)
+  "40198", // Quarters (variant)
+  "40199", // Quarters (variant)
+  "40200", // Quarters (variant)
+  "40201", // Quarters (variant)
+  "40202", // Quarters (variant)
   // ── US Half Dollars / Dollar Coins ─────────────────────────────────────────
-  "11973",  // Kennedy Half Dollars
-  "39455",  // Dollar Coins
+  "11973", // Kennedy Half Dollars
+  "39455", // Dollar Coins
   // ── US Gold / Silver ───────────────────────────────────────────────────────
-  "41084",  // US Gold Coins
-  "11950",  // US Silver Coins
-  "19167",  // US Silver type
-  "19168",  // US Silver type
-  "19169",  // US Silver type
+  "41084", // US Gold Coins
+  "11950", // US Silver Coins
+  "19167", // US Silver type
+  "19168", // US Silver type
+  "19169", // US Silver type
   // ── US Coin Sets / Proof / Rolls ───────────────────────────────────────────
-  "41111",  // Coin Sets
+  "41111", // Coin Sets
   "166679", // US Coin Proof Sets
-  "41109",  // US Coin Proof Sets (variant)
-  "3411",   // Coin Rolls
+  "41109", // US Coin Proof Sets (variant)
+  "3411", // Coin Rolls
   // ── Paper Money ────────────────────────────────────────────────────────────
-  "526",    // Paper Money: US
+  "526", // Paper Money: US
   // ── World / Canadian / Ancient / Medieval / Commemorative / Exonumia ───────
-  "45243",  // World Coins
-  "45244",  // World Coins (variant)
-  "39471",  // Canadian Coins
-  "39472",  // Ancient Coins
-  "39473",  // Medieval Coins
-  "39474",  // Bullion Coins
-  "39475",  // Commemorative Coins
+  "45243", // World Coins
+  "45244", // World Coins (variant)
+  "39471", // Canadian Coins
+  "39472", // Ancient Coins
+  "39473", // Medieval Coins
+  "39474", // Bullion Coins
+  "39475", // Commemorative Coins
   "164743", // World Coins (extended)
   "166680", // Proof Sets (variant)
   "166681", // Proof Sets (variant)
@@ -372,9 +372,9 @@ const HARDCODED_COIN_CATEGORY_IDS = new Set([
   "261075", // Collectibles: Coins variant
   "261076", // Collectibles: Coins variant
   // ── Silver/Gold Bars & Rounds (Certification aspect required) ─────────────
-  "532",    // Silver Bars & Rounds
-  "3360",   // Silver grain bars
-  "3361",   // Gold Bars & Rounds
+  "532", // Silver Bars & Rounds
+  "3360", // Silver grain bars
+  "3361", // Gold Bars & Rounds
   "173685", // Platinum / Palladium Bullion
 ]);
 const HARDCODED_BULLION_CATEGORY_IDS = new Set([
@@ -4263,8 +4263,7 @@ serve(async (req) => {
       //  3. _domain === "coins_bullion" — Gemini Pass-1 classified the item as coin/bullion;
       //     catches any category ID not yet in the hardcoded list
       const publishDomain = rawItemSpecifics._domain as string | undefined;
-      const isCoinDescriptorCategory =
-        categoryTreeType === "coin" ||
+      const isCoinDescriptorCategory = categoryTreeType === "coin" ||
         coinConditionDetailRaw != null ||
         publishDomain === "coins_bullion";
 
