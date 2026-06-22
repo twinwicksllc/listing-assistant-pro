@@ -9,12 +9,15 @@ import { DOMAIN_REGISTRY } from "./registry.ts";
 import { runPass1Identification } from "../pass1Identification.ts";
 import { runAgenticVisualAgent } from "./sub-agents/visual-agent.ts";
 import { runMarketAgent } from "./sub-agents/market-agent.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 
 export class ListingAgentController {
   private apiKey: string;
+  private supabase: ReturnType<typeof createClient>;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, supabase: ReturnType<typeof createClient>) {
     this.apiKey = apiKey;
+    this.supabase = supabase;
   }
 
   async run(context: AgentContext): Promise<{
@@ -69,6 +72,7 @@ export class ListingAgentController {
       this.apiKey,
       domainDef,
       context,
+      this.supabase,
     );
   }
 
@@ -78,6 +82,7 @@ export class ListingAgentController {
       this.apiKey,
       domainDef,
       context,
+      this.supabase,
     );
   }
 }

@@ -472,7 +472,7 @@ serve(async (req: Request) => {
     const { ListingAgentController } = await import(
       "../_helpers/agent-system/controller.ts"
     );
-    const controller = new ListingAgentController(GEMINI_API_KEY);
+    const controller = new ListingAgentController(GEMINI_API_KEY, svc);
 
     const agentResult = await controller.run({
       invocationId,

@@ -5,22 +5,45 @@
 
 import { AgentContext, MarketDataReport } from "../pipelineContracts.ts";
 import { DomainDefinition } from "../registry.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { getEmbedding } from "../../rag/embedding.ts";
+import { findSimilarContext, formatRagResults } from "../../rag/retriever.ts";
 
 export async function runMarketAgent(
   apiKey: string,
   domainDef: DomainDefinition,
   context: AgentContext,
+  supabase: ReturnType<typeof createClient>,
 ): Promise<MarketDataReport> {
   const { invocationId, identification } = context;
   const itemName = identification?.itemName || "item";
 
   console.log(`[${invocationId}] MarketAgent: Grounding market data for ${itemName}`);
 
+  // --- RAG: Augmented Context from Sales History ---
+  let ragContext = "";
+  try {
+    const embedding = await getEmbedding(apiKey, itemName);
+    const results = await findSimilarContext(supabase, embedding, "sales_history");
+    ragContext = formatRagResults(results);
+    if (ragContext) {
+      console.log(`[${invocationId}] MarketAgent: Injected ${results.length} sales history references.`);
+    }
+  } catch (ragErr) {
+    console.warn(`[${invocationId}] MarketAgent RAG failed:`, ragErr);
+  }
+
   const queries = domainDef.groundingQueries(itemName);
 
   const prompt = `You are a market data analyst. Use Google Search to ground the following item for eBay listing.
 Item: ${itemName}
 Domain: ${domainDef.domain}
+
+${
+    ragContext
+      ? `### INTERNAL SALES HISTORY:\nThe following items from our internal sales history are similar to this item:\n${ragContext}\n`
+      : ""
+  }
 
 ### TASKS:
 1. Find the most accurate 2026 eBay Leaf Category ID for this item.
@@ -53,12 +76,24 @@ Return your report in JSON format:
     if (!response.ok) throw new Error(`Gemini API error: ${response.status}`);
     const data = await response.json();
 
-    // Parser logic for Google Search grounding result.
-    // For boilerplate, we return a verified structure.
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return {
+          marketAnalysis: parsed.marketAnalysis || "Search completed with no detailed analysis.",
+          groundedCategoryId: parsed.groundedCategoryId || null,
+        };
+      } catch (pErr) {
+        console.warn(`[${invocationId}] MarketAgent: Failed to parse JSON response:`, pErr);
+      }
+    }
 
     return {
       marketAnalysis: `Grounded search completed for ${itemName} in ${domainDef.domain}.`,
-      groundedCategoryId: null, // Would be extracted from tool output
+      groundedCategoryId: null,
     };
   } catch (err) {
     console.warn(`[${invocationId}] MarketAgent failed (non-blocking):`, err);
