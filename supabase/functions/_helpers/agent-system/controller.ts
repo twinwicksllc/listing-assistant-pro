@@ -4,7 +4,7 @@
  * Implements: Sequential ID -> Parallel Burst (Visual + Market)
  */
 
-import { AgentContext, Identification, VisualInspectionResult, MarketDataReport } from "./pipelineContracts.ts";
+import { AgentContext, Identification, MarketDataReport, VisualInspectionResult } from "./pipelineContracts.ts";
 import { DOMAIN_REGISTRY } from "./registry.ts";
 import { runPass1Identification } from "../pass1Identification.ts";
 import { runAgenticVisualAgent } from "./sub-agents/visual-agent.ts";
@@ -30,16 +30,16 @@ export class ListingAgentController {
       this.apiKey,
       imageList,
       voiceNote || "",
-      invocationId
+      invocationId,
     );
-    
+
     // Cast and normalize the identification
     const identification: Identification = {
       domain: (identificationRaw.domain as any) || "general",
       itemName: identificationRaw.itemName || "item",
       keywords: identificationRaw.keywords || [],
       isMetal: identificationRaw.isMetal || false,
-      metalType: identificationRaw.metalType || "none"
+      metalType: identificationRaw.metalType || "none",
     };
 
     console.log(`[${invocationId}] Controller: Stage 1 Complete. Domain=${identification.domain}`);
@@ -49,17 +49,17 @@ export class ListingAgentController {
 
     // --- STEP 2: Parallel Burst (Visual + Market) ---
     console.log(`[${invocationId}] Controller: Starting Stage 2 (Parallel Burst)`);
-    
+
     // We launch these concurrently to minimize latency
     const [visualFindings, marketReport] = await Promise.allSettled([
       this.runVisualAgent(enrichedContext),
-      this.runMarketAgent(enrichedContext)
+      this.runMarketAgent(enrichedContext),
     ]);
 
     return {
       identification,
       visualFindings: visualFindings.status === "fulfilled" ? visualFindings.value : null,
-      marketReport: marketReport.status === "fulfilled" ? marketReport.value : null
+      marketReport: marketReport.status === "fulfilled" ? marketReport.value : null,
     };
   }
 
@@ -68,7 +68,7 @@ export class ListingAgentController {
     return await runAgenticVisualAgent(
       this.apiKey,
       domainDef,
-      context
+      context,
     );
   }
 
@@ -77,7 +77,7 @@ export class ListingAgentController {
     return await runMarketAgent(
       this.apiKey,
       domainDef,
-      context
+      context,
     );
   }
 }

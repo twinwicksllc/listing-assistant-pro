@@ -28,7 +28,7 @@ export interface Identification {
 export interface VisualInspectionResult {
   zoomRegionsExamined: string[];
   keyFindings: string;
-  confidenceBoost: number; 
+  confidenceBoost: number;
   identificationCorrection?: string;
 }
 

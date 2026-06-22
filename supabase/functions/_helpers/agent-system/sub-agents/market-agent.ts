@@ -9,7 +9,7 @@ import { DomainDefinition } from "../registry.ts";
 export async function runMarketAgent(
   apiKey: string,
   domainDef: DomainDefinition,
-  context: AgentContext
+  context: AgentContext,
 ): Promise<MarketDataReport> {
   const { invocationId, identification } = context;
   const itemName = identification?.itemName || "item";
@@ -27,7 +27,7 @@ Domain: ${domainDef.domain}
 2. Research recently sold prices and market nuances (premiums, typical defects, high-value variants).
 
 ### SEARCH QUERIES:
-${queries.map(q => `- ${q}`).join("\n")}
+${queries.map((q) => `- ${q}`).join("\n")}
 
 Return your report in JSON format:
 {
@@ -43,28 +43,28 @@ Return your report in JSON format:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{
-            parts: [{ text: prompt }]
+            parts: [{ text: prompt }],
           }],
-          tools: [{ googleSearch: {} }]
-        })
-      }
+          tools: [{ googleSearch: {} }],
+        }),
+      },
     );
 
     if (!response.ok) throw new Error(`Gemini API error: ${response.status}`);
     const data = await response.json();
-    
+
     // Parser logic for Google Search grounding result.
     // For boilerplate, we return a verified structure.
-    
+
     return {
       marketAnalysis: `Grounded search completed for ${itemName} in ${domainDef.domain}.`,
-      groundedCategoryId: null // Would be extracted from tool output
+      groundedCategoryId: null, // Would be extracted from tool output
     };
   } catch (err) {
     console.warn(`[${invocationId}] MarketAgent failed (non-blocking):`, err);
     return {
       marketAnalysis: null,
-      groundedCategoryId: null
+      groundedCategoryId: null,
     };
   }
 }
