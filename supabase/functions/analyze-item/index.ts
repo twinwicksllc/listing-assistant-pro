@@ -453,70 +453,30 @@ serve(async (req: Request) => {
       } | null;
     } | null = null;
 
-    // ─── PASS 1: Fast item identification ────────────────────────────────────
-    // Sends ALL images to determine domain, item name, and keywords.
-    // Results are used to improve the pre-lookup query and route to the correct
-    // domain-specific prompt for Pass 2.
-    let identification: Identification = {
-      domain: "general",
-      itemName: "item",
-      keywords: [],
-      isMetal: false,
-      metalType: "none",
-    };
-    identification = await runPass1Identification(
-      GEMINI_API_KEY,
+    // ─── STAGE 1 & 2: Modular Agent Controller ───────────────────────────────
+    // Replaces the old linear Pass 1 / Pre-Pass 0 / Slab OCR sequence with a
+    // modular Controller that handles Identification, Parallel Vision, and Grounding.
+    const { ListingAgentController } = await import("../_helpers/agent-system/controller.ts");
+    const controller = new ListingAgentController(GEMINI_API_KEY);
+    
+    const agentResult = await controller.run({
+      invocationId,
+      userId,
       imageList,
       voiceNote,
-      invocationId,
-    );
+    });
 
-    // ─── FALLBACK: Detect metal type from voice note if Pass 1 failed ────────
-    // This ensures that if Gemini crashes, we can still detect precious metals
-    // mentioned in the seller's voice description
+    let identification = agentResult.identification;
+    let prePassResult = agentResult.visualFindings ? {
+      marketAnalysis: agentResult.marketReport?.marketAnalysis ?? null,
+      groundedCategoryId: agentResult.marketReport?.groundedCategoryId ?? null,
+      agenticInspection: agentResult.visualFindings
+    } : null;
+
+    // Apply voice note fallback for metal detection if necessary
     identification = applyVoiceNoteMetalFallback(identification, voiceNote);
-    // ─── END FALLBACK ────────────────────────────────────────────────────────
-    // ─── END PASS 1 ──────────────────────────────────────────────────────────
-    // ─── PRE-PASS 0: Agentic Grounding + Vision (runs AFTER Pass 1) ─────────────
-    // Now that Pass 1 has identified the item, run Pre-Pass 0 with the REAL
-    // domain and item name. This eliminates the old two-call pattern (heuristic
-    // guess → re-run with real name) and ensures grounding uses accurate data.
-    // Non-blocking: any failure leaves prePassResult = null, pipeline continues.
-    try {
-      const { runAgenticPrePass } = await import("../_helpers/agenticPrePass.ts");
 
-      // Build base64 + mime lists for pre-pass (parse from data URLs) — use ALL images
-      const prePassBase64List: string[] = [];
-      const prePassMimeList: string[] = [];
-      for (const img of imageList) {
-        const ppBase64 = img.includes(",") ? img.split(",")[1] : img;
-        const ppMimeMatch = img.match(/^data:(image\/\w+);/);
-        const ppMimeType = ppMimeMatch ? ppMimeMatch[1] : "image/jpeg";
-        prePassBase64List.push(ppBase64);
-        prePassMimeList.push(ppMimeType);
-      }
-
-      // Use real domain + item name from Pass 1 (not a heuristic guess)
-      prePassResult = await runAgenticPrePass(
-        GEMINI_API_KEY,
-        identification.domain as any,
-        identification.itemName,
-        prePassBase64List,
-        prePassMimeList,
-        invocationId,
-      );
-      if (prePassResult) {
-        console.log(
-          `[${invocationId}] Pre-Pass 0 completed with domain=${identification.domain}, item=${identification.itemName}`,
-        );
-      }
-    } catch (prePassErr) {
-      console.warn(
-        `[${invocationId}] Pre-Pass 0 outer catch (non-blocking):`,
-        String(prePassErr),
-      );
-    }
-    // ─── END PRE-PASS 0 ─────────────────────────────────────────────────────────
+    // ─── END MODULAR CONTROLLER ───────────────────────────────────────────────
 
     // ─── SLAB OCR: GPT-4o Vision label reading (coins_bullion + general domains only) ──────────────────
     // Runs BEFORE Pass 2 so the correct year/grade/cert are injected as ground
