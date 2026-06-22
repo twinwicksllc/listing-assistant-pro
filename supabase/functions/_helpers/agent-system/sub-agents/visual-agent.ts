@@ -5,14 +5,33 @@
 
 import { AgentContext, VisualInspectionResult } from "../pipelineContracts.ts";
 import { DomainDefinition } from "../registry.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { getEmbedding } from "../../rag/embedding.ts";
+import { findSimilarContext, formatRagResults } from "../../rag/retriever.ts";
 
 export async function runAgenticVisualAgent(
   apiKey: string,
   domainDef: DomainDefinition,
   context: AgentContext,
+  supabase: ReturnType<typeof createClient>,
 ): Promise<VisualInspectionResult> {
   const { invocationId, imageList } = context;
   console.log(`[${invocationId}] VisualAgent: Running precision inspection for ${domainDef.domain}`);
+
+  // --- RAG: Augmented Context from Grading Standards ---
+  let ragContext = "";
+  if (domainDef.domain === "coins_bullion") {
+    try {
+      const embedding = await getEmbedding(apiKey, context.identification?.itemName || domainDef.domain);
+      const results = await findSimilarContext(supabase, embedding, "grading_standard");
+      ragContext = formatRagResults(results);
+      if (ragContext) {
+        console.log(`[${invocationId}] VisualAgent: Injected ${results.length} grading standard references.`);
+      }
+    } catch (ragErr) {
+      console.warn(`[${invocationId}] VisualAgent RAG failed:`, ragErr);
+    }
+  }
 
   // Base64 parsing (Simplified for now - in production use existing parser)
   const visionImages = imageList.map((img) => {
@@ -33,6 +52,12 @@ export async function runAgenticVisualAgent(
 Domain: ${domainDef.domain}
 Item Identification: ${context.identification?.itemName}
 
+${
+      ragContext
+        ? `### GRADING STANDARDS & CRITERIA:\nUse these verified standards to guide your inspection:\n${ragContext}\n`
+        : ""
+    }
+
 ### PRECISION INSPECTION GOALS:
 ${zoomTargets}
 
@@ -47,7 +72,7 @@ You must return your findings in JSON format:
   "zoomRegionsExamined": ["region1", "region2"],
   "keyFindings": "Detailed summary of findings...",
   "confidenceBoost": 85,
-  "identificationCorrection": "Optional correction if ID was wrong"
+  "identificationCorrection": "string or null"
 }`;
 
   try {
@@ -71,14 +96,27 @@ You must return your findings in JSON format:
     if (!response.ok) throw new Error(`Gemini API error: ${response.status}`);
     const data = await response.json();
 
-    // In a real implementation, we would parse the candidate response and tool calls.
-    // For this boilerplate, we'll simulate the return structure based on the prompt instructions.
-    // Full parser logic would be integrated here.
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return {
+          zoomRegionsExamined: parsed.zoomRegionsExamined || [],
+          keyFindings: parsed.keyFindings || "Incomplete findings provided.",
+          confidenceBoost: parsed.confidenceBoost || 50,
+          identificationCorrection: parsed.identificationCorrection || null,
+        };
+      } catch (pErr) {
+        console.warn(`[${invocationId}] VisualAgent: Failed to parse JSON response:`, pErr);
+      }
+    }
 
     return {
       zoomRegionsExamined: domainDef.visionGoals.map((g) => g.region),
-      keyFindings: "Visual inspection completed using domain-specific zoom targets.",
-      confidenceBoost: 90,
+      keyFindings: "Visual inspection completed (fallback parsing).",
+      confidenceBoost: 70,
     };
   } catch (err) {
     console.warn(`[${invocationId}] VisualAgent failed (non-blocking):`, err);
