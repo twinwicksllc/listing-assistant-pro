@@ -482,7 +482,7 @@ serve(async (req: Request) => {
     });
 
     let identification = agentResult.identification;
-    let prePassResult = agentResult.visualFindings
+    prePassResult = agentResult.visualFindings
       ? {
         marketAnalysis: agentResult.marketReport?.marketAnalysis ?? null,
         groundedCategoryId: agentResult.marketReport?.groundedCategoryId ??
