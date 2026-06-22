@@ -106,7 +106,7 @@ export default function AnalyzePage() {
     requiredAspects: string[];
     suggestedAspects: string[];
     allowedConditions: string[];
-    /** Authoritative backend flag — true when analyze-item identified coins_bullion domain */
+    /** Authoritative backend flag â true when analyze-item identified coins_bullion domain */
     isCoinCategory?: boolean;
   } | null>(null);
   const [analysisMeta, setAnalysisMeta] = useState<{
@@ -146,7 +146,7 @@ export default function AnalyzePage() {
   const coinConditionDetailRequired = isCoinConditionDetailRequired(ebayCategoryId, domain, categoryBreadcrumb, ebayMetadata?.isCoinCategory ?? false);
   const coinConditionDetailComplete = isCoinConditionDetailComplete(coinConditionDetail);
 
-  // ── Hooks ──────────────────────────────────────────────────────────────────────────
+  // ââ Hooks ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
   const {
     extractingFrames,
@@ -171,6 +171,7 @@ export default function AnalyzePage() {
     ebayCategoryId,
     itemSpecifics,
     coinConditionDetail,
+    domain,
     selectedPolicies,
     bestOfferEnabled,
     bestOfferAutoAcceptPrice,
@@ -491,21 +492,21 @@ export default function AnalyzePage() {
     currentEbayMetadata: ebayMetadata,
   });
 
-  // ── Guards ─────────────────────────────────────────────────────────────────────────
+  // ââ Guards âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
   if (imageUrls.length === 0 && !videoOnlyMode) {
     navigate("/home");
     return null;
   }
 
-  // Show all item specifics entries — including empty ones seeded from eBay aspects
+  // Show all item specifics entries â including empty ones seeded from eBay aspects
   // so the user can see and fill in required/suggested fields for the new category.
   // We only exclude the internal _coinConditionDetail key (prefixed with _).
   const displaySpecifics = Object.entries(itemSpecifics).filter(
     ([k, v]) => !k.startsWith("_") && (v !== null && v !== undefined),
   );
 
-  // ── Video-only early return ──────────────────────────────────────────────────────────────
+  // ââ Video-only early return ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
   if (videoOnlyMode) {
     return (
@@ -531,7 +532,7 @@ export default function AnalyzePage() {
     );
   }
 
-  // ── Main render ────────────────────────────────────────────────────────────────────────
+  // ââ Main render ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
   return (
     <div className="min-h-screen bg-background pb-8">

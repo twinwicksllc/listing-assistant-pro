@@ -22,6 +22,7 @@ interface UseAnalyzePublishPayloadParams {
   pricingMode: "per_item" | "total";
   ebayVideoId: string | null;
   ebayVideoStatus: string | null;
+  domain?: string; // Gemini Pass-1 domain (e.g. "coins_bullion") — forwarded to ebay-publish for coin detection
   packageWeightLb: number;
   packageWeightOz: number;
   packageLengthIn: number;
@@ -49,6 +50,7 @@ export function useAnalyzePublishPayload({
   pricingMode,
   ebayVideoId,
   ebayVideoStatus,
+  domain,
   packageWeightLb,
   packageWeightOz,
   packageLengthIn,
@@ -64,9 +66,14 @@ export function useAnalyzePublishPayload({
     postalCode?: string | null;
     city?: string | null;
   }) => {
-    const publishItemSpecifics = coinConditionDetail
-      ? { ...(itemSpecifics as Record<string, unknown>), _coinConditionDetail: coinConditionDetail }
-      : itemSpecifics;
+    // Build publish item specifics — embed _coinConditionDetail and _domain so
+    // ebay-publish can detect coin categories and build conditionDescriptors without
+    // relying solely on its hardcoded HARDCODED_COIN_CATEGORY_IDS set.
+    const publishItemSpecifics: Record<string, unknown> = {
+      ...(itemSpecifics as Record<string, unknown>),
+      ...(coinConditionDetail ? { _coinConditionDetail: coinConditionDetail } : {}),
+      ...(domain && domain !== "general" ? { _domain: domain } : {}),
+    };
 
     return {
     title,
@@ -134,6 +141,7 @@ export function useAnalyzePublishPayload({
     packageLengthIn,
     packageWidthIn,
     packageHeightIn,
+    domain,
   ]);
 
   return {
