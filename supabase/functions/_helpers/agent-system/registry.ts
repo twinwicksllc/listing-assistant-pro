@@ -29,7 +29,8 @@ export const DOMAIN_REGISTRY: Record<Domain, DomainDefinition> = {
     visionGoals: [
       {
         region: "certification slab label (PCGS/NGC/ANACS/ICG/PMG/Legacy Currency Grading text)",
-        rationale: "Extract authoritative year, denomination, grade, cert number, and any special designations (e.g. EPQ, DCAM, NET). Read each digit carefully — misreads of slab labels are a known AI failure mode.",
+        rationale:
+          "Extract authoritative year, denomination, grade, cert number, and any special designations (e.g. EPQ, DCAM, NET). Read each digit carefully — misreads of slab labels are a known AI failure mode.",
       },
       {
         region: "PMG or Legacy Currency Grading label (for paper money/banknotes)",
@@ -37,7 +38,8 @@ export const DOMAIN_REGISTRY: Record<Domain, DomainDefinition> = {
       },
       {
         region: "date and mint mark on coin face",
-        rationale: "Confirm year and mint (e.g., 'D', 'S', 'P', 'CC') for raw coins. The current year is valid — do not classify recent-dated coins as novelty.",
+        rationale:
+          "Confirm year and mint (e.g., 'D', 'S', 'P', 'CC') for raw coins. The current year is valid — do not classify recent-dated coins as novelty.",
       },
     ],
     groundingQueries: (itemName: string) => [

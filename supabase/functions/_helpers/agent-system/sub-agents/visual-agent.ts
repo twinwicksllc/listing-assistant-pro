@@ -23,7 +23,8 @@ export async function runAgenticVisualAgent(
   if (domainDef.domain === "coins_bullion") {
     try {
       // Use pre-computed embedding from controller if available; fall back to generating one
-      const embedding = context.queryEmbedding ?? await getEmbedding(apiKey, context.identification?.itemName || domainDef.domain);
+      const embedding = context.queryEmbedding ??
+        await getEmbedding(apiKey, context.identification?.itemName || domainDef.domain);
       const results = await findSimilarContext(supabase, embedding, "grading_standard");
       ragContext = formatRagResults(results);
       if (ragContext) {
@@ -78,9 +79,7 @@ You must return your findings in JSON format:
 
   // Use the stronger model for coins_bullion — precision slab label reading demands it.
   // For other domains, gemini-2.0-flash is fast and sufficient.
-  const visualModel = domainDef.domain === "coins_bullion"
-    ? "gemini-3.1-pro-preview"
-    : "gemini-2.0-flash";
+  const visualModel = domainDef.domain === "coins_bullion" ? "gemini-3.1-pro-preview" : "gemini-2.0-flash";
 
   try {
     const response = await fetch(

@@ -81,8 +81,12 @@ export class ListingAgentController {
     const boost = visualResult?.confidenceBoost ?? 0;
     if (correction && boost >= 70) {
       const corrLower = correction.toLowerCase();
-      if (/coins?|bullion|numismatic|currency|paper money/.test(corrLower) && identification.domain !== "coins_bullion") {
-        console.log(`[${invocationId}] Controller: identificationCorrection → upgrading domain to coins_bullion (boost=${boost})`);
+      if (
+        /coins?|bullion|numismatic|currency|paper money/.test(corrLower) && identification.domain !== "coins_bullion"
+      ) {
+        console.log(
+          `[${invocationId}] Controller: identificationCorrection → upgrading domain to coins_bullion (boost=${boost})`,
+        );
         identification.domain = "coins_bullion";
       }
       // Attempt to extract a more precise item name from the correction text
@@ -90,7 +94,9 @@ export class ListingAgentController {
       if (nameMatch?.[1]) {
         const correctedName = nameMatch[1].trim();
         if (correctedName.toLowerCase() !== identification.itemName.toLowerCase()) {
-          console.log(`[${invocationId}] Controller: identificationCorrection → itemName "${identification.itemName}" → "${correctedName}"`);
+          console.log(
+            `[${invocationId}] Controller: identificationCorrection → itemName "${identification.itemName}" → "${correctedName}"`,
+          );
           identification.itemName = correctedName;
         }
       }
