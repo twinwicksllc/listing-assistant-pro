@@ -591,7 +591,7 @@ export default function AnalyzePage() {
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-4" data-testid="listing-generated">
             <ListingFields
               analysisMeta={analysisMeta}
               currentPlan={currentPlan}

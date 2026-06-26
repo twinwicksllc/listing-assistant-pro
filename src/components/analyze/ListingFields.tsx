@@ -337,7 +337,7 @@ export function ListingFields({
                 const isRequired = ebayMetadata?.requiredAspects?.includes(key);
                 const isSuggested = ebayMetadata?.suggestedAspects?.includes(key);
                 return (
-                  <div key={key} className="flex items-center justify-between px-3 py-2">
+                  <div key={key} data-testid={`aspect-${key}`} className="flex items-center justify-between px-3 py-2">
                     <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
                       {key}
                       {isRequired && (

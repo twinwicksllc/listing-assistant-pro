@@ -30,6 +30,7 @@ export interface VisualInspectionResult {
   keyFindings: string;
   confidenceBoost: number;
   identificationCorrection?: string;
+  capturedAttributes?: Record<string, string>;
 }
 
 export interface MarketDataReport {
