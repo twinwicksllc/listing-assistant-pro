@@ -20,14 +20,17 @@ test.describe('PR Smoke Tests', () => {
   });
 
   test('coin analysis populates key specifics', async ({ page }) => {
+    test.setTimeout(120_000);
     await uploadTestPhoto(page, 'coin');
-    
-    // In v2, analysis triggers automatically after clicking "Process Now" in upload flow.
-    // The uploadTestPhoto helper handles "Process Now", and AnalyzePage triggers handleGenerate on mount.
-    // We just need to wait for the analysis to complete.
-    await page.waitForSelector('[data-testid="listing-generated"]', { timeout: 60_000 });
 
-    await page.waitForTimeout(2000);
+    // Click "Process Now" to navigate to /analyze and trigger AI analysis.
+    await page.getByRole('button', { name: 'Process Now' }).click();
+    await page.waitForURL(/\/analyze/, { timeout: 15_000 });
+
+    // Wait for AI analysis to complete (auto-triggered on mount).
+    await page.waitForSelector('[data-testid="listing-generated"]', { timeout: 90_000 });
+
+    await page.waitForTimeout(1000);
 
     await expect(page.locator('text=Coin Condition Details')).toBeVisible({ timeout: 10_000 });
 
