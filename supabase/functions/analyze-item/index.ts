@@ -2746,8 +2746,7 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
     const COIN_MANDATE_PARENT_IDS = new Set(["253", "256", "3377", "4733", "18466"]);
     const resolvedCategoryId = String(listing.ebayCategoryId ?? "");
     const resolvedBreadcrumb = String((listing as any).ebayCategoryBreadcrumb ?? "");
-    const isCoinCategoryFlag =
-      identification.domain === "coins_bullion" ||
+    const isCoinCategoryFlag = identification.domain === "coins_bullion" ||
       COIN_MANDATE_PARENT_IDS.has(resolvedCategoryId) ||
       /coin|paper money|currency|dollar|quarter|dime|nickel|penny|bullion|numismatic/i.test(resolvedBreadcrumb);
 
