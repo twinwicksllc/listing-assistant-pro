@@ -23,7 +23,8 @@ export async function runMarketAgent(
   // --- RAG: Augmented Context from Sales History ---
   let ragContext = "";
   try {
-    const embedding = await getEmbedding(apiKey, itemName);
+    // Use pre-computed embedding from controller if available; fall back to generating one
+    const embedding = context.queryEmbedding ?? await getEmbedding(apiKey, itemName);
     const results = await findSimilarContext(supabase, embedding, "sales_history");
     ragContext = formatRagResults(results);
     if (ragContext) {
@@ -77,7 +78,9 @@ Return your report in JSON format:
     const data = await response.json();
 
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    // Strip markdown code fences (```json...``` or ```...```) that Gemini sometimes adds around JSON
+    const cleanText = text.replace(/^```(?:json)?\s*/m, "").replace(/\s*```\s*$/m, "");
+    const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
 
     if (jsonMatch) {
       try {

@@ -48,4 +48,6 @@ export interface AgentContext {
   imageList: string[];
   voiceNote?: string;
   identification?: Identification;
+  /** Pre-computed item embedding — generated once in controller and shared by sub-agents to avoid duplicate API calls. */
+  queryEmbedding?: number[];
 }
