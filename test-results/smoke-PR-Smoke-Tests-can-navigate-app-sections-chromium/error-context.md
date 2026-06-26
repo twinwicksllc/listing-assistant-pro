@@ -7,7 +7,7 @@
 # Test info
 
 - Name: smoke.spec.ts >> PR Smoke Tests >> can navigate app sections
-- Location: e2e/tests/smoke.spec.ts:53:3
+- Location: e2e/tests/smoke.spec.ts:55:3
 
 # Error details
 

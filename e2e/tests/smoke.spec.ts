@@ -21,20 +21,22 @@ test.describe('PR Smoke Tests', () => {
 
   test('coin analysis populates key specifics', async ({ page }) => {
     await uploadTestPhoto(page, 'coin');
-    await generateListing(page);
+    
+    // In v2, analysis triggers automatically after clicking "Process Now" in upload flow.
+    // The uploadTestPhoto helper handles "Process Now", and AnalyzePage triggers handleGenerate on mount.
+    // We just need to wait for the analysis to complete.
+    await page.waitForSelector('[data-testid="listing-generated"]', { timeout: 60_000 });
 
-    await page.goto('/analyze');
     await page.waitForTimeout(2000);
 
     await expect(page.locator('text=Coin Condition Details')).toBeVisible({ timeout: 10_000 });
 
     const specifics = await page.evaluate(() => {
-      const rows = Array.from(document.querySelectorAll('div.flex.items-center.justify-between.px-3.py-2'));
+      const rows = Array.from(document.querySelectorAll('[data-testid^="aspect-"]'));
       const out: Record<string, string> = {};
       for (const row of rows) {
-        const keyEl = row.querySelector('span');
+        const key = (row as HTMLElement).dataset.testid?.replace('aspect-', '') || '';
         const valueEl = row.querySelector('input') as HTMLInputElement | null;
-        const key = keyEl?.textContent?.trim() || '';
         const value = valueEl?.value?.trim() || '';
         if (key) out[key] = value;
       }
