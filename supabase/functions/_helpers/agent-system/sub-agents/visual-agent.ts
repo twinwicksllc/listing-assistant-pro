@@ -74,8 +74,15 @@ You must return your findings in JSON format:
   "zoomRegionsExamined": ["region1", "region2"],
   "keyFindings": "Detailed summary of findings...",
   "confidenceBoost": 85,
-  "identificationCorrection": "string or null"
-}`;
+  "identificationCorrection": "string or null",
+  "capturedAttributes": {
+    "Year": "1876",
+    "Mint Mark": "D",
+    "Denomination": "10C",
+    "Strike Type": "Business",
+    "Composition": "Silver"
+  }
+} (Only include attributes you are ≥90% confident in. Use eBay-friendly values.)`;
 
   // Use the stronger model for coins_bullion — precision slab label reading demands it.
   // For other domains, gemini-2.0-flash is fast and sufficient.
@@ -110,11 +117,20 @@ You must return your findings in JSON format:
     if (jsonMatch) {
       try {
         const parsed = JSON.parse(jsonMatch[0]);
+        const capturedAttributes = parsed?.capturedAttributes &&
+            typeof parsed.capturedAttributes === "object"
+          ? Object.fromEntries(
+            Object.entries(parsed.capturedAttributes)
+              .filter(([k, v]) => typeof k === "string" && typeof v === "string")
+              .map(([k, v]) => [k.trim(), v.trim()]),
+          )
+          : undefined;
         return {
           zoomRegionsExamined: parsed.zoomRegionsExamined || [],
           keyFindings: parsed.keyFindings || "Incomplete findings provided.",
           confidenceBoost: parsed.confidenceBoost || 50,
           identificationCorrection: parsed.identificationCorrection || null,
+          capturedAttributes,
         };
       } catch (pErr) {
         console.warn(`[${invocationId}] VisualAgent: Failed to parse JSON response:`, pErr);

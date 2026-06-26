@@ -1334,6 +1334,12 @@ Seller's note: "${voiceNote}"`;
       additionalProperties: true,
     };
 
+    const isCoinCategoryForSchema = identification.domain === "coins_bullion" ||
+      COIN_MANDATE_PARENT_IDS.has(String(fetchedMetadataCategoryId ?? "")) ||
+      /coin|paper money|currency|dollar|quarter|dime|nickel|penny|bullion|numismatic/i.test(
+        String(lockedBreadcrumb ?? ""),
+      );
+
     if (categoryAspects?.aspects && categoryAspects.aspects.length > 0) {
       for (const aspect of categoryAspects.aspects) {
         const propSchema: any = {
@@ -1353,6 +1359,19 @@ Seller's note: "${voiceNote}"`;
           itemSpecificsSchema.required.push(aspect.name);
         }
       }
+
+      // COIN ENFORCEMENT: For coin categories, ensure critical numismatic fields are
+      // present even if eBay marks them as "suggested". This ensures the AI
+      // populates them using the Visual Agent's findings.
+      if (isCoinCategoryForSchema) {
+        const criticalFields = ["Certification", "Year", "Denomination", "Composition", "Strike Type"];
+        for (const field of criticalFields) {
+          if (itemSpecificsSchema.properties[field] && !itemSpecificsSchema.required.includes(field)) {
+            itemSpecificsSchema.required.push(field);
+          }
+        }
+      }
+
       console.log(
         `[${invocationId}] Dynamic itemSpecifics schema: ${
           Object.keys(itemSpecificsSchema.properties).length
@@ -1464,6 +1483,9 @@ Seller's note: "${voiceNote}"`;
         },
       };
       itemSpecificsSchema.required = ["Certification", "Year", "Composition"];
+      if (isCoinCategoryForSchema) {
+        itemSpecificsSchema.required.push("Denomination");
+      }
     }
     // ── End dynamic tool schema ───────────────────────────────────────────────
 

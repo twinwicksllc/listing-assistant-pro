@@ -308,6 +308,7 @@ const HARDCODED_COIN_CATEGORY_IDS = new Set([
   "11118", // Liberty Head Nickels
   "11063", // Shield Nickels
   // ── US Dimes ───────────────────────────────────────────────────────────────
+  "11958", // Seated Liberty Dimes (legacy leaf used in production payloads)
   "11971", // Roosevelt Dimes
   "40149", // Dimes (parent/generic)
   "40150", // Dimes (type 2)
@@ -2638,6 +2639,96 @@ interface CoinConditionDetailRaw {
 }
 type CoinConditionDetail = CoinConditionDetailGraded | CoinConditionDetailRaw;
 
+function normalizeCoinConditionDetail(
+  input: unknown,
+): CoinConditionDetail | null {
+  if (!input || typeof input !== "object") return null;
+  const rec = input as Record<string, unknown>;
+  const type = String(rec.type ?? "").trim().toLowerCase();
+
+  if (type === "raw") {
+    const rawCondition = String(rec.rawCondition ?? "").trim();
+    if (!rawCondition) return null;
+    return { type: "raw", rawCondition };
+  }
+
+  if (type === "graded") {
+    const gradingCompany = String(
+      rec.gradingCompany ??
+        (typeof rec.graded === "object" && rec.graded
+          ? (rec.graded as Record<string, unknown>).company
+          : ""),
+    ).trim();
+    const grade = String(
+      rec.grade ??
+        (typeof rec.graded === "object" && rec.graded
+          ? (rec.graded as Record<string, unknown>).grade
+          : ""),
+    ).trim();
+    const certificationNumber = String(
+      rec.certificationNumber ??
+        (typeof rec.graded === "object" && rec.graded
+          ? (rec.graded as Record<string, unknown>).certificationNumber
+          : ""),
+    ).trim();
+
+    if (!gradingCompany || !grade) return null;
+    return {
+      type: "graded",
+      gradingCompany,
+      grade,
+      ...(certificationNumber ? { certificationNumber } : {}),
+    };
+  }
+
+  return null;
+}
+
+function mapConditionEnumToRawCoinTier(conditionEnum: string): CoinConditionDetailRaw["rawCondition"] {
+  const normalized = String(conditionEnum || "").toUpperCase();
+  if (["NEW", "NEW_OTHER", "NEW_WITH_DEFECTS"].includes(normalized)) {
+    return "Uncirculated";
+  }
+  if (["LIKE_NEW", "USED_EXCELLENT"].includes(normalized)) {
+    return "Extremely Fine to About Uncirculated";
+  }
+  if (["USED_VERY_GOOD", "USED_GOOD"].includes(normalized)) {
+    return "Fine to Very Fine";
+  }
+  return "Below Fine";
+}
+
+function synthesizeCoinConditionDetail(
+  normalizedConditionEnum: string,
+  itemSpecifics: Record<string, unknown>,
+): CoinConditionDetail {
+  const cert = String(itemSpecifics["Certification"] ?? "").trim();
+  const grade = String(itemSpecifics["Grade"] ?? "").trim();
+  const certNum = String(itemSpecifics["Certification Number"] ?? "").trim();
+  const circulated = String(itemSpecifics["Circulated/Uncirculated"] ?? "").trim().toLowerCase();
+
+  const isUncertified = !cert || /^uncertified$/i.test(cert);
+  const hasUsableGrade = !!grade && !/^ungraded$/i.test(grade);
+
+  if (!isUncertified && hasUsableGrade) {
+    return {
+      type: "graded",
+      gradingCompany: cert,
+      grade,
+      ...(certNum ? { certificationNumber: certNum } : {}),
+    };
+  }
+
+  if (circulated === "uncirculated") {
+    return { type: "raw", rawCondition: "Uncirculated" };
+  }
+
+  return {
+    type: "raw",
+    rawCondition: mapConditionEnumToRawCoinTier(normalizedConditionEnum),
+  };
+}
+
 /**
  * Builds the conditionDescriptors array for the eBay Inventory API PUT body.
  * Implements strict Phase 2 validation for graded vs raw coins.
@@ -4264,10 +4355,14 @@ serve(async (req) => {
       const rawItemSpecifics = (
         itemSpecifics && typeof itemSpecifics === "object" ? itemSpecifics : {}
       ) as Record<string, unknown>;
-      const coinConditionDetailRaw = rawItemSpecifics._coinConditionDetail as
-        | CoinConditionDetail
-        | null
-        | undefined;
+      const coinConditionDetailFromSpecifics = normalizeCoinConditionDetail(
+        rawItemSpecifics._coinConditionDetail,
+      );
+      const coinConditionDetailFromPayload = normalizeCoinConditionDetail(
+        (payload as Record<string, unknown>).coinConditionDetail,
+      );
+      let coinConditionDetailRaw: CoinConditionDetail | null =
+        coinConditionDetailFromSpecifics || coinConditionDetailFromPayload;
 
       // Coin categories MUST provide condition details per eBay June 2026 mandate.
       // categoryTreeType="coin" is detected via breadcrumb patterns and includes all descendants
@@ -4279,24 +4374,41 @@ serve(async (req) => {
       //  3. _domain === "coins_bullion" — Gemini Pass-1 classified the item as coin/bullion;
       //     catches any category ID not yet in the hardcoded list
       const publishDomain = rawItemSpecifics._domain as string | undefined;
+      const hasCoinSpecificSignals = [
+        "Coin",
+        "Denomination",
+        "Circulated/Uncirculated",
+        "Strike Type",
+        "Mint Location",
+        "Mint Mark",
+        "Fineness",
+        "Certification",
+      ].some((k) => {
+        const v = rawItemSpecifics[k];
+        return typeof v === "string" && v.trim().length > 0;
+      });
       const isCoinDescriptorCategory = categoryTreeType === "coin" ||
         coinConditionDetailRaw != null ||
-        publishDomain === "coins_bullion";
+        publishDomain === "coins_bullion" ||
+        hasCoinSpecificSignals;
 
       // VALIDATION: Coin listings in our positively-identified hardcoded list MUST have condition
       // details before we even attempt to publish. For secondary signals (_coinConditionDetail
       // present, or _domain = coins_bullion), we don't throw here — we proceed optimistically
       // and let eBay validate. This prevents blocking edge-case bullion/bar categories that
       // are tagged coins_bullion but don't actually need conditionDescriptors.
-      if (categoryTreeType === "coin" && !coinConditionDetailRaw) {
-        throw new Error(
-          `Coin listings in category ${finalCategoryId} require detailed condition information per eBay June 2026 mandate. ` +
-            `Please specify either a certified grade (PCGS, NGC, ANACS, ICG, CAC, ICCS, PMG, Legacy Currency Grading) or a raw condition tier (Uncirculated, Extremely Fine to About Uncirculated, Fine to Very Fine, Below Fine) before publishing.`,
-        );
-      }
-
-      if (coinConditionDetailRaw && isCoinDescriptorCategory && clientId && clientSecret) {
+      if (isCoinDescriptorCategory && clientId && clientSecret) {
         try {
+          if (!coinConditionDetailRaw) {
+            coinConditionDetailRaw = synthesizeCoinConditionDetail(
+              effectiveConditionEnum,
+              rawItemSpecifics,
+            );
+            console.log(
+              `create_draft: synthesized coinConditionDetail from condition/itemSpecifics: ${JSON.stringify(coinConditionDetailRaw)}`,
+            );
+          }
+
           console.log(
             `create_draft: MANDATORY: fetching coin condition descriptors for category ${finalCategoryId}, type=${coinConditionDetailRaw.type}`,
           );
