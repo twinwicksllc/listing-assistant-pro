@@ -13,6 +13,8 @@ const ALLOWED_GRADING_COMPANIES = new Set([
   "ICG",
   "CAC",
   "ICCS",
+  "PMG",
+  "Legacy Currency Grading",
 ]);
 
 // Exact set of raw condition tiers mandated by eBay
@@ -125,7 +127,7 @@ export function validateGradedCoinCondition(
     errors: [],
     normalized: {
       type: "graded",
-      gradingCompany: company as "PCGS" | "NGC" | "ANACS" | "ICG" | "CAC" | "ICCS",
+      gradingCompany: company as "PCGS" | "NGC" | "ANACS" | "ICG" | "CAC" | "ICCS" | "PMG" | "Legacy Currency Grading",
       grade,
       certificationNumber: certNum ? String(certNum).trim() : undefined,
     },

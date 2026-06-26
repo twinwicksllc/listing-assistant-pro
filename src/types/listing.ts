@@ -24,7 +24,7 @@ export interface ItemSpecifics {
 export type CoinConditionDetail =
   | {
       type: "graded";
-      gradingCompany: "PCGS" | "NGC" | "ANACS" | "ICG" | "CAC" | "ICCS";
+      gradingCompany: "PCGS" | "NGC" | "ANACS" | "ICG" | "CAC" | "ICCS" | "PMG" | "Legacy Currency Grading";
       /** Full grade string as on slab label, e.g. "MS 65", "PR 70 DCAM" */
       grade: string;
       /** Cert number — include when visible */
@@ -137,6 +137,8 @@ const COIN_CATEGORY_IDS = new Set([
   "40158","40159","40160","40161","40162","40163","40164","40165","40166","40167",
   // US Coins — parent/generic
   "253","11116","11118","164743",
+  // eBay mandate coin parent categories (253=US, 256=World, 3377=Canada, 4733=Ancient, 18466=Medieval)
+  "256","3377","4733","18466",
   // World / Ancient / Medieval / Exonumia / Bullion overlap
   "532","173685","3360","3361","3411","45244",
   "177652","177653","178906","166680","166681",
