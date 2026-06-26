@@ -72,11 +72,63 @@ test.describe('Coin Condition Validation (Phase 3)', () => {
       const options = await companySelect.locator('option').allTextContents();
       
       // Verify only valid companies are available
-      const validCompanies = ['PCGS', 'NGC', 'ANACS', 'ICG', 'CAC', 'ICCS'];
+      const validCompanies = ['PCGS', 'NGC', 'ANACS', 'ICG', 'CAC', 'ICCS', 'PMG', 'Legacy Currency Grading'];
       for (const company of validCompanies) {
         expect(options.some(opt => opt.includes(company))).toBeTruthy();
       }
       expect(options.some(opt => opt.includes('INVALID'))).toBeFalsy();
+    });
+
+    test('accepts valid graded currency (PMG 66 EPQ)', async ({ page }) => {
+      // Upload currency photo (simulated via photo type)
+      await uploadTestPhoto(page, 'coin');
+      
+      // Generate listing
+      await generateListing(page);
+      
+      // Navigate to listing editor
+      await page.goto('/analyze');
+      
+      // Select "Graded coin" button (shared component for currency)
+      const gradedButton = page.locator('button:has-text("Graded coin")').first();
+      await gradedButton.click();
+      
+      // Select grading company (PMG)
+      const companySelect = page.locator('select').nth(0);
+      await companySelect.selectOption('PMG');
+      
+      // Enter grade
+      const gradeInput = page.locator('input[placeholder*="MS 65"]');
+      await gradeInput.fill('EPQ 66');
+      
+      // Verify no error message appears
+      const errorBox = page.locator('text=Invalid').first();
+      await expect(errorBox).not.toBeVisible();
+      
+      // Verify form accepts submission
+      const submitButton = page.locator('button:has-text("Publish")').first();
+      await expect(submitButton).toBeEnabled({ timeout: 5_000 });
+    });
+
+    test('accepts valid graded currency (Legacy Currency Grading)', async ({ page }) => {
+      // Upload currency photo
+      await uploadTestPhoto(page, 'coin');
+      
+      await generateListing(page);
+      await page.goto('/analyze');
+      
+      const gradedButton = page.locator('button:has-text("Graded coin")').first();
+      await gradedButton.click();
+      
+      const companySelect = page.locator('select').nth(0);
+      await companySelect.selectOption('Legacy Currency Grading');
+      
+      const gradeInput = page.locator('input[placeholder*="MS 65"]');
+      await gradeInput.fill('VF 35');
+      
+      const errorBox = page.locator('text=Invalid').first();
+      await expect(errorBox).not.toBeVisible();
+      await expect(page.locator('button:has-text("Publish")').first()).toBeEnabled();
     });
 
     test('rejects invalid grade format', async ({ page }) => {

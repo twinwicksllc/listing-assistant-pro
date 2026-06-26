@@ -20,7 +20,7 @@ import {
   isCoinConditionValid,
 } from "@/lib/coinConditionValidator";
 
-const COIN_GRADING_COMPANIES = ["PCGS", "NGC", "ANACS", "ICG", "CAC", "ICCS"] as const;
+const COIN_GRADING_COMPANIES = ["PCGS", "NGC", "ANACS", "ICG", "CAC", "ICCS", "PMG", "Legacy Currency Grading"] as const;
 const COIN_RAW_CONDITIONS = [
   "Uncirculated",
   "Extremely Fine to About Uncirculated",

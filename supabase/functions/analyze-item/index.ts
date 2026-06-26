@@ -2736,10 +2736,19 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
     const creditsResetAt = tier === "starter" ? computeNextResetAt(orgResetDay) : null;
 
     // Build eBay metadata so the frontend can use real aspects/conditions
-    // isCoinCategory: true when the backend AI identified this as a coin/bullion domain.
-    // This is the single authoritative signal the frontend uses to show the Coin
-    // Condition Details panel — no hardcoded category-ID lists required.
-    const isCoinCategoryFlag = identification.domain === "coins_bullion";
+    // isCoinCategory: true when:
+    //   1. AI Pass-1 domain === "coins_bullion" (primary signal)
+    //   2. The resolved category ID is one of eBay's mandate parent IDs (256, 3377, 4733, 18466)
+    //      or the US Coins parent (253) — catches cases where AI mislabels the domain
+    //   3. The resolved category breadcrumb contains a coin-domain keyword
+    // This ensures ALL sub-categories of the mandated parent categories trigger
+    // the Coin Condition Details panel per the eBay June 2026 mandate.
+    const COIN_MANDATE_PARENT_IDS = new Set(["253", "256", "3377", "4733", "18466"]);
+    const resolvedCategoryId = String(listing.ebayCategoryId ?? "");
+    const resolvedBreadcrumb = String((listing as any).ebayCategoryBreadcrumb ?? "");
+    const isCoinCategoryFlag = identification.domain === "coins_bullion" ||
+      COIN_MANDATE_PARENT_IDS.has(resolvedCategoryId) ||
+      /coin|paper money|currency|dollar|quarter|dime|nickel|penny|bullion|numismatic/i.test(resolvedBreadcrumb);
 
     // Build eBay metadata. Always emitted for coin listings so the frontend
     // always receives isCoinCategory even if eBay returned no aspects/conditions.

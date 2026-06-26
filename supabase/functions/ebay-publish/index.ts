@@ -241,6 +241,10 @@ async function detectCategoryTree(
   categoryId: string,
   supabase: any,
 ): Promise<CategoryTreeType> {
+  // eBay June 2026 mandate top-level parent IDs — always "coin" regardless of breadcrumb
+  const COIN_MANDATE_PARENT_IDS = new Set(["253", "256", "3377", "4733", "18466"]);
+  if (COIN_MANDATE_PARENT_IDS.has(categoryId)) return "coin";
+
   // First try to get breadcrumb from DB
   try {
     const { data: mapping } = await supabase
@@ -256,7 +260,8 @@ async function detectCategoryTree(
       if (breadcrumb.includes("bullion")) return "bullion";
       if (
         breadcrumb.includes("coins:") || breadcrumb.includes("coins >") ||
-        breadcrumb.includes("paper money")
+        breadcrumb.includes("paper money") || breadcrumb.includes("numismatic") ||
+        breadcrumb.includes("coins & paper money")
       ) return "coin";
       if (
         breadcrumb.includes("trading cards") ||
@@ -287,8 +292,13 @@ async function detectCategoryTree(
 // Parent categories are detected dynamically via breadcrumb patterns (e.g., "Coins: US", "Coins: World").
 // eBay Metadata API and descriptor fetching work with actual leaf category IDs.
 const HARDCODED_COIN_CATEGORY_IDS = new Set([
-  // ── US Coin parent / top-level ─────────────────────────────────────────────
+  // ── eBay June 2026 mandate top-level parent IDs (all descendants require conditionDescriptors) ──
   "253", // Coins: US (parent — all descendants are coins)
+  "256", // Coins: World (eBay taxonomy parent)
+  "3377", // Coins: Canada (eBay taxonomy parent)
+  "4733", // Coins: Ancient (eBay taxonomy parent)
+  "18466", // Coins: Medieval (eBay taxonomy parent)
+  // ── US Coin parent / top-level ─────────────────────────────────────────────
   // ── US Cents ───────────────────────────────────────────────────────────────
   "11981", // Wheat Pennies
   "39464", // Lincoln Cents (Memorial)
@@ -926,6 +936,8 @@ const VALID_ASPECT_VALUES: Record<string, Set<string>> = {
     "ICG",
     "CAC",
     "ICCS",
+    "PMG",
+    "Legacy Currency Grading",
   ]),
   "Circulated/Uncirculated": new Set(["Uncirculated", "Circulated", "Unknown"]),
   "Shape": new Set(["Bar", "Round"]),
@@ -1396,6 +1408,8 @@ function buildAndNormalizeAspects(
     "ICG",
     "CAC",
     "ICCS",
+    "PMG",
+    "Legacy Currency Grading",
     "PCGS & CAC",
     "NGC & CAC",
   ]);
@@ -1468,7 +1482,7 @@ const CONDITION_DESCRIPTIONS: Record<string, string> = {
   CERTIFIED_REFURBISHED: "Professionally refurbished and certified to work like new.",
   SELLER_REFURBISHED: "Seller-refurbished item in good working condition.",
   // USED_* â correct conditions for Coins & Paper Money category tree
-  // NOTE: Do NOT include numerical grades (AU-50, MS-65, etc.) in descriptions unless coin is certified by NGC, PCGS, ANACS, ICG, CAC, or ICCS
+  // NOTE: Do NOT include numerical grades (AU-50, MS-65, etc.) in descriptions unless coin is certified by NGC, PCGS, ANACS, ICG, CAC, ICCS, PMG, or Legacy Currency Grading
   USED_EXCELLENT: "Lightly circulated. Shows minimal wear on high points only.",
   USED_VERY_GOOD: "Moderately circulated. Major details clear with moderate wear.",
   USED_GOOD: "Heavily circulated. All major features visible but worn.",
@@ -1953,6 +1967,8 @@ const CERTIFIED_GRADERS_SET = new Set([
   "ICG",
   "CAC",
   "ICCS",
+  "PMG",
+  "Legacy Currency Grading",
   "PCGS & CAC",
   "NGC & CAC",
 ]);
@@ -2657,8 +2673,8 @@ function buildCoinConditionDescriptors(
   if (detail.type === "graded") {
     const graded = detail as CoinConditionDetailGraded;
 
-    // Phase 2: Strict company validation
-    const allowedCompanies = ["PCGS", "NGC", "ANACS", "ICG", "CAC", "ICCS"];
+    // Phase 2: Strict company validation (eBay June 2026 mandate approved list)
+    const allowedCompanies = ["PCGS", "NGC", "ANACS", "ICG", "CAC", "ICCS", "PMG", "Legacy Currency Grading"];
     if (!allowedCompanies.includes(graded.gradingCompany)) {
       throw new Error(
         `Phase 2 Validation: Grading company "${graded.gradingCompany}" is not allowed. ` +
@@ -4275,7 +4291,7 @@ serve(async (req) => {
       if (categoryTreeType === "coin" && !coinConditionDetailRaw) {
         throw new Error(
           `Coin listings in category ${finalCategoryId} require detailed condition information per eBay June 2026 mandate. ` +
-            `Please specify either a certified grade (PCGS, NGC, ANACS, ICG, CAC, ICCS) or a raw condition tier (Uncirculated, Extremely Fine, etc.) before publishing.`,
+            `Please specify either a certified grade (PCGS, NGC, ANACS, ICG, CAC, ICCS, PMG, Legacy Currency Grading) or a raw condition tier (Uncirculated, Extremely Fine to About Uncirculated, Fine to Very Fine, Below Fine) before publishing.`,
         );
       }
 

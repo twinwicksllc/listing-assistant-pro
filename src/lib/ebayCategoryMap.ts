@@ -9,6 +9,13 @@
  */
 export const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
 
+  // eBay June 2026 mandate parent category IDs (all descendants require conditionDescriptors)
+  "253":    "Coins & Paper Money > Coins: US",                                  // US Coins parent
+  "256":    "Coins & Paper Money > Coins: World",                               // World Coins parent
+  "3377":   "Coins & Paper Money > Coins: Canada",                              // Canadian Coins parent
+  "4733":   "Coins & Paper Money > Coins: Ancient",                             // Ancient Coins parent
+  "18466":  "Coins & Paper Money > Coins: Medieval",                            // Medieval Coins parent
+
   // ★ Template categories — fully validated in ebay-publish
   "178906": "Coins & Paper Money > Bullion > Gold > Bars & Rounds",            // ★ Gold Bars/Rounds
   "39489":  "Coins & Paper Money > Bullion > Silver > Bars & Rounds",          // ★ Silver Bars/Rounds
@@ -30,7 +37,6 @@ export const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
   "526":    "Coins & Paper Money > Coins: US > Mint Sets",                   // ★ US Coin Mint Sets
 
   // --- US Coins (general + other series) ---
-  "253":    "Coins & Paper Money > Coins: US",
   "11116":  "Coins & Paper Money > Coins: US > Pennies > Lincoln Memorial (1959-2008)",
   "11118":  "Coins & Paper Money > Coins: US > Half Dollars",
   "40149":  "Coins & Paper Money > Coins: US > Quarters > Washington (1932-1998)",
