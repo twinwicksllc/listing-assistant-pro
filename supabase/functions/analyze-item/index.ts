@@ -12,6 +12,9 @@ const corsHeaders = {
   "Access-Control-Max-Age": "86400",
 };
 
+// eBay coin category mandate: these parent IDs require conditionDescriptors (ID 1007) per June 2026 mandate
+const COIN_MANDATE_PARENT_IDS = new Set(["253", "256", "3377", "4733", "18466"]);
+
 // Table initialization deferred - will be created by category-lookup on first use
 async function ensureTableExists() {
   // No-op for now - category-lookup will initialize the table
@@ -2765,7 +2768,6 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
     //   3. The resolved category breadcrumb contains a coin-domain keyword
     // This ensures ALL sub-categories of the mandated parent categories trigger
     // the Coin Condition Details panel per the eBay June 2026 mandate.
-    const COIN_MANDATE_PARENT_IDS = new Set(["253", "256", "3377", "4733", "18466"]);
     const resolvedCategoryId = String(listing.ebayCategoryId ?? "");
     const resolvedBreadcrumb = String((listing as any).ebayCategoryBreadcrumb ?? "");
     const isCoinCategoryFlag = identification.domain === "coins_bullion" ||
