@@ -9,6 +9,7 @@ import { DOMAIN_REGISTRY } from "./registry.ts";
 import { runPass1Identification } from "../pass1Identification.ts";
 import { runAgenticVisualAgent } from "./sub-agents/visual-agent.ts";
 import { runMarketAgent } from "./sub-agents/market-agent.ts";
+import { getEmbedding } from "../rag/embedding.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 
 export class ListingAgentController {
@@ -47,8 +48,18 @@ export class ListingAgentController {
 
     console.log(`[${invocationId}] Controller: Stage 1 Complete. Domain=${identification.domain}`);
 
-    // Update context with identification for sub-agents
-    const enrichedContext = { ...context, identification };
+    // Pre-compute item embedding once — shared by Visual and Market sub-agents
+    // to avoid duplicate embedding API calls (would otherwise be identical for both).
+    let queryEmbedding: number[] | undefined;
+    try {
+      queryEmbedding = await getEmbedding(this.apiKey, identification.itemName);
+      console.log(`[${invocationId}] Controller: Embedding pre-computed for "${identification.itemName}"`);
+    } catch (embErr) {
+      console.warn(`[${invocationId}] Controller: Embedding pre-computation failed (non-blocking):`, embErr);
+    }
+
+    // Update context with identification and shared embedding for sub-agents
+    const enrichedContext = { ...context, identification, queryEmbedding };
 
     // --- STEP 2: Parallel Burst (Visual + Market) ---
     console.log(`[${invocationId}] Controller: Starting Stage 2 (Parallel Burst)`);
@@ -59,10 +70,42 @@ export class ListingAgentController {
       this.runMarketAgent(enrichedContext),
     ]);
 
+    const visualResult = visualFindings.status === "fulfilled" ? visualFindings.value : null;
+    const marketResult = marketReport.status === "fulfilled" ? marketReport.value : null;
+
+    // Close the feedback loop: apply the Visual Agent's identificationCorrection back to
+    // identification so that Slab OCR eligibility, domain fallback, and isCoinCategoryFlag
+    // all benefit from precision vision findings — not just the Pass 2 prompt.
+    // Guard: only act when confidenceBoost >= 70 to prevent low-confidence noise.
+    const correction = visualResult?.identificationCorrection;
+    const boost = visualResult?.confidenceBoost ?? 0;
+    if (correction && boost >= 70) {
+      const corrLower = correction.toLowerCase();
+      if (
+        /coins?|bullion|numismatic|currency|paper money/.test(corrLower) && identification.domain !== "coins_bullion"
+      ) {
+        console.log(
+          `[${invocationId}] Controller: identificationCorrection → upgrading domain to coins_bullion (boost=${boost})`,
+        );
+        identification.domain = "coins_bullion";
+      }
+      // Attempt to extract a more precise item name from the correction text
+      const nameMatch = correction.match(/(?:is|appears to be|actually a?n?)\s+([^.,"]{5,60})/i);
+      if (nameMatch?.[1]) {
+        const correctedName = nameMatch[1].trim();
+        if (correctedName.toLowerCase() !== identification.itemName.toLowerCase()) {
+          console.log(
+            `[${invocationId}] Controller: identificationCorrection → itemName "${identification.itemName}" → "${correctedName}"`,
+          );
+          identification.itemName = correctedName;
+        }
+      }
+    }
+
     return {
       identification,
-      visualFindings: visualFindings.status === "fulfilled" ? visualFindings.value : null,
-      marketReport: marketReport.status === "fulfilled" ? marketReport.value : null,
+      visualFindings: visualResult,
+      marketReport: marketResult,
     };
   }
 

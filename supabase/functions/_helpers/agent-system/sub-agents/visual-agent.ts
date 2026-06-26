@@ -22,7 +22,9 @@ export async function runAgenticVisualAgent(
   let ragContext = "";
   if (domainDef.domain === "coins_bullion") {
     try {
-      const embedding = await getEmbedding(apiKey, context.identification?.itemName || domainDef.domain);
+      // Use pre-computed embedding from controller if available; fall back to generating one
+      const embedding = context.queryEmbedding ??
+        await getEmbedding(apiKey, context.identification?.itemName || domainDef.domain);
       const results = await findSimilarContext(supabase, embedding, "grading_standard");
       ragContext = formatRagResults(results);
       if (ragContext) {
@@ -75,9 +77,13 @@ You must return your findings in JSON format:
   "identificationCorrection": "string or null"
 }`;
 
+  // Use the stronger model for coins_bullion — precision slab label reading demands it.
+  // For other domains, gemini-2.0-flash is fast and sufficient.
+  const visualModel = domainDef.domain === "coins_bullion" ? "gemini-3.1-pro-preview" : "gemini-2.0-flash";
+
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${visualModel}:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -97,7 +103,9 @@ You must return your findings in JSON format:
     const data = await response.json();
 
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    // Strip markdown code fences (```json...``` or ```...```) that Gemini sometimes adds around JSON
+    const cleanText = text.replace(/^```(?:json)?\s*/m, "").replace(/\s*```\s*$/m, "");
+    const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
 
     if (jsonMatch) {
       try {
