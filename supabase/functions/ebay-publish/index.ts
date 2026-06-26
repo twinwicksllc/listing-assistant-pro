@@ -2655,15 +2655,11 @@ function normalizeCoinConditionDetail(
   if (type === "graded") {
     const gradingCompany = String(
       rec.gradingCompany ??
-        (typeof rec.graded === "object" && rec.graded
-          ? (rec.graded as Record<string, unknown>).company
-          : ""),
+        (typeof rec.graded === "object" && rec.graded ? (rec.graded as Record<string, unknown>).company : ""),
     ).trim();
     const grade = String(
       rec.grade ??
-        (typeof rec.graded === "object" && rec.graded
-          ? (rec.graded as Record<string, unknown>).grade
-          : ""),
+        (typeof rec.graded === "object" && rec.graded ? (rec.graded as Record<string, unknown>).grade : ""),
     ).trim();
     const certificationNumber = String(
       rec.certificationNumber ??
@@ -4361,8 +4357,8 @@ serve(async (req) => {
       const coinConditionDetailFromPayload = normalizeCoinConditionDetail(
         (payload as Record<string, unknown>).coinConditionDetail,
       );
-      let coinConditionDetailRaw: CoinConditionDetail | null =
-        coinConditionDetailFromSpecifics || coinConditionDetailFromPayload;
+      let coinConditionDetailRaw: CoinConditionDetail | null = coinConditionDetailFromSpecifics ||
+        coinConditionDetailFromPayload;
 
       // Coin categories MUST provide condition details per eBay June 2026 mandate.
       // categoryTreeType="coin" is detected via breadcrumb patterns and includes all descendants
@@ -4405,7 +4401,9 @@ serve(async (req) => {
               rawItemSpecifics,
             );
             console.log(
-              `create_draft: synthesized coinConditionDetail from condition/itemSpecifics: ${JSON.stringify(coinConditionDetailRaw)}`,
+              `create_draft: synthesized coinConditionDetail from condition/itemSpecifics: ${
+                JSON.stringify(coinConditionDetailRaw)
+              }`,
             );
           }
 
