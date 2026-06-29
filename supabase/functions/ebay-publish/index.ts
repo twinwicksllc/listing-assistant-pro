@@ -1023,7 +1023,6 @@ function normalizeFineness(value: string): string {
   return v;
 }
 
-
 function normalizeGrade(value: string): string {
   const v = value.trim();
   const withHyphen = v.match(/^(MS|PR|AU|XF|VF|F|VG|G|AG|FA|P)-?(\d+)$/i);
