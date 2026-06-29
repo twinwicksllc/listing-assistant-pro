@@ -993,8 +993,14 @@ function normalizeFineness(value: string): string {
   const v = value.trim();
   // Already correct format: 0.999, 0.9999, etc.
   if (/^0\.\d{2,5}$/.test(v)) return v;
-  // Leading-dot format: .999, .9999 -> 0.999, 0.9999
-  if (/^\.\d{2,5}$/.test(v)) return "0" + v;
+  // Leading-dot format: .999, .99, .9 -> 0.999, 0.99, 0.9
+  // But .9 is ambiguous; for common bullion coins, expand to .999 (99.9%)
+  if (/^\.\d{1,5}$/.test(v)) {
+    const normalized = "0" + v;
+    // If single digit like .9, expand to .999 (common for ASE)
+    if (v === ".9") return "0.999";
+    return normalized;
+  }
   // Pure integer: 999, 9999 -> 0.999, 0.9999
   if (/^\d{3,5}$/.test(v)) {
     const n = parseInt(v, 10);
@@ -1008,10 +1014,15 @@ function normalizeFineness(value: string): string {
   const dec = v.match(/\b(0\.\d{2,5})\b/);
   if (dec) return dec[1];
   // Embedded leading-dot: "fine .999 silver" -> 0.999
-  const leadDot = v.match(/(?<!\d)\.(\d{2,5})\b/);
-  if (leadDot) return "0." + leadDot[1];
+  const leadDot = v.match(/(?<!\d)\.(\d{1,5})\b/);
+  if (leadDot) {
+    const normalized = "0." + leadDot[1];
+    if (leadDot[1] === "9") return "0.999";
+    return normalized;
+  }
   return v;
 }
+
 
 function normalizeGrade(value: string): string {
   const v = value.trim();
