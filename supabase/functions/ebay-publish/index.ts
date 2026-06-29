@@ -3030,6 +3030,8 @@ serve(async (req) => {
         hasDescription: !!payload.description,
         listingPrice: payload.listingPrice,
         hasUserToken: !!payload.userToken,
+        hasPackageWeightAndSize: !!payload.packageWeightAndSize,
+        packageWeightAndSizeValue: JSON.stringify(payload.packageWeightAndSize ?? null),
       });
     }
 
@@ -4171,6 +4173,8 @@ serve(async (req) => {
             unit: "POUND",
           },
         };
+      } else {
+        console.log("[create_draft] final packageWeightAndSize:", JSON.stringify(packageWeightAndSize));
       }
 
       // Resolve category tree type once in function scope so all downstream

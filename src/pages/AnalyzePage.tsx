@@ -234,6 +234,12 @@ export default function AnalyzePage() {
     setAuctionBuyItNow(0);
     setEbayVideoId(null);
     setEbayVideoStatus(null);
+    // Reset package dimensions so stale data doesn't carry over
+    setPackageWeightLb(0);
+    setPackageWeightOz(0);
+    setPackageLengthIn(0);
+    setPackageWidthIn(0);
+    setPackageHeightIn(0);
 
     const nextCoinConditionDetail = data.coinConditionDetail ?? null;
     

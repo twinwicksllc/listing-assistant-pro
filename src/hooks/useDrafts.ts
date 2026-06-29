@@ -203,12 +203,12 @@ export function useDrafts() {
     // Multi-quantity
     if (updates.quantity !== undefined)                patch.quantity = updates.quantity;
     if (updates.pricingMode !== undefined)             patch.pricing_mode = updates.pricingMode;
-    // Package dimensions
-    if (updates.packageWeightLb !== undefined)         patch.package_weight_lb = updates.packageWeightLb ?? null;
-    if (updates.packageWeightOz !== undefined)         patch.package_weight_oz = updates.packageWeightOz ?? null;
-    if (updates.packageLengthIn !== undefined)         patch.package_length_in = updates.packageLengthIn ?? null;
-    if (updates.packageWidthIn !== undefined)          patch.package_width_in = updates.packageWidthIn ?? null;
-    if (updates.packageHeightIn !== undefined)         patch.package_height_in = updates.packageHeightIn ?? null;
+    // Package dimensions (allow clearing to 0 by converting 0 to null)
+    if (updates.packageWeightLb !== undefined)         patch.package_weight_lb = updates.packageWeightLb > 0 ? updates.packageWeightLb : null;
+    if (updates.packageWeightOz !== undefined)         patch.package_weight_oz = updates.packageWeightOz > 0 ? updates.packageWeightOz : null;
+    if (updates.packageLengthIn !== undefined)         patch.package_length_in = updates.packageLengthIn > 0 ? updates.packageLengthIn : null;
+    if (updates.packageWidthIn !== undefined)          patch.package_width_in = updates.packageWidthIn > 0 ? updates.packageWidthIn : null;
+    if (updates.packageHeightIn !== undefined)         patch.package_height_in = updates.packageHeightIn > 0 ? updates.packageHeightIn : null;
     // Video
     if (updates.videoUrl !== undefined)                patch.video_url = updates.videoUrl ?? null;
     if (updates.ebayVideoId !== undefined)             patch.ebay_video_id = updates.ebayVideoId ?? null;
