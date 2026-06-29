@@ -87,12 +87,22 @@ export async function login(page: Page, user: TestUser) {
   await page.getByRole('button', { name: /sign in/i }).first().click({ timeout: 10_000 });
 
   await page.waitForURL(/\/home/, { timeout: 15_000 });
+  
+  // Disable welcome tour for tests to prevent overlay from blocking interactions
+  await page.evaluate(() => {
+    localStorage.setItem('sls_tour_seen', 'true');
+  });
 }
 
 export async function uploadTestPhoto(
   page: Page,
   photoType: 'coin' | 'electronics' | 'clothing',
 ) {
+  // Disable welcome tour for tests to prevent overlay from blocking interactions
+  await page.evaluate(() => {
+    localStorage.setItem('sls_tour_seen', 'true');
+  });
+  
   // Navigate to home upload page.
   await page.goto('/home');
 

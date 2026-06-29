@@ -243,11 +243,11 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
       videoUrl: videoUrl ?? undefined,
       ebayVideoId: ebayVideoId ?? undefined,
       ebayVideoStatus: ebayVideoStatus ?? undefined,
-      packageWeightLb: packageWeightLb > 0 ? packageWeightLb : undefined,
-      packageWeightOz: packageWeightOz > 0 ? packageWeightOz : undefined,
-      packageLengthIn: packageLengthIn > 0 ? packageLengthIn : undefined,
-      packageWidthIn: packageWidthIn > 0 ? packageWidthIn : undefined,
-      packageHeightIn: packageHeightIn > 0 ? packageHeightIn : undefined,
+      packageWeightLb: packageWeightLb,
+      packageWeightOz: packageWeightOz,
+      packageLengthIn: packageLengthIn,
+      packageWidthIn: packageWidthIn,
+      packageHeightIn: packageHeightIn,
     };
 
     const ok = await updateDraft(draft.id, updates);
