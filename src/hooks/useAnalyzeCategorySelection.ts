@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { toast } from "sonner";
 import { deriveDomainFromCategory } from "@/types/listing";
 import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
@@ -28,7 +29,7 @@ interface UseAnalyzeCategorySelectionParams {
   setEbayCategoryId: (value: string) => void;
   // Category-change side-effect callbacks
   setDomain: (value: string) => void;
-  setItemSpecifics: (value: ItemSpecifics) => void;
+  setItemSpecifics: Dispatch<SetStateAction<ItemSpecifics>>;
   setCoinConditionDetail: (value: CoinConditionDetail | null) => void;
   setCondition: (value: string) => void;
   /** Clear stale required/suggested aspects from the old category */
@@ -50,6 +51,24 @@ export function useAnalyzeCategorySelection({
   setCondition,
   setEbayMetadata,
 }: UseAnalyzeCategorySelectionParams) {
+  const keepFilledSpecificsOnly = useCallback((prev: ItemSpecifics): ItemSpecifics => {
+    const next: ItemSpecifics = {};
+    for (const [key, value] of Object.entries(prev)) {
+      if (key.startsWith("_")) {
+        next[key] = value;
+        continue;
+      }
+      if (typeof value === "string") {
+        if (value.trim().length > 0) next[key] = value;
+        continue;
+      }
+      if (value !== null && value !== undefined) {
+        next[key] = value;
+      }
+    }
+    return next;
+  }, []);
+
   const selectedSuggestedCategory = useMemo(
     () => suggestedCategories.find((c) => c.categoryId === ebayCategoryId),
     [ebayCategoryId, suggestedCategories],
@@ -113,9 +132,9 @@ export function useAnalyzeCategorySelection({
       setCoinConditionDetail(null);
     }
 
-    // Clear stale item specifics — they were built for the old category.
-    // useAnalyzeCategoryAspects will re-seed the correct fields for the new category.
-    setItemSpecifics({});
+    // Preserve user-entered specifics while switching categories.
+    // useAnalyzeCategoryAspects will seed any missing fields for the new category.
+    setItemSpecifics((prev) => keepFilledSpecificsOnly(prev));
 
     // *** KEY FIX: clear stale requiredAspects / suggestedAspects immediately.
     // If we leave the old metadata in place the publish-time validation will fire
@@ -141,6 +160,7 @@ export function useAnalyzeCategorySelection({
     setItemSpecifics,
     setEbayMetadata,
     setCondition,
+    keepFilledSpecificsOnly,
   ]);
 
   /**
@@ -166,9 +186,9 @@ export function useAnalyzeCategorySelection({
       setCoinConditionDetail(null);
     }
 
-    // Clear stale item specifics — they were built for the old category.
-    // Keep any user-edited free-text fields that are category-agnostic.
-    setItemSpecifics({});
+    // Preserve user-entered specifics while switching categories.
+    // useAnalyzeCategoryAspects will seed any missing fields for the new category.
+    setItemSpecifics((prev) => keepFilledSpecificsOnly(prev));
 
     // Clear stale required/suggested aspect metadata — the new category's aspects
     // will be populated by useAnalyzeCategoryAspects once its fetch completes.
@@ -193,6 +213,7 @@ export function useAnalyzeCategorySelection({
     setItemSpecifics,
     setEbayMetadata,
     setCondition,
+    keepFilledSpecificsOnly,
   ]);
 
   const handleCategoryDialogCancel = useCallback(() => {
