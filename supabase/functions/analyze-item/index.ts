@@ -83,7 +83,21 @@ function resolveDomainFallbackCategory(
   if (identification.domain !== "coins_bullion") return null;
 
   const combined = `${identification.itemName ?? ""} ${(identification.keywords ?? []).join(" ")}`.toLowerCase();
-  const metal = identification.metalType ?? "none";
+  let metal = identification.metalType ?? "none";
+
+  // If Pass 1 metal detection missed, infer from explicit text markers so
+  // US bullion coins (e.g. American Silver Eagles) do not fall back to World Coins.
+  if (metal === "none" || !metal) {
+    if (/\bamerican\s+silver\s+eagles?\b|\base\b|\bsilver\b/.test(combined)) {
+      metal = "silver";
+    } else if (/\bamerican\s+gold\s+eagles?\b|\bgold\b|\bbuffalo\b/.test(combined)) {
+      metal = "gold";
+    } else if (/\bplatinum\b/.test(combined)) {
+      metal = "platinum";
+    } else if (/\bpalladium\b/.test(combined)) {
+      metal = "palladium";
+    }
+  }
 
   if (metal === "gold") {
     if (/\bbar\b|\bingot\b|\bround\b/.test(combined)) {
@@ -110,7 +124,7 @@ function resolveDomainFallbackCategory(
 
   if (metal === "silver") {
     // American Silver Eagle is a named US bullion coin
-    if (/american silver eagle|\base\b/.test(combined)) {
+    if (/\bamerican\s+silver\s+eagles?\b|\base\b/.test(combined)) {
       return {
         categoryId: "41111",
         categoryName: "American Silver Eagles",
