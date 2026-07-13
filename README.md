@@ -456,8 +456,6 @@ listing-assistant-pro/
 5. Open a pull request
 
 ---
-
-
 ## License
 
 This project is proprietary software owned by Teckstart.
