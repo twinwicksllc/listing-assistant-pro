@@ -71,6 +71,66 @@ function isCoinDomainCategory(
   return ["45243", "532", "173685"].includes(categoryId);
 }
 
+// ─── Sneakers / Auto Parts domain-mismatch guardrails ─────────────────────
+// Lightweight keyword-based checks (mirroring isCoinDomainCategory above) used
+// ONLY to detect when a lookup/grounding candidate is clearly in the wrong
+// eBay category tree for these domains, so we can suppress/reject the hint
+// rather than let the AI follow a misleading category suggestion. These do
+// NOT hardcode category ID tables (unlike the legacy coin fallback above) —
+// they rely on breadcrumb/category-name text, which stays accurate regardless
+// of category ID churn in eBay's taxonomy.
+function isSneakerDomainCategory(
+  categoryId: string | null | undefined,
+  categoryName: string | null | undefined,
+  breadcrumb: string | null | undefined,
+): boolean {
+  if (!categoryId) return false;
+
+  const categoryText = `${categoryName || ""} ${breadcrumb || ""}`
+    .toLowerCase();
+
+  // Positive match: any footwear/athletic-shoe breadcrumb
+  return /(sneakers?|athletic shoes|footwear|shoes\b)/i.test(categoryText);
+}
+
+// Categories that are clearly the wrong domain for a sneaker listing, even if
+// a sneaker-related keyword (e.g. a brand name) appears somewhere in the text.
+function isKnownWrongDomainForSneakers(
+  categoryName: string | null | undefined,
+  breadcrumb: string | null | undefined,
+): boolean {
+  const categoryText = `${categoryName || ""} ${breadcrumb || ""}`
+    .toLowerCase();
+  return /(action figures|posters|handbags|electronics|trading cards|coins)/i
+    .test(categoryText);
+}
+
+function isAutoPartsDomainCategory(
+  categoryId: string | null | undefined,
+  categoryName: string | null | undefined,
+  breadcrumb: string | null | undefined,
+): boolean {
+  if (!categoryId) return false;
+
+  const categoryText = `${categoryName || ""} ${breadcrumb || ""}`
+    .toLowerCase();
+
+  return /(ebay motors|auto parts|automotive|car & truck parts|motorcycle parts|parts & accessories)/i
+    .test(categoryText);
+}
+
+// Categories that are clearly the wrong domain for an auto-part listing, even
+// if an auto-related keyword slipped into the title (e.g. a car-shaped toy).
+function isKnownWrongDomainForAutoParts(
+  categoryName: string | null | undefined,
+  breadcrumb: string | null | undefined,
+): boolean {
+  const categoryText = `${categoryName || ""} ${breadcrumb || ""}`
+    .toLowerCase();
+  return /(home & garden|toys? & hobbies|clothing|electronics|coins)/i
+    .test(categoryText);
+}
+
 /**
  * When the lookup pipeline fails to lock a category, derive one deterministically
  * from Pass 1's domain + metalType + itemName.  This ensures that Pass 2 always
@@ -175,6 +235,16 @@ function isCategoryCompatibleWithDomain(
   switch (domain) {
     case "coins_bullion":
       return isCoinDomainCategory(categoryId, categoryName, breadcrumb);
+    case "sneakers":
+      // Soft guardrail (unlike the coin hard-allowlist): reject only if it's
+      // a KNOWN wrong domain (e.g. action figures, posters). Anything
+      // ambiguous (e.g. a general "Collectibles" category, or an unrecognized
+      // breadcrumb) is left compatible so we don't over-block legitimate
+      // lookups — isSneakerDomainCategory() is a positive signal used only
+      // for logging/diagnostics elsewhere, not required here for a pass.
+      return !isKnownWrongDomainForSneakers(categoryName, breadcrumb);
+    case "auto_parts":
+      return !isKnownWrongDomainForAutoParts(categoryName, breadcrumb);
     default:
       return true;
   }

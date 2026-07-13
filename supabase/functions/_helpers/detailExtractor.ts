@@ -74,11 +74,82 @@ export interface JewelryDetails {
   gemstones: string[];
 }
 
+export interface ElectronicsDetails {
+  brand: string | null;
+  modelNumber: string | null; // e.g. "A2338", "SM-G991U" \u2014 precise, on-device model ID
+  modelNumberConfidence: "confirmed" | "likely" | "not_visible";
+  storageCapacity: string | null; // "128GB", "1TB", etc.
+  colorFinish: string | null;
+  serialNumber: string | null;
+  includedAccessories: string[]; // cables, chargers, boxes, etc. actually visible
+  cosmeticCondition: string | null; // free-text grading signal (e.g. "light scratches on back")
+  functionalIndicators: string | null; // screen-on state, error lights, etc. visible in photos
+}
+
+export interface SneakerDetails {
+  brand: string | null;
+  model: string | null; // e.g. "Air Jordan 1 Retro High OG"
+  styleCode: string | null; // SKU on box label / insole, e.g. "555088-134"
+  styleCodeConfidence: "confirmed" | "likely" | "not_visible";
+  colorway: string | null;
+  size: string | null;
+  sizeConfidence: "confirmed" | "likely" | "not_visible";
+  conditionGrade: "DS" | "VNDS" | "Used" | "Beat" | null; // deadstock / very near deadstock / used / heavily worn
+  boxIncluded: boolean;
+  authenticationCues: string | null; // stitching, font, QR code, etc. noted for authenticity
+}
+
+export interface AutoPartDetails {
+  partName: string | null;
+  partNumber: string | null; // OEM or aftermarket part number visible on the item
+  partNumberConfidence: "confirmed" | "likely" | "not_visible";
+  oemOrAftermarket: "OEM" | "Aftermarket" | "Unknown";
+  brand: string | null;
+  fitmentNotes: string | null; // make/model/year/trim compatibility visible on packaging/etching
+  condition: string | null; // free-text condition signal (e.g. "new in box", "used, minor wear")
+}
+
+export interface InstrumentDetails {
+  brand: string | null;
+  model: string | null;
+  serialNumber: string | null;
+  serialNumberConfidence: "confirmed" | "likely" | "not_visible";
+  countryOfOrigin: string | null; // e.g. "Made in USA", "Made in Japan" \u2014 often stamped on headstock/body
+  condition: string | null; // finish wear, hardware condition, playability signals
+  caseOrGigBagIncluded: boolean;
+}
+
+export interface HandbagDetails {
+  brand: string | null;
+  model: string | null; // e.g. "Neverfull MM", "Classic Flap"
+  dateCode: string | null; // authenticity date/serial code stamped inside
+  dateCodeConfidence: "confirmed" | "likely" | "not_visible";
+  material: string | null; // canvas, leather, etc.
+  hardwareCondition: string | null;
+  authenticationCues: string | null; // stitching pattern, hardware stamps, etc.
+  inclusions: string[]; // dust bag, authenticity card, box, etc.
+}
+
+export interface ToolDetails {
+  brand: string | null;
+  modelNumber: string | null;
+  modelNumberConfidence: "confirmed" | "likely" | "not_visible";
+  powerSource: "Corded" | "Cordless/Battery" | "Manual" | "Pneumatic" | "Unknown";
+  condition: string | null; // rust, wear, missing parts, etc.
+  includedAccessories: string[]; // batteries, chargers, cases, bits, etc.
+}
+
 export interface DetailExtractionResult {
   domain: Domain;
   coinDetails: CoinDetails | null;
   cardDetails: CardDetails | null;
   jewelryDetails: JewelryDetails | null;
+  electronicsDetails: ElectronicsDetails | null;
+  sneakerDetails: SneakerDetails | null;
+  autoPartDetails: AutoPartDetails | null;
+  instrumentDetails: InstrumentDetails | null;
+  handbagDetails: HandbagDetails | null;
+  toolDetails: ToolDetails | null;
   rawFindings: string; // Full narrative for logging
 }
 
@@ -260,6 +331,232 @@ Return ONLY valid JSON:
 }`;
 }
 
+// ─── Electronics detail extraction prompt ─────────────────────────────────
+
+function buildElectronicsExtractionPrompt(itemName: string): string {
+  return `You are an expert electronics reseller performing a FOCUSED visual inspection.
+Your ONLY job is to extract precise identification details from the product photographs.
+
+## YOUR TASK
+Examine ALL provided photographs and extract:
+1. Brand and exact model \u2014 read model numbers/labels printed on the device, sticker, or box
+   (e.g. "A2338", "SM-G991U", "MacBookPro16,1") \u2014 do NOT guess; only report what is visibly legible
+2. Storage capacity if shown on a label/sticker (e.g. "128GB", "1TB")
+3. Color/finish
+4. Serial number if legible on a sticker
+5. Included accessories ACTUALLY visible in the photos (cables, chargers, boxes, manuals) \u2014 do not
+   assume standard accessories are included unless photographed
+6. Cosmetic condition \u2014 describe visible scratches, cracks, wear, or "like new" appearance
+7. Functional indicators \u2014 is the screen powered on, any error lights, visible damage to ports
+
+## CRITICAL RULES
+- Model numbers are often small print on a rear label \u2014 zoom in mentally and only report if legible
+- If a model number is not legible, set modelNumberConfidence to "not_visible" and modelNumber to null
+- Never assume accessories are included unless they appear in a photograph
+
+The item was described as: "${itemName}"
+
+Return ONLY valid JSON:
+{
+  "brand": "Apple",
+  "modelNumber": "A2338",
+  "modelNumberConfidence": "confirmed" | "likely" | "not_visible",
+  "storageCapacity": "256GB",
+  "colorFinish": "Space Gray",
+  "serialNumber": null,
+  "includedAccessories": ["USB-C cable", "original box"],
+  "cosmeticCondition": "light scratches on lid, screen appears clean",
+  "functionalIndicators": "screen powers on, shown in photo displaying home screen",
+  "reasoning": "brief explanation of visual identifiers seen"
+}`;
+}
+
+// ─── Sneaker detail extraction prompt ─────────────────────────────────────
+
+function buildSneakerExtractionPrompt(itemName: string): string {
+  return `You are an expert sneaker authenticator and reseller performing a FOCUSED visual inspection.
+Your ONLY job is to extract precise identification details from the shoe photographs.
+
+## YOUR TASK
+Examine ALL provided photographs and extract:
+1. Brand and model (e.g. "Nike Air Jordan 1 Retro High OG")
+2. Style code / SKU \u2014 read from the box label or tongue label if photographed (e.g. "555088-134")
+   \u2014 do NOT guess; only report if legible
+3. Colorway name if identifiable
+4. Size \u2014 read from box label or tongue tag if photographed
+5. Condition grade:
+   - "DS" (deadstock/never worn, tags/stickers intact)
+   - "VNDS" (very near deadstock, tried on only)
+   - "Used" (worn with visible wear)
+   - "Beat" (heavily worn, significant damage)
+6. Is the original box included in the photos?
+7. Authentication cues \u2014 stitching quality, font on labels, QR code presence, materials \u2014 note
+   anything relevant to authenticity assessment (do not make a final authenticity determination)
+
+## CRITICAL RULES
+- Style codes are the primary identifier \u2014 only report if actually legible in a photo
+- Do not assume a box is included unless photographed
+- Be conservative with condition grading; only claim "DS" if tags/stickers are visibly intact
+
+The item was described as: "${itemName}"
+
+Return ONLY valid JSON:
+{
+  "brand": "Nike",
+  "model": "Air Jordan 1 Retro High OG",
+  "styleCode": "555088-134",
+  "styleCodeConfidence": "confirmed" | "likely" | "not_visible",
+  "colorway": "University Blue",
+  "size": "US 10",
+  "sizeConfidence": "confirmed" | "likely" | "not_visible",
+  "conditionGrade": "DS" | "VNDS" | "Used" | "Beat" | null,
+  "boxIncluded": true,
+  "authenticationCues": "brief notes on stitching/labels/materials observed",
+  "reasoning": "brief explanation of visual identifiers seen"
+}`;
+}
+
+// ─── Auto parts detail extraction prompt ──────────────────────────────────
+
+function buildAutoPartsExtractionPrompt(itemName: string): string {
+  return `You are an expert automotive parts specialist performing a FOCUSED visual inspection.
+Your ONLY job is to extract precise identification details from the part photographs.
+
+## YOUR TASK
+Examine ALL provided photographs and extract:
+1. Part name (e.g. "Alternator", "Brake Caliper", "Headlight Assembly")
+2. Part number \u2014 read from any etching, sticker, or stamp on the part or its packaging
+   \u2014 do NOT guess; only report if legible
+3. OEM vs Aftermarket \u2014 look for manufacturer logos/branding vs generic packaging
+4. Brand (OEM manufacturer name, or aftermarket brand name)
+5. Fitment notes \u2014 make/model/year/trim compatibility info visible on packaging or etched on the part
+6. Condition \u2014 new in box, used with wear, rust/corrosion visible, missing components, etc.
+
+## CRITICAL RULES
+- Part numbers are the primary identifier for compatibility \u2014 only report if actually legible
+- Do not guess fitment; only report compatibility information that is visibly printed/etched
+- Distinguish OEM (original manufacturer branding, e.g. "Toyota Genuine Parts") from
+  aftermarket (generic or third-party brand packaging)
+
+The item was described as: "${itemName}"
+
+Return ONLY valid JSON:
+{
+  "partName": "Alternator",
+  "partNumber": "104210-5040",
+  "partNumberConfidence": "confirmed" | "likely" | "not_visible",
+  "oemOrAftermarket": "OEM" | "Aftermarket" | "Unknown",
+  "brand": "Denso",
+  "fitmentNotes": "2007-2011 Toyota Camry 2.4L printed on box label",
+  "condition": "used, minor surface corrosion on housing",
+  "reasoning": "brief explanation of visual identifiers seen"
+}`;
+}
+
+// ─── Musical instrument detail extraction prompt ──────────────────────────
+
+function buildInstrumentExtractionPrompt(itemName: string): string {
+  return `You are an expert musical instrument appraiser performing a FOCUSED visual inspection.
+Your ONLY job is to extract precise identification details from the instrument photographs.
+
+## YOUR TASK
+Examine ALL provided photographs and extract:
+1. Brand and model (read from headstock logo, body inlay, or nameplate)
+2. Serial number \u2014 usually stamped on headstock back, neck plate, or body \u2014 only report if legible
+3. Country of origin \u2014 often stamped near serial number (e.g. "Made in USA", "Made in Japan",
+   "Made in Mexico" for guitars; look for similar markings on other instrument types)
+4. Condition \u2014 finish wear (buckle rash, dings, checking), hardware condition (rust, tarnish),
+   playability signals (string condition, visible neck issues)
+5. Is a case or gig bag included in the photos?
+
+## CRITICAL RULES
+- Serial numbers are critical for authentication/valuation \u2014 only report if actually legible
+- Do not assume a case is included unless photographed
+
+The item was described as: "${itemName}"
+
+Return ONLY valid JSON:
+{
+  "brand": "Fender",
+  "model": "American Professional II Stratocaster",
+  "serialNumber": "US23012345",
+  "serialNumberConfidence": "confirmed" | "likely" | "not_visible",
+  "countryOfOrigin": "Made in USA",
+  "condition": "light buckle rash on back, hardware shows minor tarnish",
+  "caseOrGigBagIncluded": true,
+  "reasoning": "brief explanation of visual identifiers seen"
+}`;
+}
+
+// ─── Luxury handbag detail extraction prompt ──────────────────────────────
+
+function buildHandbagExtractionPrompt(itemName: string): string {
+  return `You are an expert luxury handbag authenticator performing a FOCUSED visual inspection.
+Your ONLY job is to extract precise identification details from the handbag photographs.
+
+## YOUR TASK
+Examine ALL provided photographs and extract:
+1. Brand and model (e.g. "Louis Vuitton Neverfull MM", "Chanel Classic Flap")
+2. Date code / authenticity code \u2014 read from the interior stamp, tag, or label if photographed
+   (e.g. Louis Vuitton date codes, Chanel authenticity cards) \u2014 only report if legible
+3. Material (canvas, calfskin, caviar leather, etc.)
+4. Hardware condition (tarnish, scratches on zippers/clasps/studs)
+5. Authentication cues \u2014 stitching pattern/count, hardware stamps, font on labels, heat stamp
+   quality \u2014 note what is observed (do not make a final authenticity determination)
+6. Inclusions actually visible in photos: dust bag, authenticity card, box, receipt, straps
+
+## CRITICAL RULES
+- Date codes/serial stamps are the primary authenticity identifier \u2014 only report if legible
+- Do not assume inclusions (dust bag, cards, box) unless photographed
+- Be descriptive but do not declare the item "authentic" or "fake" \u2014 only report observed cues
+
+The item was described as: "${itemName}"
+
+Return ONLY valid JSON:
+{
+  "brand": "Louis Vuitton",
+  "model": "Neverfull MM",
+  "dateCode": "SD4128",
+  "dateCodeConfidence": "confirmed" | "likely" | "not_visible",
+  "material": "Monogram canvas",
+  "hardwareCondition": "light brassing on clasp, otherwise clean",
+  "authenticationCues": "even stitching, correct font weight on heat stamp",
+  "inclusions": ["dust bag"],
+  "reasoning": "brief explanation of visual identifiers seen"
+}`;
+}
+
+// ─── Home & garden tool detail extraction prompt ──────────────────────────
+
+function buildToolExtractionPrompt(itemName: string): string {
+  return `You are an expert tools and equipment reseller performing a FOCUSED visual inspection.
+Your ONLY job is to extract precise identification details from the tool photographs.
+
+## YOUR TASK
+Examine ALL provided photographs and extract:
+1. Brand and model number \u2014 read from a label, sticker, or stamp on the tool \u2014 only report if legible
+2. Power source \u2014 Corded, Cordless/Battery, Manual, or Pneumatic (air-powered)
+3. Condition \u2014 rust, wear, missing parts, paint/finish condition
+4. Included accessories actually visible in photos \u2014 batteries, chargers, cases, bits, blades, etc.
+
+## CRITICAL RULES
+- Model numbers are the primary identifier \u2014 only report if actually legible
+- Do not assume batteries/chargers/cases are included unless photographed
+
+The item was described as: "${itemName}"
+
+Return ONLY valid JSON:
+{
+  "brand": "DeWalt",
+  "modelNumber": "DCD771C2",
+  "modelNumberConfidence": "confirmed" | "likely" | "not_visible",
+  "powerSource": "Corded" | "Cordless/Battery" | "Manual" | "Pneumatic" | "Unknown",
+  "condition": "light surface rust on chuck, otherwise functional appearance",
+  "includedAccessories": ["battery", "charger", "carrying case"],
+  "reasoning": "brief explanation of visual identifiers seen"
+}`;
+}
+
 // ─── Main extraction function ───────────────────────────────────────────────
 
 export async function extractKeyDetails(
@@ -273,7 +570,18 @@ export async function extractKeyDetails(
   const label = `[${invocationId}][DetailExtract]`;
 
   // Only run for domains where we have focused extraction
-  if (!["coins_bullion", "trading_cards", "jewelry"].includes(domain)) {
+  const ELIGIBLE_DOMAINS: Domain[] = [
+    "coins_bullion",
+    "trading_cards",
+    "jewelry",
+    "electronics",
+    "sneakers",
+    "auto_parts",
+    "musical_instruments",
+    "luxury_handbags",
+    "home_garden_tools",
+  ];
+  if (!ELIGIBLE_DOMAINS.includes(domain)) {
     console.log(`${label} Skipping — domain "${domain}" has no detail extraction`);
     return null;
   }
@@ -294,6 +602,24 @@ export async function extractKeyDetails(
       break;
     case "jewelry":
       extractionPrompt = buildJewelryExtractionPrompt(itemName);
+      break;
+    case "electronics":
+      extractionPrompt = buildElectronicsExtractionPrompt(itemName);
+      break;
+    case "sneakers":
+      extractionPrompt = buildSneakerExtractionPrompt(itemName);
+      break;
+    case "auto_parts":
+      extractionPrompt = buildAutoPartsExtractionPrompt(itemName);
+      break;
+    case "musical_instruments":
+      extractionPrompt = buildInstrumentExtractionPrompt(itemName);
+      break;
+    case "luxury_handbags":
+      extractionPrompt = buildHandbagExtractionPrompt(itemName);
+      break;
+    case "home_garden_tools":
+      extractionPrompt = buildToolExtractionPrompt(itemName);
       break;
     default:
       return null;
@@ -377,6 +703,12 @@ export async function extractKeyDetails(
       coinDetails: null,
       cardDetails: null,
       jewelryDetails: null,
+      electronicsDetails: null,
+      sneakerDetails: null,
+      autoPartDetails: null,
+      instrumentDetails: null,
+      handbagDetails: null,
+      toolDetails: null,
       rawFindings: parsed.reasoning || JSON.stringify(parsed).slice(0, 200),
     };
 
@@ -437,6 +769,77 @@ export async function extractKeyDetails(
         gemstones: Array.isArray(parsed.gemstones) ? parsed.gemstones : [],
       };
       console.log(`${label} ✓ Jewelry details extracted:`, result.jewelryDetails);
+    } else if (domain === "electronics") {
+      result.electronicsDetails = {
+        brand: parsed.brand ?? null,
+        modelNumber: parsed.modelNumber ?? null,
+        modelNumberConfidence: parsed.modelNumberConfidence ?? "not_visible",
+        storageCapacity: parsed.storageCapacity ?? null,
+        colorFinish: parsed.colorFinish ?? null,
+        serialNumber: parsed.serialNumber ?? null,
+        includedAccessories: Array.isArray(parsed.includedAccessories) ? parsed.includedAccessories : [],
+        cosmeticCondition: parsed.cosmeticCondition ?? null,
+        functionalIndicators: parsed.functionalIndicators ?? null,
+      };
+      console.log(`${label} ✓ Electronics details extracted:`, result.electronicsDetails);
+    } else if (domain === "sneakers") {
+      result.sneakerDetails = {
+        brand: parsed.brand ?? null,
+        model: parsed.model ?? null,
+        styleCode: parsed.styleCode ?? null,
+        styleCodeConfidence: parsed.styleCodeConfidence ?? "not_visible",
+        colorway: parsed.colorway ?? null,
+        size: parsed.size ?? null,
+        sizeConfidence: parsed.sizeConfidence ?? "not_visible",
+        conditionGrade: parsed.conditionGrade ?? null,
+        boxIncluded: Boolean(parsed.boxIncluded),
+        authenticationCues: parsed.authenticationCues ?? null,
+      };
+      console.log(`${label} ✓ Sneaker details extracted:`, result.sneakerDetails);
+    } else if (domain === "auto_parts") {
+      result.autoPartDetails = {
+        partName: parsed.partName ?? null,
+        partNumber: parsed.partNumber ?? null,
+        partNumberConfidence: parsed.partNumberConfidence ?? "not_visible",
+        oemOrAftermarket: parsed.oemOrAftermarket ?? "Unknown",
+        brand: parsed.brand ?? null,
+        fitmentNotes: parsed.fitmentNotes ?? null,
+        condition: parsed.condition ?? null,
+      };
+      console.log(`${label} ✓ Auto part details extracted:`, result.autoPartDetails);
+    } else if (domain === "musical_instruments") {
+      result.instrumentDetails = {
+        brand: parsed.brand ?? null,
+        model: parsed.model ?? null,
+        serialNumber: parsed.serialNumber ?? null,
+        serialNumberConfidence: parsed.serialNumberConfidence ?? "not_visible",
+        countryOfOrigin: parsed.countryOfOrigin ?? null,
+        condition: parsed.condition ?? null,
+        caseOrGigBagIncluded: Boolean(parsed.caseOrGigBagIncluded),
+      };
+      console.log(`${label} ✓ Instrument details extracted:`, result.instrumentDetails);
+    } else if (domain === "luxury_handbags") {
+      result.handbagDetails = {
+        brand: parsed.brand ?? null,
+        model: parsed.model ?? null,
+        dateCode: parsed.dateCode ?? null,
+        dateCodeConfidence: parsed.dateCodeConfidence ?? "not_visible",
+        material: parsed.material ?? null,
+        hardwareCondition: parsed.hardwareCondition ?? null,
+        authenticationCues: parsed.authenticationCues ?? null,
+        inclusions: Array.isArray(parsed.inclusions) ? parsed.inclusions : [],
+      };
+      console.log(`${label} ✓ Handbag details extracted:`, result.handbagDetails);
+    } else if (domain === "home_garden_tools") {
+      result.toolDetails = {
+        brand: parsed.brand ?? null,
+        modelNumber: parsed.modelNumber ?? null,
+        modelNumberConfidence: parsed.modelNumberConfidence ?? "not_visible",
+        powerSource: parsed.powerSource ?? "Unknown",
+        condition: parsed.condition ?? null,
+        includedAccessories: Array.isArray(parsed.includedAccessories) ? parsed.includedAccessories : [],
+      };
+      console.log(`${label} ✓ Tool details extracted:`, result.toolDetails);
     }
 
     return result;
@@ -811,6 +1214,144 @@ export function applyDetailOverrides(
     // ── Hallmarks ──
     if (jd.hallmarks.length > 0 && !specs["Hallmark"]) {
       specs["Hallmark"] = jd.hallmarks.join(", ");
+    }
+
+    listing.itemSpecifics = specs;
+  }
+
+  if (extraction.electronicsDetails) {
+    const ed = extraction.electronicsDetails;
+    const specs = listing.itemSpecifics ?? {};
+
+    // ── Model Number (HIGH VALUE — only override with confirmed/likely reads) ──
+    if (ed.modelNumber && ed.modelNumberConfidence !== "not_visible" && !specs["Model"]) {
+      specs["Model"] = ed.modelNumber;
+      console.log(`${label} OVERRIDE Model: added "${ed.modelNumber}" (confidence: ${ed.modelNumberConfidence})`);
+    }
+
+    if (ed.brand && !specs["Brand"]) {
+      specs["Brand"] = ed.brand;
+    }
+
+    if (ed.storageCapacity && !specs["Storage Capacity"]) {
+      specs["Storage Capacity"] = ed.storageCapacity;
+    }
+
+    if (ed.colorFinish && !specs["Color"]) {
+      specs["Color"] = ed.colorFinish;
+    }
+
+    listing.itemSpecifics = specs;
+  }
+
+  if (extraction.sneakerDetails) {
+    const sd = extraction.sneakerDetails;
+    const specs = listing.itemSpecifics ?? {};
+
+    // ── Style Code / SKU (HIGH VALUE — only override with confirmed/likely reads) ──
+    if (sd.styleCode && sd.styleCodeConfidence !== "not_visible" && !specs["Style Code"]) {
+      specs["Style Code"] = sd.styleCode;
+      console.log(`${label} OVERRIDE Style Code: added "${sd.styleCode}" (confidence: ${sd.styleCodeConfidence})`);
+    }
+
+    if (sd.colorway && !specs["Color"]) {
+      specs["Color"] = sd.colorway;
+    }
+
+    if (sd.size && sd.sizeConfidence !== "not_visible" && !specs["US Shoe Size"]) {
+      specs["US Shoe Size"] = sd.size;
+    }
+
+    listing.itemSpecifics = specs;
+  }
+
+  if (extraction.autoPartDetails) {
+    const ap = extraction.autoPartDetails;
+    const specs = listing.itemSpecifics ?? {};
+
+    // ── Part Number (HIGH VALUE — only override with confirmed/likely reads) ──
+    if (ap.partNumber && ap.partNumberConfidence !== "not_visible" && !specs["Manufacturer Part Number"]) {
+      specs["Manufacturer Part Number"] = ap.partNumber;
+      console.log(
+        `${label} OVERRIDE Part Number: added "${ap.partNumber}" (confidence: ${ap.partNumberConfidence})`,
+      );
+    }
+
+    if (ap.brand && !specs["Brand"]) {
+      specs["Brand"] = ap.brand;
+    }
+
+    if (ap.oemOrAftermarket && ap.oemOrAftermarket !== "Unknown" && !specs["Other Part Number"]) {
+      specs["Type"] = ap.oemOrAftermarket;
+    }
+
+    listing.itemSpecifics = specs;
+  }
+
+  if (extraction.instrumentDetails) {
+    const id = extraction.instrumentDetails;
+    const specs = listing.itemSpecifics ?? {};
+
+    if (id.serialNumber && id.serialNumberConfidence !== "not_visible" && !specs["Serial Number"]) {
+      specs["Serial Number"] = id.serialNumber;
+      console.log(
+        `${label} OVERRIDE Serial Number: added "${id.serialNumber}" (confidence: ${id.serialNumberConfidence})`,
+      );
+    }
+
+    if (id.brand && !specs["Brand"]) {
+      specs["Brand"] = id.brand;
+    }
+
+    if (id.countryOfOrigin && !specs["Country/Region of Manufacture"]) {
+      specs["Country/Region of Manufacture"] = id.countryOfOrigin;
+    }
+
+    listing.itemSpecifics = specs;
+  }
+
+  if (extraction.handbagDetails) {
+    const hd = extraction.handbagDetails;
+    const specs = listing.itemSpecifics ?? {};
+
+    // ── Brand (HIGH VALUE — dramatically changes price) ──
+    if (hd.brand && !specs["Brand"]) {
+      specs["Brand"] = hd.brand;
+      console.log(`${label} OVERRIDE Brand: added "${hd.brand}"`);
+
+      if (listing.title && !listing.title.toLowerCase().includes(hd.brand.toLowerCase())) {
+        const newTitle = `${hd.brand} ${listing.title}`.slice(0, 80).replace(/\s+\S*$/, "").trim();
+        listing.title = newTitle;
+        console.log(`${label} OVERRIDE Title: added brand → "${newTitle}"`);
+      }
+    }
+
+    if (hd.dateCode && hd.dateCodeConfidence !== "not_visible" && !specs["Date Code"]) {
+      specs["Date Code"] = hd.dateCode;
+    }
+
+    if (hd.material && !specs["Material"]) {
+      specs["Material"] = hd.material;
+    }
+
+    listing.itemSpecifics = specs;
+  }
+
+  if (extraction.toolDetails) {
+    const td = extraction.toolDetails;
+    const specs = listing.itemSpecifics ?? {};
+
+    if (td.modelNumber && td.modelNumberConfidence !== "not_visible" && !specs["Model"]) {
+      specs["Model"] = td.modelNumber;
+      console.log(`${label} OVERRIDE Model: added "${td.modelNumber}" (confidence: ${td.modelNumberConfidence})`);
+    }
+
+    if (td.brand && !specs["Brand"]) {
+      specs["Brand"] = td.brand;
+    }
+
+    if (td.powerSource && td.powerSource !== "Unknown" && !specs["Power Source"]) {
+      specs["Power Source"] = td.powerSource;
     }
 
     listing.itemSpecifics = specs;

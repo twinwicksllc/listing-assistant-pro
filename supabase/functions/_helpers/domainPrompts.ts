@@ -3,7 +3,7 @@
 // mappings, category guidance, and item-specifics instructions.
 
 // Canonical 12-domain type — kept in sync with agent-system/pipelineContracts.ts
-// and _helpers/pass1Identification.ts. Single source of truth for domain routing. 
+// and _helpers/pass1Identification.ts. Single source of truth for domain routing.
 export type Domain =
   | "coins_bullion"
   | "trading_cards"
