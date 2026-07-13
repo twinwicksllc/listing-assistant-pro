@@ -3,115 +3,108 @@
 @tailwind utilities;
 
 /*
- * Sovereign Listing Suite — Minted Standard Design System
- * Brand:    Sovereign Listing Suite | Twin Wicks Digital Solutions
- * Tagline:  The Art of the Asset. The Science of the Sale.
+ * Listing Assistant Pro — Ember Standard Design System
+ * Modern, forward-thinking SaaS aesthetic. Amber/orange accent.
+ * Space Grotesk (display) + Inter (body).
  *
- * Dark (default) : Obsidian / Midnight Slate / Velvet Indigo
- * Light (.light) : Sovereign Pearl / White Card / Velvet Indigo
+ * Dark (default) : Warm charcoal / ember amber
+ * Light (.light) : Warm pearl / ember amber
  *
  * All colors MUST be HSL.
  */
 
 @layer base {
-  /* ── DARK: Minted Standard (default) ─────────────────────────── */
+  /* ── DARK: Ember (default) ───────────────────────────────────── */
   :root {
-    --background: 222 23% 5%;
-    --foreground: 213 20% 88%;
+    --background: 24 14% 5%;
+    --foreground: 30 16% 93%;
 
-    --card: 222 20% 9%;
-    --card-foreground: 213 20% 88%;
+    --card: 24 12% 8%;
+    --card-foreground: 30 16% 93%;
 
-    --popover: 222 20% 11%;
-    --popover-foreground: 213 20% 88%;
+    --popover: 24 12% 9%;
+    --popover-foreground: 30 16% 93%;
 
-    --primary: 243 54% 57%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 30 96% 55%;
+    --primary-foreground: 24 45% 8%;
 
-    --secondary: 222 18% 14%;
-    --secondary-foreground: 213 20% 88%;
+    --secondary: 24 10% 13%;
+    --secondary-foreground: 30 16% 93%;
 
-    --muted: 222 18% 12%;
-    --muted-foreground: 215 14% 52%;
+    --muted: 24 8% 11%;
+    --muted-foreground: 28 8% 58%;
 
-    --accent: 215 18% 60%;
-    --accent-foreground: 222 23% 5%;
+    --accent: 24 10% 15%;
+    --accent-foreground: 30 16% 93%;
 
     --destructive: 0 72% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 18% 18%;
-    --input: 220 18% 16%;
-    --ring: 243 54% 57%;
+    --border: 28 8% 16%;
+    --input: 28 8% 15%;
+    --ring: 30 96% 55%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
-    --success: 145 63% 42%;
+    --success: 152 55% 45%;
     --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
+    --warning: 38 92% 52%;
+    --warning-foreground: 24 45% 8%;
 
-    --sidebar-background: 222 25% 4%;
-    --sidebar-foreground: 213 18% 80%;
-    --sidebar-primary: 243 54% 57%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 20% 11%;
-    --sidebar-accent-foreground: 213 20% 88%;
-    --sidebar-border: 222 20% 13%;
-    --sidebar-ring: 243 54% 57%;
+    --sidebar-background: 24 16% 4%;
+    --sidebar-foreground: 30 14% 82%;
+    --sidebar-primary: 30 96% 55%;
+    --sidebar-primary-foreground: 24 45% 8%;
+    --sidebar-accent: 24 12% 10%;
+    --sidebar-accent-foreground: 30 16% 93%;
+    --sidebar-border: 24 12% 12%;
+    --sidebar-ring: 30 96% 55%;
   }
 
-  /* ── LIGHT: Sovereign Pearl ───────────────────────────────────── */
-  /* Same Velvet Indigo primary — brand color is consistent across themes. */
-  /* Deep indigo sidebar anchors the chrome to the Sovereign identity.     */
+  /* ── LIGHT: Warm Pearl ───────────────────────────────────────── */
   .light {
-    --background: 222 20% 96%;
-    --foreground: 222 30% 12%;
+    --background: 30 30% 97%;
+    --foreground: 24 22% 11%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222 30% 12%;
+    --card-foreground: 24 22% 11%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222 30% 12%;
+    --popover-foreground: 24 22% 11%;
 
-    --primary: 243 54% 57%;
+    --primary: 28 92% 50%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 18% 91%;
-    --secondary-foreground: 222 30% 12%;
+    --secondary: 30 20% 92%;
+    --secondary-foreground: 24 22% 11%;
 
-    --muted: 220 18% 93%;
-    --muted-foreground: 220 14% 58%;
+    --muted: 30 18% 93%;
+    --muted-foreground: 28 10% 42%;
 
-    --accent: 243 42% 45%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 30 24% 90%;
+    --accent-foreground: 24 22% 11%;
 
     --destructive: 0 70% 46%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 18% 86%;
-    --input: 220 20% 98%;
-    --ring: 243 54% 57%;
+    --border: 30 16% 87%;
+    --input: 30 20% 96%;
+    --ring: 28 92% 50%;
 
-    --success: 145 63% 38%;
+    --success: 152 55% 38%;
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 46%;
     --warning-foreground: 0 0% 100%;
 
-    --sidebar-background: 243 38% 16%;
-    --sidebar-foreground: 240 22% 84%;
-    --sidebar-primary: 243 54% 57%;
+    --sidebar-background: 30 26% 95%;
+    --sidebar-foreground: 24 20% 20%;
+    --sidebar-primary: 28 92% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 243 38% 22%;
-    --sidebar-accent-foreground: 240 22% 84%;
-    --sidebar-border: 243 30% 22%;
-    --sidebar-ring: 243 54% 57%;
+    --sidebar-accent: 30 22% 90%;
+    --sidebar-accent-foreground: 24 22% 11%;
+    --sidebar-border: 30 16% 86%;
+    --sidebar-ring: 28 92% 50%;
   }
-}
-
-@font-face {
-  font-family: 'Inter';
-  src: local('Inter');
 }
 
 @layer base {
@@ -126,8 +119,8 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  h1, h2, h3, .font-sovereign {
-    font-family: 'Cinzel', Georgia, serif;
-    letter-spacing: 0.04em;
+  h1, h2, h3, h4, .font-display {
+    font-family: 'Space Grotesk', 'Inter', ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: -0.02em;
   }
 }

@@ -2,9 +2,10 @@ import { useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import {
   Camera, Sparkles, TrendingUp, Shield, Zap, ChevronRight,
-  Star, Check, ArrowRight, BarChart3, Upload, Tag, Search, FileText
+  Star, Check, ArrowRight, Upload, Search, FileText
 } from "lucide-react";
 import teckstartLogo from "@/assets/teckstart-logo.png";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 // Animated counter hook
 function useCounter(target: number, duration: number = 1500, start: boolean = false) {
@@ -44,43 +45,31 @@ const FEATURES = [
     icon: Camera,
     title: "Photo-First Identification",
     desc: "Upload photos from any angle. The system identifies your item — coins, collectibles, electronics, jewelry, clothing, and more — and pulls the details that matter for a strong listing.",
-    color: "from-[#0076B6]/20 to-[#0076B6]/5",
-    iconColor: "text-[#0076B6]",
   },
   {
     icon: FileText,
     title: "Complete Listing Generation",
     desc: "Receive a fully-formed eBay listing: an 80-character SEO title, detailed description, item specifics, and the correct leaf category — ready to review and publish.",
-    color: "from-[#0076B6]/15 to-slate-500/5",
-    iconColor: "text-[#0076B6]",
   },
   {
     icon: Search,
     title: "Live Competitor Pricing",
     desc: "Real-time eBay sold listing data surfaces current market comps so you set a price grounded in what buyers are actually paying — not instinct.",
-    color: "from-[#B0B7BC]/30 to-[#B0B7BC]/10",
-    iconColor: "text-slate-500",
   },
   {
     icon: Shield,
     title: "Melt Value Protection",
     desc: "Live gold, silver, and platinum spot prices are checked automatically. Precious metal items are never listed below their intrinsic melt value.",
-    color: "from-emerald-500/15 to-emerald-600/5",
-    iconColor: "text-emerald-600",
   },
   {
     icon: TrendingUp,
     title: "Agentic Market Grounding",
     desc: "Before generating your listing, the system searches the current market in real time — verifying category, pricing trends, and item-specific value factors like mint marks, grades, and variants.",
-    color: "from-[#0076B6]/20 to-[#0076B6]/5",
-    iconColor: "text-[#0076B6]",
   },
   {
     icon: Zap,
     title: "One-Tap eBay Publishing",
     desc: "Push directly to eBay as a draft listing. Review in the eBay app or desktop before going live — no copy-pasting, no reformatting.",
-    color: "from-[#B0B7BC]/30 to-[#B0B7BC]/10",
-    iconColor: "text-slate-500",
   },
 ];
 
@@ -153,21 +142,20 @@ export default function LandingPage() {
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
 
       {/* ── NAV ── */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-background/90 backdrop-blur-md border-b border-border/50"
-           style={{ boxShadow: "0 1px 0 0 rgba(0,0,0,0.06)" }}>
-        <div className="max-w-5xl mx-auto px-5 h-14 flex items-center justify-between">
-          <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto" />
-          <div className="flex items-center gap-3">
+      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border/60 bg-background/70 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
+          <img src={teckstartLogo} alt="Listing Assistant Pro" className="h-9 w-auto" />
+          <div className="flex items-center gap-2 sm:gap-3">
+            <ThemeToggle />
             <button
               onClick={() => navigate("/login")}
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
             >
               Sign In
             </button>
             <button
               onClick={() => navigate("/signup")}
-              className="text-sm font-semibold px-4 py-2 rounded-lg text-white transition-opacity hover:opacity-90"
-              style={{ backgroundColor: "#0076B6" }}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:opacity-90 active:scale-95"
             >
               Get Started
             </button>
@@ -176,52 +164,55 @@ export default function LandingPage() {
       </nav>
 
       {/* ── HERO ── */}
-      <section className="relative pt-28 pb-20 px-5 overflow-hidden">
-        {/* Background glow */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[400px] rounded-full blur-3xl"
-               style={{ background: "radial-gradient(ellipse, rgba(0,118,182,0.10) 0%, transparent 70%)" }} />
-          <div className="absolute top-24 right-0 w-[300px] h-[300px] rounded-full blur-3xl"
-               style={{ background: "radial-gradient(ellipse, rgba(176,183,188,0.12) 0%, transparent 70%)" }} />
+      <section className="relative overflow-hidden px-5 pb-24 pt-32">
+        {/* Ambient glow + grid */}
+        <div className="pointer-events-none absolute inset-0">
+          <div
+            className="absolute left-1/2 top-[-6rem] h-[520px] w-[820px] -translate-x-1/2 rounded-full blur-3xl"
+            style={{ background: "radial-gradient(ellipse at center, hsl(var(--primary) / 0.18) 0%, transparent 68%)" }}
+          />
+          <div
+            className="absolute inset-0 opacity-[0.5]"
+            style={{
+              backgroundImage:
+                "linear-gradient(to right, hsl(var(--border) / 0.5) 1px, transparent 1px), linear-gradient(to bottom, hsl(var(--border) / 0.5) 1px, transparent 1px)",
+              backgroundSize: "56px 56px",
+              maskImage: "radial-gradient(ellipse at 50% 0%, black 20%, transparent 72%)",
+              WebkitMaskImage: "radial-gradient(ellipse at 50% 0%, black 20%, transparent 72%)",
+            }}
+          />
         </div>
 
-        <div className="relative max-w-2xl mx-auto text-center space-y-6">
+        <div className="relative mx-auto max-w-3xl space-y-7 text-center">
           {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold"
-               style={{ backgroundColor: "rgba(0,118,182,0.08)", borderColor: "rgba(0,118,182,0.2)", color: "#0076B6" }}>
-            <Sparkles className="w-3.5 h-3.5" />
-            eBay Listing Assistant — Powered by AI
+          <div className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3.5 py-1.5 text-xs font-semibold text-primary">
+            <Sparkles className="h-3.5 w-3.5" />
+            AI eBay Listing Assistant
           </div>
 
           {/* Headline */}
-          <h1 className="text-4xl sm:text-5xl font-extrabold text-foreground leading-tight tracking-tight">
-            From Photo to Published
-            <span className="block" style={{ color: "#0076B6" }}>
-              eBay Listing in Seconds
-            </span>
+          <h1 className="font-display text-5xl font-bold leading-[1.05] tracking-tight text-balance sm:text-6xl">
+            From photo to published
+            <span className="block text-primary">eBay listing in seconds</span>
           </h1>
 
           {/* Subheadline */}
-          <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-xl mx-auto">
+          <p className="mx-auto max-w-xl text-base leading-relaxed text-muted-foreground text-pretty sm:text-lg">
             Upload photos of any resellable item. Get a complete, market-researched eBay listing — title, description, category, item specifics, and competitive pricing — ready to publish.
           </p>
 
           {/* CTAs */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+          <div className="flex flex-col items-center justify-center gap-3 pt-2 sm:flex-row">
             <button
               onClick={() => navigate("/signup")}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-white font-semibold text-sm hover:opacity-90 transition-all active:scale-95"
-              style={{
-                backgroundColor: "#0076B6",
-                boxShadow: "0 4px 20px rgba(0,118,182,0.30), 0 2px 6px rgba(0,0,0,0.15)"
-              }}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:opacity-90 active:scale-95 sm:w-auto"
             >
               Start Free — No Credit Card
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="h-4 w-4" />
             </button>
             <button
               onClick={() => navigate("/login")}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl border border-border bg-card text-foreground font-medium text-sm hover:bg-secondary transition-all active:scale-95"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card px-6 py-3.5 text-sm font-medium text-foreground transition-all hover:bg-secondary active:scale-95 sm:w-auto"
             >
               Sign In
             </button>
@@ -230,119 +221,109 @@ export default function LandingPage() {
           {/* Social proof */}
           <div className="flex items-center justify-center gap-1 pt-1">
             {[...Array(5)].map((_, i) => (
-              <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
+              <Star key={i} className="h-4 w-4 fill-primary text-primary" />
             ))}
-            <span className="text-xs text-muted-foreground ml-2">Trusted by resellers, dealers &amp; collectors</span>
+            <span className="ml-2 text-xs text-muted-foreground">Trusted by resellers, dealers &amp; collectors</span>
           </div>
         </div>
 
         {/* Hero mockup card */}
-        <div className="relative max-w-sm mx-auto mt-12">
-          <div className="bg-card border border-border rounded-2xl overflow-hidden"
-               style={{ boxShadow: "0 8px 40px rgba(0,0,0,0.12), 0 2px 8px rgba(0,118,182,0.10)" }}>
+        <div className="relative mx-auto mt-14 max-w-md">
+          <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-2xl shadow-primary/10">
             {/* Fake browser bar */}
-            <div className="border-b border-border px-4 py-3 flex items-center gap-2"
-                 style={{ backgroundColor: "rgba(0,118,182,0.04)" }}>
-              <div className="w-2 h-2 rounded-full bg-red-400" />
-              <div className="w-2 h-2 rounded-full bg-amber-400" />
-              <div className="w-2 h-2 rounded-full bg-green-400" />
-              <span className="text-xs text-muted-foreground ml-2 font-mono">sls.twinwicksds.com</span>
+            <div className="flex items-center gap-2 border-b border-border bg-secondary/50 px-4 py-3">
+              <div className="h-2.5 w-2.5 rounded-full bg-destructive/60" />
+              <div className="h-2.5 w-2.5 rounded-full bg-warning/70" />
+              <div className="h-2.5 w-2.5 rounded-full bg-success/70" />
+              <span className="ml-2 font-mono text-xs text-muted-foreground">listingassistant.pro</span>
             </div>
             {/* Mock listing result */}
-            <div className="p-4 space-y-3">
+            <div className="space-y-3 p-4">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-                     style={{ backgroundColor: "rgba(0,118,182,0.10)" }}>
-                  <Sparkles className="w-4 h-4" style={{ color: "#0076B6" }} />
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/12">
+                  <Sparkles className="h-4 w-4 text-primary" />
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-foreground">Analysis Complete</p>
                   <p className="text-xs text-muted-foreground">1921-D Morgan Dollar · MS-63</p>
                 </div>
-                <span className="ml-auto text-xs font-bold text-emerald-600">✓ Ready</span>
+                <span className="ml-auto text-xs font-bold text-success">✓ Ready</span>
               </div>
-              <div className="bg-secondary rounded-lg p-3 space-y-1"
-                   style={{ borderLeft: "3px solid #0076B6" }}>
-                <p className="text-xs font-semibold text-foreground leading-snug">
+              <div className="space-y-1 rounded-lg border-l-2 border-primary bg-secondary/60 p-3">
+                <p className="text-xs font-semibold leading-snug text-foreground">
                   1921-D Morgan Silver Dollar MS-63 Lustrous Mint State — US Coin
                 </p>
                 <p className="text-xs text-muted-foreground">eBay Category: US Coins › Dollars › Morgan (1878–1921)</p>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 {[["Low", "$42.00"], ["Avg", "$58.50"], ["High", "$74.00"]].map(([label, val]) => (
-                  <div key={label} className="bg-secondary rounded-lg p-2 text-center">
+                  <div key={label} className="rounded-lg bg-secondary/60 p-2 text-center">
                     <p className="text-xs text-muted-foreground">{label}</p>
                     <p className="text-sm font-bold text-foreground">{val}</p>
                   </div>
                 ))}
               </div>
-              <div className="rounded-lg px-3 py-2 flex items-center gap-2"
-                   style={{ backgroundColor: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)" }}>
-                <Shield className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
-                <p className="text-xs text-emerald-700 font-medium">Melt value: $27.84 · Price protected ✓</p>
+              <div className="flex items-center gap-2 rounded-lg border border-success/25 bg-success/10 px-3 py-2">
+                <Shield className="h-3.5 w-3.5 flex-shrink-0 text-success" />
+                <p className="text-xs font-medium text-success">Melt value: $27.84 · Price protected ✓</p>
               </div>
-              <button
-                className="w-full py-2.5 rounded-lg text-white text-xs font-semibold flex items-center justify-center gap-1.5"
-                style={{ backgroundColor: "#0076B6" }}
-              >
-                <Upload className="w-3.5 h-3.5" /> Publish to eBay
+              <button className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-xs font-semibold text-primary-foreground">
+                <Upload className="h-3.5 w-3.5" /> Publish to eBay
               </button>
             </div>
           </div>
           {/* Floating badge */}
-          <div className="absolute -top-3 -right-3 text-white text-xs font-bold px-2.5 py-1 rounded-full"
-               style={{ backgroundColor: "#0076B6", boxShadow: "0 2px 8px rgba(0,0,0,0.20)" }}>
+          <div className="absolute -right-3 -top-3 rounded-full bg-primary px-2.5 py-1 text-xs font-bold text-primary-foreground shadow-lg">
             ⚡ 8 seconds
           </div>
         </div>
       </section>
 
       {/* ── STATS ── */}
-      <section ref={statsRef} className="py-14 px-5 border-y border-border"
-               style={{ backgroundColor: "rgba(0,118,182,0.03)" }}>
-        <div className="max-w-3xl mx-auto grid grid-cols-3 gap-6 text-center">
+      <section ref={statsRef} className="border-y border-border bg-secondary/30 px-5 py-14">
+        <div className="mx-auto grid max-w-3xl grid-cols-3 gap-6 text-center">
           <div className="space-y-1">
-            <p className="text-3xl sm:text-4xl font-extrabold" style={{ color: "#0076B6" }}>
+            <p className="font-display text-3xl font-bold text-primary sm:text-4xl">
               {listingsCount.toLocaleString()}+
             </p>
-            <p className="text-xs sm:text-sm text-muted-foreground">Listings Generated</p>
+            <p className="text-xs text-muted-foreground sm:text-sm">Listings Generated</p>
           </div>
           <div className="space-y-1">
-            <p className="text-3xl sm:text-4xl font-extrabold" style={{ color: "#0076B6" }}>{timeSaved}%</p>
-            <p className="text-xs sm:text-sm text-muted-foreground">Time Saved vs. Manual</p>
+            <p className="font-display text-3xl font-bold text-primary sm:text-4xl">{timeSaved}%</p>
+            <p className="text-xs text-muted-foreground sm:text-sm">Time Saved vs. Manual</p>
           </div>
           <div className="space-y-1">
-            <p className="text-3xl sm:text-4xl font-extrabold" style={{ color: "#0076B6" }}>{accuracy}%</p>
-            <p className="text-xs sm:text-sm text-muted-foreground">Category Accuracy</p>
+            <p className="font-display text-3xl font-bold text-primary sm:text-4xl">{accuracy}%</p>
+            <p className="text-xs text-muted-foreground sm:text-sm">Category Accuracy</p>
           </div>
         </div>
       </section>
 
       {/* ── FEATURES ── */}
-      <section ref={featuresRef} className="py-20 px-5">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center space-y-3 mb-12">
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-foreground">
+      <section ref={featuresRef} className="px-5 py-24">
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-12 space-y-3 text-center">
+            <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
               Built for serious resellers
             </h2>
-            <p className="text-sm sm:text-base text-muted-foreground max-w-xl mx-auto">
+            <p className="mx-auto max-w-xl text-sm text-muted-foreground sm:text-base">
               Every feature is designed around one goal: getting accurate, competitive listings live faster than doing it by hand.
             </p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((f, i) => (
               <div
                 key={f.title}
-                className={`rounded-xl border border-border p-5 space-y-3 transition-all duration-500 ${
-                  featuresInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
+                className={`group space-y-3 rounded-xl border border-border bg-card p-6 transition-all duration-500 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 ${
+                  featuresInView ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
                 }`}
                 style={{ transitionDelay: `${i * 80}ms` }}
               >
-                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${f.color} flex items-center justify-center`}>
-                  <f.icon className={`w-5 h-5 ${f.iconColor}`} />
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                  <f.icon className="h-5 w-5" />
                 </div>
-                <h3 className="font-semibold text-sm text-foreground">{f.title}</h3>
-                <p className="text-xs text-muted-foreground leading-relaxed">{f.desc}</p>
+                <h3 className="text-sm font-semibold text-foreground">{f.title}</h3>
+                <p className="text-xs leading-relaxed text-muted-foreground">{f.desc}</p>
               </div>
             ))}
           </div>
@@ -350,30 +331,22 @@ export default function LandingPage() {
       </section>
 
       {/* ── HOW IT WORKS ── */}
-      <section className="py-20 px-5 border-y border-border"
-               style={{ backgroundColor: "rgba(0,0,0,0.02)" }}>
-        <div className="max-w-3xl mx-auto">
-          <div className="text-center space-y-3 mb-12">
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-foreground">How it works</h2>
+      <section className="border-y border-border bg-secondary/30 px-5 py-24">
+        <div className="mx-auto max-w-3xl">
+          <div className="mb-12 space-y-3 text-center">
+            <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">How it works</h2>
             <p className="text-sm text-muted-foreground">Three steps from item in hand to listing on eBay.</p>
           </div>
-          <div className="space-y-6">
-            {STEPS.map((step, i) => (
-              <div key={step.num} className="flex items-start gap-5">
-                <div className="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center"
-                     style={{
-                       backgroundColor: "rgba(0,118,182,0.08)",
-                       border: "1px solid rgba(0,118,182,0.20)"
-                     }}>
-                  <span className="text-xs font-extrabold" style={{ color: "#0076B6" }}>{step.num}</span>
+          <div className="space-y-4">
+            {STEPS.map((step) => (
+              <div key={step.num} className="flex items-start gap-5 rounded-xl border border-border bg-card p-5">
+                <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border border-primary/25 bg-primary/10">
+                  <span className="font-display text-sm font-bold text-primary">{step.num}</span>
                 </div>
                 <div className="flex-1 pt-1">
-                  <h3 className="font-semibold text-foreground text-sm">{step.title}</h3>
-                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{step.desc}</p>
+                  <h3 className="text-sm font-semibold text-foreground">{step.title}</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{step.desc}</p>
                 </div>
-                {i < STEPS.length - 1 && (
-                  <div style={{ position: "relative", marginLeft: "-3.85rem", marginTop: "3.5rem" }} />
-                )}
               </div>
             ))}
           </div>
@@ -381,99 +354,85 @@ export default function LandingPage() {
       </section>
 
       {/* ── PRICING ── */}
-      <section className="py-20 px-5">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center space-y-3 mb-8">
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-foreground">Simple, transparent pricing</h2>
+      <section className="px-5 py-24">
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-8 space-y-3 text-center">
+            <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">Simple, transparent pricing</h2>
             <p className="text-sm text-muted-foreground">Start free. Upgrade when your volume grows.</p>
           </div>
 
           {/* Billing cycle toggle */}
-          <div className="flex items-center justify-center mb-10">
-            <div className="flex items-center p-1 rounded-full border border-border bg-card">
+          <div className="mb-10 flex items-center justify-center">
+            <div className="flex items-center rounded-full border border-border bg-card p-1">
               <button
                 onClick={() => setBillingCycle("monthly")}
-                className={`px-5 py-2 rounded-full text-sm font-semibold transition-all ${
+                className={`rounded-full px-5 py-2 text-sm font-semibold transition-all ${
                   billingCycle === "monthly"
-                    ? "text-white"
+                    ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
-                style={billingCycle === "monthly" ? { backgroundColor: "#0076B6" } : {}}
               >
                 Monthly
               </button>
               <button
                 onClick={() => setBillingCycle("annual")}
-                className={`px-5 py-2 rounded-full text-sm font-semibold transition-all flex items-center gap-2 ${
+                className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition-all ${
                   billingCycle === "annual"
-                    ? "text-white"
+                    ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
-                style={billingCycle === "annual" ? { backgroundColor: "#0076B6" } : {}}
               >
                 Annual
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500 text-white">
+                <span className="rounded-full bg-success px-2 py-0.5 text-xs font-bold text-success-foreground">
                   2 months free
                 </span>
               </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {PLANS.map((plan) => {
               const displayPrice = billingCycle === "annual" ? plan.annualPrice : plan.price;
               const displayPeriod = billingCycle === "annual" ? plan.annualPeriod : plan.period;
               return (
                 <div
                   key={plan.name}
-                  className="relative rounded-xl border p-5 space-y-5 flex flex-col"
-                  style={plan.highlight ? {
-                    borderColor: "#0076B6",
-                    boxShadow: "0 0 0 2px rgba(0,118,182,0.15)",
-                    backgroundColor: "rgba(0,118,182,0.03)"
-                  } : {
-                    borderColor: "hsl(var(--border))",
-                    backgroundColor: "hsl(var(--card))"
-                  }}
+                  className={`relative flex flex-col space-y-5 rounded-2xl border p-6 ${
+                    plan.highlight
+                      ? "border-primary bg-primary/5 shadow-xl shadow-primary/10 ring-1 ring-primary/30"
+                      : "border-border bg-card"
+                  }`}
                 >
                   {plan.badge && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 text-white text-[10px] font-bold px-3 py-1 rounded-full"
-                         style={{ backgroundColor: "#0076B6" }}>
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-[10px] font-bold text-primary-foreground">
                       {plan.badge}
                     </div>
                   )}
                   <div>
-                    <h3 className="font-bold text-foreground">{plan.name}</h3>
-                    <div className="flex items-baseline gap-0.5 mt-1">
-                      <span className="text-2xl font-extrabold text-foreground">{displayPrice}</span>
+                    <h3 className="font-display text-lg font-bold text-foreground">{plan.name}</h3>
+                    <div className="mt-1 flex items-baseline gap-0.5">
+                      <span className="font-display text-3xl font-bold text-foreground">{displayPrice}</span>
                       <span className="text-sm text-muted-foreground">{displayPeriod}</span>
                     </div>
                     {billingCycle === "annual" && plan.annualNote && (
-                      <p className="text-xs text-muted-foreground mt-0.5">{plan.annualNote}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{plan.annualNote}</p>
                     )}
                   </div>
-                  <ul className="space-y-2 flex-1">
+                  <ul className="flex-1 space-y-2.5">
                     {plan.features.map((f) => (
                       <li key={f} className="flex items-start gap-2 text-xs text-muted-foreground">
-                        <Check className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: "#0076B6" }} />
+                        <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-primary" />
                         {f}
                       </li>
                     ))}
                   </ul>
                   <button
                     onClick={() => navigate("/signup")}
-                    className="w-full py-2.5 rounded-lg text-sm font-semibold transition-all active:scale-95"
-                    style={plan.highlight ? {
-                      backgroundColor: "#0076B6",
-                      color: "#fff",
-                      boxShadow: "0 4px 14px rgba(0,118,182,0.25)"
-                    } : {
-                      border: "1px solid hsl(var(--border))",
-                      backgroundColor: "transparent",
-                      color: "hsl(var(--foreground))"
-                    }}
-                    onMouseEnter={e => { if (!plan.highlight) (e.target as HTMLButtonElement).style.backgroundColor = "hsl(var(--secondary))"; }}
-                    onMouseLeave={e => { if (!plan.highlight) (e.target as HTMLButtonElement).style.backgroundColor = "transparent"; }}
+                    className={`w-full rounded-lg py-2.5 text-sm font-semibold transition-all active:scale-95 ${
+                      plan.highlight
+                        ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:opacity-90"
+                        : "border border-border bg-transparent text-foreground hover:bg-secondary"
+                    }`}
                   >
                     {plan.cta}
                   </button>
@@ -485,10 +444,13 @@ export default function LandingPage() {
       </section>
 
       {/* ── CTA BANNER ── */}
-      <section className="py-16 px-5 border-t border-border"
-               style={{ background: "linear-gradient(135deg, rgba(0,118,182,0.07) 0%, rgba(176,183,188,0.08) 50%, rgba(0,0,0,0.02) 100%)" }}>
-        <div className="max-w-xl mx-auto text-center space-y-5">
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-foreground">
+      <section className="relative overflow-hidden border-t border-border px-5 py-20">
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{ background: "radial-gradient(ellipse at 50% 120%, hsl(var(--primary) / 0.16) 0%, transparent 60%)" }}
+        />
+        <div className="relative mx-auto max-w-xl space-y-5 text-center">
+          <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
             Ready to list smarter?
           </h2>
           <p className="text-sm text-muted-foreground">
@@ -496,27 +458,23 @@ export default function LandingPage() {
           </p>
           <button
             onClick={() => navigate("/signup")}
-            className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl text-white font-semibold text-sm hover:opacity-90 transition-all active:scale-95"
-            style={{
-              backgroundColor: "#0076B6",
-              boxShadow: "0 4px 20px rgba(0,118,182,0.30), 0 2px 6px rgba(0,0,0,0.12)"
-            }}
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-8 py-3.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:opacity-90 active:scale-95"
           >
             Get Started Free
-            <ChevronRight className="w-4 h-4" />
+            <ChevronRight className="h-4 w-4" />
           </button>
           <p className="text-xs text-muted-foreground">No credit card required · Cancel anytime</p>
         </div>
       </section>
 
       {/* ── FOOTER ── */}
-      <footer className="py-8 px-5 border-t border-border">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto opacity-70" />
+      <footer className="border-t border-border px-5 py-8">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 sm:flex-row">
+          <img src={teckstartLogo} alt="Listing Assistant Pro" className="h-8 w-auto opacity-70" />
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <button onClick={() => navigate("/terms")} className="hover:text-foreground transition-colors">Terms</button>
-            <button onClick={() => navigate("/privacy")} className="hover:text-foreground transition-colors">Privacy</button>
-            <button onClick={() => navigate("/login")} className="hover:text-foreground transition-colors">Sign In</button>
+            <button onClick={() => navigate("/terms")} className="transition-colors hover:text-foreground">Terms</button>
+            <button onClick={() => navigate("/privacy")} className="transition-colors hover:text-foreground">Privacy</button>
+            <button onClick={() => navigate("/login")} className="transition-colors hover:text-foreground">Sign In</button>
           </div>
           <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} Twin Wicks Digital Solutions. All rights reserved.</p>
         </div>
