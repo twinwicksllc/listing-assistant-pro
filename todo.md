@@ -1,30 +1,32 @@
-# Phase 4 - RAG Knowledge Base Expansion & Quality Assurance
+# Todo: RAG Enrichment — Remaining 5 Domains
+Branch: feature/phase4-rag-expansion-qa (extends PR #401)
 
-Branch: feature/phase4-rag-expansion-qa (off main @ 98c3a03, post PR #400 merge)
+## Research (complete — facts gathered for all 5 domains)
+- [x] trading_cards: PSA 4-criteria grading (centering/corners/edges/surface), PSA 10 vs 9, BGS subgrades
+- [x] vintage_clothing: ILGWU union label timeline (1900-2005), RN numbers, dating by tags
+- [x] musical_instruments: Fender serial number eras (bridge/neckplate/headstock), MIJ/MIM prefixes
+- [x] toys_collectibles: wear patterns, manufacturer marks, materials by era, AFA grading
+- [x] home_garden_tools: vintage tool ID (patina/materials/maker marks/patent dates), safety cert marks (UL/ETL/CE/GS)
 
-## Part A - RAG Knowledge Base Expansion
-- [x] Design domain -> RAG category mapping (generalize beyond coins_bullion)
-- [x] Add DOMAIN_RAG_CATEGORIES config mapping domains to knowledge_base category values
-- [x] Generalize visual-agent.ts RAG injection to use the mapping (not just coins_bullion)
-- [x] Write new knowledge content for 5 domains: sneakers, electronics, jewelry, auto_parts, luxury_handbags
-- [x] Extend scripts/seed-knowledge-base.cjs with the new domain content (new categories, additive, idempotent)
-- [x] Verify deno check/lint/fmt clean on touched files (0 new errors vs. main baseline)
+## Implement — registry mapping
+- [x] Add 5 new entries to DOMAIN_RAG_CATEGORIES in registry.ts
 
-## Part B - Domain Tracking (prerequisite for QA feedback loop)
-- [x] Add migration: domain column on drafts table (nullable TEXT)
-- [x] Add migration: domain + time_to_sale_days columns on listing_financials table
-- [x] Add domain field to ListingDraft interface (src/types/listing.ts)
-- [x] Wire domain into useDrafts.ts addDraft()/updateDraft()/fetchDrafts()
-- [x] Set domain on draft creation in AnalyzePage (from Pass-1 identification)
-- [x] Update cogs-report/index.ts to resolve domain + published_at from drafts (by ebay_sku/ebay_listing_id) and persist domain + computed time_to_sale_days into listing_financials
+## Implement — seed content (4-6 entries each)
+- [x] TRADING_CARD_GRADING array
+- [x] VINTAGE_CLOTHING_AUTHENTICATION array
+- [x] MUSICAL_INSTRUMENT_AUTHENTICATION array
+- [x] TOYS_COLLECTIBLES_AUTHENTICATION array
+- [x] HOME_GARDEN_TOOLS_IDENTIFICATION array
+- [x] Add all 5 new arrays to ALL_NEW_DOMAIN_CONTENT
 
-## Part C - Quality-Assurance Feedback Loop (scoped realistically)
-- [x] New SQL view: domain_quality_metrics aggregating listing_financials by domain (count sold, avg net profit, avg time_to_sale_days)
-- [x] New edge function domain-quality-report exposing per-domain metrics + a "refinement candidate" flag (longest time-to-sale / lowest margin domain)
-- [x] Add a "Domain Quality" section to AdminPage.tsx displaying the metrics
-- [x] Explicitly document in roadmap that rejection-rate/edit-rate need new instrumentation not yet present (out of scope for this phase, flagged as future work)
+## Update roadmap
+- [x] Update COMPREHENSIVE_LISTING_TYPES_ROADMAP.md (RAG now covers all 11 specialized domains)
 
-## Part D - Wrap-up
-- [x] Update COMPREHENSIVE_LISTING_TYPES_ROADMAP.md Phase 4 section: mark shipped, document what was built vs. deferred
-- [x] Run full verification (deno check/lint/fmt, tsc, eslint, vitest - all clean, 24/24 tests passing)
-- [x] Commit, push, open PR against main
+## Verify
+- [x] deno check registry.ts — 0 errors
+- [x] deno lint — clean
+- [x] deno fmt --check — clean
+- [x] npm run build (tsc) — clean
+- [x] npm run lint (eslint) — clean
+- [x] npm test (vitest) — all passing (24/24)
+- [ ] Commit + push (updates PR #401)
