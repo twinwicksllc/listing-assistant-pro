@@ -4,7 +4,7 @@
  */
 
 import { AgentContext, VisualInspectionResult } from "../pipelineContracts.ts";
-import { DomainDefinition } from "../registry.ts";
+import { DOMAIN_RAG_CATEGORIES, DomainDefinition } from "../registry.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { getEmbedding } from "../../rag/embedding.ts";
 import { findSimilarContext, formatRagResults } from "../../rag/retriever.ts";
@@ -18,17 +18,27 @@ export async function runAgenticVisualAgent(
   const { invocationId, imageList } = context;
   console.log(`[${invocationId}] VisualAgent: Running precision inspection for ${domainDef.domain}`);
 
-  // --- RAG: Augmented Context from Grading Standards ---
+  // --- RAG: Augmented Context from Domain-Specific Knowledge Base ---
+  // Generalized lookup (see DOMAIN_RAG_CATEGORIES in registry.ts) - not hardcoded
+  // to coins_bullion anymore. Any domain with an entry in the mapping gets its
+  // relevant knowledge_base category queried; domains without an entry simply
+  // skip RAG injection (no behavior change for them).
   let ragContext = "";
-  if (domainDef.domain === "coins_bullion") {
+  const ragCategories = DOMAIN_RAG_CATEGORIES[domainDef.domain] ?? [];
+  if (ragCategories.length > 0) {
     try {
       // Use pre-computed embedding from controller if available; fall back to generating one
       const embedding = context.queryEmbedding ??
         await getEmbedding(apiKey, context.identification?.itemName || domainDef.domain);
-      const results = await findSimilarContext(supabase, embedding, "grading_standard");
-      ragContext = formatRagResults(results);
-      if (ragContext) {
-        console.log(`[${invocationId}] VisualAgent: Injected ${results.length} grading standard references.`);
+      for (const category of ragCategories) {
+        const results = await findSimilarContext(supabase, embedding, category);
+        if (results.length > 0) {
+          ragContext = formatRagResults(results);
+          console.log(
+            `[${invocationId}] VisualAgent: Injected ${results.length} "${category}" reference(s) for domain ${domainDef.domain}.`,
+          );
+          break;
+        }
       }
     } catch (ragErr) {
       console.warn(`[${invocationId}] VisualAgent RAG failed:`, ragErr);
@@ -56,7 +66,7 @@ Item Identification: ${context.identification?.itemName}
 
 ${
       ragContext
-        ? `### GRADING STANDARDS & CRITERIA:\nUse these verified standards to guide your inspection:\n${ragContext}\n`
+        ? `### VERIFIED REFERENCE STANDARDS:\nUse these verified domain standards to guide your inspection:\n${ragContext}\n`
         : ""
     }
 

@@ -76,6 +76,8 @@ export function useDrafts() {
           videoUrl: d.video_url || undefined,
           ebayVideoId: d.ebay_video_id || undefined,
           ebayVideoStatus: d.ebay_video_status || undefined,
+          // Item domain (Phase 4 quality-assurance tracking)
+          domain: d.domain || undefined,
         }))
       );
     }
@@ -135,6 +137,8 @@ export function useDrafts() {
       cogs: draft.cogs ?? null,
       cogs_source: draft.cogsSource ?? null,
       cogs_acquired_at: draft.cogsAcquiredAt?.toISOString() ?? null,
+      // Item domain (Phase 4 quality-assurance tracking)
+      domain: draft.domain ?? null,
     });
 
     if (error) {
@@ -217,6 +221,7 @@ export function useDrafts() {
     if (updates.cogs !== undefined)                    patch.cogs = updates.cogs ?? null;
     if (updates.cogsSource !== undefined)              patch.cogs_source = updates.cogsSource ?? null;
     if (updates.cogsAcquiredAt !== undefined)          patch.cogs_acquired_at = updates.cogsAcquiredAt?.toISOString() ?? null;
+    if (updates.domain !== undefined)                  patch.domain = updates.domain ?? null;
 
     const { error } = await supabase.from("drafts").update(patch).eq("id", id);
 

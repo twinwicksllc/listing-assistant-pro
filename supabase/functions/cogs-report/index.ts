@@ -605,29 +605,95 @@ async function dualWriteFinancials(
 ): Promise<void> {
   if (items.length === 0) return;
 
+  // --- Phase 4: Resolve domain + published_at from drafts ---
+  // Look up the matching drafts row (by ebay_sku / ebay_listing_id) to get
+  // the item's domain (set by Pass-1 AI at analysis time) and published_at
+  // (set when the draft was published). This powers the domain_quality_metrics
+  // view / domain-quality-report edge function. Non-fatal on any error - a
+  // missing draft (e.g. listing created outside the app, or before domain
+  // tracking existed) simply leaves domain/time_to_sale_days as NULL.
+  const domainByListingId: Record<string, string> = {};
+  const domainBySku: Record<string, string> = {};
+  const publishedAtByListingId: Record<string, string> = {};
+  const publishedAtBySku: Record<string, string> = {};
+
+  try {
+    const listingIds = Array.from(
+      new Set(items.map((it) => it.ebayListingId).filter((v): v is string => !!v)),
+    );
+    const skus = Array.from(
+      new Set(items.map((it) => it.ebaySku).filter((v): v is string => !!v)),
+    );
+
+    if (listingIds.length > 0 || skus.length > 0) {
+      const orParts: string[] = [];
+      if (skus.length > 0) orParts.push(`ebay_sku.in.(${skus.join(",")})`);
+      if (listingIds.length > 0) orParts.push(`ebay_listing_id.in.(${listingIds.join(",")})`);
+
+      const { data: draftRows, error: draftErr } = await supabase
+        .from("drafts")
+        .select("ebay_sku, ebay_listing_id, domain, published_at")
+        .eq("user_id", userId)
+        .or(orParts.join(","));
+
+      if (draftErr) {
+        console.warn("drafts lookup for domain/published_at (non-fatal):", draftErr.message);
+      } else {
+        for (const row of draftRows ?? []) {
+          if (row.domain) {
+            if (row.ebay_listing_id) domainByListingId[row.ebay_listing_id] = row.domain;
+            if (row.ebay_sku) domainBySku[row.ebay_sku] = row.domain;
+          }
+          if (row.published_at) {
+            if (row.ebay_listing_id) publishedAtByListingId[row.ebay_listing_id] = row.published_at;
+            if (row.ebay_sku) publishedAtBySku[row.ebay_sku] = row.published_at;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Domain/published_at resolution failed (non-fatal):", (e as Error).message);
+  }
+
   // Separate rows by which unique index they resolve against
   const rowsWithListingId = items.filter((it) => it.ebayListingId != null);
   const rowsSkuOnly = items.filter(
     (it) => it.ebayListingId == null && it.ebaySku != null,
   );
 
-  const toRow = (it: (typeof items)[number]) => ({
-    user_id: userId,
-    order_id: it.orderId,
-    ebay_listing_id: it.ebayListingId,
-    ebay_sku: it.ebaySku,
-    title: it.title,
-    quantity: it.quantity,
-    sale_price: it.salePrice,
-    shipping_buyer_paid: it.shippingCollected,
-    ebay_fees: it.ebayFees,
-    cogs: it.cogs, // total line COGS (unit_cogs × quantity)
-    unit_cogs: it.unitCogs, // per-unit COGS for reference
-    shipping_label_cost: it.shippingLabelCost,
-    refund: 0, // Phase 2+
-    net_profit: it.netProfit,
-    sold_at: it.soldAt,
-  });
+  const toRow = (it: (typeof items)[number]) => {
+    const domain = (it.ebayListingId ? domainByListingId[it.ebayListingId] : undefined) ??
+      (it.ebaySku ? domainBySku[it.ebaySku] : undefined) ??
+      null;
+    const publishedAt = (it.ebayListingId ? publishedAtByListingId[it.ebayListingId] : undefined) ??
+      (it.ebaySku ? publishedAtBySku[it.ebaySku] : undefined) ??
+      null;
+    let timeToSaleDays: number | null = null;
+    if (publishedAt) {
+      const days = (new Date(it.soldAt).getTime() - new Date(publishedAt).getTime()) / (1000 * 60 * 60 * 24);
+      if (Number.isFinite(days) && days >= 0) timeToSaleDays = parseFloat(days.toFixed(2));
+    }
+
+    return {
+      user_id: userId,
+      order_id: it.orderId,
+      ebay_listing_id: it.ebayListingId,
+      ebay_sku: it.ebaySku,
+      title: it.title,
+      quantity: it.quantity,
+      sale_price: it.salePrice,
+      shipping_buyer_paid: it.shippingCollected,
+      ebay_fees: it.ebayFees,
+      cogs: it.cogs, // total line COGS (unit_cogs x quantity)
+      unit_cogs: it.unitCogs, // per-unit COGS for reference
+      shipping_label_cost: it.shippingLabelCost,
+      refund: 0, // Phase 2+
+      net_profit: it.netProfit,
+      sold_at: it.soldAt,
+      domain,
+      time_to_sale_days: timeToSaleDays,
+    };
+  };
 
   // Upsert rows that have a listing ID (most common case)
   if (rowsWithListingId.length > 0) {
