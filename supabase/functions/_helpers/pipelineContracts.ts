@@ -1,9 +1,17 @@
+// Canonical 12-domain type — kept in sync with agent-system/pipelineContracts.ts
+// and _helpers/pass1Identification.ts. Single source of truth for domain routing.
 export type Domain =
   | "coins_bullion"
   | "trading_cards"
   | "jewelry"
   | "electronics"
   | "vintage_clothing"
+  | "auto_parts"
+  | "sneakers"
+  | "luxury_handbags"
+  | "musical_instruments"
+  | "toys_collectibles"
+  | "home_garden_tools"
   | "general";
 
 /** eBay June 2026 structured coin condition requirement */

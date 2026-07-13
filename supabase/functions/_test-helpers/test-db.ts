@@ -111,7 +111,12 @@ export async function getRandomTestItem(): Promise<TestItem> {
 }
 
 /**
- * Test domains available in test_items
+ * Test domains available in test_items.
+ * Expanded to all 12 domains matching pipelineContracts.ts so that test
+ * coverage can include the newly-classifiable domains (sneakers, auto_parts,
+ * luxury_handbags, musical_instruments, toys_collectibles, home_garden_tools).
+ * Note: test_items rows for the new domains may need to be seeded via a
+ * migration before integration tests can exercise them.
  */
 export const TEST_DOMAINS = [
   "coins_bullion",
@@ -119,5 +124,11 @@ export const TEST_DOMAINS = [
   "jewelry",
   "electronics",
   "vintage_clothing",
+  "auto_parts",
+  "sneakers",
+  "luxury_handbags",
+  "musical_instruments",
+  "toys_collectibles",
+  "home_garden_tools",
   "general",
 ] as const;

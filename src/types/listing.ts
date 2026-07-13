@@ -301,12 +301,22 @@ export function deriveDomainFromCategory(
   if (COIN_CATEGORY_IDS.has(categoryId)) return "coins_bullion";
   if (BULLION_CATEGORY_IDS.has(categoryId)) return "coins_bullion";
   if (TRADING_CARD_CATEGORY_IDS.has(categoryId)) return "trading_cards";
-  // Breadcrumb-based fallback for IDs not in our hardcoded sets
+  // Breadcrumb-based fallback for IDs not in our hardcoded sets.
+  // Covers all 12 domains so that manual category overrides route to the
+  // correct domain-dependent UI (condition panel, item specifics, etc.).
   if (breadcrumb) {
     const bc = breadcrumb.toLowerCase();
     if (/coins?|paper money|currency|bullion|numismatic/i.test(bc)) return "coins_bullion";
     if (/trading card|sports card|pokemon|magic.*gathering|yu-?gi/i.test(bc)) return "trading_cards";
-    if (/vintage clothing|apparel|fashion/i.test(bc)) return "vintage_clothing";
+    if (/ring|necklace|bracelet|earring|brooch|watch|jewel/i.test(bc)) return "jewelry";
+    if (/phone|tablet|laptop|console|camera|headphone|speaker|audio|tv|smart home/i.test(bc)) return "electronics";
+    if (/sneaker|athletic shoe|running shoe|jordan|yeezy/i.test(bc)) return "sneakers";
+    if (/handbag|tote|wallet|louis vuitton|chanel|herm/i.test(bc)) return "luxury_handbags";
+    if (/guitar|bass|keyboard|drum|instrument|pedal|microphone|dj/i.test(bc)) return "musical_instruments";
+    if (/action figure|diecast|lego|funko|comic|board game|doll|model kit/i.test(bc)) return "toys_collectibles";
+    if (/auto part|car part|truck part|motorcycle|engine|wheel|tire|exhaust|suspension/i.test(bc)) return "auto_parts";
+    if (/power tool|hand tool|lawn|garden|appliance|hvac|plumbing/i.test(bc)) return "home_garden_tools";
+    if (/vintage clothing|apparel|fashion|clothing|shoe/i.test(bc)) return "vintage_clothing";
   }
   return "general";
 }

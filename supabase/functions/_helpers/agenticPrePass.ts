@@ -33,12 +33,20 @@
  *   - Independent: Stage A and Stage B run concurrently and fail independently
  */
 
+// Canonical 12-domain type — kept in sync with agent-system/pipelineContracts.ts.
+// Single source of truth for domain routing.
 export type Domain =
   | "coins_bullion"
   | "trading_cards"
   | "jewelry"
   | "electronics"
   | "vintage_clothing"
+  | "auto_parts"
+  | "sneakers"
+  | "luxury_handbags"
+  | "musical_instruments"
+  | "toys_collectibles"
+  | "home_garden_tools"
   | "general";
 
 export interface AgenticInspection {

@@ -2,12 +2,20 @@
 // Each domain produces an expert-persona system prompt with tailored condition
 // mappings, category guidance, and item-specifics instructions.
 
+// Canonical 12-domain type — kept in sync with agent-system/pipelineContracts.ts
+// and _helpers/pass1Identification.ts. Single source of truth for domain routing.
 export type Domain =
   | "coins_bullion"
   | "trading_cards"
   | "jewelry"
   | "electronics"
   | "vintage_clothing"
+  | "auto_parts"
+  | "sneakers"
+  | "luxury_handbags"
+  | "musical_instruments"
+  | "toys_collectibles"
+  | "home_garden_tools"
   | "general";
 
 export interface PromptContext {
@@ -94,9 +102,19 @@ export function buildSystemPrompt(domain: Domain, ctx: PromptContext): string {
       return buildCoinBullionPrompt(ctx);
     case "trading_cards":
       return buildTradingCardsPrompt(ctx);
+    // The following domains currently use the general-purpose prompt.
+    // Phase 2 of the comprehensive-listing-types roadmap will add specialized
+    // prompts (buildSneakersPrompt, buildElectronicsPrompt, etc.) and route
+    // each domain here to its dedicated prompt builder.
     case "jewelry":
     case "electronics":
     case "vintage_clothing":
+    case "auto_parts":
+    case "sneakers":
+    case "luxury_handbags":
+    case "musical_instruments":
+    case "toys_collectibles":
+    case "home_garden_tools":
     case "general":
     default:
       return buildGeneralPrompt(ctx);
