@@ -180,12 +180,29 @@ In `domainPrompts.ts` and `detailExtractor.ts`:
 
 ---
 
-### Phase 3 — Detail Extraction for Remaining Domains
+### Phase 3 — Detail Extraction for Remaining Domains ✅ Shipped
 **Effort:** Medium. **Impact:** Medium-High. **Risk:** Low.
+
+**Status:** Implemented for all 6 target domains (electronics, sneakers, auto_parts,
+musical_instruments, luxury_handbags, home_garden_tools) in `detailExtractor.ts`. `extractKeyDetails()`
+now runs for 9 domains total (the original 3 plus these 6). Each new domain has its own `XxxDetails`
+interface, a focused extraction prompt, a result-parsing branch, and an override-application branch in
+`applyDetailOverrides()` — following the exact pattern of the original coin/card/jewelry
+implementation. `analyze-item/index.ts` required NO changes for this part, since its call site
+(`extractKeyDetails()` + `applyDetailOverrides()`) is fully domain-agnostic and delegates entirely to
+`detailExtractor.ts`.
+
+Additionally, per user-approved recommendation, lightweight category-mismatch guardrails (soft,
+keyword/breadcrumb-based — NOT hardcoded category ID tables) were added for `sneakers` and
+`auto_parts` in `analyze-item/index.ts`, extending the existing `isCategoryCompatibleWithDomain()`
+switch (previously only handled `coins_bullion`). These reject only categories that are CLEARLY the
+wrong domain (e.g. "Action Figures" for a sneaker, "Home & Garden" for an auto part) — unlike the
+coins guardrail, they are not a hard allowlist, since footwear/auto-parts category trees are far
+larger and more varied than the coin taxonomy.
 
 **Goal:** Extend the authoritative detail-extraction pass (`detailExtractor.ts`) to the domains where precision vision re-inspection adds the most value.
 
-**Current state:** `extractDetails()` only runs for `coins_bullion`, `trading_cards`, and `jewelry`. It explicitly returns null for all other domains (line 268: `if (!["coins_bullion", "trading_cards", "jewelry"].includes(domain))`).
+**Original state (pre-Phase 3):** `extractKeyDetails()` only ran for `coins_bullion`, `trading_cards`, and `jewelry`. It explicitly returned null for all other domains (`if (!["coins_bullion", "trading_cards", "jewelry"].includes(domain))`).
 
 **Priority domains for detail extraction:**
 
