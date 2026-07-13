@@ -481,6 +481,10 @@ export interface ListingDraft {
   ebayCategoryId?: string;
   ebayCategoryBreadcrumb?: string; // e.g. "Coins > US > Dollars > Morgan"
   suggestedCategories?: Array<{ categoryId: string; categoryName: string; reason: string; breadcrumb?: string }>;
+  // Item domain classified by Pass-1 AI identification (e.g. "coins_bullion",
+  // "sneakers", "electronics"). Persisted so per-domain quality metrics
+  // (time-to-sale, net profit) can be computed once a listing sells.
+  domain?: string;
   itemSpecifics?: ItemSpecifics;
   condition?: string;              // Internal enum: NEW, PRE_OWNED_GOOD, PRE_OWNED_FAIR, etc.
   consignor?: string;

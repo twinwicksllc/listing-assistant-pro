@@ -39,3 +39,4 @@ supabase/functions/.env
 supabase/.temp/
 .vercel
 .env*.local
+supabase/functions/deno.lock

@@ -315,6 +315,8 @@ export default function AnalyzePage() {
     coinConditionDetail,
     condition,
     consignor,
+    // Item domain classified by Pass-1 AI (Phase 4 quality-assurance tracking)
+    domain: domain !== "general" ? domain : undefined,
     cogs: cogs ?? undefined,
     cogsSource: cogs != null ? "manual" : undefined,
     fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId ?? undefined,

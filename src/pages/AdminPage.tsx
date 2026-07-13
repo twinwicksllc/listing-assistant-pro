@@ -19,6 +19,7 @@ import { StatsCards } from "@/components/admin/StatsCards";
 import { FeatureUsageCard } from "@/components/admin/FeatureUsageCard";
 import { GeminiUsageSection } from "@/components/admin/GeminiUsageSection";
 import { OpenAiUsageSection } from "@/components/admin/OpenAiUsageSection";
+import { DomainQualitySection } from "@/components/admin/DomainQualitySection";
 
 export default function AdminPage() {
   const { user } = useAuth();
@@ -138,6 +139,8 @@ export default function AdminPage() {
             <StatsCards data={data} />
 
             <FeatureUsageCard featureUsage={data.featureUsage} />
+
+            <DomainQualitySection />
 
             <GeminiUsageSection gemini={data.gemini} />
 

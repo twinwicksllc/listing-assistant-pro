@@ -23,6 +23,30 @@ export interface DomainDefinition {
   criticalAttributes: string[];
 }
 
+/**
+ * DOMAIN_RAG_CATEGORIES
+ * Maps each domain to the `knowledge_base.category` value(s) that should be
+ * retrieved (via match_knowledge_base) to ground the Visual Agent's inspection.
+ *
+ * This is the generalized successor to the old coins_bullion-only RAG gate in
+ * visual-agent.ts. A domain with no entry here (or an empty array) simply
+ * skips RAG injection - no hardcoded category IDs, no per-domain special
+ * casing beyond this lookup table. Multiple categories may be listed; the
+ * first one that returns results is used (see visual-agent.ts).
+ *
+ * NOTE: This only controls *which knowledge_base category to query*. It does
+ * NOT gate whether a domain is otherwise supported - all 12 domains are fully
+ * supported end-to-end regardless of RAG coverage.
+ */
+export const DOMAIN_RAG_CATEGORIES: Partial<Record<Domain, string[]>> = {
+  coins_bullion: ["grading_standard"],
+  sneakers: ["sneaker_authentication"],
+  electronics: ["electronics_spec_standard"],
+  jewelry: ["jewelry_hallmark_standard"],
+  auto_parts: ["auto_parts_fitment"],
+  luxury_handbags: ["handbag_authentication"],
+};
+
 export const DOMAIN_REGISTRY: Record<Domain, DomainDefinition> = {
   coins_bullion: {
     domain: "coins_bullion",

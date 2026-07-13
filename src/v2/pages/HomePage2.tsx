@@ -564,7 +564,7 @@ export default function HomePage2() {
         setImagesOptimized(true);
         await recordUsage("optimize");
       } catch {
-        toast.error("Failed to optimize images.");
+        toast.error("Failed to optimize images.", { id: "optimize-images-error" });
       } finally {
         setOptimizing(false);
       }
