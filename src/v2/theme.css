@@ -1,80 +1,118 @@
 /*
- * theme.css — V2 Sleek Design System
+ * theme.css — V2 "Ember Standard" Design System
  * ─────────────────────────────────────────────────────────────────────────────
- * Brand:    Sovereign Listing Suite | Twin Wicks Digital Solutions
- * Primary:  #5B5FD4  (Velvet Indigo)   → hsl(243, 54%, 57%)
- * Silver:   #B0B7BC  (Metallic Silver) → hsl(207, 6%, 71%)
- * BG:       #F8F9FA  (Off-White)
+ * Brand:    Listing Assistant Pro | Twin Wicks Digital Solutions
+ * Accent:   Ember Amber  → hsl(30, 96%, 55%)
  *
- * Design principles:
- *   - Glass-morphic cards with subtle blur
- *   - Font weight depth: 800 primary, 600 secondary, 400 body
- *   - Soft shadows, no heavy borders
- *   - Generous corner radii (12px / 16px)
+ * Genuine light + dark mode. Tokens are driven by CSS variables that flip
+ * when `.light` is present on <html> (set by ThemeProvider). Default = dark.
  *
- * Font stack: system-ui stack — zero downloads, native on Apple/Windows/Android
+ * Font stack: Space Grotesk (display) + Inter (body) — loaded in index.html
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
 .v2 {
     /* ── Typography ─────────────────────────────────────────────────────────── */
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
       "Helvetica Neue", Arial, sans-serif;
     font-size: 16px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 
-    /* ── Color tokens ───────────────────────────────────────────────────────── */
-    --v2-bg:               210 20% 98%;         /* #F8F9FA — off-white */
-    --v2-bg-subtle:        210 20% 99%;         /* #FAFBFC — near-white tint */
-    --v2-bg-muted:         210 14% 95%;         /* #EFF2F5 — light grey fill */
-    --v2-bg-glass:         0 0% 100% / 0.72;    /* glass overlay */
+    /* ── DARK (default) color tokens ────────────────────────────────────────── */
+    --v2-bg:               24 14% 6%;           /* warm charcoal page bg */
+    --v2-bg-subtle:        24 12% 8%;
+    --v2-bg-muted:         24 10% 12%;          /* light grey fill / tracks */
+    --v2-bg-glass:         24 12% 9% / 0.72;
 
-    --v2-primary:          243 54% 57%;        /* #5B5FD4 Velvet Indigo */
-    --v2-primary-hover:    243 54% 48%;         /* slightly darker on hover */
-    --v2-primary-light:    243 54% 94%;         /* very light indigo tint */
-    --v2-primary-fg:       0 0% 100%;           /* white text on primary */
+    --v2-primary:          30 96% 55%;          /* Ember Amber */
+    --v2-primary-hover:    30 96% 48%;
+    --v2-primary-light:    30 90% 14%;          /* dark amber tint fill */
+    --v2-primary-fg:       24 45% 8%;           /* near-black text on amber */
 
-    --v2-silver:           207 6% 71%;          /* #B0B7BC Metallic Silver */
-    --v2-silver-light:     207 6% 90%;          /* lighter silver for borders */
-    --v2-silver-dark:      207 6% 45%;          /* darker silver for text */
+    --v2-silver:           28 6% 55%;
+    --v2-silver-light:     28 8% 22%;
+    --v2-silver-dark:      28 8% 70%;
 
-    --v2-fg:               220 25% 10%;         /* #141820 near-black */
-    --v2-fg-muted:         220 10% 46%;         /* #6E7580 mid-grey */
-    --v2-fg-subtle:        220 10% 65%;         /* #9BA3AD light grey text */
+    --v2-fg:               30 16% 93%;          /* near-white text */
+    --v2-fg-muted:         28 8% 62%;
+    --v2-fg-subtle:        28 8% 46%;
 
-    --v2-border:           220 13% 91%;         /* #E4E7EC soft border */
-    --v2-border-strong:    207 6% 71%;          /* silver border for emphasis */
+    --v2-border:           28 8% 17%;
+    --v2-border-strong:    28 8% 26%;
 
-    --v2-success:          145 63% 42%;         /* green */
-    --v2-success-light:    145 63% 95%;
-    --v2-warning:          38 92% 50%;          /* amber */
-    --v2-warning-light:    38 92% 95%;
-    --v2-danger:           0 84% 60%;           /* red */
-    --v2-danger-light:     0 84% 96%;
+    --v2-success:          152 55% 48%;
+    --v2-success-light:    152 40% 12%;
+    --v2-warning:          38 92% 55%;
+    --v2-warning-light:    38 60% 12%;
+    --v2-danger:           0 72% 58%;
+    --v2-danger-light:     0 50% 13%;
 
-    --v2-card:             0 0% 100%;
-    --v2-card-shadow:      0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 80 140 / 0.06);
-    --v2-card-shadow-md:   0 4px 6px -1px rgb(0 0 0 / 0.07), 0 10px 24px -4px rgb(0 80 140 / 0.08);
-    --v2-card-shadow-lg:   0 8px 16px -4px rgb(0 0 0 / 0.08), 0 24px 48px -8px rgb(0 80 140 / 0.12);
-    --v2-card-glass-bg:    #ffffff;
+    --v2-card:             24 12% 9%;
+    --v2-card-shadow:      0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.5);
+    --v2-card-shadow-md:   0 4px 6px -1px rgb(0 0 0 / 0.4), 0 10px 24px -4px rgb(0 0 0 / 0.45);
+    --v2-card-shadow-lg:   0 8px 16px -4px rgb(0 0 0 / 0.45), 0 24px 48px -8px rgb(0 0 0 / 0.55);
+    --v2-card-glass-bg:    24 12% 9%;
     --v2-card-glass-blur:  blur(12px);
 
     /* ── Sidebar ────────────────────────────────────────────────────────────── */
     --v2-sidebar-w:        240px;
     --v2-sidebar-w-collapsed: 64px;
-    --v2-sidebar-bg:       243 38% 16%;         /* deep indigo sidebar — Sovereign */
-    --v2-sidebar-fg:       0 0% 100%;           /* white text */
-    --v2-sidebar-hover:    243 38% 22%;
-    --v2-sidebar-active:   240 22% 90%;         /* near-white active item */
-    --v2-sidebar-active-bg: 243 38% 24%;        /* deeper indigo for active */
+    --v2-sidebar-bg:       24 16% 4%;
+    --v2-sidebar-fg:       0 0% 100%;
+    --v2-sidebar-hover:    24 12% 12%;
+    --v2-sidebar-active:   30 96% 55%;
+    --v2-sidebar-active-bg: 30 90% 14%;
 
     /* ── Spacing & Radius ───────────────────────────────────────────────────── */
     --v2-radius:           12px;
     --v2-radius-lg:        16px;
     --v2-radius-xl:        24px;
   }
+
+/* ── LIGHT overrides (html.light > body.v2) ─────────────────────────────────── */
+.light .v2 {
+    --v2-bg:               30 30% 97%;          /* warm pearl page bg */
+    --v2-bg-subtle:        30 24% 99%;
+    --v2-bg-muted:         30 18% 93%;
+    --v2-bg-glass:         0 0% 100% / 0.72;
+
+    --v2-primary:          28 92% 50%;
+    --v2-primary-hover:    28 92% 43%;
+    --v2-primary-light:    30 92% 94%;
+    --v2-primary-fg:       0 0% 100%;
+
+    --v2-silver:           207 6% 60%;
+    --v2-silver-light:     207 10% 88%;
+    --v2-silver-dark:      207 8% 40%;
+
+    --v2-fg:               24 22% 11%;
+    --v2-fg-muted:         28 10% 42%;
+    --v2-fg-subtle:        28 8% 60%;
+
+    --v2-border:           30 16% 87%;
+    --v2-border-strong:    30 14% 78%;
+
+    --v2-success:          152 55% 38%;
+    --v2-success-light:    152 60% 95%;
+    --v2-warning:          38 92% 46%;
+    --v2-warning-light:    38 92% 95%;
+    --v2-danger:           0 72% 50%;
+    --v2-danger-light:     0 84% 96%;
+
+    --v2-card:             0 0% 100%;
+    --v2-card-shadow:      0 1px 3px 0 rgb(24 20 12 / 0.06), 0 1px 2px -1px rgb(24 20 12 / 0.08);
+    --v2-card-shadow-md:   0 4px 6px -1px rgb(24 20 12 / 0.07), 0 10px 24px -4px rgb(120 80 20 / 0.08);
+    --v2-card-shadow-lg:   0 8px 16px -4px rgb(24 20 12 / 0.08), 0 24px 48px -8px rgb(120 80 20 / 0.12);
+    --v2-card-glass-bg:    0 0% 100%;
+
+    --v2-sidebar-bg:       30 24% 96%;
+    --v2-sidebar-fg:       24 20% 16%;
+    --v2-sidebar-hover:    30 20% 90%;
+    --v2-sidebar-active:   28 92% 50%;
+    --v2-sidebar-active-bg: 30 92% 92%;
+}
 
 /* ── Global V2 resets (scoped to .v2 root) ──────────────────────────────────── */
 .v2 * {
@@ -85,33 +123,38 @@
 .v2 #root {
   background-color: hsl(var(--v2-bg));
   color: hsl(var(--v2-fg));
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
+}
+
+.v2 h1, .v2 h2, .v2 h3, .v2 h4 {
+  font-family: 'Space Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  letter-spacing: -0.02em;
 }
 
 /* ── Utility classes used across v2 components ─────────────────────────────── */
 
 /* Cards */
 .v2-card {
-  background: #ffffff;
-  border: 1px solid #D8E4EF;
+  background: hsl(var(--v2-card));
+  border: 1px solid hsl(var(--v2-border));
   border-radius: var(--v2-radius);
   box-shadow: var(--v2-card-shadow);
 }
 
 .v2-card-elevated {
-  background: #ffffff;
-  border: 1px solid #D8E4EF;
+  background: hsl(var(--v2-card));
+  border: 1px solid hsl(var(--v2-border));
   border-radius: var(--v2-radius);
   box-shadow: var(--v2-card-shadow-md);
 }
 
 /* Glass-morphic card */
 .v2-card-glass {
-  background: #ffffff;
+  background: hsl(var(--v2-card-glass-bg));
   backdrop-filter: var(--v2-card-glass-blur);
   -webkit-backdrop-filter: var(--v2-card-glass-blur);
-  border: 1px solid #D8E4EF;
+  border: 1px solid hsl(var(--v2-border));
   border-radius: var(--v2-radius);
   box-shadow: var(--v2-card-shadow-md);
 }
@@ -186,15 +229,16 @@
 
 /* Page title — heavy weight for impact */
 .v2-page-title {
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
   font-size: 1.5rem;
-  font-weight: 800;
+  font-weight: 700;
   color: hsl(var(--v2-fg));
   letter-spacing: -0.02em;
 }
 
 /* Text utilities for font weight depth */
 .v2-text-primary {
-  font-weight: 800;
+  font-weight: 700;
   color: hsl(var(--v2-fg));
 }
 .v2-text-secondary {
@@ -219,7 +263,7 @@
   font-size: 0.9375rem;
   font-weight: 400;
   color: hsl(var(--v2-fg));
-  background: hsl(var(--v2-bg));
+  background: hsl(var(--v2-bg-subtle));
   border: 1px solid hsl(var(--v2-border));
   border-radius: var(--v2-radius);
   outline: none;
@@ -227,16 +271,16 @@
 }
 .v2-input:focus {
   border-color: hsl(var(--v2-primary));
-  box-shadow: 0 0 0 3px hsl(var(--v2-primary) / 0.12);
+  box-shadow: 0 0 0 3px hsl(var(--v2-primary) / 0.2);
 }
 
 /* ── Usage Summary Card ───────────────────────────────────────────────────── */
 
 .v2-usage-card {
-  background: #ffffff;
+  background: hsl(var(--v2-card));
   backdrop-filter: var(--v2-card-glass-blur);
   -webkit-backdrop-filter: var(--v2-card-glass-blur);
-  border: 1px solid #D8E4EF;
+  border: 1px solid hsl(var(--v2-border));
   border-top: 3px solid hsl(var(--v2-primary));
   border-radius: var(--v2-radius);
   box-shadow: var(--v2-card-shadow-md);
@@ -258,8 +302,9 @@
 }
 
 .v2-usage-card-value {
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
   font-size: 2rem;
-  font-weight: 800;
+  font-weight: 700;
   color: hsl(var(--v2-fg));
   line-height: 1;
 }
@@ -281,14 +326,14 @@
 
 .v2-usage-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, hsl(var(--v2-primary)), hsl(243 54% 48%));
+  background: linear-gradient(90deg, hsl(var(--v2-primary)), hsl(var(--v2-primary-hover)));
   border-radius: 9999px;
   transition: width 0.3s ease;
 }
 
 /* Warning state when usage is high */
 .v2-usage-card--warning .v2-usage-bar-fill {
-  background: linear-gradient(90deg, hsl(var(--v2-warning)), hsl(38 92% 56%));
+  background: linear-gradient(90deg, hsl(var(--v2-warning)), hsl(38 92% 62%));
 }
 
 /* Danger state when usage is critical */

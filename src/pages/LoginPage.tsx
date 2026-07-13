@@ -43,7 +43,7 @@ export default function LoginPage() {
             WebkitMaskImage: "radial-gradient(ellipse at 30% 30%, black 10%, transparent 70%)",
           }}
         />
-        <img src={teckstartLogo} alt="Listing Assistant Pro" className="relative h-10 w-auto" />
+        <img src={teckstartLogo} alt="Listing Assistant Pro" className="relative h-10 w-auto self-start object-contain" />
 
         <div className="relative max-w-md space-y-6">
           <h2 className="font-display text-4xl font-bold leading-tight tracking-tight text-balance">
@@ -78,7 +78,7 @@ export default function LoginPage() {
 
         <div className="w-full max-w-sm space-y-8">
           <div className="flex flex-col items-center gap-2 text-center lg:items-start lg:text-left">
-            <img src={teckstartLogo} alt="Listing Assistant Pro" className="h-9 w-auto lg:hidden" />
+            <img src={teckstartLogo} alt="Listing Assistant Pro" className="h-9 w-auto object-contain lg:hidden" />
             <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">Welcome back</h1>
             <p className="text-sm text-muted-foreground">Sign in to continue to your dashboard</p>
           </div>

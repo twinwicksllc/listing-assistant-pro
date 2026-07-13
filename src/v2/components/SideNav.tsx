@@ -1,12 +1,12 @@
 /**
- * SideNav — V2 Sidebar Navigation
- * 
+ * SideNav — V2 Sidebar Navigation ("Ember Standard")
+ *
  * Features:
- *   - Theme-aware sidebar (Vault Black / Deep Indigo) with dark/light toggle
- *   - Section-based collapsible navigation with v2-styled buttons
- *   - Support for owner-only sections (Money section)
- *   - Active state highlighting
- *   - All routes now point to v2 pages (no more "2" suffix paths)
+ *   - Theme-aware sidebar driven by --v2-sidebar-* tokens (light + dark)
+ *   - Amber active state with left accent bar
+ *   - Section-based collapsible navigation
+ *   - Owner-only sections (Money section)
+ *   - Light/dark toggle
  */
 
 import { useState } from "react";
@@ -78,35 +78,19 @@ function useNavSections(isOwner: boolean): NavSection[] {
 
 // ─── Component ─────────────────────────────────────────────────────────
 
-// Sidebar is always dark-chrome — Vault Black (dark mode) or Deep Indigo (light mode)
-const DARK_SIDEBAR_BG  = "hsl(222,25%,4%)";   // Vault Black  — matches --sidebar-background in :root
-const LIGHT_SIDEBAR_BG = "hsl(243,38%,16%)";  // Deep Indigo  — matches --sidebar-background in .light
-const ACTIVE_BG = "rgba(255,255,255,0.15)";
-const HOVER_BG  = "rgba(255,255,255,0.08)";
-
 export default function SideNav() {
   const location  = useLocation();
   const navigate  = useNavigate();
   const { isOwner, signOut, user, currentPlan } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const sidebarBg = theme === "dark" ? DARK_SIDEBAR_BG : LIGHT_SIDEBAR_BG;
   const sections  = useNavSections(isOwner);
 
-  // All sections start expanded (per spec)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
-  const isActive = (item: NavItem) => {
-    const p = location.pathname;
-    return p === item.path;
-  };
-
-  const handleNav = (item: NavItem) => {
-    navigate(item.path);
-  };
-
-  const toggleSection = (key: string) => {
+  const isActive = (item: NavItem) => location.pathname === item.path;
+  const handleNav = (item: NavItem) => navigate(item.path);
+  const toggleSection = (key: string) =>
     setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
-  };
 
   return (
     <aside
@@ -114,7 +98,9 @@ export default function SideNav() {
       style={{
         width: "var(--v2-sidebar-w, 240px)",
         minHeight: "100vh",
-        background: sidebarBg,
+        background: "hsl(var(--v2-sidebar-bg))",
+        borderRight: "1px solid hsl(var(--v2-border))",
+        color: "hsl(var(--v2-sidebar-fg))",
         display: "flex",
         flexDirection: "column",
         position: "fixed",
@@ -132,17 +118,17 @@ export default function SideNav() {
         alignItems: "center",
         gap: "0.75rem",
         padding: "1.25rem 1.25rem 1rem",
-        borderBottom: "1px solid rgba(255,255,255,0.12)",
+        borderBottom: "1px solid hsl(var(--v2-border))",
       }}>
         <img
           src={teckstartLogo}
-          alt="Sovereign Listing Suite"
-          style={{ height: 32, width: "auto", maxWidth: 120, flexShrink: 0, objectFit: "contain" }}
+          alt="Listing Assistant Pro"
+          style={{ height: 30, width: "auto", maxWidth: 130, flexShrink: 0, objectFit: "contain" }}
         />
       </div>
 
       {/* ─── Navigation Sections ─────────────────────────────────────────── */}
-      <div style={{ flex: 1, padding: "0.5rem 0" }}>
+      <div style={{ flex: 1, padding: "0.75rem 0.5rem" }}>
         {sections.map(section => {
           const isCollapsed = collapsed[section.key];
           return (
@@ -155,22 +141,15 @@ export default function SideNav() {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
-                  padding: "0.5rem 0.875rem",
+                  padding: "0.5rem 0.75rem",
                   background: "transparent",
                   border: "none",
-                  color: "rgba(255,255,255,0.7)",
+                  color: "hsl(var(--v2-fg-subtle))",
                   fontSize: "0.6875rem",
                   fontWeight: 700,
                   textTransform: "uppercase",
-                  letterSpacing: "0.08em",
+                  letterSpacing: "0.09em",
                   cursor: "pointer",
-                  transition: "color 0.15s",
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.color = "rgba(255,255,255,0.9)";
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.color = "rgba(255,255,255,0.7)";
                 }}
               >
                 {section.label}
@@ -179,7 +158,7 @@ export default function SideNav() {
 
               {/* Section items */}
               {!isCollapsed && (
-                <div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 2 }}>
                   {section.items.map(item => {
                     const active = isActive(item);
                     const Icon = item.icon;
@@ -188,46 +167,48 @@ export default function SideNav() {
                         key={item.path}
                         onClick={() => handleNav(item)}
                         style={{
+                          position: "relative",
                           width: "100%",
                           display: "flex",
                           alignItems: "center",
-                          gap: "0.625rem",
-                          padding: "0.625rem 0.875rem",
-                          marginLeft: "0.375rem",
-                          background: active ? ACTIVE_BG : "transparent",
+                          gap: "0.75rem",
+                          padding: "0.625rem 0.75rem",
+                          background: active ? "hsl(var(--v2-sidebar-active-bg))" : "transparent",
                           border: "none",
-                          color: "#ffffff",
+                          color: active ? "hsl(var(--v2-primary))" : "hsl(var(--v2-fg-muted))",
                           fontSize: "0.875rem",
-                          fontWeight: active ? 600 : 400,
+                          fontWeight: active ? 600 : 500,
                           cursor: "pointer",
-                          transition: "background 0.15s",
-                          borderRadius: active ? 8 : 0,
+                          transition: "background 0.15s, color 0.15s",
+                          borderRadius: 10,
                         }}
                         onMouseEnter={e => {
                           if (!active) {
-                            e.currentTarget.style.background = HOVER_BG;
+                            e.currentTarget.style.background = "hsl(var(--v2-sidebar-hover))";
+                            e.currentTarget.style.color = "hsl(var(--v2-fg))";
                           }
                         }}
                         onMouseLeave={e => {
                           if (!active) {
                             e.currentTarget.style.background = "transparent";
+                            e.currentTarget.style.color = "hsl(var(--v2-fg-muted))";
                           }
                         }}
                       >
-                        <Icon size={16} style={{ flexShrink: 0 }} />
-                        <span>{item.label}</span>
                         {active && (
-                          <span
-                            style={{
-                              width: 3,
-                              height: 3,
-                              borderRadius: "50%",
-                              background: "#ffffff",
-                              marginLeft: "auto",
-                              boxShadow: "0 0 4px rgba(255,255,255,0.5)",
-                            }}
-                          />
+                          <span style={{
+                            position: "absolute",
+                            left: 0,
+                            top: "50%",
+                            transform: "translateY(-50%)",
+                            width: 3,
+                            height: 18,
+                            borderRadius: 3,
+                            background: "hsl(var(--v2-primary))",
+                          }} />
                         )}
+                        <Icon size={17} style={{ flexShrink: 0 }} />
+                        <span>{item.label}</span>
                       </button>
                     );
                   })}
@@ -241,31 +222,32 @@ export default function SideNav() {
       {/* ─── User & Sign Out ─────────────────────────────────────────────── */}
       <div style={{
         padding: "0.75rem 0.875rem 1.5rem",
-        borderTop: "1px solid rgba(255,255,255,0.12)",
+        borderTop: "1px solid hsl(var(--v2-border))",
       }}>
         <div style={{
           display: "flex",
           alignItems: "center",
           gap: "0.625rem",
-          marginBottom: "0.625rem",
+          marginBottom: "0.75rem",
         }}>
           <div style={{
-            width: 32,
-            height: 32,
+            width: 34,
+            height: 34,
             borderRadius: "50%",
-            background: "rgba(255,255,255,0.2)",
+            background: "hsl(var(--v2-primary))",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            color: "#ffffff",
+            color: "hsl(var(--v2-primary-fg))",
             fontSize: "0.8125rem",
-            fontWeight: 600,
+            fontWeight: 700,
+            flexShrink: 0,
           }}>
             {user?.email?.[0]?.toUpperCase() || "U"}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
-              color: "#ffffff",
+              color: "hsl(var(--v2-fg))",
               fontSize: "0.8125rem",
               fontWeight: 600,
               whiteSpace: "nowrap",
@@ -275,7 +257,7 @@ export default function SideNav() {
               {user?.email || "User"}
             </div>
             <div style={{
-              color: "rgba(255,255,255,0.6)",
+              color: "hsl(var(--v2-fg-subtle))",
               fontSize: "0.6875rem",
               marginTop: "0.125rem",
             }}>
@@ -299,22 +281,14 @@ export default function SideNav() {
             justifyContent: "space-between",
             padding: "0.4375rem 0.75rem",
             marginBottom: "0.5rem",
-            background: "rgba(255,255,255,0.08)",
-            border: "1px solid rgba(255,255,255,0.15)",
-            borderRadius: 8,
-            color: "rgba(255,255,255,0.85)",
+            background: "hsl(var(--v2-bg-muted))",
+            border: "1px solid hsl(var(--v2-border))",
+            borderRadius: 10,
+            color: "hsl(var(--v2-fg-muted))",
             fontSize: "0.8125rem",
             fontWeight: 500,
             cursor: "pointer",
             transition: "all 0.15s",
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.background = "rgba(255,255,255,0.13)";
-            e.currentTarget.style.borderColor = "rgba(255,255,255,0.25)";
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.background = "rgba(255,255,255,0.08)";
-            e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)";
           }}
         >
           <span style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
@@ -322,11 +296,12 @@ export default function SideNav() {
             {theme === "dark" ? "Dark" : "Light"}
           </span>
           <span style={{
-            background: "rgba(255,255,255,0.12)",
-            borderRadius: 4,
+            background: "hsl(var(--v2-primary) / 0.15)",
+            color: "hsl(var(--v2-primary))",
+            borderRadius: 5,
             padding: "0.0625rem 0.375rem",
             fontSize: "0.6875rem",
-            color: "rgba(255,255,255,0.55)",
+            fontWeight: 600,
           }}>
             toggle
           </span>
@@ -341,22 +316,24 @@ export default function SideNav() {
             justifyContent: "center",
             gap: "0.5rem",
             padding: "0.5rem 0.75rem",
-            background: "rgba(255,255,255,0.1)",
-            border: "1px solid rgba(255,255,255,0.2)",
-            borderRadius: 8,
-            color: "#ffffff",
+            background: "transparent",
+            border: "1px solid hsl(var(--v2-border))",
+            borderRadius: 10,
+            color: "hsl(var(--v2-fg-muted))",
             fontSize: "0.8125rem",
             fontWeight: 600,
             cursor: "pointer",
             transition: "all 0.15s",
           }}
           onMouseEnter={e => {
-            e.currentTarget.style.background = "rgba(255,255,255,0.15)";
-            e.currentTarget.style.borderColor = "rgba(255,255,255,0.3)";
+            e.currentTarget.style.background = "hsl(var(--v2-danger) / 0.12)";
+            e.currentTarget.style.borderColor = "hsl(var(--v2-danger) / 0.4)";
+            e.currentTarget.style.color = "hsl(var(--v2-danger))";
           }}
           onMouseLeave={e => {
-            e.currentTarget.style.background = "rgba(255,255,255,0.1)";
-            e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)";
+            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.borderColor = "hsl(var(--v2-border))";
+            e.currentTarget.style.color = "hsl(var(--v2-fg-muted))";
           }}
         >
           <LogOut size={14} />

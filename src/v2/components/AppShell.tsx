@@ -33,7 +33,7 @@ export default function AppShell({ children, mobilePb = 80 }: AppShellProps) {
       {/* ── Desktop: sidebar + main ─────────────────────────── */}
       <div
         className="hidden lg:flex"
-        style={{ minHeight: "100vh", background: "hsl(210 20% 98%)" }}
+        style={{ minHeight: "100vh", background: "hsl(var(--v2-bg))" }}
       >
         <SideNav />
 
@@ -44,7 +44,7 @@ export default function AppShell({ children, mobilePb = 80 }: AppShellProps) {
             flex: 1,
             minWidth: 0,
             overflowX: "hidden",
-            background: "hsl(210 14% 96%)",  /* subtle off-white page bg */
+            background: "hsl(var(--v2-bg))",
           }}
         >
           {children}
@@ -56,7 +56,7 @@ export default function AppShell({ children, mobilePb = 80 }: AppShellProps) {
         className="lg:hidden"
         style={{
           minHeight: "100vh",
-          background: "#fff",
+          background: "hsl(var(--v2-bg))",
           paddingBottom: mobilePb,
         }}
       >
