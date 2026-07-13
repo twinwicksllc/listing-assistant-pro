@@ -248,7 +248,13 @@ larger and more varied than the coin taxonomy.
   - `jewelry_hallmark_standard` — gold/silver/platinum purity hallmarks and stamp locations, diamond grading terminology (reference only)
   - `auto_parts_fitment` — OEM cross-reference basics, Year/Make/Model/Trim fitment verification, part number locations, used-part condition disclosure
   - `handbag_authentication` — Louis Vuitton date code format, Chanel serial number history, general authentication checkpoints, condition grading
-- This satisfies the "RAG retriever returns domain-relevant knowledge for ≥ 3 new domains" acceptance criterion for all 5 target domains.
+  - `trading_card_grading` — PSA 4-criteria grading (centering/corners/edges/surface), PSA 10 vs PSA 9 distinction, BGS subgrades and half-grades, edge whitening on dark-bordered cards, surface defect types, corner condition thresholds
+  - `vintage_clothing_authentication` — ILGWU union label timeline (1900–2005) for garment dating, RN number dating ranges, FTC care-label rule (post-1972), country-of-origin labeling eras, tag material and zipper-type dating (metal vs plastic, side-seam vs back)
+  - `instrument_identification` — Fender serial number location by era (bridge/neckplate/headstock), US prefix codes (S/E/N/Z/US10+), Made in Japan vs Crafted in Japan prefix ranges, Made in Mexico prefixes, Gibson serial systems by era, pot-code and neck-date authentication checkpoints
+  - `toy_authentication` — wear-pattern authentication (natural vs artificial distressing), manufacturer date codes (Mattel/Kenner/Barbie), materials by era (tin/cast iron/celluloid → acetate → ABS), zinc pest as authenticity confirmation, offset lithography vs digital printing on packaging, AFA grading subgrades
+  - `tool_identification` — vintage tool dating via patina/materials/construction methods, maker's marks and USPTO patent number lookup, UL Listed vs UL Recognized distinction, ETL vs UL equivalence, CE (self-declaration) vs GS (third-party) marks, power tool model/serial number nameplate locations
+- RAG coverage now spans **all 11 specialized domains** (every domain except `general`). The `general` domain intentionally has no RAG category — it serves as the unclassified fallback and relies on the model's baseline knowledge.
+- This satisfies the "RAG retriever returns domain-relevant knowledge for ≥ 3 new domains" acceptance criterion for all 5 target domains, and the subsequent enrichment extends it to the remaining 5 specialized domains.
 
 *Domain tracking (new prerequisite infrastructure):*
 - Migration `20260714000000_add_domain_tracking.sql` adds a nullable `domain` column to both `drafts` and `listing_financials`, plus `time_to_sale_days` on `listing_financials`. Fully additive — existing rows get `NULL` domain and are excluded from aggregates until new analyses populate it.
@@ -273,7 +279,7 @@ larger and more varied than the coin taxonomy.
 - **Luxury Handbags:** Date code format references by brand/era, authentication guide summaries
 
 **Acceptance criteria:**
-- [x] The RAG retriever returns domain-relevant knowledge for at least 3 new domains (not just coins) — 5 shipped
+- [x] The RAG retriever returns domain-relevant knowledge for at least 3 new domains (not just coins) — all 11 specialized domains now covered (5 shipped in initial Phase 4, 5 added in subsequent enrichment)
 - [x] A quality dashboard (or report) shows per-domain listing metrics: time-to-sale, net profit/margin (rejection-rate/edit-rate deferred — see above)
 - [x] The feedback loop identifies at least one domain for refinement based on real data (once sufficient sold-listing volume with domain tracking accumulates — mechanism is live and tested against the schema)
 

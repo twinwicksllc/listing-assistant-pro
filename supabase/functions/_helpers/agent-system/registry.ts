@@ -45,6 +45,11 @@ export const DOMAIN_RAG_CATEGORIES: Partial<Record<Domain, string[]>> = {
   jewelry: ["jewelry_hallmark_standard"],
   auto_parts: ["auto_parts_fitment"],
   luxury_handbags: ["handbag_authentication"],
+  trading_cards: ["trading_card_grading"],
+  vintage_clothing: ["vintage_clothing_authentication"],
+  musical_instruments: ["instrument_identification"],
+  toys_collectibles: ["toy_authentication"],
+  home_garden_tools: ["tool_identification"],
 };
 
 export const DOMAIN_REGISTRY: Record<Domain, DomainDefinition> = {
