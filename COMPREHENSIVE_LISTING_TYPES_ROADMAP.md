@@ -148,6 +148,7 @@ In `domainPrompts.ts` and `detailExtractor.ts`:
 ---
 
 ### Phase 2 — Specialized Prompts for High-Volume Domains
+**Status:** ✅ Shipped for 6 domains (sneakers, electronics, jewelry, auto_parts, luxury_handbags, vintage_clothing) — see PR implementing this phase.
 **Effort:** Medium (per domain). **Impact:** High. **Risk:** Low.
 
 **Goal:** Add specialized listing-generation prompts (`buildXxxPrompt`) for the domains that represent the highest listing volume on eBay, so they get the same expert-persona treatment as coins and trading cards.
