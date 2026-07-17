@@ -4770,16 +4770,17 @@ serve(async (req) => {
       // Some coin categories reject specific USED_* variants at publish-time even if
       // inventory/offer creation succeeded. Retry with safer fallbacks before failing.
       if (!publishResp.ok) {
-        const firstErrText = await publishResp.text();
+        let publishErrText = await publishResp.text();
         let isConditionIdError = false;
         try {
-          const parsed = JSON.parse(firstErrText);
+          const parsed = JSON.parse(publishErrText);
           const errs: Array<{ errorId?: number; message?: string }> = parsed?.errors ?? [];
           isConditionIdError = errs.some((e) =>
-            e.errorId === 25021 || /CONDITION_ID|condition id is invalid/i.test(e.message ?? "")
+            e.errorId === 25021 || e.errorId === 25060 ||
+            /CONDITION_ID|condition id is invalid|Condition descriptor \d+ is not valid/i.test(e.message ?? "")
           );
         } catch {
-          isConditionIdError = /CONDITION_ID|condition id is invalid/i.test(firstErrText);
+          isConditionIdError = /CONDITION_ID|condition id is invalid|Condition descriptor \d+ is not valid/i.test(publishErrText);
         }
 
         if (isConditionIdError && offerId) {
@@ -4880,10 +4881,11 @@ serve(async (req) => {
               }`,
             );
             publishResp = publishRetryResp;
+            publishErrText = publishRetryErr;
           }
         } else {
           // Preserve original failed response body for downstream handling.
-          publishResp = new Response(firstErrText, {
+          publishResp = new Response(publishErrText, {
             status: publishResp.status,
             statusText: publishResp.statusText,
             headers: publishResp.headers,
@@ -4892,7 +4894,7 @@ serve(async (req) => {
       }
 
       if (!publishResp.ok) {
-        const errText = await publishResp.text();
+        const errText = publishErrText;
         console.error(
           "create_draft: eBay publish error:",
           publishResp.status,
@@ -4928,6 +4930,8 @@ serve(async (req) => {
         const DEMOTABLE_ERROR_IDS = new Set([
           21919288, // Invalid category ID
           25004, // Category not supported
+          25005, // Leaf category required / invalid category ID
+          25060, // Condition descriptor invalid for selected condition
           21916585, // Category requires item specifics
           25017, // Leaf category required
           25021, // Invalid condition id for selected category
@@ -5057,10 +5061,10 @@ serve(async (req) => {
             userFriendlyError = remaining
               ? `Your eBay account has reached its monthly selling limit. You have ${remaining} of listing capacity remaining this month. Visit eBay's Selling Limits page to request an increase.`
               : "Your eBay account has reached its monthly selling limit. Please visit eBay's Selling Limits page to request an increase before listing high-value items.";
-          } else if (errorId === 25002) {
+          } else if (errorId === 25002 || errorId === 25060) {
             userFriendlyError =
               "The selected condition is not valid for this category. Please adjust the condition and try again.";
-          } else if (errorId === 21919288 || errorId === 25004 || errorId === 25017) {
+          } else if (errorId === 21919288 || errorId === 25004 || errorId === 25005 || errorId === 25017) {
             userFriendlyError =
               "The selected category is not valid for this item. Please choose a different category and try again.";
           } else {
