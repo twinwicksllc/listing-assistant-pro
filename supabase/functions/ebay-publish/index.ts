@@ -4774,8 +4774,9 @@ serve(async (req) => {
       // Auto-recovery for eBay errorId 25021 (invalid CONDITION_ID for category).
       // Some coin categories reject specific USED_* variants at publish-time even if
       // inventory/offer creation succeeded. Retry with safer fallbacks before failing.
+      let publishErrText = "";
       if (!publishResp.ok) {
-        let publishErrText = await publishResp.text();
+        publishErrText = await publishResp.text();
         let isConditionIdError = false;
         try {
           const parsed = JSON.parse(publishErrText);
@@ -4793,7 +4794,14 @@ serve(async (req) => {
         }
 
         if (isConditionIdError && offerId) {
-          const candidates = categoryTreeType === "coin"
+          // For graded coins in category 171526 and similar, don't retry with raw conditions.
+          // These categories strictly require graded condition descriptors per eBay mandate.
+          // If the initial graded condition fails, this category cannot be salvaged via fallback.
+          const isGradedCoinCategory = finalCategoryId === "171526";
+          
+          const candidates = isGradedCoinCategory
+            ? [] // No valid fallbacks for graded coin categories
+            : categoryTreeType === "coin"
             ? ["USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE", "NEW"]
             : categoryTreeType === "bullion"
             ? ["NEW", "USED_GOOD"]
@@ -4801,11 +4809,17 @@ serve(async (req) => {
 
           const retryConditions = candidates.filter((c) => c !== effectiveConditionEnum);
 
-          console.warn(
-            `create_draft: publish failed with invalid condition for category ${finalCategoryId}; retrying with fallbacks: ${
-              retryConditions.join(", ")
-            }`,
-          );
+          if (retryConditions.length === 0) {
+            console.error(
+              `create_draft: no valid condition fallbacks for graded coin category ${finalCategoryId}; aborting retry`,
+            );
+          } else {
+            console.warn(
+              `create_draft: publish failed with invalid condition for category ${finalCategoryId}; retrying with fallbacks: ${
+                retryConditions.join(", ")
+              }`,
+            );
+          }
 
           for (const retryCondition of retryConditions) {
             const retryDescription = CONDITION_DESCRIPTIONS[retryCondition] ??
