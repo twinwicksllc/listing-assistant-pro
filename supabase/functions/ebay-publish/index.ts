@@ -4782,10 +4782,14 @@ serve(async (req) => {
           const errs: Array<{ errorId?: number; message?: string }> = parsed?.errors ?? [];
           isConditionIdError = errs.some((e) =>
             e.errorId === 25021 || e.errorId === 25060 ||
-            /CONDITION_ID|condition id is invalid|Condition descriptor \d+ is not valid/i.test(e.message ?? "")
+            /CONDITION_ID|condition id is invalid|Condition descriptor \d+ is not valid/i.test(
+              e.message ?? ""
+            )
           );
         } catch {
-          isConditionIdError = /CONDITION_ID|condition id is invalid|Condition descriptor \d+ is not valid/i.test(publishErrText);
+          isConditionIdError = /CONDITION_ID|condition id is invalid|Condition descriptor \d+ is not valid/i.test(
+            publishErrText,
+          );
         }
 
         if (isConditionIdError && offerId) {
