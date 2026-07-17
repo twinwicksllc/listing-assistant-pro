@@ -130,7 +130,7 @@ export type ConditionOption = { value: string; label: string };
 // This ensures the category detection works with actual eBay leaf categories that can be published.
 const COIN_CATEGORY_IDS = new Set([
   // Original set
-  "11981","39464","11980","11971","41099","41102","11973","39455","41084",
+  "11981","39464","39456","11980","11949","11971","11956","41099","41102","11973","41103","39455","41084",
   "11950","41111","166679","41109","526","45243","39471","39472","39473","39474","39475",
   // US Coins — Dimes (40149-40167 range includes Mercury dimes = 40151)
   "40149","40150","40151","40152","40153","40154","40155","40156","40157",
@@ -149,6 +149,8 @@ const COIN_CATEGORY_IDS = new Set([
   "19167","19168","19169","11063",
   // US Coins — additional subtypes
   "40196","40197","40198","40199","40200","40201","40202",
+  // 2026+ America the Beautiful Quarters
+  "171526", // America the Beautiful Quarters (2026)
 ]);
 const BULLION_CATEGORY_IDS = new Set(["178906","39489","3361","532","173685"]);
 const TRADING_CARD_CATEGORY_IDS = new Set(["261328","183454","2536","19107","64482","213"]);
