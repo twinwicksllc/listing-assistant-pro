@@ -149,8 +149,8 @@ const COIN_CATEGORY_IDS = new Set([
   "19167","19168","19169","11063",
   // US Coins — additional subtypes
   "40196","40197","40198","40199","40200","40201","40202",
-  // 2026+ Commemorative & Modern Quarters
-  "171526", // 2026-D Semiquincentennial Quarter (Revolutionary War theme)
+  // 2026+ America the Beautiful Quarters
+  "171526", // America the Beautiful Quarters (2026)
 ]);
 const BULLION_CATEGORY_IDS = new Set(["178906","39489","3361","532","173685"]);
 const TRADING_CARD_CATEGORY_IDS = new Set(["261328","183454","2536","19107","64482","213"]);

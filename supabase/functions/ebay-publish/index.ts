@@ -340,7 +340,7 @@ const HARDCODED_COIN_CATEGORY_IDS = new Set([
   "40200", // Quarters (variant)
   "40201", // Quarters (variant)
   "40202", // Quarters (variant)
-  "171526", // 2026-D Semiquincentennial Quarter & 2026+ commemorative quarters
+  "171526", // America the Beautiful Quarters (2026)
   // ── US Half Dollars / Dollar Coins ─────────────────────────────────────────
   "11973", // Kennedy Half Dollars
   "39455", // Dollar Coins
