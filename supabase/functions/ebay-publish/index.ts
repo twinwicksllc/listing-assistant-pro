@@ -302,14 +302,17 @@ const HARDCODED_COIN_CATEGORY_IDS = new Set([
   // ── US Cents ───────────────────────────────────────────────────────────────
   "11981", // Wheat Pennies
   "39464", // Lincoln Cents (Memorial)
+  "39456", // Lincoln Cents (1959-Now, includes 2026 dual-date)
   // ── US Nickels ─────────────────────────────────────────────────────────────
   "11980", // Jefferson Nickels
+  "11949", // Jefferson Nickels (1938-Now, includes 2026 dual-date)
   "11116", // Buffalo Nickels
   "11118", // Liberty Head Nickels
   "11063", // Shield Nickels
   // ── US Dimes ───────────────────────────────────────────────────────────────
   "11958", // Seated Liberty Dimes (legacy leaf used in production payloads)
   "11971", // Roosevelt Dimes
+  "11956", // Roosevelt Dimes (1946-Now, includes 2026 Emerging Liberty)
   "40149", // Dimes (parent/generic)
   "40150", // Dimes (type 2)
   "40151", // Mercury Dimes (1916–1945)
@@ -343,6 +346,7 @@ const HARDCODED_COIN_CATEGORY_IDS = new Set([
   "171526", // America the Beautiful Quarters (2026)
   // ── US Half Dollars / Dollar Coins ─────────────────────────────────────────
   "11973", // Kennedy Half Dollars
+  "41103", // Kennedy Half Dollars (1964-Now, includes 2026 Enduring Liberty)
   "39455", // Dollar Coins
   // ── US Gold / Silver ───────────────────────────────────────────────────────
   "41084", // US Gold Coins

@@ -130,7 +130,7 @@ export type ConditionOption = { value: string; label: string };
 // This ensures the category detection works with actual eBay leaf categories that can be published.
 const COIN_CATEGORY_IDS = new Set([
   // Original set
-  "11981","39464","11980","11971","41099","41102","11973","39455","41084",
+  "11981","39464","39456","11980","11949","11971","11956","41099","41102","11973","41103","39455","41084",
   "11950","41111","166679","41109","526","45243","39471","39472","39473","39474","39475",
   // US Coins — Dimes (40149-40167 range includes Mercury dimes = 40151)
   "40149","40150","40151","40152","40153","40154","40155","40156","40157",
