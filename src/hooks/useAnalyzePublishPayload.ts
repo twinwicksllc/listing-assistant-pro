@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import type { CoinConditionDetail, ItemSpecifics } from "@/types/listing";
 import type { SelectedPolicies } from "@/types/ebay-policies";
+import { buildPackageWeightAndSizePayload } from "@/lib/packageWeightAndSize";
 
 interface UseAnalyzePublishPayloadParams {
   title: string;
@@ -97,22 +98,13 @@ export function useAnalyzePublishPayload({
     quantity: quantity > 1 ? quantity : undefined,
     pricingMode: quantity > 1 ? pricingMode : undefined,
     ebayVideoId: ebayVideoStatus === "LIVE" ? ebayVideoId : undefined,
-    packageWeightAndSize: (() => {
-      const totalLb = (packageWeightLb || 0) + (packageWeightOz || 0) / 16;
-      if (totalLb <= 0) return undefined;
-      const hasDims = packageLengthIn > 0 && packageWidthIn > 0 && packageHeightIn > 0;
-      return {
-        weight: { value: Number(totalLb.toFixed(4)), unit: "POUND" },
-        ...(hasDims ? {
-          dimensions: {
-            length: packageLengthIn,
-            width: packageWidthIn,
-            height: packageHeightIn,
-            unit: "INCH",
-          },
-        } : {}),
-      };
-    })(),
+    packageWeightAndSize: buildPackageWeightAndSizePayload({
+      weightLb: packageWeightLb,
+      weightOz: packageWeightOz,
+      lengthIn: packageLengthIn,
+      widthIn: packageWidthIn,
+      heightIn: packageHeightIn,
+    }),
     };
   }, [
     title,
