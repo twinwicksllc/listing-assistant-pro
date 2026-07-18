@@ -11,13 +11,9 @@ const corsHeaders = {
   "Access-Control-Max-Age": "86400",
 };
 
-// Force redeploy v24: Dynamic category aspects â fetch from eBay Taxonomy API via category_aspects_cache, hardcoded rules as fallback
-// Force redeploy v23: Fix SKU generation â use rpc("increment_sku_sequence") instead of broken { increment: 1 } update syntax
-// Force redeploy v17: fix errorId 25002 for category 45243 (World Coins) - Brand removed from NON_ASPECT_KEYS, Color updated to include BM (Bi-Metallic) for non-copper coins
-// Force redeploy v15: shipping location from profile â city+postalCode passed to ensureInventoryLocation; fallback NYCâChicago
-// Force redeploy v14: fix errorId 25002 "Country of Origin value too long" â drop Country of Origin if value > 65 chars or contains sentence punctuation (AI hallucination guard)
-// Force redeploy v13: fix errorId 25005 "not a leaf category" for US Mint Proof Sets â correct category 253â41109 (US Coin Proof Sets), add CATEGORY_ASPECT_RULES for 41109 and 526
-// fineness/denomination/grade normalisation, required-aspect safety-fill (PR #118)
+// eBay publish Edge Function.
+// Handles OAuth helpers, policy lookup, media upload, inventory/offer creation,
+// dynamic category aspects, and category-aware condition normalization.
 
 // ================================================================
 // CATEGORY ASPECT RULES
@@ -36,6 +32,41 @@ interface AspectRule {
   fixedValues?: Record<string, string>;
 }
 
+const EBAY_MARKETPLACE_ID = "EBAY_US";
+const EBAY_CATEGORY_TREE_ID = "0";
+
+const CERTIFIED_GRADING_COMPANIES = [
+  "PCGS",
+  "NGC",
+  "ANACS",
+  "ICG",
+  "CAC",
+  "ICCS",
+  "PMG",
+  "Legacy Currency Grading",
+];
+
+const CERTIFIED_GRADING_SERVICES = new Set([
+  ...CERTIFIED_GRADING_COMPANIES,
+  "PCGS & CAC",
+  "NGC & CAC",
+]);
+
+const CERTIFICATION_ASPECT_VALUES = new Set([
+  "Uncertified",
+  ...CERTIFIED_GRADING_SERVICES,
+  "U.S. Mint",
+]);
+
+function buildEbayJsonHeaders(accessToken: unknown): Record<string, string> {
+  return {
+    Authorization: `Bearer ${String(accessToken)}`,
+    "Content-Type": "application/json",
+    "Content-Language": "en-US",
+    "Accept-Language": "en-US",
+  };
+}
+
 // ================================================================
 // DYNAMIC ASPECT FETCHER
 // ================================================================
@@ -49,14 +80,14 @@ async function fetchDynamicAspectRule(
   supabase: any,
 ): Promise<AspectRule | null> {
   try {
-    // 1. Check the cache table
-    // Deficiency #7: composite cache key includes marketplace_id
-    const marketplaceId = "EBAY_US"; // default marketplace
+    // 1. Check the cache table. Keep the composite context aligned with
+    // the category_aspects_cache primary key: category, marketplace, and tree.
     const { data: cached } = await supabase
       .from("category_aspects_cache")
       .select("aspects, expires_at")
       .eq("category_id", categoryId)
-      .eq("marketplace_id", marketplaceId)
+      .eq("marketplace_id", EBAY_MARKETPLACE_ID)
+      .eq("category_tree_id", EBAY_CATEGORY_TREE_ID)
       .maybeSingle();
 
     if (cached?.aspects && new Date(cached.expires_at) > new Date()) {
@@ -64,7 +95,7 @@ async function fetchDynamicAspectRule(
       return convertEbayAspectsToRule(cached.aspects);
     }
 
-    // 2. Cache miss or stale â call category-lookup to fetch + cache
+    // 2. Cache miss or stale — call category-lookup to fetch + cache
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (supabaseUrl && supabaseServiceKey) {
@@ -245,7 +276,41 @@ async function detectCategoryTree(
   const COIN_MANDATE_PARENT_IDS = new Set(["253", "256", "3377", "4733", "18466"]);
   if (COIN_MANDATE_PARENT_IDS.has(categoryId)) return "coin";
 
-  // First try to get breadcrumb from DB
+  const classifyBreadcrumb = (breadcrumb: string): CategoryTreeType => {
+    const normalized = breadcrumb.toLowerCase();
+    if (normalized.includes("bullion")) return "bullion";
+    if (
+      normalized.includes("coins:") || normalized.includes("coins >") ||
+      normalized.includes("paper money") || normalized.includes("numismatic") ||
+      normalized.includes("coins & paper money")
+    ) return "coin";
+    if (
+      normalized.includes("trading cards") ||
+      normalized.includes("collectible card games")
+    ) return "trading_card";
+    if (
+      normalized.includes("collectibles") || normalized.includes("toys &") ||
+      normalized.includes("stuffed animal") ||
+      normalized.includes("action figure") || normalized.includes("funko") ||
+      normalized.includes("lego") || normalized.includes("board game")
+    ) return "collectible";
+    return "other";
+  };
+
+  // First check the weekly taxonomy sync output. Do not remove this path:
+  // sync-ebay-taxonomy writes all active leaf breadcrumbs to ebay_taxonomy_cache.
+  try {
+    const { data: taxonomy } = await supabase
+      .from("ebay_taxonomy_cache")
+      .select("breadcrumb, category_name")
+      .eq("category_id", categoryId)
+      .maybeSingle();
+
+    const breadcrumb = taxonomy?.breadcrumb || taxonomy?.category_name || "";
+    if (breadcrumb) return classifyBreadcrumb(String(breadcrumb));
+  } catch (_) { /* fall through to legacy mapping */ }
+
+  // Legacy fallback for categories cached before the taxonomy sync existed.
   try {
     const { data: mapping } = await supabase
       .from("category_mappings")
@@ -253,28 +318,8 @@ async function detectCategoryTree(
       .eq("ebay_category_id", categoryId)
       .maybeSingle();
 
-    const breadcrumb = (mapping?.breadcrumb || mapping?.category_name || "")
-      .toLowerCase();
-
-    if (breadcrumb) {
-      if (breadcrumb.includes("bullion")) return "bullion";
-      if (
-        breadcrumb.includes("coins:") || breadcrumb.includes("coins >") ||
-        breadcrumb.includes("paper money") || breadcrumb.includes("numismatic") ||
-        breadcrumb.includes("coins & paper money")
-      ) return "coin";
-      if (
-        breadcrumb.includes("trading cards") ||
-        breadcrumb.includes("collectible card games")
-      ) return "trading_card";
-      if (
-        breadcrumb.includes("collectibles") || breadcrumb.includes("toys &") ||
-        breadcrumb.includes("stuffed animal") ||
-        breadcrumb.includes("action figure") || breadcrumb.includes("funko") ||
-        breadcrumb.includes("lego") || breadcrumb.includes("board game")
-      ) return "collectible";
-      return "other";
-    }
+    const breadcrumb = mapping?.breadcrumb || mapping?.category_name || "";
+    if (breadcrumb) return classifyBreadcrumb(String(breadcrumb));
   } catch (_) { /* fall through to hardcoded */ }
 
   // Fallback to hardcoded sets
@@ -785,7 +830,7 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
     ],
     defaults: { "Certification": "Uncertified" },
   },
-  // ââ Collectibles / Toys / Trading Cards ââââââââââââââââââââââââââââââââââ
+  // ── Collectibles / Toys / Trading Cards ──────────────────────────────────
   // Sports Trading Cards
   "261328": {
     required: ["Sport"],
@@ -931,20 +976,7 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
 // VALID ASPECT VALUES
 // ================================================================
 const VALID_ASPECT_VALUES: Record<string, Set<string>> = {
-  "Certification": new Set([
-    "Uncertified",
-    "PCGS",
-    "NGC",
-    "PCGS & CAC",
-    "NGC & CAC",
-    "U.S. Mint",
-    "ANACS",
-    "ICG",
-    "CAC",
-    "ICCS",
-    "PMG",
-    "Legacy Currency Grading",
-  ]),
+  "Certification": CERTIFICATION_ASPECT_VALUES,
   "Circulated/Uncirculated": new Set(["Uncirculated", "Circulated", "Unknown"]),
   "Shape": new Set(["Bar", "Round"]),
   "Strike Type": new Set([
@@ -989,7 +1021,7 @@ const ASPECT_SKIP_VALUES = new Set([
   "not applicable",
   "unknown/not applicable",
   "not specified",
-  // "Ungraded" is not a valid Sheldon-scale grade â eBay treats any grade value on an
+  // "Ungraded" is not a valid Sheldon-scale grade — eBay treats any grade value on an
   // uncertified coin as a numerical-grade policy violation (errorId 25019).  Drop it.
   "ungraded",
 ]);
@@ -1256,18 +1288,18 @@ const ASPECT_KEY_ALIASES: Record<string, string> = {
   "Cleaned/Uncleaned": "Cleaned/Uncleaned",
   "Provenance": "Provenance",
   // These were previously in NON_ASPECT_KEYS; now pass through as real eBay aspects:
-  "Type": "Type", // required by bullion categories (e.g. 261186 Silver Bullion Coins) â errorId 25002
+  "Type": "Type", // required by bullion categories (e.g. 261186 Silver Bullion Coins) — errorId 25002
   "Color": "Color", // used by 45243 (World Coins) for copper/bronze coins
   "Materials sourced from": "Materials sourced from",
-  "Brand": "Brand", // required by 45243 (World Coins) â errorId 25002 when missing
+  "Brand": "Brand", // required by 45243 (World Coins) — errorId 25002 when missing
 };
 
 const NON_ASPECT_KEYS = new Set([
-  // "Type" removed â eBay bullion categories (e.g. 261068 Silver Bullion Coins) require
+  // "Type" removed — eBay bullion categories (e.g. 261068 Silver Bullion Coins) require
   // "Type" as a real aspect (errorId 25002 when missing).  It must pass through to the
   // Inventory API rather than being silently dropped.
-  // "Color" removed â world coins category 45243 uses Color (RD/RB/BN) as a real eBay aspect.
-  // "Brand" removed â world coins category 45243 requires Brand as a real eBay aspect (errorId 25002 when missing).
+  // "Color" removed — world coins category 45243 uses Color (RD/RB/BN) as a real eBay aspect.
+  // "Brand" removed — world coins category 45243 requires Brand as a real eBay aspect (errorId 25002 when missing).
   "Material",
   "Size",
   "Mintage",
@@ -1277,7 +1309,7 @@ const NON_ASPECT_KEYS = new Set([
 ]);
 
 function normalizeAspectKey(key: string): string {
-  // eBay Inventory API expects BARE keys (Fineness, Grade, Year â NOT C:Fineness etc.)
+  // eBay Inventory API expects BARE keys (Fineness, Grade, Year — NOT C:Fineness etc.)
   // The C: prefix is only used in eBay's Category Tree API taxonomy responses, never in payloads.
   // Strip any C: prefix the AI might have output, then resolve aliases to canonical bare names.
   const bare = key.startsWith("C:") ? key.slice(2) : key;
@@ -1322,7 +1354,7 @@ function buildAndNormalizeAspects(
         (value.includes(",") && value.length > 40);
       if (looksLikeSentence) {
         console.warn(
-          `buildAndNormalizeAspects: dropping Country of Origin â value looks like AI-generated text (${value.length} chars): "${
+          `buildAndNormalizeAspects: dropping Country of Origin — value looks like AI-generated text (${value.length} chars): "${
             value.slice(0, 80)
           }..."`,
         );
@@ -1332,7 +1364,7 @@ function buildAndNormalizeAspects(
 
     if (VALID_ASPECT_VALUES[key] && !VALID_ASPECT_VALUES[key].has(value)) {
       console.warn(
-        `buildAndNormalizeAspects: invalid value "${value}" for ${key} â skipping`,
+        `buildAndNormalizeAspects: invalid value "${value}" for ${key} — skipping`,
       );
       continue;
     }
@@ -1353,10 +1385,10 @@ function buildAndNormalizeAspects(
     );
   }
 
-  // ââ Sport inference for trading card categories âââââââââââââââââââââââââ
+  // ── Sport inference for trading card categories ─────────────────────────
   // If category is a sports card category and Sport is missing, infer from title/description
   const SPORT_CARD_CATS = new Set(["213", "261328", "64482"]);
-  if (SPORT_CARD_CATS.has(categoryId) && !aspects["Sport"]) {
+  if (SPORT_CARD_CATS.has(realCatId) && !aspects["Sport"]) {
     // Try to infer sport from item title or existing aspects
     const textToSearch = (
       (aspects["Player/Athlete"]?.[0] || "") + " " +
@@ -1417,22 +1449,10 @@ function buildAndNormalizeAspects(
 
   // Normalize cert values that include the grader name plus extra text.
   // e.g. "ICG Genuine" -> "ICG", "NGC MS 65" -> "NGC", "PCGS AU-58" -> "PCGS"
-  const CERTIFIED_GRADERS = new Set([
-    "PCGS",
-    "NGC",
-    "ANACS",
-    "ICG",
-    "CAC",
-    "ICCS",
-    "PMG",
-    "Legacy Currency Grading",
-    "PCGS & CAC",
-    "NGC & CAC",
-  ]);
   let normalizedCert = certValue;
-  if (certValue && !CERTIFIED_GRADERS.has(certValue)) {
+  if (certValue && !CERTIFIED_GRADING_SERVICES.has(certValue)) {
     // Try to extract a known grader name from the beginning of the value
-    for (const grader of CERTIFIED_GRADERS) {
+    for (const grader of CERTIFIED_GRADING_SERVICES) {
       if (certValue.toUpperCase().startsWith(grader)) {
         normalizedCert = grader;
         console.log(
@@ -1446,7 +1466,7 @@ function buildAndNormalizeAspects(
 
   if (
     aspects["Grade"] &&
-    (!normalizedCert || !CERTIFIED_GRADERS.has(normalizedCert))
+    (!normalizedCert || !CERTIFIED_GRADING_SERVICES.has(normalizedCert))
   ) {
     console.warn(
       `buildAndNormalizeAspects: dropping Grade="${aspects["Grade"][0]}" for category ${categoryId} ` +
@@ -1467,10 +1487,10 @@ const CONDITION_ID_MAP: Record<string, number> = {
   NEW_OTHER: 1500,
   NEW_WITH_DEFECTS: 1750,
   LIKE_NEW: 2750,
-  // Refurbished (electronics/appliances â NOT for coins)
+  // Refurbished (electronics/appliances — NOT for coins)
   CERTIFIED_REFURBISHED: 2000,
   SELLER_REFURBISHED: 2500,
-  // USED_* family â correct for Coins & Paper Money category tree
+  // USED_* family — correct for Coins & Paper Money category tree
   USED_EXCELLENT: 3000, // AU-50 to XF-45
   USED_VERY_GOOD: 4000, // VF-20 to VF-35
   USED_GOOD: 5000, // F-12 to VG-10
@@ -1480,11 +1500,11 @@ const CONDITION_ID_MAP: Record<string, number> = {
   VERY_GOOD: 3000, // Trading cards: Very Good
   GOOD: 4000, // Trading cards: Good
   ACCEPTABLE: 5000, // Trading cards: Acceptable
-  // Legacy *_REFURBISHED aliases â mapped to USED_* for coin categories
+  // Legacy *_REFURBISHED aliases — mapped to USED_* for coin categories
   EXCELLENT_REFURBISHED: 3000,
   VERY_GOOD_REFURBISHED: 4000,
   GOOD_REFURBISHED: 5000,
-  // Legacy PRE_OWNED_* aliases â kept so old DB records can still publish
+  // Legacy PRE_OWNED_* aliases — kept so old DB records can still publish
   PRE_OWNED_GOOD: 3000, // same as USED_EXCELLENT
   PRE_OWNED_FAIR: 5000, // same as USED_GOOD
   PRE_OWNED_POOR: 6000, // same as USED_ACCEPTABLE
@@ -1497,7 +1517,7 @@ const CONDITION_DESCRIPTIONS: Record<string, string> = {
   LIKE_NEW: "Professionally graded and encapsulated coin.", // Used as conditionDescription for graded coins (LIKE_NEW = 2750 = Graded)
   CERTIFIED_REFURBISHED: "Professionally refurbished and certified to work like new.",
   SELLER_REFURBISHED: "Seller-refurbished item in good working condition.",
-  // USED_* â correct conditions for Coins & Paper Money category tree
+  // USED_* — correct conditions for Coins & Paper Money category tree
   // NOTE: Do NOT include numerical grades (AU-50, MS-65, etc.) in descriptions unless coin is certified by NGC, PCGS, ANACS, ICG, CAC, ICCS, PMG, or Legacy Currency Grading
   USED_EXCELLENT: "Lightly circulated. Shows minimal wear on high points only.",
   USED_VERY_GOOD: "Moderately circulated. Major details clear with moderate wear.",
@@ -1508,7 +1528,7 @@ const CONDITION_DESCRIPTIONS: Record<string, string> = {
   VERY_GOOD: "Item in very good condition with minor wear.",
   GOOD: "Item in good condition with moderate wear.",
   ACCEPTABLE: "Item in acceptable condition with heavy wear but still functional.",
-  // Legacy aliases â redirect to their USED_* equivalents
+  // Legacy aliases — redirect to their USED_* equivalents
   EXCELLENT_REFURBISHED: "Lightly circulated. Shows minimal wear on high points only.",
   VERY_GOOD_REFURBISHED: "Moderately circulated. Major details clear with moderate wear.",
   GOOD_REFURBISHED: "Moderately circulated. Major details clear with moderate wear.",
@@ -1524,7 +1544,7 @@ const CONDITION_DESCRIPTIONS: Record<string, string> = {
 
 const LEGACY_CONDITION_MAP: Record<string, string> = {
   // Migrate old *_REFURBISHED and PRE_OWNED_* values from DB to USED_* equivalents.
-  // Users no longer select these from the UI â these only handle old stored records.
+  // Users no longer select these from the UI — these only handle old stored records.
   EXCELLENT_REFURBISHED: "USED_EXCELLENT",
   VERY_GOOD_REFURBISHED: "USED_VERY_GOOD",
   GOOD_REFURBISHED: "USED_VERY_GOOD",
@@ -1602,8 +1622,8 @@ function normalizeConditionForCategory(
 
   if (isCoin) {
     // eBay Inventory API for Coins & Paper Money:
-    // LIKE_NEW (2750) = "Graded"   â professionally graded/slabbed coins (NGC, PCGS, etc.)
-    // USED_VERY_GOOD (4000) = "Ungraded" â raw/circulated coins
+    // LIKE_NEW (2750) = "Graded"   — professionally graded/slabbed coins (NGC, PCGS, etc.)
+    // USED_VERY_GOOD (4000) = "Ungraded" — raw/circulated coins
     // Reference: https://developer.ebay.com/api-docs/sell/static/metadata/condition-id-values.html
     // "For trading cards or coins, the numeric identifier 2750 indicates that the item is graded."
     // "For trading cards or coins, the numeric identifier 4000 indicates that the item is ungraded."
@@ -1634,7 +1654,7 @@ function normalizeConditionForCategory(
       };
       const mapped = fallbackMap[condition] ?? "USED_VERY_GOOD";
       console.log(
-        `normalizeConditionForCategory: coin category ${categoryId} â ${condition} -> ${mapped}`,
+        `normalizeConditionForCategory: coin category ${categoryId} — ${condition} -> ${mapped}`,
       );
       return { condition: mapped, corrected: true };
     }
@@ -1642,7 +1662,7 @@ function normalizeConditionForCategory(
     // Bullion: allow everything except LIKE_NEW
     if (condition === "LIKE_NEW") {
       console.log(
-        `normalizeConditionForCategory: bullion category ${categoryId} â LIKE_NEW -> NEW`,
+        `normalizeConditionForCategory: bullion category ${categoryId} — LIKE_NEW -> NEW`,
       );
       return { condition: "NEW", corrected: true };
     }
@@ -1650,11 +1670,11 @@ function normalizeConditionForCategory(
     // Trading cards: use standard eBay Inventory API ConditionEnum strings.
     // Note: VERY_GOOD/GOOD/ACCEPTABLE are condition IDs 3000/5000/6000 for trading
     // cards, but the Inventory API's ConditionEnum type only accepts USED_* and
-    // LIKE_NEW strings â sending "VERY_GOOD" causes errorId 2004 "Could not
+    // LIKE_NEW strings — sending "VERY_GOOD" causes errorId 2004 "Could not
     // serialize field [condition]". Keep USED_* here; eBay resolves the display
     // label ("Very Good", "Good", etc.) from the category + enum combination.
     const validCardConditions = new Set([
-      // LIKE_NEW removed: conditionId 2750 = Graded â requires Professional Grader
+      // LIKE_NEW removed: conditionId 2750 = Graded — requires Professional Grader
       // (27501) and Grade item specifics (errorId 25064). Only allow ungraded.
       "USED_VERY_GOOD",
       "USED_GOOD",
@@ -1681,7 +1701,7 @@ function normalizeConditionForCategory(
       };
       const mapped = fallbackMap[condition] ?? "USED_VERY_GOOD";
       console.log(
-        `normalizeConditionForCategory: trading card category ${categoryId} â ${condition} -> ${mapped}`,
+        `normalizeConditionForCategory: trading card category ${categoryId} — ${condition} -> ${mapped}`,
       );
       return { condition: mapped, corrected: true };
     }
@@ -1713,7 +1733,7 @@ function normalizeConditionForCategory(
       };
       const mapped = fallbackMap[condition] ?? "USED_GOOD";
       console.log(
-        `normalizeConditionForCategory: collectible category ${categoryId} â ${condition} -> ${mapped}`,
+        `normalizeConditionForCategory: collectible category ${categoryId} — ${condition} -> ${mapped}`,
       );
       return { condition: mapped, corrected: true };
     }
@@ -1761,7 +1781,7 @@ function detectCategoryTreeSync(
 
 // ----------------------------------------------------------------
 // Listing duration constants
-// GTC = "Good 'Til Cancelled" â required for FIXED_PRICE listings
+// GTC = "Good 'Til Cancelled" — required for FIXED_PRICE listings
 // Auctions must use a specific day count: 1, 3, 5, 7, or 10
 // ----------------------------------------------------------------
 const FIXED_PRICE_DURATION = "GTC";
@@ -1850,8 +1870,8 @@ function sanitizeDescription(desc: string): string {
 // ----------------------------------------------------------------
 // Convert markdown formatting to HTML for eBay listings.
 // eBay's listingDescription field expects HTML, but AI generates markdown.
-// This converts: **bold** â <b>bold</b>, *italic* â <i>italic</i>,
-// line breaks â <br>, bullet points â <ul><li>, etc.
+// This converts: **bold** → <b>bold</b>, *italic* → <i>italic</i>,
+// line breaks → <br>, bullet points → <ul><li>, etc.
 // ----------------------------------------------------------------
 function markdownToHtml(markdown: string): string {
   if (!markdown) return markdown;
@@ -1976,26 +1996,13 @@ function markdownToHtml(markdown: string): string {
 // trigger a policy violation even if the Grade aspect was already dropped.
 // ----------------------------------------------------------------
 const GRADE_PATTERN = /\b(MS|PR|PF|AU|XF|EF|VF|F|VG|G|AG|FA|PO|P)-?\s*(\d{1,2})\b/gi;
-const CERTIFIED_GRADERS_SET = new Set([
-  "PCGS",
-  "NGC",
-  "ANACS",
-  "ICG",
-  "CAC",
-  "ICCS",
-  "PMG",
-  "Legacy Currency Grading",
-  "PCGS & CAC",
-  "NGC & CAC",
-]);
-
 function stripGradesIfUncertified(
   text: string,
   certificationValue: string | undefined,
 ): string {
   if (!text) return text;
-  // If certified by an approved grader, grades are allowed â don't strip
-  if (certificationValue && CERTIFIED_GRADERS_SET.has(certificationValue)) {
+  // If certified by an approved grader, grades are allowed — don't strip
+  if (certificationValue && CERTIFIED_GRADING_SERVICES.has(certificationValue)) {
     return text;
   }
   // Strip grade patterns from text (replace with empty string)
@@ -2028,7 +2035,7 @@ function buildFixedPriceOffer(params: {
   bestOfferAutoAcceptPrice?: number;
   bestOfferAutoDeclinePrice?: number;
 }): Record<string, unknown> {
-  // Build listingPolicies â paymentPolicyId is omitted for managed payments sellers
+  // Build listingPolicies — paymentPolicyId is omitted for managed payments sellers
   const listingPolicies: Record<string, unknown> = {
     fulfillmentPolicyId: params.fulfillmentPolicyId,
     returnPolicyId: params.returnPolicyId,
@@ -2037,7 +2044,7 @@ function buildFixedPriceOffer(params: {
     listingPolicies.paymentPolicyId = params.paymentPolicyId;
   }
 
-  // Best Offer â only added for fixed-price listings when enabled
+  // Best Offer — only added for fixed-price listings when enabled
   if (params.bestOfferEnabled) {
     const bestOfferTerms: Record<string, unknown> = {
       bestOfferEnabled: true,
@@ -2161,7 +2168,7 @@ function buildAuctionOffer(params: {
 // ----------------------------------------------------------------
 // Upload a base64 data URL image to Supabase Storage from within the edge function.
 // Returns the public HTTPS URL on success, or the original value on failure.
-// eBay's Inventory API rejects data: URLs (errorId 25721) â all images must be
+// eBay's Inventory API rejects data: URLs (errorId 25721) — all images must be
 // real publicly-accessible HTTPS URLs before they're sent to eBay.
 // ----------------------------------------------------------------
 async function uploadDataUrlToStorage(dataUrl: string): Promise<string> {
@@ -2169,7 +2176,7 @@ async function uploadDataUrlToStorage(dataUrl: string): Promise<string> {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceKey) {
     console.warn(
-      "uploadDataUrlToStorage: missing Supabase env vars â skipping upload",
+      "uploadDataUrlToStorage: missing Supabase env vars — skipping upload",
     );
     return dataUrl;
   }
@@ -2218,7 +2225,7 @@ async function uploadDataUrlToStorage(dataUrl: string): Promise<string> {
 // ----------------------------------------------------------------
 // Ensure an eBay inventory location exists for the seller.
 // POST creates it; if it already exists (409/errorId 25803), DELETE and re-create
-// to guarantee the address (postalCode/city) is current â eBay PATCH silently ignores
+// to guarantee the address (postalCode/city) is current — eBay PATCH silently ignores
 // address fields so DELETE+re-create is the only reliable way to update them.
 // If DELETE is blocked (location has active items), fall back to a postal-code-keyed location.
 // Returns the merchantLocationKey on success.
@@ -2277,7 +2284,7 @@ async function ensureInventoryLocation(
     return merchantLocationKey;
   }
 
-  // Location already exists â eBay PATCH does NOT update address fields (postalCode/city are
+  // Location already exists — eBay PATCH does NOT update address fields (postalCode/city are
   // immutable via PATCH; only metadata like name/phone/hours can change).
   // The correct approach is DELETE then re-create so the address is definitely current.
   const errText = await resp.text();
@@ -2291,7 +2298,7 @@ async function ensureInventoryLocation(
 
   if (resp.status === 409 || alreadyExists) {
     console.log(
-      `ensureInventoryLocation: location "${merchantLocationKey}" already exists â attempting DELETE + re-create to update address (PATCH silently ignores address fields)`,
+      `ensureInventoryLocation: location "${merchantLocationKey}" already exists — attempting DELETE + re-create to update address (PATCH silently ignores address fields)`,
     );
 
     // Step 1: DELETE the existing location so we can re-create it with the correct address.
@@ -2309,7 +2316,7 @@ async function ensureInventoryLocation(
 
     if (deleteResp.ok || deleteResp.status === 204) {
       console.log(
-        `ensureInventoryLocation: deleted "${merchantLocationKey}" â re-creating with postal code ${postalCode}`,
+        `ensureInventoryLocation: deleted "${merchantLocationKey}" — re-creating with postal code ${postalCode}`,
       );
       const reCreateResp = await fetchWithTimeout(
         `${apiBase}/sell/inventory/v1/location/${merchantLocationKey}`,
@@ -2380,21 +2387,21 @@ async function ensureInventoryLocation(
     } catch { /* not JSON */ }
 
     if (fallbackResp.status === 409 || fallbackAlreadyExists) {
-      // This postal code was used before â the location already exists with the right address.
+      // This postal code was used before — the location already exists with the right address.
       console.log(
-        `ensureInventoryLocation: fallback location "${fallbackKey}" already exists with correct postal code â using it`,
+        `ensureInventoryLocation: fallback location "${fallbackKey}" already exists with correct postal code — using it`,
       );
       return fallbackKey;
     }
 
-    // All attempts exhausted â proceed with whatever key eBay has on file.
+    // All attempts exhausted — proceed with whatever key eBay has on file.
     console.error(
       `ensureInventoryLocation: all location update attempts failed. Using "${merchantLocationKey}" with potentially stale address. Last error: ${fallbackResp.status}: ${fallbackErrText}`,
     );
     return merchantLocationKey;
   }
 
-  // Genuine error â not an "already exists" case.
+  // Genuine error — not an "already exists" case.
   console.error(
     `ensureInventoryLocation: unexpected error ${resp.status}: ${errText}`,
   );
@@ -2462,7 +2469,7 @@ async function fetchCoinConditionDescriptors(
     return _coinDescriptorCache.get(cacheKey)!;
   }
 
-  console.log(`fetchCoinConditionDescriptors: cache miss for ${categoryId} â fetching from eBay Metadata API`);
+  console.log(`fetchCoinConditionDescriptors: cache miss for ${categoryId} — fetching from eBay Metadata API`);
 
   try {
     // Step 1: Get app token for Metadata API
@@ -2543,7 +2550,7 @@ async function fetchCoinConditionDescriptors(
     const policies = metaData?.itemConditionPolicies;
     if (!Array.isArray(policies)) {
       console.warn(
-        `fetchCoinConditionDescriptors: unexpected Metadata API schema â itemConditionPolicies not an array. Got:`,
+        `fetchCoinConditionDescriptors: unexpected Metadata API schema — itemConditionPolicies not an array. Got:`,
         JSON.stringify(metaData).slice(0, 300),
       );
       return null;
@@ -2623,7 +2630,7 @@ async function fetchCoinConditionDescriptors(
     }));
 
     console.log(
-      `fetchCoinConditionDescriptors: SUCCESS â found ${result.length} descriptors (${descriptorCount} raw, ${valueCount} values) for category ${categoryId}:`,
+      `fetchCoinConditionDescriptors: SUCCESS — found ${result.length} descriptors (${descriptorCount} raw, ${valueCount} values) for category ${categoryId}:`,
       result.map((d) => `${d.descriptorName}(${d.descriptorId})[${d.values.length}v]`).join(", "),
     );
 
@@ -2640,7 +2647,7 @@ async function fetchCoinConditionDescriptors(
 }
 
 /**
- * CoinConditionDetail type (mirrors pipelineContracts.ts â kept local to avoid shared imports)
+ * CoinConditionDetail type (mirrors pipelineContracts.ts — kept local to avoid shared imports)
  */
 interface CoinConditionDetailGraded {
   type: "graded";
@@ -2752,10 +2759,10 @@ function synthesizeCoinConditionDetail(
  *
  * For RAW coins:
  *   - Validates rawCondition is one of 4 eBay tiers:
- *     â¢ "Uncirculated"
- *     â¢ "Extremely Fine to About Uncirculated"
- *     â¢ "Fine to Very Fine"
- *     â¢ "Below Fine"
+ *     • "Uncirculated"
+ *     • "Extremely Fine to About Uncirculated"
+ *     • "Fine to Very Fine"
+ *     • "Below Fine"
  *   - Finds "Coin Condition" descriptor and maps to numeric ID
  *
  * Throws error if validation fails (mandatory compliance).
@@ -2776,11 +2783,10 @@ function buildCoinConditionDescriptors(
     const graded = detail as CoinConditionDetailGraded;
 
     // Phase 2: Strict company validation (eBay June 2026 mandate approved list)
-    const allowedCompanies = ["PCGS", "NGC", "ANACS", "ICG", "CAC", "ICCS", "PMG", "Legacy Currency Grading"];
-    if (!allowedCompanies.includes(graded.gradingCompany)) {
+    if (!CERTIFIED_GRADING_COMPANIES.includes(graded.gradingCompany)) {
       throw new Error(
         `Phase 2 Validation: Grading company "${graded.gradingCompany}" is not allowed. ` +
-          `Must be one of: ${allowedCompanies.join(", ")}`,
+          `Must be one of: ${CERTIFIED_GRADING_COMPANIES.join(", ")}`,
       );
     }
 
@@ -2983,7 +2989,7 @@ function buildCoinConditionDescriptors(
 }
 
 // ================================================================
-// SECURITY HELPER â caller-identity verification
+// SECURITY HELPER — caller-identity verification
 // ================================================================
 // Every action that reads or writes a user's eBay tokens (exchange_code,
 // refresh_token, get_stored_token) MUST call this before touching the DB.
@@ -3054,7 +3060,7 @@ serve(async (req) => {
     const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "production";
 
-    // Environment diagnostic log â emitted on every invocation to aid debugging.
+    // Environment diagnostic log — emitted on every invocation to aid debugging.
     // Masks secrets: shows only first 8 chars of clientId, booleans for secrets.
     console.log("ebay-publish invoked:", {
       action,
@@ -3187,7 +3193,7 @@ serve(async (req) => {
       // Avoids exposing the token in localStorage (XSS risk).
       // IMPORTANT: Use upsert (not update) so this works even if the profiles row
       // doesn't exist yet. .update() silently affects 0 rows with no error when
-      // the row is missing â the token would never be stored server-side, causing
+      // the row is missing — the token would never be stored server-side, causing
       // get_stored_token to always return null and policies to fail to load.
       if (userId) {
         try {
@@ -3198,7 +3204,7 @@ serve(async (req) => {
             const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000)
               .toISOString();
 
-            // upsert with onConflict: "id" â creates the row if missing, updates if present
+            // upsert with onConflict: "id" — creates the row if missing, updates if present
             const { error: upsertError } = await supabase
               .from("profiles")
               .upsert(
@@ -3242,7 +3248,7 @@ serve(async (req) => {
             }
           }
         } catch (storeErr) {
-          // Non-fatal â still return the token to the client as fallback
+          // Non-fatal — still return the token to the client as fallback
           console.warn(
             "exchange_code: token storage error (non-fatal):",
             storeErr,
@@ -3254,7 +3260,7 @@ serve(async (req) => {
       // Call eBay Identity API to fetch username and account type (exchange_code only, not on refresh)
       // One-account enforcement: block different username if tier is not Unlimited
       try {
-        // Resolve credentials here â supabaseUrl/supabaseServiceKey declared above are const-scoped
+        // Resolve credentials here — supabaseUrl/supabaseServiceKey declared above are const-scoped
         // inside the token-storage try block, so we must re-read them from env for this scope.
         const _identitySupabaseUrl = Deno.env.get("SUPABASE_URL");
         const _identityServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -3378,7 +3384,7 @@ serve(async (req) => {
         }
       } catch (identityErr) {
         console.error("Identity API call failed (non-fatal):", identityErr);
-        // Still return token to client â identity info is supplementary
+        // Still return token to client — identity info is supplementary
       }
 
       return new Response(
@@ -3569,7 +3575,7 @@ serve(async (req) => {
         // Skip proactive refresh if eBay app credentials are not configured
         if (!clientId || !clientSecret) {
           console.warn(
-            "get_stored_token: skipping proactive refresh â eBay credentials not configured",
+            "get_stored_token: skipping proactive refresh — eBay credentials not configured",
           );
           return new Response(
             JSON.stringify({
@@ -3656,7 +3662,7 @@ serve(async (req) => {
           );
         }
 
-        // Refresh failed â return null so caller triggers re-auth
+        // Refresh failed — return null so caller triggers re-auth
         return new Response(
           JSON.stringify({
             token: null,
@@ -3707,7 +3713,7 @@ serve(async (req) => {
         throw new Error(`Failed to fetch video from storage (${videoFetchResp.status})`);
       }
 
-      // Step 3: Upload bytes to eBay (no short timeout â large files may take minutes)
+      // Step 3: Upload bytes to eBay (no short timeout — large files may take minutes)
       const uploadResp = await fetch(`${apiBase}/sell/marketing/v1_beta/video/${videoId}/upload`, {
         method: "PUT",
         headers: {
@@ -3854,7 +3860,7 @@ serve(async (req) => {
           }
         } else {
           console.log(
-            "create_draft: userId not provided (old frontend code) â will use random SKU fallback",
+            "create_draft: userId not provided (old frontend code) — will use random SKU fallback",
           );
         }
 
@@ -3907,7 +3913,7 @@ serve(async (req) => {
       //   - Fixed values for known categories (Composition, Fineness for silver dollars, etc.)
       //   - Drops placeholder values (none / unknown / n/a / other / etc.)
 
-      // ââ DYNAMIC ASPECT RULES ââââââââââââââââââââââââââââââââââââââââââ
+      // ── DYNAMIC ASPECT RULES ──────────────────────────────────────────
       // Try to fetch aspect rules from eBay's Taxonomy API (cached in DB).
       // Falls back to hardcoded CATEGORY_ASPECT_RULES if dynamic fetch fails.
       let categoryForAspects = finalCategoryId ?? "";
@@ -3977,13 +3983,13 @@ serve(async (req) => {
             undefined,
           );
           if (!categoryForAspects) {
-            // No category at all â use empty rule (generic normalization only)
+            // No category at all — use empty rule (generic normalization only)
             console.warn(
               `create_draft: no category ID provided, using empty aspect rule`,
             );
             categoryForAspects = "__empty__";
           } else if (ruleTreeType === "coin" || ruleTreeType === "bullion") {
-            // Known coin/bullion type not in CATEGORY_ASPECT_RULES â use empty rule.
+            // Known coin/bullion type not in CATEGORY_ASPECT_RULES — use empty rule.
             // 253 (US Coins General) is a non-leaf parent and causes eBay errorId 25003.
             console.warn(
               `create_draft: coin/bullion category ${categoryForAspects} not in CATEGORY_ASPECT_RULES, using generic normalization`,
@@ -3998,14 +4004,17 @@ serve(async (req) => {
         }
       }
 
-      const aspects = buildAndNormalizeAspects(
-        (itemSpecifics && typeof itemSpecifics === "object" ? itemSpecifics : {}) as Record<string, unknown>,
-        categoryForAspects,
-      );
-
-      // Clean up temporary dynamic rule from the map
-      if (dynamicRuleApplied) {
-        delete CATEGORY_ASPECT_RULES[categoryForAspects];
+      let aspects: Record<string, string[]>;
+      try {
+        aspects = buildAndNormalizeAspects(
+          (itemSpecifics && typeof itemSpecifics === "object" ? itemSpecifics : {}) as Record<string, unknown>,
+          categoryForAspects,
+        );
+      } finally {
+        // Clean up temporary dynamic rule from the map even if aspect normalization throws.
+        if (dynamicRuleApplied) {
+          delete CATEGORY_ASPECT_RULES[categoryForAspects];
+        }
       }
 
       console.log(
@@ -4013,7 +4022,7 @@ serve(async (req) => {
         JSON.stringify(aspects, null, 2),
       );
 
-      // ââ Coin-condition â Certification aspect bridge ââââââââââââââââââââââââ
+      // ── Coin-condition → Certification aspect bridge ────────────────────────
       // If no Certification aspect was resolved (not in itemSpecifics, not in dynamic
       // or hardcoded defaults), derive it from _coinConditionDetail.
       // Covers any coin/bullion category where eBay requires Certification but the
@@ -4110,7 +4119,7 @@ serve(async (req) => {
           .toLowerCase();
         if (!raw) return null;
 
-        // Max 3.9 lb â USPS Ground Coins and most coin shipping services cap at 4 lb.
+        // Max 3.9 lb — USPS Ground Coins and most coin shipping services cap at 4 lb.
         // Precious metal content is used as a proxy for item weight, but large bars/lots
         // can produce values that exceed service limits. We cap here to be safe; a UI
         // weight field is the long-term solution.
@@ -4193,11 +4202,28 @@ serve(async (req) => {
       }
 
       // Resolve category tree type once in function scope so all downstream
-      // condition/category logic can safely reuse it.
-      const categoryTreeType = detectCategoryTreeSync(
+      // condition/category logic can safely reuse it. Prefer the DB-backed
+      // path because sync-ebay-taxonomy writes authoritative breadcrumbs to
+      // ebay_taxonomy_cache; fall back to hardcoded detection if unavailable.
+      let categoryTreeType = detectCategoryTreeSync(
         finalCategoryId ?? "",
         itemType,
       );
+      try {
+        const categorySupabaseUrl = Deno.env.get("SUPABASE_URL");
+        const categorySupabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (categorySupabaseUrl && categorySupabaseKey && finalCategoryId) {
+          categoryTreeType = await detectCategoryTree(
+            String(finalCategoryId),
+            createClient(categorySupabaseUrl, categorySupabaseKey),
+          );
+        }
+      } catch (categoryTreeErr) {
+        console.warn(
+          `create_draft: DB category tree detection failed for ${finalCategoryId}, using fallback ${categoryTreeType}:`,
+          categoryTreeErr,
+        );
+      }
 
       // Map internal condition string to numeric conditionId
       // eBay Inventory API accepts ConditionEnum strings, but many categories
@@ -4251,12 +4277,7 @@ serve(async (req) => {
       // Deno's runtime auto-injects the system locale when this header is omitted,
       // sending an invalid value that eBay rejects with errorId 25709.
       // Explicitly providing "en-US" overrides Deno's injected value.
-      const authHeaders = {
-        Authorization: `Bearer ${userToken}`,
-        "Content-Type": "application/json",
-        "Content-Language": "en-US",
-        "Accept-Language": "en-US",
-      };
+      const authHeaders = buildEbayJsonHeaders(userToken);
 
       // Step 1: Ensure inventory location exists before creating the item.
       // The item's shipToLocationAvailability references this location by key,
@@ -4277,7 +4298,7 @@ serve(async (req) => {
         effectiveCity,
       );
 
-      // Step 2: Create/update inventory item (PUT is idempotent â safe to retry)
+      // Step 2: Create/update inventory item (PUT is idempotent — safe to retry)
       // NOTE: description goes in the OFFER (listingDescription), not the inventory item.
       // The inventory item holds product data; the offer holds listing-specific data.
 
@@ -4290,18 +4311,18 @@ serve(async (req) => {
         : (imageUrl ? [imageUrl as string] : []);
       if (incomingImageUrls.length > 0) {
         console.log(
-          `create_draft: received ${incomingImageUrls.length} image(s) â resolving to public URLs`,
+          `create_draft: received ${incomingImageUrls.length} image(s) — resolving to public URLs`,
         );
         for (const img of incomingImageUrls) {
           let resolved = img as string;
           if (resolved?.startsWith("data:")) {
             console.log(
-              "create_draft: image is base64 data URL â uploading to storage",
+              "create_draft: image is base64 data URL — uploading to storage",
             );
             resolved = await uploadDataUrlToStorage(resolved);
             if (resolved.startsWith("data:")) {
               console.error(
-                "create_draft: one image upload failed â skipping this image",
+                "create_draft: one image upload failed — skipping this image",
               );
               continue;
             }
@@ -4333,7 +4354,7 @@ serve(async (req) => {
         },
       };
 
-      // ââ Trading card: inject Card Condition item specific (eBay errorId 40001) ââââ
+      // ── Trading card: inject Card Condition item specific (eBay errorId 40001) ────
       // eBay requires "Card Condition" as an item specific for trading card categories
       // even though the Sell form marks it optional. Derive from effectiveConditionEnum
       // if the AI/user did not already supply it in itemSpecifics.
@@ -4363,7 +4384,7 @@ serve(async (req) => {
         console.log(`create_draft: attaching ebayVideoId=${payloadEbayVideoId} to product.videoIds`);
       }
 
-      // ââ eBay June 2026 Coin Condition Descriptors (MANDATORY) ââââââââââââââââââ
+      // ── eBay June 2026 Coin Condition Descriptors (MANDATORY) ──────────────────
       // Extract coinConditionDetail stored under itemSpecifics._coinConditionDetail
       // and translate it to the numeric conditionDescriptors array required by
       // the eBay Inventory API v1.18.5 for coin categories (253, 256, 3377, 4733, 18466 and all descendants).
@@ -4480,7 +4501,7 @@ serve(async (req) => {
               );
             }
           } else if (lastError !== null) {
-            // FAIL: Metadata API calls threw exceptions â genuine transient failure.
+            // FAIL: Metadata API calls threw exceptions — genuine transient failure.
             // Distinguish this from the "API responded with 0 descriptors" case below.
             throw new Error(
               `Unable to retrieve coin condition descriptors from eBay for category ${finalCategoryId} after 2 attempts. ` +
@@ -4490,10 +4511,10 @@ serve(async (req) => {
           } else {
             // eBay Metadata API responded successfully but returned 0 condition descriptors
             // for this category (e.g. Proof Sets 41109, 166679). This means the category is
-            // NOT subject to the June 2026 condition descriptor mandate â proceed without them.
+            // NOT subject to the June 2026 condition descriptor mandate — proceed without them.
             console.log(
               `create_draft: category ${finalCategoryId} returned 0 condition descriptors from eBay ` +
-                `Metadata API â not subject to the condition descriptor mandate, skipping.`,
+                `Metadata API — not subject to the condition descriptor mandate, skipping.`,
             );
           }
         } catch (cdErr) {
@@ -4510,7 +4531,7 @@ serve(async (req) => {
           throw cdErr;
         }
       }
-      // ââ End Coin Condition Descriptors (MANDATORY) ââââââââââââââââââââââââââââ
+      // ── End Coin Condition Descriptors (MANDATORY) ────────────────────────────
 
       console.log(
         `create_draft: creating inventory item for sku=${sku}, condition=${conditionEnum} (raw=${rawCondition}), merchantLocationKey=${merchantLocationKey}`,
@@ -4576,7 +4597,7 @@ serve(async (req) => {
         return null;
       };
 
-      // Fetch policies â paymentPolicyId is optional for managed payments sellers.
+      // Fetch policies — paymentPolicyId is optional for managed payments sellers.
       // Most eBay sellers enrolled in managed payments do NOT need a payment policy.
       // We only require fulfillment and return policies.
       const [fulfillmentPolicyId, paymentPolicyId, returnPolicyId] = await Promise.all([
@@ -4699,7 +4720,7 @@ serve(async (req) => {
           JSON.stringify(offerBody, null, 2),
         );
 
-        // Check if this is errorId 25002 â offer already exists.
+        // Check if this is errorId 25002 — offer already exists.
         // This can happen if a previous publish attempt created the offer but failed at publish step.
         // When this happens, UPDATE the existing offer with the corrected payload (PUT /offer/{offerId})
         // to ensure any fixes (e.g., condition, policies) take effect before publishing.
@@ -4739,7 +4760,7 @@ serve(async (req) => {
             }
           }
         } catch {
-          // Not JSON or missing offerId â fall through to throw
+          // Not JSON or missing offerId — fall through to throw
         }
 
         if (!offerId) {
@@ -4758,7 +4779,7 @@ serve(async (req) => {
       console.log(`create_draft: proceeding to publish offerId=${offerId}...`);
 
       // Step 5: Publish the offer to make it a live listing.
-      // The publish endpoint does NOT accept a request body â condition is already
+      // The publish endpoint does NOT accept a request body — condition is already
       // set on the inventory item (root level). Sending extra body fields causes
       // unexpected behavior. POST with no body is the correct usage.
       // Reference: https://developer.ebay.com/api-docs/sell/inventory/resources/offer/methods/publishOffer
@@ -4937,11 +4958,11 @@ serve(async (req) => {
         // or condition mismatch. Do NOT demote for transient eBay server errors
         // (errorId 25001 = "Core Inventory Service internal error") or rate limits,
         // as those are eBay-side issues unrelated to our category choice.
-        // errorId 25002 is OVERLOADED by eBay â it can mean:
-        //   (a) "Invalid condition for category"  â demotable, condition error
-        //   (b) "Seller monthly listing limit exceeded"  â NOT demotable, account limit
-        //   (c) "Country of Origin value too long"  â NOT demotable, data error
-        //   (d) "Missing required item specific"  â NOT demotable, data error
+        // errorId 25002 is OVERLOADED by eBay — it can mean:
+        //   (a) "Invalid condition for category"  → demotable, condition error
+        //   (b) "Seller monthly listing limit exceeded"  → NOT demotable, account limit
+        //   (c) "Country of Origin value too long"  → NOT demotable, data error
+        //   (d) "Missing required item specific"  → NOT demotable, data error
         // We detect seller-limit flavor by checking message text for known keywords.
         const SELLER_LIMIT_PATTERNS = [
           /exceed.*amount.*you can list/i,
@@ -4958,7 +4979,7 @@ serve(async (req) => {
           21916585, // Category requires item specifics
           25017, // Leaf category required
           25021, // Invalid condition id for selected category
-          // NOTE: 25002 intentionally excluded â handled below with message-text check
+          // NOTE: 25002 intentionally excluded — handled below with message-text check
         ]);
         let shouldDemote = false;
         let isSellerLimitError = false;
@@ -4973,7 +4994,7 @@ serve(async (req) => {
             if (e.errorId === 25002 && SELLER_LIMIT_PATTERNS.some((p) => p.test(e.message ?? ""))) {
               isSellerLimitError = true;
               console.warn(
-                `create_draft: errorId 25002 is a SELLER LIMIT error (not condition/category) â skipping demotion. Message: ${
+                `create_draft: errorId 25002 is a SELLER LIMIT error (not condition/category) — skipping demotion. Message: ${
                   e.message?.slice(0, 120)
                 }`,
               );
@@ -5011,7 +5032,7 @@ serve(async (req) => {
             // 25002 is demotable ONLY when it is NOT a seller limit error
             const has25002 = errorIds.includes(25002);
             if (has25002 && !isSellerLimitError) {
-              // Check all 25002 errors in this response â if any is NOT a seller limit, it's a condition error
+              // Check all 25002 errors in this response — if any is NOT a seller limit, it's a condition error
               const conditionError = errors.some(
                 (e) => e.errorId === 25002 && !SELLER_LIMIT_PATTERNS.some((p) => p.test(e.message ?? "")),
               );
@@ -5021,7 +5042,7 @@ serve(async (req) => {
 
           if (!shouldDemote) {
             console.warn(
-              `create_draft: skipping category demotion for ${finalCategoryId} â not a category/condition error (HTTP ${publishResp.status}, sellerLimit=${isSellerLimitError})`,
+              `create_draft: skipping category demotion for ${finalCategoryId} — not a category/condition error (HTTP ${publishResp.status}, sellerLimit=${isSellerLimitError})`,
             );
           }
         } catch (_parseErr) {
@@ -5105,7 +5126,7 @@ serve(async (req) => {
             offerId,
             sku,
             publishFailed: true,
-            // Seller limit errors are also "transient" from listing perspective â not a listing defect
+            // Seller limit errors are also "transient" from listing perspective — not a listing defect
             isTransientError: publishResp.status === 500 || isSellerLimitError,
           }),
           {
@@ -5119,7 +5140,7 @@ serve(async (req) => {
       const listingId = publishData.listingId ||
         (offerData as any)?.listing?.listingId || null;
 
-      // Build affiliate URL â non-fatal, wrapped in try/catch
+      // Build affiliate URL — non-fatal, wrapped in try/catch
       const affiliateUrl = listingId ? buildAffiliateUrl(listingId) : null;
 
       console.log(
@@ -5276,7 +5297,7 @@ serve(async (req) => {
       }
 
       if (!resolvedToken) {
-        // Return empty policies rather than throwing â lets the UI show "no policies" gracefully
+        // Return empty policies rather than throwing — lets the UI show "no policies" gracefully
         return new Response(
           JSON.stringify({
             fulfillment: [],
@@ -5292,15 +5313,10 @@ serve(async (req) => {
       // Deno's runtime auto-injects the system locale when this header is omitted,
       // sending an invalid value that eBay rejects with errorId 25709.
       // Explicitly providing "en-US" overrides Deno's injected value.
-      const authHeaders = {
-        Authorization: `Bearer ${resolvedToken}`,
-        "Content-Type": "application/json",
-        "Content-Language": "en-US",
-        "Accept-Language": "en-US",
-      };
+      const authHeaders = buildEbayJsonHeaders(resolvedToken);
 
       // Fetch each policy type independently so one failure doesn't kill all three.
-      // Returns { policies, error } â error is non-null if the fetch failed.
+      // Returns { policies, error } — error is non-null if the fetch failed.
       const fetchPoliciesSafe = async (
         policyType: string,
       ): Promise<
@@ -5387,7 +5403,7 @@ serve(async (req) => {
 
     // Only treat as a 400 client error for explicit configuration/input problems.
     // eBay API error strings (e.g. "Failed to create inventory item: 400 - {...}")
-    // must NOT match here â they should be 500s so the client knows it's a server-side
+    // must NOT match here — they should be 500s so the client knows it's a server-side
     // eBay API failure, not a missing-parameter problem on the client side.
     const isClientError = errorMsg.includes("not configured") ||
       errorMsg.includes("not provided") ||
