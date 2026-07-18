@@ -3642,6 +3642,460 @@ async function handleGetStoredToken(
   );
 }
 
+// ================================================================
+// CREATE_DRAFT HELPERS
+// ================================================================
+// Keep the create_draft action readable by splitting each major publish
+// responsibility into a focused helper while preserving the existing flow.
+
+async function generateDraftSku(incomingSku: unknown, userId: unknown): Promise<string> {
+  let sku = incomingSku ? String(incomingSku) : "";
+  if (sku) return sku;
+
+  // Attempt sequential SKU generation if userId is provided
+  if (userId) {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.warn(
+        "create_draft: Supabase credentials not configured, falling back to random SKU",
+      );
+    } else {
+      try {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+        // Atomically increment next_sku_sequence via RPC and get the new value
+        const { data: seqNum, error: seqError } = await supabase
+          .rpc("increment_sku_sequence", { user_id: userId });
+
+        if (seqError || seqNum == null) {
+          console.error(
+            "create_draft: failed to increment SKU sequence:",
+            seqError?.message || "no data returned",
+          );
+          // Fall through to random SKU fallback
+        } else {
+          // Format as LA + zero-padded 5-digit sequence number (e.g., LA01000, LA01001, ...)
+          sku = `LA${String(seqNum).padStart(5, "0")}`;
+          console.log(
+            `create_draft: generated sequential SKU: ${sku} (sequence #${seqNum})`,
+          );
+        }
+      } catch (skuErr) {
+        console.error("create_draft: SKU generation error:", skuErr);
+        // Fall through to random SKU fallback
+      }
+    }
+  } else {
+    console.log(
+      "create_draft: userId not provided (old frontend code) — will use random SKU fallback",
+    );
+  }
+
+  // Fallback to random SKU if sequential generation didn't work or userId was missing
+  if (!sku) {
+    sku = `LA-${crypto.randomUUID().replace(/-/g, "").slice(0, 16).toUpperCase()}`;
+    console.log(`create_draft: using fallback random SKU: ${sku}`);
+  }
+
+  return sku;
+}
+
+function isGrainBar(title: string, description?: string): boolean {
+  const combinedText = (title + " " + (description || "")).toLowerCase();
+  const grainPatterns = /\b(grain|grains)\b/;
+  return grainPatterns.test(combinedText);
+}
+
+function buildListingUrl(listingId: string): string | null {
+  try {
+    return `https://www.ebay.com/itm/${listingId}`;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveAspectCategory(finalCategoryId: string): Promise<{
+  categoryForAspects: string;
+  dynamicRuleApplied: boolean;
+}> {
+  // ── DYNAMIC ASPECT RULES ──────────────────────────────────────────
+  // Try to fetch aspect rules from eBay's Taxonomy API (cached in DB).
+  // Falls back to hardcoded CATEGORY_ASPECT_RULES if dynamic fetch fails.
+  let categoryForAspects = finalCategoryId ?? "";
+  let dynamicRuleApplied = false;
+
+  // Try dynamic aspect rules from eBay API cache
+  try {
+    const _supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const _supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (_supabaseUrl && _supabaseServiceKey && categoryForAspects) {
+      const _supabase = createClient(_supabaseUrl, _supabaseServiceKey);
+      const dynamicRule = await fetchDynamicAspectRule(
+        categoryForAspects,
+        _supabase,
+      );
+      if (
+        dynamicRule &&
+        (dynamicRule.required.length > 0 ||
+          dynamicRule.preferred.length > 0)
+      ) {
+        // Merge: dynamic rules provide required/preferred/defaults,
+        // but hardcoded fixedValues still override (they encode known-correct values like Fineness for Morgan Dollars)
+        const hardcodedRule = CATEGORY_ASPECT_RULES[categoryForAspects];
+        // Deficiency #5: Only merge hardcoded fixedValues for coin/bullion categories
+        if (
+          hardcodedRule?.fixedValues &&
+          COIN_FIXED_VALUES_ALLOWED_IDS.has(categoryForAspects)
+        ) {
+          dynamicRule.fixedValues = {
+            ...dynamicRule.fixedValues,
+            ...hardcodedRule.fixedValues,
+          };
+        } else if (hardcodedRule?.fixedValues) {
+          console.warn(
+            `create_draft: skipping hardcoded fixedValues merge for non-coin category ${categoryForAspects}`,
+          );
+        }
+        // Also merge hardcoded defaults that are known-good (e.g., Certification: "Uncertified")
+        if (hardcodedRule?.defaults) {
+          dynamicRule.defaults = {
+            ...dynamicRule.defaults,
+            ...hardcodedRule.defaults,
+          };
+        }
+
+        // Temporarily inject into CATEGORY_ASPECT_RULES so buildAndNormalizeAspects can use it
+        CATEGORY_ASPECT_RULES[`__dynamic_${categoryForAspects}`] = dynamicRule;
+        categoryForAspects = `__dynamic_${categoryForAspects}`;
+        dynamicRuleApplied = true;
+        console.log(
+          `create_draft: using DYNAMIC aspect rules for category ${finalCategoryId} (${dynamicRule.required.length} required, ${dynamicRule.preferred.length} preferred)`,
+        );
+      }
+    }
+  } catch (dynamicErr) {
+    console.warn(
+      `create_draft: dynamic aspect fetch failed for ${categoryForAspects}, using hardcoded fallback:`,
+      dynamicErr,
+    );
+  }
+
+  // If dynamic didn't work, fall back to hardcoded rules
+  if (!dynamicRuleApplied) {
+    if (!CATEGORY_ASPECT_RULES[categoryForAspects]) {
+      const ruleTreeType = detectCategoryTreeSync(
+        categoryForAspects,
+        undefined,
+      );
+      if (!categoryForAspects) {
+        // No category at all — use empty rule (generic normalization only)
+        console.warn(
+          `create_draft: no category ID provided, using empty aspect rule`,
+        );
+        categoryForAspects = "__empty__";
+      } else if (ruleTreeType === "coin" || ruleTreeType === "bullion") {
+        // Known coin/bullion type not in CATEGORY_ASPECT_RULES — use empty rule.
+        // 253 (US Coins General) is a non-leaf parent and causes eBay errorId 25003.
+        console.warn(
+          `create_draft: coin/bullion category ${categoryForAspects} not in CATEGORY_ASPECT_RULES, using generic normalization`,
+        );
+        categoryForAspects = "__empty__";
+      } else {
+        console.warn(
+          `create_draft: category ${categoryForAspects} not in CATEGORY_ASPECT_RULES, using empty aspect rule (non-coin category)`,
+        );
+        categoryForAspects = "__empty__";
+      }
+    }
+  }
+
+  return { categoryForAspects, dynamicRuleApplied };
+}
+
+function prepareListingDescription(
+  title: string,
+  description: string,
+  finalCertValue: string | undefined,
+): { finalTitle: string; htmlDescription: string } {
+  // Sanitize description: fix JS-blocked words (errorId 25002)
+  const sanitizedDescription = sanitizeDescription(description);
+  if (sanitizedDescription !== description) {
+    console.log(
+      `create_draft: description sanitized - replaced eBay-blocked patterns (errorId 25002 prevention)`,
+    );
+  }
+
+  // Strip grade patterns from title & description if coin is not certified (errorId 25019)
+  // eBay scans title and description text for grade patterns even when Grade aspect is dropped
+  const finalTitle = stripGradesIfUncertified(
+    title,
+    finalCertValue,
+  );
+  const finalDescription = stripGradesIfUncertified(
+    sanitizedDescription,
+    finalCertValue,
+  );
+  if (finalTitle !== title) {
+    console.log(
+      `create_draft: grade stripped from title (cert="${finalCertValue ?? "none"}"): "${title}" -> "${finalTitle}"`,
+    );
+  }
+  if (finalDescription !== sanitizedDescription) {
+    console.log(
+      `create_draft: grade stripped from description (cert="${finalCertValue ?? "none"}")`,
+    );
+  }
+
+  // Convert markdown to HTML for eBay listing
+  // AI generates markdown (**bold**, bullets, etc.) but eBay expects HTML
+  const htmlDescription = markdownToHtml(finalDescription);
+  if (htmlDescription !== finalDescription) {
+    console.log(
+      `create_draft: converted markdown to HTML for eBay listingDescription`,
+    );
+  }
+
+  return { finalTitle, htmlDescription };
+}
+
+function toPositiveNumber(v: unknown): number | null {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function inferWeightLbFromSpecifics(
+  specifics: unknown,
+): number | null {
+  if (!specifics || typeof specifics !== "object") return null;
+  const rec = specifics as Record<string, unknown>;
+  const raw = String(
+    rec["Precious Metal Content per Unit"] ??
+      rec["Total Precious Metal Content"] ??
+      rec["Weight"] ??
+      "",
+  )
+    .trim()
+    .toLowerCase();
+  if (!raw) return null;
+
+  // Max 3.9 lb — USPS Ground Coins and most coin shipping services cap at 4 lb.
+  // Precious metal content is used as a proxy for item weight, but large bars/lots
+  // can produce values that exceed service limits. We cap here to be safe; a UI
+  // weight field is the long-term solution.
+  const MAX_SHIP_LB = 3.9;
+
+  const ozMatch = raw.match(/([0-9]+(?:\.[0-9]+)?)\s*(oz|ounce|ounces|troy\s*oz|toz)\b/);
+  if (ozMatch) {
+    // Add light packaging buffer and enforce a sane minimum.
+    const oz = Number(ozMatch[1]);
+    const lb = Math.max(0.125, (oz + 1.0) / 16);
+    return Number(Math.min(MAX_SHIP_LB, lb).toFixed(3));
+  }
+
+  const gMatch = raw.match(/([0-9]+(?:\.[0-9]+)?)\s*(g|gram|grams)\b/);
+  if (gMatch) {
+    const grams = Number(gMatch[1]);
+    const oz = grams * 0.0352739619;
+    const lb = Math.max(0.125, (oz + 1.0) / 16);
+    return Number(Math.min(MAX_SHIP_LB, lb).toFixed(3));
+  }
+
+  const lbMatch = raw.match(/([0-9]+(?:\.[0-9]+)?)\s*(lb|lbs|pound|pounds)\b/);
+  if (lbMatch) {
+    const lb = Number(lbMatch[1]);
+    return Number(Math.min(MAX_SHIP_LB, Math.max(0.125, lb)).toFixed(3));
+  }
+
+  return null;
+}
+
+function buildPackageWeightAndSize(
+  payloadPackageWeightAndSize: unknown,
+  itemSpecifics: unknown,
+): Record<string, unknown> {
+  let packageWeightAndSize: Record<string, unknown> | null = null;
+  if (payloadPackageWeightAndSize && typeof payloadPackageWeightAndSize === "object") {
+    const incoming = payloadPackageWeightAndSize as Record<string, unknown>;
+    const incomingWeight = incoming.weight && typeof incoming.weight === "object"
+      ? (incoming.weight as Record<string, unknown>)
+      : null;
+    const incomingDimensions = incoming.dimensions && typeof incoming.dimensions === "object"
+      ? (incoming.dimensions as Record<string, unknown>)
+      : (incoming.dimension && typeof incoming.dimension === "object"
+        ? (incoming.dimension as Record<string, unknown>)
+        : null);
+    const incomingValue = toPositiveNumber(incomingWeight?.value);
+
+    const dimLength = toPositiveNumber(incomingDimensions?.length);
+    const dimWidth = toPositiveNumber(incomingDimensions?.width);
+    const dimHeight = toPositiveNumber(incomingDimensions?.height);
+    const normalizedDimensions = (dimLength && dimWidth && dimHeight)
+      ? {
+        length: dimLength,
+        width: dimWidth,
+        height: dimHeight,
+        unit: String(incomingDimensions?.unit || "INCH").toUpperCase(),
+      }
+      : null;
+
+    if (incomingValue) {
+      packageWeightAndSize = {
+        ...incoming,
+        weight: {
+          ...(incomingWeight || {}),
+          value: incomingValue,
+          unit: String(incomingWeight?.unit || "POUND").toUpperCase(),
+        },
+        ...(normalizedDimensions ? { dimensions: normalizedDimensions } : {}),
+      };
+    }
+  }
+
+  if (!packageWeightAndSize) {
+    const inferredLb = inferWeightLbFromSpecifics(itemSpecifics) ?? 0.25;
+    console.log("[ebay-publish] inferred shipping weight lb:", inferredLb);
+    packageWeightAndSize = {
+      weight: {
+        value: inferredLb,
+        unit: "POUND",
+      },
+    };
+  } else {
+    console.log("[create_draft] final packageWeightAndSize:", JSON.stringify(packageWeightAndSize));
+  }
+
+  return packageWeightAndSize;
+}
+
+async function resolveCategoryTreeType(
+  finalCategoryId: string,
+  itemType: string | undefined,
+): Promise<CategoryTreeType> {
+  // Resolve category tree type once in function scope so all downstream
+  // condition/category logic can safely reuse it. Prefer the DB-backed
+  // path because sync-ebay-taxonomy writes authoritative breadcrumbs to
+  // ebay_taxonomy_cache; fall back to hardcoded detection if unavailable.
+  let categoryTreeType = detectCategoryTreeSync(
+    finalCategoryId ?? "",
+    itemType,
+  );
+  try {
+    const categorySupabaseUrl = Deno.env.get("SUPABASE_URL");
+    const categorySupabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (categorySupabaseUrl && categorySupabaseKey && finalCategoryId) {
+      categoryTreeType = await detectCategoryTree(
+        String(finalCategoryId),
+        createClient(categorySupabaseUrl, categorySupabaseKey),
+      );
+    }
+  } catch (categoryTreeErr) {
+    console.warn(
+      `create_draft: DB category tree detection failed for ${finalCategoryId}, using fallback ${categoryTreeType}:`,
+      categoryTreeErr,
+    );
+  }
+
+  return categoryTreeType;
+}
+
+async function resolveDraftImageUrls(imageUrl: unknown, imageUrls: unknown): Promise<string[]> {
+  // Resolve imageUrl: eBay rejects base64 data: URLs (errorId 25721).
+  // Upload to Supabase Storage if needed to get a public HTTPS URL.
+  // Support multiple images: prefer `imageUrls` array if provided, else fall back to singular `imageUrl` for compatibility.
+  const resolvedImageUrls: string[] = [];
+  const incomingImageUrls = Array.isArray(imageUrls) && imageUrls.length > 0
+    ? imageUrls
+    : (imageUrl ? [imageUrl as string] : []);
+  if (incomingImageUrls.length > 0) {
+    console.log(
+      `create_draft: received ${incomingImageUrls.length} image(s) — resolving to public URLs`,
+    );
+    for (const img of incomingImageUrls) {
+      let resolved = img as string;
+      if (resolved?.startsWith("data:")) {
+        console.log(
+          "create_draft: image is base64 data URL — uploading to storage",
+        );
+        resolved = await uploadDataUrlToStorage(resolved);
+        if (resolved.startsWith("data:")) {
+          console.error(
+            "create_draft: one image upload failed — skipping this image",
+          );
+          continue;
+        }
+      }
+      if (resolved) resolvedImageUrls.push(resolved);
+    }
+  }
+
+  return resolvedImageUrls;
+}
+
+async function fetchDefaultPolicy(
+  apiBase: string,
+  authHeaders: Record<string, string>,
+  policyType: string,
+): Promise<string | null> {
+  const resp = await fetchWithTimeout(
+    `${apiBase}/sell/account/v1/${policyType}_policy?marketplace_id=EBAY_US`,
+    { headers: authHeaders, timeout: 15000 },
+  );
+  if (!resp.ok) {
+    console.warn(`Could not fetch ${policyType} policies:`, resp.status);
+    return null;
+  }
+  const data = await resp.json();
+  const policies = data[`${policyType}Policies`] ||
+    data[`${policyType}Policy`] || [];
+  if (Array.isArray(policies) && policies.length > 0) {
+    console.log(`Using ${policyType} policy: ${policies[0].name}`);
+    return policies[0][`${policyType}PolicyId`] || null;
+  }
+  return null;
+}
+
+async function resolveDraftBusinessPolicies({
+  apiBase,
+  authHeaders,
+  draftFulfillmentPolicyId,
+  draftPaymentPolicyId,
+  draftReturnPolicyId,
+}: {
+  apiBase: string;
+  authHeaders: Record<string, string>;
+  draftFulfillmentPolicyId: unknown;
+  draftPaymentPolicyId: unknown;
+  draftReturnPolicyId: unknown;
+}): Promise<{
+  fulfillmentPolicyId: string | null;
+  paymentPolicyId: string | null;
+  returnPolicyId: string | null;
+}> {
+  // Fetch policies — paymentPolicyId is optional for managed payments sellers.
+  // Most eBay sellers enrolled in managed payments do NOT need a payment policy.
+  // We only require fulfillment and return policies.
+  const [fulfillmentPolicyId, paymentPolicyId, returnPolicyId] = await Promise.all([
+    draftFulfillmentPolicyId ? Promise.resolve(String(draftFulfillmentPolicyId)) : fetchDefaultPolicy(
+      apiBase,
+      authHeaders,
+      "fulfillment",
+    ),
+    draftPaymentPolicyId ? Promise.resolve(String(draftPaymentPolicyId)) : fetchDefaultPolicy(
+      apiBase,
+      authHeaders,
+      "payment",
+    ),
+    draftReturnPolicyId ? Promise.resolve(String(draftReturnPolicyId)) : fetchDefaultPolicy(
+      apiBase,
+      authHeaders,
+      "return",
+    ),
+  ]);
+
+  return { fulfillmentPolicyId, paymentPolicyId, returnPolicyId };
+}
+
 serve(async (req) => {
   initSentry();
 
@@ -3863,58 +4317,7 @@ serve(async (req) => {
         JSON.stringify(itemSpecifics || {}, null, 2),
       );
 
-      // Generate sequential SKU using atomic database counter.
-      // If client provided a SKU, use it (for backwards compatibility on retry).
-      // Otherwise, atomically increment the user's next_sku_sequence counter if userId is available.
-      // If userId is missing (old frontend code before refresh), fall back to random SKU.
-      let sku = incomingSku;
-      if (!sku) {
-        // Attempt sequential SKU generation if userId is provided
-        if (userId) {
-          const supabaseUrl = Deno.env.get("SUPABASE_URL");
-          const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-          if (!supabaseUrl || !supabaseServiceKey) {
-            console.warn(
-              "create_draft: Supabase credentials not configured, falling back to random SKU",
-            );
-          } else {
-            try {
-              const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-              // Atomically increment next_sku_sequence via RPC and get the new value
-              const { data: seqNum, error: seqError } = await supabase
-                .rpc("increment_sku_sequence", { user_id: userId });
-
-              if (seqError || seqNum == null) {
-                console.error(
-                  "create_draft: failed to increment SKU sequence:",
-                  seqError?.message || "no data returned",
-                );
-                // Fall through to random SKU fallback
-              } else {
-                // Format as LA + zero-padded 5-digit sequence number (e.g., LA01000, LA01001, ...)
-                sku = `LA${String(seqNum).padStart(5, "0")}`;
-                console.log(
-                  `create_draft: generated sequential SKU: ${sku} (sequence #${seqNum})`,
-                );
-              }
-            } catch (skuErr) {
-              console.error("create_draft: SKU generation error:", skuErr);
-              // Fall through to random SKU fallback
-            }
-          }
-        } else {
-          console.log(
-            "create_draft: userId not provided (old frontend code) — will use random SKU fallback",
-          );
-        }
-
-        // Fallback to random SKU if sequential generation didn't work or userId was missing
-        if (!sku) {
-          sku = `LA-${crypto.randomUUID().replace(/-/g, "").slice(0, 16).toUpperCase()}`;
-          console.log(`create_draft: using fallback random SKU: ${sku}`);
-        }
-      }
+      const sku = await generateDraftSku(incomingSku, userId);
 
       console.log(`create_draft: sku=${sku}`);
 
@@ -3924,28 +4327,13 @@ serve(async (req) => {
       // category 3360 (Coins & Paper Money > Bullion > Gold > Other).
       // Detect grain bars by checking title/description for "grain" keywords.
       // ----------------------------------------------------------------
-      function isGrainBar(title: string, description?: string): boolean {
-        const combinedText = (title + " " + (description || "")).toLowerCase();
-        const grainPatterns = /\b(grain|grains)\b/;
-        return grainPatterns.test(combinedText);
-      }
-
-      let finalCategoryId = ebayCategoryId;
-      if (isGrainBar(title, description)) {
+      let finalCategoryId = String(ebayCategoryId ?? "");
+      if (isGrainBar(title as string, description as string | undefined)) {
         finalCategoryId = "3360"; // Coins & Paper Money > Bullion > Gold > Other
         console.log(
           `create_draft: GRAIN BAR DETECTED - overriding category ${ebayCategoryId} -> ${finalCategoryId}`,
         );
       }
-
-      // Build direct eBay listing URL (no affiliate wrapping)
-      const buildAffiliateUrl = (listingId: string): string | null => {
-        try {
-          return `https://www.ebay.com/itm/${listingId}`;
-        } catch {
-          return null;
-        }
-      };
 
       // Build eBay-formatted item specifics (aspects) using the category-aware
       // normalisation engine. This handles:
@@ -3958,96 +4346,9 @@ serve(async (req) => {
       //   - Fixed values for known categories (Composition, Fineness for silver dollars, etc.)
       //   - Drops placeholder values (none / unknown / n/a / other / etc.)
 
-      // ── DYNAMIC ASPECT RULES ──────────────────────────────────────────
-      // Try to fetch aspect rules from eBay's Taxonomy API (cached in DB).
-      // Falls back to hardcoded CATEGORY_ASPECT_RULES if dynamic fetch fails.
-      let categoryForAspects = finalCategoryId ?? "";
-      let dynamicRuleApplied = false;
-
-      // Try dynamic aspect rules from eBay API cache
-      try {
-        const _supabaseUrl = Deno.env.get("SUPABASE_URL");
-        const _supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-        if (_supabaseUrl && _supabaseServiceKey && categoryForAspects) {
-          const _supabase = createClient(_supabaseUrl, _supabaseServiceKey);
-          const dynamicRule = await fetchDynamicAspectRule(
-            categoryForAspects,
-            _supabase,
-          );
-          if (
-            dynamicRule &&
-            (dynamicRule.required.length > 0 ||
-              dynamicRule.preferred.length > 0)
-          ) {
-            // Merge: dynamic rules provide required/preferred/defaults,
-            // but hardcoded fixedValues still override (they encode known-correct values like Fineness for Morgan Dollars)
-            const hardcodedRule = CATEGORY_ASPECT_RULES[categoryForAspects];
-            // Deficiency #5: Only merge hardcoded fixedValues for coin/bullion categories
-            if (
-              hardcodedRule?.fixedValues &&
-              COIN_FIXED_VALUES_ALLOWED_IDS.has(categoryForAspects)
-            ) {
-              dynamicRule.fixedValues = {
-                ...dynamicRule.fixedValues,
-                ...hardcodedRule.fixedValues,
-              };
-            } else if (hardcodedRule?.fixedValues) {
-              console.warn(
-                `create_draft: skipping hardcoded fixedValues merge for non-coin category ${categoryForAspects}`,
-              );
-            }
-            // Also merge hardcoded defaults that are known-good (e.g., Certification: "Uncertified")
-            if (hardcodedRule?.defaults) {
-              dynamicRule.defaults = {
-                ...dynamicRule.defaults,
-                ...hardcodedRule.defaults,
-              };
-            }
-
-            // Temporarily inject into CATEGORY_ASPECT_RULES so buildAndNormalizeAspects can use it
-            CATEGORY_ASPECT_RULES[`__dynamic_${categoryForAspects}`] = dynamicRule;
-            categoryForAspects = `__dynamic_${categoryForAspects}`;
-            dynamicRuleApplied = true;
-            console.log(
-              `create_draft: using DYNAMIC aspect rules for category ${finalCategoryId} (${dynamicRule.required.length} required, ${dynamicRule.preferred.length} preferred)`,
-            );
-          }
-        }
-      } catch (dynamicErr) {
-        console.warn(
-          `create_draft: dynamic aspect fetch failed for ${categoryForAspects}, using hardcoded fallback:`,
-          dynamicErr,
-        );
-      }
-
-      // If dynamic didn't work, fall back to hardcoded rules
-      if (!dynamicRuleApplied) {
-        if (!CATEGORY_ASPECT_RULES[categoryForAspects]) {
-          const ruleTreeType = detectCategoryTreeSync(
-            categoryForAspects,
-            undefined,
-          );
-          if (!categoryForAspects) {
-            // No category at all — use empty rule (generic normalization only)
-            console.warn(
-              `create_draft: no category ID provided, using empty aspect rule`,
-            );
-            categoryForAspects = "__empty__";
-          } else if (ruleTreeType === "coin" || ruleTreeType === "bullion") {
-            // Known coin/bullion type not in CATEGORY_ASPECT_RULES — use empty rule.
-            // 253 (US Coins General) is a non-leaf parent and causes eBay errorId 25003.
-            console.warn(
-              `create_draft: coin/bullion category ${categoryForAspects} not in CATEGORY_ASPECT_RULES, using generic normalization`,
-            );
-            categoryForAspects = "__empty__";
-          } else {
-            console.warn(
-              `create_draft: category ${categoryForAspects} not in CATEGORY_ASPECT_RULES, using empty aspect rule (non-coin category)`,
-            );
-            categoryForAspects = "__empty__";
-          }
-        }
-      }
+      const { categoryForAspects, dynamicRuleApplied } = await resolveAspectCategory(
+        String(finalCategoryId ?? ""),
+      );
 
       let aspects: Record<string, string[]>;
       try {
@@ -4098,43 +4399,11 @@ serve(async (req) => {
       // Get the final normalized certification value from aspects (already normalized above)
       const finalCertValue = aspects["Certification"]?.[0];
 
-      // Sanitize description: fix JS-blocked words (errorId 25002)
-      const sanitizedDescription = sanitizeDescription(description as string);
-      if (sanitizedDescription !== description) {
-        console.log(
-          `create_draft: description sanitized - replaced eBay-blocked patterns (errorId 25002 prevention)`,
-        );
-      }
-
-      // Strip grade patterns from title & description if coin is not certified (errorId 25019)
-      // eBay scans title and description text for grade patterns even when Grade aspect is dropped
-      const finalTitle = stripGradesIfUncertified(
+      const { finalTitle, htmlDescription } = prepareListingDescription(
         title as string,
+        description as string,
         finalCertValue,
       );
-      const finalDescription = stripGradesIfUncertified(
-        sanitizedDescription,
-        finalCertValue,
-      );
-      if (finalTitle !== title) {
-        console.log(
-          `create_draft: grade stripped from title (cert="${finalCertValue ?? "none"}"): "${title}" -> "${finalTitle}"`,
-        );
-      }
-      if (finalDescription !== sanitizedDescription) {
-        console.log(
-          `create_draft: grade stripped from description (cert="${finalCertValue ?? "none"}")`,
-        );
-      }
-
-      // Convert markdown to HTML for eBay listing
-      // AI generates markdown (**bold**, bullets, etc.) but eBay expects HTML
-      const htmlDescription = markdownToHtml(finalDescription);
-      if (htmlDescription !== finalDescription) {
-        console.log(
-          `create_draft: converted markdown to HTML for eBay listingDescription`,
-        );
-      }
 
       // Extract the item Type (e.g., "Coin", "Round", "Bar") from itemSpecifics
       // This is used to disambiguate coins from bullion when validating conditions
@@ -4142,133 +4411,15 @@ serve(async (req) => {
         ? (itemSpecifics as Record<string, unknown>).Type as string | undefined
         : undefined;
 
-      // Build package weight for calculated-shipping policies.
-      // eBay may reject publish with errorId 25020 when weight is missing.
-      const toPositiveNumber = (v: unknown): number | null => {
-        const n = Number(v);
-        return Number.isFinite(n) && n > 0 ? n : null;
-      };
+      const packageWeightAndSize = buildPackageWeightAndSize(
+        payloadPackageWeightAndSize,
+        itemSpecifics,
+      );
 
-      const inferWeightLbFromSpecifics = (
-        specifics: unknown,
-      ): number | null => {
-        if (!specifics || typeof specifics !== "object") return null;
-        const rec = specifics as Record<string, unknown>;
-        const raw = String(
-          rec["Precious Metal Content per Unit"] ??
-            rec["Total Precious Metal Content"] ??
-            rec["Weight"] ??
-            "",
-        )
-          .trim()
-          .toLowerCase();
-        if (!raw) return null;
-
-        // Max 3.9 lb — USPS Ground Coins and most coin shipping services cap at 4 lb.
-        // Precious metal content is used as a proxy for item weight, but large bars/lots
-        // can produce values that exceed service limits. We cap here to be safe; a UI
-        // weight field is the long-term solution.
-        const MAX_SHIP_LB = 3.9;
-
-        const ozMatch = raw.match(/([0-9]+(?:\.[0-9]+)?)\s*(oz|ounce|ounces|troy\s*oz|toz)\b/);
-        if (ozMatch) {
-          // Add light packaging buffer and enforce a sane minimum.
-          const oz = Number(ozMatch[1]);
-          const lb = Math.max(0.125, (oz + 1.0) / 16);
-          return Number(Math.min(MAX_SHIP_LB, lb).toFixed(3));
-        }
-
-        const gMatch = raw.match(/([0-9]+(?:\.[0-9]+)?)\s*(g|gram|grams)\b/);
-        if (gMatch) {
-          const grams = Number(gMatch[1]);
-          const oz = grams * 0.0352739619;
-          const lb = Math.max(0.125, (oz + 1.0) / 16);
-          return Number(Math.min(MAX_SHIP_LB, lb).toFixed(3));
-        }
-
-        const lbMatch = raw.match(/([0-9]+(?:\.[0-9]+)?)\s*(lb|lbs|pound|pounds)\b/);
-        if (lbMatch) {
-          const lb = Number(lbMatch[1]);
-          return Number(Math.min(MAX_SHIP_LB, Math.max(0.125, lb)).toFixed(3));
-        }
-
-        return null;
-      };
-
-      let packageWeightAndSize: Record<string, unknown> | null = null;
-      if (payloadPackageWeightAndSize && typeof payloadPackageWeightAndSize === "object") {
-        const incoming = payloadPackageWeightAndSize as Record<string, unknown>;
-        const incomingWeight = incoming.weight && typeof incoming.weight === "object"
-          ? (incoming.weight as Record<string, unknown>)
-          : null;
-        const incomingDimensions = incoming.dimensions && typeof incoming.dimensions === "object"
-          ? (incoming.dimensions as Record<string, unknown>)
-          : (incoming.dimension && typeof incoming.dimension === "object"
-            ? (incoming.dimension as Record<string, unknown>)
-            : null);
-        const incomingValue = toPositiveNumber(incomingWeight?.value);
-
-        const dimLength = toPositiveNumber(incomingDimensions?.length);
-        const dimWidth = toPositiveNumber(incomingDimensions?.width);
-        const dimHeight = toPositiveNumber(incomingDimensions?.height);
-        const normalizedDimensions = (dimLength && dimWidth && dimHeight)
-          ? {
-            length: dimLength,
-            width: dimWidth,
-            height: dimHeight,
-            unit: String(incomingDimensions?.unit || "INCH").toUpperCase(),
-          }
-          : null;
-
-        if (incomingValue) {
-          packageWeightAndSize = {
-            ...incoming,
-            weight: {
-              ...(incomingWeight || {}),
-              value: incomingValue,
-              unit: String(incomingWeight?.unit || "POUND").toUpperCase(),
-            },
-            ...(normalizedDimensions ? { dimensions: normalizedDimensions } : {}),
-          };
-        }
-      }
-
-      if (!packageWeightAndSize) {
-        const inferredLb = inferWeightLbFromSpecifics(itemSpecifics) ?? 0.25;
-        console.log("[ebay-publish] inferred shipping weight lb:", inferredLb);
-        packageWeightAndSize = {
-          weight: {
-            value: inferredLb,
-            unit: "POUND",
-          },
-        };
-      } else {
-        console.log("[create_draft] final packageWeightAndSize:", JSON.stringify(packageWeightAndSize));
-      }
-
-      // Resolve category tree type once in function scope so all downstream
-      // condition/category logic can safely reuse it. Prefer the DB-backed
-      // path because sync-ebay-taxonomy writes authoritative breadcrumbs to
-      // ebay_taxonomy_cache; fall back to hardcoded detection if unavailable.
-      let categoryTreeType = detectCategoryTreeSync(
-        finalCategoryId ?? "",
+      const categoryTreeType = await resolveCategoryTreeType(
+        finalCategoryId,
         itemType,
       );
-      try {
-        const categorySupabaseUrl = Deno.env.get("SUPABASE_URL");
-        const categorySupabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-        if (categorySupabaseUrl && categorySupabaseKey && finalCategoryId) {
-          categoryTreeType = await detectCategoryTree(
-            String(finalCategoryId),
-            createClient(categorySupabaseUrl, categorySupabaseKey),
-          );
-        }
-      } catch (categoryTreeErr) {
-        console.warn(
-          `create_draft: DB category tree detection failed for ${finalCategoryId}, using fallback ${categoryTreeType}:`,
-          categoryTreeErr,
-        );
-      }
 
       // Map internal condition string to numeric conditionId
       // eBay Inventory API accepts ConditionEnum strings, but many categories
@@ -4338,43 +4489,16 @@ serve(async (req) => {
       });
       const merchantLocationKey = await ensureInventoryLocation(
         apiBase,
-        userToken,
-        effectivePostalCode,
-        effectiveCity,
+        String(userToken),
+        String(effectivePostalCode),
+        String(effectiveCity),
       );
 
       // Step 2: Create/update inventory item (PUT is idempotent — safe to retry)
       // NOTE: description goes in the OFFER (listingDescription), not the inventory item.
       // The inventory item holds product data; the offer holds listing-specific data.
 
-      // Resolve imageUrl: eBay rejects base64 data: URLs (errorId 25721).
-      // Upload to Supabase Storage if needed to get a public HTTPS URL.
-      // Support multiple images: prefer `imageUrls` array if provided, else fall back to singular `imageUrl` for compatibility.
-      const resolvedImageUrls: string[] = [];
-      const incomingImageUrls = Array.isArray(imageUrls) && imageUrls.length > 0
-        ? imageUrls
-        : (imageUrl ? [imageUrl as string] : []);
-      if (incomingImageUrls.length > 0) {
-        console.log(
-          `create_draft: received ${incomingImageUrls.length} image(s) — resolving to public URLs`,
-        );
-        for (const img of incomingImageUrls) {
-          let resolved = img as string;
-          if (resolved?.startsWith("data:")) {
-            console.log(
-              "create_draft: image is base64 data URL — uploading to storage",
-            );
-            resolved = await uploadDataUrlToStorage(resolved);
-            if (resolved.startsWith("data:")) {
-              console.error(
-                "create_draft: one image upload failed — skipping this image",
-              );
-              continue;
-            }
-          }
-          if (resolved) resolvedImageUrls.push(resolved);
-        }
-      }
+      const resolvedImageUrls = await resolveDraftImageUrls(imageUrl, imageUrls);
 
       // IMPORTANT: condition and conditionDescription belong at the ROOT level
       // of the inventory item body, NOT inside product. Placing them inside product
@@ -4621,35 +4745,13 @@ serve(async (req) => {
       );
 
       // Step 3: Fetch business policies (use draft-level if set, else auto-fetch first)
-      const fetchDefaultPolicy = async (
-        policyType: string,
-      ): Promise<string | null> => {
-        const resp = await fetchWithTimeout(
-          `${apiBase}/sell/account/v1/${policyType}_policy?marketplace_id=EBAY_US`,
-          { headers: authHeaders, timeout: 15000 },
-        );
-        if (!resp.ok) {
-          console.warn(`Could not fetch ${policyType} policies:`, resp.status);
-          return null;
-        }
-        const data = await resp.json();
-        const policies = data[`${policyType}Policies`] ||
-          data[`${policyType}Policy`] || [];
-        if (Array.isArray(policies) && policies.length > 0) {
-          console.log(`Using ${policyType} policy: ${policies[0].name}`);
-          return policies[0][`${policyType}PolicyId`] || null;
-        }
-        return null;
-      };
-
-      // Fetch policies — paymentPolicyId is optional for managed payments sellers.
-      // Most eBay sellers enrolled in managed payments do NOT need a payment policy.
-      // We only require fulfillment and return policies.
-      const [fulfillmentPolicyId, paymentPolicyId, returnPolicyId] = await Promise.all([
-        draftFulfillmentPolicyId ? Promise.resolve(draftFulfillmentPolicyId) : fetchDefaultPolicy("fulfillment"),
-        draftPaymentPolicyId ? Promise.resolve(draftPaymentPolicyId) : fetchDefaultPolicy("payment"),
-        draftReturnPolicyId ? Promise.resolve(draftReturnPolicyId) : fetchDefaultPolicy("return"),
-      ]);
+      const { fulfillmentPolicyId, paymentPolicyId, returnPolicyId } = await resolveDraftBusinessPolicies({
+        apiBase,
+        authHeaders,
+        draftFulfillmentPolicyId,
+        draftPaymentPolicyId,
+        draftReturnPolicyId,
+      });
 
       // Only fulfillment and return policies are required; payment policy is optional
       if (!fulfillmentPolicyId || !returnPolicyId) {
@@ -5186,7 +5288,7 @@ serve(async (req) => {
         (offerData as any)?.listing?.listingId || null;
 
       // Build affiliate URL — non-fatal, wrapped in try/catch
-      const affiliateUrl = listingId ? buildAffiliateUrl(listingId) : null;
+      const affiliateUrl = listingId ? buildListingUrl(listingId) : null;
 
       console.log(
         `create_draft: Successfully published: listingId=${listingId}, offerId=${offerId}, sku=${sku}, publishData keys: ${
