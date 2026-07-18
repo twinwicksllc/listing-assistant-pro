@@ -4798,7 +4798,7 @@ serve(async (req) => {
           // These categories strictly require graded condition descriptors per eBay mandate.
           // If the initial graded condition fails, this category cannot be salvaged via fallback.
           const isGradedCoinCategory = finalCategoryId === "171526";
-          
+
           const candidates = isGradedCoinCategory
             ? [] // No valid fallbacks for graded coin categories
             : categoryTreeType === "coin"
