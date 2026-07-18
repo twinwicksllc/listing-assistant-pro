@@ -3020,6 +3020,617 @@ async function assertCallerOwnsUser(
   }
 }
 
+async function handleGetAuthUrl(clientId: string, authBase: string): Promise<Response> {
+  const ruName = Deno.env.get("EBAY_RUNAME") ||
+    Deno.env.get("EBAY_REDIRECT_URI");
+  if (!ruName) throw new Error("EBAY_RUNAME not configured");
+
+  const scopes = [
+    "https://api.ebay.com/oauth/api_scope",
+    "https://api.ebay.com/oauth/api_scope/sell.inventory",
+    "https://api.ebay.com/oauth/api_scope/sell.account",
+    "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
+    "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly", // Required for dashboard views/analytics
+    "https://api.ebay.com/oauth/api_scope/sell.finances", // Required for shipping label cost data
+    "https://api.ebay.com/oauth/api_scope/sell.marketing", // Required for eBay Video API
+    "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly", // OQ-5: required for Identity API username/accountType lookup
+  ].join(" ");
+
+  const authUrl = `${authBase}/oauth2/authorize?` +
+    `client_id=${encodeURIComponent(clientId)}` +
+    `&redirect_uri=${encodeURIComponent(ruName)}` +
+    `&response_type=code` +
+    `&scope=${encodeURIComponent(scopes)}`;
+
+  console.log("get_auth_url: ruName =", ruName);
+
+  return new Response(JSON.stringify({ authUrl }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+async function handleExchangeCode(
+  req: Request,
+  payload: any,
+  clientId: string,
+  clientSecret: string,
+  ebayEnv: string,
+  tokenUrl: string,
+): Promise<Response> {
+  const { code, userId } = payload;
+  if (!code) throw new Error("No authorization code provided");
+
+  // Security: verify the caller owns the userId they claim to be storing tokens for.
+  if (userId) {
+    const _ecUrl = Deno.env.get("SUPABASE_URL");
+    const _ecKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (_ecUrl && _ecKey) {
+      await assertCallerOwnsUser(req, String(userId), _ecUrl, _ecKey);
+    }
+  }
+
+  const ruName = Deno.env.get("EBAY_RUNAME") ||
+    Deno.env.get("EBAY_REDIRECT_URI");
+  if (!ruName) {
+    throw new Error(
+      "eBay callback URI not configured. Contact admin to set EBAY_RUNAME.",
+    );
+  }
+
+  console.log(
+    "exchange_code: code =",
+    code?.substring(0, 20) + "...",
+    "env =",
+    ebayEnv,
+  );
+
+  const credentials = btoa(`${clientId}:${clientSecret}`);
+
+  const resp = await fetchWithTimeout(tokenUrl, {
+    method: "POST",
+    timeout: 15000,
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: ruName,
+    }).toString(),
+  });
+
+  if (!resp.ok) {
+    const txt = await resp.text();
+    let errorMsg = txt;
+    try {
+      const json = JSON.parse(txt);
+      errorMsg = json.error_description || json.error || txt;
+    } catch { /* not JSON */ }
+    throw new Error(
+      `eBay token exchange failed (${resp.status}): ${errorMsg}`,
+    );
+  }
+
+  const tokenData = await resp.json();
+
+  if (!tokenData.access_token) {
+    throw new Error(
+      "eBay returned no access token. Authorization code may have expired or been reused.",
+    );
+  }
+
+  console.log(
+    "exchange_code: token obtained, expires in",
+    tokenData.expires_in,
+    "seconds",
+  );
+
+  // --- Store token server-side in Supabase profiles table ---
+  // Avoids exposing the token in localStorage (XSS risk).
+  // IMPORTANT: Use upsert (not update) so this works even if the profiles row
+  // doesn't exist yet. .update() silently affects 0 rows with no error when
+  // the row is missing — the token would never be stored server-side, causing
+  // get_stored_token to always return null and policies to fail to load.
+  if (userId) {
+    try {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (supabaseUrl && supabaseServiceKey) {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000)
+          .toISOString();
+
+        // upsert with onConflict: "id" — creates the row if missing, updates if present
+        const { error: upsertError } = await supabase
+          .from("profiles")
+          .upsert(
+            {
+              id: userId,
+              ebay_access_token: tokenData.access_token,
+              ebay_refresh_token: tokenData.refresh_token ?? null,
+              ebay_token_expires_at: expiresAt,
+            },
+            { onConflict: "id" },
+          );
+
+        if (upsertError) {
+          console.warn(
+            "exchange_code: failed to upsert token in profiles:",
+            upsertError.message,
+          );
+        } else {
+          // Read-back verification: confirm the token was actually stored
+          const { data: verifyData, error: verifyError } = await supabase
+            .from("profiles")
+            .select("ebay_access_token, ebay_token_expires_at")
+            .eq("id", userId)
+            .single();
+
+          if (verifyError || !verifyData?.ebay_access_token) {
+            console.warn(
+              "exchange_code: upsert succeeded but read-back verification FAILED for user",
+              userId,
+              "verifyError:",
+              verifyError?.message ?? "token null after upsert",
+            );
+          } else {
+            console.log(
+              "exchange_code: token upserted and verified in profiles for user",
+              userId,
+              "expires_at:",
+              verifyData.ebay_token_expires_at,
+            );
+          }
+        }
+      }
+    } catch (storeErr) {
+      // Non-fatal — still return the token to the client as fallback
+      console.warn(
+        "exchange_code: token storage error (non-fatal):",
+        storeErr,
+      );
+    }
+  }
+
+  // --- NEW: Identity API Call + One-Account Rule (OQ-5, OQ-3) ---
+  // Call eBay Identity API to fetch username and account type (exchange_code only, not on refresh)
+  // One-account enforcement: block different username if tier is not Unlimited
+  try {
+    // Resolve credentials here — supabaseUrl/supabaseServiceKey declared above are const-scoped
+    // inside the token-storage try block, so we must re-read them from env for this scope.
+    const _identitySupabaseUrl = Deno.env.get("SUPABASE_URL");
+    const _identityServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const _stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
+    const identityBase = ebayEnv === "production" ? "https://apiz.ebay.com" : "https://apiz.sandbox.ebay.com";
+
+    const identityRes = await fetch(
+      `${identityBase}/commerce/identity/v1/user/`,
+      { headers: { Authorization: `Bearer ${tokenData.access_token}` } },
+    );
+    if (!identityRes.ok) {
+      const identityErrText = await identityRes.text();
+      throw new Error(
+        `Identity API failed (${identityRes.status}): ${identityErrText}`,
+      );
+    }
+    const identity = await identityRes.json();
+    const newUsername = identity?.userId ?? identity?.username ?? null;
+    const accountType = (identity?.accountType ?? "")?.toLowerCase() ??
+      "individual";
+
+    // Determine tier for one-account enforcement (OQ-3: gate on LA subscription, not eBay account type)
+    // Fetch the eBay user's email from the identity payload (or from the Supabase profile)
+    let tierForOneAccountCheck: "starter" | "pro" | "unlimited" = "starter";
+    let _userEmailForStripe: string | null = null;
+    if (userId && _identitySupabaseUrl && _identityServiceKey) {
+      try {
+        const _sc = createClient(_identitySupabaseUrl, _identityServiceKey);
+        const { data: profileData } = await _sc
+          .from("profiles")
+          .select("email")
+          .eq("id", userId)
+          .maybeSingle();
+        _userEmailForStripe = profileData?.email ?? null;
+      } catch { /* non-fatal */ }
+    }
+    if (_userEmailForStripe && _stripeSecretKey) {
+      try {
+        const { default: Stripe } = await import(
+          "https://esm.sh/stripe@18.5.0"
+        );
+        const stripe = new Stripe(_stripeSecretKey, {
+          apiVersion: "2025-08-27.basil",
+        });
+        const customers = await stripe.customers.list({
+          email: _userEmailForStripe,
+          limit: 1,
+        });
+        if (customers.data.length > 0) {
+          const subs = await stripe.subscriptions.list({
+            customer: customers.data[0].id,
+            status: "active",
+            limit: 1,
+          });
+          if (subs.data.length > 0) {
+            const productId = subs.data[0].items.data[0].price.product;
+            if (productId === "prod_U70aT1KvuI2uDx") {
+              tierForOneAccountCheck = "unlimited";
+            } else if (productId === "prod_U6zUiC1SYuPrGU") {
+              tierForOneAccountCheck = "pro";
+            }
+          }
+        }
+      } catch (stripeE) {
+        console.error("Stripe check in exchange_code failed:", stripeE);
+      }
+    }
+
+    // Check for existing eBay username (one-account rule for non-Unlimited)
+    if (userId && _identitySupabaseUrl && _identityServiceKey) {
+      const supabase = createClient(
+        _identitySupabaseUrl,
+        _identityServiceKey,
+      );
+      const { data: existingProfile } = await supabase
+        .from("profiles")
+        .select("ebay_username")
+        .eq("id", userId)
+        .single();
+
+      if (
+        existingProfile?.ebay_username &&
+        existingProfile.ebay_username !== newUsername &&
+        tierForOneAccountCheck !== "unlimited"
+      ) {
+        return new Response(
+          JSON.stringify({
+            error: "account_already_linked",
+            message:
+              `This Listing Assistant account is already linked to eBay user "${existingProfile.ebay_username}". Disconnect it before connecting a new account.`,
+          }),
+          {
+            status: 409,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      // Store username and account type
+      const { error: usernameErr } = await supabase
+        .from("profiles")
+        .update({
+          ebay_username: newUsername,
+          ebay_account_type: accountType,
+        })
+        .eq("id", userId);
+
+      if (usernameErr) {
+        console.warn(
+          "exchange_code: failed to store eBay username:",
+          usernameErr.message,
+        );
+      } else {
+        console.log(
+          "exchange_code: stored eBay username for user",
+          userId,
+          ":",
+          newUsername,
+        );
+      }
+    }
+  } catch (identityErr) {
+    console.error("Identity API call failed (non-fatal):", identityErr);
+    // Still return token to client — identity info is supplementary
+  }
+
+  return new Response(
+    JSON.stringify({
+      access_token: tokenData.access_token,
+      refresh_token: tokenData.refresh_token,
+      expires_in: tokenData.expires_in,
+    }),
+    { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
+}
+
+async function handleRefreshToken(
+  req: Request,
+  payload: any,
+  clientId: string,
+  clientSecret: string,
+  tokenUrl: string,
+): Promise<Response> {
+  const { userId } = payload;
+  if (!userId) throw new Error("No userId provided");
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error("Supabase credentials not configured");
+  }
+
+  // Security: verify the caller owns the userId before rotating their token.
+  await assertCallerOwnsUser(req, String(userId), supabaseUrl, supabaseServiceKey);
+
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("ebay_refresh_token")
+    .eq("id", userId)
+    .single();
+
+  if (error || !data?.ebay_refresh_token) {
+    return new Response(
+      JSON.stringify({
+        token: null,
+        error: "No refresh token available. Please reconnect eBay.",
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
+  const credentials = btoa(`${clientId}:${clientSecret}`);
+  const refreshResp = await fetchWithTimeout(tokenUrl, {
+    method: "POST",
+    timeout: 15000,
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: data.ebay_refresh_token,
+      scope: [
+        "https://api.ebay.com/oauth/api_scope",
+        "https://api.ebay.com/oauth/api_scope/sell.inventory",
+        "https://api.ebay.com/oauth/api_scope/sell.account",
+        "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
+        "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly",
+        "https://api.ebay.com/oauth/api_scope/sell.finances",
+        "https://api.ebay.com/oauth/api_scope/sell.marketing",
+      ].join(" "),
+    }).toString(),
+  });
+
+  if (!refreshResp.ok) {
+    const txt = await refreshResp.text();
+    console.error(
+      "refresh_token: eBay refresh failed:",
+      refreshResp.status,
+      txt,
+    );
+    return new Response(
+      JSON.stringify({
+        token: null,
+        error: `Token refresh failed (${refreshResp.status}). Please reconnect eBay.`,
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
+  const tokenData = await refreshResp.json();
+  if (!tokenData.access_token) {
+    return new Response(
+      JSON.stringify({
+        token: null,
+        error: "eBay returned no access token during refresh.",
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
+  // Store the new access token (and new refresh token if provided)
+  const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000)
+    .toISOString();
+  const updatePatch: Record<string, string> = {
+    ebay_access_token: tokenData.access_token,
+    ebay_token_expires_at: expiresAt,
+  };
+  if (tokenData.refresh_token) {
+    updatePatch.ebay_refresh_token = tokenData.refresh_token;
+  }
+
+  const { error: updateError } = await supabase
+    .from("profiles")
+    .update(updatePatch)
+    .eq("id", userId);
+
+  if (updateError) {
+    console.warn(
+      "refresh_token: failed to store refreshed token:",
+      updateError.message,
+    );
+  } else {
+    console.log(
+      "refresh_token: token refreshed and stored for user",
+      userId,
+      "expires at",
+      expiresAt,
+    );
+  }
+
+  return new Response(
+    JSON.stringify({
+      token: tokenData.access_token,
+      expiresIn: tokenData.expires_in,
+    }),
+    { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
+}
+
+async function handleGetStoredToken(
+  req: Request,
+  payload: any,
+  clientId: string | undefined,
+  clientSecret: string | undefined,
+  tokenUrl: string,
+): Promise<Response> {
+  const { userId } = payload;
+  if (!userId) throw new Error("No userId provided");
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error("Supabase credentials not configured");
+  }
+
+  // Security: verify the caller owns the userId before returning their stored token.
+  await assertCallerOwnsUser(req, String(userId), supabaseUrl, supabaseServiceKey);
+
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  const { data, error } = await supabase
+    .from("profiles")
+    .select(
+      "ebay_access_token, ebay_token_expires_at, ebay_refresh_token, postal_code, city",
+    )
+    .eq("id", userId)
+    .single();
+
+  console.log("get_stored_token: database query result", {
+    userId,
+    hasData: !!data,
+    queryError: error?.message,
+    dbPostalCode: data?.postal_code || "NULL",
+    dbCity: (data as any)?.city || "NULL",
+    dbCityType: typeof (data as any)?.city,
+  });
+
+  if (error || !data) {
+    console.warn(
+      "get_stored_token: no profile found or query error for user",
+      userId,
+    );
+    return new Response(
+      JSON.stringify({ token: null, postalCode: null, city: null }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
+  const now = new Date();
+  const expiresAt = data.ebay_token_expires_at ? new Date(data.ebay_token_expires_at) : null;
+  // Consider token expired if it expires within 5 minutes (proactive refresh window)
+  const REFRESH_BUFFER_MS = 5 * 60 * 1000;
+  const isExpiredOrExpiringSoon = expiresAt ? expiresAt.getTime() - now.getTime() < REFRESH_BUFFER_MS : true;
+
+  // Proactively refresh if token is expired or expiring within 5 minutes
+  if (isExpiredOrExpiringSoon && data.ebay_refresh_token) {
+    console.log(
+      "get_stored_token: token expiring soon, attempting proactive refresh for user",
+      userId,
+    );
+    // Skip proactive refresh if eBay app credentials are not configured
+    if (!clientId || !clientSecret) {
+      console.warn(
+        "get_stored_token: skipping proactive refresh — eBay credentials not configured",
+      );
+      return new Response(
+        JSON.stringify({
+          token: data.ebay_access_token,
+          postalCode: data.postal_code,
+          city: (data as any).city ?? null,
+          isExpired: false,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    try {
+      const credentials = btoa(`${clientId}:${clientSecret}`);
+      const refreshResp = await fetchWithTimeout(tokenUrl, {
+        method: "POST",
+        timeout: 15000,
+        headers: {
+          Authorization: `Basic ${credentials}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: data.ebay_refresh_token,
+          scope: [
+            "https://api.ebay.com/oauth/api_scope",
+            "https://api.ebay.com/oauth/api_scope/sell.inventory",
+            "https://api.ebay.com/oauth/api_scope/sell.account",
+            "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
+            "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly",
+            "https://api.ebay.com/oauth/api_scope/sell.finances",
+            "https://api.ebay.com/oauth/api_scope/sell.marketing",
+          ].join(" "),
+        }).toString(),
+      });
+
+      if (refreshResp.ok) {
+        const tokenData = await refreshResp.json();
+        if (tokenData.access_token) {
+          const newExpiresAt = new Date(
+            Date.now() + tokenData.expires_in * 1000,
+          ).toISOString();
+          const updatePatch: Record<string, string> = {
+            ebay_access_token: tokenData.access_token,
+            ebay_token_expires_at: newExpiresAt,
+          };
+          if (tokenData.refresh_token) {
+            updatePatch.ebay_refresh_token = tokenData.refresh_token;
+          }
+          await supabase.from("profiles").update(updatePatch).eq(
+            "id",
+            userId,
+          );
+          console.log(
+            "get_stored_token: proactive refresh succeeded, new expiry:",
+            newExpiresAt,
+          );
+
+          return new Response(
+            JSON.stringify({
+              token: tokenData.access_token,
+              postalCode: data.postal_code,
+              city: (data as any).city ?? null,
+              isExpired: false,
+              refreshed: true,
+            }),
+            {
+              headers: {
+                ...corsHeaders,
+                "Content-Type": "application/json",
+              },
+            },
+          );
+        }
+      } else {
+        console.warn(
+          "get_stored_token: proactive refresh failed:",
+          refreshResp.status,
+        );
+      }
+    } catch (refreshErr) {
+      console.warn(
+        "get_stored_token: proactive refresh error (non-fatal):",
+        refreshErr,
+      );
+    }
+
+    // Refresh failed — return null so caller triggers re-auth
+    return new Response(
+      JSON.stringify({
+        token: null,
+        postalCode: data.postal_code,
+        city: (data as any).city ?? null,
+        isExpired: true,
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
+  return new Response(
+    JSON.stringify({
+      token: data.ebay_access_token,
+      postalCode: data.postal_code,
+      city: (data as any).city ?? null,
+      isExpired: false,
+    }),
+    { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
+}
 serve(async (req) => {
   initSentry();
 
@@ -3090,599 +3701,22 @@ serve(async (req) => {
 
     // --- ACTION: Get OAuth consent URL ---
     if (action === "get_auth_url") {
-      const ruName = Deno.env.get("EBAY_RUNAME") ||
-        Deno.env.get("EBAY_REDIRECT_URI");
-      if (!ruName) throw new Error("EBAY_RUNAME not configured");
-
-      const scopes = [
-        "https://api.ebay.com/oauth/api_scope",
-        "https://api.ebay.com/oauth/api_scope/sell.inventory",
-        "https://api.ebay.com/oauth/api_scope/sell.account",
-        "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
-        "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly", // Required for dashboard views/analytics
-        "https://api.ebay.com/oauth/api_scope/sell.finances", // Required for shipping label cost data
-        "https://api.ebay.com/oauth/api_scope/sell.marketing", // Required for eBay Video API
-        "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly", // OQ-5: required for Identity API username/accountType lookup
-      ].join(" ");
-
-      const authUrl = `${authBase}/oauth2/authorize?` +
-        `client_id=${encodeURIComponent(clientId)}` +
-        `&redirect_uri=${encodeURIComponent(ruName)}` +
-        `&response_type=code` +
-        `&scope=${encodeURIComponent(scopes)}`;
-
-      console.log("get_auth_url: ruName =", ruName);
-
-      return new Response(JSON.stringify({ authUrl }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return handleGetAuthUrl(clientId!, authBase);
     }
 
     // --- ACTION: Exchange auth code for user token ---
     if (action === "exchange_code") {
-      const { code, userId } = payload;
-      if (!code) throw new Error("No authorization code provided");
-
-      // Security: verify the caller owns the userId they claim to be storing tokens for.
-      if (userId) {
-        const _ecUrl = Deno.env.get("SUPABASE_URL");
-        const _ecKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-        if (_ecUrl && _ecKey) {
-          await assertCallerOwnsUser(req, String(userId), _ecUrl, _ecKey);
-        }
-      }
-
-      const ruName = Deno.env.get("EBAY_RUNAME") ||
-        Deno.env.get("EBAY_REDIRECT_URI");
-      if (!ruName) {
-        throw new Error(
-          "eBay callback URI not configured. Contact admin to set EBAY_RUNAME.",
-        );
-      }
-
-      console.log(
-        "exchange_code: code =",
-        code?.substring(0, 20) + "...",
-        "env =",
-        ebayEnv,
-      );
-
-      const credentials = btoa(`${clientId}:${clientSecret}`);
-
-      const resp = await fetchWithTimeout(tokenUrl, {
-        method: "POST",
-        timeout: 15000,
-        headers: {
-          Authorization: `Basic ${credentials}`,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams({
-          grant_type: "authorization_code",
-          code,
-          redirect_uri: ruName,
-        }).toString(),
-      });
-
-      if (!resp.ok) {
-        const txt = await resp.text();
-        let errorMsg = txt;
-        try {
-          const json = JSON.parse(txt);
-          errorMsg = json.error_description || json.error || txt;
-        } catch { /* not JSON */ }
-        throw new Error(
-          `eBay token exchange failed (${resp.status}): ${errorMsg}`,
-        );
-      }
-
-      const tokenData = await resp.json();
-
-      if (!tokenData.access_token) {
-        throw new Error(
-          "eBay returned no access token. Authorization code may have expired or been reused.",
-        );
-      }
-
-      console.log(
-        "exchange_code: token obtained, expires in",
-        tokenData.expires_in,
-        "seconds",
-      );
-
-      // --- Store token server-side in Supabase profiles table ---
-      // Avoids exposing the token in localStorage (XSS risk).
-      // IMPORTANT: Use upsert (not update) so this works even if the profiles row
-      // doesn't exist yet. .update() silently affects 0 rows with no error when
-      // the row is missing — the token would never be stored server-side, causing
-      // get_stored_token to always return null and policies to fail to load.
-      if (userId) {
-        try {
-          const supabaseUrl = Deno.env.get("SUPABASE_URL");
-          const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-          if (supabaseUrl && supabaseServiceKey) {
-            const supabase = createClient(supabaseUrl, supabaseServiceKey);
-            const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000)
-              .toISOString();
-
-            // upsert with onConflict: "id" — creates the row if missing, updates if present
-            const { error: upsertError } = await supabase
-              .from("profiles")
-              .upsert(
-                {
-                  id: userId,
-                  ebay_access_token: tokenData.access_token,
-                  ebay_refresh_token: tokenData.refresh_token ?? null,
-                  ebay_token_expires_at: expiresAt,
-                },
-                { onConflict: "id" },
-              );
-
-            if (upsertError) {
-              console.warn(
-                "exchange_code: failed to upsert token in profiles:",
-                upsertError.message,
-              );
-            } else {
-              // Read-back verification: confirm the token was actually stored
-              const { data: verifyData, error: verifyError } = await supabase
-                .from("profiles")
-                .select("ebay_access_token, ebay_token_expires_at")
-                .eq("id", userId)
-                .single();
-
-              if (verifyError || !verifyData?.ebay_access_token) {
-                console.warn(
-                  "exchange_code: upsert succeeded but read-back verification FAILED for user",
-                  userId,
-                  "verifyError:",
-                  verifyError?.message ?? "token null after upsert",
-                );
-              } else {
-                console.log(
-                  "exchange_code: token upserted and verified in profiles for user",
-                  userId,
-                  "expires_at:",
-                  verifyData.ebay_token_expires_at,
-                );
-              }
-            }
-          }
-        } catch (storeErr) {
-          // Non-fatal — still return the token to the client as fallback
-          console.warn(
-            "exchange_code: token storage error (non-fatal):",
-            storeErr,
-          );
-        }
-      }
-
-      // --- NEW: Identity API Call + One-Account Rule (OQ-5, OQ-3) ---
-      // Call eBay Identity API to fetch username and account type (exchange_code only, not on refresh)
-      // One-account enforcement: block different username if tier is not Unlimited
-      try {
-        // Resolve credentials here — supabaseUrl/supabaseServiceKey declared above are const-scoped
-        // inside the token-storage try block, so we must re-read them from env for this scope.
-        const _identitySupabaseUrl = Deno.env.get("SUPABASE_URL");
-        const _identityServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-        const _stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
-        const identityBase = ebayEnv === "production" ? "https://apiz.ebay.com" : "https://apiz.sandbox.ebay.com";
-
-        const identityRes = await fetch(
-          `${identityBase}/commerce/identity/v1/user/`,
-          { headers: { Authorization: `Bearer ${tokenData.access_token}` } },
-        );
-        if (!identityRes.ok) {
-          const identityErrText = await identityRes.text();
-          throw new Error(
-            `Identity API failed (${identityRes.status}): ${identityErrText}`,
-          );
-        }
-        const identity = await identityRes.json();
-        const newUsername = identity?.userId ?? identity?.username ?? null;
-        const accountType = (identity?.accountType ?? "")?.toLowerCase() ??
-          "individual";
-
-        // Determine tier for one-account enforcement (OQ-3: gate on LA subscription, not eBay account type)
-        // Fetch the eBay user's email from the identity payload (or from the Supabase profile)
-        let tierForOneAccountCheck: "starter" | "pro" | "unlimited" = "starter";
-        let _userEmailForStripe: string | null = null;
-        if (userId && _identitySupabaseUrl && _identityServiceKey) {
-          try {
-            const _sc = createClient(_identitySupabaseUrl, _identityServiceKey);
-            const { data: profileData } = await _sc
-              .from("profiles")
-              .select("email")
-              .eq("id", userId)
-              .maybeSingle();
-            _userEmailForStripe = profileData?.email ?? null;
-          } catch { /* non-fatal */ }
-        }
-        if (_userEmailForStripe && _stripeSecretKey) {
-          try {
-            const { default: Stripe } = await import(
-              "https://esm.sh/stripe@18.5.0"
-            );
-            const stripe = new Stripe(_stripeSecretKey, {
-              apiVersion: "2025-08-27.basil",
-            });
-            const customers = await stripe.customers.list({
-              email: _userEmailForStripe,
-              limit: 1,
-            });
-            if (customers.data.length > 0) {
-              const subs = await stripe.subscriptions.list({
-                customer: customers.data[0].id,
-                status: "active",
-                limit: 1,
-              });
-              if (subs.data.length > 0) {
-                const productId = subs.data[0].items.data[0].price.product;
-                if (productId === "prod_U70aT1KvuI2uDx") {
-                  tierForOneAccountCheck = "unlimited";
-                } else if (productId === "prod_U6zUiC1SYuPrGU") {
-                  tierForOneAccountCheck = "pro";
-                }
-              }
-            }
-          } catch (stripeE) {
-            console.error("Stripe check in exchange_code failed:", stripeE);
-          }
-        }
-
-        // Check for existing eBay username (one-account rule for non-Unlimited)
-        if (userId && _identitySupabaseUrl && _identityServiceKey) {
-          const supabase = createClient(
-            _identitySupabaseUrl,
-            _identityServiceKey,
-          );
-          const { data: existingProfile } = await supabase
-            .from("profiles")
-            .select("ebay_username")
-            .eq("id", userId)
-            .single();
-
-          if (
-            existingProfile?.ebay_username &&
-            existingProfile.ebay_username !== newUsername &&
-            tierForOneAccountCheck !== "unlimited"
-          ) {
-            return new Response(
-              JSON.stringify({
-                error: "account_already_linked",
-                message:
-                  `This Listing Assistant account is already linked to eBay user "${existingProfile.ebay_username}". Disconnect it before connecting a new account.`,
-              }),
-              {
-                status: 409,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
-              },
-            );
-          }
-
-          // Store username and account type
-          const { error: usernameErr } = await supabase
-            .from("profiles")
-            .update({
-              ebay_username: newUsername,
-              ebay_account_type: accountType,
-            })
-            .eq("id", userId);
-
-          if (usernameErr) {
-            console.warn(
-              "exchange_code: failed to store eBay username:",
-              usernameErr.message,
-            );
-          } else {
-            console.log(
-              "exchange_code: stored eBay username for user",
-              userId,
-              ":",
-              newUsername,
-            );
-          }
-        }
-      } catch (identityErr) {
-        console.error("Identity API call failed (non-fatal):", identityErr);
-        // Still return token to client — identity info is supplementary
-      }
-
-      return new Response(
-        JSON.stringify({
-          access_token: tokenData.access_token,
-          refresh_token: tokenData.refresh_token,
-          expires_in: tokenData.expires_in,
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return handleExchangeCode(req, payload, clientId!, clientSecret!, ebayEnv, tokenUrl);
     }
 
     // --- ACTION: Silently refresh eBay access token using stored refresh token ---
     if (action === "refresh_token") {
-      const { userId } = payload;
-      if (!userId) throw new Error("No userId provided");
-
-      const supabaseUrl = Deno.env.get("SUPABASE_URL");
-      const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-      if (!supabaseUrl || !supabaseServiceKey) {
-        throw new Error("Supabase credentials not configured");
-      }
-
-      // Security: verify the caller owns the userId before rotating their token.
-      await assertCallerOwnsUser(req, String(userId), supabaseUrl, supabaseServiceKey);
-
-      const supabase = createClient(supabaseUrl, supabaseServiceKey);
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("ebay_refresh_token")
-        .eq("id", userId)
-        .single();
-
-      if (error || !data?.ebay_refresh_token) {
-        return new Response(
-          JSON.stringify({
-            token: null,
-            error: "No refresh token available. Please reconnect eBay.",
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
-
-      const credentials = btoa(`${clientId}:${clientSecret}`);
-      const refreshResp = await fetchWithTimeout(tokenUrl, {
-        method: "POST",
-        timeout: 15000,
-        headers: {
-          Authorization: `Basic ${credentials}`,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams({
-          grant_type: "refresh_token",
-          refresh_token: data.ebay_refresh_token,
-          scope: [
-            "https://api.ebay.com/oauth/api_scope",
-            "https://api.ebay.com/oauth/api_scope/sell.inventory",
-            "https://api.ebay.com/oauth/api_scope/sell.account",
-            "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
-            "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly",
-            "https://api.ebay.com/oauth/api_scope/sell.finances",
-            "https://api.ebay.com/oauth/api_scope/sell.marketing",
-          ].join(" "),
-        }).toString(),
-      });
-
-      if (!refreshResp.ok) {
-        const txt = await refreshResp.text();
-        console.error(
-          "refresh_token: eBay refresh failed:",
-          refreshResp.status,
-          txt,
-        );
-        return new Response(
-          JSON.stringify({
-            token: null,
-            error: `Token refresh failed (${refreshResp.status}). Please reconnect eBay.`,
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
-
-      const tokenData = await refreshResp.json();
-      if (!tokenData.access_token) {
-        return new Response(
-          JSON.stringify({
-            token: null,
-            error: "eBay returned no access token during refresh.",
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
-
-      // Store the new access token (and new refresh token if provided)
-      const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000)
-        .toISOString();
-      const updatePatch: Record<string, string> = {
-        ebay_access_token: tokenData.access_token,
-        ebay_token_expires_at: expiresAt,
-      };
-      if (tokenData.refresh_token) {
-        updatePatch.ebay_refresh_token = tokenData.refresh_token;
-      }
-
-      const { error: updateError } = await supabase
-        .from("profiles")
-        .update(updatePatch)
-        .eq("id", userId);
-
-      if (updateError) {
-        console.warn(
-          "refresh_token: failed to store refreshed token:",
-          updateError.message,
-        );
-      } else {
-        console.log(
-          "refresh_token: token refreshed and stored for user",
-          userId,
-          "expires at",
-          expiresAt,
-        );
-      }
-
-      return new Response(
-        JSON.stringify({
-          token: tokenData.access_token,
-          expiresIn: tokenData.expires_in,
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return handleRefreshToken(req, payload, clientId!, clientSecret!, tokenUrl);
     }
 
     // --- ACTION: Get stored eBay token for a user (with proactive refresh) ---
     if (action === "get_stored_token") {
-      const { userId } = payload;
-      if (!userId) throw new Error("No userId provided");
-
-      const supabaseUrl = Deno.env.get("SUPABASE_URL");
-      const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-      if (!supabaseUrl || !supabaseServiceKey) {
-        throw new Error("Supabase credentials not configured");
-      }
-
-      // Security: verify the caller owns the userId before returning their stored token.
-      await assertCallerOwnsUser(req, String(userId), supabaseUrl, supabaseServiceKey);
-
-      const supabase = createClient(supabaseUrl, supabaseServiceKey);
-      const { data, error } = await supabase
-        .from("profiles")
-        .select(
-          "ebay_access_token, ebay_token_expires_at, ebay_refresh_token, postal_code, city",
-        )
-        .eq("id", userId)
-        .single();
-
-      console.log("get_stored_token: database query result", {
-        userId,
-        hasData: !!data,
-        queryError: error?.message,
-        dbPostalCode: data?.postal_code || "NULL",
-        dbCity: (data as any)?.city || "NULL",
-        dbCityType: typeof (data as any)?.city,
-      });
-
-      if (error || !data) {
-        console.warn(
-          "get_stored_token: no profile found or query error for user",
-          userId,
-        );
-        return new Response(
-          JSON.stringify({ token: null, postalCode: null, city: null }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
-
-      const now = new Date();
-      const expiresAt = data.ebay_token_expires_at ? new Date(data.ebay_token_expires_at) : null;
-      // Consider token expired if it expires within 5 minutes (proactive refresh window)
-      const REFRESH_BUFFER_MS = 5 * 60 * 1000;
-      const isExpiredOrExpiringSoon = expiresAt ? expiresAt.getTime() - now.getTime() < REFRESH_BUFFER_MS : true;
-
-      // Proactively refresh if token is expired or expiring within 5 minutes
-      if (isExpiredOrExpiringSoon && data.ebay_refresh_token) {
-        console.log(
-          "get_stored_token: token expiring soon, attempting proactive refresh for user",
-          userId,
-        );
-        // Skip proactive refresh if eBay app credentials are not configured
-        if (!clientId || !clientSecret) {
-          console.warn(
-            "get_stored_token: skipping proactive refresh — eBay credentials not configured",
-          );
-          return new Response(
-            JSON.stringify({
-              token: data.ebay_access_token,
-              postalCode: data.postal_code,
-              city: (data as any).city ?? null,
-              isExpired: false,
-            }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-          );
-        }
-        try {
-          const credentials = btoa(`${clientId}:${clientSecret}`);
-          const refreshResp = await fetchWithTimeout(tokenUrl, {
-            method: "POST",
-            timeout: 15000,
-            headers: {
-              Authorization: `Basic ${credentials}`,
-              "Content-Type": "application/x-www-form-urlencoded",
-            },
-            body: new URLSearchParams({
-              grant_type: "refresh_token",
-              refresh_token: data.ebay_refresh_token,
-              scope: [
-                "https://api.ebay.com/oauth/api_scope",
-                "https://api.ebay.com/oauth/api_scope/sell.inventory",
-                "https://api.ebay.com/oauth/api_scope/sell.account",
-                "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
-                "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly",
-                "https://api.ebay.com/oauth/api_scope/sell.finances",
-                "https://api.ebay.com/oauth/api_scope/sell.marketing",
-              ].join(" "),
-            }).toString(),
-          });
-
-          if (refreshResp.ok) {
-            const tokenData = await refreshResp.json();
-            if (tokenData.access_token) {
-              const newExpiresAt = new Date(
-                Date.now() + tokenData.expires_in * 1000,
-              ).toISOString();
-              const updatePatch: Record<string, string> = {
-                ebay_access_token: tokenData.access_token,
-                ebay_token_expires_at: newExpiresAt,
-              };
-              if (tokenData.refresh_token) {
-                updatePatch.ebay_refresh_token = tokenData.refresh_token;
-              }
-              await supabase.from("profiles").update(updatePatch).eq(
-                "id",
-                userId,
-              );
-              console.log(
-                "get_stored_token: proactive refresh succeeded, new expiry:",
-                newExpiresAt,
-              );
-
-              return new Response(
-                JSON.stringify({
-                  token: tokenData.access_token,
-                  postalCode: data.postal_code,
-                  city: (data as any).city ?? null,
-                  isExpired: false,
-                  refreshed: true,
-                }),
-                {
-                  headers: {
-                    ...corsHeaders,
-                    "Content-Type": "application/json",
-                  },
-                },
-              );
-            }
-          } else {
-            console.warn(
-              "get_stored_token: proactive refresh failed:",
-              refreshResp.status,
-            );
-          }
-        } catch (refreshErr) {
-          console.warn(
-            "get_stored_token: proactive refresh error (non-fatal):",
-            refreshErr,
-          );
-        }
-
-        // Refresh failed — return null so caller triggers re-auth
-        return new Response(
-          JSON.stringify({
-            token: null,
-            postalCode: data.postal_code,
-            city: (data as any).city ?? null,
-            isExpired: true,
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
-
-      return new Response(
-        JSON.stringify({
-          token: data.ebay_access_token,
-          postalCode: data.postal_code,
-          city: (data as any).city ?? null,
-          isExpired: false,
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return handleGetStoredToken(req, payload, clientId, clientSecret, tokenUrl);
     }
 
     // --- ACTION: Upload video to eBay Video API ---
