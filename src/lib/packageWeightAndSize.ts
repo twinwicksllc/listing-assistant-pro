@@ -28,10 +28,9 @@ export interface PackageWeightAndSizePayload {
  *
  * Fix: forward whatever the user actually entered.
  *  - weight is included if lb and/or oz sum to > 0
- *  - dimensions are included if ANY of length/width/height is > 0, only including
- *    the fields that were actually provided
- *  - if the user entered nothing at all, returns undefined (unchanged behavior —
- *    ebay-publish falls back to an inferred weight in that case)
+ *  - if the user entered nothing at all, returns undefined (server may fall back to an inferred weight)
+ *
+ * Note: the server-side ebay-publish implementation must preserve dimensions when inferring weight; otherwise a dimensions-only payload will be overwritten.
  */
 export function buildPackageWeightAndSizePayload(
   input: PackageDimensionsInput,
