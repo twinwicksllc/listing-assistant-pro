@@ -1,0 +1,53 @@
+name: Weekly Category Taxonomy Sync
+
+# Runs two previously-unscheduled maintenance jobs:
+#   - sync-ebay-taxonomy: pulls eBay's full active/current category tree
+#     into ebay_taxonomy_cache (source of truth for category breadcrumbs
+#     used by analyze-item and the frontend Analyze page)
+#   - category-hygiene-cron: dedupes, decays, and expires stale/low-confidence
+#     rows in category_mappings, and cleans up old cache/audit entries
+#
+# Both functions previously had comments claiming a weekly pg_cron schedule
+# that was never actually created — they only ran when manually POSTed.
+# This workflow is the actual schedule.
+
+on:
+  schedule:
+    # eBay taxonomy full-tree sync — Sunday 03:00 UTC
+    - cron: '0 3 * * 0'
+    # category hygiene cleanup — Sunday 02:00 UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch: {}
+
+jobs:
+  sync-taxonomy:
+    name: Sync eBay Taxonomy
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 3 * * 0'
+    steps:
+      - name: Call sync-ebay-taxonomy
+        run: |
+          curl --fail --show-error --silent \
+            -X POST "${{ secrets.SUPABASE_URL }}/functions/v1/sync-ebay-taxonomy" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{}' | tee /tmp/sync-result.json
+      - name: Show result summary
+        if: always()
+        run: cat /tmp/sync-result.json || true
+
+  category-hygiene:
+    name: Category Hygiene Cleanup
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 2 * * 0'
+    steps:
+      - name: Call category-hygiene-cron
+        run: |
+          curl --fail --show-error --silent \
+            -X POST "${{ secrets.SUPABASE_URL }}/functions/v1/category-hygiene-cron" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{}' | tee /tmp/hygiene-result.json
+      - name: Show result summary
+        if: always()
+        run: cat /tmp/hygiene-result.json || true
