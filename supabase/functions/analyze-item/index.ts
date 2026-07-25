@@ -581,6 +581,29 @@ serve(async (req: Request) => {
     // Apply voice note fallback for metal detection if necessary
     identification = applyVoiceNoteMetalFallback(identification, voiceNote);
 
+    // ─── DOMAIN SELF-CORRECTION: catch coins Pass 1 missed ────────────────────
+    // Pass 1's single Gemini classification call is the ONLY signal every
+    // downstream coin safety-net depends on (domain-mismatch category
+    // overrides here, coin-condition-detail prompts on the frontend, and the
+    // MANDATORY conditionDescriptors check in ebay-publish). If Pass 1
+    // mis-tags an uncommon or confusingly-worded coin (e.g. a "three cent
+    // piece") as a non-coin domain, every one of those safety nets is
+    // silently disabled at once. Independently re-check the item name and
+    // keywords for unambiguous numismatic terms and self-correct the domain
+    // here so the rest of the pipeline benefits, not just this one guard.
+    if (identification.domain !== "coins_bullion") {
+      const _domainCheckText =
+        `${identification.itemName} ${identification.keywords.join(" ")}`
+          .toLowerCase();
+      const _COIN_DOMAIN_SIGNAL_RE =
+        /\b(coin|coins|cent|cents|trime|dime|dimes|nickel|nickels|penny|pennies|quarter|quarters|half dollar|silver dollar|gold dollar|morgan dollar|peace dollar|eisenhower dollar|kennedy half|franklin half|walking liberty|barber (?:dime|quarter|half)|mercury dime|roosevelt dime|buffalo nickel|jefferson nickel|wheat penny|indian head|proof set|mint set|bullion|troy oz|fine silver|fine gold|numismatic|ngc|pcgs|anacs|icg)\b/i;
+      if (_COIN_DOMAIN_SIGNAL_RE.test(_domainCheckText)) {
+        console.log(
+          `[${invocationId}] Domain self-correction: Pass 1 said "${identification.domain}" but itemName/keywords ("${_domainCheckText}") match coin signals — correcting to coins_bullion`,
+        );
+        identification.domain = "coins_bullion";
+      }
+    }
     // ─── END MODULAR CONTROLLER ───────────────────────────────────────────────
 
     // ─── SLAB OCR: GPT-4o Vision label reading (coins_bullion + general domains only) ──────────────────
@@ -591,9 +614,9 @@ serve(async (req: Request) => {
       ReturnType<typeof import("../_helpers/slabOcr.ts").runSlabOcr>
     > = null;
     try {
-      const NEW_OPENAI_API_KEY = Deno.env.get("NEW_OPENAI_API_KEY");
+      const NEW_[REDACTED_ENV] = Deno.env.get("NEW_[REDACTED_ENV]");
       const OPENAI_PROXY_URL = Deno.env.get("OPENAI_PROXY_URL")?.trim();
-      const _hasOpenAiPath = Boolean(NEW_OPENAI_API_KEY || OPENAI_PROXY_URL);
+      const _hasOpenAiPath = Boolean(NEW_[REDACTED_ENV] || OPENAI_PROXY_URL);
       // Domain guard: only run for coins_bullion (definite slabs) and general
       // (Pass 1 mis-classifications). Skip trading_cards, jewelry, electronics,
       // vintage_clothing to avoid unnecessary GPT-4o spend (~$0.038/call).
@@ -613,7 +636,7 @@ serve(async (req: Request) => {
           `[${invocationId}] Calling Slab OCR with ${ocrBase64List.length} images (domain=${identification.domain}, eligible=true)`,
         );
         slabOcrResult = await runSlabOcr(
-          NEW_OPENAI_API_KEY ?? "",
+          NEW_[REDACTED_ENV] ?? "",
           ocrBase64List,
           ocrMimeList,
           invocationId,
@@ -671,7 +694,7 @@ serve(async (req: Request) => {
         }
       } else if (!_hasOpenAiPath) {
         console.warn(
-          `[${invocationId}] Slab OCR: no OpenAI route configured (set NEW_OPENAI_API_KEY or OPENAI_PROXY_URL) — skipping`,
+          `[${invocationId}] Slab OCR: no OpenAI route configured (set NEW_[REDACTED_ENV] or OPENAI_PROXY_URL) — skipping`,
         );
       } else {
         console.log(
@@ -1215,8 +1238,8 @@ You handle ALL types of items: coins, bullion, precious metals, collectibles, to
 1. HOLISTIC ANALYSIS: Treat all uploaded images as a single item.
 2. ZERO SPECULATION: Use ONLY visible evidence + factual data. If details are not visible, state "uncertain" or "not visible."
 3. NO NUMERICAL GRADING for coins unless in a certified slab (PCGS, NGC, ANACS, ICG, CAC, ICCS).
-4. EBAY COMPLIANCE: Title must be \u2264 80 chars. No hype words like "L@@K."
-5. SELLER VOICE NOTE: If provided, treat as authoritative \u2014 override visual assessment where applicable.
+4. EBAY COMPLIANCE: Title must be ≤ 80 chars. No hype words like "L@@K."
+5. SELLER VOICE NOTE: If provided, treat as authoritative — override visual assessment where applicable.
 
 ### CATEGORY SELECTION
 You MUST select the correct eBay **leaf** category ID for every item.
