@@ -866,7 +866,7 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
     preferred: ["Player/Athlete", "Card Manufacturer", "Year", "Team"],
     defaults: { "Sport": "Baseball" },
   },
-  // PokÃ©mon Trading Card Games
+  // Pokémon Trading Card Games
   "183454": {
     required: [],
     preferred: [
@@ -2998,6 +2998,7 @@ function buildCoinConditionDescriptors(
 // Without this check any logged-in user could read or overwrite any
 // other user's eBay tokens (IDOR).
 // ================================================================
+
 async function assertCallerOwnsUser(
   req: Request,
   claimedUserId: string,
@@ -3784,10 +3785,26 @@ async function resolveAspectCategory(finalCategoryId: string): Promise<{
   // If dynamic didn't work, fall back to hardcoded rules
   if (!dynamicRuleApplied) {
     if (!CATEGORY_ASPECT_RULES[categoryForAspects]) {
-      const ruleTreeType = detectCategoryTreeSync(
-        categoryForAspects,
-        undefined,
-      );
+      // Prefer the DB-backed detector (ebay_taxonomy_cache first, then
+      // category_mappings) so rare categories not in the hardcoded ID sets
+      // still get correctly routed to the coin/bullion empty-rule path
+      // below instead of falling through with no aspect rule at all.
+      let ruleTreeType = detectCategoryTreeSync(categoryForAspects, undefined);
+      try {
+        const _ruleSupabaseUrl = Deno.env.get("SUPABASE_URL");
+        const _ruleSupabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (_ruleSupabaseUrl && _ruleSupabaseKey && categoryForAspects) {
+          ruleTreeType = await detectCategoryTree(
+            categoryForAspects,
+            createClient(_ruleSupabaseUrl, _ruleSupabaseKey),
+          );
+        }
+      } catch (ruleTreeErr) {
+        console.warn(
+          `create_draft: DB category tree detection failed for aspect rule fallback (${categoryForAspects}), using sync fallback ${ruleTreeType}:`,
+          ruleTreeErr,
+        );
+      }
       if (!categoryForAspects) {
         // No category at all — use empty rule (generic normalization only)
         console.warn(
@@ -4592,10 +4609,22 @@ serve(async (req) => {
         const v = rawItemSpecifics[k];
         return typeof v === "string" && v.trim().length > 0;
       });
+      // Independent text signal: scan the listing title/description for
+      // unambiguous numismatic terms. This is a safety net for uncommon
+      // coin categories/domains that slip past every other signal above —
+      // e.g. a mis-tagged Pass-1 domain plus a category ID outside the
+      // hardcoded/DB-known coin sets should still not be enough to skip
+      // the MANDATORY conditionDescriptors block for an actual coin.
+      const _coinTextCheck = `${title ?? ""} ${description ?? ""}`.toLowerCase();
+      const COIN_TEXT_SIGNAL_RE =
+        /\b(coin|coins|cent|cents|trime|dime|dimes|nickel|nickels|penny|pennies|quarter dollar|half dollar|silver dollar|gold dollar|morgan dollar|peace dollar|eisenhower dollar|kennedy half|franklin half|walking liberty|barber (?:dime|quarter|half)|mercury dime|roosevelt dime|buffalo nickel|jefferson nickel|wheat penny|indian head|proof set|mint set|bullion|troy oz|fine silver|fine gold|numismatic|ngc|pcgs|anacs|icg)\b/i;
+      const hasCoinTextSignal = COIN_TEXT_SIGNAL_RE.test(_coinTextCheck);
+
       const isCoinDescriptorCategory = categoryTreeType === "coin" ||
         coinConditionDetailRaw != null ||
         publishDomain === "coins_bullion" ||
-        hasCoinSpecificSignals;
+        hasCoinSpecificSignals ||
+        hasCoinTextSignal;
 
       // VALIDATION: Coin listings in our positively-identified hardcoded list MUST have condition
       // details before we even attempt to publish. For secondary signals (_coinConditionDetail
