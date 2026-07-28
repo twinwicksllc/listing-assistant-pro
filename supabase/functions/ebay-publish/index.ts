@@ -4445,6 +4445,69 @@ serve(async (req) => {
         );
       }
 
+      // ── Graded world coin re-route ─────────────────────────────────────────
+      // eBay category 45243 ("Coins: World") is a ROLLUP/parent category that
+      // does NOT accept the "Graded" condition (LIKE_NEW / conditionId 2750).
+      // Publishing a slabbed NGC/PCGS coin there fails with
+      // "publish failed with invalid condition for category 45243", and no raw
+      // condition fallback can save it. The correct home for a graded world coin
+      // is a graded-friendly LEAF category (which supports the Grade item
+      // specific + condition 2750). We map based on Country of Origin, defaulting
+      // to the generic Coins: World leaf (256) when the country is unknown.
+      {
+        const _rerouteIS = itemSpecifics && typeof itemSpecifics === "object"
+          ? (itemSpecifics as Record<string, unknown>)
+          : {};
+        const _rerouteCcd = _rerouteIS._coinConditionDetail as
+          | { type?: string }
+          | null
+          | undefined;
+        const _rerouteCert = typeof _rerouteIS.Certification === "string"
+          ? (_rerouteIS.Certification as string)
+          : undefined;
+        const _rerouteGraded = _rerouteCcd?.type === "graded" ||
+          (String(condition ?? "").toUpperCase() === "LIKE_NEW") ||
+          (!!_rerouteCert && _rerouteCert.trim().toLowerCase() !== "uncertified" &&
+            _rerouteCert.trim() !== "");
+
+        // Parent world-coin categories that reject the Graded (2750) condition.
+        const GRADED_UNFRIENDLY_WORLD_PARENTS = new Set(["45243"]);
+
+        if (_rerouteGraded && GRADED_UNFRIENDLY_WORLD_PARENTS.has(finalCategoryId)) {
+          const country =
+            (typeof _rerouteIS["Country of Origin"] === "string" ? (_rerouteIS["Country of Origin"] as string) : "")
+              .trim().toLowerCase();
+
+          // South Pacific leaf (3392): Cook Islands, Fiji, Niue, Palau, Tuvalu,
+          // Tokelau, Samoa, Solomon Islands, Kiribati, Nauru, Vanuatu, Tonga.
+          const SOUTH_PACIFIC_COUNTRIES = new Set([
+            "cook islands",
+            "fiji",
+            "niue",
+            "palau",
+            "tuvalu",
+            "tokelau",
+            "samoa",
+            "solomon islands",
+            "kiribati",
+            "nauru",
+            "vanuatu",
+            "tonga",
+          ]);
+
+          const rerouteTarget = SOUTH_PACIFIC_COUNTRIES.has(country)
+            ? "3392" // Coins: World > South Pacific
+            : "256"; // Coins: World (graded-friendly leaf) — safe default
+
+          console.log(
+            `create_draft: GRADED WORLD COIN in graded-unfriendly parent ${finalCategoryId} — re-routing to ${rerouteTarget} (country="${
+              country || "unknown"
+            }") so the Graded condition (2750) is accepted`,
+          );
+          finalCategoryId = rerouteTarget;
+        }
+      }
+
       // Build eBay-formatted item specifics (aspects) using the category-aware
       // normalisation engine. This handles:
       //   - C: prefix normalisation (AI may omit it)
