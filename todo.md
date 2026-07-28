@@ -35,5 +35,5 @@ a pure safety net, not the primary fix.
 - [x] Make DOMAIN-MISMATCH SAFETY block graded-aware
 - [x] Add/extend tests (analyze-item graded world coin category test)
 - [x] deno fmt / deno check / tsc / vitest / vite build all pass
-- [x] Commit, push, open PR
-- [x] Confirm CI green
+- [x] Commit, push, open PR (#419)
+- [x] Confirm CI green (Test & Lint CI/CD + E2E PR Smoke Tests both succeeded)
