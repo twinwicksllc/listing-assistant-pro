@@ -151,6 +151,15 @@ const COIN_CATEGORY_IDS = new Set([
   "40196","40197","40198","40199","40200","40201","40202",
   // 2026+ America the Beautiful Quarters
   "171526", // America the Beautiful Quarters (2026)
+  // US Quarters — early & classic type leaves (verified against live eBay browse nodes 2026-07).
+  // These were missing, so the Raw/Graded coin-condition selector did not appear for them.
+  "11962", // Quarters (US parent)
+  "173587", // Draped Bust Quarters (1796-1807)
+  "11963", // Capped Bust Quarters (1815-1838)
+  "11964", // Seated Liberty Quarters (1838-1891)
+  "11965", // Barber Quarters (1892-1916)
+  "11966", // Standing Liberty Quarters (1916-1930)
+  "39461", // Washington Quarters (1932-1998)
   // World coin leaves that support Grade (graded-friendly, NOT bullion):
   "3392",  // Coins: World > South Pacific (Cook Islands, Fiji, Niue, Palau, Tuvalu, etc.)
   "546",   // World Commemorative Coins
