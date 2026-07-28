@@ -53,6 +53,14 @@ export const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
   "40160":  "Coins & Paper Money > Coins: US > Dollars > Susan B. Anthony",
   "41111":  "Coins & Paper Money > Coins: US > Dollars > American Silver Eagle",
   "164743": "Coins & Paper Money > Coins: US > Quarters > 50 States & Territories",
+  // US Quarters — early & classic type leaves (verified against live eBay browse nodes 2026-07)
+  "11962":  "Coins & Paper Money > Coins: US > Quarters",
+  "173587": "Coins & Paper Money > Coins: US > Quarters > Draped Bust (1796-1807)",
+  "11963":  "Coins & Paper Money > Coins: US > Quarters > Capped Bust (1815-1838)",
+  "11964":  "Coins & Paper Money > Coins: US > Quarters > Seated Liberty (1838-1891)",
+  "11965":  "Coins & Paper Money > Coins: US > Quarters > Barber (1892-1916)",
+  "11966":  "Coins & Paper Money > Coins: US > Quarters > Standing Liberty (1916-1930)",
+  "39461":  "Coins & Paper Money > Coins: US > Quarters > Washington (1932-1998)",
 
   // --- US Gold Coins ---
   "40161":  "Coins & Paper Money > Coins: US > Gold Coins > $20 Double Eagle",
