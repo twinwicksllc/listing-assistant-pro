@@ -1365,6 +1365,14 @@ function buildAndNormalizeAspects(
   const rule = CATEGORY_ASPECT_RULES[categoryId];
 
   for (const [rawKey, rawValue] of Object.entries(rawSpecifics)) {
+    // Skip internal-only keys the frontend/backend attaches to itemSpecifics for
+    // routing/condition logic (e.g. "_domain", "_coinConditionDetail",
+    // "_domainMeta"). These are NOT real eBay aspects. If they leak into the
+    // inventory item's product.aspects, eBay's Core Inventory Service rejects the
+    // publish with HTTP 500 / errorId 25001 ("A system error has occurred. Core
+    // Inventory Service internal error") — which is exactly what was blocking the
+    // graded Cook Islands Barn Owl coin ("_domain":"coins_bullion" was being sent).
+    if (rawKey.startsWith("_")) continue;
     if (!rawValue || typeof rawValue !== "string") continue;
     const trimmed = rawValue.trim();
     if (!trimmed) continue;
@@ -1372,6 +1380,7 @@ function buildAndNormalizeAspects(
 
     const key = normalizeAspectKey(rawKey);
     if (NON_ASPECT_KEYS.has(key)) continue; // skip internal-only keys
+    if (key.startsWith("_")) continue; // belt-and-suspenders: never emit underscore aspects
 
     let value = trimmed;
     if (key === "Fineness") value = normalizeFineness(trimmed);
