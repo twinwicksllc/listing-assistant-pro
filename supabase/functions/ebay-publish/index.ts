@@ -813,7 +813,11 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
   },
   // World Coins (general)
   "45243": {
-    required: [],
+    // "Department" is a REQUIRED item specific for Coins: World (errorId 25002
+    // "The item specific Department is missing" on publishOffer). eBay's coin
+    // taxonomy uses Department to split US vs World vs Ancient etc.; for the
+    // 45243 (World) tree the valid value is "World Coins".
+    required: ["Department"],
     preferred: [
       "Year",
       "Denomination",
@@ -828,7 +832,41 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Fineness",
       "Strike Type",
     ],
-    defaults: { "Certification": "Uncertified" },
+    defaults: { "Certification": "Uncertified", "Department": "World Coins" },
+  },
+  // Coins: World (taxonomy parent 256) — same Department requirement as 45243.
+  "256": {
+    required: ["Department"],
+    preferred: [
+      "Year",
+      "Denomination",
+      "Composition",
+      "Circulated/Uncirculated",
+      "Certification",
+      "Grade",
+      "Country of Origin",
+      "Materials sourced from",
+      "Fineness",
+    ],
+    defaults: { "Certification": "Uncertified", "Department": "World Coins" },
+  },
+  // Coins: World > South Pacific (Cook Islands, Fiji, Niue, Palau, Tuvalu, …).
+  // Graded-friendly leaf; also requires Department = "World Coins".
+  "3392": {
+    required: ["Department"],
+    preferred: [
+      "Year",
+      "Denomination",
+      "Composition",
+      "Circulated/Uncirculated",
+      "Certification",
+      "Grade",
+      "Country of Origin",
+      "Materials sourced from",
+      "Fineness",
+      "Strike Type",
+    ],
+    defaults: { "Certification": "Uncertified", "Department": "World Coins" },
   },
   // ── Collectibles / Toys / Trading Cards ──────────────────────────────────
   // Sports Trading Cards
@@ -1292,6 +1330,7 @@ const ASPECT_KEY_ALIASES: Record<string, string> = {
   "Color": "Color", // used by 45243 (World Coins) for copper/bronze coins
   "Materials sourced from": "Materials sourced from",
   "Brand": "Brand", // required by 45243 (World Coins) — errorId 25002 when missing
+  "Department": "Department", // required by Coins: World (45243/256/3392) — errorId 25002 when missing
 };
 
 const NON_ASPECT_KEYS = new Set([
@@ -1607,6 +1646,15 @@ function normalizeConditionForCategory(
   categoryId: string | undefined,
   itemType: string | undefined = undefined,
   categoryTreeType: CategoryTreeType | undefined = undefined,
+  /**
+   * True when the coin/card is in a professional grading slab (NGC, PCGS, etc.).
+   * For coins & trading cards eBay uses conditionId 2750 (LIKE_NEW = "Graded")
+   * for slabbed items and 4000 (USED_VERY_GOOD = "Ungraded") for raw items.
+   * Without this flag a graded PF/MS-70 coin was being force-mapped to
+   * USED_VERY_GOOD ("Moderately circulated … moderate wear"), which eBay
+   * rejects as an invalid condition for the category.
+   */
+  isGraded: boolean = false,
 ): { condition: string; corrected: boolean } {
   // Apply legacy migration first (case-insensitive using normalizeConditionDescriptorToEnum)
   const condition = normalizeConditionDescriptorToEnum(rawCondition);
@@ -1633,9 +1681,26 @@ function normalizeConditionForCategory(
       "FOR_PARTS_OR_NOT_WORKING", // 7000 = Damaged/holed/bent
     ]);
 
+    // GRADED coins → LIKE_NEW (2750 = "Graded"). A slabbed NGC/PCGS coin must be
+    // "Graded", never a circulated "USED_*" tier. This is the correct eBay
+    // condition for certified coins and is what unblocks publish for e.g. a
+    // PF 70 Ultra Cameo. (The old code force-downgraded every NEW coin to
+    // USED_VERY_GOOD, which eBay rejects for graded pieces.)
+    if (isGraded) {
+      if (condition !== "LIKE_NEW") {
+        console.log(
+          `normalizeConditionForCategory: GRADED coin category ${categoryId} — ${condition} -> LIKE_NEW (2750 Graded)`,
+        );
+        return { condition: "LIKE_NEW", corrected: true };
+      }
+      return { condition: "LIKE_NEW", corrected: false };
+    }
+
     if (!validCoinConditions.has(condition)) {
+      // RAW/ungraded coins only. LIKE_NEW here would require Professional Grader
+      // aspects, so ungraded coins map to USED_VERY_GOOD (4000 = "Ungraded").
       const fallbackMap: Record<string, string> = {
-        NEW: "USED_VERY_GOOD", // graded->ungraded downgrade; LIKE_NEW requires Professional Grader
+        NEW: "USED_VERY_GOOD",
         NEW_OTHER: "USED_VERY_GOOD",
         NEW_WITH_DEFECTS: "USED_VERY_GOOD",
         CERTIFIED_REFURBISHED: "LIKE_NEW",
@@ -2538,11 +2603,30 @@ async function fetchCoinConditionDescriptors(
       return null;
     }
 
+    // Read the body as text first. Some categories (e.g. 45243 "Coins: World")
+    // legitimately return HTTP 200 with an EMPTY body, which means "no condition
+    // policies for this category". Calling metaResp.json() directly on an empty
+    // body throws `SyntaxError: Unexpected end of JSON input`, which previously
+    // surfaced as a scary console.error even though it is an expected,
+    // non-fatal outcome. Guard for that explicitly and treat it as info-level.
+    const metaBodyText = await metaResp.text();
+    if (!metaBodyText || metaBodyText.trim() === "") {
+      console.log(
+        `fetchCoinConditionDescriptors: Metadata API returned an empty body for category ${categoryId} — no condition policies available (this is expected for some categories).`,
+      );
+      return null;
+    }
+
     let metaData;
     try {
-      metaData = await metaResp.json();
+      metaData = JSON.parse(metaBodyText);
     } catch (parseErr) {
-      console.error(`fetchCoinConditionDescriptors: failed to parse Metadata API response:`, parseErr);
+      console.warn(
+        `fetchCoinConditionDescriptors: could not parse Metadata API response for category ${categoryId} (treating as no policies). Body starts with: ${
+          metaBodyText.slice(0, 120)
+        }`,
+        parseErr,
+      );
       return null;
     }
 
@@ -4444,11 +4528,30 @@ serve(async (req) => {
       // Migrate any legacy deprecated condition codes to current equivalents,
       // then normalize based on the category and item type (e.g., LIKE_NEW not valid for coins).
       const rawCondition = condition || "USED_EXCELLENT";
+      // Determine whether this is a graded (slabbed/certified) coin. Graded coins
+      // must map to the eBay "Graded" condition (LIKE_NEW / 2750) rather than being
+      // force-corrected to a circulated grade. We derive this from the coin condition
+      // detail the frontend attaches under itemSpecifics._coinConditionDetail, and from
+      // the resolved Certification aspect (a grading company name means graded).
+      const isGraded = (() => {
+        const _gradeIS = itemSpecifics && typeof itemSpecifics === "object"
+          ? (itemSpecifics as Record<string, unknown>)
+          : {};
+        const _gradeCcd = _gradeIS._coinConditionDetail as
+          | { type?: string; graded?: { company?: string } }
+          | null
+          | undefined;
+        if (_gradeCcd?.type === "graded") return true;
+        const _cert = aspects["Certification"]?.[0];
+        if (_cert && _cert.toLowerCase() !== "uncertified") return true;
+        return false;
+      })();
       const { condition: normalizedCondition, corrected } = normalizeConditionForCategory(
         rawCondition,
         finalCategoryId,
         itemType,
         categoryTreeType,
+        isGraded,
       );
       let conditionEnum = normalizedCondition;
       let conditionId = CONDITION_ID_MAP[conditionEnum];
