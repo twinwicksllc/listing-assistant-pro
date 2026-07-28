@@ -51,6 +51,10 @@ export interface PromptContext {
       keyFindings: string; // Narrative of what was found
       confidenceBoost: number; // 0-100 — how much more certain the model is post-inspection
       identificationCorrection?: string; // Non-null if inspection changed the identification
+      // Attributes read directly off the item during the zoom pass (e.g. year,
+      // mint mark, grade). Authoritative for itemSpecifics. Shape matches
+      // AgenticInspection.capturedAttributes in pipelineContracts.ts.
+      capturedAttributes?: Record<string, string>;
     };
   } | null;
 }
