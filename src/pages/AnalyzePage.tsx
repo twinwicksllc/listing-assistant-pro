@@ -374,6 +374,9 @@ export default function AnalyzePage() {
     // so the publish validation doesn't block on the OLD category's required fields
     // while useAnalyzeCategoryAspects fetches the new category's aspects async.
     setEbayMetadata,
+    // Enables the "graded coin in a bullion category" warning.
+    coinConditionDetail,
+    isSlabbed,
   });
 
   const { downloadLabel, handleExport } = useAnalyzeExport({
