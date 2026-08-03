@@ -131,14 +131,90 @@ function isKnownWrongDomainForAutoParts(
     .test(categoryText);
 }
 
+// South Pacific countries whose World Coin listings belong in the 3392 leaf
+// (Cook Islands, Fiji, Niue, Palau, Tuvalu, Tokelau, Samoa, Solomon Islands,
+// Kiribati, Nauru, Vanuatu, Tonga). Kept in sync with the identical set in
+// ebay-publish/index.ts's graded-world-coin re-route logic (PR #417).
+const SOUTH_PACIFIC_COUNTRIES = new Set([
+  "cook islands",
+  "fiji",
+  "niue",
+  "palau",
+  "tuvalu",
+  "tokelau",
+  "samoa",
+  "solomon islands",
+  "kiribati",
+  "nauru",
+  "vanuatu",
+  "tonga",
+]);
+
+/**
+ * Determine whether an item is a graded/certified coin from the signals
+ * available at analyze-time: GPT-4o Slab OCR result (authoritative when
+ * present) and free-text certification keywords (PCGS/NGC/ANACS/ICG/CAC/ICCS)
+ * in the item name/keywords (fallback when OCR did not run or found nothing).
+ *
+ * This is the missing link that PR #417 (publish-time reroute) had to work
+ * around: analyze-time category selection previously never asked "is this
+ * coin graded?" before assigning a category, so graded world coins kept
+ * landing in the graded-unfriendly parent category 45243.
+ */
+function isLikelyGradedCoin(
+  identification: Identification,
+  slabOcrResult?: { isSlabbed?: boolean | null; grader?: string | null } | null,
+): boolean {
+  if (slabOcrResult?.isSlabbed) return true;
+
+  const combined = `${identification.itemName ?? ""} ${(identification.keywords ?? []).join(" ")}`
+    .toLowerCase();
+  return /\b(pcgs|ngc|anacs|icg|cac|iccs|graded|certified|slab(?:bed)?)\b/.test(
+    combined,
+  );
+}
+
+/**
+ * Resolve the correct graded-friendly World Coins category for a graded/
+ * certified world coin, given whatever country text is known at analyze
+ * time (may be empty). Mirrors the re-route targets used by ebay-publish's
+ * safety net (PR #417) so analyze-time and publish-time agree on the same
+ * leaves: 3392 (South Pacific) when the country is known, else 256 (Coins:
+ * World graded-friendly leaf) as the safe default. 45243 is deliberately
+ * NEVER returned here — it is a rollup/parent category that rejects the
+ * Graded condition (LIKE_NEW / 2750) at publish time.
+ */
+function resolveGradedFriendlyWorldCoinCategory(
+  countryText?: string | null,
+): { categoryId: string; categoryName: string; breadcrumb: string } {
+  const country = (countryText ?? "").trim().toLowerCase();
+  if (SOUTH_PACIFIC_COUNTRIES.has(country)) {
+    return {
+      categoryId: "3392",
+      categoryName: "Coins: World > South Pacific",
+      breadcrumb: "Coins & Paper Money > Coins: World > South Pacific",
+    };
+  }
+  return {
+    categoryId: "256",
+    categoryName: "World Coins (graded-friendly)",
+    breadcrumb: "Coins & Paper Money > Coins: World",
+  };
+}
+
 /**
  * When the lookup pipeline fails to lock a category, derive one deterministically
  * from Pass 1's domain + metalType + itemName.  This ensures that Pass 2 always
  * receives the correct eBay aspects schema — eliminating the need for post-lookup
  * correction and itemSpecifics regeneration in the common case.
+ *
+ * `slabOcrResult` (optional) lets callers pass the already-computed GPT-4o Slab
+ * OCR result so the fallback never sends a graded/certified world coin to the
+ * graded-unfriendly parent category 45243 (see isLikelyGradedCoin above).
  */
 function resolveDomainFallbackCategory(
   identification: Identification,
+  slabOcrResult?: { isSlabbed?: boolean | null; grader?: string | null } | null,
 ): { categoryId: string; categoryName: string; breadcrumb: string } | null {
   if (identification.domain !== "coins_bullion") return null;
 
@@ -157,6 +233,31 @@ function resolveDomainFallbackCategory(
     } else if (/\bpalladium\b/.test(combined)) {
       metal = "palladium";
     }
+  }
+
+  // Named US numismatic coins (American Silver/Gold Eagle, Morgan/Peace/etc
+  // silver dollars) are legitimate leaf categories that already support the
+  // Grade item specific, so graded examples of these are fine to route
+  // normally below. Anything else — a generic "silver"/"gold" mention with no
+  // recognized US named-coin match — is NOT safe to send to a Bullion bucket
+  // (166679/3361/177652/177653/178906/261070/39489) if the coin is graded,
+  // because Bullion categories do not support the Grade item specific either.
+  // In that case, escape to a graded-friendly World Coin leaf (3392/256)
+  // instead of guessing a bullion category for what is likely a graded
+  // foreign/world coin (e.g. a colorized silver Cook Islands commemorative
+  // whose description happens to mention "silver").
+  const isGraded = isLikelyGradedCoin(identification, slabOcrResult);
+  const isNamedUsBullionCoin = /\bamerican\s+silver\s+eagles?\b|\bae\b|\bamerican\s+gold\s+eagles?\b/
+    .test(combined);
+  const isNamedUsSilverDollar = /morgan|peace|walking liberty|franklin|kennedy|barber|seated|bust/
+    .test(combined);
+  // Best-effort country detection from itemName/keywords text so a graded
+  // South Pacific coin (e.g. Cook Islands) lands on the 3392 leaf rather than
+  // the generic 256 default. This mirrors SOUTH_PACIFIC_COUNTRIES.
+  const detectedCountry = [...SOUTH_PACIFIC_COUNTRIES].find((c) => combined.includes(c)) ?? null;
+
+  if (isGraded && !isNamedUsBullionCoin && !isNamedUsSilverDollar) {
+    return resolveGradedFriendlyWorldCoinCategory(detectedCountry);
   }
 
   if (metal === "gold") {
@@ -216,7 +317,16 @@ function resolveDomainFallbackCategory(
     };
   }
 
-  // Domain is coins_bullion but metal unknown — safest general coin fallback
+  // Domain is coins_bullion but metal unknown — safest general coin fallback.
+  // IMPORTANT: 45243 ("Coins: World") is a rollup/parent category that
+  // REJECTS the Graded condition (LIKE_NEW / 2750) at publish time (PR #417).
+  // If Slab OCR or keyword signals indicate this is a graded/certified coin,
+  // route straight to a graded-friendly leaf (3392/256) instead of 45243 so
+  // the listing can actually publish without needing a publish-time rescue.
+  if (isGraded) {
+    return resolveGradedFriendlyWorldCoinCategory(detectedCountry);
+  }
+
   return {
     categoryId: "45243",
     categoryName: "World Coins",
@@ -948,7 +1058,7 @@ serve(async (req: Request) => {
     // + item name.  This guarantees Pass 2 always has the correct eBay aspects
     // schema, removing the need for post-lookup correction in the common case.
     if (!lockedCategoryId && !userCategoryId) {
-      const fallback = resolveDomainFallbackCategory(identification);
+      const fallback = resolveDomainFallbackCategory(identification, slabOcrResult);
       if (fallback) {
         lockedCategoryId = fallback.categoryId;
         lockedCategoryName = fallback.categoryName;
@@ -1629,7 +1739,7 @@ Seller's note: "${voiceNote}"`;
                     categoryId: {
                       type: "string",
                       description:
-                        "eBay leaf category ID. ALL IDs below are VERIFIED LEAF categories. COINS US: Morgan Dollars=39464, Peace Dollars=11980, Eisenhower Dollars=11981, Kennedy Half=41102, Franklin Half=11973, Walking Liberty Half=41099, Barber Half=11971, Wheat Penny=39455, US Proof Sets=41109, US Mint Sets=526, Ancient Coins=532, Medieval Coins=173685. BULLION (use ONLY for items sold primarily for precious metal content — e.g. generic silver rounds, metal bars, American Silver/Gold Eagles sold as bullion): Gold Bars/Rounds=178906, Silver Bars/Rounds=39489, Gold Coins (bullion)=177652, Silver Coins (bullion)=177653, Copper/Other Bullion=166679, Other Silver Bullion=3361. WORLD COINS (non-US coins — use for ANY coin issued by a non-US government mint, especially collectibles and certified/graded coins): Canada=40196, Mexico=40197, Great Britain=40198, Australia=40199, Germany=40200, World Coins (all other countries including China, Japan, Asia, Europe, etc.)=45243. CRITICAL WORLD COIN RULES: Chinese Panda coins, Chinese Lunar series (Year of the Pig/Rat/Ox/Tiger/Dragon/etc.), any Chinese Yuan/commemorative coin, Japanese Yen commemoratives, any NGC/PCGS/ANACS-certified coin from a non-US mint = ALWAYS use World Coins (45243 or country-specific), NEVER bullion categories. A coin in a grading slab with a foreign country name on the label is a WORLD COIN, not bullion. FORBIDDEN CATEGORY RULE: NEVER assign any coin, currency, or bullion item to category 261186 (Books) or any category outside Coins & Paper Money. If unsure about a coin's origin, always default to 45243 (World Coins) before guessing any non-coin category. TRADING CARDS: Sports Card Singles=261328, Sports Card Lots=261329, Sports Card Sets=261330, Sealed Card Packs=261331, Sealed Card Boxes=261332, CCG Individual Cards (Pokemon/MTG/Yu-Gi-Oh)=183454, Non-Sport Card Singles=183050. TOYS: LEGO Complete Sets=19006, Action Figures=261068, Beanie Babies Retired=440, Jellycat=158786, Other Stuffed Animals=230, Jigsaw Puzzles=19183, Diecast Cars=180506, Board Games=180349, Collectible Figures/Bobbleheads=149372. ELECTRONICS: Smartphones=9355, Headphones=112529. JEWELRY: Wristwatches=31387. For items not listed above, describe the item clearly and the system will find the correct leaf category via eBay's API. NEVER use broad parent IDs like 253, 11118, 213, 246, 182, 1, 550, or 64482.",
+                        "eBay leaf category ID. ALL IDs below are VERIFIED LEAF categories. COINS US: Morgan Dollars=39464, Peace Dollars=11980, Eisenhower Dollars=11981, Kennedy Half=41102, Franklin Half=11973, Walking Liberty Half=41099, Barber Half=11971, Wheat Penny=39455, US Proof Sets=41109, US Mint Sets=526, Ancient Coins=532, Medieval Coins=173685. BULLION (use ONLY for items sold primarily for precious metal content — e.g. generic silver rounds, metal bars, American Silver/Gold Eagles sold as bullion): Gold Bars/Rounds=178906, Silver Bars/Rounds=39489, Gold Coins (bullion)=177652, Silver Coins (bullion)=177653, Copper/Other Bullion=166679, Other Silver Bullion=3361. WORLD COINS (non-US coins — use for ANY coin issued by a non-US government mint, especially collectibles): Canada=40196, Mexico=40197, Great Britain=40198, Australia=40199, Germany=40200, South Pacific (Cook Islands/Fiji/Niue/Palau/Tuvalu/Tokelau/Samoa/Solomon Islands)=3392, World Commemorative Coins=546, Other World Coins (raw/ungraded only, all other countries including China, Japan, Asia, Europe, etc.)=45243. CRITICAL WORLD COIN RULES: Chinese Panda coins, Chinese Lunar series (Year of the Pig/Rat/Ox/Tiger/Dragon/etc.), any Chinese Yuan/commemorative coin, Japanese Yen commemoratives = ALWAYS use World Coins (country-specific or 45243 if raw/ungraded), NEVER bullion categories. A coin in a grading slab with a foreign country name on the label is a WORLD COIN, not bullion. **GRADED/CERTIFIED WORLD COIN RULE (CRITICAL — 45243 WILL REJECT THESE)**: Category 45243 is a rollup category that CANNOT accept graded/certified coins and will fail to publish if used for one. Any coin in a professional grading slab (PCGS/NGC/ANACS/ICG/CAC/ICCS visible on the label) from a non-US mint MUST use a country-specific leaf (40196/40197/40198/40199/40200) if the country matches, otherwise 3392 (South Pacific, for Cook Islands/Fiji/Niue/Palau/Tuvalu/Tokelau/Samoa/Solomon Islands) or 546 (World Commemorative) — NEVER 45243. Only use 45243 for an UNGRADED/RAW world coin with no grading slab. FORBIDDEN CATEGORY RULE: NEVER assign any coin, currency, or bullion item to category 261186 (Books) or any category outside Coins & Paper Money. If unsure about a coin's origin, default to 3392 (if graded) or 45243 (if raw/ungraded) before guessing any non-coin category. TRADING CARDS: Sports Card Singles=261328, Sports Card Lots=261329, Sports Card Sets=261330, Sealed Card Packs=261331, Sealed Card Boxes=261332, CCG Individual Cards (Pokemon/MTG/Yu-Gi-Oh)=183454, Non-Sport Card Singles=183050. TOYS: LEGO Complete Sets=19006, Action Figures=261068, Beanie Babies Retired=440, Jellycat=158786, Other Stuffed Animals=230, Jigsaw Puzzles=19183, Diecast Cars=180506, Board Games=180349, Collectible Figures/Bobbleheads=149372. ELECTRONICS: Smartphones=9355, Headphones=112529. JEWELRY: Wristwatches=31387. For items not listed above, describe the item clearly and the system will find the correct leaf category via eBay's API. NEVER use broad parent IDs like 253, 11118, 213, 246, 182, 1, 550, or 64482.",
                     },
                     alternativeCategoryIds: {
                       type: "array",
@@ -2242,16 +2352,37 @@ Seller's note: "${voiceNote}"`;
               listing.ebayCategoryId &&
               (["261186", "268"].includes(listing.ebayCategoryId) ||
                 (!listing.ebayCategoryId.match(
-                  /^(3[0-9]|4[0-9]|1[0-9]|2[0-9]|45243|532|173685)/,
+                  /^(3[0-9]|4[0-9]|1[0-9]|2[0-9]|45243|532|173685|546)/,
                 ) &&
                   parseInt(listing.ebayCategoryId) > 200000))
             ) {
-              console.warn(
-                `analyze-item: DOMAIN-MISMATCH SAFETY: coins_bullion item but AI returned category ${listing.ebayCategoryId} ` +
-                  `and post-lookup found nothing — forcing fallback to World Coins (45243)`,
-              );
-              listing.ebayCategoryId = "45243";
-              listing.categoryId = "45243";
+              // GRADED-AWARE SAFETY: 45243 ("Coins: World") is a rollup/parent
+              // category that REJECTS the Graded condition (LIKE_NEW / 2750)
+              // at publish time (PR #417). If this coin is graded/certified
+              // (per Slab OCR or keyword signals), route straight to a
+              // graded-friendly leaf (3392/256) instead of 45243 so the
+              // listing can actually publish.
+              const _countryHint = typeof listing.itemSpecifics?.["Country of Origin"] === "string"
+                ? (listing.itemSpecifics["Country of Origin"] as string)
+                : null;
+              if (isLikelyGradedCoin(identification, slabOcrResult)) {
+                const gradedFallback = resolveGradedFriendlyWorldCoinCategory(
+                  _countryHint,
+                );
+                console.warn(
+                  `analyze-item: DOMAIN-MISMATCH SAFETY: coins_bullion GRADED item but AI returned category ${listing.ebayCategoryId} ` +
+                    `and post-lookup found nothing — forcing fallback to graded-friendly World Coins (${gradedFallback.categoryId}) instead of 45243`,
+                );
+                listing.ebayCategoryId = gradedFallback.categoryId;
+                listing.categoryId = gradedFallback.categoryId;
+              } else {
+                console.warn(
+                  `analyze-item: DOMAIN-MISMATCH SAFETY: coins_bullion item but AI returned category ${listing.ebayCategoryId} ` +
+                    `and post-lookup found nothing — forcing fallback to World Coins (45243)`,
+                );
+                listing.ebayCategoryId = "45243";
+                listing.categoryId = "45243";
+              }
             }
           }
         }
