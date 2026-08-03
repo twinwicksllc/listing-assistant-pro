@@ -380,7 +380,7 @@ export default function HomePage() {
                     : "Upload images or drag & drop to generate your eBay listing"}
                 </p>
                 <p className="text-muted-foreground/60 text-xs">
-                  Photos: JPG, PNG, WebP, GIF up to {MAX_FILE_SIZE_MB}MB each. Videos upload in the next step.
+                  Photos: JPG, PNG, WebP, GIF up to {MAX_FILE_SIZE_MB}MB each. Video (max {MAX_RECORDING_SEC}s) can be recorded or uploaded in the next step.
                 </p>
               </div>
 
