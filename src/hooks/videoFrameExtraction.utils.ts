@@ -12,21 +12,27 @@ export function computeFrameQualityScore(imageData: Uint8ClampedArray, width: nu
   let sampleCount = 0;
   const step = Math.max(1, Math.floor(Math.min(width, height) / 24));
 
-  for (let y = 0; y < height - step; y += step) {
-    for (let x = 0; x < width - step; x += step) {
+  for (let y = 0; y < height; y += step) {
+    for (let x = 0; x < width; x += step) {
       const idx = (y * width + x) * 4;
-      const nextIdx = ((y + step) * width + x) * 4;
+      const nextXIdx = (y * width + Math.min(width - 1, x + step)) * 4;
+      const nextYIdx = (Math.min(height - 1, y + step) * width + x) * 4;
+
       const r1 = imageData[idx];
       const g1 = imageData[idx + 1];
       const b1 = imageData[idx + 2];
-      const r2 = imageData[nextIdx];
-      const g2 = imageData[nextIdx + 1];
-      const b2 = imageData[nextIdx + 2];
+      const r2 = imageData[nextXIdx];
+      const g2 = imageData[nextXIdx + 1];
+      const b2 = imageData[nextXIdx + 2];
+      const r3 = imageData[nextYIdx];
+      const g3 = imageData[nextYIdx + 1];
+      const b3 = imageData[nextYIdx + 2];
 
       const luminance1 = 0.299 * r1 + 0.587 * g1 + 0.114 * b1;
       const luminance2 = 0.299 * r2 + 0.587 * g2 + 0.114 * b2;
-      gradientSum += Math.abs(luminance2 - luminance1);
-      sampleCount += 1;
+      const luminance3 = 0.299 * r3 + 0.587 * g3 + 0.114 * b3;
+      gradientSum += Math.abs(luminance2 - luminance1) + Math.abs(luminance3 - luminance1);
+      sampleCount += 2;
     }
   }
 
