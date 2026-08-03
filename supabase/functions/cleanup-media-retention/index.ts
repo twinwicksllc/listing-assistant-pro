@@ -122,7 +122,11 @@ serve(async (req: Request) => {
     let scanned = 0;
 
     for (const prefix of PREFIXES) {
-      const { data: objects, error: listError } = await adminClient.storage.from(BUCKET_ID).list(prefix, { limit: 1000 });
+      const { data: objects, error: listError } = await adminClient.storage
+        .from(BUCKET_ID)
+        .list(prefix, {
+          limit: 1000,
+        });
       if (listError) throw listError;
 
       for (const object of objects ?? []) {
@@ -137,7 +141,9 @@ serve(async (req: Request) => {
 
         const activeDraft = referencedDrafts.find((draft) => isDraftStillActive(draft));
         const draftAgeDays = activeDraft ? getAgeDays(activeDraft.created_at, activeDraft.created_at) : null;
-        const shouldKeepForActiveDraft = Boolean(activeDraft && draftAgeDays !== null && draftAgeDays < DRAFT_GRACE_DAYS);
+        const shouldKeepForActiveDraft = Boolean(
+          activeDraft && draftAgeDays !== null && draftAgeDays < DRAFT_GRACE_DAYS,
+        );
 
         if (shouldKeepForActiveDraft) {
           keptForDraft += 1;
