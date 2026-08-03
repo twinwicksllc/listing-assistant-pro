@@ -128,7 +128,7 @@ export function VideoOnlyView({
                 disabled={extractingFrames}
                 className="w-full py-2 rounded-lg border border-border bg-card text-foreground text-xs font-medium hover:border-primary/40 disabled:opacity-60"
               >
-                Use Fallback Frame Set
+                Retry Extraction
               </button>
               <button
                 type="button"
