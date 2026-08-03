@@ -4322,7 +4322,9 @@ serve(async (req) => {
         }
         if (durationSec < MIN_VIDEO_DURATION_SEC) {
           return new Response(
-            JSON.stringify({ error: `Video is too short (${durationSec.toFixed(1)}s). eBay requires at least 3 seconds.` }),
+            JSON.stringify({
+              error: `Video is too short (${durationSec.toFixed(1)}s). eBay requires at least 3 seconds.`,
+            }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
