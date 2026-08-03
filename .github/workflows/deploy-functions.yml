@@ -46,10 +46,8 @@ jobs:
 
       - name: Deploy Edge Functions
         run: |
-          # Deploy analyze-item, ebay-publish, and cleanup-media-retention functions
-          supabase functions deploy analyze-item --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
-          supabase functions deploy ebay-publish --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
-          supabase functions deploy cleanup-media-retention --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
+          # Deploy all functions in the repository
+          supabase functions deploy --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 # Migration auto-apply enabled
