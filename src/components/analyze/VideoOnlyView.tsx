@@ -60,8 +60,9 @@ export function VideoOnlyView({
         <div className="rounded-xl border border-border bg-card p-4 space-y-2">
           <p className="text-sm font-semibold text-foreground">Upload a Video</p>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            You can attach a video here for your listing media. AI item identification still needs photos today.
-            We are planning automatic key-frame extraction so video-only uploads can run identification in a future release.
+            Record or upload one video (max 10 seconds) for your listing media. AI item identification still needs
+            photos today. We are planning automatic key-frame extraction so video-only uploads can run
+            identification in a future release.
           </p>
         </div>
 

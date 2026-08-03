@@ -4296,9 +4296,37 @@ serve(async (req) => {
 
     // --- ACTION: Upload video to eBay Video API ---
     if (action === "upload_video") {
-      const { userToken, videoUrl, title: videoTitle, fileSize, contentType } = payload;
+      const { userToken, videoUrl, title: videoTitle, fileSize, contentType, durationSec } = payload;
       if (!userToken) throw new Error("No eBay user token provided");
       if (!videoUrl) throw new Error("No videoUrl provided");
+
+      // Defense-in-depth: re-validate format/duration server-side even though the
+      // client already enforces these (client checks can be bypassed).
+      const ALLOWED_VIDEO_CONTENT_TYPES = ["video/mp4", "video/quicktime", "video/x-msvideo", "video/webm"];
+      if (contentType && !ALLOWED_VIDEO_CONTENT_TYPES.includes(String(contentType))) {
+        return new Response(
+          JSON.stringify({ error: `Unsupported video format: ${contentType}. Use MP4, MOV, AVI, or WebM.` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      // Small buffer above the 10s client-side cap / below eBay's 3s minimum to
+      // tolerate encoder rounding without rejecting legitimate clips.
+      const MAX_VIDEO_DURATION_SEC = 12;
+      const MIN_VIDEO_DURATION_SEC = 2;
+      if (typeof durationSec === "number" && Number.isFinite(durationSec)) {
+        if (durationSec > MAX_VIDEO_DURATION_SEC) {
+          return new Response(
+            JSON.stringify({ error: `Video is too long (${durationSec.toFixed(1)}s). Maximum allowed is 10 seconds.` }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+        if (durationSec < MIN_VIDEO_DURATION_SEC) {
+          return new Response(
+            JSON.stringify({ error: `Video is too short (${durationSec.toFixed(1)}s). eBay requires at least 3 seconds.` }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+      }
 
       // Step 1: Create the video entity in eBay
       const createResp = await fetchWithTimeout(`${apiBase}/sell/marketing/v1_beta/video`, {
