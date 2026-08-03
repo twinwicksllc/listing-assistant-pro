@@ -38,7 +38,7 @@ function makeMockFrameDataUrl(label: string): string {
   <rect width="960" height="540" fill="url(#bg)" />
   <rect x="30" y="30" width="900" height="480" rx="18" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="3" />
   <text x="480" y="260" text-anchor="middle" fill="#ffffff" font-size="38" font-family="Arial, sans-serif" font-weight="700">${label}</text>
-  <text x="480" y="305" text-anchor="middle" fill="#e2e8f0" font-size="20" font-family="Arial, sans-serif">Mock extracted frame (Slice 1 scaffold)</text>
+  <text x="480" y="305" text-anchor="middle" fill="#e2e8f0" font-size="20" font-family="Arial, sans-serif">Debug mock frame</text>
 </svg>`;
 
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -154,8 +154,8 @@ serve(async (req: Request) => {
       mocked,
     });
 
-    // Fallback mock mode for compatibility if caller did not send frame payload yet.
-    if (frames.length === 0) {
+    const debugMockMode = Deno.env.get("VIDEO_FRAME_EXTRACT_DEBUG") === "true";
+    if (frames.length === 0 && debugMockMode) {
       mocked = true;
       frames = Array.from({ length: Math.min(maxFrames, 6) }).map((_, idx) => ({
         url: makeMockFrameDataUrl(`Frame ${idx + 1}`),
@@ -176,7 +176,7 @@ serve(async (req: Request) => {
           framesExamined: incomingFrames.length > 0 ? incomingFrames.length : 24,
           framesSelected: frames.length,
           message: mocked
-            ? "Mock fallback response (no frame payload provided)."
+            ? "Debug mock response only (no production fallback frames)."
             : "Frames persisted to Supabase storage.",
         },
       }),
