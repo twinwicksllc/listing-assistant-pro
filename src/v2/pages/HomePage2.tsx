@@ -12,7 +12,7 @@
 
 import {
   Camera, Upload, Sparkles, X, ArrowRight, ImagePlus,
-  Mic, MicOff, Loader2, HelpCircle, Layers, Info, Star, Trash2,
+  Mic, MicOff, Loader2, HelpCircle, Layers, Info, Star, Trash2, Video,
 } from "lucide-react";
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -577,9 +577,26 @@ export default function HomePage2() {
     localStorage.setItem(TOUR_KEY, "true");
   };
 
+  const openVideoFlow = useCallback((selectedVideoFile?: File) => {
+    navigate("/analyze", {
+      state: {
+        imageUrls: [],
+        voiceNote,
+        videoOnly: true,
+        selectedVideoFile,
+      },
+    });
+  }, [navigate, voiceNote]);
+
   const validateAndStageFiles = useCallback((files: FileList | File[] | null) => {
     if (!files) return;
     Array.from(files).forEach((file) => {
+      if (file.type.startsWith("video/")) {
+        toast.info("Video uploads use the Analyze video flow. Opening video upload…");
+        openVideoFlow(file);
+        return;
+      }
+
       if (!ACCEPTED_TYPES.includes(file.type)) {
         toast.error(`"${file.name}" is not a supported format`);
         return;
@@ -595,7 +612,7 @@ export default function HomePage2() {
       };
       reader.readAsDataURL(file);
     });
-  }, []);
+  }, [openVideoFlow]);
 
   const removeImage = (i: number) => {
     setStagedImages(prev => prev.filter((_, idx) => idx !== i));
@@ -715,7 +732,7 @@ export default function HomePage2() {
 
       {/* Desktop shortcuts */}
       {!isMobile && (
-        <div style={{ display: "flex", gap: "0.625rem", marginTop: "0.25rem" }}>
+        <div style={{ display: "flex", gap: "0.625rem", marginTop: "0.25rem", flexWrap: "wrap", justifyContent: "center" }}>
           <button
             style={S.btnSecondary}
             onClick={e => { e.stopPropagation(); handleGallery(); }}
@@ -724,9 +741,27 @@ export default function HomePage2() {
           </button>
           <button
             style={S.btnBrandOutline}
+            onClick={e => { e.stopPropagation(); openVideoFlow(); }}
+          >
+            <Video size={15} /> Start with Video
+          </button>
+          <button
+            style={S.btnBrandOutline}
             onClick={e => { e.stopPropagation(); navigate("/bulk"); }}
           >
             <Layers size={15} /> Bulk List (CSV/Excel)
+          </button>
+        </div>
+      )}
+
+      {/* Mobile: video shortcut */}
+      {isMobile && (
+        <div style={{ marginTop: "0.25rem" }}>
+          <button
+            style={S.btnBrandOutline}
+            onClick={e => { e.stopPropagation(); openVideoFlow(); }}
+          >
+            <Video size={15} /> Start with Video
           </button>
         </div>
       )}
@@ -902,6 +937,14 @@ export default function HomePage2() {
         <Sparkles size={18} />
         Process Now
         <ArrowRight size={18} />
+      </button>
+
+      <button
+        onClick={() => openVideoFlow()}
+        style={{ ...S.btnSecondary, width: "100%" }}
+      >
+        <Video size={16} />
+        Use Video Instead
       </button>
     </div>
   );
