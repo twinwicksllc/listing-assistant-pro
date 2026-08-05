@@ -60,9 +60,9 @@ export function VideoOnlyView({
         <div className="rounded-xl border border-border bg-card p-4 space-y-2">
           <p className="text-sm font-semibold text-foreground">Upload a Video</p>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            You can attach a short video (max 10 seconds) for your listing media. AI item identification still needs photos today.
-            We accept videos of 10 seconds or shorter only — this applies whether you record with your phone or upload a file.
-            We are planning automatic key-frame extraction so video-only uploads can run identification in a future release.
+            Record or upload one video (max 10 seconds) for your listing media. AI item identification still needs
+            photos today. We are planning automatic key-frame extraction so video-only uploads can run
+            identification in a future release.
           </p>
         </div>
 
@@ -122,7 +122,7 @@ export function VideoOnlyView({
                 disabled={extractingFrames}
                 className="w-full py-2 rounded-lg border border-border bg-card text-foreground text-xs font-medium hover:border-primary/40 disabled:opacity-60"
               >
-                Use Fallback Frame Set
+                Retry Extraction
               </button>
               <button
                 type="button"

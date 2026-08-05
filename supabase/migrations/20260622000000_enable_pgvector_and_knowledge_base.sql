@@ -15,19 +15,41 @@ CREATE TABLE IF NOT EXISTS public.knowledge_base (
 ALTER TABLE public.knowledge_base ENABLE ROW LEVEL SECURITY;
 
 -- Service role can do everything
-CREATE POLICY "Service role can manage knowledge base" 
-ON public.knowledge_base 
-FOR ALL 
-TO service_role 
-USING (true) 
-WITH CHECK (true);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policy
+    WHERE polname = 'Service role can manage knowledge base'
+      AND polrelid = 'public.knowledge_base'::regclass
+  ) THEN
+    CREATE POLICY "Service role can manage knowledge base"
+    ON public.knowledge_base
+    FOR ALL
+    TO service_role
+    USING (true)
+    WITH CHECK (true);
+  END IF;
+END
+$$;
 
 -- Authenticated users can read (for potential frontend features)
-CREATE POLICY "Authenticated users can read knowledge base" 
-ON public.knowledge_base 
-FOR SELECT 
-TO authenticated 
-USING (true);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policy
+    WHERE polname = 'Authenticated users can read knowledge base'
+      AND polrelid = 'public.knowledge_base'::regclass
+  ) THEN
+    CREATE POLICY "Authenticated users can read knowledge base"
+    ON public.knowledge_base
+    FOR SELECT
+    TO authenticated
+    USING (true);
+  END IF;
+END
+$$;
 
 -- Create an IVFFlat index for faster vector similarity search
 -- Note: ivfflat is simpler for initial setup than HNSW

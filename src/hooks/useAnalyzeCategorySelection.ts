@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { toast } from "sonner";
-import { deriveDomainFromCategory } from "@/types/listing";
+import { deriveDomainFromCategory, isBullionCategory } from "@/types/listing";
 import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
 import type { CoinConditionDetail, ItemSpecifics } from "@/types/listing";
 
@@ -34,6 +34,10 @@ interface UseAnalyzeCategorySelectionParams {
   setCondition: (value: string) => void;
   /** Clear stale required/suggested aspects from the old category */
   setEbayMetadata: (meta: EbayMetadata | null) => void;
+  /** Current coin condition detail — used to warn when a graded coin is put in bullion */
+  coinConditionDetail?: CoinConditionDetail | null;
+  /** Whether the analyzed coin is in a professional grading slab */
+  isSlabbed?: boolean;
 }
 
 export function useAnalyzeCategorySelection({
@@ -50,7 +54,28 @@ export function useAnalyzeCategorySelection({
   setCoinConditionDetail,
   setCondition,
   setEbayMetadata,
+  coinConditionDetail,
+  isSlabbed,
 }: UseAnalyzeCategorySelectionParams) {
+  /**
+   * Warn the user if they route a GRADED / SLABBED coin into a Bullion category.
+   * eBay bullion leaves have no Grade item specific, so the Grade field will
+   * disappear and the graded value can't be captured. This is the #1 cause of
+   * "I switched to silver bullion but there's no place to enter the grade."
+   */
+  const warnIfGradedIntoBullion = useCallback((categoryId: string) => {
+    const isGraded = coinConditionDetail?.type === "graded" || !!isSlabbed;
+    if (!isGraded) return;
+    const breadcrumb = getEbayCategoryBreadcrumb(categoryId) || undefined;
+    if (isBullionCategory(categoryId, breadcrumb)) {
+      toast.warning(
+        "This is a graded/slabbed coin, but bullion categories don't have a Grade field. " +
+          "Use a Coins: World or Coins: US category (e.g. South Pacific 3392 for Cook Islands) so the grade shows and can be published.",
+        { duration: 8000 },
+      );
+    }
+  }, [coinConditionDetail, isSlabbed]);
+
   const keepFilledSpecificsOnly = useCallback((prev: ItemSpecifics): ItemSpecifics => {
     const next: ItemSpecifics = {};
     for (const [key, value] of Object.entries(prev)) {
@@ -120,6 +145,7 @@ export function useAnalyzeCategorySelection({
     // Same as handleCategoryDialogConfirm but without the confirm-dialog step
     setEbayCategoryId(value);
     setCustomCategoryInput("");
+    warnIfGradedIntoBullion(value);
 
     // Derive new domain from the selected category
     const breadcrumb = getEbayCategoryBreadcrumb(value);
@@ -161,6 +187,7 @@ export function useAnalyzeCategorySelection({
     setEbayMetadata,
     setCondition,
     keepFilledSpecificsOnly,
+    warnIfGradedIntoBullion,
   ]);
 
   /**
@@ -174,6 +201,13 @@ export function useAnalyzeCategorySelection({
     setEbayCategoryId(categoryId);
     setCustomCategoryInput("");
     setShowCategoryConfirm(false);
+    // Exit custom-input mode so the dropdown (now showing the confirmed
+    // category as its active selection) is rendered instead of the text box.
+    // Without this the page can stay stuck on the "Enter custom category ID"
+    // input and the user never sees the category they just confirmed.
+    setIsCustomCategoryMode(false);
+    setPendingCategoryId("");
+    warnIfGradedIntoBullion(categoryId);
 
     // --- Refresh domain-dependent state for the new category ---
     const breadcrumb = getEbayCategoryBreadcrumb(categoryId);
@@ -208,12 +242,15 @@ export function useAnalyzeCategorySelection({
     setEbayCategoryId,
     setCustomCategoryInput,
     setShowCategoryConfirm,
+    setIsCustomCategoryMode,
+    setPendingCategoryId,
     setDomain,
     setCoinConditionDetail,
     setItemSpecifics,
     setEbayMetadata,
     setCondition,
     keepFilledSpecificsOnly,
+    warnIfGradedIntoBullion,
   ]);
 
   const handleCategoryDialogCancel = useCallback(() => {

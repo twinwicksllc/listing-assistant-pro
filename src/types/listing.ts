@@ -151,8 +151,43 @@ const COIN_CATEGORY_IDS = new Set([
   "40196","40197","40198","40199","40200","40201","40202",
   // 2026+ America the Beautiful Quarters
   "171526", // America the Beautiful Quarters (2026)
+  // US Quarters — early & classic type leaves (verified against live eBay browse nodes 2026-07).
+  // These were missing, so the Raw/Graded coin-condition selector did not appear for them.
+  "11962", // Quarters (US parent)
+  "173587", // Draped Bust Quarters (1796-1807)
+  "11963", // Capped Bust Quarters (1815-1838)
+  "11964", // Seated Liberty Quarters (1838-1891)
+  "11965", // Barber Quarters (1892-1916)
+  "11966", // Standing Liberty Quarters (1916-1930)
+  "39461", // Washington Quarters (1932-1998)
+  // World coin leaves that support Grade (graded-friendly, NOT bullion):
+  "3392",  // Coins: World > South Pacific (Cook Islands, Fiji, Niue, Palau, Tuvalu, etc.)
+  "546",   // World Commemorative Coins
 ]);
-const BULLION_CATEGORY_IDS = new Set(["178906","39489","3361","532","173685"]);
+// Bullion leaves that DO NOT support the Grade item specific on eBay.
+// A graded/slabbed coin must NEVER be listed in one of these — it belongs in a
+// numismatic coin category (US or World) that exposes Grade.
+// Verified against live eBay browse nodes (2026-07):
+//   39482 Bullion (parent) · 39489 Silver Bars & Rounds · 39487 Silver Bullion (lots)
+//   178906 Gold Bars & Rounds · 39488 Platinum Bullion · 3361 Silver: Other
+//   261068/261069 Bullion>Silver>Coins/Bars · 261071/178906 Gold · 166679 Other
+const BULLION_CATEGORY_IDS = new Set([
+  "39482","39489","39487","178906","39488","3361",
+  "261068","261069","261070","261071","261072","261073","166679","166680","166681",
+]);
+
+/**
+ * True when the category is a Bullion leaf that has no Grade item specific.
+ * Used to warn the user when they try to place a graded/slabbed coin in bullion.
+ */
+export function isBullionCategory(
+  categoryId: string | undefined,
+  breadcrumb?: string | undefined,
+): boolean {
+  if (categoryId && BULLION_CATEGORY_IDS.has(categoryId)) return true;
+  if (breadcrumb && /\bbullion\b|gold bar|silver bar|ingot/i.test(breadcrumb)) return true;
+  return false;
+}
 const TRADING_CARD_CATEGORY_IDS = new Set(["261328","183454","2536","19107","64482","213"]);
 
 const GENERAL_MARKETPLACE_CONDITION_OPTIONS: ConditionOption[] = [
