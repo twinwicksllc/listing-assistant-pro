@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { computeFrameQualityScore, selectBestFrames } from "./videoFrameExtraction.utils";
 
 interface UseVideoFrameExtractionProps {
   videoUrl: string | null;
@@ -55,7 +56,7 @@ export function useVideoFrameExtraction({ videoUrl, voiceNote }: UseVideoFrameEx
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Unable to initialize extraction canvas.");
 
-    const frames: Array<{ dataUrl: string; timestampSec: number; score: number }> = [];
+    const candidates: Array<{ dataUrl: string; timestampSec: number; score: number }> = [];
     for (let i = 0; i < frameCount; i++) {
       const timestampSec = Number((start + i * step).toFixed(2));
       await new Promise<void>((resolve, reject) => {
@@ -70,10 +71,20 @@ export function useVideoFrameExtraction({ videoUrl, voiceNote }: UseVideoFrameEx
         video.currentTime = Math.min(duration, Math.max(0, timestampSec));
       });
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      const qualityScore = computeFrameQualityScore(imageData, canvas.width, canvas.height);
       const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
-      frames.push({ dataUrl, timestampSec, score: Number((0.96 - i * 0.03).toFixed(2)) });
+      candidates.push({ dataUrl, timestampSec, score: Number(qualityScore.toFixed(3)) });
     }
-    return frames;
+
+    const selected = selectBestFrames(
+      candidates.map((candidate) => ({ timestampSec: candidate.timestampSec, qualityScore: candidate.score })),
+      4,
+    );
+
+    return candidates
+      .filter((candidate) => selected.some((item) => item.timestampSec === candidate.timestampSec))
+      .map((candidate) => ({ ...candidate, score: Number(candidate.score.toFixed(3)) }));
   };
 
   const mapExtractError = (err: unknown): { code: string; message: string } => {
@@ -141,6 +152,13 @@ export function useVideoFrameExtraction({ videoUrl, voiceNote }: UseVideoFrameEx
       });
       if (error) throw error;
       const frames = Array.isArray(data?.frames) ? data.frames.filter((f: { url?: unknown }) => typeof f?.url === "string") : [];
+      if (frames.length === 0) {
+        setExtractedFrames([]);
+        setExtractedFrameDataUrls([]);
+        setExtractFramesMessage("Frame extraction is still unavailable. Please use photo capture as the safer fallback for AI analysis.");
+        setExtractFramesErrorCode("fallback_unavailable");
+        return;
+      }
       setExtractedFrames(frames);
       setExtractedFrameDataUrls([]);
       setExtractFramesMessage("Fallback frame set generated. For best AI quality, use photo capture or retry extraction.");

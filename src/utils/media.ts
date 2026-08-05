@@ -8,12 +8,11 @@ export function getSupportedVideoMimeType(): string | null {
     'video/mp4',
   ];
 
-  if (typeof (window as any).MediaRecorder === 'undefined') return null;
+  if (typeof MediaRecorder === 'undefined') return null;
 
   for (const m of candidates) {
     try {
-      // @ts-ignore
-      if ((window as any).MediaRecorder.isTypeSupported?.(m)) return m;
+      if (MediaRecorder.isTypeSupported?.(m)) return m;
     } catch (e) {
       // ignore
     }

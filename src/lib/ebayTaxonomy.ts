@@ -92,10 +92,19 @@ export const EBAY_CATEGORIES = {
   COINS_PAPER_MONEY: '11116',
   US_COINS: '11116',
   BULLION: '39482',
+  // NOTE: eBay leaf IDs verified against live eBay browse nodes (2026-07).
+  // 39489 = Bullion > Silver > Bars & Rounds
+  // 39487 = Silver Bullion (mixed-lot silver bullion) — this is SILVER, not gold.
+  //          It was previously (incorrectly) labeled GOLD_BULLION.
+  // 178906 = Bullion > Gold > Bars & Rounds (the correct GOLD bullion leaf)
   SILVER_BULLION: '39489',
-  GOLD_BULLION: '39487',
+  SILVER_BULLION_LOT: '39487',
+  GOLD_BULLION: '178906',
   PLATINUM_BULLION: '39488',
+  // World coin leaves that DO support the Grade item specific (graded-friendly):
   WORLD_COINS: '256',
+  WORLD_COMMEMORATIVE_COINS: '546',
+  SOUTH_PACIFIC_COINS: '3392', // Cook Islands, Fiji, Niue, Tokelau, etc.
   EXONUMIA: '3452',
 } as const;
 

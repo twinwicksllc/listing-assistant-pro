@@ -46,7 +46,10 @@ jobs:
 
       - name: Deploy Edge Functions
         run: |
-          # Deploy analyze-item and ebay-publish functions
+          # Deploy all functions with JWT verification enabled by default
+          supabase functions deploy --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
+
+          # Public functions (no JWT verification)
           supabase functions deploy analyze-item --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
           supabase functions deploy ebay-publish --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
         env:
