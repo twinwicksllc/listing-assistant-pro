@@ -5,9 +5,10 @@ import { useAuth } from "@/contexts/AuthContext";
 
 type UploadStatus = "idle" | "uploading_storage" | "uploading_ebay" | "processing" | "live" | "failed";
 
-const ACCEPTED_VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm", "video/x-msvideo"];
+  const ACCEPTED_VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm", "video/x-msvideo", "video/3gpp"];
 const MAX_VIDEO_SIZE_MB = 500;
 const MAX_VIDEO_SIZE_BYTES = MAX_VIDEO_SIZE_MB * 1024 * 1024;
+  const MAX_VIDEO_SECONDS = 10;
 
 interface VideoUploadInputProps {
   /** Used as the eBay video title */
@@ -138,6 +139,34 @@ export function VideoUploadInput({
       return;
     }
 
+    // Check duration before uploading (if we can read it)
+    const getVideoDuration = (f: File): Promise<number | null> =>
+      new Promise((resolve) => {
+        try {
+          const url = URL.createObjectURL(f);
+          const v = document.createElement("video");
+          v.preload = "metadata";
+          v.onloadedmetadata = () => {
+            URL.revokeObjectURL(url);
+            resolve(v.duration || null);
+          };
+          v.onerror = () => {
+            URL.revokeObjectURL(url);
+            resolve(null);
+          };
+          v.src = url;
+        } catch (e) {
+          resolve(null);
+        }
+      });
+
+    const duration = await getVideoDuration(file);
+    if (duration && duration > MAX_VIDEO_SECONDS) {
+      setErrorMsg(`Video is too long (${Math.round(duration)}s). Maximum allowed is ${MAX_VIDEO_SECONDS}s.`);
+      setStatus("failed");
+      return;
+    }
+
     const token = userToken ?? localStorage.getItem("ebay-user-token");
     if (!token) {
       setErrorMsg("Connect eBay in Settings before uploading a video.");
@@ -248,7 +277,7 @@ export function VideoUploadInput({
       <input
         ref={fileInputRef}
         type="file"
-        accept="video/mp4,video/quicktime,video/x-msvideo,.mp4,.mov,.avi"
+        accept="video/mp4,video/quicktime,video/x-msvideo,video/webm,video/3gp,.mp4,.mov,.avi,.3gp"
         onChange={handleFileSelect}
         className="hidden"
       />
@@ -270,16 +299,16 @@ export function VideoUploadInput({
             className="flex-1 flex items-center gap-2 py-2.5 px-3 rounded-lg border border-dashed border-border text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors text-xs"
           >
             <Video className="w-4 h-4 flex-shrink-0" />
-            <span>Add optional video (MP4 / MOV / WebM / AVI — max 500 MB)</span>
+            <span>Upload Video (max 10s)</span>
           </button>
 
           <button
             type="button"
             onClick={() => captureFileInputRef.current?.click()}
             className="ml-2 px-3 py-2 rounded-lg border border-border bg-card text-xs text-foreground hover:border-primary/40"
-            title="Record with phone camera"
+            title="Record Video"
           >
-            Record with camera
+            Record Video
           </button>
         </div>
       ) : (
