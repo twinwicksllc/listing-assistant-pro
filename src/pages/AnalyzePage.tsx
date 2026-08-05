@@ -403,7 +403,6 @@ export default function AnalyzePage() {
   const { ebayTokenForPolicies } = useAnalyzePolicyToken({
     generated,
     userId: user?.id,
-    loadPolicyToken,
   });
 
   const {
