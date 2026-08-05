@@ -11,7 +11,11 @@ export function useAnalyzePolicyToken({
   userId,
   loadPolicyToken,
 }: UseAnalyzePolicyTokenParams) {
-  const [ebayTokenForPolicies, setEbayTokenForPolicies] = useState<string | null>(null);
+  // Initialize with localStorage token for immediate availability
+  // (especially for video-only flow before first analysis)
+  const [ebayTokenForPolicies, setEbayTokenForPolicies] = useState<string | null>(
+    () => localStorage.getItem("ebay-user-token")
+  );
 
   useEffect(() => {
     if (!generated || !userId) return;
