@@ -146,13 +146,14 @@ export function useEbayPolicies(userToken: string | null) {
         if (age < CACHE_TTL) {
           setPolicies(parsed.data);
           setCacheAge(age);
-          // Auto-select first of each type if available
-          if (parsed.data.fulfillment.length > 0) {
-            setSelectedPolicies((prev) => ({
-              ...prev,
-              fulfillmentPolicyId: parsed.data.fulfillment[0].fulfillmentPolicyId,
-            }));
-          }
+             // Auto-select first of each type if available. Prefer non-flat-rate fulfillment policies.
+             if (parsed.data.fulfillment.length > 0) {
+               const preferred = pickPreferredFulfillment(parsed.data.fulfillment);
+               setSelectedPolicies((prev) => ({
+                 ...prev,
+                 fulfillmentPolicyId: preferred?.fulfillmentPolicyId || parsed.data.fulfillment[0].fulfillmentPolicyId,
+               }));
+             }
           if (parsed.data.payment.length > 0) {
             setSelectedPolicies((prev) => ({
               ...prev,
