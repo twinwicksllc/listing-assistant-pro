@@ -10,6 +10,8 @@ jobs:
   full-lifecycle:
     name: Full Lifecycle Tests
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.48-jammy
     
     steps:
       - uses: actions/checkout@v4
@@ -22,8 +24,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+      # Use Playwright container image which includes browsers and deps.
 
       - name: Setup test user in Supabase
         run: node scripts/setup-test-user.js

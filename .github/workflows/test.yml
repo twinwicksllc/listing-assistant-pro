@@ -15,29 +15,28 @@ jobs:
   frontend-tests:
     name: Frontend Tests
     runs-on: ubuntu-latest
-    
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          bun-version: 1.1.38
-      
+          node-version: '20'
+
       - name: Install dependencies
-        run: bun install
-      
+        run: npm ci
+
       - name: TypeScript type-check
         run: npx tsc --noEmit
-      
+
       - name: ESLint
         run: npx eslint src/ --max-warnings 0
-      
+
       - name: Unit Tests
-        run: bun run test
-      
+        run: npm run test
+
       - name: Build
-        run: bun run build
+        run: npm run build
 
   # Edge Functions: Format check, type validation
   functions-check:
@@ -62,23 +61,29 @@ jobs:
   e2e-smoke-tests:
     name: E2E Smoke Tests
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          bun-version: 1.1.38
-      
+          node-version: '20'
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('**/package-lock.json') }}
+
       - name: Install dependencies
-        run: bun install
-      
-      - name: Install Playwright browsers
-        run: bunx playwright install --with-deps
-      
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
       - name: Run smoke tests
-        run: bun run test:e2e:smoke
+        run: npm run test:e2e:smoke
         continue-on-error: true
 
   # Integration tests require a local Supabase instance (Docker).
