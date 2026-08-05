@@ -56,9 +56,22 @@ jobs:
           name: playwright-report-smoke
           path: playwright-report/
           retention-days: 7
-      
+
+  comment-pr:
+    name: Comment PR with results
+    runs-on: ubuntu-latest
+    needs: smoke-tests
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download test report artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: playwright-report-smoke
+          path: playwright-report
+
       - name: Comment PR with results
-        if: always()
         uses: actions/github-script@v7
         with:
           script: |
@@ -79,4 +92,7 @@ jobs:
                 repo: context.repo.repo,
                 body: comment
               });
+            } else {
+              core.info('No results.json found to comment.');
             }
+      
