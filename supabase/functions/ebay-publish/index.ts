@@ -813,7 +813,11 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
   },
   // World Coins (general)
   "45243": {
-    required: [],
+    // "Department" is a REQUIRED item specific for Coins: World (errorId 25002
+    // "The item specific Department is missing" on publishOffer). eBay's coin
+    // taxonomy uses Department to split US vs World vs Ancient etc.; for the
+    // 45243 (World) tree the valid value is "World Coins".
+    required: ["Department"],
     preferred: [
       "Year",
       "Denomination",
@@ -828,7 +832,41 @@ const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Fineness",
       "Strike Type",
     ],
-    defaults: { "Certification": "Uncertified" },
+    defaults: { "Certification": "Uncertified", "Department": "World Coins" },
+  },
+  // Coins: World (taxonomy parent 256) — same Department requirement as 45243.
+  "256": {
+    required: ["Department"],
+    preferred: [
+      "Year",
+      "Denomination",
+      "Composition",
+      "Circulated/Uncirculated",
+      "Certification",
+      "Grade",
+      "Country of Origin",
+      "Materials sourced from",
+      "Fineness",
+    ],
+    defaults: { "Certification": "Uncertified", "Department": "World Coins" },
+  },
+  // Coins: World > South Pacific (Cook Islands, Fiji, Niue, Palau, Tuvalu, …).
+  // Graded-friendly leaf; also requires Department = "World Coins".
+  "3392": {
+    required: ["Department"],
+    preferred: [
+      "Year",
+      "Denomination",
+      "Composition",
+      "Circulated/Uncirculated",
+      "Certification",
+      "Grade",
+      "Country of Origin",
+      "Materials sourced from",
+      "Fineness",
+      "Strike Type",
+    ],
+    defaults: { "Certification": "Uncertified", "Department": "World Coins" },
   },
   // ── Collectibles / Toys / Trading Cards ──────────────────────────────────
   // Sports Trading Cards
@@ -1292,6 +1330,7 @@ const ASPECT_KEY_ALIASES: Record<string, string> = {
   "Color": "Color", // used by 45243 (World Coins) for copper/bronze coins
   "Materials sourced from": "Materials sourced from",
   "Brand": "Brand", // required by 45243 (World Coins) — errorId 25002 when missing
+  "Department": "Department", // required by Coins: World (45243/256/3392) — errorId 25002 when missing
 };
 
 const NON_ASPECT_KEYS = new Set([
@@ -1326,6 +1365,14 @@ function buildAndNormalizeAspects(
   const rule = CATEGORY_ASPECT_RULES[categoryId];
 
   for (const [rawKey, rawValue] of Object.entries(rawSpecifics)) {
+    // Skip internal-only keys the frontend/backend attaches to itemSpecifics for
+    // routing/condition logic (e.g. "_domain", "_coinConditionDetail",
+    // "_domainMeta"). These are NOT real eBay aspects. If they leak into the
+    // inventory item's product.aspects, eBay's Core Inventory Service rejects the
+    // publish with HTTP 500 / errorId 25001 ("A system error has occurred. Core
+    // Inventory Service internal error") — which is exactly what was blocking the
+    // graded Cook Islands Barn Owl coin ("_domain":"coins_bullion" was being sent).
+    if (rawKey.startsWith("_")) continue;
     if (!rawValue || typeof rawValue !== "string") continue;
     const trimmed = rawValue.trim();
     if (!trimmed) continue;
@@ -1333,6 +1380,7 @@ function buildAndNormalizeAspects(
 
     const key = normalizeAspectKey(rawKey);
     if (NON_ASPECT_KEYS.has(key)) continue; // skip internal-only keys
+    if (key.startsWith("_")) continue; // belt-and-suspenders: never emit underscore aspects
 
     let value = trimmed;
     if (key === "Fineness") value = normalizeFineness(trimmed);
@@ -1607,6 +1655,15 @@ function normalizeConditionForCategory(
   categoryId: string | undefined,
   itemType: string | undefined = undefined,
   categoryTreeType: CategoryTreeType | undefined = undefined,
+  /**
+   * True when the coin/card is in a professional grading slab (NGC, PCGS, etc.).
+   * For coins & trading cards eBay uses conditionId 2750 (LIKE_NEW = "Graded")
+   * for slabbed items and 4000 (USED_VERY_GOOD = "Ungraded") for raw items.
+   * Without this flag a graded PF/MS-70 coin was being force-mapped to
+   * USED_VERY_GOOD ("Moderately circulated … moderate wear"), which eBay
+   * rejects as an invalid condition for the category.
+   */
+  isGraded: boolean = false,
 ): { condition: string; corrected: boolean } {
   // Apply legacy migration first (case-insensitive using normalizeConditionDescriptorToEnum)
   const condition = normalizeConditionDescriptorToEnum(rawCondition);
@@ -1633,9 +1690,26 @@ function normalizeConditionForCategory(
       "FOR_PARTS_OR_NOT_WORKING", // 7000 = Damaged/holed/bent
     ]);
 
+    // GRADED coins → LIKE_NEW (2750 = "Graded"). A slabbed NGC/PCGS coin must be
+    // "Graded", never a circulated "USED_*" tier. This is the correct eBay
+    // condition for certified coins and is what unblocks publish for e.g. a
+    // PF 70 Ultra Cameo. (The old code force-downgraded every NEW coin to
+    // USED_VERY_GOOD, which eBay rejects for graded pieces.)
+    if (isGraded) {
+      if (condition !== "LIKE_NEW") {
+        console.log(
+          `normalizeConditionForCategory: GRADED coin category ${categoryId} — ${condition} -> LIKE_NEW (2750 Graded)`,
+        );
+        return { condition: "LIKE_NEW", corrected: true };
+      }
+      return { condition: "LIKE_NEW", corrected: false };
+    }
+
     if (!validCoinConditions.has(condition)) {
+      // RAW/ungraded coins only. LIKE_NEW here would require Professional Grader
+      // aspects, so ungraded coins map to USED_VERY_GOOD (4000 = "Ungraded").
       const fallbackMap: Record<string, string> = {
-        NEW: "USED_VERY_GOOD", // graded->ungraded downgrade; LIKE_NEW requires Professional Grader
+        NEW: "USED_VERY_GOOD",
         NEW_OTHER: "USED_VERY_GOOD",
         NEW_WITH_DEFECTS: "USED_VERY_GOOD",
         CERTIFIED_REFURBISHED: "LIKE_NEW",
@@ -2538,11 +2612,30 @@ async function fetchCoinConditionDescriptors(
       return null;
     }
 
+    // Read the body as text first. Some categories (e.g. 45243 "Coins: World")
+    // legitimately return HTTP 200 with an EMPTY body, which means "no condition
+    // policies for this category". Calling metaResp.json() directly on an empty
+    // body throws `SyntaxError: Unexpected end of JSON input`, which previously
+    // surfaced as a scary console.error even though it is an expected,
+    // non-fatal outcome. Guard for that explicitly and treat it as info-level.
+    const metaBodyText = await metaResp.text();
+    if (!metaBodyText || metaBodyText.trim() === "") {
+      console.log(
+        `fetchCoinConditionDescriptors: Metadata API returned an empty body for category ${categoryId} — no condition policies available (this is expected for some categories).`,
+      );
+      return null;
+    }
+
     let metaData;
     try {
-      metaData = await metaResp.json();
+      metaData = JSON.parse(metaBodyText);
     } catch (parseErr) {
-      console.error(`fetchCoinConditionDescriptors: failed to parse Metadata API response:`, parseErr);
+      console.warn(
+        `fetchCoinConditionDescriptors: could not parse Metadata API response for category ${categoryId} (treating as no policies). Body starts with: ${
+          metaBodyText.slice(0, 120)
+        }`,
+        parseErr,
+      );
       return null;
     }
 
@@ -4203,9 +4296,39 @@ serve(async (req) => {
 
     // --- ACTION: Upload video to eBay Video API ---
     if (action === "upload_video") {
-      const { userToken, videoUrl, title: videoTitle, fileSize, contentType } = payload;
+      const { userToken, videoUrl, title: videoTitle, fileSize, contentType, durationSec } = payload;
       if (!userToken) throw new Error("No eBay user token provided");
       if (!videoUrl) throw new Error("No videoUrl provided");
+
+      // Defense-in-depth: re-validate format/duration server-side even though the
+      // client already enforces these (client checks can be bypassed).
+      const ALLOWED_VIDEO_CONTENT_TYPES = ["video/mp4", "video/quicktime", "video/x-msvideo", "video/webm"];
+      if (contentType && !ALLOWED_VIDEO_CONTENT_TYPES.includes(String(contentType))) {
+        return new Response(
+          JSON.stringify({ error: `Unsupported video format: ${contentType}. Use MP4, MOV, AVI, or WebM.` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      // Small buffer above the 10s client-side cap / below eBay's 3s minimum to
+      // tolerate encoder rounding without rejecting legitimate clips.
+      const MAX_VIDEO_DURATION_SEC = 12;
+      const MIN_VIDEO_DURATION_SEC = 2;
+      if (typeof durationSec === "number" && Number.isFinite(durationSec)) {
+        if (durationSec > MAX_VIDEO_DURATION_SEC) {
+          return new Response(
+            JSON.stringify({ error: `Video is too long (${durationSec.toFixed(1)}s). Maximum allowed is 10 seconds.` }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+        if (durationSec < MIN_VIDEO_DURATION_SEC) {
+          return new Response(
+            JSON.stringify({
+              error: `Video is too short (${durationSec.toFixed(1)}s). eBay requires at least 3 seconds.`,
+            }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+      }
 
       // Step 1: Create the video entity in eBay
       const createResp = await fetchWithTimeout(`${apiBase}/sell/marketing/v1_beta/video`, {
@@ -4352,6 +4475,69 @@ serve(async (req) => {
         );
       }
 
+      // ── Graded world coin re-route ─────────────────────────────────────────
+      // eBay category 45243 ("Coins: World") is a ROLLUP/parent category that
+      // does NOT accept the "Graded" condition (LIKE_NEW / conditionId 2750).
+      // Publishing a slabbed NGC/PCGS coin there fails with
+      // "publish failed with invalid condition for category 45243", and no raw
+      // condition fallback can save it. The correct home for a graded world coin
+      // is a graded-friendly LEAF category (which supports the Grade item
+      // specific + condition 2750). We map based on Country of Origin, defaulting
+      // to the generic Coins: World leaf (256) when the country is unknown.
+      {
+        const _rerouteIS = itemSpecifics && typeof itemSpecifics === "object"
+          ? (itemSpecifics as Record<string, unknown>)
+          : {};
+        const _rerouteCcd = _rerouteIS._coinConditionDetail as
+          | { type?: string }
+          | null
+          | undefined;
+        const _rerouteCert = typeof _rerouteIS.Certification === "string"
+          ? (_rerouteIS.Certification as string)
+          : undefined;
+        const _rerouteGraded = _rerouteCcd?.type === "graded" ||
+          (String(condition ?? "").toUpperCase() === "LIKE_NEW") ||
+          (!!_rerouteCert && _rerouteCert.trim().toLowerCase() !== "uncertified" &&
+            _rerouteCert.trim() !== "");
+
+        // Parent world-coin categories that reject the Graded (2750) condition.
+        const GRADED_UNFRIENDLY_WORLD_PARENTS = new Set(["45243"]);
+
+        if (_rerouteGraded && GRADED_UNFRIENDLY_WORLD_PARENTS.has(finalCategoryId)) {
+          const country =
+            (typeof _rerouteIS["Country of Origin"] === "string" ? (_rerouteIS["Country of Origin"] as string) : "")
+              .trim().toLowerCase();
+
+          // South Pacific leaf (3392): Cook Islands, Fiji, Niue, Palau, Tuvalu,
+          // Tokelau, Samoa, Solomon Islands, Kiribati, Nauru, Vanuatu, Tonga.
+          const SOUTH_PACIFIC_COUNTRIES = new Set([
+            "cook islands",
+            "fiji",
+            "niue",
+            "palau",
+            "tuvalu",
+            "tokelau",
+            "samoa",
+            "solomon islands",
+            "kiribati",
+            "nauru",
+            "vanuatu",
+            "tonga",
+          ]);
+
+          const rerouteTarget = SOUTH_PACIFIC_COUNTRIES.has(country)
+            ? "3392" // Coins: World > South Pacific
+            : "256"; // Coins: World (graded-friendly leaf) — safe default
+
+          console.log(
+            `create_draft: GRADED WORLD COIN in graded-unfriendly parent ${finalCategoryId} — re-routing to ${rerouteTarget} (country="${
+              country || "unknown"
+            }") so the Graded condition (2750) is accepted`,
+          );
+          finalCategoryId = rerouteTarget;
+        }
+      }
+
       // Build eBay-formatted item specifics (aspects) using the category-aware
       // normalisation engine. This handles:
       //   - C: prefix normalisation (AI may omit it)
@@ -4444,11 +4630,30 @@ serve(async (req) => {
       // Migrate any legacy deprecated condition codes to current equivalents,
       // then normalize based on the category and item type (e.g., LIKE_NEW not valid for coins).
       const rawCondition = condition || "USED_EXCELLENT";
+      // Determine whether this is a graded (slabbed/certified) coin. Graded coins
+      // must map to the eBay "Graded" condition (LIKE_NEW / 2750) rather than being
+      // force-corrected to a circulated grade. We derive this from the coin condition
+      // detail the frontend attaches under itemSpecifics._coinConditionDetail, and from
+      // the resolved Certification aspect (a grading company name means graded).
+      const isGraded = (() => {
+        const _gradeIS = itemSpecifics && typeof itemSpecifics === "object"
+          ? (itemSpecifics as Record<string, unknown>)
+          : {};
+        const _gradeCcd = _gradeIS._coinConditionDetail as
+          | { type?: string; graded?: { company?: string } }
+          | null
+          | undefined;
+        if (_gradeCcd?.type === "graded") return true;
+        const _cert = aspects["Certification"]?.[0];
+        if (_cert && _cert.toLowerCase() !== "uncertified") return true;
+        return false;
+      })();
       const { condition: normalizedCondition, corrected } = normalizeConditionForCategory(
         rawCondition,
         finalCategoryId,
         itemType,
         categoryTreeType,
+        isGraded,
       );
       let conditionEnum = normalizedCondition;
       let conditionId = CONDITION_ID_MAP[conditionEnum];
@@ -4852,7 +5057,8 @@ serve(async (req) => {
             // Normalize and search for indicators of the Small Flat Rate Box
             const normalized = policyServices.map((s) => (s || "").toString().toLowerCase());
             const indicatesSmallFlatRate = normalized.some((s) =>
-              s.includes("small flat rate") || s.includes("priority mail small") || s.includes("uspsprioritymailsmallflatratebox") || s.includes("smallflatrate"),
+              s.includes("small flat rate") || s.includes("priority mail small") ||
+              s.includes("uspsprioritymailsmallflatratebox") || s.includes("smallflatrate")
             );
 
             if (indicatesSmallFlatRate) {
@@ -4863,11 +5069,17 @@ serve(async (req) => {
                 const height = Number(dims.height || 0);
                 // eBay error showed 8.6875 in — use that as a conservative per-side max for small flat rate
                 const SMALL_FLAT_RATE_SIDE_MAX = 8.6875;
-                if (length > SMALL_FLAT_RATE_SIDE_MAX || width > SMALL_FLAT_RATE_SIDE_MAX || height > SMALL_FLAT_RATE_SIDE_MAX) {
-                  console.log(`create_draft: fulfillment policy ${fulfillmentPolicyId} contains Small Flat Rate service but package dims exceed limits: ${length}x${width}x${height} in`);
+                if (
+                  length > SMALL_FLAT_RATE_SIDE_MAX || width > SMALL_FLAT_RATE_SIDE_MAX ||
+                  height > SMALL_FLAT_RATE_SIDE_MAX
+                ) {
+                  console.log(
+                    `create_draft: fulfillment policy ${fulfillmentPolicyId} contains Small Flat Rate service but package dims exceed limits: ${length}x${width}x${height} in`,
+                  );
                   return new Response(
                     JSON.stringify({
-                      error: `Selected shipping policy (${fulfillmentPolicyId}) includes USPS Small Flat Rate Box service which is incompatible with the provided package dimensions (${length} x ${width} x ${height} in). Please choose a different shipping policy or adjust package dimensions.`,
+                      error:
+                        `Selected shipping policy (${fulfillmentPolicyId}) includes USPS Small Flat Rate Box service which is incompatible with the provided package dimensions (${length} x ${width} x ${height} in). Please choose a different shipping policy or adjust package dimensions.`,
                       policyConflict: true,
                       fulfillmentPolicyId: fulfillmentPolicyId,
                       offendingServiceHint: "USPS Priority Mail Small Flat Rate Box",
@@ -4877,13 +5089,18 @@ serve(async (req) => {
                 }
               } else {
                 // No dimensions provided — warn but allow normal flow (eBay may infer)
-                console.log(`create_draft: fulfillment policy ${fulfillmentPolicyId} contains Small Flat Rate service; no package dimensions provided to validate.`);
+                console.log(
+                  `create_draft: fulfillment policy ${fulfillmentPolicyId} contains Small Flat Rate service; no package dimensions provided to validate.`,
+                );
               }
             }
           }
         }
       } catch (policyChkErr) {
-        console.warn("create_draft: unable to validate fulfillment policy services against package dimensions:", policyChkErr);
+        console.warn(
+          "create_draft: unable to validate fulfillment policy services against package dimensions:",
+          policyChkErr,
+        );
         // Non-fatal — continue to attempt publish so we don't block users if policy API fails
       }
 
