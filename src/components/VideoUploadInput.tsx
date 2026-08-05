@@ -68,6 +68,7 @@ export function VideoUploadInput({
 }: VideoUploadInputProps) {
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const captureFileInputRef = useRef<HTMLInputElement>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef = useRef(true);
   const streamRef = useRef<MediaStream | null>(null);
@@ -271,6 +272,8 @@ export function VideoUploadInput({
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    // Clear the input so the same file/recording can be re-selected on retry
+    e.target.value = "";
     if (!file) return;
     await uploadFile(file);
   };
@@ -380,7 +383,16 @@ export function VideoUploadInput({
       <input
         ref={fileInputRef}
         type="file"
-        accept="video/mp4,video/quicktime,video/x-msvideo,.mp4,.mov,.avi"
+        accept="video/mp4,video/quicktime,video/webm,video/x-msvideo,.mp4,.mov,.webm,.avi"
+        onChange={handleFileSelect}
+        className="hidden"
+      />
+      {/* Mobile native camera fallback: opens native camera app for recording */}
+      <input
+        ref={captureFileInputRef}
+        type="file"
+        accept="video/*"
+        capture="environment"
         onChange={handleFileSelect}
         className="hidden"
       />
@@ -406,7 +418,7 @@ export function VideoUploadInput({
       )}
 
       {status === "idle" && (
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <button
             type="button"
             onClick={startRecording}
@@ -414,6 +426,15 @@ export function VideoUploadInput({
           >
             <Video className="w-4 h-4 flex-shrink-0" />
             Record (max {MAX_VIDEO_DURATION_SEC}s)
+          </button>
+          <button
+            type="button"
+            onClick={() => captureFileInputRef.current?.click()}
+            className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg border border-dashed border-border text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors text-xs"
+            title="Record with phone camera"
+          >
+            <Video className="w-4 h-4 flex-shrink-0" />
+            Camera app
           </button>
           <button
             type="button"
