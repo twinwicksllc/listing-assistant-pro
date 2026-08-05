@@ -65,20 +65,14 @@ export function VideoOnlyView({
           </p>
         </div>
 
-        {ebayTokenForPolicies ? (
-          <VideoUploadInput
-            title={title}
-            userToken={ebayTokenForPolicies}
-            initialFile={initialVideoFile}
-            onVideoReady={onVideoReady}
-            onVideoRemoved={onVideoRemoved}
-            onStatusChange={onVideoStatusChange}
-          />
-        ) : (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-            Connect eBay in Settings to upload a video.
-          </div>
-        )}
+        <VideoUploadInput
+          title={title}
+          userToken={ebayTokenForPolicies}
+          initialFile={initialVideoFile}
+          onVideoReady={onVideoReady}
+          onVideoRemoved={onVideoRemoved}
+          onStatusChange={onVideoStatusChange}
+        />
 
         {videoIsProcessing && (
           <p className="text-xs text-center text-amber-600">
