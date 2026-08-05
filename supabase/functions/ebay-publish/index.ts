@@ -5017,6 +5017,93 @@ serve(async (req) => {
         }`,
       );
 
+      // --- SAFEGUARD: validate selected fulfillment policy services vs provided package dimensions ---
+      // If the chosen fulfillment policy contains a USPS small flat rate box service and
+      // the incoming package dimensions exceed that service's limits, return a clear error
+      // to the client so the user can choose a different policy or adjust dimensions.
+      try {
+        if (fulfillmentPolicyId && payloadPackageWeightAndSize && typeof fulfillmentPolicyId === "string") {
+          const policyResp = await fetchWithTimeout(
+            `${apiBase}/sell/account/v1/fulfillment_policy/${encodeURIComponent(String(fulfillmentPolicyId))}`,
+            { headers: authHeaders, timeout: 8000 },
+          );
+          if (policyResp.ok) {
+            const policyJson = await policyResp.json();
+            // Look for shipping services that indicate USPS small flat rate box usage.
+            // eBay may expose service codes or descriptive names — check both.
+            const policyServices: string[] = [];
+            try {
+              const shipOptions = policyJson?.shippingOptions || policyJson?.shipping || [];
+              if (Array.isArray(shipOptions)) {
+                shipOptions.forEach((opt: any) => {
+                  if (opt?.shippingServices && Array.isArray(opt.shippingServices)) {
+                    opt.shippingServices.forEach((s: any) => {
+                      if (s?.shippingServiceCode) policyServices.push(String(s.shippingServiceCode));
+                      if (s?.name) policyServices.push(String(s.name));
+                    });
+                  }
+                  if (opt?.services && Array.isArray(opt.services)) {
+                    opt.services.forEach((s: any) => {
+                      if (s?.serviceCode) policyServices.push(String(s.serviceCode));
+                      if (s?.name) policyServices.push(String(s.name));
+                    });
+                  }
+                });
+              }
+            } catch (svcErr) {
+              // ignore parsing errors — continue gracefully
+            }
+
+            // Normalize and search for indicators of the Small Flat Rate Box
+            const normalized = policyServices.map((s) => (s || "").toString().toLowerCase());
+            const indicatesSmallFlatRate = normalized.some((s) =>
+              s.includes("small flat rate") || s.includes("priority mail small") ||
+              s.includes("uspsprioritymailsmallflatratebox") || s.includes("smallflatrate")
+            );
+
+            if (indicatesSmallFlatRate) {
+              const dims = (payloadPackageWeightAndSize as any).dimensions || null;
+              if (dims) {
+                const length = Number(dims.length || 0);
+                const width = Number(dims.width || 0);
+                const height = Number(dims.height || 0);
+                // eBay error showed 8.6875 in — use that as a conservative per-side max for small flat rate
+                const SMALL_FLAT_RATE_SIDE_MAX = 8.6875;
+                if (
+                  length > SMALL_FLAT_RATE_SIDE_MAX || width > SMALL_FLAT_RATE_SIDE_MAX ||
+                  height > SMALL_FLAT_RATE_SIDE_MAX
+                ) {
+                  console.log(
+                    `create_draft: fulfillment policy ${fulfillmentPolicyId} contains Small Flat Rate service but package dims exceed limits: ${length}x${width}x${height} in`,
+                  );
+                  return new Response(
+                    JSON.stringify({
+                      error:
+                        `Selected shipping policy (${fulfillmentPolicyId}) includes USPS Small Flat Rate Box service which is incompatible with the provided package dimensions (${length} x ${width} x ${height} in). Please choose a different shipping policy or adjust package dimensions.`,
+                      policyConflict: true,
+                      fulfillmentPolicyId: fulfillmentPolicyId,
+                      offendingServiceHint: "USPS Priority Mail Small Flat Rate Box",
+                    }),
+                    { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+                  );
+                }
+              } else {
+                // No dimensions provided — warn but allow normal flow (eBay may infer)
+                console.log(
+                  `create_draft: fulfillment policy ${fulfillmentPolicyId} contains Small Flat Rate service; no package dimensions provided to validate.`,
+                );
+              }
+            }
+          }
+        }
+      } catch (policyChkErr) {
+        console.warn(
+          "create_draft: unable to validate fulfillment policy services against package dimensions:",
+          policyChkErr,
+        );
+        // Non-fatal — continue to attempt publish so we don't block users if policy API fails
+      }
+
       // Step 4: Build offer payload
       // IMPORTANT: The eBay Inventory API (REST) only supports FIXED_PRICE format.
       // Auction listings require the legacy Trading API (XML-based) which is a

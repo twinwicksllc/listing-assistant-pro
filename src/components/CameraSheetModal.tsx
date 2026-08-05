@@ -33,21 +33,56 @@ export default function CameraSheetModal({ open, onClose, onDone }: CameraSheetM
     setCameraError(null);
 
     try {
-      const constraints: MediaStreamConstraints = {
-        video: {
-          facingMode: facing,
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-        audio: false,
-      };
+      // Try multiple facingMode constraint variants for broader device compatibility.
+      const variants: MediaStreamConstraints[] = [
+        { video: { facingMode: { exact: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false },
+        { video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+        { video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+        { video: true, audio: false },
+      ];
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      let stream: MediaStream | null = null;
+      let lastErr: unknown = null;
+
+      for (const c of variants) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(c);
+          if (stream) {
+            // prefer first successful
+            break;
+          }
+        } catch (e) {
+          lastErr = e;
+          // Try next variant
+          console.warn("startCamera: getUserMedia variant failed", c, e);
+        }
+      }
+
+      if (!stream) throw lastErr ?? new Error("Could not obtain camera stream");
+
       streamRef.current = stream;
 
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+        try {
+          videoRef.current.srcObject = stream;
+          // Some mobile browsers require a small delay before play()
+          const p = videoRef.current.play();
+          if (p && typeof p.then === "function") {
+            await p.catch((e) => {
+              console.warn("video.play() rejected, will try again after short delay", e);
+            });
+          }
+        } catch (e) {
+          console.warn("Failed to attach stream to video element or play immediately:", e);
+        }
+        // Ensure play after microtask to improve reliability
+        setTimeout(() => {
+          try {
+            videoRef.current?.play().catch((e) => console.warn("video.play() async fail:", e));
+          } catch (e) {
+            console.warn("video.play() final attempt failed:", e);
+          }
+        }, 250);
       }
 
       // Check torch and zoom support
