@@ -62,38 +62,22 @@ jobs:
   e2e-smoke-tests:
     name: E2E Smoke Tests
     runs-on: ubuntu-latest
-    
+    container:
+      image: mcr.microsoft.com/playwright:v1.48-jammy
+
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          bun-version: 1.1.38
-      
+          node-version: '20'
+
       - name: Install dependencies
-        run: bun install
-      
-      - name: Restore Playwright browsers cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('**/package.json') }}
-          restore-keys: |
-            playwright-${{ runner.os }}-
+        run: npm ci
 
-      - name: Install Playwright browsers (Chromium only)
-        run: bunx playwright install --with-deps chromium
-
-      - name: Save Playwright browsers to cache
-        if: success()
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('**/package.json') }}
-      
       - name: Run smoke tests
-        run: bun run test:e2e:smoke
+        run: npm run test:e2e:smoke
         continue-on-error: true
 
   # Integration tests require a local Supabase instance (Docker).
