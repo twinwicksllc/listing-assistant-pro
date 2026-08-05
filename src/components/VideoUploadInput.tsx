@@ -39,6 +39,7 @@ export function VideoUploadInput({
 }: VideoUploadInputProps) {
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const captureFileInputRef = useRef<HTMLInputElement>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef = useRef(true);
 
@@ -251,16 +252,36 @@ export function VideoUploadInput({
         onChange={handleFileSelect}
         className="hidden"
       />
+      {/* Mobile native camera fallback: opens native camera app for recording */}
+      <input
+        ref={captureFileInputRef}
+        type="file"
+        accept="video/*"
+        capture="environment"
+        onChange={handleFileSelect}
+        className="hidden"
+      />
 
       {status === "idle" ? (
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="w-full flex items-center gap-2 py-2.5 px-3 rounded-lg border border-dashed border-border text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors text-xs"
-        >
-          <Video className="w-4 h-4 flex-shrink-0" />
-          <span>Add optional video (MP4 / MOV / WebM / AVI — max 500 MB)</span>
-        </button>
+        <div className="w-full flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex-1 flex items-center gap-2 py-2.5 px-3 rounded-lg border border-dashed border-border text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors text-xs"
+          >
+            <Video className="w-4 h-4 flex-shrink-0" />
+            <span>Add optional video (MP4 / MOV / WebM / AVI — max 500 MB)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => captureFileInputRef.current?.click()}
+            className="ml-2 px-3 py-2 rounded-lg border border-border bg-card text-xs text-foreground hover:border-primary/40"
+            title="Record with phone camera"
+          >
+            Record with camera
+          </button>
+        </div>
       ) : (
         <div className="flex items-center gap-2 py-2.5 px-3 rounded-lg border border-border bg-card text-xs">
           {/* Status icon */}
