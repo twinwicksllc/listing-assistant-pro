@@ -4338,8 +4338,15 @@ serve(async (req) => {
         body: JSON.stringify({ title: videoTitle || "Item Video", size: Number(fileSize) || 0 }),
       });
       if (!createResp.ok) {
-        const e = await createResp.text();
-        throw new Error(`eBay video create failed (${createResp.status}): ${e}`);
+        const respText = await createResp.text().catch(() => "<no-body>");
+        const respSnippet = respText.slice(0, 200) + (respText.length > 200 ? "…" : "");
+        console.error("upload_video: eBay video create returned non-ok response", {
+          status: createResp.status,
+          statusText: createResp.statusText,
+          body: respSnippet,
+          truncated: respText.length > 200,
+        });
+        throw new Error(`eBay video create failed (${createResp.status}): ${respSnippet}`);
       }
       const createData = await createResp.json();
       const videoId = createData.videoId;
