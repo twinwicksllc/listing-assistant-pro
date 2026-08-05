@@ -592,9 +592,8 @@ serve(async (req: Request) => {
     // keywords for unambiguous numismatic terms and self-correct the domain
     // here so the rest of the pipeline benefits, not just this one guard.
     if (identification.domain !== "coins_bullion") {
-      const _domainCheckText =
-        `${identification.itemName} ${identification.keywords.join(" ")}`
-          .toLowerCase();
+      const _domainCheckText = `${identification.itemName} ${identification.keywords.join(" ")}`
+        .toLowerCase();
       const _COIN_DOMAIN_SIGNAL_RE =
         /\b(coin|coins|cent|cents|trime|dime|dimes|nickel|nickels|penny|pennies|quarter|quarters|half dollar|silver dollar|gold dollar|morgan dollar|peace dollar|eisenhower dollar|kennedy half|franklin half|walking liberty|barber (?:dime|quarter|half)|mercury dime|roosevelt dime|buffalo nickel|jefferson nickel|wheat penny|indian head|proof set|mint set|bullion|troy oz|fine silver|fine gold|numismatic|ngc|pcgs|anacs|icg)\b/i;
       if (_COIN_DOMAIN_SIGNAL_RE.test(_domainCheckText)) {

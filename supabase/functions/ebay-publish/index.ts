@@ -4852,7 +4852,8 @@ serve(async (req) => {
             // Normalize and search for indicators of the Small Flat Rate Box
             const normalized = policyServices.map((s) => (s || "").toString().toLowerCase());
             const indicatesSmallFlatRate = normalized.some((s) =>
-              s.includes("small flat rate") || s.includes("priority mail small") || s.includes("uspsprioritymailsmallflatratebox") || s.includes("smallflatrate"),
+              s.includes("small flat rate") || s.includes("priority mail small") ||
+              s.includes("uspsprioritymailsmallflatratebox") || s.includes("smallflatrate")
             );
 
             if (indicatesSmallFlatRate) {
@@ -4863,11 +4864,17 @@ serve(async (req) => {
                 const height = Number(dims.height || 0);
                 // eBay error showed 8.6875 in — use that as a conservative per-side max for small flat rate
                 const SMALL_FLAT_RATE_SIDE_MAX = 8.6875;
-                if (length > SMALL_FLAT_RATE_SIDE_MAX || width > SMALL_FLAT_RATE_SIDE_MAX || height > SMALL_FLAT_RATE_SIDE_MAX) {
-                  console.log(`create_draft: fulfillment policy ${fulfillmentPolicyId} contains Small Flat Rate service but package dims exceed limits: ${length}x${width}x${height} in`);
+                if (
+                  length > SMALL_FLAT_RATE_SIDE_MAX || width > SMALL_FLAT_RATE_SIDE_MAX ||
+                  height > SMALL_FLAT_RATE_SIDE_MAX
+                ) {
+                  console.log(
+                    `create_draft: fulfillment policy ${fulfillmentPolicyId} contains Small Flat Rate service but package dims exceed limits: ${length}x${width}x${height} in`,
+                  );
                   return new Response(
                     JSON.stringify({
-                      error: `Selected shipping policy (${fulfillmentPolicyId}) includes USPS Small Flat Rate Box service which is incompatible with the provided package dimensions (${length} x ${width} x ${height} in). Please choose a different shipping policy or adjust package dimensions.`,
+                      error:
+                        `Selected shipping policy (${fulfillmentPolicyId}) includes USPS Small Flat Rate Box service which is incompatible with the provided package dimensions (${length} x ${width} x ${height} in). Please choose a different shipping policy or adjust package dimensions.`,
                       policyConflict: true,
                       fulfillmentPolicyId: fulfillmentPolicyId,
                       offendingServiceHint: "USPS Priority Mail Small Flat Rate Box",
@@ -4877,13 +4884,18 @@ serve(async (req) => {
                 }
               } else {
                 // No dimensions provided — warn but allow normal flow (eBay may infer)
-                console.log(`create_draft: fulfillment policy ${fulfillmentPolicyId} contains Small Flat Rate service; no package dimensions provided to validate.`);
+                console.log(
+                  `create_draft: fulfillment policy ${fulfillmentPolicyId} contains Small Flat Rate service; no package dimensions provided to validate.`,
+                );
               }
             }
           }
         }
       } catch (policyChkErr) {
-        console.warn("create_draft: unable to validate fulfillment policy services against package dimensions:", policyChkErr);
+        console.warn(
+          "create_draft: unable to validate fulfillment policy services against package dimensions:",
+          policyChkErr,
+        );
         // Non-fatal — continue to attempt publish so we don't block users if policy API fails
       }
 
