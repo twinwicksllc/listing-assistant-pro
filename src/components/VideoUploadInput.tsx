@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-import { Video, Loader2, CheckCircle2, XCircle, X } from "lucide-react";
+import { Video, Loader2, CheckCircle2, XCircle, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { compressVideo } from "@/utils/videoCompression";
 
-type UploadStatus = "idle" | "recording" | "uploading_storage" | "uploading_ebay" | "processing" | "live" | "failed";
+type UploadStatus = "idle" | "recording" | "compressing" | "uploading_storage" | "uploading_ebay" | "processing" | "live" | "failed";
 
 const ACCEPTED_VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm", "video/x-msvideo"];
 const MAX_VIDEO_SIZE_MB = 500;
@@ -91,6 +92,13 @@ export function VideoUploadInput({
   const [fileName, setFileName] = useState<string | null>(null);
   const [recordSecondsLeft, setRecordSecondsLeft] = useState(MAX_VIDEO_DURATION_SEC);
   const [recordedFormatWarning, setRecordedFormatWarning] = useState(false);
+  const [enableCompression, setEnableCompression] = useState(true);
+  const [compressionProgress, setCompressionProgress] = useState(0);
+  const [compressionInfo, setCompressionInfo] = useState<{
+    originalSize: number;
+    compressedSize: number;
+    ratio: number;
+  } | null>(null);
 
   // Track current videoId in a ref so the polling interval sees the latest value
   const videoIdRef = useRef<string | null>(initialVideoId ?? null);
@@ -211,14 +219,60 @@ export function VideoUploadInput({
     if (fileInputRef.current) fileInputRef.current.value = "";
 
     try {
-      // ── Step 1: Upload to Supabase Storage ──────────────────────────────
+      // ── Step 1: Optionally compress video ───────────────────────────────
+      let fileToUpload = file;
+      if (enableCompression && file.type.includes("video")) {
+        setStatus("compressing");
+        try {
+          // Track compression progress
+          const progressInterval = setInterval(() => {
+            const now = Date.now();
+            // Simulate smooth progress since FFmpeg doesn't always report it
+            setCompressionProgress((p) => Math.min(p + 0.05, 0.95));
+          }, 500);
+
+          const compressionResult = await compressVideo(file, {
+            bitrate: 2500, // 2.5 Mbps optimal for eBay
+            resolution: "720p",
+            preset: "medium", // Balance speed and compression ratio
+          });
+
+          clearInterval(progressInterval);
+          setCompressionProgress(1);
+
+          fileToUpload = new File([compressionResult.blob], compressionResult.filename, {
+            type: "video/mp4",
+          });
+
+          const savedMB = ((1 - compressionResult.compressionRatio) * 100).toFixed(1);
+          setCompressionInfo({
+            originalSize: compressionResult.originalSize,
+            compressedSize: compressionResult.compressedSize,
+            ratio: compressionResult.compressionRatio,
+          });
+
+          console.log(
+            `[VideoUploadInput] Compression complete: ${(compressionResult.originalSize / (1024 * 1024)).toFixed(2)}MB → ${(compressionResult.compressedSize / (1024 * 1024)).toFixed(2)}MB (saved ${savedMB}%)`,
+          );
+        } catch (compressionErr: any) {
+          console.warn(
+            `[VideoUploadInput] Compression failed (uploading original):`,
+            compressionErr.message,
+          );
+          // Fall back to uploading original file
+          setCompressionInfo(null);
+        }
+        setCompressionProgress(0);
+      }
+
+      // ── Step 2: Upload to Supabase Storage ──────────────────────────────
       setStatus("uploading_storage");
-      const ext = file.name.split(".").pop() ?? "mp4";
+      const ext = fileToUpload.name.split(".").pop() ?? "mp4";
       const path = `listing-videos/${user.id}/${Date.now()}.${ext}`;
 
       const { error: storageError } = await supabase.storage
         .from("listing-images")
-        .upload(path, file, { contentType: file.type, upsert: false });
+        .upload(path, fileToUpload, { contentType: fileToUpload.type, upsert: false });
 
       if (storageError) throw new Error(`Storage upload failed: ${storageError.message}`);
 
@@ -227,7 +281,7 @@ export function VideoUploadInput({
       setVideoUrl(publicUrl);
       videoUrlRef.current = publicUrl;
 
-      // ── Step 2: Upload to eBay Video API ────────────────────────────────
+      // ── Step 3: Upload to eBay Video API ────────────────────────────────
       setStatus("uploading_ebay");
       const { data, error } = await supabase.functions.invoke("ebay-publish", {
         body: {
@@ -235,8 +289,8 @@ export function VideoUploadInput({
           userToken: token,
           videoUrl: publicUrl,
           title: (title || "Item Video").slice(0, 80),
-          fileSize: file.size,
-          contentType: file.type,
+          fileSize: fileToUpload.size,
+          contentType: fileToUpload.type,
           durationSec: durationSec ?? undefined,
         },
       });
@@ -249,7 +303,7 @@ export function VideoUploadInput({
       setVideoId(newVideoId);
       videoIdRef.current = newVideoId;
 
-      // ── Step 3: Poll for LIVE status ─────────────────────────────────────
+      // ── Step 4: Poll for LIVE status ─────────────────────────────────────
       setStatus("processing");
       onStatusChange?.("PROCESSING");
       startPolling(newVideoId);
@@ -257,6 +311,8 @@ export function VideoUploadInput({
       if (!mountedRef.current) return;
       setStatus("failed");
       setErrorMsg(err.message ?? "Upload failed");
+      setCompressionProgress(0);
+      setCompressionInfo(null);
     }
   };
 
@@ -366,6 +422,7 @@ export function VideoUploadInput({
   const statusLabel: Record<UploadStatus, string> = {
     idle: "",
     recording: "",
+    compressing: "Optimizing video for eBay…",
     uploading_storage: "Uploading video…",
     uploading_ebay: "Sending to eBay…",
     processing: "eBay is processing your video — this can take a few minutes",
@@ -373,7 +430,7 @@ export function VideoUploadInput({
     failed: errorMsg ?? "Video processing failed",
   };
 
-  const isLoading = status === "uploading_storage" || status === "uploading_ebay" || status === "processing";
+  const isLoading = status === "compressing" || status === "uploading_storage" || status === "uploading_ebay" || status === "processing";
   const canRemove = status === "live" || status === "failed" || status === "processing";
   const canRetry = status === "failed";
 
@@ -414,6 +471,44 @@ export function VideoUploadInput({
               Stop
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Compression toggle (only show when idle or if compression was used) */}
+      {(status === "idle" || compressionInfo) && (
+        <div className="mt-3 pt-3 border-t border-border flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="enable-compression"
+            checked={enableCompression}
+            onChange={(e) => setEnableCompression(e.target.checked)}
+            className="w-4 h-4 rounded border-border cursor-pointer"
+            disabled={status !== "idle"}
+          />
+          <label htmlFor="enable-compression" className="text-xs text-muted-foreground cursor-pointer flex items-center gap-1.5 flex-1">
+            <Zap className="w-3.5 h-3.5 text-amber-500" />
+            Optimize video size (2.5 Mbps, 720p)
+          </label>
+          {compressionInfo && (
+            <span className="text-xs text-green-600 dark:text-green-400 font-medium whitespace-nowrap">
+              Saved {((1 - compressionInfo.ratio) * 100).toFixed(0)}%
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Compression progress bar */}
+      {status === "compressing" && compressionProgress > 0 && (
+        <div className="mt-2 space-y-1">
+          <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+            <div
+              className="bg-amber-500 h-full transition-all"
+              style={{ width: `${Math.min(compressionProgress * 100, 100)}%` }}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground text-center">
+            {(compressionProgress * 100).toFixed(0)}% complete
+          </p>
         </div>
       )}
 
