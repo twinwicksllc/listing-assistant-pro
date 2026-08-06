@@ -4350,17 +4350,19 @@ serve(async (req) => {
       if (!createResp.ok) {
         const respText = await createResp.text().catch(() => "<no-body>");
         const respSnippet = respText.slice(0, 200) + (respText.length > 200 ? "…" : "");
-        
+
         // Provide diagnostic guidance based on status
         let guidance = "";
         if (createResp.status === 404) {
-          guidance = "404 typically means: (1) Account not enabled for video on eBay, (2) Token missing video scope, or (3) Account status issue. Contact eBay seller support to enable video uploads.";
+          guidance =
+            "404 typically means: (1) Account not enabled for video on eBay, (2) Token missing video scope, or (3) Account status issue. Contact eBay seller support to enable video uploads.";
         } else if (createResp.status === 401 || createResp.status === 403) {
-          guidance = "Authentication/authorization issue. Token may be expired or lack required scopes (sell.marketing.media.manage).";
+          guidance =
+            "Authentication/authorization issue. Token may be expired or lack required scopes (sell.marketing.media.manage).";
         } else if (createResp.status === 400) {
           guidance = "Bad request. Check file size, title length, or eBay API requirements.";
         }
-        
+
         console.error("upload_video: eBay video create returned non-ok response", {
           environment: ebayEnv,
           status: createResp.status,

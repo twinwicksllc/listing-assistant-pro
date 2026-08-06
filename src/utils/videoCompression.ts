@@ -1,5 +1,5 @@
-import { FFmpeg, toBlobURL } from "@ffmpeg/ffmpeg";
-import { fetchFile } from "@ffmpeg/util";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { fetchFile, toBlobURL } from "@ffmpeg/util";
 
 // Singleton FFmpeg instance to avoid re-initializing
 let ffmpegInstance: FFmpeg | null = null;
