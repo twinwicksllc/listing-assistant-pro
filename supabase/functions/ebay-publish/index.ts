@@ -4331,20 +4331,29 @@ serve(async (req) => {
       }
 
       // Step 1: Create the video entity in eBay
-      const createResp = await fetchWithTimeout(`${apiBase}/sell/marketing/v1_beta/video`, {
+      const videoCreateUrl = `${apiBase}/sell/marketing/v1_beta/video`;
+      const videoCreateBody = JSON.stringify({ title: videoTitle || "Item Video", size: Number(fileSize) || 0 });
+      console.log("upload_video: calling eBay video create", {
+        environment: ebayEnv,
+        url: videoCreateUrl,
+        body: videoCreateBody,
+      });
+      const createResp = await fetchWithTimeout(videoCreateUrl, {
         method: "POST",
         timeout: 15000,
         headers: { Authorization: `Bearer ${userToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ title: videoTitle || "Item Video", size: Number(fileSize) || 0 }),
+        body: videoCreateBody,
       });
       if (!createResp.ok) {
         const respText = await createResp.text().catch(() => "<no-body>");
         const respSnippet = respText.slice(0, 200) + (respText.length > 200 ? "…" : "");
         console.error("upload_video: eBay video create returned non-ok response", {
+          environment: ebayEnv,
           status: createResp.status,
           statusText: createResp.statusText,
           body: respSnippet,
           truncated: respText.length > 200,
+          requestUrl: videoCreateUrl,
         });
         throw new Error(`eBay video create failed (${createResp.status}): ${respSnippet}`);
       }
