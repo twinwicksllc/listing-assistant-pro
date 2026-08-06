@@ -134,7 +134,7 @@ export async function compressVideo(
   const blob = new Blob([data], { type: "video/mp4" });
 
   // Get video duration from input for reference
-  let duration = 0;
+  const duration = 0;
   try {
     const probeArgs = ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1:0", "input_video"];
     await ffmpeg.exec(probeArgs);
