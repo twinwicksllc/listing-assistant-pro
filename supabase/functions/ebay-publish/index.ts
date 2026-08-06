@@ -4331,7 +4331,7 @@ serve(async (req) => {
       }
 
       // Step 1: Create the video entity in eBay
-      const videoCreateUrl = `${apiBase}/sell/marketing/v1_beta/video`;
+      const videoCreateUrl = `${apiBase}/sell/media/v1/video`;
       const videoCreateBody = JSON.stringify({ title: videoTitle || "Item Video", size: Number(fileSize) || 0 });
       console.log("upload_video: calling eBay video create", {
         environment: ebayEnv,
@@ -4386,7 +4386,7 @@ serve(async (req) => {
       }
 
       // Step 3: Upload bytes to eBay (no short timeout — large files may take minutes)
-      const uploadResp = await fetch(`${apiBase}/sell/marketing/v1_beta/video/${videoId}/upload`, {
+      const uploadResp = await fetch(`${apiBase}/sell/media/v1/video/${videoId}/upload`, {
         method: "PUT",
         headers: {
           Authorization: `Bearer ${userToken}`,
@@ -4412,7 +4412,7 @@ serve(async (req) => {
       if (!userToken) throw new Error("No eBay user token provided");
       if (!videoId) throw new Error("No videoId provided");
 
-      const statusResp = await fetchWithTimeout(`${apiBase}/sell/marketing/v1_beta/video/${videoId}`, {
+      const statusResp = await fetchWithTimeout(`${apiBase}/sell/media/v1/video/${videoId}`, {
         timeout: 10000,
         headers: { Authorization: `Bearer ${userToken}`, "Accept-Language": "en-US" },
       });
