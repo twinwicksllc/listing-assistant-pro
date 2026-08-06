@@ -4331,12 +4331,15 @@ serve(async (req) => {
       }
 
       // Step 1: Create the video entity in eBay
-      const videoCreateUrl = `${apiBase}/sell/marketing/v1_beta/video`;
+      const videoCreateUrl = `${apiBase}/sell/media/v1/video`;
       const videoCreateBody = JSON.stringify({ title: videoTitle || "Item Video", size: Number(fileSize) || 0 });
       console.log("upload_video: calling eBay video create", {
         environment: ebayEnv,
         url: videoCreateUrl,
         body: videoCreateBody,
+        fileSizeMB: (Number(fileSize) || 0) / (1024 * 1024),
+        durationSec,
+        contentType,
       });
       const createResp = await fetchWithTimeout(videoCreateUrl, {
         method: "POST",
@@ -4347,6 +4350,19 @@ serve(async (req) => {
       if (!createResp.ok) {
         const respText = await createResp.text().catch(() => "<no-body>");
         const respSnippet = respText.slice(0, 200) + (respText.length > 200 ? "…" : "");
+
+        // Provide diagnostic guidance based on status
+        let guidance = "";
+        if (createResp.status === 404) {
+          guidance =
+            "404 typically means: (1) Account not enabled for video on eBay, (2) Token missing video scope, or (3) Account status issue. Contact eBay seller support to enable video uploads.";
+        } else if (createResp.status === 401 || createResp.status === 403) {
+          guidance =
+            "Authentication/authorization issue. Token may be expired or lack required scopes (sell.marketing.media.manage).";
+        } else if (createResp.status === 400) {
+          guidance = "Bad request. Check file size, title length, or eBay API requirements.";
+        }
+
         console.error("upload_video: eBay video create returned non-ok response", {
           environment: ebayEnv,
           status: createResp.status,
@@ -4354,8 +4370,11 @@ serve(async (req) => {
           body: respSnippet,
           truncated: respText.length > 200,
           requestUrl: videoCreateUrl,
+          guidance,
+          fileSizeMB: (Number(fileSize) || 0) / (1024 * 1024),
+          durationSec,
         });
-        throw new Error(`eBay video create failed (${createResp.status}): ${respSnippet}`);
+        throw new Error(`eBay video create failed (${createResp.status}): ${respSnippet}. ${guidance}`);
       }
       const createData = await createResp.json();
       const videoId = createData.videoId;
@@ -4369,7 +4388,7 @@ serve(async (req) => {
       }
 
       // Step 3: Upload bytes to eBay (no short timeout — large files may take minutes)
-      const uploadResp = await fetch(`${apiBase}/sell/marketing/v1_beta/video/${videoId}/upload`, {
+      const uploadResp = await fetch(`${apiBase}/sell/media/v1/video/${videoId}/upload`, {
         method: "PUT",
         headers: {
           Authorization: `Bearer ${userToken}`,
@@ -4395,7 +4414,7 @@ serve(async (req) => {
       if (!userToken) throw new Error("No eBay user token provided");
       if (!videoId) throw new Error("No videoId provided");
 
-      const statusResp = await fetchWithTimeout(`${apiBase}/sell/marketing/v1_beta/video/${videoId}`, {
+      const statusResp = await fetchWithTimeout(`${apiBase}/sell/media/v1/video/${videoId}`, {
         timeout: 10000,
         headers: { Authorization: `Bearer ${userToken}`, "Accept-Language": "en-US" },
       });
