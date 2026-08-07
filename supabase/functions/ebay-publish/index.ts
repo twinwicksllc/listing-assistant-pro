@@ -3495,8 +3495,8 @@ async function handleRefreshToken(
         "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
         "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly",
         "https://api.ebay.com/oauth/api_scope/sell.finances",
-          "https://api.ebay.com/oauth/api_scope/sell.marketing",
-          "https://api.ebay.com/oauth/api_scope/commerce.media",
+        "https://api.ebay.com/oauth/api_scope/sell.marketing",
+        "https://api.ebay.com/oauth/api_scope/commerce.media",
       ].join(" "),
     }).toString(),
   });
@@ -4384,7 +4384,8 @@ serve(async (req) => {
           return new Response(
             JSON.stringify({
               error: "token_env_mismatch",
-              message: `Provided user token appears to be for '${tokenEnvDetected}' but the function is configured for '${ebayEnv}'. Use a ${ebayEnv} user token or set EBAY_ENVIRONMENT to '${tokenEnvDetected}'.`,
+              message:
+                `Provided user token appears to be for '${tokenEnvDetected}' but the function is configured for '${ebayEnv}'. Use a ${ebayEnv} user token or set EBAY_ENVIRONMENT to '${tokenEnvDetected}'.`,
             }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
