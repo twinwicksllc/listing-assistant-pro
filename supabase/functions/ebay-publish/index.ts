@@ -3142,6 +3142,7 @@ async function handleGetAuthUrl(
     "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly", // Required for dashboard views/analytics
     "https://api.ebay.com/oauth/api_scope/sell.finances", // Required for shipping label cost data
     "https://api.ebay.com/oauth/api_scope/sell.marketing", // Required for eBay Video API
+    "https://api.ebay.com/oauth/api_scope/commerce.media", // Required for eBay Media (video) API
     "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly", // OQ-5: required for Identity API username/accountType lookup
   ].join(" ");
 
@@ -3494,7 +3495,8 @@ async function handleRefreshToken(
         "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
         "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly",
         "https://api.ebay.com/oauth/api_scope/sell.finances",
-        "https://api.ebay.com/oauth/api_scope/sell.marketing",
+          "https://api.ebay.com/oauth/api_scope/sell.marketing",
+          "https://api.ebay.com/oauth/api_scope/commerce.media",
       ].join(" "),
     }).toString(),
   });
@@ -3658,6 +3660,7 @@ async function handleGetStoredToken(
             "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly",
             "https://api.ebay.com/oauth/api_scope/sell.finances",
             "https://api.ebay.com/oauth/api_scope/sell.marketing",
+            "https://api.ebay.com/oauth/api_scope/commerce.media",
           ].join(" "),
         }).toString(),
       });
@@ -4346,10 +4349,58 @@ serve(async (req) => {
         durationSec,
         contentType,
       });
+
+      // Lightweight identity probe: detect whether the provided userToken is
+      // a sandbox token or a production token so we can return a clearer error
+      // when environments are mixed (common cause of 404s).
+      try {
+        const identityProd = "https://apiz.ebay.com/commerce/identity/v1/user/";
+        const identitySandbox = "https://apiz.sandbox.ebay.com/commerce/identity/v1/user/";
+        let tokenEnvDetected: string = "unknown";
+        try {
+          const idProdResp = await fetchWithTimeout(identityProd, {
+            method: "GET",
+            timeout: 4000,
+            headers: { Authorization: `Bearer ${userToken}` },
+          });
+          if (idProdResp.ok) tokenEnvDetected = "production";
+        } catch {
+          // ignore
+        }
+        if (tokenEnvDetected === "unknown") {
+          try {
+            const idSandResp = await fetchWithTimeout(identitySandbox, {
+              method: "GET",
+              timeout: 4000,
+              headers: { Authorization: `Bearer ${userToken}` },
+            });
+            if (idSandResp.ok) tokenEnvDetected = "sandbox";
+          } catch {
+            // ignore
+          }
+        }
+        if (tokenEnvDetected !== "unknown" && tokenEnvDetected !== ebayEnv) {
+          console.error("upload_video: token environment mismatch", { tokenEnvDetected, ebayEnv });
+          return new Response(
+            JSON.stringify({
+              error: "token_env_mismatch",
+              message: `Provided user token appears to be for '${tokenEnvDetected}' but the function is configured for '${ebayEnv}'. Use a ${ebayEnv} user token or set EBAY_ENVIRONMENT to '${tokenEnvDetected}'.`,
+            }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+      } catch (probeErr) {
+        console.warn("upload_video: identity probe failed (non-fatal):", probeErr);
+      }
       const createResp = await fetchWithTimeout(videoCreateUrl, {
         method: "POST",
         timeout: 15000,
-        headers: { Authorization: `Bearer ${userToken}`, "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+          "Content-Type": "application/json",
+          "Content-Language": "en-US",
+          "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+        },
         body: videoCreateBody,
       });
       if (!createResp.ok) {
@@ -4398,6 +4449,8 @@ serve(async (req) => {
         headers: {
           Authorization: `Bearer ${userToken}`,
           "Content-Type": "application/octet-stream",
+          "Content-Language": "en-US",
+          "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
           ...(fileSize ? { "Content-Length": String(fileSize) } : {}),
         },
         body: videoFetchResp.body,
@@ -4421,7 +4474,11 @@ serve(async (req) => {
 
       const statusResp = await fetchWithTimeout(`${apiBase}/commerce/media/v1/video/${videoId}`, {
         timeout: 10000,
-        headers: { Authorization: `Bearer ${userToken}`, "Accept-Language": "en-US" },
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+          "Accept-Language": "en-US",
+          "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+        },
       });
       if (!statusResp.ok) {
         const e = await statusResp.text();
