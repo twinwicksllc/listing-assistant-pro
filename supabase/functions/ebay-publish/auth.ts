@@ -1,4 +1,5 @@
 import {
+  corsHeaders,
   EBAY_OAUTH_SCOPES,
   REFRESH_BUFFER_MS,
   STRIPE_PRO_PRODUCT_ID,
@@ -7,12 +8,7 @@ import {
 import { assertCallerOwnsUser, createClient } from "./supabase.ts";
 import { fetchWithTimeout } from "./fetch.ts";
 
-// Export for use in main router
-export const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-};
+export { corsHeaders };
 
 export interface EbayActionHandlerContext {
   req: Request;
