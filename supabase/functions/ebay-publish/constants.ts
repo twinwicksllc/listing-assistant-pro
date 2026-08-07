@@ -1,14 +1,21 @@
 // OAuth scope constants
+// NOTE: If you get "invalid_scope" 400 error, the app may not have these scopes registered in eBay Developer Portal.
+// Start with the minimal set below and gradually add optional scopes after registering them:
+// - commerce.media: Requires special registration for Video Upload API
+// - commerce.identity.readonly: Requires special registration for Identity API
+// - sell.analytics.readonly: Requires registration for dashboard analytics
+// - sell.finances: Requires registration for shipping/financial data
 export const EBAY_OAUTH_SCOPES = [
-  "https://api.ebay.com/oauth/api_scope",
-  "https://api.ebay.com/oauth/api_scope/sell.inventory",
-  "https://api.ebay.com/oauth/api_scope/sell.account",
-  "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
-  "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly", // Required for dashboard views/analytics
-  "https://api.ebay.com/oauth/api_scope/sell.finances", // Required for shipping label cost data
-  "https://api.ebay.com/oauth/api_scope/sell.marketing", // Required for eBay Video API
-  "https://api.ebay.com/oauth/api_scope/commerce.media", // Required for eBay Media (video) API
-  "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly", // OQ-5: required for Identity API username/accountType lookup
+  "https://api.ebay.com/oauth/api_scope", // Base scope (required)
+  "https://api.ebay.com/oauth/api_scope/sell.inventory", // Sell inventory (required for listings)
+  "https://api.ebay.com/oauth/api_scope/sell.account", // Account access (required)
+  "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly", // Fulfillment (optional)
+  // Uncomment the scopes below after registering them in eBay Developer Portal:
+  // "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly", // Dashboard analytics
+  // "https://api.ebay.com/oauth/api_scope/sell.finances", // Financial data (shipping labels, etc)
+  // "https://api.ebay.com/oauth/api_scope/sell.marketing", // eBay Video/promotions
+  // "https://api.ebay.com/oauth/api_scope/commerce.media", // Media API (video uploads)
+  // "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly", // Identity API (username lookup)
 ];
 
 // Video upload constants
