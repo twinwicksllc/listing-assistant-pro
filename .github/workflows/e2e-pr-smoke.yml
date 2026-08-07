@@ -24,7 +24,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Cache Playwright browsers
         uses: actions/cache@v4
@@ -69,6 +69,7 @@ jobs:
     if: ${{ github.event_name == 'pull_request' }}
     permissions:
       pull-requests: write
+      issues: write
     steps:
       - name: Download test report artifact
         uses: actions/download-artifact@v4
@@ -106,6 +107,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: smoke-tests
     if: ${{ github.event_name == 'push' }}
+    permissions:
+      contents: write
+      issues: write
     steps:
       - uses: actions/checkout@v4
 
@@ -115,7 +119,7 @@ jobs:
           name: playwright-report-smoke
           path: playwright-report
 
-      - name: Comment push results (create issue)
+      - name: Comment push results (commit comment)
         uses: actions/github-script@v7
         with:
           script: |
@@ -130,11 +134,11 @@ jobs:
               const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
               const body = `## 🧪 E2E Smoke Tests (push)\n\n✅ Passed: ${passed}\n❌ Failed: ${failed}\n\n[View detailed report](${runUrl})`;
 
-              // create an issue to record push results
-              github.rest.issues.create({
+              // create a commit comment to record push results (safer than creating a repo issue)
+              github.rest.repos.createCommitComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                title: `E2E Smoke Results — ${process.env.GITHUB_REF_NAME} — ${process.env.GITHUB_RUN_ID}`,
+                commit_sha: process.env.GITHUB_SHA,
                 body
               });
             } else {
