@@ -4331,8 +4331,13 @@ serve(async (req) => {
       }
 
       // Step 1: Create the video entity in eBay
-      const videoCreateUrl = `${apiBase}/sell/media/v1/video`;
-      const videoCreateBody = JSON.stringify({ title: videoTitle || "Item Video", size: Number(fileSize) || 0 });
+      const mediaApiBase = `${apiBase}/commerce/media/v1/video`;
+      const videoCreateUrl = mediaApiBase;
+      const videoCreateBody = JSON.stringify({
+        title: videoTitle || "Item Video",
+        size: Number(fileSize) || 0,
+        classification: ["ITEM"],
+      });
       console.log("upload_video: calling eBay video create", {
         environment: ebayEnv,
         url: videoCreateUrl,
@@ -4377,7 +4382,7 @@ serve(async (req) => {
         throw new Error(`eBay video create failed (${createResp.status}): ${respSnippet}. ${guidance}`);
       }
       const createData = await createResp.json();
-      const videoId = createData.videoId;
+      const videoId = createData.videoId ?? createData.video_id;
       if (!videoId) throw new Error("eBay returned no videoId");
       console.log(`upload_video: created eBay video entity videoId=${videoId}`);
 
@@ -4388,11 +4393,11 @@ serve(async (req) => {
       }
 
       // Step 3: Upload bytes to eBay (no short timeout — large files may take minutes)
-      const uploadResp = await fetch(`${apiBase}/sell/media/v1/video/${videoId}/upload`, {
-        method: "PUT",
+      const uploadResp = await fetch(`${mediaApiBase}/${videoId}/upload`, {
+        method: "POST",
         headers: {
           Authorization: `Bearer ${userToken}`,
-          "Content-Type": (contentType as string) || "video/mp4",
+          "Content-Type": "application/octet-stream",
           ...(fileSize ? { "Content-Length": String(fileSize) } : {}),
         },
         body: videoFetchResp.body,
@@ -4414,7 +4419,7 @@ serve(async (req) => {
       if (!userToken) throw new Error("No eBay user token provided");
       if (!videoId) throw new Error("No videoId provided");
 
-      const statusResp = await fetchWithTimeout(`${apiBase}/sell/media/v1/video/${videoId}`, {
+      const statusResp = await fetchWithTimeout(`${apiBase}/commerce/media/v1/video/${videoId}`, {
         timeout: 10000,
         headers: { Authorization: `Bearer ${userToken}`, "Accept-Language": "en-US" },
       });
@@ -4423,9 +4428,10 @@ serve(async (req) => {
         throw new Error(`eBay get video status failed (${statusResp.status}): ${e}`);
       }
       const statusData = await statusResp.json();
-      console.log(`get_video_status: videoId=${videoId} status=${statusData.videoStatus}`);
+      const currentStatus = statusData.videoStatus ?? statusData.status ?? "PENDING";
+      console.log(`get_video_status: videoId=${videoId} status=${currentStatus}`);
 
-      return new Response(JSON.stringify({ videoId, status: statusData.videoStatus }), {
+      return new Response(JSON.stringify({ videoId, status: currentStatus }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
