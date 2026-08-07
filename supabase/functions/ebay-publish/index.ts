@@ -3594,7 +3594,7 @@ serve(async (req) => {
     // get_stored_token and get_policies only need Supabase credentials, so we defer
     // this check to avoid blocking those actions when eBay app credentials are misconfigured.
     const requiresEbayCredentials = !["get_stored_token", "get_policies", "upload_video", "get_video_status"]
-      .includes(action);
+      .includes(action ?? "");
     if (requiresEbayCredentials && (!clientId || !clientSecret)) {
       throw new Error("eBay API credentials not configured");
     }
@@ -3607,7 +3607,7 @@ serve(async (req) => {
 
     // --- ACTION: Get OAuth consent URL ---
     if (action === "get_auth_url") {
-      return await handleGetAuthUrl({ clientId, authBase });
+      return await handleGetAuthUrl({ req, payload, clientId, authBase });
     }
 
     // --- ACTION: Exchange auth code for user token ---
@@ -3869,7 +3869,7 @@ serve(async (req) => {
       // also require the numeric conditionId. We send both for maximum compatibility.
       // Migrate any legacy deprecated condition codes to current equivalents,
       // then normalize based on the category and item type (e.g., LIKE_NEW not valid for coins).
-      const rawCondition = condition || "USED_EXCELLENT";
+      const rawCondition = (condition as string) || "USED_EXCELLENT";
       // Determine whether this is a graded (slabbed/certified) coin. Graded coins
       // must map to the eBay "Graded" condition (LIKE_NEW / 2750) rather than being
       // force-corrected to a circulated grade. We derive this from the coin condition
@@ -4477,8 +4477,9 @@ serve(async (req) => {
           );
         }
       } else {
-        offerData = await offerResp.json();
-        offerId = offerData.offerId;
+        const parsedOfferData = await offerResp.json() as Record<string, unknown>;
+        offerData = parsedOfferData;
+        offerId = parsedOfferData.offerId as string | undefined;
         console.log(
           `create_draft: offer created successfully, offerId=${offerId}, about to publish...`,
         );

@@ -64,7 +64,7 @@ export async function handleExchangeCode(
   if (!ebayEnv || !tokenUrl) throw new Error("eBay OAuth endpoint not configured");
 
   const { code, userId } = payload;
-  if (!code) throw new Error("No authorization code provided");
+  if (!code || typeof code !== "string") throw new Error("No authorization code provided");
 
   // Security: verify the caller owns the userId they claim to be storing tokens for.
   if (userId) {
