@@ -1,6 +1,7 @@
 import {
   ALLOWED_VIDEO_CONTENT_TYPES,
   CONTENT_LANGUAGE,
+  corsHeaders,
   EBAY_MARKETPLACE_ID,
   IDENTITY_API_PROD,
   IDENTITY_API_SANDBOX,
@@ -8,13 +9,6 @@ import {
   MIN_VIDEO_DURATION_SEC,
 } from "./constants.ts";
 import { fetchWithTimeout } from "./fetch.ts";
-
-// CORS headers for video responses
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-};
 
 export interface VideoHandlerContext {
   payload: Record<string, unknown>;

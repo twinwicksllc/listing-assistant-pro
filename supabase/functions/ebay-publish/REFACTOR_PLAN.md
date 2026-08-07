@@ -52,9 +52,26 @@ Reduce file size and complexity by extracting cohesive responsibilities into sma
 
 ## Branch / PR
 
-This plan will be committed to branch `fix/ebay-video-scope-headers` and attached to PR: https://github.com/twinwicksllc/listing-assistant-pro/pull/437
+- Steps 1-5 (auth.ts, video.ts, supabase.ts, fetch.ts, constants.ts): PR #438 (merged to `main`).
+- Steps 6-8 (publish.ts, publish-helpers.ts, publish-create-draft.ts): branch `refactor/ebay-publish-extract-publish-ts`.
 
-If you approve, I will extract `auth.ts` first and open a small PR for that step.
+## Status: Complete
+
+All 8 steps finished. Final module layout:
+
+| Module                    | Lines | Contents                                                                                                |
+| ------------------------- | ----- | ------------------------------------------------------------------------------------------------------- |
+| `index.ts`                | 159   | Thin router — parses `action`, resolves shared env context, dispatches                                  |
+| `auth.ts`                 | 618   | OAuth handlers (`handleGetAuthUrl`, `handleExchangeCode`, `handleRefreshToken`, `handleGetStoredToken`) |
+| `video.ts`                | 265   | `handleUploadVideo`, `handleGetVideoStatus`, identity-probe                                             |
+| `supabase.ts`             | 45    | `createClient` wrapper, `assertCallerOwnsUser`                                                          |
+| `fetch.ts`                | 35    | `fetchWithTimeout`                                                                                      |
+| `constants.ts`            | 46    | OAuth scopes, CORS headers, marketplace IDs, video constraints                                          |
+| `publish.ts`              | 220   | `handleGetPolicies`, `handleBulkCreateDraft`, `buildEbayJsonHeaders`                                    |
+| `publish-helpers.ts`      | 3514  | ~50 standalone aspect/condition/offer/coin-descriptor/category helpers                                  |
+| `publish-create-draft.ts` | 1308  | `handleCreateDraft` — the single-listing publish flow                                                   |
+
+Original `index.ts` was ~5800 lines. Every extraction was verified with `deno check` (not just `fmt`/`lint`) against a zero-error baseline before and after each step, per the safety checklist above.
 
 ---
 
