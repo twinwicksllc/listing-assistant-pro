@@ -6,15 +6,15 @@
 // - sell.analytics.readonly: Requires registration for dashboard analytics
 // - sell.finances: Requires registration for shipping/financial data
 export const EBAY_OAUTH_SCOPES = [
-  "https://api.ebay.com/oauth/api_scope",                      // Base scope (required)
-  "https://api.ebay.com/oauth/api_scope/sell.inventory",       // Sell inventory (required for listings)
-  "https://api.ebay.com/oauth/api_scope/sell.account",         // Account access (required)
+  "https://api.ebay.com/oauth/api_scope", // Base scope (required)
+  "https://api.ebay.com/oauth/api_scope/sell.inventory", // Sell inventory (required for listings)
+  "https://api.ebay.com/oauth/api_scope/sell.account", // Account access (required)
   "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly", // Fulfillment (optional)
   // Uncomment the scopes below after registering them in eBay Developer Portal:
-  // "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly",  // Dashboard analytics
-  // "https://api.ebay.com/oauth/api_scope/sell.finances",            // Financial data (shipping labels, etc)
-  // "https://api.ebay.com/oauth/api_scope/sell.marketing",           // eBay Video/promotions
-  // "https://api.ebay.com/oauth/api_scope/commerce.media",           // Media API (video uploads)
+  // "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly", // Dashboard analytics
+  // "https://api.ebay.com/oauth/api_scope/sell.finances", // Financial data (shipping labels, etc)
+  // "https://api.ebay.com/oauth/api_scope/sell.marketing", // eBay Video/promotions
+  // "https://api.ebay.com/oauth/api_scope/commerce.media", // Media API (video uploads)
   // "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly", // Identity API (username lookup)
 ];
 
