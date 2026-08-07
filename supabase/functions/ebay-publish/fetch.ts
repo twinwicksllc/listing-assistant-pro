@@ -4,7 +4,7 @@
  *
  * @param url The URL to fetch
  * @param options Fetch options (method, headers, body, etc.)
- * @param timeout Timeout in milliseconds (default: 30000)
+ * @param options.timeout Timeout in milliseconds (default: 15000)
  * @returns Promise<Response>
  * @throws Error if the request times out or fails
  */
@@ -12,7 +12,8 @@ export async function fetchWithTimeout(
   url: string,
   options: RequestInit & { timeout?: number } = {},
 ): Promise<Response> {
-  const { timeout = 30000, ...fetchOptions } = options;
+  const timeout = options.timeout ?? 15000; // 15 second default
+  const { timeout: _timeout, ...fetchOptions } = options;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -22,8 +23,13 @@ export async function fetchWithTimeout(
       ...fetchOptions,
       signal: controller.signal,
     });
-    return response;
-  } finally {
     clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Request to ${url} timed out after ${timeout}ms`);
+    }
+    throw error;
   }
 }

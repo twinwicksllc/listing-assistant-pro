@@ -19,7 +19,7 @@ const corsHeaders = {
 export interface VideoHandlerContext {
   payload: Record<string, unknown>;
   apiBase: string;
-  ebayEnv: string;
+  ebayEnv?: string;
 }
 
 /**
@@ -129,7 +129,7 @@ export async function handleUploadVideo(
   // a sandbox token or a production token so we can return a clearer error
   // when environments are mixed (common cause of 404s).
   try {
-    const tokenEnvDetected = await probeTokenEnvironment(userToken);
+    const tokenEnvDetected = await probeTokenEnvironment(String(userToken));
     if (tokenEnvDetected !== "unknown" && tokenEnvDetected !== ebayEnv) {
       console.error("upload_video: token environment mismatch", {
         tokenEnvDetected,
