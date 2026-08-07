@@ -108,7 +108,7 @@ serve(async (req) => {
 
     // --- ACTION: Publish a single draft to eBay ---
     if (action === "create_draft") {
-      return await handleCreateDraft({ payload, apiBase, ebayEnv, clientId, clientSecret });
+      return await handleCreateDraft({ req, payload, apiBase, ebayEnv, clientId, clientSecret });
     }
 
     // --- ACTION: Bulk publish multiple drafts (server-side loop) ---
@@ -118,7 +118,7 @@ serve(async (req) => {
 
     // --- ACTION: Fetch eBay business policies for a user token ---
     if (action === "get_policies") {
-      return await handleGetPolicies({ payload, apiBase });
+      return await handleGetPolicies({ req, payload, apiBase });
     }
 
     return new Response(JSON.stringify({ error: "Unknown action" }), {

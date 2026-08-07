@@ -1,5 +1,5 @@
 import { corsHeaders } from "./constants.ts";
-import { createClient } from "./supabase.ts";
+import { assertCallerOwnsUser, createClient } from "./supabase.ts";
 import { fetchWithTimeout } from "./fetch.ts";
 
 export function buildEbayJsonHeaders(accessToken: unknown): Record<string, string> {
@@ -12,6 +12,7 @@ export function buildEbayJsonHeaders(accessToken: unknown): Record<string, strin
 }
 
 export interface GetPoliciesContext {
+  req: Request;
   payload: Record<string, unknown>;
   apiBase: string;
 }
@@ -21,7 +22,7 @@ export interface GetPoliciesContext {
  * Consolidated here to avoid CORS issues with a separate policies function.
  */
 export async function handleGetPolicies(
-  { payload, apiBase }: GetPoliciesContext,
+  { req, payload, apiBase }: GetPoliciesContext,
 ): Promise<Response> {
   const { userToken, userId } = payload;
 
@@ -32,6 +33,8 @@ export async function handleGetPolicies(
       const supabaseUrl = Deno.env.get("SUPABASE_URL");
       const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
       if (supabaseUrl && supabaseServiceKey) {
+        // Security: verify caller owns this userId before accessing their token
+        await assertCallerOwnsUser(req, String(userId), supabaseUrl, supabaseServiceKey);
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
         const { data } = await supabase
           .from("profiles")
@@ -163,12 +166,18 @@ export async function handleBulkCreateDraft(
 
   for (const draft of drafts) {
     try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      // Only include Authorization header if present (avoid sending empty string)
+      const authHeader = req.headers.get("Authorization");
+      if (authHeader) {
+        headers.Authorization = authHeader;
+      }
+
       const singleResp = await fetch(req.url, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: req.headers.get("Authorization") || "",
-        },
+        headers,
         body: JSON.stringify({
           action: "create_draft",
           ...(userId ? { userId } : {}),
@@ -178,22 +187,43 @@ export async function handleBulkCreateDraft(
         }),
       });
 
-      const singleData = await singleResp.json();
+      // Defensively handle response: check status and parse JSON safely
+      if (!singleResp.ok) {
+        const errText = await singleResp.text().catch(() => "(no response body)");
+        results.push({
+          draftId: draft.draftId,
+          success: false,
+          error: `HTTP ${singleResp.status}: ${errText}`,
+        });
+        continue;
+      }
+
+      let singleData: Record<string, unknown>;
+      try {
+        singleData = await singleResp.json();
+      } catch (parseErr) {
+        results.push({
+          draftId: draft.draftId,
+          success: false,
+          error: `Response is not valid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
+        });
+        continue;
+      }
 
       if (singleData.success) {
         results.push({
           draftId: draft.draftId,
           success: true,
-          listingId: singleData.listingId,
-          offerId: singleData.offerId,
-          sku: singleData.sku,
-          affiliateUrl: singleData.affiliateUrl,
+          listingId: singleData.listingId as string | undefined,
+          offerId: singleData.offerId as string | undefined,
+          sku: singleData.sku as string | undefined,
+          affiliateUrl: singleData.affiliateUrl as string | undefined,
         });
       } else {
         results.push({
           draftId: draft.draftId,
           success: false,
-          error: singleData.error || "Unknown error",
+          error: (singleData.error as string) || "Unknown error",
         });
       }
     } catch (err) {

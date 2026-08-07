@@ -1,5 +1,6 @@
 import { fetchWithTimeout } from "./fetch.ts";
 import { corsHeaders } from "./constants.ts";
+import { assertCallerOwnsUser } from "./supabase.ts";
 import { buildEbayJsonHeaders } from "./publish.ts";
 import {
   buildAndNormalizeAspects,
@@ -29,6 +30,7 @@ import {
 } from "./publish-helpers.ts";
 
 export interface CreateDraftContext {
+  req: Request;
   payload: Record<string, unknown>;
   apiBase: string;
   ebayEnv: string;
@@ -42,7 +44,7 @@ export interface CreateDraftContext {
  * and publishes the offer live.
  */
 export async function handleCreateDraft(
-  { payload, apiBase, ebayEnv, clientId, clientSecret }: CreateDraftContext,
+  { req, payload, apiBase, ebayEnv, clientId, clientSecret }: CreateDraftContext,
 ): Promise<Response> {
   const {
     userId,
@@ -75,6 +77,15 @@ export async function handleCreateDraft(
   } = payload;
 
   if (!userToken) throw new Error("No eBay user token provided");
+
+  // Security: verify caller owns this userId before allowing SKU generation and RPC calls
+  if (userId) {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (supabaseUrl && supabaseServiceKey) {
+      await assertCallerOwnsUser(req, String(userId), supabaseUrl, supabaseServiceKey);
+    }
+  }
 
   console.log(
     `create_draft: starting publish - title="${title}", format=${listingFormat}, env=${ebayEnv}`,
