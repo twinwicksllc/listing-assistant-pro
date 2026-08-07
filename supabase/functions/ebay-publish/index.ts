@@ -1,7 +1,19 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { decode as decodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient as createSupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { captureException, initSentry } from "../_helpers/sentry.ts";
+
+// Import extracted modules
+import {
+  corsHeaders as authCorsHeaders,
+  handleExchangeCode,
+  handleGetAuthUrl,
+  handleGetStoredToken,
+  handleRefreshToken,
+} from "./auth.ts";
+import { handleGetVideoStatus, handleUploadVideo } from "./video.ts";
+import { createClient } from "./supabase.ts";
+import { fetchWithTimeout } from "./fetch.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -3082,47 +3094,9 @@ function buildCoinConditionDescriptors(
 }
 
 // ================================================================
-// SECURITY HELPER — caller-identity verification
+// ACTION HANDLERS - OAuth, tokens, video, and publishing
+// Extracted into separate modules: auth.ts, video.ts, supabase.ts
 // ================================================================
-// Every action that reads or writes a user's eBay tokens (exchange_code,
-// refresh_token, get_stored_token) MUST call this before touching the DB.
-// It validates the caller's Supabase JWT and confirms the authenticated
-// user is the same person as the claimed userId payload field.
-// Without this check any logged-in user could read or overwrite any
-// other user's eBay tokens (IDOR).
-// ================================================================
-
-async function assertCallerOwnsUser(
-  req: Request,
-  claimedUserId: string,
-  supabaseUrl: string,
-  supabaseServiceKey: string,
-): Promise<void> {
-  const authHeader = req.headers.get("Authorization");
-  const jwt = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
-  if (!jwt) {
-    throw new Error("Unauthorized: missing Authorization header for token action.");
-  }
-  // Validate the JWT using the service-role client (verifies against project JWT secret).
-  const sc = createClient(supabaseUrl, supabaseServiceKey);
-  const { data: { user }, error: authErr } = await sc.auth.getUser(jwt);
-  if (authErr || !user) {
-    throw new Error("Unauthorized: invalid or expired session token.");
-  }
-  if (user.id !== claimedUserId) {
-    throw new Error("Unauthorized: userId does not match the authenticated session.");
-  }
-}
-
-interface EbayActionHandlerContext {
-  req: Request;
-  payload: Record<string, unknown>;
-  clientId?: string;
-  clientSecret?: string;
-  ebayEnv?: string;
-  authBase?: string;
-  tokenUrl?: string;
-}
 
 async function handleGetAuthUrl(
   { clientId, authBase }: EbayActionHandlerContext,
@@ -4299,199 +4273,12 @@ serve(async (req) => {
 
     // --- ACTION: Upload video to eBay Video API ---
     if (action === "upload_video") {
-      const { userToken, videoUrl, title: videoTitle, fileSize, contentType, durationSec } = payload;
-      if (!userToken) throw new Error("No eBay user token provided");
-      if (!videoUrl) throw new Error("No videoUrl provided");
-
-      // Defense-in-depth: re-validate format/duration server-side even though the
-      // client already enforces these (client checks can be bypassed).
-      const ALLOWED_VIDEO_CONTENT_TYPES = ["video/mp4", "video/quicktime", "video/x-msvideo", "video/webm"];
-      if (contentType && !ALLOWED_VIDEO_CONTENT_TYPES.includes(String(contentType))) {
-        return new Response(
-          JSON.stringify({ error: `Unsupported video format: ${contentType}. Use MP4, MOV, AVI, or WebM.` }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
-      // Small buffer above the 10s client-side cap / below eBay's 3s minimum to
-      // tolerate encoder rounding without rejecting legitimate clips.
-      const MAX_VIDEO_DURATION_SEC = 12;
-      const MIN_VIDEO_DURATION_SEC = 2;
-      if (typeof durationSec === "number" && Number.isFinite(durationSec)) {
-        if (durationSec > MAX_VIDEO_DURATION_SEC) {
-          return new Response(
-            JSON.stringify({ error: `Video is too long (${durationSec.toFixed(1)}s). Maximum allowed is 10 seconds.` }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-          );
-        }
-        if (durationSec < MIN_VIDEO_DURATION_SEC) {
-          return new Response(
-            JSON.stringify({
-              error: `Video is too short (${durationSec.toFixed(1)}s). eBay requires at least 3 seconds.`,
-            }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-          );
-        }
-      }
-
-      // Step 1: Create the video entity in eBay
-      const mediaApiBase = `${apiBase}/commerce/media/v1/video`;
-      const videoCreateUrl = mediaApiBase;
-      const videoCreateBody = JSON.stringify({
-        title: videoTitle || "Item Video",
-        size: Number(fileSize) || 0,
-        classification: ["ITEM"],
-      });
-      console.log("upload_video: calling eBay video create", {
-        environment: ebayEnv,
-        url: videoCreateUrl,
-        body: videoCreateBody,
-        fileSizeMB: (Number(fileSize) || 0) / (1024 * 1024),
-        durationSec,
-        contentType,
-      });
-
-      // Lightweight identity probe: detect whether the provided userToken is
-      // a sandbox token or a production token so we can return a clearer error
-      // when environments are mixed (common cause of 404s).
-      try {
-        const identityProd = "https://apiz.ebay.com/commerce/identity/v1/user/";
-        const identitySandbox = "https://apiz.sandbox.ebay.com/commerce/identity/v1/user/";
-        let tokenEnvDetected: string = "unknown";
-        try {
-          const idProdResp = await fetchWithTimeout(identityProd, {
-            method: "GET",
-            timeout: 4000,
-            headers: { Authorization: `Bearer ${userToken}` },
-          });
-          if (idProdResp.ok) tokenEnvDetected = "production";
-        } catch {
-          // ignore
-        }
-        if (tokenEnvDetected === "unknown") {
-          try {
-            const idSandResp = await fetchWithTimeout(identitySandbox, {
-              method: "GET",
-              timeout: 4000,
-              headers: { Authorization: `Bearer ${userToken}` },
-            });
-            if (idSandResp.ok) tokenEnvDetected = "sandbox";
-          } catch {
-            // ignore
-          }
-        }
-        if (tokenEnvDetected !== "unknown" && tokenEnvDetected !== ebayEnv) {
-          console.error("upload_video: token environment mismatch", { tokenEnvDetected, ebayEnv });
-          return new Response(
-            JSON.stringify({
-              error: "token_env_mismatch",
-              message:
-                `Provided user token appears to be for '${tokenEnvDetected}' but the function is configured for '${ebayEnv}'. Use a ${ebayEnv} user token or set EBAY_ENVIRONMENT to '${tokenEnvDetected}'.`,
-            }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-          );
-        }
-      } catch (probeErr) {
-        console.warn("upload_video: identity probe failed (non-fatal):", probeErr);
-      }
-      const createResp = await fetchWithTimeout(videoCreateUrl, {
-        method: "POST",
-        timeout: 15000,
-        headers: {
-          Authorization: `Bearer ${userToken}`,
-          "Content-Type": "application/json",
-          "Content-Language": "en-US",
-          "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
-        },
-        body: videoCreateBody,
-      });
-      if (!createResp.ok) {
-        const respText = await createResp.text().catch(() => "<no-body>");
-        const respSnippet = respText.slice(0, 200) + (respText.length > 200 ? "…" : "");
-
-        // Provide diagnostic guidance based on status
-        let guidance = "";
-        if (createResp.status === 404) {
-          guidance =
-            "404 typically means: (1) Account not enabled for video on eBay, (2) Token missing video scope, or (3) Account status issue. Contact eBay seller support to enable video uploads.";
-        } else if (createResp.status === 401 || createResp.status === 403) {
-          guidance =
-            "Authentication/authorization issue. Token may be expired or lack required scopes (sell.marketing.media.manage).";
-        } else if (createResp.status === 400) {
-          guidance = "Bad request. Check file size, title length, or eBay API requirements.";
-        }
-
-        console.error("upload_video: eBay video create returned non-ok response", {
-          environment: ebayEnv,
-          status: createResp.status,
-          statusText: createResp.statusText,
-          body: respSnippet,
-          truncated: respText.length > 200,
-          requestUrl: videoCreateUrl,
-          guidance,
-          fileSizeMB: (Number(fileSize) || 0) / (1024 * 1024),
-          durationSec,
-        });
-        throw new Error(`eBay video create failed (${createResp.status}): ${respSnippet}. ${guidance}`);
-      }
-      const createData = await createResp.json();
-      const videoId = createData.videoId ?? createData.video_id;
-      if (!videoId) throw new Error("eBay returned no videoId");
-      console.log(`upload_video: created eBay video entity videoId=${videoId}`);
-
-      // Step 2: Fetch video bytes from Supabase Storage
-      const videoFetchResp = await fetch(videoUrl as string);
-      if (!videoFetchResp.ok) {
-        throw new Error(`Failed to fetch video from storage (${videoFetchResp.status})`);
-      }
-
-      // Step 3: Upload bytes to eBay (no short timeout — large files may take minutes)
-      const uploadResp = await fetch(`${mediaApiBase}/${videoId}/upload`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${userToken}`,
-          "Content-Type": "application/octet-stream",
-          "Content-Language": "en-US",
-          "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
-          ...(fileSize ? { "Content-Length": String(fileSize) } : {}),
-        },
-        body: videoFetchResp.body,
-      });
-      if (!uploadResp.ok && uploadResp.status !== 204) {
-        const e = await uploadResp.text();
-        throw new Error(`eBay video upload failed (${uploadResp.status}): ${e}`);
-      }
-      console.log(`upload_video: bytes uploaded for videoId=${videoId}, httpStatus=${uploadResp.status}`);
-
-      return new Response(JSON.stringify({ videoId, status: "PENDING" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return await handleUploadVideo({ payload, apiBase, ebayEnv });
     }
 
     // --- ACTION: Get eBay video processing status ---
     if (action === "get_video_status") {
-      const { userToken, videoId } = payload;
-      if (!userToken) throw new Error("No eBay user token provided");
-      if (!videoId) throw new Error("No videoId provided");
-
-      const statusResp = await fetchWithTimeout(`${apiBase}/commerce/media/v1/video/${videoId}`, {
-        timeout: 10000,
-        headers: {
-          Authorization: `Bearer ${userToken}`,
-          "Accept-Language": "en-US",
-          "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
-        },
-      });
-      if (!statusResp.ok) {
-        const e = await statusResp.text();
-        throw new Error(`eBay get video status failed (${statusResp.status}): ${e}`);
-      }
-      const statusData = await statusResp.json();
-      const currentStatus = statusData.videoStatus ?? statusData.status ?? "PENDING";
-      console.log(`get_video_status: videoId=${videoId} status=${currentStatus}`);
-
-      return new Response(JSON.stringify({ videoId, status: currentStatus }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return await handleGetVideoStatus({ payload, apiBase });
     }
 
     // --- ACTION: Publish a single draft to eBay ---
