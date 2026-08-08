@@ -220,8 +220,7 @@ export async function handleUploadVideo(
     // Non-endpoint errors should fail fast.
     let guidance = "";
     if (resp.status === 401 || resp.status === 403) {
-      guidance =
-        "Authentication/authorization issue. Token may be expired or lack required scopes (commerce.media).";
+      guidance = "Authentication/authorization issue. Token may be expired or lack required scopes (commerce.media).";
     } else if (resp.status === 400) {
       guidance = "Bad request. Check file size, title length, classification, and eBay API requirements.";
     }
@@ -233,7 +232,9 @@ export async function handleUploadVideo(
 
   if (!createResp || !createData) {
     throw new Error(
-      `eBay video create failed across endpoint variants: ${endpointErrors.map((e) => `${e.status}@${e.url}`).join(", ")}`,
+      `eBay video create failed across endpoint variants: ${
+        endpointErrors.map((e) => `${e.status}@${e.url}`).join(", ")
+      }`,
     );
   }
 
@@ -282,6 +283,7 @@ export async function handleGetVideoStatus(
   {
     payload,
     apiBase,
+    ebayEnv,
   }: VideoHandlerContext,
 ): Promise<Response> {
   const { userToken, videoId } = payload;
@@ -326,12 +328,15 @@ export async function handleGetVideoStatus(
   const normalizedStatus = normalizeVideoStatus(rawStatus);
   console.log(`get_video_status: videoId=${videoId} status=${normalizedStatus} rawStatus=${rawStatus}`);
 
-  return new Response(JSON.stringify({
-    videoId,
-    status: normalizedStatus,
-    rawStatus,
-    statusMessage: statusData.statusMessage ?? statusData.status_message ?? null,
-  }), {
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return new Response(
+    JSON.stringify({
+      videoId,
+      status: normalizedStatus,
+      rawStatus,
+      statusMessage: statusData.statusMessage ?? statusData.status_message ?? null,
+    }),
+    {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    },
+  );
 }
