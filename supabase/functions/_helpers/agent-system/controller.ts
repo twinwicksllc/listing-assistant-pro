@@ -14,9 +14,9 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 
 export class ListingAgentController {
   private apiKey: string;
-  private supabase: ReturnType<typeof createClient>;
+  private supabase: ReturnType<typeof createClient<any>>;
 
-  constructor(apiKey: string, supabase: ReturnType<typeof createClient>) {
+  constructor(apiKey: string, supabase: ReturnType<typeof createClient<any>>) {
     this.apiKey = apiKey;
     this.supabase = supabase;
   }

@@ -13,7 +13,7 @@ export async function runAgenticVisualAgent(
   apiKey: string,
   domainDef: DomainDefinition,
   context: AgentContext,
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createClient<any>>,
 ): Promise<VisualInspectionResult> {
   const { invocationId, imageList } = context;
   console.log(`[${invocationId}] VisualAgent: Running precision inspection for ${domainDef.domain}`);
@@ -130,8 +130,10 @@ You must return your findings in JSON format:
         const capturedAttributes = parsed?.capturedAttributes &&
             typeof parsed.capturedAttributes === "object"
           ? Object.fromEntries(
-            Object.entries(parsed.capturedAttributes)
-              .filter(([k, v]) => typeof k === "string" && typeof v === "string")
+            Object.entries(parsed.capturedAttributes as Record<string, unknown>)
+              .filter((entry): entry is [string, string] =>
+                typeof entry[0] === "string" && typeof entry[1] === "string"
+              )
               .map(([k, v]) => [k.trim(), v.trim()]),
           )
           : undefined;

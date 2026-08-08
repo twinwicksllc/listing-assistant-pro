@@ -776,25 +776,31 @@ serve(async (req: Request) => {
         );
         // Log OpenAI usage for cost tracking (non-blocking)
         if (slabOcrResult?._usage) {
-          svc
-            .from("gemini_usage")
-            .insert({
-              user_id: userId,
-              function_name: "analyze-item/slab-ocr",
-              model: "gpt-4o",
-              provider: "openai",
-              prompt_tokens: slabOcrResult._usage.promptTokens,
-              completion_tokens: slabOcrResult._usage.completionTokens,
-              total_tokens: slabOcrResult._usage.totalTokens,
-              cost_usd: slabOcrResult._usage.costUsd,
-            })
-            .then(() => {})
-            .catch((e: unknown) =>
+          try {
+            const { error: usageLogErr } = await svc
+              .from("gemini_usage")
+              .insert({
+                user_id: userId,
+                function_name: "analyze-item/slab-ocr",
+                model: "gpt-4o",
+                provider: "openai",
+                prompt_tokens: slabOcrResult._usage.promptTokens,
+                completion_tokens: slabOcrResult._usage.completionTokens,
+                total_tokens: slabOcrResult._usage.totalTokens,
+                cost_usd: slabOcrResult._usage.costUsd,
+              });
+            if (usageLogErr) {
               console.warn(
                 `[${invocationId}] Failed to log OpenAI slab OCR usage:`,
-                String(e),
-              )
+                usageLogErr,
+              );
+            }
+          } catch (e) {
+            console.warn(
+              `[${invocationId}] Failed to log OpenAI slab OCR usage:`,
+              String(e),
             );
+          }
         }
         if (slabOcrResult?.isSlabbed) {
           console.log(
@@ -1532,27 +1538,27 @@ Seller's note: "${voiceNote}"`;
     // "Graded") that are NOT valid Inventory API condition enum values. We must never let these
     // pass through to the AI's allowed enum list or the publish call will fail with errorId 2004.
     const INVALID_CONDITION_STRINGS = new Set(["UNGRADED", "GRADED"]);
+    const mappedConditionEnums: string[] = categoryConditions?.conditions?.length > 0
+      ? categoryConditions.conditions
+        .map((c: any) => {
+          const id = Number(c.conditionId);
+          const mapped = CONDITION_ID_TO_ENUM[id] ??
+            CONDITION_DESCRIPTION_TO_ENUM[
+              String(c.conditionDescription ?? "")
+                .trim()
+                .toLowerCase()
+            ] ??
+            String(c.conditionDescription ?? c.conditionId)
+              .toUpperCase()
+              .replace(/[^A-Z0-9]+/g, "_")
+              .replace(/^_|_$/g, "");
+          return INVALID_CONDITION_STRINGS.has(mapped.toUpperCase()) ? null : mapped;
+        })
+        .filter((value: string | null): value is string => typeof value === "string" && value.length > 0)
+      : [];
     const conditionEnum: string[] = categoryConditions?.conditions?.length > 0
       ? [
-        ...new Set(
-          categoryConditions.conditions
-            .map((c: any) => {
-              const id = Number(c.conditionId);
-              const mapped = CONDITION_ID_TO_ENUM[id] ??
-                CONDITION_DESCRIPTION_TO_ENUM[
-                  String(c.conditionDescription ?? "")
-                    .trim()
-                    .toLowerCase()
-                ] ??
-                String(c.conditionDescription ?? c.conditionId)
-                  .toUpperCase()
-                  .replace(/[^A-Z0-9]+/g, "_")
-                  .replace(/^_|_$/g, "");
-              // Drop any non-enum strings that would cause eBay errorId 2004 on publish
-              return INVALID_CONDITION_STRINGS.has(mapped.toUpperCase()) ? null : mapped;
-            })
-            .filter(Boolean),
-        ),
+        ...new Set<string>(mappedConditionEnums),
       ]
       : [
         "NEW",

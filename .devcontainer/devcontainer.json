@@ -1,0 +1,7 @@
+{
+  "name": "listing-assistant-pro",
+  "postCreateCommand": "curl -fsSL https://deno.land/install.sh | sh",
+  "remoteEnv": {
+    "PATH": "/home/codespace/.deno/bin:${containerEnv:PATH}"
+  }
+}

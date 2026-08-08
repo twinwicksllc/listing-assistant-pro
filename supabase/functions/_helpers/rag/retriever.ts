@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2.43.4";
+import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 
 export interface RagContext {
   content: string;
@@ -11,7 +11,7 @@ export interface RagContext {
  * Uses vector similarity search (cosine distance).
  */
 export async function findSimilarContext(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createClient<any>>,
   queryEmbedding: number[],
   category: string,
   matchThreshold: number = 0.5,

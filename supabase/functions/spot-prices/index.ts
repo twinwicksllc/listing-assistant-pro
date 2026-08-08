@@ -51,7 +51,7 @@ function sanitizeSpotPrices(raw: {
 }
 
 async function getSpotPrices(
-  svc: ReturnType<typeof createClient>,
+  svc: ReturnType<typeof createClient<any>>,
   forceRefresh = false,
 ): Promise<{
   gold: number;
