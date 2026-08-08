@@ -21,13 +21,13 @@ function getMediaVideoBaseCandidates(ebayEnv: string): string[] {
   const restBase = isProduction ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
   const mediaGatewayBase = isProduction ? "https://apim.ebay.com" : "https://apim.sandbox.ebay.com";
 
-  // Prefer the currently documented REST path first, then fall back to
-  // alternates that are observed in older docs / account environments.
+  // eBay documents Media API resources under the apim v1_beta gateway.
+  // Keep observed alternates as fallbacks for account/environment differences.
   return [
-    `${restBase}/commerce/media/v1/video`,
-    `${restBase}/commerce/media/v1_beta/video`,
-    `${mediaGatewayBase}/commerce/media/v1/video`,
     `${mediaGatewayBase}/commerce/media/v1_beta/video`,
+    `${mediaGatewayBase}/commerce/media/v1/video`,
+    `${restBase}/commerce/media/v1_beta/video`,
+    `${restBase}/commerce/media/v1/video`,
   ];
 }
 
@@ -43,6 +43,32 @@ function normalizeVideoStatus(rawStatus: string | null | undefined): string {
   if (status === "PROCESSING") return "PROCESSING";
   if (status === "PENDING") return "PENDING";
   return status || "PENDING";
+}
+
+function getResourceIdFromLocation(location: string | null): string | null {
+  if (!location) return null;
+  const pathname = new URL(location).pathname.replace(/\/$/, "");
+  const resourceId = pathname.split("/").pop();
+  return resourceId ? decodeURIComponent(resourceId) : null;
+}
+
+async function readJsonObject(response: Response, operation: string): Promise<Record<string, unknown>> {
+  const text = await response.text();
+  if (!text.trim()) {
+    throw new Error(`eBay ${operation} returned ${response.status} with an empty response body`);
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("response body was not a JSON object");
+    }
+    return parsed as Record<string, unknown>;
+  } catch (error) {
+    throw new Error(
+      `eBay ${operation} returned ${response.status} with invalid JSON: ${String(error)}; body=${text.slice(0, 200)}`,
+    );
+  }
 }
 
 /**
@@ -172,8 +198,7 @@ export async function handleUploadVideo(
     console.warn("upload_video: identity probe failed (non-fatal):", probeErr);
   }
 
-  let createResp: Response | null = null;
-  let createData: Record<string, unknown> | null = null;
+  let videoId: string | null = null;
   const endpointErrors: Array<{ url: string; status: number; body: string }> = [];
 
   for (const candidateBase of mediaApiCandidates) {
@@ -193,11 +218,42 @@ export async function handleUploadVideo(
     });
 
     if (resp.ok) {
-      createResp = resp;
-      createData = await resp.json();
+      const locationVideoId = getResourceIdFromLocation(resp.headers.get("Location"));
+      const responseText = await resp.text();
+      let bodyVideoId: string | null = null;
+
+      if (responseText.trim()) {
+        try {
+          const parsed: unknown = JSON.parse(responseText);
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            const data = parsed as Record<string, unknown>;
+            bodyVideoId = String(data.videoId ?? data.video_id ?? "") || null;
+          }
+        } catch (error) {
+          if (!locationVideoId) {
+            throw new Error(
+              `eBay video create returned ${resp.status} with invalid JSON and no Location video ID: ${String(error)}`,
+            );
+          }
+          console.warn("upload_video: ignoring invalid create response body because Location supplied video ID", {
+            requestUrl: videoCreateUrl,
+            status: resp.status,
+            body: responseText.slice(0, 200),
+          });
+        }
+      }
+
+      videoId = bodyVideoId ?? locationVideoId;
+      if (!videoId) {
+        throw new Error(
+          `eBay video create returned ${resp.status} but supplied neither a response-body videoId nor a Location header`,
+        );
+      }
       console.log("upload_video: create succeeded", {
         requestUrl: videoCreateUrl,
         environment: ebayEnv,
+        responseStatus: resp.status,
+        videoIdSource: bodyVideoId ? "body" : "location",
       });
       break;
     }
@@ -230,7 +286,7 @@ export async function handleUploadVideo(
     );
   }
 
-  if (!createResp || !createData) {
+  if (!videoId) {
     throw new Error(
       `eBay video create failed across endpoint variants: ${
         endpointErrors.map((e) => `${e.status}@${e.url}`).join(", ")
@@ -238,8 +294,6 @@ export async function handleUploadVideo(
     );
   }
 
-  const videoId = createData.videoId ?? createData.video_id;
-  if (!videoId) throw new Error("eBay returned no videoId");
   console.log(`upload_video: created eBay video entity videoId=${videoId}`);
 
   // Step 2: Fetch video bytes from Supabase Storage
@@ -307,7 +361,7 @@ export async function handleGetVideoStatus(
 
     if (resp.ok) {
       statusResp = resp;
-      statusData = await resp.json();
+      statusData = await readJsonObject(resp, "get video status");
       break;
     }
 
