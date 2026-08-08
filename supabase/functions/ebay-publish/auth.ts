@@ -582,9 +582,22 @@ export async function handleGetStoredToken(
           );
         }
       } else {
+        const refreshError = (await refreshResp.text()).slice(0, 500);
         console.warn(
           "get_stored_token: proactive refresh failed:",
           refreshResp.status,
+          refreshError,
+        );
+        return new Response(
+          JSON.stringify({
+            token: null,
+            postalCode: data.postal_code,
+            city: (data as any).city ?? null,
+            isExpired: true,
+            reconnectRequired: true,
+            refreshStatus: refreshResp.status,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
     } catch (refreshErr) {
@@ -601,6 +614,7 @@ export async function handleGetStoredToken(
         postalCode: data.postal_code,
         city: (data as any).city ?? null,
         isExpired: true,
+        reconnectRequired: true,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

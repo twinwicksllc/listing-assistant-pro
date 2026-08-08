@@ -419,6 +419,13 @@ export default function SettingsPage2() {
           const { data } = await supabase.functions.invoke("ebay-publish", { body: { action: "get_stored_token", userId: user.id } });
           if (cancelled) return;
           if (data?.token) { setEbayConnected(true); localStorage.setItem(EBAY_TOKEN_KEY, data.token); return; }
+          if (data?.reconnectRequired || data?.isExpired) {
+            localStorage.removeItem(EBAY_TOKEN_KEY);
+            localStorage.removeItem("ebay-refresh-token");
+            localStorage.removeItem("ebay-token-expires-at");
+            setEbayConnected(false);
+            return;
+          }
         } catch {
           // Token fetch failed - will fall back to localStorage check below
         }
@@ -471,19 +478,20 @@ export default function SettingsPage2() {
   };
 
   const handleDisconnectEbay = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke("disconnect-ebay");
+      if (error || !data?.success) {
+        throw new Error(data?.error || error?.message || "Failed to disconnect eBay account");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to disconnect eBay account");
+      return;
+    }
+
     localStorage.removeItem(EBAY_TOKEN_KEY);
     localStorage.removeItem("ebay-refresh-token");
     localStorage.removeItem("ebay-token-expires-at");
     setEbayConnected(false);
-    if (user?.id) {
-      try {
-        await supabase.from("profiles").update({
-          ebay_access_token: null, ebay_refresh_token: null, ebay_token_expires_at: null,
-        }).eq("id", user.id);
-      } catch {
-        // Non-critical: profile update failed, user still disconnected locally
-      }
-    }
     toast.success("eBay account disconnected");
   };
 
