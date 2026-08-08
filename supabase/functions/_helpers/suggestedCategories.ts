@@ -92,7 +92,6 @@ const _LEGACY_BOOTSTRAP_BREADCRUMBS: Record<string, string> = {
   "19209": "Collectibles > Stuffed Animals & Plushies",
   "19013": "Toys & Hobbies > Stuffed Animals",
   "246": "Toys & Hobbies > Action Figures & Accessories > Action Figures",
-  "261068": "Toys & Hobbies > Action Figures & Accessories > Funko",
   "2562": "Toys & Hobbies > Diecast & Toy Vehicles",
   "222": "Toys & Hobbies > Dolls & Bears > Dolls",
   "238": "Toys & Hobbies > Dolls & Bears > Bears",
@@ -153,7 +152,6 @@ const _LEGACY_BOOTSTRAP_BREADCRUMBS: Record<string, string> = {
   "45": "Collectibles > Animation Art & Characters",
   "40": "Collectibles > Autographs",
   "99": "Collectibles > Vintage Sports Memorabilia",
-  "64482": "Collectibles > Sports Mem, Cards & Fan Shop",
   "261": "Collectibles > Holiday & Seasonal > Christmas",
   "14339": "Collectibles > Banks, Registers & Vending > Still Banks",
 };

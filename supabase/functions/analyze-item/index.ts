@@ -574,9 +574,17 @@ serve(async (req: Request) => {
     // --- End usage limit enforcement ---
 
     // --- Fetch live spot prices from shared DB cache ---
-    let spotGold = 5200,
-      spotSilver = 89,
-      spotPlatinum = 2200;
+    let spotGold = 3400,
+      spotSilver = 64,
+      spotPlatinum = 1350;
+
+    const isValidSpotPrice = (metal: "gold" | "silver" | "platinum", value: unknown): boolean => {
+      const num = Number(value);
+      if (!Number.isFinite(num) || num <= 0) return false;
+      if (metal === "gold") return num >= 500 && num <= 10000;
+      if (metal === "silver") return num >= 5 && num <= 500;
+      return num >= 100 && num <= 5000;
+    };
     try {
       const { data: spotData, error: spotErr } = await svc
         .from("spot_price_cache")
@@ -588,9 +596,15 @@ serve(async (req: Request) => {
         const ageMinutes = (Date.now() - new Date(spotData.fetched_at).getTime()) / 60000;
         if (ageMinutes < 720) {
           // Use DB cache if less than 12 hours old (spot-prices function refreshes every 12 hours)
-          spotGold = Number(spotData.gold) || spotGold;
-          spotSilver = Number(spotData.silver) || spotSilver;
-          spotPlatinum = Number(spotData.platinum) || spotPlatinum;
+          const dbGold = Number(spotData.gold);
+          const dbSilver = Number(spotData.silver);
+          const dbPlatinum = Number(spotData.platinum);
+
+          if (isValidSpotPrice("gold", dbGold)) spotGold = dbGold;
+          if (isValidSpotPrice("silver", dbSilver)) spotSilver = dbSilver;
+          if (isValidSpotPrice("platinum", dbPlatinum)) {
+            spotPlatinum = dbPlatinum;
+          }
         } else {
           // Cache is stale — trigger a refresh via spot-prices function
           const spotResp = await fetch(
@@ -606,9 +620,15 @@ serve(async (req: Request) => {
           );
           if (spotResp.ok) {
             const spotJson = await spotResp.json();
-            spotGold = spotJson.spotPrices?.gold || spotGold;
-            spotSilver = spotJson.spotPrices?.silver || spotSilver;
-            spotPlatinum = spotJson.spotPrices?.platinum || spotPlatinum;
+            const apiGold = Number(spotJson.spotPrices?.gold);
+            const apiSilver = Number(spotJson.spotPrices?.silver);
+            const apiPlatinum = Number(spotJson.spotPrices?.platinum);
+
+            if (isValidSpotPrice("gold", apiGold)) spotGold = apiGold;
+            if (isValidSpotPrice("silver", apiSilver)) spotSilver = apiSilver;
+            if (isValidSpotPrice("platinum", apiPlatinum)) {
+              spotPlatinum = apiPlatinum;
+            }
           }
         }
       }
@@ -756,25 +776,31 @@ serve(async (req: Request) => {
         );
         // Log OpenAI usage for cost tracking (non-blocking)
         if (slabOcrResult?._usage) {
-          svc
-            .from("gemini_usage")
-            .insert({
-              user_id: userId,
-              function_name: "analyze-item/slab-ocr",
-              model: "gpt-4o",
-              provider: "openai",
-              prompt_tokens: slabOcrResult._usage.promptTokens,
-              completion_tokens: slabOcrResult._usage.completionTokens,
-              total_tokens: slabOcrResult._usage.totalTokens,
-              cost_usd: slabOcrResult._usage.costUsd,
-            })
-            .then(() => {})
-            .catch((e: unknown) =>
+          try {
+            const { error: usageLogErr } = await svc
+              .from("gemini_usage")
+              .insert({
+                user_id: userId,
+                function_name: "analyze-item/slab-ocr",
+                model: "gpt-4o",
+                provider: "openai",
+                prompt_tokens: slabOcrResult._usage.promptTokens,
+                completion_tokens: slabOcrResult._usage.completionTokens,
+                total_tokens: slabOcrResult._usage.totalTokens,
+                cost_usd: slabOcrResult._usage.costUsd,
+              });
+            if (usageLogErr) {
               console.warn(
                 `[${invocationId}] Failed to log OpenAI slab OCR usage:`,
-                String(e),
-              )
+                usageLogErr,
+              );
+            }
+          } catch (e) {
+            console.warn(
+              `[${invocationId}] Failed to log OpenAI slab OCR usage:`,
+              String(e),
             );
+          }
         }
         if (slabOcrResult?.isSlabbed) {
           console.log(
@@ -1512,27 +1538,27 @@ Seller's note: "${voiceNote}"`;
     // "Graded") that are NOT valid Inventory API condition enum values. We must never let these
     // pass through to the AI's allowed enum list or the publish call will fail with errorId 2004.
     const INVALID_CONDITION_STRINGS = new Set(["UNGRADED", "GRADED"]);
+    const mappedConditionEnums: string[] = categoryConditions?.conditions?.length > 0
+      ? categoryConditions.conditions
+        .map((c: any) => {
+          const id = Number(c.conditionId);
+          const mapped = CONDITION_ID_TO_ENUM[id] ??
+            CONDITION_DESCRIPTION_TO_ENUM[
+              String(c.conditionDescription ?? "")
+                .trim()
+                .toLowerCase()
+            ] ??
+            String(c.conditionDescription ?? c.conditionId)
+              .toUpperCase()
+              .replace(/[^A-Z0-9]+/g, "_")
+              .replace(/^_|_$/g, "");
+          return INVALID_CONDITION_STRINGS.has(mapped.toUpperCase()) ? null : mapped;
+        })
+        .filter((value: string | null): value is string => typeof value === "string" && value.length > 0)
+      : [];
     const conditionEnum: string[] = categoryConditions?.conditions?.length > 0
       ? [
-        ...new Set(
-          categoryConditions.conditions
-            .map((c: any) => {
-              const id = Number(c.conditionId);
-              const mapped = CONDITION_ID_TO_ENUM[id] ??
-                CONDITION_DESCRIPTION_TO_ENUM[
-                  String(c.conditionDescription ?? "")
-                    .trim()
-                    .toLowerCase()
-                ] ??
-                String(c.conditionDescription ?? c.conditionId)
-                  .toUpperCase()
-                  .replace(/[^A-Z0-9]+/g, "_")
-                  .replace(/^_|_$/g, "");
-              // Drop any non-enum strings that would cause eBay errorId 2004 on publish
-              return INVALID_CONDITION_STRINGS.has(mapped.toUpperCase()) ? null : mapped;
-            })
-            .filter(Boolean),
-        ),
+        ...new Set<string>(mappedConditionEnums),
       ]
       : [
         "NEW",

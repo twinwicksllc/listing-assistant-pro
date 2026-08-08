@@ -13,6 +13,8 @@ const MAX_VIDEO_SIZE_BYTES = MAX_VIDEO_SIZE_MB * 1024 * 1024;
 const MAX_VIDEO_DURATION_SEC = 10;
 const MIN_VIDEO_DURATION_SEC = 3;
 
+const VIDEO_FAILURE_STATUSES = new Set(["FAILED", "PROCESSING_FAILED", "BLOCKED"]);
+
 function getVideoDuration(file: File): Promise<number> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -151,12 +153,14 @@ export function VideoUploadInput({
 
         if (!mountedRef.current) return;
 
-        if (data?.status === "LIVE") {
+        const polledStatus = String(data?.status || "").toUpperCase();
+
+        if (polledStatus === "LIVE") {
           stopPolling();
           setStatus("live");
           onStatusChange?.("LIVE");
           onVideoReady(vidId, videoUrlRef.current ?? "");
-        } else if (data?.status === "FAILED") {
+        } else if (VIDEO_FAILURE_STATUSES.has(polledStatus)) {
           stopPolling();
           setStatus("failed");
           onStatusChange?.("FAILED");

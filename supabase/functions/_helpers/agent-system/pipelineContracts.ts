@@ -22,7 +22,7 @@ export interface Identification {
   itemName: string;
   keywords: string[];
   isMetal: boolean;
-  metalType: "gold" | "silver" | "platinum" | "none";
+  metalType: "gold" | "silver" | "platinum" | "palladium" | "none";
 }
 
 export interface VisualInspectionResult {

@@ -133,7 +133,8 @@ export default function AnalyzePage() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [ebayVideoId, setEbayVideoId] = useState<string | null>(null);
   const [ebayVideoStatus, setEbayVideoStatus] = useState<string | null>(null);
-  const videoIsProcessing = !!ebayVideoId && ebayVideoStatus !== "LIVE" && ebayVideoStatus !== "FAILED";
+  const terminalVideoStatuses = new Set(["LIVE", "FAILED", "PROCESSING_FAILED", "BLOCKED"]);
+  const videoIsProcessing = !!ebayVideoId && !terminalVideoStatuses.has(String(ebayVideoStatus || "").toUpperCase());
   const [packageWeightLb, setPackageWeightLb] = useState<number>(0);
   const [packageWeightOz, setPackageWeightOz] = useState<number>(0);
   const [packageLengthIn, setPackageLengthIn] = useState<number>(0);

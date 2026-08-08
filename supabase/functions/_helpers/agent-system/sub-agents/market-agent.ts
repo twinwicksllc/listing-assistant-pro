@@ -13,7 +13,7 @@ export async function runMarketAgent(
   apiKey: string,
   domainDef: DomainDefinition,
   context: AgentContext,
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createClient<any>>,
 ): Promise<MarketDataReport> {
   const { invocationId, identification } = context;
   const itemName = identification?.itemName || "item";
