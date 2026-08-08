@@ -6,9 +6,16 @@ import { computeFrameQualityScore, selectBestFrames } from "./videoFrameExtracti
 interface UseVideoFrameExtractionProps {
   videoUrl: string | null;
   voiceNote: string;
+  ebayVideoId: string | null;
+  ebayVideoStatus: string | null;
 }
 
-export function useVideoFrameExtraction({ videoUrl, voiceNote }: UseVideoFrameExtractionProps) {
+export function useVideoFrameExtraction({
+  videoUrl,
+  voiceNote,
+  ebayVideoId,
+  ebayVideoStatus,
+}: UseVideoFrameExtractionProps) {
   const navigate = useNavigate();
   const [extractingFrames, setExtractingFrames] = useState(false);
   const [extractedFrames, setExtractedFrames] = useState<Array<{ url: string; timestampSec: number; score: number }>>([]);
@@ -175,7 +182,16 @@ export function useVideoFrameExtraction({ videoUrl, voiceNote }: UseVideoFrameEx
       setExtractFramesMessage("Extract frames first before running AI identification.");
       return;
     }
-    navigate("/analyze", { state: { imageUrls: extractedFrameDataUrls, voiceNote, fromVideoExtraction: true } });
+    navigate("/analyze", {
+      state: {
+        imageUrls: extractedFrameDataUrls,
+        voiceNote,
+        fromVideoExtraction: true,
+        videoUrl,
+        ebayVideoId,
+        ebayVideoStatus,
+      },
+    });
   };
 
   return {
