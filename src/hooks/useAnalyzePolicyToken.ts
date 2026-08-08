@@ -6,6 +6,12 @@ interface UseAnalyzePolicyTokenParams {
   userId: string | null | undefined;
 }
 
+function clearCachedEbayTokens() {
+  localStorage.removeItem("ebay-user-token");
+  localStorage.removeItem("ebay-refresh-token");
+  localStorage.removeItem("ebay-token-expires-at");
+}
+
 export function useAnalyzePolicyToken({
   generated,
   userId,
@@ -25,6 +31,10 @@ export function useAnalyzePolicyToken({
       const { data } = await supabase.functions.invoke("ebay-publish", {
         body: { action: "get_stored_token", userId },
       });
+      if (data?.reconnectRequired || data?.isExpired) {
+        clearCachedEbayTokens();
+        return null;
+      }
       return data?.token ?? localStorage.getItem("ebay-user-token");
     } catch (e) {
       console.error("useAnalyzePolicyToken: Failed to load token from server", e);

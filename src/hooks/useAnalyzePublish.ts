@@ -30,6 +30,13 @@ interface StoredTokenData {
   token: string | null;
   postalCode: string | null;
   city: string | null;
+  reconnectRequired: boolean;
+}
+
+function clearCachedEbayTokens() {
+  localStorage.removeItem("ebay-user-token");
+  localStorage.removeItem("ebay-refresh-token");
+  localStorage.removeItem("ebay-token-expires-at");
 }
 
 export function useAnalyzePublish({
@@ -56,6 +63,7 @@ export function useAnalyzePublish({
         token: data?.token ?? null,
         postalCode: data?.postalCode ?? null,
         city: data?.city ?? null,
+        reconnectRequired: data?.reconnectRequired === true || data?.isExpired === true,
       };
     } catch (e) {
       console.error("useAnalyzePublish: get_stored_token error", e);
@@ -63,6 +71,7 @@ export function useAnalyzePublish({
         token: null,
         postalCode: null,
         city: null,
+        reconnectRequired: false,
       };
     }
   }, []);
@@ -106,9 +115,11 @@ export function useAnalyzePublish({
       let ebayToken: string | null = null;
       let postalCode: string | null = null;
       let city: string | null = null;
+      let reconnectRequired = false;
 
       if (userId) {
         const tokenData = await fetchStoredTokenData(userId);
+        reconnectRequired = tokenData.reconnectRequired;
         if (tokenData.token) {
           ebayToken = tokenData.token;
           postalCode = tokenData.postalCode;
@@ -128,11 +139,15 @@ export function useAnalyzePublish({
         }
       }
 
-      if (!ebayToken) {
+      if (!ebayToken && !reconnectRequired) {
         ebayToken = localStorage.getItem("ebay-user-token");
       }
 
       if (!ebayToken) {
+        if (reconnectRequired) {
+          clearCachedEbayTokens();
+          toast.info("Your eBay session needs to be reconnected before publishing.");
+        }
         const { data, error } = await supabase.functions.invoke("ebay-publish", {
           body: { action: "get_auth_url" },
         });
@@ -180,7 +195,7 @@ export function useAnalyzePublish({
         );
 
         if (isTokenExpiry) {
-          localStorage.removeItem("ebay-user-token");
+          clearCachedEbayTokens();
           toast.error("eBay session expired. Please reconnect eBay in Settings.");
           return;
         }
