@@ -1,4 +1,4 @@
-import { ShieldCheck } from "lucide-react";
+import { CheckCircle2, ShieldCheck } from "lucide-react";
 import { EbayPolicySelector } from "@/components/EbayPolicySelector";
 import { VideoUploadInput } from "@/components/VideoUploadInput";
 import type { SelectedPolicies } from "@/types/ebay-policies";
@@ -7,6 +7,9 @@ interface PolicyAndVideoProps {
   ebayTokenForPolicies: string | null;
   title: string;
   publishing: boolean;
+  videoUrl: string | null;
+  ebayVideoId: string | null;
+  ebayVideoStatus: string | null;
   onPoliciesSelected: (policies: SelectedPolicies) => void;
   onVideoReady: (videoId: string, url: string) => void;
   onVideoRemoved: () => void;
@@ -17,6 +20,9 @@ export function PolicyAndVideo({
   ebayTokenForPolicies,
   title,
   publishing,
+  videoUrl,
+  ebayVideoId,
+  ebayVideoStatus,
   onPoliciesSelected,
   onVideoReady,
   onVideoRemoved,
@@ -41,13 +47,24 @@ export function PolicyAndVideo({
 
       {/* Video Upload (optional) */}
       {ebayTokenForPolicies && (
-        <VideoUploadInput
-          title={title}
-          userToken={ebayTokenForPolicies}
-          onVideoReady={onVideoReady}
-          onVideoRemoved={onVideoRemoved}
-          onStatusChange={onVideoStatusChange}
-        />
+        <div className="space-y-2">
+          <VideoUploadInput
+            title={title}
+            userToken={ebayTokenForPolicies}
+            initialVideoId={ebayVideoId ?? undefined}
+            initialVideoStatus={ebayVideoStatus ?? undefined}
+            initialVideoUrl={videoUrl ?? undefined}
+            onVideoReady={onVideoReady}
+            onVideoRemoved={onVideoRemoved}
+            onStatusChange={onVideoStatusChange}
+          />
+          {ebayVideoId && ebayVideoStatus === "LIVE" && (
+            <p className="flex items-center gap-1.5 text-xs text-emerald-600">
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+              This video is ready and will be included when you publish the listing.
+            </p>
+          )}
+        </div>
       )}
     </>
   );

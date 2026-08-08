@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Loader2, Crown } from "lucide-react";
+import { ArrowLeft, Sparkles, Loader2, Crown, Video } from "lucide-react";
 import CategoryConfirmDialog from "@/components/CategoryConfirmDialog";
 import { useDrafts } from "@/hooks/useDrafts";
 import { supabase } from "@/integrations/supabase/client";
@@ -69,8 +69,12 @@ export default function AnalyzePage() {
   const state = location.state as any;
   const imageUrls: string[] = state?.imageUrls ?? (state?.imageUrl ? [state.imageUrl] : []);
   const videoOnlyMode = !!state?.videoOnly && imageUrls.length === 0;
+  const fromVideoExtraction = !!state?.fromVideoExtraction;
   const selectedVideoFile = state?.selectedVideoFile instanceof File ? state.selectedVideoFile : undefined;
   const voiceNote: string = state?.voiceNote || "";
+  const initialVideoUrl = typeof state?.videoUrl === "string" ? state.videoUrl : null;
+  const initialEbayVideoId = typeof state?.ebayVideoId === "string" ? state.ebayVideoId : null;
+  const initialEbayVideoStatus = typeof state?.ebayVideoStatus === "string" ? state.ebayVideoStatus : null;
 
   const [generated, setGenerated] = useState(false);
   const [title, setTitle] = useState("");
@@ -130,9 +134,9 @@ export default function AnalyzePage() {
   const [bestOfferAutoDeclinePrice, setBestOfferAutoDeclinePrice] = useState<number>(0);
   const [quantity, setQuantity] = useState(1);
   const [pricingMode, setPricingMode] = useState<"per_item" | "total">("per_item");
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [ebayVideoId, setEbayVideoId] = useState<string | null>(null);
-  const [ebayVideoStatus, setEbayVideoStatus] = useState<string | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(initialVideoUrl);
+  const [ebayVideoId, setEbayVideoId] = useState<string | null>(initialEbayVideoId);
+  const [ebayVideoStatus, setEbayVideoStatus] = useState<string | null>(initialEbayVideoStatus);
   const terminalVideoStatuses = new Set(["LIVE", "FAILED", "PROCESSING_FAILED", "BLOCKED"]);
   const videoIsProcessing = !!ebayVideoId && !terminalVideoStatuses.has(String(ebayVideoStatus || "").toUpperCase());
   const [packageWeightLb, setPackageWeightLb] = useState<number>(0);
@@ -164,7 +168,12 @@ export default function AnalyzePage() {
     handleExtractFrames,
     handleExtractFramesFallback,
     handleAnalyzeExtractedFrames,
-  } = useVideoFrameExtraction({ videoUrl, voiceNote });
+  } = useVideoFrameExtraction({
+    videoUrl,
+    voiceNote,
+    ebayVideoId,
+    ebayVideoStatus,
+  });
 
   const { buildPublishPayload } = useAnalyzePublishPayload({
     title,
@@ -562,7 +571,8 @@ export default function AnalyzePage() {
         </button>
         <h1 className="font-semibold text-foreground">Analyze Item</h1>
         <span className="ml-auto text-xs text-muted-foreground">
-          {imageUrls.length} photo{imageUrls.length !== 1 && "s"}
+          {imageUrls.length} {fromVideoExtraction ? "AI frame" : "photo"}
+          {imageUrls.length !== 1 && "s"}
         </span>
       </header>
 
@@ -574,6 +584,20 @@ export default function AnalyzePage() {
           onGoToPreviousPhoto={goToPreviousPhoto}
           onGoToNextPhoto={goToNextPhoto}
         />
+
+        {ebayVideoId && (
+          <div className="flex items-start gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2.5">
+            <Video className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+            <div>
+              <p className="text-xs font-medium text-foreground">Video attached</p>
+              <p className="text-xs text-muted-foreground">
+                {ebayVideoStatus === "LIVE"
+                  ? "Ready on eBay and included when you publish this listing."
+                  : "Processing on eBay and retained with this listing."}
+              </p>
+            </div>
+          </div>
+        )}
 
         {generating && !generated ? (
           <div className="space-y-2">
@@ -691,6 +715,9 @@ export default function AnalyzePage() {
               ebayTokenForPolicies={ebayTokenForPolicies}
               title={title}
               publishing={publishing}
+              videoUrl={videoUrl}
+              ebayVideoId={ebayVideoId}
+              ebayVideoStatus={ebayVideoStatus}
               onPoliciesSelected={setSelectedPolicies}
               onVideoReady={onVideoReady}
               onVideoRemoved={onVideoRemoved}
