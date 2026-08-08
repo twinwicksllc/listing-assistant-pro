@@ -14,7 +14,7 @@ import {
   EbayReturnPolicy,
 } from "@/types/ebay-policies";
 
-const CACHE_KEY = "ebay-business-policies";
+const CACHE_KEY = "ebay-business-policies-v2";
 const CACHE_TTL = 86400000; // 24 hours in milliseconds
 
 /**
@@ -66,6 +66,22 @@ async function fetchPoliciesViaEdgeFunction(
     throw new Error("No response from policy fetch");
   }
 
+  if (data.noToken) {
+    throw new Error("INVALID_TOKEN");
+  }
+
+  if (data.policyErrors && Object.keys(data.policyErrors).length > 0) {
+    const policyErrorMessages = Object.values(data.policyErrors).filter(
+      (message): message is string => typeof message === "string"
+    );
+    const error = new Error(
+      policyErrorMessages.some((message) => message.includes("HTTP 401"))
+        ? "INVALID_TOKEN"
+        : `eBay could not load your business policies: ${policyErrorMessages.join(", ")}`
+    );
+    throw error;
+  }
+
   // Edge function returns { fulfillment: [], payment: [], returns: [], policyErrors?: {} }
   // Transform it to match our BusinessPolicies format
   const fulfillment = (data.fulfillment || []).map(
@@ -88,16 +104,6 @@ async function fetchPoliciesViaEdgeFunction(
       name: p.name,
     })
   );
-
-  // Log if any policy type had errors (e.g., 401 unauthorized)
-  if (data.policyErrors) {
-    console.warn("Policy fetch partial failures:", data.policyErrors);
-  }
-
-  // Return empty on no token
-  if (data.noToken) {
-    return { fulfillment: [], payment: [], return: [] };
-  }
 
   return { fulfillment, payment, return: returnPolicies };
 }
@@ -202,12 +208,13 @@ export function useEbayPolicies(userToken: string | null) {
       console.error("Failed to load eBay policies:", err);
 
       let errorType: PolicyFetchError["type"] = "FETCH_ERROR";
-      let errorMessage = err.message || "Failed to load policies";
+      const rawErrorMessage = err instanceof Error ? err.message : "Failed to load policies";
+      let errorMessage = rawErrorMessage;
 
-      if (err.message === "INVALID_TOKEN") {
+      if (rawErrorMessage === "INVALID_TOKEN") {
         errorType = "INVALID_TOKEN";
         errorMessage = "eBay session expired. Please reconnect your account.";
-      } else if (err.message.includes("Failed to fetch")) {
+      } else if (rawErrorMessage.includes("Failed to fetch")) {
         errorType = "NETWORK_ERROR";
       }
 
