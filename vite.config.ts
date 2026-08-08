@@ -86,5 +86,30 @@ export default defineConfig(({ mode }) => ({
         drop_debugger: true,
       },
     },
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) {
+            return;
+          }
+
+          if (id.includes("recharts")) {
+            return "recharts-vendor";
+          }
+
+          if (id.includes("xlsx")) {
+            return "xlsx-vendor";
+          }
+
+          if (id.includes("@ffmpeg")) {
+            return "ffmpeg-vendor";
+          }
+
+          if (id.includes("@radix-ui") || id.includes("sonner")) {
+            return "ui-vendor";
+          }
+        },
+      },
+    },
   },
 }));
