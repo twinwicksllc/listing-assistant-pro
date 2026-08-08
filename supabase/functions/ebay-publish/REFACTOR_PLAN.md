@@ -1,0 +1,78 @@
+## Refactor Plan: `ebay-publish/index.ts`
+
+## Goal
+
+Reduce file size and complexity by extracting cohesive responsibilities into small, testable modules while keeping changes incremental and low-risk.
+
+## Scope
+
+- Current file: `supabase/functions/ebay-publish/index.ts` (large, multi-responsibility)
+- Target: thin router `index.ts` + modules for Auth, Video, Publish, Supabase helpers, Fetch helpers, Constants.
+
+## Module Layout (recommended)
+
+- `index.ts` — thin router: parse `action` and dispatch to handlers.
+- `auth.ts` — `handleGetAuthUrl`, `handleExchangeCode`, `handleRefreshToken`, scope constants, token helpers.
+- `video.ts` — `handleUploadVideo`, `handleGetVideoStatus`, media headers, identity-probe, upload helpers.
+- `publish.ts` — `handleCreateDraft`, inventory/offer/publish flows.
+- `supabase.ts` — Supabase client helpers, `assertCallerOwnsUser`, profile helpers.
+- `fetch.ts` — `fetchWithTimeout`, retry wrappers, centralized fetch error handling.
+- `constants.ts` — API base/endpoint builders, scope lists, marketplace IDs, allowed types.
+- `logging.ts` (optional) — structured logging helpers and eBay response formatter.
+
+## Incremental Extraction Steps (safe approach)
+
+1. Create `auth.ts` and move `handleGetAuthUrl` (small, isolated). Update `index.ts` to import and call it. Run `deno fmt`/`deno lint`.
+2. Move `handleExchangeCode` and token storage logic to `auth.ts`. Verify OAuth flows locally or via sandbox.
+3. Extract `handleRefreshToken` and proactive refresh code path into `auth.ts`.
+4. Create `video.ts` and move `upload_video` + `get_video_status` handlers. Keep identical function signatures; wire imports. Run integration test with a sandbox token.
+5. Extract `supabase.ts` for helper wrappers used by multiple handlers.
+6. Move `create_draft` and related publish logic to `publish.ts` last — this is the largest and most coupling-heavy part.
+7. Replace inline constants with `constants.ts` and centralize `fetchWithTimeout` into `fetch.ts`.
+8. Add unit tests for `auth` scope generation and `video` identity-probe behavior.
+
+## Safety Checklist
+
+- Make one extraction per PR (or small grouped PRs) so regressions are easy to bisect.
+- Preserve public handler signatures; `index.ts` remains the single function entrypoint for the Supabase Edge Function.
+- Run `deno fmt` and `deno lint` for each PR.
+- Add logging assertions or smoke tests for critical flows (OAuth exchange, video create/upload).
+- Keep a rollback plan: revert the PR if integration tests fail.
+
+## Testing
+
+- Unit tests: scope list generation, identity-probe logic.
+- Integration: connect a sandbox eBay account and exercise `upload_video` and `get_video_status`.
+- CI: run the existing e2e smoke tests; ensure `playwright` tests pass for publish flows.
+
+## Estimated Effort
+
+- Minimal extraction (auth + video): 2–4 hours.
+- Full extraction (auth + video + publish + helpers + tests): 6–10 hours depending on test cycles.
+
+## Branch / PR
+
+- Steps 1-5 (auth.ts, video.ts, supabase.ts, fetch.ts, constants.ts): PR #438 (merged to `main`).
+- Steps 6-8 (publish.ts, publish-helpers.ts, publish-create-draft.ts): branch `refactor/ebay-publish-extract-publish-ts`.
+
+## Status: Complete
+
+All 8 steps finished. Final module layout:
+
+| Module                    | Lines | Contents                                                                                                |
+| ------------------------- | ----- | ------------------------------------------------------------------------------------------------------- |
+| `index.ts`                | 159   | Thin router — parses `action`, resolves shared env context, dispatches                                  |
+| `auth.ts`                 | 618   | OAuth handlers (`handleGetAuthUrl`, `handleExchangeCode`, `handleRefreshToken`, `handleGetStoredToken`) |
+| `video.ts`                | 265   | `handleUploadVideo`, `handleGetVideoStatus`, identity-probe                                             |
+| `supabase.ts`             | 45    | `createClient` wrapper, `assertCallerOwnsUser`                                                          |
+| `fetch.ts`                | 35    | `fetchWithTimeout`                                                                                      |
+| `constants.ts`            | 46    | OAuth scopes, CORS headers, marketplace IDs, video constraints                                          |
+| `publish.ts`              | 220   | `handleGetPolicies`, `handleBulkCreateDraft`, `buildEbayJsonHeaders`                                    |
+| `publish-helpers.ts`      | 3514  | ~50 standalone aspect/condition/offer/coin-descriptor/category helpers                                  |
+| `publish-create-draft.ts` | 1308  | `handleCreateDraft` — the single-listing publish flow                                                   |
+
+Original `index.ts` was ~5800 lines. Every extraction was verified with `deno check` (not just `fmt`/`lint`) against a zero-error baseline before and after each step, per the safety checklist above.
+
+---
+
+Generated by developer assistant to guide safe refactor of the eBay publish function.
