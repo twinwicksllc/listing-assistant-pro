@@ -103,7 +103,7 @@ serve(async (req) => {
 
     // --- ACTION: Get eBay video processing status ---
     if (action === "get_video_status") {
-      return await handleGetVideoStatus({ payload, apiBase });
+      return await handleGetVideoStatus({ payload, apiBase, ebayEnv });
     }
 
     // --- ACTION: Publish a single draft to eBay ---

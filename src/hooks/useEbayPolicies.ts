@@ -17,6 +17,20 @@ import {
 const CACHE_KEY = "ebay-business-policies-v2";
 const CACHE_TTL = 86400000; // 24 hours in milliseconds
 
+function pickPreferredFulfillment(
+  fulfillmentPolicies: EbayFulfillmentPolicy[]
+): EbayFulfillmentPolicy | null {
+  if (!fulfillmentPolicies.length) return null;
+
+  // Prefer non-flat-rate policies when details are available.
+  const preferred = fulfillmentPolicies.find((policy) => {
+    const costType = policy.shippingOption?.costType;
+    return costType !== "FLAT_RATE";
+  });
+
+  return preferred || fulfillmentPolicies[0];
+}
+
 /**
  * Type definition for cached policy data stored in localStorage
  * Includes the policy data and timestamp for TTL validation
@@ -85,23 +99,27 @@ async function fetchPoliciesViaEdgeFunction(
   // Edge function returns { fulfillment: [], payment: [], returns: [], policyErrors?: {} }
   // Transform it to match our BusinessPolicies format
   const fulfillment = (data.fulfillment || []).map(
-    (p: { id: string; name: string }, idx: number): EbayFulfillmentPolicy => ({
+    (p: { id: string; name: string }): EbayFulfillmentPolicy => ({
       fulfillmentPolicyId: p.id,
       name: p.name,
+      marketplaceId: "EBAY_US",
     })
   );
 
   const payment = (data.payment || []).map(
-    (p: { id: string; name: string }, idx: number): EbayPaymentPolicy => ({
+    (p: { id: string; name: string }): EbayPaymentPolicy => ({
       paymentPolicyId: p.id,
       name: p.name,
+      marketplaceId: "EBAY_US",
     })
   );
 
   const returnPolicies = (data.returns || []).map(
-    (p: { id: string; name: string }, idx: number): EbayReturnPolicy => ({
+    (p: { id: string; name: string }): EbayReturnPolicy => ({
       returnPolicyId: p.id,
       name: p.name,
+      marketplaceId: "EBAY_US",
+      returnsAccepted: true,
     })
   );
 

@@ -10,8 +10,45 @@ const corsHeaders = {
 const CACHE_TTL_MINUTES = 15;
 // Fallback spot prices used when API fetch fails (in USD per troy oz)
 // These should be updated monthly or made configurable via env vars
-// Last updated: March 2026
-const FALLBACK = { gold: 2650, silver: 89, platinum: 1040 };
+// Last updated: August 2026
+const FALLBACK = { gold: 3400, silver: 64, platinum: 1350 };
+
+function isValidSpotPrice(metal: "gold" | "silver" | "platinum", value: unknown): boolean {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num <= 0) return false;
+
+  if (metal === "gold") return num >= 500 && num <= 10000;
+  if (metal === "silver") return num >= 5 && num <= 500;
+  return num >= 100 && num <= 5000;
+}
+
+function sanitizeSpotPrices(raw: {
+  gold: unknown;
+  silver: unknown;
+  platinum: unknown;
+}): {
+  gold: number;
+  silver: number;
+  platinum: number;
+  valid: boolean;
+} {
+  const parsed = {
+    gold: Number(raw.gold),
+    silver: Number(raw.silver),
+    platinum: Number(raw.platinum),
+  };
+
+  const validGold = isValidSpotPrice("gold", parsed.gold);
+  const validSilver = isValidSpotPrice("silver", parsed.silver);
+  const validPlatinum = isValidSpotPrice("platinum", parsed.platinum);
+
+  return {
+    gold: validGold ? parsed.gold : FALLBACK.gold,
+    silver: validSilver ? parsed.silver : FALLBACK.silver,
+    platinum: validPlatinum ? parsed.platinum : FALLBACK.platinum,
+    valid: validGold && validSilver && validPlatinum,
+  };
+}
 
 async function getSpotPrices(
   svc: ReturnType<typeof createClient>,
@@ -35,16 +72,24 @@ async function getSpotPrices(
     console.error("Failed to read spot_price_cache:", readErr);
   }
 
+  const cachedSanitized = cached
+    ? sanitizeSpotPrices({
+      gold: cached.gold,
+      silver: cached.silver,
+      platinum: cached.platinum,
+    })
+    : null;
+
   const now = new Date();
   const fetchedAt = cached?.fetched_at ? new Date(cached.fetched_at) : null;
   const ageMinutes = fetchedAt ? (now.getTime() - fetchedAt.getTime()) / 60000 : Infinity;
 
   // 2. If cache is fresh (< 15 min) and not forced to refresh, return it immediately
-  if (cached && ageMinutes < CACHE_TTL_MINUTES && !forceRefresh) {
+  if (cached && cachedSanitized?.valid && ageMinutes < CACHE_TTL_MINUTES && !forceRefresh) {
     return {
-      gold: Number(cached.gold),
-      silver: Number(cached.silver),
-      platinum: Number(cached.platinum),
+      gold: cachedSanitized.gold,
+      silver: cachedSanitized.silver,
+      platinum: cachedSanitized.platinum,
       fetched_at: cached.fetched_at,
       source: cached.source,
       refreshed: false,
@@ -74,16 +119,22 @@ async function getSpotPrices(
         /Platinum<\/a>.*?<span>([\d,]+\.?\d*)<\/span>/s,
       );
 
-      const prices = {
+      const parsedPrices = {
         gold: goldMatch ? parseFloat(goldMatch[1].replace(/,/g, "")) : 0,
         silver: silverMatch ? parseFloat(silverMatch[1].replace(/,/g, "")) : 0,
         platinum: platinumMatch ? parseFloat(platinumMatch[1].replace(/,/g, "")) : 0,
       };
 
-      console.log("Kitco parsed prices:", prices);
+      const prices = sanitizeSpotPrices(parsedPrices);
 
-      if (prices.gold > 0 && prices.silver > 0) {
-        fresh = prices;
+      console.log("Kitco parsed prices:", parsedPrices, "sanitized:", prices);
+
+      if (prices.valid || (prices.gold > 0 && prices.silver > 0)) {
+        fresh = {
+          gold: prices.gold,
+          silver: prices.silver,
+          platinum: prices.platinum,
+        };
         source = "kitco.com";
         console.log("Successfully fetched fresh prices from Kitco");
       } else {
@@ -98,11 +149,11 @@ async function getSpotPrices(
 
   // 4. If live fetch failed, use existing cached values or hardcoded fallback
   const prices = fresh ??
-    (cached
+    (cachedSanitized
       ? {
-        gold: Number(cached.gold),
-        silver: Number(cached.silver),
-        platinum: Number(cached.platinum),
+        gold: cachedSanitized.gold,
+        silver: cachedSanitized.silver,
+        platinum: cachedSanitized.platinum,
       }
       : FALLBACK);
 

@@ -16,6 +16,35 @@ export interface VideoHandlerContext {
   ebayEnv?: string;
 }
 
+function getMediaVideoBaseCandidates(ebayEnv: string): string[] {
+  const isProduction = ebayEnv === "production";
+  const restBase = isProduction ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
+  const mediaGatewayBase = isProduction ? "https://apim.ebay.com" : "https://apim.sandbox.ebay.com";
+
+  // Prefer the currently documented REST path first, then fall back to
+  // alternates that are observed in older docs / account environments.
+  return [
+    `${restBase}/commerce/media/v1/video`,
+    `${restBase}/commerce/media/v1_beta/video`,
+    `${mediaGatewayBase}/commerce/media/v1/video`,
+    `${mediaGatewayBase}/commerce/media/v1_beta/video`,
+  ];
+}
+
+function isRetryableCreateEndpointStatus(status: number): boolean {
+  return status === 404 || status === 405;
+}
+
+function normalizeVideoStatus(rawStatus: string | null | undefined): string {
+  const status = (rawStatus || "").toUpperCase();
+  if (status === "LIVE") return "LIVE";
+  if (status === "BLOCKED" || status === "PROCESSING_FAILED") return "FAILED";
+  if (status === "PENDING_UPLOAD") return "PENDING";
+  if (status === "PROCESSING") return "PROCESSING";
+  if (status === "PENDING") return "PENDING";
+  return status || "PENDING";
+}
+
 /**
  * Detect and return the environment (sandbox/production) of a provided user token.
  * @param userToken The eBay user token to probe
@@ -103,8 +132,9 @@ export async function handleUploadVideo(
   }
 
   // Step 1: Create the video entity in eBay
-  const mediaApiBase = `${apiBase}/commerce/media/v1/video`;
-  const videoCreateUrl = mediaApiBase;
+  const mediaApiCandidates = getMediaVideoBaseCandidates(ebayEnv || "production");
+  let mediaApiBase = mediaApiCandidates[0];
+  let videoCreateUrl = mediaApiBase;
   const videoCreateBody = JSON.stringify({
     title: videoTitle || "Item Video",
     size: Number(fileSize) || 0,
@@ -142,51 +172,71 @@ export async function handleUploadVideo(
     console.warn("upload_video: identity probe failed (non-fatal):", probeErr);
   }
 
-  const createResp = await fetchWithTimeout(videoCreateUrl, {
-    method: "POST",
-    timeout: 15000,
-    headers: {
-      Authorization: `Bearer ${userToken}`,
-      "Content-Type": "application/json",
-      "Content-Language": CONTENT_LANGUAGE,
-      "X-EBAY-C-MARKETPLACE-ID": EBAY_MARKETPLACE_ID,
-    },
-    body: videoCreateBody,
-  });
+  let createResp: Response | null = null;
+  let createData: Record<string, unknown> | null = null;
+  const endpointErrors: Array<{ url: string; status: number; body: string }> = [];
 
-  if (!createResp.ok) {
-    const respText = await createResp.text().catch(() => "<no-body>");
-    const respSnippet = respText.slice(0, 200) + (respText.length > 200 ? "…" : "");
+  for (const candidateBase of mediaApiCandidates) {
+    videoCreateUrl = candidateBase;
+    mediaApiBase = candidateBase;
 
-    // Provide diagnostic guidance based on status
-    let guidance = "";
-    if (createResp.status === 404) {
-      guidance =
-        "404 typically means: (1) Account not enabled for video on eBay, (2) Token missing video scope, or (3) Account status issue. Contact eBay seller support to enable video uploads.";
-    } else if (createResp.status === 401 || createResp.status === 403) {
-      guidance =
-        "Authentication/authorization issue. Token may be expired or lack required scopes (sell.marketing.media.manage).";
-    } else if (createResp.status === 400) {
-      guidance = "Bad request. Check file size, title length, or eBay API requirements.";
+    const resp = await fetchWithTimeout(videoCreateUrl, {
+      method: "POST",
+      timeout: 15000,
+      headers: {
+        Authorization: `Bearer ${userToken}`,
+        "Content-Type": "application/json",
+        "Content-Language": CONTENT_LANGUAGE,
+        "X-EBAY-C-MARKETPLACE-ID": EBAY_MARKETPLACE_ID,
+      },
+      body: videoCreateBody,
+    });
+
+    if (resp.ok) {
+      createResp = resp;
+      createData = await resp.json();
+      console.log("upload_video: create succeeded", {
+        requestUrl: videoCreateUrl,
+        environment: ebayEnv,
+      });
+      break;
     }
 
-    console.error("upload_video: eBay video create returned non-ok response", {
-      environment: ebayEnv,
-      status: createResp.status,
-      statusText: createResp.statusText,
-      body: respSnippet,
-      truncated: respText.length > 200,
-      requestUrl: videoCreateUrl,
-      guidance,
-      fileSizeMB: (Number(fileSize) || 0) / (1024 * 1024),
-      durationSec,
+    const respText = await resp.text().catch(() => "<no-body>");
+    endpointErrors.push({
+      url: videoCreateUrl,
+      status: resp.status,
+      body: respText.slice(0, 200),
     });
+
+    if (isRetryableCreateEndpointStatus(resp.status)) {
+      console.warn("upload_video: retrying create on alternate media endpoint", {
+        status: resp.status,
+        requestUrl: videoCreateUrl,
+      });
+      continue;
+    }
+
+    // Non-endpoint errors should fail fast.
+    let guidance = "";
+    if (resp.status === 401 || resp.status === 403) {
+      guidance =
+        "Authentication/authorization issue. Token may be expired or lack required scopes (commerce.media).";
+    } else if (resp.status === 400) {
+      guidance = "Bad request. Check file size, title length, classification, and eBay API requirements.";
+    }
+
     throw new Error(
-      `eBay video create failed (${createResp.status}): ${respSnippet}. ${guidance}`,
+      `eBay video create failed (${resp.status}) on ${videoCreateUrl}: ${respText.slice(0, 200)}. ${guidance}`,
     );
   }
 
-  const createData = await createResp.json();
+  if (!createResp || !createData) {
+    throw new Error(
+      `eBay video create failed across endpoint variants: ${endpointErrors.map((e) => `${e.status}@${e.url}`).join(", ")}`,
+    );
+  }
+
   const videoId = createData.videoId ?? createData.video_id;
   if (!videoId) throw new Error("eBay returned no videoId");
   console.log(`upload_video: created eBay video entity videoId=${videoId}`);
@@ -238,28 +288,50 @@ export async function handleGetVideoStatus(
   if (!userToken) throw new Error("No eBay user token provided");
   if (!videoId) throw new Error("No videoId provided");
 
-  const statusResp = await fetchWithTimeout(
-    `${apiBase}/commerce/media/v1/video/${videoId}`,
-    {
+  const mediaApiCandidates = getMediaVideoBaseCandidates(ebayEnv || "production");
+  let statusResp: Response | null = null;
+  let statusData: Record<string, unknown> | null = null;
+
+  for (const candidateBase of mediaApiCandidates) {
+    const candidateUrl = `${candidateBase}/${videoId}`;
+    const resp = await fetchWithTimeout(candidateUrl, {
       timeout: 10000,
       headers: {
         Authorization: `Bearer ${userToken}`,
         "Accept-Language": CONTENT_LANGUAGE,
         "X-EBAY-C-MARKETPLACE-ID": EBAY_MARKETPLACE_ID,
       },
-    },
-  );
+    });
 
-  if (!statusResp.ok) {
-    const e = await statusResp.text();
-    throw new Error(`eBay get video status failed (${statusResp.status}): ${e}`);
+    if (resp.ok) {
+      statusResp = resp;
+      statusData = await resp.json();
+      break;
+    }
+
+    // If endpoint itself likely mismatched, continue trying alternates.
+    if (isRetryableCreateEndpointStatus(resp.status)) {
+      continue;
+    }
+
+    const e = await resp.text();
+    throw new Error(`eBay get video status failed (${resp.status}) on ${candidateUrl}: ${e}`);
   }
 
-  const statusData = await statusResp.json();
-  const currentStatus = statusData.videoStatus ?? statusData.status ?? "PENDING";
-  console.log(`get_video_status: videoId=${videoId} status=${currentStatus}`);
+  if (!statusResp || !statusData) {
+    throw new Error("eBay get video status failed: no endpoint variant returned success");
+  }
 
-  return new Response(JSON.stringify({ videoId, status: currentStatus }), {
+  const rawStatus = String(statusData.videoStatus ?? statusData.status ?? "PENDING");
+  const normalizedStatus = normalizeVideoStatus(rawStatus);
+  console.log(`get_video_status: videoId=${videoId} status=${normalizedStatus} rawStatus=${rawStatus}`);
+
+  return new Response(JSON.stringify({
+    videoId,
+    status: normalizedStatus,
+    rawStatus,
+    statusMessage: statusData.statusMessage ?? statusData.status_message ?? null,
+  }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }

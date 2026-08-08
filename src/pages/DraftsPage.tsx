@@ -49,7 +49,11 @@ export default function DraftsPage() {
     });
   };
 
-  const selectableDrafts = drafts.filter((d) => !(d.ebayVideoId && d.ebayVideoStatus !== "LIVE"));
+  const terminalVideoStatuses = new Set(["LIVE", "FAILED", "PROCESSING_FAILED", "BLOCKED"]);
+  const selectableDrafts = drafts.filter((d) => {
+    if (!d.ebayVideoId) return true;
+    return terminalVideoStatuses.has(String(d.ebayVideoStatus || "").toUpperCase());
+  });
   const allSelected = selectableDrafts.length > 0 && selectableDrafts.every((d) => selectedIds.has(d.id));
 
   const toggleSelectAll = () => {
@@ -192,7 +196,7 @@ export default function DraftsPage() {
           const isAuction      = draft.listingFormat === "AUCTION";
           const isSelected     = selectedIds.has(draft.id);
           const isBeingPublished = publishingIds.has(draft.id);
-          const hasVideoProcessing = !!draft.ebayVideoId && draft.ebayVideoStatus !== "LIVE";
+          const hasVideoProcessing = !!draft.ebayVideoId && !terminalVideoStatuses.has(String(draft.ebayVideoStatus || "").toUpperCase());
 
           // Melt value alert: check if listing price is below precious metal melt floor
           const metalKey = draft.metalType?.toLowerCase() as keyof typeof spotPrices;
