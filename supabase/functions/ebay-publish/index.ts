@@ -65,6 +65,16 @@ function buildEbayJsonHeaders(accessToken: unknown): Record<string, string> {
     "Content-Language": "en-US",
     "Accept-Language": "en-US",
   };
+
+
+function buildEbayMediaApiHeaders(accessToken: unknown): Record<string, string> {
+  return {
+    Authorization: `******
+    "Content-Type": "application/json",
+    "Content-Language": "en-US",
+    "Accept-Language": "en-US",
+    "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+  };
 }
 
 // ================================================================
@@ -3141,7 +3151,8 @@ async function handleGetAuthUrl(
     "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
     "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly", // Required for dashboard views/analytics
     "https://api.ebay.com/oauth/api_scope/sell.finances", // Required for shipping label cost data
-    "https://api.ebay.com/oauth/api_scope/sell.marketing", // Required for eBay Video API
+    "https://api.ebay.com/oauth/api_scope/sell.marketing", // Required for eBay Video API (legacy endpoint)
+    "https://api.ebay.com/oauth/api_scope/commerce.media", // Required for eBay Media API (commerce/media/v1/video)
     "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly", // OQ-5: required for Identity API username/accountType lookup
   ].join(" ");
 
@@ -3495,6 +3506,7 @@ async function handleRefreshToken(
         "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly",
         "https://api.ebay.com/oauth/api_scope/sell.finances",
         "https://api.ebay.com/oauth/api_scope/sell.marketing",
+        "https://api.ebay.com/oauth/api_scope/commerce.media",
       ].join(" "),
     }).toString(),
   });
@@ -3658,6 +3670,7 @@ async function handleGetStoredToken(
             "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly",
             "https://api.ebay.com/oauth/api_scope/sell.finances",
             "https://api.ebay.com/oauth/api_scope/sell.marketing",
+            "https://api.ebay.com/oauth/api_scope/commerce.media",
           ].join(" "),
         }).toString(),
       });
@@ -4331,10 +4344,20 @@ serve(async (req) => {
       }
 
       // Step 1: Create the video entity in eBay
-      const createResp = await fetchWithTimeout(`${apiBase}/sell/marketing/v1_beta/video`, {
+      const videoUrl = `${apiBase}/commerce/media/v1/video`;
+      const videoHeaders = buildEbayMediaApiHeaders(userToken);
+      console.log("upload_video: calling eBay video create", {
+        environment: ebayEnv,
+        url: videoUrl,
+        hasMarketplaceId: "X-EBAY-C-MARKETPLACE-ID" in videoHeaders,
+        fileSizeMB: (Number(fileSize) || 0) / (1024 * 1024),
+        durationSec,
+        contentType,
+      });
+      const createResp = await fetchWithTimeout(videoUrl, {
         method: "POST",
         timeout: 15000,
-        headers: { Authorization: `Bearer ${userToken}`, "Content-Type": "application/json" },
+        headers: videoHeaders,
         body: JSON.stringify({ title: videoTitle || "Item Video", size: Number(fileSize) || 0 }),
       });
       if (!createResp.ok) {
@@ -4360,10 +4383,10 @@ serve(async (req) => {
       }
 
       // Step 3: Upload bytes to eBay (no short timeout — large files may take minutes)
-      const uploadResp = await fetch(`${apiBase}/sell/marketing/v1_beta/video/${videoId}/upload`, {
+      const uploadResp = await fetch(`${apiBase}/commerce/media/v1/video/${videoId}/upload`, {
         method: "PUT",
         headers: {
-          Authorization: `Bearer ${userToken}`,
+          ...buildEbayMediaApiHeaders(userToken),
           "Content-Type": (contentType as string) || "video/mp4",
           ...(fileSize ? { "Content-Length": String(fileSize) } : {}),
         },
@@ -4386,9 +4409,9 @@ serve(async (req) => {
       if (!userToken) throw new Error("No eBay user token provided");
       if (!videoId) throw new Error("No videoId provided");
 
-      const statusResp = await fetchWithTimeout(`${apiBase}/sell/marketing/v1_beta/video/${videoId}`, {
+      const statusResp = await fetchWithTimeout(`${apiBase}/commerce/media/v1/video/${videoId}`, {
         timeout: 10000,
-        headers: { Authorization: `Bearer ${userToken}`, "Accept-Language": "en-US" },
+        headers: buildEbayMediaApiHeaders(userToken),
       });
       if (!statusResp.ok) {
         const e = await statusResp.text();
