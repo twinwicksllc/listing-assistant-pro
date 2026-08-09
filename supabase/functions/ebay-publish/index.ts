@@ -10,8 +10,8 @@ import {
 } from "./auth.ts";
 import {
   handleGetVideoStatus,
-  handleUploadVideo,
   handlePollVideoStatusUntilLive,
+  handleUploadVideo,
 } from "./video.ts";
 import { corsHeaders } from "./constants.ts";
 import { handleBulkCreateDraft, handleGetPolicies } from "./publish.ts";

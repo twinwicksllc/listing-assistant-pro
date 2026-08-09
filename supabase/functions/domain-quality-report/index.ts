@@ -78,8 +78,9 @@ serve(async (req) => {
         .not("domain", "is", null)
         .range(offset, offset + pageSize - 1);
 
-      if (error)
+      if (error) {
         throw new Error(`listing_financials query failed: ${error.message}`);
+      }
       if (!data || data.length === 0) break;
       rows.push(...data);
       if (data.length < pageSize) break;

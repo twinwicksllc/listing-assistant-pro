@@ -898,8 +898,9 @@ async function fetchTradingAPIListingsRaw(
     if (
       firstPageXml.includes("<Ack>Failure</Ack>") ||
       firstPageXml.includes("<Ack>PartialFailure</Ack>")
-    )
+    ) {
       return [];
+    }
 
     const totalPages = parseInt(
       firstPageXml.match(
@@ -920,8 +921,9 @@ async function fetchTradingAPIListingsRaw(
     const allXmlPages: string[] = [firstPageXml];
     if (totalPages > 1) {
       const pagePromises = [];
-      for (let p = 2; p <= totalPages; p++)
+      for (let p = 2; p <= totalPages; p++) {
         pagePromises.push(fetchTradingPage(p));
+      }
       const extraPages = await Promise.all(pagePromises);
       for (const pg of extraPages) if (pg) allXmlPages.push(pg);
     }
@@ -1532,8 +1534,9 @@ serve(async (req) => {
     // fallback (in ebay-reprice) has the item ID it needs.
     const tradingSkuToListingId = new Map<string, string>();
     for (const tl of tradingListings) {
-      if (tl.sku && tl.listingId)
+      if (tl.sku && tl.listingId) {
         tradingSkuToListingId.set(tl.sku, tl.listingId);
+      }
     }
     for (const l of enrichedInventoryListings) {
       if (!l.listingId && l.sku && tradingSkuToListingId.has(l.sku)) {
@@ -1556,8 +1559,9 @@ serve(async (req) => {
       .filter((l: any) => {
         // Skip if already in Inventory API results (by listingId or SKU)
         if (l.listingId && inventoryListingIdSet.has(l.listingId)) return false;
-        if (l.sku && l.sku !== l.listingId && inventorySkuSet.has(l.sku))
+        if (l.sku && l.sku !== l.listingId && inventorySkuSet.has(l.sku)) {
           return false;
+        }
         return true;
       })
       .map((l: any) => ({

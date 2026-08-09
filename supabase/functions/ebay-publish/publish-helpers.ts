@@ -287,13 +287,15 @@ export async function detectCategoryTree(
       normalized.includes("paper money") ||
       normalized.includes("numismatic") ||
       normalized.includes("coins & paper money")
-    )
+    ) {
       return "coin";
+    }
     if (
       normalized.includes("trading cards") ||
       normalized.includes("collectible card games")
-    )
+    ) {
       return "trading_card";
+    }
     if (
       normalized.includes("collectibles") ||
       normalized.includes("toys &") ||
@@ -302,8 +304,9 @@ export async function detectCategoryTree(
       normalized.includes("funko") ||
       normalized.includes("lego") ||
       normalized.includes("board game")
-    )
+    ) {
       return "collectible";
+    }
     return "other";
   };
 

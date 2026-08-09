@@ -703,8 +703,9 @@ async function dualWriteFinancials(
     if (listingIds.length > 0 || skus.length > 0) {
       const orParts: string[] = [];
       if (skus.length > 0) orParts.push(`ebay_sku.in.(${skus.join(",")})`);
-      if (listingIds.length > 0)
+      if (listingIds.length > 0) {
         orParts.push(`ebay_listing_id.in.(${listingIds.join(",")})`);
+      }
 
       const { data: draftRows, error: draftErr } = await supabase
         .from("drafts")
@@ -720,13 +721,15 @@ async function dualWriteFinancials(
       } else {
         for (const row of draftRows ?? []) {
           if (row.domain) {
-            if (row.ebay_listing_id)
+            if (row.ebay_listing_id) {
               domainByListingId[row.ebay_listing_id] = row.domain;
+            }
             if (row.ebay_sku) domainBySku[row.ebay_sku] = row.domain;
           }
           if (row.published_at) {
-            if (row.ebay_listing_id)
+            if (row.ebay_listing_id) {
               publishedAtByListingId[row.ebay_listing_id] = row.published_at;
+            }
             if (row.ebay_sku) publishedAtBySku[row.ebay_sku] = row.published_at;
           }
         }
@@ -761,8 +764,9 @@ async function dualWriteFinancials(
       const days =
         (new Date(it.soldAt).getTime() - new Date(publishedAt).getTime()) /
         (1000 * 60 * 60 * 24);
-      if (Number.isFinite(days) && days >= 0)
+      if (Number.isFinite(days) && days >= 0) {
         timeToSaleDays = parseFloat(days.toFixed(2));
+      }
     }
 
     return {

@@ -90,10 +90,11 @@ async function reviseFixedPriceItemContent(
 
   const itemFragments: string[] = [`<ItemID>${listingId}</ItemID>`];
   if (newTitle) itemFragments.push(`<Title>${newTitle}</Title>`);
-  if (newDescription)
+  if (newDescription) {
     itemFragments.push(
       `<Description><![CDATA[${newDescription}]]></Description>`,
     );
+  }
 
   const xml = `<?xml version="1.0" encoding="utf-8"?>
 <ReviseFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">

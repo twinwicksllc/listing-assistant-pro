@@ -908,18 +908,21 @@ function inferCoinWeightOz(text: string): number {
     /walking liberty half|franklin half|barber half|kennedy half.*1964/.test(
       text,
     )
-  )
+  ) {
     return 0.3618;
+  }
   if (/kennedy half.*196[5-9]|kennedy half.*1970/.test(text)) return 0.1479; // 40% silver
-  if (/barber quarter|standing liberty quarter|washington quarter/.test(text))
+  if (/barber quarter|standing liberty quarter|washington quarter/.test(text)) {
     return 0.1809;
+  }
   if (/mercury dime|barber dime|roosevelt dime/.test(text)) return 0.0724;
   if (
     /silver war nickel|1942.*nickel|1943.*nickel|1944.*nickel|1945.*nickel/.test(
       text,
     )
-  )
+  ) {
     return 0.0563;
+  }
   // Generic silver bars/rounds — look for weight in oz in the text
   const silverOzMatch = text.match(
     /(\d+(?:\.\d+)?)\s*(?:troy\s*)?oz\s*(?:\.999|fine|silver)/,
@@ -935,26 +938,30 @@ function inferCoinWeightOz(text: string): number {
   // ── Gold ──
   if (
     /american gold eagle.*\$50|1\s*oz.*gold eagle|gold eagle.*1\s*oz/.test(text)
-  )
+  ) {
     return 1.0;
+  }
   if (
     /american gold eagle.*\$25|1\/2\s*oz.*gold eagle|gold eagle.*1\/2\s*oz/.test(
       text,
     )
-  )
+  ) {
     return 0.5;
+  }
   if (
     /american gold eagle.*\$10|1\/4\s*oz.*gold eagle|gold eagle.*1\/4\s*oz/.test(
       text,
     )
-  )
+  ) {
     return 0.25;
+  }
   if (
     /american gold eagle.*\$5|1\/10\s*oz.*gold eagle|gold eagle.*1\/10\s*oz/.test(
       text,
     )
-  )
+  ) {
     return 0.1;
+  }
   if (/american gold buffalo/.test(text)) return 1.0;
   if (/gold sovereign/.test(text)) return 0.2354;
   // Pre-1933 US gold

@@ -314,8 +314,9 @@ serve(async (req) => {
           if (
             rule.category_filter &&
             listing.categoryId !== rule.category_filter
-          )
+          ) {
             return false;
+          }
           return true;
         });
 

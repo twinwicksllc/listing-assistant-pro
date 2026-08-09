@@ -138,7 +138,9 @@ async function pollVideoStatusWithRetry(
           maxDelayMs,
         );
         console.log(
-          `pollVideoStatus: videoId=${videoId} still processing (${normalizedStatus}), waiting ${exponentialBackoff.toFixed(0)}ms before retry`,
+          `pollVideoStatus: videoId=${videoId} still processing (${normalizedStatus}), waiting ${exponentialBackoff.toFixed(
+            0,
+          )}ms before retry`,
         );
         await new Promise((resolve) => setTimeout(resolve, exponentialBackoff));
         continue;

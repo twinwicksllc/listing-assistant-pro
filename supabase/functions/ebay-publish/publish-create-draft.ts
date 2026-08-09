@@ -745,15 +745,17 @@ export async function handleCreateDraft({
                 Array.isArray(opt.shippingServices)
               ) {
                 opt.shippingServices.forEach((s: any) => {
-                  if (s?.shippingServiceCode)
+                  if (s?.shippingServiceCode) {
                     policyServices.push(String(s.shippingServiceCode));
+                  }
                   if (s?.name) policyServices.push(String(s.name));
                 });
               }
               if (opt?.services && Array.isArray(opt.services)) {
                 opt.services.forEach((s: any) => {
-                  if (s?.serviceCode)
+                  if (s?.serviceCode) {
                     policyServices.push(String(s.serviceCode));
+                  }
                   if (s?.name) policyServices.push(String(s.name));
                 });
               }

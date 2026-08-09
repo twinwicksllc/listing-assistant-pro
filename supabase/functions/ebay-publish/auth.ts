@@ -63,14 +63,17 @@ export async function handleExchangeCode({
   ebayEnv,
   tokenUrl,
 }: EbayActionHandlerContext): Promise<Response> {
-  if (!clientId || !clientSecret)
+  if (!clientId || !clientSecret) {
     throw new Error("eBay API credentials not configured");
-  if (!ebayEnv || !tokenUrl)
+  }
+  if (!ebayEnv || !tokenUrl) {
     throw new Error("eBay OAuth endpoint not configured");
+  }
 
   const { code, userId } = payload;
-  if (!code || typeof code !== "string")
+  if (!code || typeof code !== "string") {
     throw new Error("No authorization code provided");
+  }
 
   // Security: verify the caller owns the userId they claim to be storing tokens for.
   if (userId) {
@@ -349,8 +352,9 @@ export async function handleRefreshToken({
   clientSecret,
   tokenUrl,
 }: EbayActionHandlerContext): Promise<Response> {
-  if (!clientId || !clientSecret)
+  if (!clientId || !clientSecret) {
     throw new Error("eBay API credentials not configured");
+  }
   if (!tokenUrl) throw new Error("eBay OAuth endpoint not configured");
 
   const { userId } = payload;
