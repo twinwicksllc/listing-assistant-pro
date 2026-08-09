@@ -7,7 +7,7 @@ type TestUser = {
 };
 
 export const test = base.extend<{ testUser: TestUser }>({
-  testUser: async ({ ..._ctx }, yieldFn) => {
+  testUser: async ({ browserName: _browserName }, yieldFn) => {
     const timestamp = Date.now();
     const user: TestUser = {
       email: `qa${timestamp}test@test.sovereignlistingsuite.com`,
