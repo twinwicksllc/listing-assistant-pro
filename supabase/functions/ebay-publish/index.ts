@@ -3,7 +3,7 @@ import { captureException, initSentry } from "../_helpers/sentry.ts";
 
 // Import extracted modules
 import { handleExchangeCode, handleGetAuthUrl, handleGetStoredToken, handleRefreshToken } from "./auth.ts";
-import { handleGetVideoStatus, handleUploadVideo } from "./video.ts";
+import { handleGetVideoStatus, handleUploadVideo, handlePollVideoStatusUntilLive } from "./video.ts";
 import { corsHeaders } from "./constants.ts";
 import { handleBulkCreateDraft, handleGetPolicies } from "./publish.ts";
 import { handleCreateDraft } from "./publish-create-draft.ts";
@@ -64,7 +64,7 @@ serve(async (req) => {
     // (exchange_code, refresh_token, get_auth_url, create_draft, bulk_create_draft).
     // get_stored_token and get_policies only need Supabase credentials, so we defer
     // this check to avoid blocking those actions when eBay app credentials are misconfigured.
-    const requiresEbayCredentials = !["get_stored_token", "get_policies", "upload_video", "get_video_status"]
+    const requiresEbayCredentials = !["get_stored_token", "get_policies", "upload_video", "get_video_status", "poll_video_status_until_live"]
       .includes(action ?? "");
     if (requiresEbayCredentials && (!clientId || !clientSecret)) {
       throw new Error("eBay API credentials not configured");
@@ -104,6 +104,11 @@ serve(async (req) => {
     // --- ACTION: Get eBay video processing status ---
     if (action === "get_video_status") {
       return await handleGetVideoStatus({ payload, apiBase, ebayEnv });
+    }
+
+    // --- ACTION: Poll eBay video status until LIVE or FAILED (with retry backoff) ---
+    if (action === "poll_video_status_until_live") {
+      return await handlePollVideoStatusUntilLive({ payload, apiBase, ebayEnv });
     }
 
     // --- ACTION: Publish a single draft to eBay ---

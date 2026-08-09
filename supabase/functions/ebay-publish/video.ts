@@ -35,6 +35,11 @@ function isRetryableCreateEndpointStatus(status: number): boolean {
   return status === 404 || status === 405;
 }
 
+function isRetryableStatusCode(status: number): boolean {
+  // Transient errors that warrant a retry with backoff
+  return status === 500 || status === 502 || status === 503 || status === 504 || status === 429;
+}
+
 function normalizeVideoStatus(rawStatus: string | null | undefined): string {
   const status = (rawStatus || "").toUpperCase();
   if (status === "LIVE") return "LIVE";
@@ -43,6 +48,124 @@ function normalizeVideoStatus(rawStatus: string | null | undefined): string {
   if (status === "PROCESSING") return "PROCESSING";
   if (status === "PENDING") return "PENDING";
   return status || "PENDING";
+}
+
+interface VideoPollingOptions {
+  maxAttempts?: number;
+  initialDelayMs?: number;
+  maxDelayMs?: number;
+}
+
+/**
+ * Poll video status with exponential backoff retry logic.
+ * Useful for waiting until eBay finishes processing a video (status changes from PROCESSING to LIVE or FAILED).
+ * 
+ * @param videoId eBay video ID to poll
+ * @param userToken eBay user token with commerce.media scope
+ * @param mediaApiBase Base URL for Media API (e.g., https://api.ebay.com/commerce/media/v1)
+ * @param options Polling configuration (maxAttempts, initialDelayMs, maxDelayMs)
+ * @returns Video status object {videoId, status, statusMessage, attempts, processingTimeMs}
+ */
+async function pollVideoStatusWithRetry(
+  videoId: string,
+  userToken: string,
+  mediaApiBase: string,
+  options: VideoPollingOptions = {},
+): Promise<Record<string, unknown>> {
+  const maxAttempts = options.maxAttempts ?? 120; // ~60 minutes with default delays
+  const initialDelayMs = options.initialDelayMs ?? 2000; // Start with 2 seconds
+  const maxDelayMs = options.maxDelayMs ?? 10000; // Cap at 10 seconds
+
+  let lastError: Error | null = null;
+  let lastStatus: Record<string, unknown> | null = null;
+  const startTimeMs = Date.now();
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const resp = await fetchWithTimeout(`${mediaApiBase}/${videoId}`, {
+        timeout: 10000,
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+          "Accept-Language": CONTENT_LANGUAGE,
+          "X-EBAY-C-MARKETPLACE-ID": EBAY_MARKETPLACE_ID,
+        },
+      });
+
+      if (!resp.ok && !isRetryableStatusCode(resp.status)) {
+        const e = await resp.text();
+        throw new Error(
+          `eBay status check failed (${resp.status}): ${e.slice(0, 200)}`,
+        );
+      }
+
+      if (resp.ok) {
+        lastStatus = await readJsonObject(resp, "poll video status");
+        const rawStatus = String(lastStatus.videoStatus ?? lastStatus.status ?? "PENDING");
+        const normalizedStatus = normalizeVideoStatus(rawStatus);
+        const processingTimeMs = Date.now() - startTimeMs;
+
+        console.log(`pollVideoStatus: videoId=${videoId} attempt=${attempt}/${maxAttempts} status=${normalizedStatus} elapsed=${processingTimeMs}ms`);
+
+        // Video is done processing (LIVE or FAILED)
+        if (normalizedStatus === "LIVE" || normalizedStatus === "FAILED") {
+          return {
+            videoId,
+            status: normalizedStatus,
+            statusMessage: lastStatus.statusMessage ?? lastStatus.status_message ?? null,
+            attempts: attempt,
+            processingTimeMs,
+          };
+        }
+
+        // Still processing — calculate backoff and retry
+        const exponentialBackoff = Math.min(
+          initialDelayMs * Math.pow(1.5, attempt - 1),
+          maxDelayMs,
+        );
+        console.log(
+          `pollVideoStatus: videoId=${videoId} still processing (${normalizedStatus}), waiting ${exponentialBackoff.toFixed(0)}ms before retry`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, exponentialBackoff));
+        continue;
+      }
+
+      // Transient error on this attempt — log and retry
+      lastError = new Error(`Status check returned ${resp.status}`);
+      console.warn(
+        `pollVideoStatus: videoId=${videoId} transient error (${resp.status}) on attempt ${attempt}, retrying...`,
+      );
+
+      const exponentialBackoff = Math.min(
+        initialDelayMs * Math.pow(1.5, attempt - 1),
+        maxDelayMs,
+      );
+      await new Promise((resolve) => setTimeout(resolve, exponentialBackoff));
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      console.warn(
+        `pollVideoStatus: videoId=${videoId} error on attempt ${attempt}/${maxAttempts}: ${lastError.message}`,
+      );
+
+      if (attempt >= maxAttempts) {
+        break; // Don't retry after final attempt
+      }
+
+      const exponentialBackoff = Math.min(
+        initialDelayMs * Math.pow(1.5, attempt - 1),
+        maxDelayMs,
+      );
+      await new Promise((resolve) => setTimeout(resolve, exponentialBackoff));
+    }
+  }
+
+  // All retries exhausted
+  const processingTimeMs = Date.now() - startTimeMs;
+  const lastStatusStr = lastStatus ? String(lastStatus.videoStatus ?? lastStatus.status ?? "UNKNOWN") : "UNKNOWN";
+  throw new Error(
+    `Video processing timeout after ${maxAttempts} attempts (${processingTimeMs}ms): status=${lastStatusStr}. ${
+      lastError ? `Last error: ${lastError.message}` : ""
+    }`,
+  );
 }
 
 function getResourceIdFromLocation(location: string | null): string | null {
@@ -276,9 +399,14 @@ export async function handleUploadVideo(
     // Non-endpoint errors should fail fast.
     let guidance = "";
     if (resp.status === 401 || resp.status === 403) {
-      guidance = "Authentication/authorization issue. Token may be expired or lack required scopes (commerce.media).";
+      guidance = "Authentication/authorization issue. Token may be expired, lack required scopes (needs 'commerce.media' scope registered in eBay Developer Portal), or the account may not be authorized for video uploads. " +
+        "Verify: (1) commerce.media scope is registered at https://developer.ebay.com/my/keys, " +
+        "(2) your eBay app is in Production mode, (3) your eBay account has video upload permissions.";
     } else if (resp.status === 400) {
-      guidance = "Bad request. Check file size, title length, classification, and eBay API requirements.";
+      guidance = "Bad request. Check file size (typically < 500MB), title length, classification, and that the video format is supported (MP4, MOV, AVI, WebM). " +
+        "Also verify the commerce.media scope is registered in eBay Developer Portal.";
+    } else if (resp.status === 422) {
+      guidance = "Unprocessable entity. File format or metadata may be invalid. Verify video is valid MP4/MOV/AVI/WebM and meets eBay requirements.";
     }
 
     throw new Error(
@@ -382,15 +510,92 @@ export async function handleGetVideoStatus(
   const normalizedStatus = normalizeVideoStatus(rawStatus);
   console.log(`get_video_status: videoId=${videoId} status=${normalizedStatus} rawStatus=${rawStatus}`);
 
+  // If video is FAILED, provide diagnostic information
+  if (normalizedStatus === "FAILED") {
+    console.error(`get_video_status: video processing FAILED`, {
+      videoId,
+      statusMessage: statusData.statusMessage ?? statusData.status_message,
+      rawResponse: statusData,
+    });
+  }
+
   return new Response(
     JSON.stringify({
       videoId,
       status: normalizedStatus,
       rawStatus,
       statusMessage: statusData.statusMessage ?? statusData.status_message ?? null,
+      // Include additional metadata for debugging
+      debugData: {
+        fullResponse: statusData,
+      },
     }),
     {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     },
   );
+}
+
+/**
+ * Poll eBay video status until it reaches LIVE or FAILED state.
+ * Exported for frontend to use for monitoring video processing.
+ */
+export async function handlePollVideoStatusUntilLive(
+  {
+    payload,
+    apiBase,
+    ebayEnv,
+  }: VideoHandlerContext,
+): Promise<Response> {
+  const {
+    userToken,
+    videoId,
+    maxWaitMs,
+  } = payload;
+  if (!userToken) throw new Error("No eBay user token provided");
+  if (!videoId) throw new Error("No videoId provided");
+
+  const mediaApiCandidates = getMediaVideoBaseCandidates(ebayEnv || "production");
+  const mediaApiBase = mediaApiCandidates[0]; // Use primary endpoint for polling
+
+  const maxWaitSeconds = typeof maxWaitMs === "number" ? Math.floor(maxWaitMs / 1000) : 300; // Default 5 min
+  const maxAttempts = Math.ceil(maxWaitSeconds / 2); // 2 seconds base retry
+
+  try {
+    const result = await pollVideoStatusWithRetry(
+      String(videoId),
+      String(userToken),
+      mediaApiBase,
+      {
+        maxAttempts,
+        initialDelayMs: 2000,
+        maxDelayMs: 10000,
+      },
+    );
+
+    console.log(`poll_video_status_until_live: completed for videoId=${videoId}`, result);
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        ...result,
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error(`poll_video_status_until_live: failed for videoId=${videoId}:`, errorMessage);
+
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: errorMessage,
+        videoId,
+      }),
+      {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
+  }
 }
