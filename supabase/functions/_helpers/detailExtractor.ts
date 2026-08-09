@@ -171,7 +171,8 @@ async function fetchWithTimeout(
 }
 
 function extractJson(raw: string): string {
-  let text = raw.trim()
+  let text = raw
+    .trim()
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```\s*$/, "")
     .trim();
@@ -582,7 +583,9 @@ export async function extractKeyDetails(
     "home_garden_tools",
   ];
   if (!ELIGIBLE_DOMAINS.includes(domain)) {
-    console.log(`${label} Skipping — domain "${domain}" has no detail extraction`);
+    console.log(
+      `${label} Skipping — domain "${domain}" has no detail extraction`,
+    );
     return null;
   }
 
@@ -657,7 +660,9 @@ export async function extractKeyDetails(
   };
 
   try {
-    console.log(`${label} Starting ${domain} detail extraction (model=${DETAIL_MODEL}, images=${imageParts.length})`);
+    console.log(
+      `${label} Starting ${domain} detail extraction (model=${DETAIL_MODEL}, images=${imageParts.length})`,
+    );
 
     const resp = await fetchWithTimeout(
       `https://generativelanguage.googleapis.com/v1beta/models/${DETAIL_MODEL}:generateContent?key=${apiKey}`,
@@ -671,7 +676,9 @@ export async function extractKeyDetails(
 
     if (!resp.ok) {
       const errText = await resp.text();
-      console.warn(`${label} ${DETAIL_MODEL} returned ${resp.status}: ${errText.slice(0, 300)}`);
+      console.warn(
+        `${label} ${DETAIL_MODEL} returned ${resp.status}: ${errText.slice(0, 300)}`,
+      );
       return null;
     }
 
@@ -691,11 +698,16 @@ export async function extractKeyDetails(
     try {
       parsed = JSON.parse(extractJson(rawText));
     } catch (e) {
-      console.warn(`${label} JSON parse failed: ${String(e)}. Raw: ${rawText.slice(0, 300)}`);
+      console.warn(
+        `${label} JSON parse failed: ${String(e)}. Raw: ${rawText.slice(0, 300)}`,
+      );
       return null;
     }
 
-    console.log(`${label} Raw extraction result:`, JSON.stringify(parsed).slice(0, 500));
+    console.log(
+      `${label} Raw extraction result:`,
+      JSON.stringify(parsed).slice(0, 500),
+    );
 
     // Build domain-specific result
     const result: DetailExtractionResult = {
@@ -768,7 +780,10 @@ export async function extractKeyDetails(
         brandSignature: parsed.brandSignature ?? null,
         gemstones: Array.isArray(parsed.gemstones) ? parsed.gemstones : [],
       };
-      console.log(`${label} ✓ Jewelry details extracted:`, result.jewelryDetails);
+      console.log(
+        `${label} ✓ Jewelry details extracted:`,
+        result.jewelryDetails,
+      );
     } else if (domain === "electronics") {
       result.electronicsDetails = {
         brand: parsed.brand ?? null,
@@ -781,7 +796,10 @@ export async function extractKeyDetails(
         cosmeticCondition: parsed.cosmeticCondition ?? null,
         functionalIndicators: parsed.functionalIndicators ?? null,
       };
-      console.log(`${label} ✓ Electronics details extracted:`, result.electronicsDetails);
+      console.log(
+        `${label} ✓ Electronics details extracted:`,
+        result.electronicsDetails,
+      );
     } else if (domain === "sneakers") {
       result.sneakerDetails = {
         brand: parsed.brand ?? null,
@@ -795,7 +813,10 @@ export async function extractKeyDetails(
         boxIncluded: Boolean(parsed.boxIncluded),
         authenticationCues: parsed.authenticationCues ?? null,
       };
-      console.log(`${label} ✓ Sneaker details extracted:`, result.sneakerDetails);
+      console.log(
+        `${label} ✓ Sneaker details extracted:`,
+        result.sneakerDetails,
+      );
     } else if (domain === "auto_parts") {
       result.autoPartDetails = {
         partName: parsed.partName ?? null,
@@ -806,7 +827,10 @@ export async function extractKeyDetails(
         fitmentNotes: parsed.fitmentNotes ?? null,
         condition: parsed.condition ?? null,
       };
-      console.log(`${label} ✓ Auto part details extracted:`, result.autoPartDetails);
+      console.log(
+        `${label} ✓ Auto part details extracted:`,
+        result.autoPartDetails,
+      );
     } else if (domain === "musical_instruments") {
       result.instrumentDetails = {
         brand: parsed.brand ?? null,
@@ -817,7 +841,10 @@ export async function extractKeyDetails(
         condition: parsed.condition ?? null,
         caseOrGigBagIncluded: Boolean(parsed.caseOrGigBagIncluded),
       };
-      console.log(`${label} ✓ Instrument details extracted:`, result.instrumentDetails);
+      console.log(
+        `${label} ✓ Instrument details extracted:`,
+        result.instrumentDetails,
+      );
     } else if (domain === "luxury_handbags") {
       result.handbagDetails = {
         brand: parsed.brand ?? null,
@@ -829,7 +856,10 @@ export async function extractKeyDetails(
         authenticationCues: parsed.authenticationCues ?? null,
         inclusions: Array.isArray(parsed.inclusions) ? parsed.inclusions : [],
       };
-      console.log(`${label} ✓ Handbag details extracted:`, result.handbagDetails);
+      console.log(
+        `${label} ✓ Handbag details extracted:`,
+        result.handbagDetails,
+      );
     } else if (domain === "home_garden_tools") {
       result.toolDetails = {
         brand: parsed.brand ?? null,
@@ -867,29 +897,67 @@ export async function extractKeyDetails(
 // ─────────────────────────────────────────────────────────────────────────────
 function inferCoinWeightOz(text: string): number {
   // ── Silver ──
-  if (/american silver eagle/.test(text)) return 1.0000;
+  if (/american silver eagle/.test(text)) return 1.0;
   if (/morgan dollar|peace dollar/.test(text)) return 0.7734;
-  if (/walking liberty half|franklin half|barber half|kennedy half.*1964/.test(text)) return 0.3618;
+  if (
+    /walking liberty half|franklin half|barber half|kennedy half.*1964/.test(
+      text,
+    )
+  ) {
+    return 0.3618;
+  }
   if (/kennedy half.*196[5-9]|kennedy half.*1970/.test(text)) return 0.1479; // 40% silver
-  if (/barber quarter|standing liberty quarter|washington quarter/.test(text)) return 0.1809;
+  if (/barber quarter|standing liberty quarter|washington quarter/.test(text)) {
+    return 0.1809;
+  }
   if (/mercury dime|barber dime|roosevelt dime/.test(text)) return 0.0724;
-  if (/silver war nickel|1942.*nickel|1943.*nickel|1944.*nickel|1945.*nickel/.test(text)) return 0.0563;
+  if (
+    /silver war nickel|1942.*nickel|1943.*nickel|1944.*nickel|1945.*nickel/.test(
+      text,
+    )
+  ) {
+    return 0.0563;
+  }
   // Generic silver bars/rounds — look for weight in oz in the text
-  const silverOzMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:troy\s*)?oz\s*(?:\.999|fine|silver)/);
+  const silverOzMatch = text.match(
+    /(\d+(?:\.\d+)?)\s*(?:troy\s*)?oz\s*(?:\.999|fine|silver)/,
+  );
   if (silverOzMatch) return parseFloat(silverOzMatch[1]);
-  if (/1\s*oz.*silver|silver.*1\s*oz/.test(text)) return 1.0000;
-  if (/10\s*oz.*silver|silver.*10\s*oz/.test(text)) return 10.0000;
-  if (/100\s*oz.*silver|silver.*100\s*oz/.test(text)) return 100.0000;
-  if (/1\/2\s*oz.*silver|silver.*1\/2\s*oz/.test(text)) return 0.5000;
-  if (/1\/4\s*oz.*silver|silver.*1\/4\s*oz/.test(text)) return 0.2500;
-  if (/1\/10\s*oz.*silver|silver.*1\/10\s*oz/.test(text)) return 0.1000;
+  if (/1\s*oz.*silver|silver.*1\s*oz/.test(text)) return 1.0;
+  if (/10\s*oz.*silver|silver.*10\s*oz/.test(text)) return 10.0;
+  if (/100\s*oz.*silver|silver.*100\s*oz/.test(text)) return 100.0;
+  if (/1\/2\s*oz.*silver|silver.*1\/2\s*oz/.test(text)) return 0.5;
+  if (/1\/4\s*oz.*silver|silver.*1\/4\s*oz/.test(text)) return 0.25;
+  if (/1\/10\s*oz.*silver|silver.*1\/10\s*oz/.test(text)) return 0.1;
 
   // ── Gold ──
-  if (/american gold eagle.*\$50|1\s*oz.*gold eagle|gold eagle.*1\s*oz/.test(text)) return 1.0000;
-  if (/american gold eagle.*\$25|1\/2\s*oz.*gold eagle|gold eagle.*1\/2\s*oz/.test(text)) return 0.5000;
-  if (/american gold eagle.*\$10|1\/4\s*oz.*gold eagle|gold eagle.*1\/4\s*oz/.test(text)) return 0.2500;
-  if (/american gold eagle.*\$5|1\/10\s*oz.*gold eagle|gold eagle.*1\/10\s*oz/.test(text)) return 0.1000;
-  if (/american gold buffalo/.test(text)) return 1.0000;
+  if (
+    /american gold eagle.*\$50|1\s*oz.*gold eagle|gold eagle.*1\s*oz/.test(text)
+  ) {
+    return 1.0;
+  }
+  if (
+    /american gold eagle.*\$25|1\/2\s*oz.*gold eagle|gold eagle.*1\/2\s*oz/.test(
+      text,
+    )
+  ) {
+    return 0.5;
+  }
+  if (
+    /american gold eagle.*\$10|1\/4\s*oz.*gold eagle|gold eagle.*1\/4\s*oz/.test(
+      text,
+    )
+  ) {
+    return 0.25;
+  }
+  if (
+    /american gold eagle.*\$5|1\/10\s*oz.*gold eagle|gold eagle.*1\/10\s*oz/.test(
+      text,
+    )
+  ) {
+    return 0.1;
+  }
+  if (/american gold buffalo/.test(text)) return 1.0;
   if (/gold sovereign/.test(text)) return 0.2354;
   // Pre-1933 US gold
   if (/double eagle|\$20\s*gold/.test(text)) return 0.9675;
@@ -902,12 +970,14 @@ function inferCoinWeightOz(text: string): number {
   if (/indian head.*\$5|indian.*half eagle/.test(text)) return 0.2419;
   if (/indian head.*\$10|indian.*eagle/.test(text)) return 0.4838;
   // Generic gold bars/rounds
-  const goldOzMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:troy\s*)?oz\s*(?:\.999|\.9999|fine|gold)/);
+  const goldOzMatch = text.match(
+    /(\d+(?:\.\d+)?)\s*(?:troy\s*)?oz\s*(?:\.999|\.9999|fine|gold)/,
+  );
   if (goldOzMatch) return parseFloat(goldOzMatch[1]);
-  if (/1\s*oz.*gold|gold.*1\s*oz/.test(text)) return 1.0000;
-  if (/1\/10\s*oz.*gold|gold.*1\/10\s*oz/.test(text)) return 0.1000;
-  if (/1\/4\s*oz.*gold|gold.*1\/4\s*oz/.test(text)) return 0.2500;
-  if (/1\/2\s*oz.*gold|gold.*1\/2\s*oz/.test(text)) return 0.5000;
+  if (/1\s*oz.*gold|gold.*1\s*oz/.test(text)) return 1.0;
+  if (/1\/10\s*oz.*gold|gold.*1\/10\s*oz/.test(text)) return 0.1;
+  if (/1\/4\s*oz.*gold|gold.*1\/4\s*oz/.test(text)) return 0.25;
+  if (/1\/2\s*oz.*gold|gold.*1\/2\s*oz/.test(text)) return 0.5;
   // LEGO silver bars — "1/8 oz" style
   if (/1\/8\s*oz.*silver|silver.*1\/8\s*oz/.test(text)) return 0.125;
 
@@ -926,7 +996,10 @@ export function applyDetailOverrides(
     const specs = listing.itemSpecifics ?? {};
 
     // ── Mint Mark Override ──
-    if (cd.mintMarkConfidence === "confirmed" || cd.mintMarkConfidence === "likely") {
+    if (
+      cd.mintMarkConfidence === "confirmed" ||
+      cd.mintMarkConfidence === "likely"
+    ) {
       const oldMintLocation = specs["Mint Location"] ?? "not set";
       const oldMintMark = specs["Mint Mark"] ?? "not set";
 
@@ -945,11 +1018,17 @@ export function applyDetailOverrides(
       } else if (cd.mintLocation === "Philadelphia") {
         specs["Mint Mark"] = "None";
         specs["Mint Location"] = "Philadelphia";
-        console.log(`${label} OVERRIDE Mint Mark: "${oldMintMark}" → "None" (Philadelphia confirmed)`);
+        console.log(
+          `${label} OVERRIDE Mint Mark: "${oldMintMark}" → "None" (Philadelphia confirmed)`,
+        );
       }
 
       // ── Update title with correct mint mark ──
-      if (listing.title && cd.mintMark && cd.mintMarkConfidence === "confirmed") {
+      if (
+        listing.title &&
+        cd.mintMark &&
+        cd.mintMarkConfidence === "confirmed"
+      ) {
         const title = listing.title as string;
         // Check if title has wrong mint info or is missing mint mark
         const mintMarkInTitle = /\b([OSDW]|CC)\s*(?:mint|mark)?\b/i.test(title) ||
@@ -964,10 +1043,15 @@ export function applyDetailOverrides(
           // Insert mint mark after year: "1896" → "1896-O"
           const yearPattern = new RegExp(`\\b${cd.year}\\b`);
           if (yearPattern.test(title)) {
-            const newTitle = title.replace(yearPattern, `${cd.year}-${cd.mintMark}`);
+            const newTitle = title.replace(
+              yearPattern,
+              `${cd.year}-${cd.mintMark}`,
+            );
             if (newTitle.length <= 80) {
               listing.title = newTitle;
-              console.log(`${label} OVERRIDE Title: added mint mark → "${newTitle}"`);
+              console.log(
+                `${label} OVERRIDE Title: added mint mark → "${newTitle}"`,
+              );
             }
           }
         } else if (mintMarkInTitle && cd.mintMark) {
@@ -978,7 +1062,10 @@ export function applyDetailOverrides(
             if (match) {
               const currentMark = match[1] || "";
               if (currentMark.toUpperCase() !== cd.mintMark.toUpperCase()) {
-                const newTitle = title.replace(wrongPattern, `${cd.year}-${cd.mintMark}`);
+                const newTitle = title.replace(
+                  wrongPattern,
+                  `${cd.year}-${cd.mintMark}`,
+                );
                 if (newTitle.length <= 80) {
                   listing.title = newTitle;
                   console.log(
@@ -992,12 +1079,18 @@ export function applyDetailOverrides(
       }
 
       // ── Update description with correct mint info ──
-      if (listing.description && cd.mintLocation && cd.mintMarkConfidence === "confirmed") {
+      if (
+        listing.description &&
+        cd.mintLocation &&
+        cd.mintMarkConfidence === "confirmed"
+      ) {
         const desc = listing.description as string;
         // If description says Philadelphia but we found a different mint
         if (/Philadelphia/i.test(desc) && cd.mintLocation !== "Philadelphia") {
           listing.description = desc.replace(/Philadelphia/gi, cd.mintLocation);
-          console.log(`${label} OVERRIDE Description: replaced "Philadelphia" → "${cd.mintLocation}"`);
+          console.log(
+            `${label} OVERRIDE Description: replaced "Philadelphia" → "${cd.mintLocation}"`,
+          );
         }
       }
     } else if (cd.mintMarkConfidence === "not_visible") {
@@ -1005,7 +1098,9 @@ export function applyDetailOverrides(
       if (specs["Mint Location"] === "Philadelphia" && !cd.reverseVisible) {
         specs["Mint Location"] = "Unknown/Not Visible";
         specs["Mint Mark"] = "Not Visible";
-        console.log(`${label} OVERRIDE: reverse not visible, changed Philadelphia → Unknown/Not Visible`);
+        console.log(
+          `${label} OVERRIDE: reverse not visible, changed Philadelphia → Unknown/Not Visible`,
+        );
       }
     }
 
@@ -1013,7 +1108,9 @@ export function applyDetailOverrides(
     if (cd.year) {
       // Override Year in item specifics
       if (cd.year !== specs["Year"]) {
-        console.log(`${label} OVERRIDE Year spec: "${specs["Year"]}" → "${cd.year}"`);
+        console.log(
+          `${label} OVERRIDE Year spec: "${specs["Year"]}" → "${cd.year}"`,
+        );
         specs["Year"] = cd.year;
       }
 
@@ -1024,13 +1121,20 @@ export function applyDetailOverrides(
         if (titleYearMatch && titleYearMatch[1] !== cd.year) {
           const oldYear = titleYearMatch[1];
           // Replace old year with correct year (preserve mint mark suffix like "-W", "-S")
-          const yearWithMarkPattern = new RegExp(`\\b${oldYear}(-(\\w{1,2}))?\\b`);
-          const newTitle = titleStr.replace(yearWithMarkPattern, (match, markSuffix) => {
-            return markSuffix ? `${cd.year}${markSuffix}` : cd.year!;
-          });
+          const yearWithMarkPattern = new RegExp(
+            `\\b${oldYear}(-(\\w{1,2}))?\\b`,
+          );
+          const newTitle = titleStr.replace(
+            yearWithMarkPattern,
+            (match, markSuffix) => {
+              return markSuffix ? `${cd.year}${markSuffix}` : cd.year!;
+            },
+          );
           if (newTitle !== titleStr) {
             listing.title = newTitle;
-            console.log(`${label} OVERRIDE Title year: "${oldYear}" → "${cd.year}" → "${newTitle}"`);
+            console.log(
+              `${label} OVERRIDE Title year: "${oldYear}" → "${cd.year}" → "${newTitle}"`,
+            );
           }
         }
       }
@@ -1044,7 +1148,9 @@ export function applyDetailOverrides(
           // Replace all occurrences of the wrong year in description
           const wrongYearPattern = new RegExp(`\\b${oldYear}\\b`, "g");
           listing.description = descStr.replace(wrongYearPattern, cd.year);
-          console.log(`${label} OVERRIDE Description year: "${oldYear}" → "${cd.year}"`);
+          console.log(
+            `${label} OVERRIDE Description year: "${oldYear}" → "${cd.year}"`,
+          );
         }
       }
     }
@@ -1054,7 +1160,9 @@ export function applyDetailOverrides(
       // Add key date info to description
       if (listing.description && !listing.description.includes("key date")) {
         listing.description = `KEY DATE: ${cd.keyDateReason}\n\n${listing.description}`;
-        console.log(`${label} Added key date info to description: ${cd.keyDateReason}`);
+        console.log(
+          `${label} Added key date info to description: ${cd.keyDateReason}`,
+        );
       }
     }
 
@@ -1070,7 +1178,11 @@ export function applyDetailOverrides(
     // If Pass 2 failed to populate metalType/metalWeightOz (common when Pass 1
     // didn't flag isMetal), derive them from the coin series identified here.
     // This ensures melt value is always calculated for precious metal coins.
-    const seriesLower = (cd.series ?? listing.itemSpecifics?.["Series"] ?? "").toLowerCase();
+    const seriesLower = (
+      cd.series ??
+        listing.itemSpecifics?.["Series"] ??
+        ""
+    ).toLowerCase();
     const titleLower = (listing.title ?? "").toLowerCase();
     const combinedText = `${seriesLower} ${titleLower}`;
 
@@ -1078,28 +1190,44 @@ export function applyDetailOverrides(
     if (!listing.metalType || listing.metalType === "none") {
       if (
         /morgan|peace|american silver eagle|silver dollar|silver dime|silver quarter|silver half|mercury dime|barber|walking liberty|franklin half|silver bar|silver round|silver bullion/
-          .test(combinedText)
+          .test(
+            combinedText,
+          )
       ) {
         listing.metalType = "silver";
-        console.log(`${label} BACKSTOP metalType -> "silver" (derived from series/title)`);
+        console.log(
+          `${label} BACKSTOP metalType -> "silver" (derived from series/title)`,
+        );
       } else if (
         /gold eagle|gold buffalo|double eagle|gold sovereign|half eagle|quarter eagle|indian head gold|\$2\.5|\$5 gold|\$10 gold|\$20 gold|gold bar|gold round|gold bullion|gold coin/
-          .test(combinedText)
+          .test(
+            combinedText,
+          )
       ) {
         listing.metalType = "gold";
-        console.log(`${label} BACKSTOP metalType -> "gold" (derived from series/title)`);
+        console.log(
+          `${label} BACKSTOP metalType -> "gold" (derived from series/title)`,
+        );
       } else if (/platinum/.test(combinedText)) {
         listing.metalType = "platinum";
-        console.log(`${label} BACKSTOP metalType -> "platinum" (derived from series/title)`);
+        console.log(
+          `${label} BACKSTOP metalType -> "platinum" (derived from series/title)`,
+        );
       }
     }
 
     // Determine weight from series/title if not already set (or is 0)
-    if (listing.metalType && listing.metalType !== "none" && !(listing.metalWeightOz > 0)) {
+    if (
+      listing.metalType &&
+      listing.metalType !== "none" &&
+      !(listing.metalWeightOz > 0)
+    ) {
       const w = inferCoinWeightOz(combinedText);
       if (w > 0) {
         listing.metalWeightOz = w;
-        console.log(`${label} BACKSTOP metalWeightOz -> ${w} (derived from series/title)`);
+        console.log(
+          `${label} BACKSTOP metalWeightOz -> ${w} (derived from series/title)`,
+        );
       }
     }
   }
@@ -1118,12 +1246,18 @@ export function applyDetailOverrides(
     if (card.playerOrCharacter) {
       if (!specs["Player/Athlete"] && !specs["Card Name"]) {
         // Determine if sports or TCG
-        if (["Baseball", "Basketball", "Football", "Hockey", "Soccer"].includes(card.sport ?? "")) {
+        if (
+          ["Baseball", "Basketball", "Football", "Hockey", "Soccer"].includes(
+            card.sport ?? "",
+          )
+        ) {
           specs["Player/Athlete"] = card.playerOrCharacter;
         } else {
           specs["Card Name"] = card.playerOrCharacter;
         }
-        console.log(`${label} Added player/character: ${card.playerOrCharacter}`);
+        console.log(
+          `${label} Added player/character: ${card.playerOrCharacter}`,
+        );
       }
     }
 
@@ -1138,15 +1272,25 @@ export function applyDetailOverrides(
       const oldFeatures = specs["Features"] ?? "";
       if (!oldFeatures.toLowerCase().includes(card.parallel.toLowerCase())) {
         specs["Features"] = oldFeatures ? `${oldFeatures}, ${card.parallel}` : card.parallel;
-        console.log(`${label} OVERRIDE Features: added parallel "${card.parallel}"`);
+        console.log(
+          `${label} OVERRIDE Features: added parallel "${card.parallel}"`,
+        );
       }
 
       // Add parallel to title if not present
-      if (listing.title && !listing.title.toLowerCase().includes(card.parallel.toLowerCase())) {
-        const newTitle = `${listing.title} ${card.parallel}`.slice(0, 80).replace(/\s+\S*$/, "").trim();
+      if (
+        listing.title &&
+        !listing.title.toLowerCase().includes(card.parallel.toLowerCase())
+      ) {
+        const newTitle = `${listing.title} ${card.parallel}`
+          .slice(0, 80)
+          .replace(/\s+\S*$/, "")
+          .trim();
         if (newTitle.length > listing.title.length) {
           listing.title = newTitle;
-          console.log(`${label} OVERRIDE Title: added parallel → "${newTitle}"`);
+          console.log(
+            `${label} OVERRIDE Title: added parallel → "${newTitle}"`,
+          );
         }
       }
     }
@@ -1154,9 +1298,14 @@ export function applyDetailOverrides(
     // ── Serial Number — HIGH VALUE ──
     if (card.serialNumbered && card.serialNumber) {
       if (listing.title && !listing.title.includes("/")) {
-        const newTitle = `${listing.title} ${card.serialNumber}`.slice(0, 80).replace(/\s+\S*$/, "").trim();
+        const newTitle = `${listing.title} ${card.serialNumber}`
+          .slice(0, 80)
+          .replace(/\s+\S*$/, "")
+          .trim();
         listing.title = newTitle;
-        console.log(`${label} OVERRIDE Title: added serial number → "${newTitle}"`);
+        console.log(
+          `${label} OVERRIDE Title: added serial number → "${newTitle}"`,
+        );
       }
     }
 
@@ -1166,9 +1315,14 @@ export function applyDetailOverrides(
         specs["Features"] = specs["Features"] ? `${specs["Features"]}, Rookie` : "Rookie";
       }
       if (
-        listing.title && !listing.title.toLowerCase().includes("rc") && !listing.title.toLowerCase().includes("rookie")
+        listing.title &&
+        !listing.title.toLowerCase().includes("rc") &&
+        !listing.title.toLowerCase().includes("rookie")
       ) {
-        const newTitle = `${listing.title} RC`.slice(0, 80).replace(/\s+\S*$/, "").trim();
+        const newTitle = `${listing.title} RC`
+          .slice(0, 80)
+          .replace(/\s+\S*$/, "")
+          .trim();
         listing.title = newTitle;
         console.log(`${label} OVERRIDE Title: added RC → "${newTitle}"`);
       }
@@ -1198,8 +1352,14 @@ export function applyDetailOverrides(
       console.log(`${label} OVERRIDE Brand: added "${jd.brandSignature}"`);
 
       // Add brand to title if not present
-      if (listing.title && !listing.title.toLowerCase().includes(jd.brandSignature.toLowerCase())) {
-        const newTitle = `${jd.brandSignature} ${listing.title}`.slice(0, 80).replace(/\s+\S*$/, "").trim();
+      if (
+        listing.title &&
+        !listing.title.toLowerCase().includes(jd.brandSignature.toLowerCase())
+      ) {
+        const newTitle = `${jd.brandSignature} ${listing.title}`
+          .slice(0, 80)
+          .replace(/\s+\S*$/, "")
+          .trim();
         listing.title = newTitle;
         console.log(`${label} OVERRIDE Title: added brand → "${newTitle}"`);
       }
@@ -1224,9 +1384,15 @@ export function applyDetailOverrides(
     const specs = listing.itemSpecifics ?? {};
 
     // ── Model Number (HIGH VALUE — only override with confirmed/likely reads) ──
-    if (ed.modelNumber && ed.modelNumberConfidence !== "not_visible" && !specs["Model"]) {
+    if (
+      ed.modelNumber &&
+      ed.modelNumberConfidence !== "not_visible" &&
+      !specs["Model"]
+    ) {
       specs["Model"] = ed.modelNumber;
-      console.log(`${label} OVERRIDE Model: added "${ed.modelNumber}" (confidence: ${ed.modelNumberConfidence})`);
+      console.log(
+        `${label} OVERRIDE Model: added "${ed.modelNumber}" (confidence: ${ed.modelNumberConfidence})`,
+      );
     }
 
     if (ed.brand && !specs["Brand"]) {
@@ -1249,16 +1415,26 @@ export function applyDetailOverrides(
     const specs = listing.itemSpecifics ?? {};
 
     // ── Style Code / SKU (HIGH VALUE — only override with confirmed/likely reads) ──
-    if (sd.styleCode && sd.styleCodeConfidence !== "not_visible" && !specs["Style Code"]) {
+    if (
+      sd.styleCode &&
+      sd.styleCodeConfidence !== "not_visible" &&
+      !specs["Style Code"]
+    ) {
       specs["Style Code"] = sd.styleCode;
-      console.log(`${label} OVERRIDE Style Code: added "${sd.styleCode}" (confidence: ${sd.styleCodeConfidence})`);
+      console.log(
+        `${label} OVERRIDE Style Code: added "${sd.styleCode}" (confidence: ${sd.styleCodeConfidence})`,
+      );
     }
 
     if (sd.colorway && !specs["Color"]) {
       specs["Color"] = sd.colorway;
     }
 
-    if (sd.size && sd.sizeConfidence !== "not_visible" && !specs["US Shoe Size"]) {
+    if (
+      sd.size &&
+      sd.sizeConfidence !== "not_visible" &&
+      !specs["US Shoe Size"]
+    ) {
       specs["US Shoe Size"] = sd.size;
     }
 
@@ -1270,7 +1446,11 @@ export function applyDetailOverrides(
     const specs = listing.itemSpecifics ?? {};
 
     // ── Part Number (HIGH VALUE — only override with confirmed/likely reads) ──
-    if (ap.partNumber && ap.partNumberConfidence !== "not_visible" && !specs["Manufacturer Part Number"]) {
+    if (
+      ap.partNumber &&
+      ap.partNumberConfidence !== "not_visible" &&
+      !specs["Manufacturer Part Number"]
+    ) {
       specs["Manufacturer Part Number"] = ap.partNumber;
       console.log(
         `${label} OVERRIDE Part Number: added "${ap.partNumber}" (confidence: ${ap.partNumberConfidence})`,
@@ -1281,7 +1461,11 @@ export function applyDetailOverrides(
       specs["Brand"] = ap.brand;
     }
 
-    if (ap.oemOrAftermarket && ap.oemOrAftermarket !== "Unknown" && !specs["Other Part Number"]) {
+    if (
+      ap.oemOrAftermarket &&
+      ap.oemOrAftermarket !== "Unknown" &&
+      !specs["Other Part Number"]
+    ) {
       specs["Type"] = ap.oemOrAftermarket;
     }
 
@@ -1292,7 +1476,11 @@ export function applyDetailOverrides(
     const id = extraction.instrumentDetails;
     const specs = listing.itemSpecifics ?? {};
 
-    if (id.serialNumber && id.serialNumberConfidence !== "not_visible" && !specs["Serial Number"]) {
+    if (
+      id.serialNumber &&
+      id.serialNumberConfidence !== "not_visible" &&
+      !specs["Serial Number"]
+    ) {
       specs["Serial Number"] = id.serialNumber;
       console.log(
         `${label} OVERRIDE Serial Number: added "${id.serialNumber}" (confidence: ${id.serialNumberConfidence})`,
@@ -1319,14 +1507,24 @@ export function applyDetailOverrides(
       specs["Brand"] = hd.brand;
       console.log(`${label} OVERRIDE Brand: added "${hd.brand}"`);
 
-      if (listing.title && !listing.title.toLowerCase().includes(hd.brand.toLowerCase())) {
-        const newTitle = `${hd.brand} ${listing.title}`.slice(0, 80).replace(/\s+\S*$/, "").trim();
+      if (
+        listing.title &&
+        !listing.title.toLowerCase().includes(hd.brand.toLowerCase())
+      ) {
+        const newTitle = `${hd.brand} ${listing.title}`
+          .slice(0, 80)
+          .replace(/\s+\S*$/, "")
+          .trim();
         listing.title = newTitle;
         console.log(`${label} OVERRIDE Title: added brand → "${newTitle}"`);
       }
     }
 
-    if (hd.dateCode && hd.dateCodeConfidence !== "not_visible" && !specs["Date Code"]) {
+    if (
+      hd.dateCode &&
+      hd.dateCodeConfidence !== "not_visible" &&
+      !specs["Date Code"]
+    ) {
       specs["Date Code"] = hd.dateCode;
     }
 
@@ -1341,16 +1539,26 @@ export function applyDetailOverrides(
     const td = extraction.toolDetails;
     const specs = listing.itemSpecifics ?? {};
 
-    if (td.modelNumber && td.modelNumberConfidence !== "not_visible" && !specs["Model"]) {
+    if (
+      td.modelNumber &&
+      td.modelNumberConfidence !== "not_visible" &&
+      !specs["Model"]
+    ) {
       specs["Model"] = td.modelNumber;
-      console.log(`${label} OVERRIDE Model: added "${td.modelNumber}" (confidence: ${td.modelNumberConfidence})`);
+      console.log(
+        `${label} OVERRIDE Model: added "${td.modelNumber}" (confidence: ${td.modelNumberConfidence})`,
+      );
     }
 
     if (td.brand && !specs["Brand"]) {
       specs["Brand"] = td.brand;
     }
 
-    if (td.powerSource && td.powerSource !== "Unknown" && !specs["Power Source"]) {
+    if (
+      td.powerSource &&
+      td.powerSource !== "Unknown" &&
+      !specs["Power Source"]
+    ) {
       specs["Power Source"] = td.powerSource;
     }
 

@@ -1,4 +1,10 @@
-import { CheckCircle, XCircle, Loader2, ExternalLink, Download } from "lucide-react";
+import {
+  CheckCircle,
+  XCircle,
+  Loader2,
+  ExternalLink,
+  Download,
+} from "lucide-react";
 import type { BulkPublishResult } from "@/types/bulk-listing";
 
 interface BulkProgressBarProps {
@@ -91,11 +97,15 @@ export default function BulkProgressBar({
               ) : (
                 <XCircle className="w-3.5 h-3.5 text-destructive flex-shrink-0" />
               )}
-              <span className="text-muted-foreground min-w-[40px]">Row {r.rowIndex + 1}</span>
+              <span className="text-muted-foreground min-w-[40px]">
+                Row {r.rowIndex + 1}
+              </span>
               {r.success ? (
                 <div className="flex items-center gap-2 flex-1 min-w-0">
                   <span className="text-green-700 dark:text-green-300 font-medium truncate">
-                    {r.listingId ? `Listing #${r.listingId}` : `Offer #${r.offerId}`}
+                    {r.listingId
+                      ? `Listing #${r.listingId}`
+                      : `Offer #${r.offerId}`}
                   </span>
                   {r.ebayUrl && (
                     <a
@@ -110,7 +120,9 @@ export default function BulkProgressBar({
                   )}
                 </div>
               ) : (
-                <span className="text-destructive truncate flex-1">{r.error ?? "Unknown error"}</span>
+                <span className="text-destructive truncate flex-1">
+                  {r.error ?? "Unknown error"}
+                </span>
               )}
             </div>
           ))}
@@ -132,8 +144,8 @@ export default function BulkProgressBar({
               {failed === 0
                 ? `All ${published} listings published successfully! 🎉`
                 : published === 0
-                ? `All ${failed} listings failed to publish`
-                : `${published} published · ${failed} failed`}
+                  ? `All ${failed} listings failed to publish`
+                  : `${published} published · ${failed} failed`}
             </p>
           </div>
 

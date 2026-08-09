@@ -1,4 +1,8 @@
-import type { BulkRow, BulkRowState, BulkValidationIssue } from "@/types/bulk-listing";
+import type {
+  BulkRow,
+  BulkRowState,
+  BulkValidationIssue,
+} from "@/types/bulk-listing";
 import { SUPPORTED_CONDITION_VALUES } from "@/types/listing";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -15,7 +19,11 @@ export function validateRow(row: BulkRow): BulkRowState {
 
   // Title
   if (!row.title || row.title.trim().length === 0) {
-    errors.push({ field: "title", message: "Title is required", severity: "error" });
+    errors.push({
+      field: "title",
+      message: "Title is required",
+      severity: "error",
+    });
   } else if (row.title.trim().length > 80) {
     errors.push({
       field: "title",
@@ -25,7 +33,8 @@ export function validateRow(row: BulkRow): BulkRowState {
   } else if (row.title.trim().length < 5) {
     warnings.push({
       field: "title",
-      message: "Title is very short — add more detail for better search visibility",
+      message:
+        "Title is very short — add more detail for better search visibility",
       severity: "warning",
     });
   }
@@ -33,7 +42,11 @@ export function validateRow(row: BulkRow): BulkRowState {
   // Price
   if (row.format === "FIXED_PRICE" || !row.format) {
     if (!row.price || row.price <= 0) {
-      errors.push({ field: "price", message: "Price must be greater than $0", severity: "error" });
+      errors.push({
+        field: "price",
+        message: "Price must be greater than $0",
+        severity: "error",
+      });
     } else if (row.price < 0.99) {
       warnings.push({
         field: "price",
@@ -56,7 +69,11 @@ export function validateRow(row: BulkRow): BulkRowState {
 
   // Category ID
   if (!row.categoryId || row.categoryId.trim().length === 0) {
-    errors.push({ field: "categoryId", message: "eBay Category ID is required", severity: "error" });
+    errors.push({
+      field: "categoryId",
+      message: "eBay Category ID is required",
+      severity: "error",
+    });
   } else if (!/^\d+$/.test(row.categoryId.trim())) {
     errors.push({
       field: "categoryId",
@@ -67,7 +84,11 @@ export function validateRow(row: BulkRow): BulkRowState {
 
   // Condition
   if (!row.condition || row.condition.trim().length === 0) {
-    errors.push({ field: "condition", message: "Condition is required", severity: "error" });
+    errors.push({
+      field: "condition",
+      message: "Condition is required",
+      severity: "error",
+    });
   } else if (!VALID_CONDITIONS.includes(row.condition.trim().toUpperCase())) {
     errors.push({
       field: "condition",
@@ -87,7 +108,11 @@ export function validateRow(row: BulkRow): BulkRowState {
 
   // Quantity
   if (row.quantity !== undefined && (isNaN(row.quantity) || row.quantity < 1)) {
-    errors.push({ field: "quantity", message: "Quantity must be at least 1", severity: "error" });
+    errors.push({
+      field: "quantity",
+      message: "Quantity must be at least 1",
+      severity: "error",
+    });
   }
 
   // Image URLs (warnings only — images are optional for draft creation)
@@ -119,7 +144,11 @@ export function validateRow(row: BulkRow): BulkRowState {
 
   // COGS sanity check
   if (row.cogs !== undefined && row.cogs < 0) {
-    errors.push({ field: "cogs", message: "COGS cannot be negative", severity: "error" });
+    errors.push({
+      field: "cogs",
+      message: "COGS cannot be negative",
+      severity: "error",
+    });
   }
 
   // Price vs COGS warning
@@ -151,7 +180,7 @@ export function validateAllRows(rows: BulkRow[]): BulkRowState[] {
 
 export function rawToBulkRow(
   raw: Record<string, string> & { _itemSpecifics: Record<string, string> },
-  rowIndex: number
+  rowIndex: number,
 ): BulkRow {
   // Collect image URLs from imageUrl1..imageUrl8
   const imageUrls: string[] = [];
@@ -162,7 +191,9 @@ export function rawToBulkRow(
 
   // Normalize condition to uppercase
   const rawCondition = (raw.condition || "USED_EXCELLENT").trim().toUpperCase();
-  const condition = VALID_CONDITIONS.includes(rawCondition) ? rawCondition : "USED_EXCELLENT";
+  const condition = VALID_CONDITIONS.includes(rawCondition)
+    ? rawCondition
+    : "USED_EXCELLENT";
 
   // Normalize format
   const rawFormat = (raw.format || "FIXED_PRICE").trim().toUpperCase();
@@ -170,8 +201,12 @@ export function rawToBulkRow(
 
   const price = parseFloat(raw.price || "0") || 0;
   const quantity = parseInt(raw.quantity || "1", 10) || 1;
-  const auctionStartPrice = raw.auctionStartPrice ? parseFloat(raw.auctionStartPrice) : undefined;
-  const buyItNowPrice = raw.buyItNowPrice ? parseFloat(raw.buyItNowPrice) : undefined;
+  const auctionStartPrice = raw.auctionStartPrice
+    ? parseFloat(raw.auctionStartPrice)
+    : undefined;
+  const buyItNowPrice = raw.buyItNowPrice
+    ? parseFloat(raw.buyItNowPrice)
+    : undefined;
   const cogs = raw.cogs ? parseFloat(raw.cogs) : undefined;
 
   return {
@@ -189,7 +224,10 @@ export function rawToBulkRow(
     fulfillmentPolicyId: raw.fulfillmentPolicyId?.trim() || undefined,
     paymentPolicyId: raw.paymentPolicyId?.trim() || undefined,
     returnPolicyId: raw.returnPolicyId?.trim() || undefined,
-    itemSpecifics: Object.keys(raw._itemSpecifics).length > 0 ? raw._itemSpecifics : undefined,
+    itemSpecifics:
+      Object.keys(raw._itemSpecifics).length > 0
+        ? raw._itemSpecifics
+        : undefined,
     cogs: cogs !== undefined && !isNaN(cogs) ? cogs : undefined,
     consignor: raw.consignor?.trim() || undefined,
   };
@@ -198,7 +236,8 @@ export function rawToBulkRow(
 // ─── Validation summary helpers ────────────────────────────────────────────────
 
 export function countValidRows(states: BulkRowState[]): number {
-  return states.filter((s) => s.status === "valid" || s.status === "ready").length;
+  return states.filter((s) => s.status === "valid" || s.status === "ready")
+    .length;
 }
 
 export function countErrorRows(states: BulkRowState[]): number {
@@ -206,14 +245,18 @@ export function countErrorRows(states: BulkRowState[]): number {
 }
 
 export function countWarningRows(states: BulkRowState[]): number {
-  return states.filter((s) => s.warnings.length > 0 && s.status !== "error").length;
+  return states.filter((s) => s.warnings.length > 0 && s.status !== "error")
+    .length;
 }
 
-export function getValidRows(rows: BulkRow[], states: BulkRowState[]): BulkRow[] {
+export function getValidRows(
+  rows: BulkRow[],
+  states: BulkRowState[],
+): BulkRow[] {
   const validIndices = new Set(
     states
       .filter((s) => s.status === "valid" || s.status === "ready")
-      .map((s) => s.rowIndex)
+      .map((s) => s.rowIndex),
   );
   return rows.filter((r) => validIndices.has(r.rowIndex));
 }

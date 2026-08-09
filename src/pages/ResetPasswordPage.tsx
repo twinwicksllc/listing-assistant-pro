@@ -27,7 +27,9 @@ export default function ResetPasswordPage() {
       }
     }, 10000);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
       if (handled.current) return;
       if (event === "PASSWORD_RECOVERY") {
         handled.current = true;
@@ -89,9 +91,15 @@ export default function ResetPasswordPage() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
         <div className="flex flex-col items-center gap-4">
-          <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto" />
+          <img
+            src={teckstartLogo}
+            alt="Sovereign Listing Suite"
+            className="h-12 w-auto"
+          />
           <Loader2 className="w-6 h-6 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Verifying reset link...</p>
+          <p className="text-sm text-muted-foreground">
+            Verifying reset link...
+          </p>
         </div>
       </div>
     );
@@ -101,9 +109,18 @@ export default function ResetPasswordPage() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
         <div className="w-full max-w-sm text-center space-y-4">
-          <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto mx-auto" />
-          <p className="text-sm text-muted-foreground">Invalid or expired reset link.</p>
-          <button onClick={() => navigate("/forgot-password")} className="text-sm text-primary font-medium hover:underline">
+          <img
+            src={teckstartLogo}
+            alt="Sovereign Listing Suite"
+            className="h-12 w-auto mx-auto"
+          />
+          <p className="text-sm text-muted-foreground">
+            Invalid or expired reset link.
+          </p>
+          <button
+            onClick={() => navigate("/forgot-password")}
+            className="text-sm text-primary font-medium hover:underline"
+          >
             Request a new reset link
           </button>
         </div>
@@ -115,14 +132,24 @@ export default function ResetPasswordPage() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
       <div className="w-full max-w-sm space-y-8">
         <div className="flex flex-col items-center gap-2">
-          <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto" />
-          <h1 className="text-xl font-bold text-foreground">Set new password</h1>
-          <p className="text-sm text-muted-foreground">Choose a strong password for your account</p>
+          <img
+            src={teckstartLogo}
+            alt="Sovereign Listing Suite"
+            className="h-12 w-auto"
+          />
+          <h1 className="text-xl font-bold text-foreground">
+            Set new password
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Choose a strong password for your account
+          </p>
         </div>
 
         <form onSubmit={handleUpdate} className="space-y-4">
           <div className="space-y-2">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">New Password</label>
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              New Password
+            </label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input

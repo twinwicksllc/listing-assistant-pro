@@ -10,7 +10,10 @@ interface PriceHistogramProps {
   selectedPrice?: number;
 }
 
-export default function PriceHistogram({ histogram, selectedPrice }: PriceHistogramProps) {
+export default function PriceHistogram({
+  histogram,
+  selectedPrice,
+}: PriceHistogramProps) {
   if (!histogram || histogram.length === 0) return null;
 
   const maxCount = Math.max(...histogram.map((b) => b.count), 1);
@@ -36,8 +39,8 @@ export default function PriceHistogram({ histogram, selectedPrice }: PriceHistog
                   isSelected
                     ? "bg-primary"
                     : bucket.count > 0
-                    ? "bg-primary/30"
-                    : "bg-muted"
+                      ? "bg-primary/30"
+                      : "bg-muted"
                 }`}
                 style={{ height: `${heightPct}%` }}
                 title={`${bucket.bucket}: ${bucket.count} listing${bucket.count !== 1 ? "s" : ""}`}

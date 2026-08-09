@@ -35,11 +35,15 @@ const BillingPage2 = lazy(() => import("./v2/pages/BillingPage2"));
 const TeamPage2 = lazy(() => import("./v2/pages/TeamPage2"));
 const AdminPage2 = lazy(() => import("./v2/pages/AdminPage2"));
 const BulkListingPage2 = lazy(() => import("./v2/pages/BulkListingPage2"));
-const MarketResearchPage2 = lazy(() => import("./v2/pages/MarketResearchPage2"));
+const MarketResearchPage2 = lazy(
+  () => import("./v2/pages/MarketResearchPage2"),
+);
 const RepriceRulesPage2 = lazy(() => import("./v2/pages/RepriceRulesPage2"));
 const ProfitReportPage2 = lazy(() => import("./v2/pages/ProfitReportPage2"));
 const BulkCogsPage2 = lazy(() => import("./v2/pages/BulkCogsPage2"));
-const HistoricalCogsPage2 = lazy(() => import("./v2/pages/HistoricalCogsPage2"));
+const HistoricalCogsPage2 = lazy(
+  () => import("./v2/pages/HistoricalCogsPage2"),
+);
 const ListingsPage2 = lazy(() => import("./v2/pages/ListingsPage2"));
 
 // Smart root redirect
@@ -52,7 +56,11 @@ function RootRedirect() {
       </div>
     );
   }
-  return user ? <Navigate to="/home" replace /> : <Navigate to="/landing" replace />;
+  return user ? (
+    <Navigate to="/home" replace />
+  ) : (
+    <Navigate to="/landing" replace />
+  );
 }
 
 const queryClient = new QueryClient();
@@ -68,58 +76,175 @@ function RouteLoadingFallback() {
 const App = () => (
   <ErrorBoundary>
     <ThemeProvider>
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Suspense fallback={<RouteLoadingFallback />}>
-              <Routes>
-                {/* Root smart redirect */}
-                <Route path="/" element={<RootRedirect />} />
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Suspense fallback={<RouteLoadingFallback />}>
+                <Routes>
+                  {/* Root smart redirect */}
+                  <Route path="/" element={<RootRedirect />} />
 
-                {/* Public routes */}
-                <Route path="/landing"          element={<LandingPage />} />
-                <Route path="/login"            element={<LoginPage />} />
-                <Route path="/signup"           element={<SignupPage />} />
-                <Route path="/forgot-password"  element={<ForgotPasswordPage />} />
-                <Route path="/reset-password"   element={<ResetPasswordPage />} />
-                <Route path="/terms"            element={<TermsPage />} />
-                <Route path="/privacy"          element={<PrivacyPage />} />
-                <Route path="/auth/callback"    element={<AuthCallbackPage />} />
-                <Route path="/ebay/callback"    element={<EbayCallbackPage />} />
+                  {/* Public routes */}
+                  <Route path="/landing" element={<LandingPage />} />
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route path="/signup" element={<SignupPage />} />
+                  <Route
+                    path="/forgot-password"
+                    element={<ForgotPasswordPage />}
+                  />
+                  <Route
+                    path="/reset-password"
+                    element={<ResetPasswordPage />}
+                  />
+                  <Route path="/terms" element={<TermsPage />} />
+                  <Route path="/privacy" element={<PrivacyPage />} />
+                  <Route path="/auth/callback" element={<AuthCallbackPage />} />
+                  <Route path="/ebay/callback" element={<EbayCallbackPage />} />
 
-                {/* Protected routes — all v2 */}
-                <Route path="/home"          element={<ProtectedRoute><HomePage2 /></ProtectedRoute>} />
-                <Route path="/analyze"       element={<ProtectedRoute><AnalyzePage2 /></ProtectedRoute>} />
-                <Route path="/drafts"        element={<ProtectedRoute><DraftsPage2 /></ProtectedRoute>} />
-                <Route path="/dashboard"     element={<ProtectedRoute ownerOnly><DashboardPage2 /></ProtectedRoute>} />
-                <Route path="/settings"      element={<ProtectedRoute><SettingsPage2 /></ProtectedRoute>} />
-                <Route path="/billing"       element={<ProtectedRoute ownerOnly><BillingPage2 /></ProtectedRoute>} />
-                <Route path="/team"          element={<ProtectedRoute><TeamPage2 /></ProtectedRoute>} />
-                <Route path="/admin"         element={<ProtectedRoute><AdminPage2 /></ProtectedRoute>} />
-                <Route path="/bulk"          element={<ProtectedRoute><BulkListingPage2 /></ProtectedRoute>} />
-                <Route path="/market"        element={<ProtectedRoute><MarketResearchPage2 /></ProtectedRoute>} />
-                <Route path="/reprice-rules" element={<ProtectedRoute ownerOnly><RepriceRulesPage2 /></ProtectedRoute>} />
-                <Route path="/profit-report" element={<ProtectedRoute ownerOnly><ProfitReportPage2 /></ProtectedRoute>} />
-                <Route path="/cogs-editor"   element={<ProtectedRoute ownerOnly><BulkCogsPage2 /></ProtectedRoute>} />
-                <Route path="/historical-cogs" element={<ProtectedRoute ownerOnly><HistoricalCogsPage2 /></ProtectedRoute>} />
-                <Route path="/listings" element={<ProtectedRoute ownerOnly><ListingsPage2 /></ProtectedRoute>} />
+                  {/* Protected routes — all v2 */}
+                  <Route
+                    path="/home"
+                    element={
+                      <ProtectedRoute>
+                        <HomePage2 />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/analyze"
+                    element={
+                      <ProtectedRoute>
+                        <AnalyzePage2 />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/drafts"
+                    element={
+                      <ProtectedRoute>
+                        <DraftsPage2 />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/dashboard"
+                    element={
+                      <ProtectedRoute ownerOnly>
+                        <DashboardPage2 />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/settings"
+                    element={
+                      <ProtectedRoute>
+                        <SettingsPage2 />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/billing"
+                    element={
+                      <ProtectedRoute ownerOnly>
+                        <BillingPage2 />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/team"
+                    element={
+                      <ProtectedRoute>
+                        <TeamPage2 />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/admin"
+                    element={
+                      <ProtectedRoute>
+                        <AdminPage2 />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/bulk"
+                    element={
+                      <ProtectedRoute>
+                        <BulkListingPage2 />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/market"
+                    element={
+                      <ProtectedRoute>
+                        <MarketResearchPage2 />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/reprice-rules"
+                    element={
+                      <ProtectedRoute ownerOnly>
+                        <RepriceRulesPage2 />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/profit-report"
+                    element={
+                      <ProtectedRoute ownerOnly>
+                        <ProfitReportPage2 />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/cogs-editor"
+                    element={
+                      <ProtectedRoute ownerOnly>
+                        <BulkCogsPage2 />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/historical-cogs"
+                    element={
+                      <ProtectedRoute ownerOnly>
+                        <HistoricalCogsPage2 />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/listings"
+                    element={
+                      <ProtectedRoute ownerOnly>
+                        <ListingsPage2 />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                {/* Legacy preview aliases — redirect to canonical routes */}
-                <Route path="/home2"     element={<Navigate to="/home"     replace />} />
-                <Route path="/settings2" element={<Navigate to="/settings" replace />} />
+                  {/* Legacy preview aliases — redirect to canonical routes */}
+                  <Route
+                    path="/home2"
+                    element={<Navigate to="/home" replace />}
+                  />
+                  <Route
+                    path="/settings2"
+                    element={<Navigate to="/settings" replace />}
+                  />
 
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </Suspense>
-            <CookieConsent />
-            <SupportModal />
-          </BrowserRouter>
-        </TooltipProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </Suspense>
+              <CookieConsent />
+              <SupportModal />
+            </BrowserRouter>
+          </TooltipProvider>
+        </AuthProvider>
+      </QueryClientProvider>
     </ThemeProvider>
   </ErrorBoundary>
 );

@@ -43,9 +43,7 @@ export default function ProfitBadge({
   }
 
   const label =
-    margin >= 0
-      ? `${margin.toFixed(0)}%`
-      : `−${Math.abs(margin).toFixed(0)}%`;
+    margin >= 0 ? `${margin.toFixed(0)}%` : `−${Math.abs(margin).toFixed(0)}%`;
 
   const feeNote =
     domain === "coins_bullion"

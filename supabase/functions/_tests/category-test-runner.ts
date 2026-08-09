@@ -44,7 +44,7 @@ interface MetricsSummary {
 }
 
 async function runTest(
-  testCase: typeof fixtures.cases[0],
+  testCase: (typeof fixtures.cases)[0],
   baseUrl: string,
   serviceKey: string,
 ): Promise<TestResult> {
@@ -72,7 +72,7 @@ async function runTest(
     const resp = await fetch(`${baseUrl}/functions/v1/category-lookup`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${serviceKey}`,
+        Authorization: `Bearer ${serviceKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

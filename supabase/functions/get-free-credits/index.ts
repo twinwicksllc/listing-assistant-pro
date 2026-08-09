@@ -58,8 +58,7 @@ serve(async (req: Request) => {
         .limit(1);
 
       if (!subError && subs && subs.length > 0) {
-        const productId = subs[0].stripe_product_id ||
-          (subs[0] as any).product_id;
+        const productId = subs[0].stripe_product_id || (subs[0] as any).product_id;
         if (productId === "prod_U70aT1KvuI2uDx") tier = "unlimited";
         else if (productId === "prod_U6zUiC1SYuPrGU") tier = "pro";
       }
@@ -87,13 +86,18 @@ serve(async (req: Request) => {
     // Get current rolling-window start for free users
     let windowStart: string;
     if (tier === "starter" && orgResetDay) {
-      const { data: wsData, error: wsErr } = await svc
-        .rpc("get_free_tier_window_start", { p_reset_day: orgResetDay });
+      const { data: wsData, error: wsErr } = await svc.rpc(
+        "get_free_tier_window_start",
+        { p_reset_day: orgResetDay },
+      );
       windowStart = wsData ? new Date(wsData).toISOString() : new Date().toISOString();
     } else {
       // Pro/Unlimited: calendar month; or fresh start for NULL reset_day
-      windowStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-        .toISOString();
+      windowStart = new Date(
+        new Date().getFullYear(),
+        new Date().getMonth(),
+        1,
+      ).toISOString();
     }
 
     // Count per-org usage for Starter; per-user for Pro/Unlimited
@@ -175,6 +179,9 @@ function computeNextResetAt(resetDay: number | null): string {
   const nextYear = nextMonth > 11 ? year + 1 : year;
   const nm = nextMonth % 12;
   const daysInNextMonth = new Date(nextYear, nm + 1, 0).getDate();
-  return new Date(nextYear, nm, Math.min(resetDay, daysInNextMonth))
-    .toISOString();
+  return new Date(
+    nextYear,
+    nm,
+    Math.min(resetDay, daysInNextMonth),
+  ).toISOString();
 }

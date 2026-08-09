@@ -32,7 +32,11 @@ export async function callCategoryLookup(
 
   try {
     const text = await response.text();
-    return { ok: true, data: text ? JSON.parse(text) : null, status: response.status };
+    return {
+      ok: true,
+      data: text ? JSON.parse(text) : null,
+      status: response.status,
+    };
   } catch {
     return { ok: true, data: null, status: response.status };
   }

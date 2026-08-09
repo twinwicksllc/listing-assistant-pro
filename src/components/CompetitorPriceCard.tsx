@@ -1,4 +1,11 @@
-import { TrendingUp, TrendingDown, Minus, RefreshCw, Users, ChevronRight } from "lucide-react";
+import {
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  RefreshCw,
+  Users,
+  ChevronRight,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -56,7 +63,7 @@ export function CompetitorPriceCard({
             categoryId,
             yourPrice,
           },
-        }
+        },
       );
 
       if (error || data?.error) {
@@ -99,14 +106,23 @@ export function CompetitorPriceCard({
           disabled={refreshing}
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
         >
-          <RefreshCw className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`} />
+          <RefreshCw
+            className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`}
+          />
           {refreshing ? "Searching eBay..." : "Check competitor prices"}
         </button>
       </div>
     );
   }
 
-  const { avgPrice, minPrice, maxPrice, priceDelta, competitorCount, fetchedAt } = competitor;
+  const {
+    avgPrice,
+    minPrice,
+    maxPrice,
+    priceDelta,
+    competitorCount,
+    fetchedAt,
+  } = competitor;
 
   // Compute position label and icon
   const deltaPct =
@@ -118,28 +134,28 @@ export function CompetitorPriceCard({
     deltaPct === null
       ? null
       : deltaPct < -5
-      ? "Below market"
-      : deltaPct > 5
-      ? "Above market"
-      : "At market";
+        ? "Below market"
+        : deltaPct > 5
+          ? "Above market"
+          : "At market";
 
   const PositionIcon =
     deltaPct === null
       ? Minus
       : deltaPct < -5
-      ? TrendingDown
-      : deltaPct > 5
-      ? TrendingUp
-      : Minus;
+        ? TrendingDown
+        : deltaPct > 5
+          ? TrendingUp
+          : Minus;
 
   const positionColor =
     deltaPct === null
       ? "text-muted-foreground"
       : deltaPct < -5
-      ? "text-blue-500"
-      : deltaPct > 5
-      ? "text-amber-500"
-      : "text-green-500";
+        ? "text-blue-500"
+        : deltaPct > 5
+          ? "text-amber-500"
+          : "text-green-500";
 
   const formattedAge = (() => {
     const diffMs = Date.now() - new Date(fetchedAt).getTime();
@@ -177,12 +193,16 @@ export function CompetitorPriceCard({
           title={`Last updated ${formattedAge}`}
           className="text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
         >
-          <RefreshCw className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`} />
+          <RefreshCw
+            className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`}
+          />
         </button>
       </div>
 
       {positionLabel && (
-        <div className={`flex items-center gap-1 text-xs font-medium ${positionColor}`}>
+        <div
+          className={`flex items-center gap-1 text-xs font-medium ${positionColor}`}
+        >
           <PositionIcon className="w-3 h-3" />
           <span>{positionLabel}</span>
           {deltaPct !== null && (
@@ -257,8 +277,7 @@ function PriceDistributionBar({
     <div className="flex items-end gap-0.5 h-5 mt-1">
       {distribution.map((bucket, i) => {
         const heightPct = Math.round((bucket.count / maxCount) * 100);
-        const isYours =
-          yourPrice >= bucket.min && yourPrice <= bucket.max;
+        const isYours = yourPrice >= bucket.min && yourPrice <= bucket.max;
         return (
           <div
             key={i}

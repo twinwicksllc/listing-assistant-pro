@@ -35,6 +35,7 @@ All 12 flaws from the third round of reviewer feedback have been addressed and m
 ### Database Schema Ready
 
 Migration file 20260315000000_draft_publish_lifecycle.sql is ready to be applied:
+
 - Adds publish_status lifecycle tracking
 - Adds ebay_sku, ebay_offer_id, ebay_listing_id for tracking
 - Adds last_publish_error for debugging
@@ -84,6 +85,7 @@ Create them at: https://www.ebay.com/sh/ovw/policies
 ### 4. Complete OAuth Flow
 
 Before your first publish:
+
 - Connect your eBay account via OAuth
 - Verify token is stored in profiles table
 - Check token expires_at is in the future
@@ -91,6 +93,7 @@ Before your first publish:
 ### 5. Prepare Test Draft
 
 Create a test draft with:
+
 - FIXED_PRICE format (NOT AUCTION)
 - Current condition code (PRE_OWNED_GOOD, etc.)
 - Valid image URL
@@ -143,6 +146,7 @@ Create a test draft with:
 ### 1. Sandbox Testing First (Recommended)
 
 If you have sandbox credentials:
+
 1. Set EBAY_ENVIRONMENT=sandbox
 2. Test complete flow in sandbox
 3. Verify all fields are correct
@@ -151,6 +155,7 @@ If you have sandbox credentials:
 ### 2. Production Testing
 
 When ready for production:
+
 1. Use a low-value test item
 2. Set clear, descriptive title
 3. Select appropriate category
@@ -162,6 +167,7 @@ When ready for production:
 ### 3. Post-Publish Verification
 
 After successful publish:
+
 - Check publish_status = 'published'
 - Verify ebay_listing_id populated
 - Check listing on eBay directly

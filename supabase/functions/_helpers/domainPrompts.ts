@@ -46,7 +46,8 @@ export interface PromptContext {
   prePassContext?: {
     marketAnalysis?: string; // Grounded market narrative (search citations)
     groundedCategoryId?: string; // Category ID found via live Google Search
-    agenticInspection?: { // Think-Act-Observe zoom findings
+    agenticInspection?: {
+      // Think-Act-Observe zoom findings
       zoomRegionsExamined: string[]; // e.g. ["mint mark", "date digits", "edge reeds"]
       keyFindings: string; // Narrative of what was found
       confidenceBoost: number; // 0-100 — how much more certain the model is post-inspection
@@ -136,9 +137,13 @@ function pricingBlock(ctx: PromptContext): string {
   if (ctx.competitorData && ctx.competitorData.competitorCount > 0) {
     const d = ctx.competitorData;
     return `MARKET DATA (${d.competitorCount} recently sold similar items): avg $${d.avgPrice.toFixed(2)}, range $${
-      d.minPrice.toFixed(2)
+      d.minPrice.toFixed(
+        2,
+      )
     }–$${d.maxPrice.toFixed(2)}, median $${
-      d.medianPrice.toFixed(2)
+      d.medianPrice.toFixed(
+        2,
+      )
     }. Use the median as your target price and adjust ±10% based on condition relative to typical examples.`;
   }
   return `No recent sold comps available. Estimate fair market value from domain knowledge and item condition.`;
@@ -151,7 +156,9 @@ function categoryBlock(ctx: PromptContext): string {
   }" (ID: ${ctx.suggestedCategoryId}). Use this categoryId unless you are confident a more specific leaf category exists for this exact item.`;
   if (ctx.requiredAspects && ctx.requiredAspects.length > 0) {
     s += `\nREQUIRED by eBay for this category — MUST populate all in itemSpecifics:\n  ${
-      ctx.requiredAspects.join(", ")
+      ctx.requiredAspects.join(
+        ", ",
+      )
     }`;
   }
   if (ctx.recommendedAspects && ctx.recommendedAspects.length > 0) {
@@ -232,8 +239,13 @@ function prePassBlock(ctx: PromptContext): string {
         `Confidence boost from inspection: +${ins.confidenceBoost} points`,
       );
     }
-    if (ins.capturedAttributes && Object.keys(ins.capturedAttributes).length > 0) {
-      parts.push("**OBSERVED ATTRIBUTES** (authoritative - use these for itemSpecifics):");
+    if (
+      ins.capturedAttributes &&
+      Object.keys(ins.capturedAttributes).length > 0
+    ) {
+      parts.push(
+        "**OBSERVED ATTRIBUTES** (authoritative - use these for itemSpecifics):",
+      );
       for (const [k, v] of Object.entries(ins.capturedAttributes)) {
         parts.push(`- ${k}: ${v}`);
       }
@@ -267,24 +279,39 @@ function prePassBlock(ctx: PromptContext): string {
 function buildCoinBullionPrompt(ctx: PromptContext): string {
   const spotLine = ctx.spotPrices
     ? `- Current spot: Gold $${ctx.spotPrices.gold.toFixed(2)}/oz | Silver $${
-      ctx.spotPrices.silver.toFixed(2)
+      ctx.spotPrices.silver.toFixed(
+        2,
+      )
     }/oz | Platinum $${
-      ctx.spotPrices.platinum.toFixed(2)
+      ctx.spotPrices.platinum.toFixed(
+        2,
+      )
     }/oz\n- **CRITICAL WEIGHT RULES**: metalWeightOz = fine troy oz of pure metal (not total coin weight). ALWAYS populate for precious metals:\n  • Morgan/Peace Silver Dollar (1878-1935): 0.7734oz Ag (26.73g × 90% silver)\n  • US 90% Silver Halves (Barber/Walking Liberty/Franklin/Kennedy 1964): 0.3618oz Ag\n  • Kennedy Half Dollar 1965-1970 (40% silver): 0.1479oz Ag\n  • US 90% Silver Quarters (pre-1965): 0.1809oz Ag\n  • US 90% Silver Dimes (Mercury/Roosevelt/Barber): 0.0724oz Ag\n  • American Silver Eagle: 1.0000oz Ag\n  • US Gold Eagles: $5=0.1209oz Au | $10=0.2419oz Au | $25=0.6044oz Au | $50=1.0000oz Au\n  • American Gold Buffalo: 1.0000oz Au\n  • Gold Sovereigns (British): 0.2354oz Au\n  • Pre-1933 US Gold: $20 Double Eagle=0.9675oz Au (90% = 0.8709oz fine) | $10 Eagle=0.4838oz Au | $5 Half Eagle=0.2419oz Au\n  • Silver Bars/Rounds: face weight in oz (e.g. "1 oz Silver Round" = 1.0000oz Ag)\n  • If coin type is recognizable but weight not listed above, use known standard weight. NEVER leave metalWeightOz as 0.\n- Melt floor: (spot × metalWeightOz × 1.19) — never price below this.`
     : "";
 
   // Dynamic current-year statement based on actual current date
   const currentYear = ctx.currentDate ? ctx.currentDate.getFullYear() : new Date().getFullYear();
-  const currentYearCoins = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1].filter((y) => y >= 2020);
+  const currentYearCoins = [
+    currentYear - 2,
+    currentYear - 1,
+    currentYear,
+    currentYear + 1,
+  ].filter((y) => y >= 2020);
   const currentYearStatement = `**CURRENT-YEAR COINS ARE REAL**: Coins dated ${
-    currentYearCoins.join(", ")
+    currentYearCoins.join(
+      ", ",
+    )
   } are genuine government-issued coins. The US Mint and world mints actively produce coins with these dates. NEVER classify them as novelty, fantasy, replica, or tribute. A coin in a professional grading slab (PCGS, NGC, etc.) is by definition authentic and must use domain coins_bullion, NEVER exonumia or general.`;
 
   return `You are a professional Numismatist and eBay Listing Expert specializing in coins, currency, and bullion.
 
 **TODAY'S DATE: ${
     ctx.currentDate
-      ? ctx.currentDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
+      ? ctx.currentDate.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
       : "Unknown"
   }**
 
@@ -498,8 +525,7 @@ Certification: ICG Genuine
 
 function buildTradingCardsPrompt(ctx: PromptContext): string {
   const pricing = pricingBlock(ctx);
-  return (
-    `You are an expert trading card specialist and eBay listing professional with deep knowledge of sports cards, Pokemon, Magic: The Gathering, and other TCGs.
+  return `You are an expert trading card specialist and eBay listing professional with deep knowledge of sports cards, Pokemon, Magic: The Gathering, and other TCGs.
 
 ### CORE RULES
 1. Identify: sport/game, player/character name, year, set name, card number, parallel/variant, holo/foil type.
@@ -545,8 +571,7 @@ Good: "I've provided high-resolution photos showing the front, back, and conditi
 - NO clichés: no "Discover", "Elevate", "Invest in"
 - NO MARKDOWN, NO EMOJIS, NO EM-DASHES (use plain hyphens)
 - Use "Quick Specs:" and "Historical Note:" as plain text labels — these are REQUIRED
-${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}`
-  );
+${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}`;
 }
 
 // ─── sneakers ─────────────────────────────────────────────────────────────
@@ -674,7 +699,9 @@ function buildJewelryPrompt(ctx: PromptContext): string {
   const pricing = pricingBlock(ctx);
   const spotLine = ctx.spotPrices
     ? `\n- Current spot for reference (jewelry is rarely priced at pure melt, but this helps sanity-check metal value): Gold $${
-      ctx.spotPrices.gold.toFixed(2)
+      ctx.spotPrices.gold.toFixed(
+        2,
+      )
     }/oz | Silver $${ctx.spotPrices.silver.toFixed(2)}/oz | Platinum $${ctx.spotPrices.platinum.toFixed(2)}/oz`
     : "";
   return `You are an expert jeweler/gemologist and eBay listing professional with deep knowledge of precious metals, gemstones, and fine and fashion jewelry.

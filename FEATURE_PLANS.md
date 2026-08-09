@@ -39,6 +39,7 @@ Allow sellers to record what they **paid** for each item (Cost of Goods Sold). C
 ### Database Changes
 
 **New column on `drafts` table:**
+
 ```sql
 ALTER TABLE public.drafts
   ADD COLUMN cogs NUMERIC(10, 2) DEFAULT NULL,           -- acquisition cost
@@ -47,6 +48,7 @@ ALTER TABLE public.drafts
 ```
 
 **New column on `profiles` table (for dashboard COGS enrichment):**
+
 ```sql
 -- Store COGS keyed by eBay SKU for published listings
 -- This lets the dashboard match Fulfillment API orders to COGS data
@@ -70,6 +72,7 @@ CREATE INDEX listing_cogs_sku_idx ON public.listing_cogs(ebay_sku);
 ### Frontend Changes
 
 **1. `src/types/listing.ts`** — Add COGS fields to `ListingDraft`:
+
 ```typescript
 cogs?: number;            // acquisition cost (what seller paid)
 cogsSource?: string;      // e.g. "estate sale", "eBay purchase"
@@ -79,16 +82,19 @@ cogsAcquiredAt?: string;  // ISO date string
 **2. `src/hooks/useDrafts.ts`** — Map new DB columns in fetch/add/update functions
 
 **3. `src/components/EditDraftModal.tsx`** — Add COGS section:
+
 - Number input for acquisition cost
 - Text input for source (autocomplete from previous entries)
 - Date picker for purchase date
 - Real-time profit preview: `listingPrice - cogs = estimated profit`
 
 **4. `src/pages/AnalyzePage.tsx`** — Add COGS entry in the save draft flow:
+
 - Optional COGS input below Consignor field
 - Shows "Est. true profit: $X.XX" preview after entry
 
 **5. `src/pages/DashboardPage.tsx`** — Extend Sales & Profit card:
+
 - New `fetchCogsData()` function queries `listing_cogs` table joined to order SKUs
 - Add `cogsTotal: number` to `FinancialWindow` interface
 - Update `netProfit` calculation: `revenue + shippingCollected - ebayFees - shippingLabels - cogsTotal`
@@ -97,17 +103,20 @@ cogsAcquiredAt?: string;  // ISO date string
 - Add "Without COGS" toggle to compare before/after COGS
 
 **6. `src/pages/DashboardPage.tsx`** — Listings table column:
+
 - Add "Est. Profit" column showing `listingPrice - cogs` for each row
 - Color-coded: green (>20% margin), yellow (5-20%), red (<5% or loss)
 - Sort by profit column
 
 **7. New `src/pages/ProfitReportPage.tsx`** — Standalone P&L report:
+
 - Table of all sold items with COGS, revenue, fees, true profit
 - Subtotals by time period (weekly/monthly)
 - Export to CSV / Excel button
 - "Best performers" and "worst performers" summary cards
 
 **8. New `supabase/functions/cogs-report/index.ts`** — Edge function:
+
 - Joins Fulfillment API order data with `listing_cogs` table
 - Returns per-item P&L and aggregate summaries
 - Used by ProfitReportPage
@@ -157,70 +166,118 @@ Calculated entirely client-side in the browser from existing `EbayListing` data 
 ```typescript
 // src/lib/listingHealthScore.ts
 export interface HealthScore {
-  score: number;           // 0–100
+  score: number; // 0–100
   grade: "A" | "B" | "C" | "D" | "F";
   flags: HealthFlag[];
 }
 
 export interface HealthFlag {
-  type: "stale" | "no_views" | "low_ctr" | "no_watchers" | "overpriced" | "underpriced" | "duplicate";
+  type:
+    | "stale"
+    | "no_views"
+    | "low_ctr"
+    | "no_watchers"
+    | "overpriced"
+    | "underpriced"
+    | "duplicate";
   severity: "warning" | "critical";
   message: string;
-  action: string;           // suggested fix
+  action: string; // suggested fix
 }
 
-export function computeHealthScore(listing: EbayListing, allListings: EbayListing[]): HealthScore {
+export function computeHealthScore(
+  listing: EbayListing,
+  allListings: EbayListing[],
+): HealthScore {
   let score = 100;
   const flags: HealthFlag[] = [];
 
   // Views component (max 25 pts)
   const viewScore = Math.min(25, (listing.views30d / 50) * 25);
-  score -= (25 - viewScore);
+  score -= 25 - viewScore;
 
   // CTR component (max 20 pts) — good CTR is >= 2%
   const ctrScore = Math.min(20, (listing.clickThroughRate / 2) * 20);
-  score -= (20 - ctrScore);
+  score -= 20 - ctrScore;
 
   // Watcher component (max 20 pts)
   const watchScore = Math.min(20, (listing.watchCount / 5) * 20);
-  score -= (20 - watchScore);
+  score -= 20 - watchScore;
 
   // Sales component (max 35 pts)
   const saleScore = listing.transactions30d > 0 ? 35 : 0;
-  score -= (35 - saleScore);
+  score -= 35 - saleScore;
 
   // Staleness flag: active > 60 days with 0 sales
   if (listing.listingDate) {
-    const ageDays = (Date.now() - new Date(listing.listingDate).getTime()) / 86400000;
+    const ageDays =
+      (Date.now() - new Date(listing.listingDate).getTime()) / 86400000;
     if (ageDays > 60 && listing.transactions === 0) {
-      flags.push({ type: "stale", severity: "warning", message: "Listed 60+ days with no sales", action: "Relist with lower price or better photos" });
+      flags.push({
+        type: "stale",
+        severity: "warning",
+        message: "Listed 60+ days with no sales",
+        action: "Relist with lower price or better photos",
+      });
       score = Math.max(0, score - 10);
     }
   }
 
   // No views in 30d
   if (listing.views30d === 0) {
-    flags.push({ type: "no_views", severity: "critical", message: "Zero views in 30 days", action: "Review title keywords and category" });
+    flags.push({
+      type: "no_views",
+      severity: "critical",
+      message: "Zero views in 30 days",
+      action: "Review title keywords and category",
+    });
   }
 
   // Low CTR
   if (listing.impressions30d > 100 && listing.clickThroughRate < 0.5) {
-    flags.push({ type: "low_ctr", severity: "warning", message: "Low click-through rate (<0.5%)", action: "Improve main photo and title" });
+    flags.push({
+      type: "low_ctr",
+      severity: "warning",
+      message: "Low click-through rate (<0.5%)",
+      action: "Improve main photo and title",
+    });
   }
 
   // Competitor pricing flags (if competitor data available)
   if (listing.competitor?.medianPrice) {
-    const delta = ((listing.price - listing.competitor.medianPrice) / listing.competitor.medianPrice) * 100;
+    const delta =
+      ((listing.price - listing.competitor.medianPrice) /
+        listing.competitor.medianPrice) *
+      100;
     if (delta > 20) {
-      flags.push({ type: "overpriced", severity: "warning", message: `Priced ${delta.toFixed(0)}% above market median`, action: `Consider lowering to ~$${listing.competitor.medianPrice.toFixed(2)}` });
+      flags.push({
+        type: "overpriced",
+        severity: "warning",
+        message: `Priced ${delta.toFixed(0)}% above market median`,
+        action: `Consider lowering to ~$${listing.competitor.medianPrice.toFixed(2)}`,
+      });
       score = Math.max(0, score - 15);
     } else if (delta < -20) {
-      flags.push({ type: "underpriced", severity: "warning", message: `Priced ${Math.abs(delta).toFixed(0)}% below market median`, action: "You may be leaving money on the table" });
+      flags.push({
+        type: "underpriced",
+        severity: "warning",
+        message: `Priced ${Math.abs(delta).toFixed(0)}% below market median`,
+        action: "You may be leaving money on the table",
+      });
     }
   }
 
   // Grade mapping
-  const grade = score >= 80 ? "A" : score >= 60 ? "B" : score >= 40 ? "C" : score >= 20 ? "D" : "F";
+  const grade =
+    score >= 80
+      ? "A"
+      : score >= 60
+        ? "B"
+        : score >= 40
+          ? "C"
+          : score >= 20
+            ? "D"
+            : "F";
   return { score: Math.max(0, Math.round(score)), grade, flags };
 }
 ```
@@ -230,12 +287,14 @@ export function computeHealthScore(listing: EbayListing, allListings: EbayListin
 **1. `src/lib/listingHealthScore.ts`** — New utility file with the algorithm above
 
 **2. `src/pages/DashboardPage.tsx`** — Listings table additions:
+
 - New "Health" column: circular score badge (color-coded A=green, B=blue, C=yellow, D=orange, F=red)
 - Clicking the badge opens a `ListingInsightsSheet` side panel
 - New "Issues" filter button: "Show only listings with warnings/critical flags"
 - Insights summary banner at top of listings table: "⚠️ 3 listings need attention"
 
 **3. New `src/components/ListingInsightsSheet.tsx`** — Side panel (shadcn Sheet):
+
 - Listing thumbnail + title + current price
 - Large circular health score dial
 - Flags list with severity icons, messages, and action buttons
@@ -243,11 +302,13 @@ export function computeHealthScore(listing: EbayListing, allListings: EbayListin
 - Historical score trend (if we start storing scores over time)
 
 **4. New `src/components/InsightsBanner.tsx`** — Top-of-dashboard summary:
+
 - Count of critical vs warning issues
 - Quick action links ("Fix 2 critical listings")
 - Dismissible until next data refresh
 
 **5. New `src/components/DuplicateDetector.tsx`** — Inline badge on listings:
+
 - Client-side: compare all listing titles using normalized token comparison
 - Flag pairs with Jaccard similarity > 0.7 as potential duplicates
 - Show "Possible duplicate" badge with link to the similar listing
@@ -259,11 +320,17 @@ export function computeHealthScore(listing: EbayListing, allListings: EbayListin
 ```typescript
 // src/lib/duplicateDetection.ts
 function tokenize(title: string): Set<string> {
-  return new Set(title.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(t => t.length > 2));
+  return new Set(
+    title
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, "")
+      .split(/\s+/)
+      .filter((t) => t.length > 2),
+  );
 }
 
 function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
-  const intersection = new Set([...a].filter(t => b.has(t)));
+  const intersection = new Set([...a].filter((t) => b.has(t)));
   const union = new Set([...a, ...b]);
   return intersection.size / union.size;
 }
@@ -303,6 +370,7 @@ Give sellers real-time intelligence about the eBay marketplace for their categor
 ### Database Changes
 
 **New `market_watches` table:**
+
 ```sql
 CREATE TABLE public.market_watches (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -324,6 +392,7 @@ CREATE INDEX market_watches_user_idx ON public.market_watches(user_id);
 ```
 
 **New `market_price_history` table:**
+
 ```sql
 CREATE TABLE public.market_price_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -342,6 +411,7 @@ CREATE INDEX market_price_history_sampled_idx ON public.market_price_history(sam
 ### New Edge Functions
 
 **1. `supabase/functions/market-watch-refresh/index.ts`**
+
 - Input: `{ watchId, userId }`
 - Calls eBay Finding API (`findCompletedItems` + `findItemsAdvanced`) for the saved query
 - Extracts sold prices, active prices, counts
@@ -349,11 +419,13 @@ CREATE INDEX market_price_history_sampled_idx ON public.market_price_history(sam
 - Returns fresh market snapshot
 
 **2. `supabase/functions/market-watch-cron/index.ts`**
+
 - Cron job (daily) — scans all `market_watches` rows not updated in 24h
 - Calls `market-watch-refresh` for each
 - Rate-limited: max 50 watches per run to stay within eBay API limits
 
 **3. `supabase/functions/keyword-research/index.ts`**
+
 - Input: `{ query, categoryId? }`
 - Calls eBay `findItemsAdvanced` for active listings count
 - Calls eBay `findCompletedItems` for sold count
@@ -363,6 +435,7 @@ CREATE INDEX market_price_history_sampled_idx ON public.market_price_history(sam
 ### Frontend Changes
 
 **1. New `src/pages/MarketResearchPage.tsx`** — Main research hub:
+
 - **Search bar at top**: enter any keyword to get instant market snapshot
 - **Saved Watches panel**: list of pinned searches with last-updated prices and trend arrows
 - **Keyword research results card**: active count, sold count, sell-through rate, avg price, price range
@@ -370,12 +443,14 @@ CREATE INDEX market_price_history_sampled_idx ON public.market_price_history(sam
 - **Top competitors panel**: top 3 active competing listings with thumbnails and prices
 
 **2. New `src/components/MarketWatchCard.tsx`** — Individual watch card:
+
 - Query label + last-updated timestamp
 - Price: avg/min/max with trend arrow (vs. previous snapshot)
 - Sell-through rate badge
 - "Refresh now" and "Delete watch" buttons
 
 **3. New `src/components/PriceTrendChart.tsx`** — Recharts line chart:
+
 - X-axis: dates (last 30 samples)
 - Y-axis: price ($)
 - Three lines: avg, min, max
@@ -383,11 +458,13 @@ CREATE INDEX market_price_history_sampled_idx ON public.market_price_history(sam
 - Responsive container, dark-mode aware colors
 
 **4. New `src/components/SellThroughMeter.tsx`** — Visual gauge:
+
 - Circular progress meter (0–100%)
 - Color coded: green >50%, yellow 20-50%, red <20%
 - Tooltip: "X sold items vs Y active listings"
 
 **5. `src/pages/DashboardPage.tsx`** — Category heat map widget:
+
 - Groups seller's listings by `categoryId`
 - Fetches sell-through rate for each category from `market_watches` (if watch exists)
 - Renders a colored grid of category tiles
@@ -400,6 +477,7 @@ CREATE INDEX market_price_history_sampled_idx ON public.market_price_history(sam
 ### eBay API Integration
 
 Uses the existing eBay Finding API pattern already established in `ebay-competitor-search`. Key endpoints:
+
 - `findItemsAdvanced` — active listings
 - `findCompletedItems` — sold items (requires `itemFilter[0].name=SoldItemsOnly`)
 - Existing auth pattern: user OAuth token passed in headers
@@ -435,6 +513,7 @@ Take the insights from Feature #4 (health scores) and Feature #5 (market data) a
 ### New Edge Functions
 
 **1. `supabase/functions/ebay-relist/index.ts`**
+
 - Input: `{ userToken, listingId, newPrice?, reason }`
 - Calls eBay Inventory API to end current listing if needed
 - Creates new offer/listing with updated price
@@ -442,12 +521,14 @@ Take the insights from Feature #4 (health scores) and Feature #5 (market data) a
 - Returns: `{ success, newListingId, newOfferId }`
 
 **2. `supabase/functions/ebay-bulk-reprice/index.ts`** (extends existing `ebay-reprice`)
+
 - Input: `{ userToken, items: [{ sku, newPrice }] }`
 - Batch updates prices using eBay Inventory API `updateOffer`
 - Returns per-item success/failure array
 - Max 50 items per call (eBay rate limit)
 
 **3. `supabase/functions/title-optimizer/index.ts`**
+
 - Input: `{ title, categoryId, competitorTitles: string[] }`
 - Calls OpenAI GPT-4o with a carefully crafted prompt
 - Analyzes top competitor titles for winning keyword patterns
@@ -455,18 +536,21 @@ Take the insights from Feature #4 (health scores) and Feature #5 (market data) a
 - Results cached by `(title, categoryId)` hash for 24h
 
 **4. `supabase/functions/image-scorer/index.ts`**
+
 - Input: `{ imageUrl }`
 - Calls GPT-4o Vision to evaluate listing photo
 - Scores: background cleanliness, lighting, focus, composition, subject prominence
 - Returns: `{ overallScore: 1-5, breakdown: {...}, suggestions: string[] }`
 
 **5. Extend `supabase/functions/ebay-reprice/index.ts`**
+
 - Add support for rule-based repricing: `{ rule: "beat_median_by", percent: 5 }`
 - Store active reprice rules in new `reprice_rules` table
 
 ### Database Changes
 
 **New `relist_history` table:**
+
 ```sql
 CREATE TABLE public.relist_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -481,6 +565,7 @@ CREATE TABLE public.relist_history (
 ```
 
 **New `reprice_rules` table:**
+
 ```sql
 CREATE TABLE public.reprice_rules (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -496,6 +581,7 @@ CREATE TABLE public.reprice_rules (
 ```
 
 **New `optimization_suggestions` table:**
+
 ```sql
 CREATE TABLE public.optimization_suggestions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -515,6 +601,7 @@ CREATE TABLE public.optimization_suggestions (
 ### Frontend Changes
 
 **1. New `src/pages/OptimizationPage.tsx`** — Action queue hub:
+
 - **Summary cards**: "5 listings need attention", "3 price updates suggested", "2 titles can be improved"
 - **Priority queue table**: sorted by priority, showing listing + suggestion + one-click "Apply" button
 - **Bulk actions**: "Apply all price suggestions", "Dismiss all info-level"
@@ -522,24 +609,28 @@ CREATE TABLE public.optimization_suggestions (
 - **Auto-relist settings**: configure age threshold (30/60/90 days) and price delta
 
 **2. New `src/components/ActionQueueCard.tsx`** — Individual suggestion row:
+
 - Listing thumbnail, title, current value, suggested value, reason
 - "Apply" button (calls appropriate edge function)
 - "Dismiss" button
 - "Preview" button (shows before/after comparison)
 
 **3. New `src/components/TitleOptimizerModal.tsx`** — Modal for title improvements:
+
 - Side-by-side current vs. optimized title
 - Highlighted diff (added keywords in green, removed in red)
 - "Accept", "Edit", or "Reject" actions
 - Shows explanation from AI
 
 **4. New `src/components/ImageScoreCard.tsx`** — Photo quality widget:
+
 - Star rating display (1–5)
 - Breakdown bars for each dimension
 - Bullet-point suggestions
 - "Re-score" button
 
 **5. New `src/components/RepriceRuleBuilder.tsx`** — Rule configuration UI:
+
 - Dropdown for rule type
 - Number input for percentage/amount
 - Floor price input
@@ -547,6 +638,7 @@ CREATE TABLE public.optimization_suggestions (
 - Enable/disable toggle
 
 **6. `src/pages/DashboardPage.tsx`** — Add "Optimize" quick-action button to each listing row:
+
 - Opens `OptimizationPage` filtered to that specific listing
 
 **7. `src/App.tsx`** — Add `/optimize` route (ProtectedRoute, ownerOnly)
@@ -590,11 +682,13 @@ Allow sellers to upload a CSV or fill a template to create 10–1,000 listings a
 ### CSV Format Specification
 
 **Minimum required columns:**
+
 ```
 Title, Condition, Price, Category_ID
 ```
 
 **Full supported columns:**
+
 ```
 Title, Description, Condition, Price, Quantity, Category_ID,
 Format (FIXED_PRICE|AUCTION), Auction_Start_Price, Buy_It_Now_Price,
@@ -607,6 +701,7 @@ Return_Policy_ID, Item_Specific_[Key], COGS, Consignor
 ### New Edge Functions
 
 **1. `supabase/functions/bulk-generate-descriptions/index.ts`**
+
 - Input: `{ rows: [{ title, condition, itemSpecifics, imageUrl? }], tier }`
 - Loops through rows, calls GPT-4o per row (same prompt as `analyze-item`)
 - Returns array of `{ rowIndex, description, error? }`
@@ -614,6 +709,7 @@ Return_Policy_ID, Item_Specific_[Key], COGS, Consignor
 - Streams progress updates via Server-Sent Events or chunked response
 
 **2. `supabase/functions/bulk-publish/index.ts`**
+
 - Input: `{ userToken, rows: BulkRow[], dryRun?: boolean }`
 - Loops through validated rows and calls eBay Inventory API for each
 - Returns: `{ published: number, failed: number, results: [{ rowIndex, success, listingId?, error? }] }`
@@ -624,6 +720,7 @@ Return_Policy_ID, Item_Specific_[Key], COGS, Consignor
 ### New Types
 
 **`src/types/bulk-listing.ts`:**
+
 ```typescript
 export interface BulkRow {
   rowIndex: number;
@@ -645,7 +742,8 @@ export interface BulkRow {
   consignor?: string;
 }
 
-export type BulkRowStatus = "pending" | "generating" | "ready" | "publishing" | "published" | "error";
+export type BulkRowStatus =
+  "pending" | "generating" | "ready" | "publishing" | "published" | "error";
 
 export interface BulkRowValidation {
   rowIndex: number;
@@ -662,7 +760,8 @@ export interface BulkValidationIssue {
   severity: "error" | "warning";
 }
 
-export type BulkTemplate = "coins" | "electronics" | "clothing" | "books" | "generic";
+export type BulkTemplate =
+  "coins" | "electronics" | "clothing" | "books" | "generic";
 ```
 
 ### Frontend Changes
@@ -670,12 +769,14 @@ export type BulkTemplate = "coins" | "electronics" | "clothing" | "books" | "gen
 **1. New `src/pages/BulkListingPage.tsx`** — Main bulk listing page, 4-step wizard:
 
 **Step 1 — Upload/Template:**
+
 - Drag-and-drop CSV upload zone with `react-dropzone`-style handling (native file input)
 - "Or start from template" section with 5 template cards (Coins, Electronics, Clothing, Books, Generic)
 - Template download button: generates and downloads a pre-filled CSV example
 - Manual entry option: "Add rows one by one" link to step 2 with empty table
 
 **Step 2 — Column Mapping:**
+
 - Shows first 3 rows of uploaded CSV as preview
 - Dropdown selector per CSV column: maps to our internal field names
 - Auto-detection: if CSV column headers match our names, auto-map
@@ -683,6 +784,7 @@ export type BulkTemplate = "coins" | "electronics" | "clothing" | "books" | "gen
 - "Skip column" option for unrecognized columns
 
 **Step 3 — Review & Generate:**
+
 - Editable data table using a custom `BulkDataTable` component
   - Each row shows all mapped fields in compact cells
   - Inline editing: click any cell to edit
@@ -697,6 +799,7 @@ export type BulkTemplate = "coins" | "electronics" | "clothing" | "books" | "gen
 - Policies section: set fulfillment/payment/return policy for all rows at once (or per-row override)
 
 **Step 4 — Publish:**
+
 - Summary: "N rows ready, M rows have errors"
 - Error rows list with specific fixes needed
 - "Publish X Ready Listings" button — triggers `bulk-publish`
@@ -706,21 +809,25 @@ export type BulkTemplate = "coins" | "electronics" | "clothing" | "books" | "gen
 - "Download Error Report" button: CSV of failed rows with error messages
 
 **2. New `src/components/BulkDataTable.tsx`** — High-performance editable table:
+
 - Uses `<table>` with virtualization for large row counts (100+)
 - Keyboard navigation: Tab, Enter, Arrow keys
 - Batch column fill: select multiple rows + shift-click to fill same value
 
 **3. New `src/components/BulkUploadZone.tsx`** — CSV upload widget:
+
 - Accepts `.csv`, `.xlsx` files
 - Shows file name, row count, detected columns after upload
 - Uses `papaparse` for CSV parsing, `xlsx` library (already in package.json) for Excel
 
 **4. New `src/components/BulkTemplateCard.tsx`** — Template selection card:
+
 - Icon, category name, "best for X items" description
 - Pre-configured columns for that category type
 - Click to load empty template table
 
 **5. New `src/components/BulkProgressBar.tsx`** — Real-time publish progress:
+
 - Overall progress bar (% of rows published)
 - Row-level status indicators
 - "Pause" and "Resume" controls (stops queue between rows)
@@ -747,11 +854,12 @@ export function parseBulkCSV(file: File): Promise<{
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      complete: (results) => resolve({
-        headers: results.meta.fields || [],
-        rows: results.data as Record<string, string>[],
-        rowCount: results.data.length,
-      }),
+      complete: (results) =>
+        resolve({
+          headers: results.meta.fields || [],
+          rows: results.data as Record<string, string>[],
+          rowCount: results.data.length,
+        }),
       error: reject,
     });
   });
@@ -767,15 +875,30 @@ export const BULK_TEMPLATES = {
     label: "Coins & Currency",
     icon: "🪙",
     defaultCategoryId: "11116",
-    columns: ["Title", "Year", "Mint_Location", "Grade", "Condition", "Price", "Description"],
+    columns: [
+      "Title",
+      "Year",
+      "Mint_Location",
+      "Grade",
+      "Condition",
+      "Price",
+      "Description",
+    ],
     sampleRows: [
-      { Title: "1921 Morgan Silver Dollar MS-63", Year: "1921", Mint_Location: "Philadelphia", Grade: "MS-63", Condition: "PRE_OWNED_GOOD", Price: "89.99" },
+      {
+        Title: "1921 Morgan Silver Dollar MS-63",
+        Year: "1921",
+        Mint_Location: "Philadelphia",
+        Grade: "MS-63",
+        Condition: "PRE_OWNED_GOOD",
+        Price: "89.99",
+      },
     ],
   },
-  electronics: { /* ... */ },
-  clothing: { /* ... */ },
-  books: { /* ... */ },
-  generic: { /* ... */ },
+  electronics: {/* ... */},
+  clothing: {/* ... */},
+  books: {/* ... */},
+  generic: {/* ... */},
 };
 ```
 
@@ -787,7 +910,11 @@ const VALIDATION_RULES = [
   { field: "title", maxLen: 80, required: true },
   { field: "price", min: 0.01, required: true, numeric: true },
   { field: "categoryId", required: true, pattern: /^\d+$/ },
-  { field: "condition", required: true, enum: Object.keys(EBAY_CONDITION_ID_MAP) },
+  {
+    field: "condition",
+    required: true,
+    enum: Object.keys(EBAY_CONDITION_ID_MAP),
+  },
   { field: "imageUrls", maxCount: 8 },
   // ...
 ];
@@ -810,20 +937,24 @@ const VALIDATION_RULES = [
 ## 🗃️ Feature #1 — True Profit with COGS
 
 ### Database
+
 - [ ] Write migration: add `cogs`, `cogs_source`, `cogs_acquired_at` columns to `drafts` table
 - [ ] Write migration: create `listing_cogs` table with indexes
 - [ ] Apply migrations via `supabase db push`
 
 ### Types & Hooks
+
 - [ ] Add `cogs`, `cogsSource`, `cogsAcquiredAt` fields to `ListingDraft` in `src/types/listing.ts`
 - [ ] Update `useDrafts.ts` — map new columns in `fetchDrafts`, `addDraft`, `updateDraft`
 
 ### Components
+
 - [ ] Create `src/components/CogsInput.tsx` — reusable COGS entry widget
 - [ ] Create `src/components/ProfitBadge.tsx` — color-coded margin badge
 - [ ] Create `src/components/ProfitReportCard.tsx` — summary card
 
 ### Page Updates
+
 - [ ] Update `src/pages/AnalyzePage.tsx` — add optional COGS field below Consignor
 - [ ] Update `src/components/EditDraftModal.tsx` — add COGS section with profit preview
 - [ ] Update `src/pages/DashboardPage.tsx` — add `cogsTotal` to `FinancialWindow`, update `netProfit` calc
@@ -831,12 +962,14 @@ const VALIDATION_RULES = [
 - [ ] Update `src/pages/DashboardPage.tsx` — add COGS row + True Margin % to Sales & Profit card
 
 ### New Pages & Edge Functions
+
 - [ ] Create `src/pages/ProfitReportPage.tsx` — per-item P&L report
 - [ ] Create `supabase/functions/cogs-report/index.ts` — edge function joining orders + COGS data
 - [ ] Add `/profit-report` route in `src/App.tsx`
 - [ ] Gate P&L report page behind Pro/Shop plan check
 
 ### Testing & Deploy
+
 - [ ] Verify TypeScript compiles cleanly (`npm run build`)
 - [ ] Test COGS entry in AnalyzePage → save draft → verify DB values
 - [ ] Test profit calculation on Dashboard with real order data
@@ -848,16 +981,19 @@ const VALIDATION_RULES = [
 ## 📊 Feature #4 — Smart Listing Insights
 
 ### Core Algorithm
+
 - [ ] Create `src/lib/listingHealthScore.ts` — full `computeHealthScore` function
 - [ ] Create `src/lib/duplicateDetection.ts` — `findDuplicates` with Jaccard similarity
 
 ### Components
+
 - [ ] Create `src/components/ListingInsightsSheet.tsx` — shadcn Sheet side panel
 - [ ] Create `src/components/InsightsBanner.tsx` — top-of-listings summary banner
 - [ ] Create `src/components/DuplicateDetector.tsx` — inline duplicate badge
 - [ ] Create `src/components/HealthScoreBadge.tsx` — circular score badge with grade letter
 
 ### Dashboard Updates
+
 - [ ] Update `src/pages/DashboardPage.tsx` — add "Health" column to listings table
 - [ ] Update `src/pages/DashboardPage.tsx` — add `health` sort option
 - [ ] Update `src/pages/DashboardPage.tsx` — add InsightsBanner above listings table
@@ -865,10 +1001,12 @@ const VALIDATION_RULES = [
 - [ ] Wire "Health" badge click to open `ListingInsightsSheet`
 
 ### Plan Gating
+
 - [ ] Gate health score computation behind Pro/Shop check in `useAuth`
 - [ ] Show upgrade prompt for Starter users in badge area
 
 ### Testing & Deploy
+
 - [ ] Test health score algorithm with edge cases (new listing, 0 views, high CTR)
 - [ ] Test duplicate detection with known-similar titles
 - [ ] Verify TypeScript compiles cleanly
@@ -880,11 +1018,13 @@ const VALIDATION_RULES = [
 ## 🔍 Feature #5 — Market Research Tools
 
 ### Database
+
 - [ ] Write migration: create `market_watches` table with indexes
 - [ ] Write migration: create `market_price_history` table with indexes
 - [ ] Apply migrations via `supabase db push`
 
 ### Edge Functions
+
 - [ ] Create `supabase/functions/market-watch-refresh/index.ts`
   - [ ] Integrate eBay Finding API `findCompletedItems` (sold prices)
   - [ ] Integrate eBay Finding API `findItemsAdvanced` (active listings)
@@ -899,12 +1039,14 @@ const VALIDATION_RULES = [
   - [ ] Return full market snapshot
 
 ### Components
+
 - [ ] Create `src/components/MarketWatchCard.tsx`
 - [ ] Create `src/components/PriceTrendChart.tsx` — Recharts LineChart
 - [ ] Create `src/components/SellThroughMeter.tsx` — circular progress gauge
 - [ ] Create `src/components/CategoryHeatMap.tsx` — category grid for Dashboard
 
 ### New Page
+
 - [ ] Create `src/pages/MarketResearchPage.tsx` — full research hub
   - [ ] Keyword search bar
   - [ ] Saved watches panel
@@ -913,17 +1055,21 @@ const VALIDATION_RULES = [
 - [ ] Add `/market` route in `src/App.tsx` (ProtectedRoute, ownerOnly)
 
 ### Navigation
+
 - [ ] Update `src/components/BottomNav.tsx` — add "Market" tab with `TrendingUp` icon (Pro/Shop)
 
 ### Dashboard Integration
+
 - [ ] Update `src/pages/DashboardPage.tsx` — add CategoryHeatMap widget below listings table
 
 ### Plan Gating
+
 - [ ] Gate keyword research behind paid plan check
 - [ ] Gate saved watches (> 5) behind Shop plan
 - [ ] Gate price history charts behind Pro/Shop
 
 ### Testing & Deploy
+
 - [ ] Test `market-watch-refresh` with real eBay token and query
 - [ ] Test cron logic with mock data
 - [ ] Verify PriceTrendChart renders with empty and populated data
@@ -936,12 +1082,14 @@ const VALIDATION_RULES = [
 ## ⚡ Feature #6 — Auto-Optimization
 
 ### Database
+
 - [ ] Write migration: create `relist_history` table
 - [ ] Write migration: create `reprice_rules` table
 - [ ] Write migration: create `optimization_suggestions` table
 - [ ] Apply migrations via `supabase db push`
 
 ### Edge Functions
+
 - [ ] Create `supabase/functions/ebay-relist/index.ts`
   - [ ] Accept `{ userToken, listingId, newPrice?, reason }`
   - [ ] Call eBay Inventory API to end + recreate listing
@@ -960,12 +1108,14 @@ const VALIDATION_RULES = [
   - [ ] Return structured scores + suggestions
 
 ### Components
+
 - [ ] Create `src/components/ActionQueueCard.tsx`
 - [ ] Create `src/components/TitleOptimizerModal.tsx`
 - [ ] Create `src/components/ImageScoreCard.tsx`
 - [ ] Create `src/components/RepriceRuleBuilder.tsx`
 
 ### New Page
+
 - [ ] Create `src/pages/OptimizationPage.tsx` — action queue hub
   - [ ] Summary stats cards
   - [ ] Priority-sorted suggestion table
@@ -975,17 +1125,21 @@ const VALIDATION_RULES = [
 - [ ] Add `/optimize` route in `src/App.tsx` (ProtectedRoute, ownerOnly)
 
 ### Navigation
+
 - [ ] Update `src/components/BottomNav.tsx` — add "Optimize" tab with `Zap` icon (Shop only)
 
 ### Dashboard Integration
+
 - [ ] Update `src/pages/DashboardPage.tsx` — add "Optimize" quick-action button per listing row
 
 ### Plan Gating
+
 - [ ] Gate action queue view behind Pro/Shop
 - [ ] Gate reprice + relist actions behind Pro/Shop
 - [ ] Gate title optimizer + image scorer behind Shop only
 
 ### Testing & Deploy
+
 - [ ] Test `ebay-relist` with a real ended listing
 - [ ] Test `title-optimizer` with sample coin titles
 - [ ] Test `image-scorer` with listing photo URL
@@ -999,16 +1153,19 @@ const VALIDATION_RULES = [
 ## 📋 Feature #10 — Bulk Listing Generator
 
 ### Dependencies
+
 - [ ] Add `papaparse` + `@types/papaparse` to `package.json`
 - [ ] Run `npm install` to install new deps
 
 ### Types & Libraries
+
 - [ ] Create `src/types/bulk-listing.ts` — `BulkRow`, `BulkRowStatus`, `BulkRowValidation`, `BulkValidationIssue`, `BulkTemplate` types
 - [ ] Create `src/lib/bulkCsvParser.ts` — CSV/Excel parser using `papaparse` + `xlsx`
 - [ ] Create `src/lib/bulkTemplates.ts` — 5 template definitions (coins, electronics, clothing, books, generic)
 - [ ] Create `src/lib/bulkValidation.ts` — per-row validation rules using existing condition/category maps
 
 ### Edge Functions
+
 - [ ] Create `supabase/functions/bulk-generate-descriptions/index.ts`
   - [ ] Accept `{ rows, tier }` array
   - [ ] Loop through rows calling GPT-4o description generation
@@ -1021,6 +1178,7 @@ const VALIDATION_RULES = [
   - [ ] Return per-row results array
 
 ### Components
+
 - [ ] Create `src/components/BulkUploadZone.tsx` — drag-and-drop CSV/Excel upload
 - [ ] Create `src/components/BulkDataTable.tsx` — virtualized editable table
   - [ ] Inline cell editing
@@ -1032,6 +1190,7 @@ const VALIDATION_RULES = [
 - [ ] Create `src/components/BulkColumnMapper.tsx` — CSV column → internal field mapping UI
 
 ### New Page
+
 - [ ] Create `src/pages/BulkListingPage.tsx` — 4-step wizard
   - [ ] Step 1: Upload CSV or choose template
   - [ ] Step 2: Column mapping
@@ -1040,15 +1199,18 @@ const VALIDATION_RULES = [
 - [ ] Add `/bulk` route in `src/App.tsx` (ProtectedRoute)
 
 ### Navigation & Discovery
+
 - [ ] Update `src/components/BottomNav.tsx` — add "Bulk" tab with `Layers` icon
 - [ ] Update `src/pages/HomePage.tsx` — add "Bulk List" card to quick actions
 
 ### Plan Gating
+
 - [ ] Gate AI description generation (> 25 rows) behind Shop plan
 - [ ] Gate bulk publish (> 50 rows) behind Shop plan
 - [ ] Show upgrade prompt for Free/Starter users
 
 ### Testing & Deploy
+
 - [ ] Test CSV parser with real file (coins template)
 - [ ] Test Excel parser with .xlsx file
 - [ ] Test `bulk-generate-descriptions` with 10-row batch

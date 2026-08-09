@@ -58,7 +58,9 @@ export function PackageDimensions({
                 min="0"
                 step="1"
                 value={weightLb > 0 ? weightLb : ""}
-                onChange={(e) => onWeightLbChange(parsePositiveFloat(e.target.value))}
+                onChange={(e) =>
+                  onWeightLbChange(parsePositiveFloat(e.target.value))
+                }
                 placeholder="0"
                 className={inputCls}
               />
@@ -76,7 +78,9 @@ export function PackageDimensions({
                 max="15.99"
                 step="0.1"
                 value={weightOz > 0 ? weightOz : ""}
-                onChange={(e) => onWeightOzChange(parsePositiveFloat(e.target.value))}
+                onChange={(e) =>
+                  onWeightOzChange(parsePositiveFloat(e.target.value))
+                }
                 placeholder="0"
                 className={inputCls}
               />
@@ -101,7 +105,9 @@ export function PackageDimensions({
                 min="0"
                 step="0.1"
                 value={lengthIn > 0 ? lengthIn : ""}
-                onChange={(e) => onLengthInChange(parsePositiveFloat(e.target.value))}
+                onChange={(e) =>
+                  onLengthInChange(parsePositiveFloat(e.target.value))
+                }
                 placeholder="L"
                 className={inputCls}
               />
@@ -114,7 +120,9 @@ export function PackageDimensions({
                 min="0"
                 step="0.1"
                 value={widthIn > 0 ? widthIn : ""}
-                onChange={(e) => onWidthInChange(parsePositiveFloat(e.target.value))}
+                onChange={(e) =>
+                  onWidthInChange(parsePositiveFloat(e.target.value))
+                }
                 placeholder="W"
                 className={inputCls}
               />
@@ -127,7 +135,9 @@ export function PackageDimensions({
                 min="0"
                 step="0.1"
                 value={heightIn > 0 ? heightIn : ""}
-                onChange={(e) => onHeightInChange(parsePositiveFloat(e.target.value))}
+                onChange={(e) =>
+                  onHeightInChange(parsePositiveFloat(e.target.value))
+                }
                 placeholder="H"
                 className={inputCls}
               />

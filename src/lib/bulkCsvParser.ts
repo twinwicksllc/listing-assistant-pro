@@ -45,7 +45,13 @@ export async function parseExcelFile(file: File): Promise<ParsedFile> {
   });
 
   if (raw.length === 0) {
-    return { headers: [], rows: [], rowCount: 0, fileName: file.name, fileType: "excel" };
+    return {
+      headers: [],
+      rows: [],
+      rowCount: 0,
+      fileName: file.name,
+      fileType: "excel",
+    };
   }
 
   const headers = Object.keys(raw[0]).map((h) => h.trim());
@@ -55,7 +61,13 @@ export async function parseExcelFile(file: File): Promise<ParsedFile> {
     return clean;
   });
 
-  return { headers, rows, rowCount: rows.length, fileName: file.name, fileType: "excel" };
+  return {
+    headers,
+    rows,
+    rowCount: rows.length,
+    fileName: file.name,
+    fileType: "excel",
+  };
 }
 
 // ─── Unified entry point ───────────────────────────────────────────────────────
@@ -64,7 +76,9 @@ export async function parseListingFile(file: File): Promise<ParsedFile> {
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
   if (ext === "csv") return parseCsvFile(file);
   if (ext === "xlsx" || ext === "xls") return parseExcelFile(file);
-  throw new Error(`Unsupported file type: .${ext}. Please upload a .csv or .xlsx file.`);
+  throw new Error(
+    `Unsupported file type: .${ext}. Please upload a .csv or .xlsx file.`,
+  );
 }
 
 // ─── Auto-column detection ─────────────────────────────────────────────────────
@@ -162,7 +176,7 @@ export function autoDetectMappings(headers: string[]): ColumnMapping[] {
 
 export function applyMappings(
   rows: Record<string, string>[],
-  mappings: ColumnMapping[]
+  mappings: ColumnMapping[],
 ): Array<Record<string, string> & { _itemSpecifics: Record<string, string> }> {
   return rows.map((raw, idx) => {
     const out: Record<string, string> = { _rowIndex: String(idx) };

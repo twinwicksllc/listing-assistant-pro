@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { Search, ExternalLink, TrendingUp, Users, ShoppingBag, BarChart2 } from "lucide-react";
+import {
+  Search,
+  ExternalLink,
+  TrendingUp,
+  Users,
+  ShoppingBag,
+  BarChart2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -51,7 +58,9 @@ function TopItemRow({ item }: { item: TopItem }) {
           src={item.imageUrl}
           alt={item.title}
           className="w-10 h-10 object-cover rounded shrink-0 bg-muted"
-          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+          onError={(e) => {
+            (e.target as HTMLImageElement).style.display = "none";
+          }}
         />
       ) : (
         <div className="w-10 h-10 rounded bg-muted shrink-0" />
@@ -85,7 +94,9 @@ export default function KeywordResearchPanel({
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<KeywordResearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"competitors" | "sold">("competitors");
+  const [activeTab, setActiveTab] = useState<"competitors" | "sold">(
+    "competitors",
+  );
 
   const runResearch = async (q: string = query) => {
     if (!q.trim()) return;
@@ -94,9 +105,12 @@ export default function KeywordResearchPanel({
     setResult(null);
 
     try {
-      const { data, error: fnErr } = await supabase.functions.invoke("keyword-research", {
-        body: { query: q.trim() },
-      });
+      const { data, error: fnErr } = await supabase.functions.invoke(
+        "keyword-research",
+        {
+          body: { query: q.trim() },
+        },
+      );
 
       if (fnErr) throw fnErr;
       if (data?.error) throw new Error(data.error);
@@ -128,7 +142,10 @@ export default function KeywordResearchPanel({
             className="pl-9"
           />
         </div>
-        <Button onClick={() => runResearch()} disabled={loading || !query.trim()}>
+        <Button
+          onClick={() => runResearch()}
+          disabled={loading || !query.trim()}
+        >
           {loading ? "Searching…" : "Research"}
         </Button>
       </div>
@@ -150,7 +167,9 @@ export default function KeywordResearchPanel({
                   <CompetitionBadge level={result.competitionLevel} />
                   <DemandBadge signal={result.demandSignal} />
                   {result.fromCache && (
-                    <Badge variant="secondary" className="text-[10px]">Cached</Badge>
+                    <Badge variant="secondary" className="text-[10px]">
+                      Cached
+                    </Badge>
                   )}
                 </div>
               </div>
@@ -169,18 +188,29 @@ export default function KeywordResearchPanel({
                 {result.avgSoldPrice != null && (
                   <div className="space-y-0.5">
                     <p className="text-xs text-muted-foreground">
-                      Avg: <span className="text-foreground font-medium">${result.avgSoldPrice.toFixed(2)}</span>
+                      Avg:{" "}
+                      <span className="text-foreground font-medium">
+                        ${result.avgSoldPrice.toFixed(2)}
+                      </span>
                     </p>
                     {result.medianSoldPrice != null && (
                       <p className="text-xs text-muted-foreground">
-                        Median: <span className="text-foreground font-medium">${result.medianSoldPrice.toFixed(2)}</span>
+                        Median:{" "}
+                        <span className="text-foreground font-medium">
+                          ${result.medianSoldPrice.toFixed(2)}
+                        </span>
                       </p>
                     )}
-                    {result.p25SoldPrice != null && result.p75SoldPrice != null && (
-                      <p className="text-xs text-muted-foreground">
-                        IQR: <span className="text-foreground font-medium">${result.p25SoldPrice.toFixed(2)} – ${result.p75SoldPrice.toFixed(2)}</span>
-                      </p>
-                    )}
+                    {result.p25SoldPrice != null &&
+                      result.p75SoldPrice != null && (
+                        <p className="text-xs text-muted-foreground">
+                          IQR:{" "}
+                          <span className="text-foreground font-medium">
+                            ${result.p25SoldPrice.toFixed(2)} – $
+                            {result.p75SoldPrice.toFixed(2)}
+                          </span>
+                        </p>
+                      )}
                   </div>
                 )}
               </div>
@@ -195,13 +225,21 @@ export default function KeywordResearchPanel({
                 {result.avgActivePrice != null && (
                   <div className="space-y-0.5">
                     <p className="text-xs text-muted-foreground">
-                      Avg: <span className="text-foreground font-medium">${result.avgActivePrice.toFixed(2)}</span>
+                      Avg:{" "}
+                      <span className="text-foreground font-medium">
+                        ${result.avgActivePrice.toFixed(2)}
+                      </span>
                     </p>
-                    {result.minActivePrice != null && result.maxActivePrice != null && (
-                      <p className="text-xs text-muted-foreground">
-                        Range: <span className="text-foreground font-medium">${result.minActivePrice.toFixed(2)} – ${result.maxActivePrice.toFixed(2)}</span>
-                      </p>
-                    )}
+                    {result.minActivePrice != null &&
+                      result.maxActivePrice != null && (
+                        <p className="text-xs text-muted-foreground">
+                          Range:{" "}
+                          <span className="text-foreground font-medium">
+                            ${result.minActivePrice.toFixed(2)} – $
+                            {result.maxActivePrice.toFixed(2)}
+                          </span>
+                        </p>
+                      )}
                   </div>
                 )}
               </div>
@@ -213,7 +251,9 @@ export default function KeywordResearchPanel({
                 <span className="flex items-center gap-1 text-muted-foreground">
                   <BarChart2 className="w-3.5 h-3.5" /> Sell-Through Rate
                 </span>
-                <span className="font-semibold">{result.sellThroughRate.toFixed(1)}%</span>
+                <span className="font-semibold">
+                  {result.sellThroughRate.toFixed(1)}%
+                </span>
               </div>
               <div className="h-2 rounded-full bg-muted overflow-hidden">
                 <div
@@ -221,14 +261,15 @@ export default function KeywordResearchPanel({
                     result.sellThroughRate >= 60
                       ? "bg-green-500"
                       : result.sellThroughRate >= 30
-                      ? "bg-yellow-500"
-                      : "bg-red-400"
+                        ? "bg-yellow-500"
+                        : "bg-red-400"
                   }`}
                   style={{ width: `${Math.min(result.sellThroughRate, 100)}%` }}
                 />
               </div>
               <p className="text-[10px] text-muted-foreground">
-                {result.soldCount} sold / {result.soldCount + result.activeCount} total listings
+                {result.soldCount} sold /{" "}
+                {result.soldCount + result.activeCount} total listings
               </p>
             </div>
 
@@ -274,13 +315,14 @@ export default function KeywordResearchPanel({
               </div>
 
               <div className="p-3">
-                {activeTab === "competitors" && result.topCompetitors.length > 0 && (
-                  <div>
-                    {result.topCompetitors.map((item, i) => (
-                      <TopItemRow key={i} item={item} />
-                    ))}
-                  </div>
-                )}
+                {activeTab === "competitors" &&
+                  result.topCompetitors.length > 0 && (
+                    <div>
+                      {result.topCompetitors.map((item, i) => (
+                        <TopItemRow key={i} item={item} />
+                      ))}
+                    </div>
+                  )}
                 {activeTab === "sold" && result.topSold.length > 0 && (
                   <div>
                     {result.topSold.map((item, i) => (
@@ -288,11 +330,16 @@ export default function KeywordResearchPanel({
                     ))}
                   </div>
                 )}
-                {activeTab === "competitors" && result.topCompetitors.length === 0 && (
-                  <p className="text-xs text-muted-foreground py-2 text-center">No active listings found.</p>
-                )}
+                {activeTab === "competitors" &&
+                  result.topCompetitors.length === 0 && (
+                    <p className="text-xs text-muted-foreground py-2 text-center">
+                      No active listings found.
+                    </p>
+                  )}
                 {activeTab === "sold" && result.topSold.length === 0 && (
-                  <p className="text-xs text-muted-foreground py-2 text-center">No sold listings found.</p>
+                  <p className="text-xs text-muted-foreground py-2 text-center">
+                    No sold listings found.
+                  </p>
                 )}
               </div>
             </div>

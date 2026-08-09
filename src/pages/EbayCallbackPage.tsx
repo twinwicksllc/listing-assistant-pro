@@ -9,7 +9,9 @@ const EBAY_TOKEN_KEY = "ebay-user-token";
 export default function EbayCallbackPage() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
-  const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
+  const [status, setStatus] = useState<"loading" | "success" | "error">(
+    "loading",
+  );
   const [message, setMessage] = useState("Connecting your eBay account…");
   // Prevent double-execution when user loads after initial render
   const exchangedRef = useRef(false);
@@ -48,18 +50,23 @@ export default function EbayCallbackPage() {
     // Exchange the code for a user token via our Edge Function.
     // Pass userId so the edge function stores the token server-side in profiles
     // (avoids XSS risk of keeping tokens only in localStorage).
-    console.log("EbayCallbackPage: exchanging code", code?.substring(0, 20) + "...", "userId:", user?.id ?? "null");
+    console.log(
+      "EbayCallbackPage: exchanging code",
+      code?.substring(0, 20) + "...",
+      "userId:",
+      user?.id ?? "null",
+    );
     supabase.functions
       .invoke("ebay-publish", {
         body: { action: "exchange_code", code, userId: user?.id ?? null },
       })
       .then(({ data, error: fnError }) => {
-        console.log("EbayCallbackPage: exchange response status", { 
-          hasData: !!data, 
+        console.log("EbayCallbackPage: exchange response status", {
+          hasData: !!data,
           hasError: !!fnError,
-          dataStatus: data?.status 
+          dataStatus: data?.status,
         });
-        
+
         if (fnError) {
           console.error("EbayCallbackPage: function error:", fnError);
           const msg = fnError.message || "Failed to connect eBay account";
@@ -71,17 +78,20 @@ export default function EbayCallbackPage() {
         // Check if the response contains an error (either at top level or in data)
         if (data?.error) {
           console.error("EbayCallbackPage: API error:", data.error);
-          
+
           // Provide specific guidance based on error type
           let userMessage = data.error;
           if (data.error.includes("not configured")) {
-            userMessage = "eBay integration is not properly configured. Please contact support.";
+            userMessage =
+              "eBay integration is not properly configured. Please contact support.";
           } else if (data.error.includes("expired")) {
-            userMessage = "Your authorization code has expired. Please try connecting again.";
+            userMessage =
+              "Your authorization code has expired. Please try connecting again.";
           } else if (data.error.includes("invalid")) {
-            userMessage = "Invalid authorization code. Please try connecting again.";
+            userMessage =
+              "Invalid authorization code. Please try connecting again.";
           }
-          
+
           setStatus("error");
           setMessage(userMessage);
           return;
@@ -91,7 +101,9 @@ export default function EbayCallbackPage() {
         if (!token) {
           console.error("EbayCallbackPage: no access_token in response:", data);
           setStatus("error");
-          setMessage("eBay did not return an access token. Please try connecting again.");
+          setMessage(
+            "eBay did not return an access token. Please try connecting again.",
+          );
           return;
         }
 
@@ -112,7 +124,8 @@ export default function EbayCallbackPage() {
         setMessage("eBay account connected successfully!");
 
         // Check if a specific post-auth redirect was requested (e.g. /drafts?publish=all)
-        const postAuthRedirect = localStorage.getItem("ebay_post_auth_redirect") || "/dashboard";
+        const postAuthRedirect =
+          localStorage.getItem("ebay_post_auth_redirect") || "/dashboard";
         localStorage.removeItem("ebay_post_auth_redirect");
 
         // Redirect after a short delay
@@ -121,12 +134,13 @@ export default function EbayCallbackPage() {
       .catch((err: unknown) => {
         console.error("EbayCallbackPage: catch error:", err);
         setStatus("error");
-        const msg = err?.message || "Failed to connect eBay account. Please try again.";
+        const msg =
+          err?.message || "Failed to connect eBay account. Please try again.";
         setMessage(msg);
       });
-  // Include authLoading in deps so the effect re-runs once auth context finishes
-  // loading, ensuring userId is available when exchange_code is called.
-  // exchangedRef prevents the code from being exchanged twice.
+    // Include authLoading in deps so the effect re-runs once auth context finishes
+    // loading, ensuring userId is available when exchange_code is called.
+    // exchangedRef prevents the code from being exchanged twice.
   }, [navigate, user, authLoading]);
 
   return (
@@ -136,7 +150,9 @@ export default function EbayCallbackPage() {
           <>
             <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto" />
             <div>
-              <h2 className="text-base font-semibold text-foreground">Connecting eBay</h2>
+              <h2 className="text-base font-semibold text-foreground">
+                Connecting eBay
+              </h2>
               <p className="text-sm text-muted-foreground mt-1">{message}</p>
             </div>
           </>
@@ -146,9 +162,13 @@ export default function EbayCallbackPage() {
           <>
             <CheckCircle className="w-12 h-12 text-green-500 mx-auto" />
             <div>
-              <h2 className="text-base font-semibold text-foreground">Connected!</h2>
+              <h2 className="text-base font-semibold text-foreground">
+                Connected!
+              </h2>
               <p className="text-sm text-muted-foreground mt-1">{message}</p>
-              <p className="text-xs text-muted-foreground mt-2">Redirecting to dashboard…</p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Redirecting to dashboard…
+              </p>
             </div>
           </>
         )}
@@ -157,7 +177,9 @@ export default function EbayCallbackPage() {
           <>
             <XCircle className="w-12 h-12 text-destructive mx-auto" />
             <div>
-              <h2 className="text-base font-semibold text-foreground">Connection Failed</h2>
+              <h2 className="text-base font-semibold text-foreground">
+                Connection Failed
+              </h2>
               <p className="text-sm text-muted-foreground mt-1">{message}</p>
             </div>
             <div className="flex gap-3">

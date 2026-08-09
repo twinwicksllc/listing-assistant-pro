@@ -69,8 +69,9 @@ serve(async (req: Request) => {
     // 2. DECAY: Reduce effective_score by 5 for rows not published
     //    in the last 90 days (approved or quarantine only)
     // ────────────────────────────────────────────────────────────
-    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
-      .toISOString();
+    const ninetyDaysAgo = new Date(
+      Date.now() - 90 * 24 * 60 * 60 * 1000,
+    ).toISOString();
     const { data: staleRows, error: staleErr } = await supabase
       .from("category_mappings")
       .select("id, effective_score")
@@ -123,8 +124,9 @@ serve(async (req: Request) => {
     // ────────────────────────────────────────────────────────────
     // 4. AUDIT CLEANUP: Delete lookup_decisions older than 180 days
     // ────────────────────────────────────────────────────────────
-    const oneEightyDaysAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000)
-      .toISOString();
+    const oneEightyDaysAgo = new Date(
+      Date.now() - 180 * 24 * 60 * 60 * 1000,
+    ).toISOString();
     const { data: deletedAudit, error: auditErr } = await supabase
       .from("lookup_decisions")
       .delete()
@@ -168,20 +170,17 @@ serve(async (req: Request) => {
 
     // Log the run to the database
     try {
-      await supabase
-        .from("category_hygiene_log")
-        .insert({
-          status: "success",
-          results: results,
-        });
+      await supabase.from("category_hygiene_log").insert({
+        status: "success",
+        results: results,
+      });
     } catch (logErr) {
       console.warn("category-hygiene: failed to log run:", logErr);
     }
 
-    return new Response(
-      JSON.stringify({ success: true, results }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return new Response(JSON.stringify({ success: true, results }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("category-hygiene: fatal error:", message);
@@ -192,23 +191,18 @@ serve(async (req: Request) => {
       const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
       if (supabaseUrl && supabaseServiceKey) {
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
-        await supabase
-          .from("category_hygiene_log")
-          .insert({
-            status: "error",
-            error: message,
-          });
+        await supabase.from("category_hygiene_log").insert({
+          status: "error",
+          error: message,
+        });
       }
     } catch (logErr) {
       console.warn("category-hygiene: failed to log error:", logErr);
     }
 
-    return new Response(
-      JSON.stringify({ error: message }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });

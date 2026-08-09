@@ -1,13 +1,27 @@
 import { useState } from "react";
 import { TrendingUp, Plus, BookMarked, Search, RefreshCw } from "lucide-react";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import MarketWatchCard from "@/components/MarketWatchCard";
 import KeywordResearchPanel from "@/components/KeywordResearchPanel";
 import { useMarketWatches } from "@/hooks/useMarketWatches";
 import AppShell from "@/v2/components/AppShell";
-import { COLORS, SHADOWS, FONT, cardStyle, cardHeaderStyle, cardTitleStyle, btnPrimaryStyle, btnOutlineStyle, inputStyle } from "@/v2/theme";
+import {
+  COLORS,
+  SHADOWS,
+  FONT,
+  cardStyle,
+  cardHeaderStyle,
+  cardTitleStyle,
+  btnPrimaryStyle,
+  btnOutlineStyle,
+  inputStyle,
+} from "@/v2/theme";
 
 // ── Add Watch Dialog ─────────────────────────────────────────────
 interface AddWatchDialogProps {
@@ -17,7 +31,12 @@ interface AddWatchDialogProps {
   initialQuery?: string;
 }
 
-function AddWatchDialog({ open, onClose, onAdd, initialQuery = "" }: AddWatchDialogProps) {
+function AddWatchDialog({
+  open,
+  onClose,
+  onAdd,
+  initialQuery = "",
+}: AddWatchDialogProps) {
   const [query, setQuery] = useState(initialQuery);
   const [label, setLabel] = useState("");
   const [saving, setSaving] = useState(false);
@@ -25,16 +44,22 @@ function AddWatchDialog({ open, onClose, onAdd, initialQuery = "" }: AddWatchDia
   const handleSave = async () => {
     if (!query.trim()) return;
     setSaving(true);
-    await onAdd({ searchQuery: query.trim(), label: label.trim() || undefined });
+    await onAdd({
+      searchQuery: query.trim(),
+      label: label.trim() || undefined,
+    });
     setSaving(false);
-    setQuery(""); setLabel("");
+    setQuery("");
+    setLabel("");
     onClose();
   };
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-sm">
-        <DialogHeader><DialogTitle>Add Market Watch</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Add Market Watch</DialogTitle>
+        </DialogHeader>
         <div className="space-y-3 py-2">
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Search Query *</label>
@@ -55,18 +80,31 @@ function AddWatchDialog({ open, onClose, onAdd, initialQuery = "" }: AddWatchDia
               value={label}
               onChange={(e) => setLabel(e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">A friendly name shown on the watch card.</p>
+            <p className="text-xs text-muted-foreground">
+              A friendly name shown on the watch card.
+            </p>
           </div>
         </div>
         <DialogFooter>
           <button
             onClick={onClose}
-            style={{ ...btnOutlineStyle, padding: "0.5rem 1rem", fontSize: "0.875rem" }}
-          >Cancel</button>
+            style={{
+              ...btnOutlineStyle,
+              padding: "0.5rem 1rem",
+              fontSize: "0.875rem",
+            }}
+          >
+            Cancel
+          </button>
           <button
             onClick={handleSave}
             disabled={saving || !query.trim()}
-            style={{ ...btnPrimaryStyle, padding: "0.5rem 1rem", fontSize: "0.875rem", opacity: (saving || !query.trim()) ? 0.6 : 1 }}
+            style={{
+              ...btnPrimaryStyle,
+              padding: "0.5rem 1rem",
+              fontSize: "0.875rem",
+              opacity: saving || !query.trim() ? 0.6 : 1,
+            }}
           >
             {saving ? "Saving…" : "Add Watch"}
           </button>
@@ -82,7 +120,8 @@ type Tab = "research" | "watches";
 const S = {
   page: {
     minHeight: "100vh",
-    background: "linear-gradient(145deg, #e8f4fb 0%, #f0f6ff 40%, #eaf1f8 100%)",
+    background:
+      "linear-gradient(145deg, #e8f4fb 0%, #f0f6ff 40%, #eaf1f8 100%)",
     backgroundAttachment: "fixed" as const,
     fontFamily: FONT,
     paddingBottom: "2rem",
@@ -178,7 +217,15 @@ const S = {
 };
 
 export default function MarketResearchPage2() {
-  const { watches, loading, refreshingId, addWatch, deleteWatch, refreshWatch, fetchHistory } = useMarketWatches();
+  const {
+    watches,
+    loading,
+    refreshingId,
+    addWatch,
+    deleteWatch,
+    refreshWatch,
+    fetchHistory,
+  } = useMarketWatches();
   const [activeTab, setActiveTab] = useState<Tab>("research");
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addDialogQuery, setAddDialogQuery] = useState("");
@@ -190,9 +237,10 @@ export default function MarketResearchPage2() {
   };
 
   const filteredWatches = watchSearch
-    ? watches.filter((w) =>
-        w.label?.toLowerCase().includes(watchSearch.toLowerCase()) ||
-        w.searchQuery.toLowerCase().includes(watchSearch.toLowerCase())
+    ? watches.filter(
+        (w) =>
+          w.label?.toLowerCase().includes(watchSearch.toLowerCase()) ||
+          w.searchQuery.toLowerCase().includes(watchSearch.toLowerCase()),
       )
     : watches;
 
@@ -204,13 +252,30 @@ export default function MarketResearchPage2() {
           <div style={S.headerInner}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <TrendingUp size={20} color={COLORS.brand} />
-              <span style={{ fontWeight: 800, fontSize: "1.125rem", color: COLORS.textPrimary }}>Market Research</span>
+              <span
+                style={{
+                  fontWeight: 800,
+                  fontSize: "1.125rem",
+                  color: COLORS.textPrimary,
+                }}
+              >
+                Market Research
+              </span>
             </div>
             <button
               style={S.addWatchBtn}
-              onClick={() => { setAddDialogQuery(""); setAddDialogOpen(true); }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)"; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; }}
+              onClick={() => {
+                setAddDialogQuery("");
+                setAddDialogOpen(true);
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.transform =
+                  "translateY(-1px)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.transform =
+                  "translateY(0)";
+              }}
             >
               <Plus size={15} /> Watch
             </button>
@@ -218,10 +283,16 @@ export default function MarketResearchPage2() {
 
           {/* Tab bar */}
           <div style={S.tabBar}>
-            <button style={S.tabBtn(activeTab === "research")} onClick={() => setActiveTab("research")}>
+            <button
+              style={S.tabBtn(activeTab === "research")}
+              onClick={() => setActiveTab("research")}
+            >
               <Search size={15} /> Keyword Research
             </button>
-            <button style={S.tabBtn(activeTab === "watches")} onClick={() => setActiveTab("watches")}>
+            <button
+              style={S.tabBtn(activeTab === "watches")}
+              onClick={() => setActiveTab("watches")}
+            >
               <BookMarked size={15} /> Saved Watches
               {watches.length > 0 && (
                 <span style={S.watchCountBadge}>{watches.length}</span>
@@ -241,7 +312,17 @@ export default function MarketResearchPage2() {
             <>
               {watches.length > 3 && (
                 <div style={{ position: "relative" }}>
-                  <Search size={15} color={COLORS.textMuted} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                  <Search
+                    size={15}
+                    color={COLORS.textMuted}
+                    style={{
+                      position: "absolute",
+                      left: 12,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      pointerEvents: "none",
+                    }}
+                  />
                   <input
                     placeholder="Filter watches…"
                     value={watchSearch}
@@ -252,26 +333,69 @@ export default function MarketResearchPage2() {
               )}
 
               {loading ? (
-                <div style={{ display: "flex", justifyContent: "center", padding: "4rem 0" }}>
-                  <RefreshCw size={24} color={COLORS.textMuted} className="animate-spin" />
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "center",
+                    padding: "4rem 0",
+                  }}
+                >
+                  <RefreshCw
+                    size={24}
+                    color={COLORS.textMuted}
+                    className="animate-spin"
+                  />
                 </div>
               ) : filteredWatches.length === 0 ? (
                 <div style={S.emptyState}>
-                  <div style={{ width: 56, height: 56, borderRadius: 16, background: "rgba(0,118,182,0.08)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div
+                    style={{
+                      width: 56,
+                      height: 56,
+                      borderRadius: 16,
+                      background: "rgba(0,118,182,0.08)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
                     <BookMarked size={28} color={COLORS.brand} />
                   </div>
-                  <p style={{ fontWeight: 700, color: COLORS.textPrimary, margin: 0 }}>
-                    {watches.length === 0 ? "No saved watches yet" : "No watches match your filter"}
+                  <p
+                    style={{
+                      fontWeight: 700,
+                      color: COLORS.textPrimary,
+                      margin: 0,
+                    }}
+                  >
+                    {watches.length === 0
+                      ? "No saved watches yet"
+                      : "No watches match your filter"}
                   </p>
-                  <p style={{ fontSize: "0.875rem", color: COLORS.textMuted, margin: 0, maxWidth: 300 }}>
+                  <p
+                    style={{
+                      fontSize: "0.875rem",
+                      color: COLORS.textMuted,
+                      margin: 0,
+                      maxWidth: 300,
+                    }}
+                  >
                     {watches.length === 0
                       ? "Use Keyword Research to find market data and save watches to track price trends."
                       : "Try a different search term."}
                   </p>
                   {watches.length === 0 && (
                     <button
-                      onClick={() => { setAddDialogQuery(""); setAddDialogOpen(true); }}
-                      style={{ ...btnPrimaryStyle, padding: "0.625rem 1.25rem", fontSize: "0.875rem", marginTop: 4 }}
+                      onClick={() => {
+                        setAddDialogQuery("");
+                        setAddDialogOpen(true);
+                      }}
+                      style={{
+                        ...btnPrimaryStyle,
+                        padding: "0.625rem 1.25rem",
+                        fontSize: "0.875rem",
+                        marginTop: 4,
+                      }}
                     >
                       <Plus size={15} /> Add First Watch
                     </button>
@@ -297,7 +421,9 @@ export default function MarketResearchPage2() {
           open={addDialogOpen}
           initialQuery={addDialogQuery}
           onClose={() => setAddDialogOpen(false)}
-          onAdd={async (params) => { await addWatch(params); }}
+          onAdd={async (params) => {
+            await addWatch(params);
+          }}
         />
       </div>
     </AppShell>

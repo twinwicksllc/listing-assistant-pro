@@ -31,16 +31,25 @@ async function fetchShippingLabelCosts(
     // Note: transactionDate filter uses the same format as fulfillment API
     const filterValue = `transactionType:{SHIPPING_LABEL},transactionDate:[${fromStr}..${toStr}]`;
     const transactionsUrl = `${financesApiBase}/sell/finances/v1/transaction?filter=${
-      encodeURIComponent(filterValue)
+      encodeURIComponent(
+        filterValue,
+      )
     }&limit=200`;
 
-    console.log("Fetching shipping label transactions from Finances API:", transactionsUrl);
+    console.log(
+      "Fetching shipping label transactions from Finances API:",
+      transactionsUrl,
+    );
 
     const resp = await fetch(transactionsUrl, { headers: ebayHeaders });
 
     if (!resp.ok) {
       const errText = await resp.text();
-      console.warn("Finances API error (non-fatal, will use proxy):", resp.status, errText);
+      console.warn(
+        "Finances API error (non-fatal, will use proxy):",
+        resp.status,
+        errText,
+      );
       return labelCosts; // Return empty map, will fall back to proxy
     }
 
@@ -109,16 +118,25 @@ async function fetchEbayFees(
 
     while (hasMore) {
       const transactionsUrl = `${financesApiBase}/sell/finances/v1/transaction?filter=${
-        encodeURIComponent(filterValue)
+        encodeURIComponent(
+          filterValue,
+        )
       }&limit=${limit}&offset=${offset}`;
 
-      console.log(`Fetching Finances API transactions (offset=${offset}):`, transactionsUrl);
+      console.log(
+        `Fetching Finances API transactions (offset=${offset}):`,
+        transactionsUrl,
+      );
 
       const resp = await fetch(transactionsUrl, { headers: ebayHeaders });
 
       if (!resp.ok) {
         const errText = await resp.text();
-        console.warn("Finances API fees fetch error (non-fatal):", resp.status, errText);
+        console.warn(
+          "Finances API fees fetch error (non-fatal):",
+          resp.status,
+          errText,
+        );
         break;
       }
 
@@ -135,7 +153,13 @@ async function fetchEbayFees(
         const amount = parseFloat(tx.amount?.value ?? "0");
 
         // Skip non-fee transaction types
-        const skipTypes = new Set(["SALE", "REFUND", "SHIPPING_LABEL", "CREDIT", "NON_SALE_CHARGE"]);
+        const skipTypes = new Set([
+          "SALE",
+          "REFUND",
+          "SHIPPING_LABEL",
+          "CREDIT",
+          "NON_SALE_CHARGE",
+        ]);
         if (skipTypes.has(txType)) continue;
 
         // Only count DEBITs (charges to seller), not CREDITs (adjustments/refunds of fees)
@@ -151,7 +175,9 @@ async function fetchEbayFees(
       hasMore = offset < total && transactions.length > 0;
     }
 
-    console.log(`Aggregated eBay fees for ${feesMap.size} orders from Finances API`);
+    console.log(
+      `Aggregated eBay fees for ${feesMap.size} orders from Finances API`,
+    );
   } catch (err) {
     console.warn("Error fetching eBay fees (non-fatal):", err);
   }
@@ -182,9 +208,10 @@ serve(async (req) => {
     // Resolve the user from the JWT in the Authorization header
     const authHeader = req.headers.get("authorization") ?? "";
     const userJwt = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authErr } = await supabase.auth.getUser(
-      userJwt,
-    );
+    const {
+      data: { user },
+      error: authErr,
+    } = await supabase.auth.getUser(userJwt);
     if (authErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -234,14 +261,22 @@ serve(async (req) => {
       if (ordersResp.status === 400 || ordersResp.status === 404) {
         const filterValue2 = `lastmodifieddate:[${fromStr}..${toStr}]`;
         const ordersUrlStr2 = `${apiBase}/sell/fulfillment/v1/order?filter=${
-          encodeURIComponent(filterValue2)
+          encodeURIComponent(
+            filterValue2,
+          )
         }&limit=200`;
         console.log("Retrying with lastmodifieddate:", ordersUrlStr2);
 
-        const ordersResp2 = await fetch(ordersUrlStr2, { headers: ebayHeaders });
+        const ordersResp2 = await fetch(ordersUrlStr2, {
+          headers: ebayHeaders,
+        });
         if (!ordersResp2.ok) {
           const errText2 = await ordersResp2.text();
-          console.error("Fulfillment API fallback error:", ordersResp2.status, errText2);
+          console.error(
+            "Fulfillment API fallback error:",
+            ordersResp2.status,
+            errText2,
+          );
           return new Response(
             JSON.stringify({
               error: "eBay Fulfillment API error",
@@ -262,11 +297,25 @@ serve(async (req) => {
           ordersData2 = JSON.parse(respText2);
         } catch (e) {
           return new Response(
-            JSON.stringify({ error: "eBay Fulfillment API parse error", detail: String(e) }),
-            { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            JSON.stringify({
+              error: "eBay Fulfillment API parse error",
+              detail: String(e),
+            }),
+            {
+              status: 502,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
           );
         }
-        return processOrders(ordersData2, fromStr, toStr, user.id, supabase, corsHeaders, userToken);
+        return processOrders(
+          ordersData2,
+          fromStr,
+          toStr,
+          user.id,
+          supabase,
+          corsHeaders,
+          userToken,
+        );
       }
 
       return new Response(
@@ -299,7 +348,15 @@ serve(async (req) => {
       );
     }
 
-    return processOrders(ordersData, fromStr, toStr, user.id, supabase, corsHeaders, userToken);
+    return processOrders(
+      ordersData,
+      fromStr,
+      toStr,
+      user.id,
+      supabase,
+      corsHeaders,
+      userToken,
+    );
   } catch (err: any) {
     console.error("cogs-report error:", err);
     return new Response(JSON.stringify({ error: err.message }), {
@@ -328,8 +385,12 @@ async function processOrders(
   // order creation/modification window. We go 15 days back from fromStr.
   const fromDateMatch = fromStr.match(/^(\d{4}-\d{2}-\d{2})/);
   const fromDateBase = fromDateMatch ? new Date(fromDateMatch[1]) : new Date();
-  const broaderFromDate = new Date(fromDateBase.getTime() - 15 * 24 * 60 * 60 * 1000);
-  const broaderFromStr = broaderFromDate.toISOString().replace(/\.\d{3}Z$/, "Z");
+  const broaderFromDate = new Date(
+    fromDateBase.getTime() - 15 * 24 * 60 * 60 * 1000,
+  );
+  const broaderFromStr = broaderFromDate
+    .toISOString()
+    .replace(/\.\d{3}Z$/, "Z");
 
   // ── Fetch shipping label costs from eBay Finances API ─────────────────────────────
   // This gives us the actual cost the seller paid for labels purchased through eBay
@@ -397,7 +458,7 @@ async function processOrders(
         // Apportion fee based on this line's share of total order value
         feeAmt = orderTotalValue > 0
           ? (lineTotal / orderTotalValue) * financesFeeForOrder
-          : (financesFeeForOrder / (order.lineItems?.length || 1));
+          : financesFeeForOrder / (order.lineItems?.length || 1);
       } else {
         feeAmt = fallbackFeeAmt;
       }
@@ -492,8 +553,8 @@ async function processOrders(
     // unitCogs: the cost of a single unit (as stored in listing_cogs)
     // Prefer listing ID over SKU — it's the most stable eBay identifier.
     // Match by listing ID first (most precise), then fall back to SKU
-    const unitCogs = (fo.ebayListingId ? cogsByListingId[fo.ebayListingId] ?? null : null) ??
-      (fo.ebaySku ? cogsBySku[fo.ebaySku] ?? null : null) ??
+    const unitCogs = (fo.ebayListingId ? (cogsByListingId[fo.ebayListingId] ?? null) : null) ??
+      (fo.ebaySku ? (cogsBySku[fo.ebaySku] ?? null) : null) ??
       null;
 
     // totalLineCogs: multiply per-unit COGS by quantity sold
@@ -503,8 +564,11 @@ async function processOrders(
     //   salePrice + shippingCollected - shippingLabelCost - ebayFees - (unitCogs x quantity)
     // salePrice already reflects lineItemCost x quantity (set in the lineItems loop above).
     // shippingLabelCost is fetched from Finances API for accurate P&L.
-    const netProfit = fo.salePrice + fo.shippingCollected - fo.shippingLabelCost -
-      fo.ebayFees - (totalLineCogs ?? 0);
+    const netProfit = fo.salePrice +
+      fo.shippingCollected -
+      fo.shippingLabelCost -
+      fo.ebayFees -
+      (totalLineCogs ?? 0);
     const margin = totalLineCogs != null && fo.salePrice > 0 ? (netProfit / fo.salePrice) * 100 : null;
 
     totalRevenue += fo.salePrice;
@@ -537,7 +601,9 @@ async function processOrders(
   });
 
   // Sort by soldAt descending (newest first)
-  items.sort((a, b) => new Date(b.soldAt).getTime() - new Date(a.soldAt).getTime());
+  items.sort(
+    (a, b) => new Date(b.soldAt).getTime() - new Date(a.soldAt).getTime(),
+  );
 
   // shippingNet = collected - labels (actual label costs from Finances API)
   const totalShippingNet = totalShippingCollected - totalShippingLabels;
@@ -619,7 +685,9 @@ async function dualWriteFinancials(
 
   try {
     const listingIds = Array.from(
-      new Set(items.map((it) => it.ebayListingId).filter((v): v is string => !!v)),
+      new Set(
+        items.map((it) => it.ebayListingId).filter((v): v is string => !!v),
+      ),
     );
     const skus = Array.from(
       new Set(items.map((it) => it.ebaySku).filter((v): v is string => !!v)),
@@ -628,7 +696,9 @@ async function dualWriteFinancials(
     if (listingIds.length > 0 || skus.length > 0) {
       const orParts: string[] = [];
       if (skus.length > 0) orParts.push(`ebay_sku.in.(${skus.join(",")})`);
-      if (listingIds.length > 0) orParts.push(`ebay_listing_id.in.(${listingIds.join(",")})`);
+      if (listingIds.length > 0) {
+        orParts.push(`ebay_listing_id.in.(${listingIds.join(",")})`);
+      }
 
       const { data: draftRows, error: draftErr } = await supabase
         .from("drafts")
@@ -637,22 +707,32 @@ async function dualWriteFinancials(
         .or(orParts.join(","));
 
       if (draftErr) {
-        console.warn("drafts lookup for domain/published_at (non-fatal):", draftErr.message);
+        console.warn(
+          "drafts lookup for domain/published_at (non-fatal):",
+          draftErr.message,
+        );
       } else {
         for (const row of draftRows ?? []) {
           if (row.domain) {
-            if (row.ebay_listing_id) domainByListingId[row.ebay_listing_id] = row.domain;
+            if (row.ebay_listing_id) {
+              domainByListingId[row.ebay_listing_id] = row.domain;
+            }
             if (row.ebay_sku) domainBySku[row.ebay_sku] = row.domain;
           }
           if (row.published_at) {
-            if (row.ebay_listing_id) publishedAtByListingId[row.ebay_listing_id] = row.published_at;
+            if (row.ebay_listing_id) {
+              publishedAtByListingId[row.ebay_listing_id] = row.published_at;
+            }
             if (row.ebay_sku) publishedAtBySku[row.ebay_sku] = row.published_at;
           }
         }
       }
     }
   } catch (e) {
-    console.warn("Domain/published_at resolution failed (non-fatal):", (e as Error).message);
+    console.warn(
+      "Domain/published_at resolution failed (non-fatal):",
+      (e as Error).message,
+    );
   }
 
   // Separate rows by which unique index they resolve against
@@ -670,8 +750,11 @@ async function dualWriteFinancials(
       null;
     let timeToSaleDays: number | null = null;
     if (publishedAt) {
-      const days = (new Date(it.soldAt).getTime() - new Date(publishedAt).getTime()) / (1000 * 60 * 60 * 24);
-      if (Number.isFinite(days) && days >= 0) timeToSaleDays = parseFloat(days.toFixed(2));
+      const days = (new Date(it.soldAt).getTime() - new Date(publishedAt).getTime()) /
+        (1000 * 60 * 60 * 24);
+      if (Number.isFinite(days) && days >= 0) {
+        timeToSaleDays = parseFloat(days.toFixed(2));
+      }
     }
 
     return {

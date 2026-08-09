@@ -1,0 +1,6 @@
+# Supabase Edge Functions are formatted by deno fmt.
+supabase/functions/
+
+# Generated Playwright output.
+playwright-report/
+test-results/

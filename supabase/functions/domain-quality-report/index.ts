@@ -76,22 +76,27 @@ serve(async (req) => {
         .not("domain", "is", null)
         .range(offset, offset + pageSize - 1);
 
-      if (error) throw new Error(`listing_financials query failed: ${error.message}`);
+      if (error) {
+        throw new Error(`listing_financials query failed: ${error.message}`);
+      }
       if (!data || data.length === 0) break;
       rows.push(...data);
       if (data.length < pageSize) break;
     }
 
     // --- Aggregate by domain ---
-    const byDomain = new Map<string, {
-      count: number;
-      netProfitSum: number;
-      salePriceSum: number;
-      marginSum: number;
-      marginCount: number;
-      timeToSaleSum: number;
-      timeToSaleCount: number;
-    }>();
+    const byDomain = new Map<
+      string,
+      {
+        count: number;
+        netProfitSum: number;
+        salePriceSum: number;
+        marginSum: number;
+        marginCount: number;
+        timeToSaleSum: number;
+        timeToSaleCount: number;
+      }
+    >();
 
     for (const row of rows) {
       const domain = row.domain as string;
@@ -123,17 +128,19 @@ serve(async (req) => {
       }
     }
 
-    const metrics: DomainMetrics[] = Array.from(byDomain.entries()).map(([domain, agg]) => ({
-      domain,
-      soldCount: agg.count,
-      avgNetProfit: agg.count > 0 ? parseFloat((agg.netProfitSum / agg.count).toFixed(2)) : null,
-      avgSalePrice: agg.count > 0 ? parseFloat((agg.salePriceSum / agg.count).toFixed(2)) : null,
-      avgMarginPct: agg.marginCount > 0 ? parseFloat((agg.marginSum / agg.marginCount).toFixed(1)) : null,
-      avgTimeToSaleDays: agg.timeToSaleCount > 0
-        ? parseFloat((agg.timeToSaleSum / agg.timeToSaleCount).toFixed(1))
-        : null,
-      timeToSaleSampleSize: agg.timeToSaleCount,
-    }));
+    const metrics: DomainMetrics[] = Array.from(byDomain.entries()).map(
+      ([domain, agg]) => ({
+        domain,
+        soldCount: agg.count,
+        avgNetProfit: agg.count > 0 ? parseFloat((agg.netProfitSum / agg.count).toFixed(2)) : null,
+        avgSalePrice: agg.count > 0 ? parseFloat((agg.salePriceSum / agg.count).toFixed(2)) : null,
+        avgMarginPct: agg.marginCount > 0 ? parseFloat((agg.marginSum / agg.marginCount).toFixed(1)) : null,
+        avgTimeToSaleDays: agg.timeToSaleCount > 0
+          ? parseFloat((agg.timeToSaleSum / agg.timeToSaleCount).toFixed(1))
+          : null,
+        timeToSaleSampleSize: agg.timeToSaleCount,
+      }),
+    );
 
     metrics.sort((a, b) => b.soldCount - a.soldCount);
 
@@ -145,16 +152,18 @@ serve(async (req) => {
     // This directly satisfies the Phase 4 acceptance criterion: "feedback
     // loop identifies >= 1 domain for refinement based on real data."
     const MIN_SAMPLE = 3;
-    const eligibleForTimeToSale = metrics.filter((m) =>
-      m.timeToSaleSampleSize >= MIN_SAMPLE && m.avgTimeToSaleDays != null
+    const eligibleForTimeToSale = metrics.filter(
+      (m) => m.timeToSaleSampleSize >= MIN_SAMPLE && m.avgTimeToSaleDays != null,
     );
-    const eligibleForMargin = metrics.filter((m) => m.soldCount >= MIN_SAMPLE && m.avgMarginPct != null);
+    const eligibleForMargin = metrics.filter(
+      (m) => m.soldCount >= MIN_SAMPLE && m.avgMarginPct != null,
+    );
 
     const longestTimeToSale = eligibleForTimeToSale.length > 0
-      ? eligibleForTimeToSale.reduce((a, b) => (a.avgTimeToSaleDays! > b.avgTimeToSaleDays! ? a : b))
+      ? eligibleForTimeToSale.reduce((a, b) => a.avgTimeToSaleDays! > b.avgTimeToSaleDays! ? a : b)
       : null;
     const lowestMargin = eligibleForMargin.length > 0
-      ? eligibleForMargin.reduce((a, b) => (a.avgMarginPct! < b.avgMarginPct! ? a : b))
+      ? eligibleForMargin.reduce((a, b) => a.avgMarginPct! < b.avgMarginPct! ? a : b)
       : null;
 
     const refinementCandidates: Array<{ domain: string; reason: string }> = [];
@@ -165,7 +174,10 @@ serve(async (req) => {
           `Longest average time-to-sale (${longestTimeToSale.avgTimeToSaleDays} days, n=${longestTimeToSale.timeToSaleSampleSize}) - consider reviewing pricing/description prompts for this domain.`,
       });
     }
-    if (lowestMargin && (!longestTimeToSale || lowestMargin.domain !== longestTimeToSale.domain)) {
+    if (
+      lowestMargin &&
+      (!longestTimeToSale || lowestMargin.domain !== longestTimeToSale.domain)
+    ) {
       refinementCandidates.push({
         domain: lowestMargin.domain,
         reason:

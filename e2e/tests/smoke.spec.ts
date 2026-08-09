@@ -1,25 +1,33 @@
-import { test, expect, login, uploadTestPhoto, generateListing } from '../fixtures/helpers';
+import {
+  test,
+  expect,
+  login,
+  uploadTestPhoto,
+  generateListing,
+} from "../fixtures/helpers";
 
 const QA_USER = {
-  email: 'qa0000000000test@test.sovereignlistingsuite.com',
-  password: 'QATest123!@#',
+  email: "qa0000000000test@test.sovereignlistingsuite.com",
+  password: "QATest123!@#",
 };
 
-test.describe('PR Smoke Tests', () => {
+test.describe("PR Smoke Tests", () => {
   test.beforeEach(async ({ page }) => {
     await login(page, QA_USER);
   });
 
-  test('can login to account', async ({ page }) => {
+  test("can login to account", async ({ page }) => {
     await expect(page).toHaveURL(/\/home/);
   });
 
-  test('can upload photo', async ({ page }) => {
-    await uploadTestPhoto(page, 'coin');
-    await expect(page.getByRole('button', { name: 'Process Now' })).toBeVisible();
+  test("can upload photo", async ({ page }) => {
+    await uploadTestPhoto(page, "coin");
+    await expect(
+      page.getByRole("button", { name: "Process Now" }),
+    ).toBeVisible();
   });
 
-  test('coin analysis populates key specifics', async ({ page }) => {
+  test("coin analysis populates key specifics", async ({ page }) => {
     // In CI the real Gemini edge-function call takes 60-120 s per attempt and the
     // concurrency "cancel-in-progress" policy kills the run on every new push.
     // Smoke tests must be fast and reliable: verify the upload→analyze flow starts
@@ -27,51 +35,65 @@ test.describe('PR Smoke Tests', () => {
     const isCI = !!process.env.CI;
     test.setTimeout(isCI ? 30_000 : 120_000);
 
-    await uploadTestPhoto(page, 'coin');
+    await uploadTestPhoto(page, "coin");
 
     // Click "Process Now" to navigate to /analyze and auto-trigger AI analysis.
-    await page.getByRole('button', { name: 'Process Now' }).click();
+    await page.getByRole("button", { name: "Process Now" }).click();
     await page.waitForURL(/\/analyze/, { timeout: 15_000 });
 
     // CI: just verify we're on the analyze page and the UI renders.
     // Non-CI: also assert coin specifics are populated.
     if (!isCI) {
       // Wait for full AI response.
-      await page.waitForSelector('[data-testid="listing-generated"]', { timeout: 90_000 });
+      await page.waitForSelector('[data-testid="listing-generated"]', {
+        timeout: 90_000,
+      });
       await page.waitForTimeout(500);
 
-      await expect(page.locator('text=Coin Condition Details')).toBeVisible({ timeout: 10_000 });
+      await expect(page.locator("text=Coin Condition Details")).toBeVisible({
+        timeout: 10_000,
+      });
 
       const specifics = await page.evaluate(() => {
-        const rows = Array.from(document.querySelectorAll('[data-testid^="aspect-"]'));
+        const rows = Array.from(
+          document.querySelectorAll('[data-testid^="aspect-"]'),
+        );
         const out: Record<string, string> = {};
         for (const row of rows) {
-          const key = (row as HTMLElement).dataset.testid?.replace('aspect-', '') || '';
-          const valueEl = row.querySelector('input') as HTMLInputElement | null;
-          const value = valueEl?.value?.trim() || '';
+          const key =
+            (row as HTMLElement).dataset.testid?.replace("aspect-", "") || "";
+          const valueEl = row.querySelector("input") as HTMLInputElement | null;
+          const value = valueEl?.value?.trim() || "";
           if (key) out[key] = value;
         }
         return out;
       });
 
-      expect((specifics['Year'] || '').trim().length).toBeGreaterThan(0);
-      expect((specifics['Denomination'] || '').trim().length).toBeGreaterThan(0);
+      expect((specifics["Year"] || "").trim().length).toBeGreaterThan(0);
+      expect((specifics["Denomination"] || "").trim().length).toBeGreaterThan(
+        0,
+      );
 
-      const optionalFilledCount = ['Mint Mark', 'Mint Location', 'Strike Type', 'Composition']
-        .map((k) => (specifics[k] || '').trim().length > 0)
+      const optionalFilledCount = [
+        "Mint Mark",
+        "Mint Location",
+        "Strike Type",
+        "Composition",
+      ]
+        .map((k) => (specifics[k] || "").trim().length > 0)
         .filter(Boolean).length;
       expect(optionalFilledCount).toBeGreaterThan(0);
     }
   });
 
-  test('can navigate app sections', async ({ page }) => {
-    await page.goto('/home');
+  test("can navigate app sections", async ({ page }) => {
+    await page.goto("/home");
     await expect(page).toHaveURL(/\/home/);
 
-    await page.goto('/analyze');
+    await page.goto("/analyze");
     await expect(page).toHaveURL(/\/analyze/);
 
-    await page.goto('/billing');
+    await page.goto("/billing");
     await expect(page).toHaveURL(/\/billing/);
   });
 });

@@ -7,7 +7,10 @@ interface ProtectedRouteProps {
   ownerOnly?: boolean;
 }
 
-export default function ProtectedRoute({ children, ownerOnly }: ProtectedRouteProps) {
+export default function ProtectedRoute({
+  children,
+  ownerOnly,
+}: ProtectedRouteProps) {
   const { user, loading, org, isOwner } = useAuth();
 
   if (loading || org.loading) {

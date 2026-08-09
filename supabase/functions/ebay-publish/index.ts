@@ -3,7 +3,7 @@ import { captureException, initSentry } from "../_helpers/sentry.ts";
 
 // Import extracted modules
 import { handleExchangeCode, handleGetAuthUrl, handleGetStoredToken, handleRefreshToken } from "./auth.ts";
-import { handleGetVideoStatus, handleUploadVideo } from "./video.ts";
+import { handleGetVideoStatus, handlePollVideoStatusUntilLive, handleUploadVideo } from "./video.ts";
 import { corsHeaders } from "./constants.ts";
 import { handleBulkCreateDraft, handleGetPolicies } from "./publish.ts";
 import { handleCreateDraft } from "./publish-create-draft.ts";
@@ -40,7 +40,9 @@ serve(async (req) => {
         listingPrice: payload.listingPrice,
         hasUserToken: !!payload.userToken,
         hasPackageWeightAndSize: !!payload.packageWeightAndSize,
-        packageWeightAndSizeValue: JSON.stringify(payload.packageWeightAndSize ?? null),
+        packageWeightAndSizeValue: JSON.stringify(
+          payload.packageWeightAndSize ?? null,
+        ),
       });
     }
 
@@ -64,8 +66,13 @@ serve(async (req) => {
     // (exchange_code, refresh_token, get_auth_url, create_draft, bulk_create_draft).
     // get_stored_token and get_policies only need Supabase credentials, so we defer
     // this check to avoid blocking those actions when eBay app credentials are misconfigured.
-    const requiresEbayCredentials = !["get_stored_token", "get_policies", "upload_video", "get_video_status"]
-      .includes(action ?? "");
+    const requiresEbayCredentials = ![
+      "get_stored_token",
+      "get_policies",
+      "upload_video",
+      "get_video_status",
+      "poll_video_status_until_live",
+    ].includes(action ?? "");
     if (requiresEbayCredentials && (!clientId || !clientSecret)) {
       throw new Error("eBay API credentials not configured");
     }
@@ -83,17 +90,36 @@ serve(async (req) => {
 
     // --- ACTION: Exchange auth code for user token ---
     if (action === "exchange_code") {
-      return await handleExchangeCode({ req, payload, clientId, clientSecret, ebayEnv, tokenUrl });
+      return await handleExchangeCode({
+        req,
+        payload,
+        clientId,
+        clientSecret,
+        ebayEnv,
+        tokenUrl,
+      });
     }
 
     // --- ACTION: Silently refresh eBay access token using stored refresh token ---
     if (action === "refresh_token") {
-      return await handleRefreshToken({ req, payload, clientId, clientSecret, tokenUrl });
+      return await handleRefreshToken({
+        req,
+        payload,
+        clientId,
+        clientSecret,
+        tokenUrl,
+      });
     }
 
     // --- ACTION: Get stored eBay token for a user (with proactive refresh) ---
     if (action === "get_stored_token") {
-      return await handleGetStoredToken({ req, payload, clientId, clientSecret, tokenUrl });
+      return await handleGetStoredToken({
+        req,
+        payload,
+        clientId,
+        clientSecret,
+        tokenUrl,
+      });
     }
 
     // --- ACTION: Upload video to eBay Video API ---
@@ -106,9 +132,25 @@ serve(async (req) => {
       return await handleGetVideoStatus({ payload, apiBase, ebayEnv });
     }
 
+    // --- ACTION: Poll eBay video status until LIVE or FAILED (with retry backoff) ---
+    if (action === "poll_video_status_until_live") {
+      return await handlePollVideoStatusUntilLive({
+        payload,
+        apiBase,
+        ebayEnv,
+      });
+    }
+
     // --- ACTION: Publish a single draft to eBay ---
     if (action === "create_draft") {
-      return await handleCreateDraft({ req, payload, apiBase, ebayEnv, clientId, clientSecret });
+      return await handleCreateDraft({
+        req,
+        payload,
+        apiBase,
+        ebayEnv,
+        clientId,
+        clientSecret,
+      });
     }
 
     // --- ACTION: Bulk publish multiple drafts (server-side loop) ---

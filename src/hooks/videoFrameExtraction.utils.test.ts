@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { computeFrameQualityScore, selectBestFrames } from "./videoFrameExtraction.utils";
+import {
+  computeFrameQualityScore,
+  selectBestFrames,
+} from "./videoFrameExtraction.utils";
 
 describe("video frame extraction helpers", () => {
   it("scores sharper images higher than blurry ones", () => {
@@ -27,7 +30,9 @@ describe("video frame extraction helpers", () => {
       }
     }
 
-    expect(computeFrameQualityScore(sharp, 64, 64)).toBeGreaterThan(computeFrameQualityScore(blurry, 64, 64));
+    expect(computeFrameQualityScore(sharp, 64, 64)).toBeGreaterThan(
+      computeFrameQualityScore(blurry, 64, 64),
+    );
   });
 
   it("filters duplicate frames and keeps the strongest candidates", () => {

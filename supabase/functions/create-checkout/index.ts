@@ -32,9 +32,10 @@ serve(async (req) => {
     if (!authHeader) throw new Error("No authorization header");
     const token = authHeader.replace("Bearer ", "");
 
-    const { data: { user }, error: userError } = await supabase.auth.getUser(
-      token,
-    );
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser(token);
     if (userError || !user?.email) throw new Error("User not authenticated");
 
     const body = await req.json().catch(() => ({}));

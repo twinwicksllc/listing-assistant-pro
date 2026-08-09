@@ -1,4 +1,4 @@
-/** 
+/**
  * seed-knowledge-base.js
  * Ingests ANA standards and sample sales history into the Supabase knowledge_base.
  *

@@ -1,5 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
-import { ListingDraft, PublishStatus, CoinConditionDetail } from "@/types/listing";
+import {
+  ListingDraft,
+  PublishStatus,
+  CoinConditionDetail,
+} from "@/types/listing";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -35,7 +39,8 @@ export function useDrafts() {
           description: d.description,
           priceMin: Number(d.price_min),
           priceMax: Number(d.price_max),
-          listingPrice: d.listing_price != null ? Number(d.listing_price) : undefined,
+          listingPrice:
+            d.listing_price != null ? Number(d.listing_price) : undefined,
           listingFormat: d.listing_format || "FIXED_PRICE",
           createdAt: new Date(d.created_at),
           ebayCategoryId: d.ebay_category_id || undefined,
@@ -57,28 +62,44 @@ export function useDrafts() {
           // Cost of Goods Sold
           cogs: d.cogs != null ? Number(d.cogs) : undefined,
           cogsSource: d.cogs_source || undefined,
-          cogsAcquiredAt: d.cogs_acquired_at ? new Date(d.cogs_acquired_at) : undefined,
+          cogsAcquiredAt: d.cogs_acquired_at
+            ? new Date(d.cogs_acquired_at)
+            : undefined,
           // Precious metal content
-          metalType: d.metal_type || 'none',
+          metalType: d.metal_type || "none",
           metalWeightOz: Number(d.metal_weight_oz) || 0,
           // eBay June 2026 coin condition requirement (stored inside item_specifics)
-          coinConditionDetail: (d.item_specifics as any)?._coinConditionDetail as CoinConditionDetail | undefined,
+          coinConditionDetail: (d.item_specifics as any)
+            ?._coinConditionDetail as CoinConditionDetail | undefined,
           // Multi-quantity
           quantity: d.quantity ?? 1,
-          pricingMode: (d.pricing_mode as 'per_item' | 'total') ?? 'per_item',
+          pricingMode: (d.pricing_mode as "per_item" | "total") ?? "per_item",
           // Package dimensions
-          packageWeightLb: d.package_weight_lb != null ? Number(d.package_weight_lb) : undefined,
-          packageWeightOz: d.package_weight_oz != null ? Number(d.package_weight_oz) : undefined,
-          packageLengthIn: d.package_length_in != null ? Number(d.package_length_in) : undefined,
-          packageWidthIn: d.package_width_in != null ? Number(d.package_width_in) : undefined,
-          packageHeightIn: d.package_height_in != null ? Number(d.package_height_in) : undefined,
+          packageWeightLb:
+            d.package_weight_lb != null
+              ? Number(d.package_weight_lb)
+              : undefined,
+          packageWeightOz:
+            d.package_weight_oz != null
+              ? Number(d.package_weight_oz)
+              : undefined,
+          packageLengthIn:
+            d.package_length_in != null
+              ? Number(d.package_length_in)
+              : undefined,
+          packageWidthIn:
+            d.package_width_in != null ? Number(d.package_width_in) : undefined,
+          packageHeightIn:
+            d.package_height_in != null
+              ? Number(d.package_height_in)
+              : undefined,
           // Video
           videoUrl: d.video_url || undefined,
           ebayVideoId: d.ebay_video_id || undefined,
           ebayVideoStatus: d.ebay_video_status || undefined,
           // Item domain (Phase 4 quality-assurance tracking)
           domain: d.domain || undefined,
-        }))
+        })),
       );
     }
     setLoading(false);
@@ -91,14 +112,19 @@ export function useDrafts() {
   const addDraft = async (draft: ListingDraft): Promise<boolean> => {
     if (!user) return false;
 
-    const orgId = (!org.loading && org.orgId) ? org.orgId : undefined;
+    const orgId = !org.loading && org.orgId ? org.orgId : undefined;
 
-      const { error } = await supabase.from("drafts").insert({
+    const { error } = await supabase.from("drafts").insert({
       id: draft.id,
       user_id: user.id,
       ...(orgId ? { org_id: orgId } : {}),
-        image_url: draft.imageUrl || (draft.imageUrls && draft.imageUrls.length > 0 ? draft.imageUrls[0] : ""),
-        image_urls: draft.imageUrls && draft.imageUrls.length > 0 ? draft.imageUrls : null,
+      image_url:
+        draft.imageUrl ||
+        (draft.imageUrls && draft.imageUrls.length > 0
+          ? draft.imageUrls[0]
+          : ""),
+      image_urls:
+        draft.imageUrls && draft.imageUrls.length > 0 ? draft.imageUrls : null,
       title: draft.title,
       description: draft.description,
       price_min: draft.priceMin,
@@ -108,8 +134,11 @@ export function useDrafts() {
       ebay_category_id: draft.ebayCategoryId || null,
       ebay_category_breadcrumb: draft.ebayCategoryBreadcrumb || null,
       item_specifics: draft.coinConditionDetail
-        ? { ...(draft.itemSpecifics || {}), _coinConditionDetail: draft.coinConditionDetail }
-        : (draft.itemSpecifics || {}),
+        ? {
+            ...(draft.itemSpecifics || {}),
+            _coinConditionDetail: draft.coinConditionDetail,
+          }
+        : draft.itemSpecifics || {},
       condition: draft.condition || null,
       consignor: draft.consignor || "",
       fulfillment_policy_id: draft.fulfillmentPolicyId || null,
@@ -118,11 +147,11 @@ export function useDrafts() {
       auction_duration: draft.auctionDuration || null,
       publish_status: "draft",
       // Precious metal content
-      metal_type: draft.metalType || 'none',
+      metal_type: draft.metalType || "none",
       metal_weight_oz: draft.metalWeightOz ?? 0,
       // Multi-quantity
       quantity: draft.quantity ?? 1,
-      pricing_mode: draft.pricingMode ?? 'per_item',
+      pricing_mode: draft.pricingMode ?? "per_item",
       // Package dimensions
       package_weight_lb: draft.packageWeightLb ?? null,
       package_weight_oz: draft.packageWeightOz ?? null,
@@ -164,64 +193,101 @@ export function useDrafts() {
 
   const updateDraft = async (id: string, updates: Partial<ListingDraft>) => {
     const patch: Record<string, any> = {};
-    if (updates.imageUrl !== undefined)               patch.image_url = updates.imageUrl;
-    if (updates.imageUrls !== undefined)              patch.image_urls = updates.imageUrls;
-    if (updates.title !== undefined)                  patch.title = updates.title;
-    if (updates.description !== undefined)            patch.description = updates.description;
-    if (updates.listingPrice !== undefined)           patch.listing_price = updates.listingPrice;
-    if (updates.listingFormat !== undefined)          patch.listing_format = updates.listingFormat;
-    if (updates.ebayCategoryId !== undefined)         patch.ebay_category_id = updates.ebayCategoryId || null;
+    if (updates.imageUrl !== undefined) patch.image_url = updates.imageUrl;
+    if (updates.imageUrls !== undefined) patch.image_urls = updates.imageUrls;
+    if (updates.title !== undefined) patch.title = updates.title;
+    if (updates.description !== undefined)
+      patch.description = updates.description;
+    if (updates.listingPrice !== undefined)
+      patch.listing_price = updates.listingPrice;
+    if (updates.listingFormat !== undefined)
+      patch.listing_format = updates.listingFormat;
+    if (updates.ebayCategoryId !== undefined)
+      patch.ebay_category_id = updates.ebayCategoryId || null;
     // Always patch breadcrumb when ebayCategoryId is being updated, even if breadcrumb is
     // undefined (meaning "clear it"). This ensures a stale breadcrumb from the old category
     // is never left in the DB when the user picks a new category ID.
-    if (updates.ebayCategoryId !== undefined || updates.ebayCategoryBreadcrumb !== undefined) {
+    if (
+      updates.ebayCategoryId !== undefined ||
+      updates.ebayCategoryBreadcrumb !== undefined
+    ) {
       patch.ebay_category_breadcrumb = updates.ebayCategoryBreadcrumb || null;
     }
     if (updates.itemSpecifics !== undefined) {
       // Merge coinConditionDetail into item_specifics if present
-      patch.item_specifics = updates.coinConditionDetail !== undefined
-        ? { ...(updates.itemSpecifics || {}), _coinConditionDetail: updates.coinConditionDetail }
-        : (updates.itemSpecifics || {});
+      patch.item_specifics =
+        updates.coinConditionDetail !== undefined
+          ? {
+              ...(updates.itemSpecifics || {}),
+              _coinConditionDetail: updates.coinConditionDetail,
+            }
+          : updates.itemSpecifics || {};
     } else if (updates.coinConditionDetail !== undefined) {
       // coinConditionDetail updated without touching other specifics — handled at DB level
       // We don't have the existing specifics here, so just store as a marker for the caller
       // to also pass itemSpecifics. In practice, coinConditionDetail is always set alongside itemSpecifics.
     }
-    if (updates.condition !== undefined)              patch.condition = updates.condition;
-    if (updates.consignor !== undefined)              patch.consignor = updates.consignor;
-    if (updates.priceMin !== undefined)               patch.price_min = updates.priceMin;
-    if (updates.priceMax !== undefined)               patch.price_max = updates.priceMax;
-    if (updates.fulfillmentPolicyId !== undefined)    patch.fulfillment_policy_id = updates.fulfillmentPolicyId || null;
-    if (updates.paymentPolicyId !== undefined)        patch.payment_policy_id = updates.paymentPolicyId || null;
-    if (updates.returnPolicyId !== undefined)         patch.return_policy_id = updates.returnPolicyId || null;
-    if (updates.auctionDuration !== undefined)        patch.auction_duration = updates.auctionDuration || null;
+    if (updates.condition !== undefined) patch.condition = updates.condition;
+    if (updates.consignor !== undefined) patch.consignor = updates.consignor;
+    if (updates.priceMin !== undefined) patch.price_min = updates.priceMin;
+    if (updates.priceMax !== undefined) patch.price_max = updates.priceMax;
+    if (updates.fulfillmentPolicyId !== undefined)
+      patch.fulfillment_policy_id = updates.fulfillmentPolicyId || null;
+    if (updates.paymentPolicyId !== undefined)
+      patch.payment_policy_id = updates.paymentPolicyId || null;
+    if (updates.returnPolicyId !== undefined)
+      patch.return_policy_id = updates.returnPolicyId || null;
+    if (updates.auctionDuration !== undefined)
+      patch.auction_duration = updates.auctionDuration || null;
     // Publish lifecycle fields
-    if (updates.publishStatus !== undefined)          patch.publish_status = updates.publishStatus;
-    if (updates.publishedAt !== undefined)            patch.published_at = updates.publishedAt?.toISOString() || null;
-    if (updates.ebaySku !== undefined)                patch.ebay_sku = updates.ebaySku || null;
-    if (updates.ebayOfferId !== undefined)            patch.ebay_offer_id = updates.ebayOfferId || null;
-    if (updates.ebayListingId !== undefined)          patch.ebay_listing_id = updates.ebayListingId || null;
-    if (updates.lastPublishError !== undefined)       patch.last_publish_error = updates.lastPublishError || null;
-    if (updates.metalType !== undefined)               patch.metal_type = updates.metalType;
-    if (updates.metalWeightOz !== undefined)           patch.metal_weight_oz = updates.metalWeightOz;
+    if (updates.publishStatus !== undefined)
+      patch.publish_status = updates.publishStatus;
+    if (updates.publishedAt !== undefined)
+      patch.published_at = updates.publishedAt?.toISOString() || null;
+    if (updates.ebaySku !== undefined) patch.ebay_sku = updates.ebaySku || null;
+    if (updates.ebayOfferId !== undefined)
+      patch.ebay_offer_id = updates.ebayOfferId || null;
+    if (updates.ebayListingId !== undefined)
+      patch.ebay_listing_id = updates.ebayListingId || null;
+    if (updates.lastPublishError !== undefined)
+      patch.last_publish_error = updates.lastPublishError || null;
+    if (updates.metalType !== undefined) patch.metal_type = updates.metalType;
+    if (updates.metalWeightOz !== undefined)
+      patch.metal_weight_oz = updates.metalWeightOz;
     // Multi-quantity
-    if (updates.quantity !== undefined)                patch.quantity = updates.quantity;
-    if (updates.pricingMode !== undefined)             patch.pricing_mode = updates.pricingMode;
+    if (updates.quantity !== undefined) patch.quantity = updates.quantity;
+    if (updates.pricingMode !== undefined)
+      patch.pricing_mode = updates.pricingMode;
     // Package dimensions (allow clearing to 0 by converting 0 to null)
-    if (updates.packageWeightLb !== undefined)         patch.package_weight_lb = updates.packageWeightLb > 0 ? updates.packageWeightLb : null;
-    if (updates.packageWeightOz !== undefined)         patch.package_weight_oz = updates.packageWeightOz > 0 ? updates.packageWeightOz : null;
-    if (updates.packageLengthIn !== undefined)         patch.package_length_in = updates.packageLengthIn > 0 ? updates.packageLengthIn : null;
-    if (updates.packageWidthIn !== undefined)          patch.package_width_in = updates.packageWidthIn > 0 ? updates.packageWidthIn : null;
-    if (updates.packageHeightIn !== undefined)         patch.package_height_in = updates.packageHeightIn > 0 ? updates.packageHeightIn : null;
+    if (updates.packageWeightLb !== undefined)
+      patch.package_weight_lb =
+        updates.packageWeightLb > 0 ? updates.packageWeightLb : null;
+    if (updates.packageWeightOz !== undefined)
+      patch.package_weight_oz =
+        updates.packageWeightOz > 0 ? updates.packageWeightOz : null;
+    if (updates.packageLengthIn !== undefined)
+      patch.package_length_in =
+        updates.packageLengthIn > 0 ? updates.packageLengthIn : null;
+    if (updates.packageWidthIn !== undefined)
+      patch.package_width_in =
+        updates.packageWidthIn > 0 ? updates.packageWidthIn : null;
+    if (updates.packageHeightIn !== undefined)
+      patch.package_height_in =
+        updates.packageHeightIn > 0 ? updates.packageHeightIn : null;
     // Video
-    if (updates.videoUrl !== undefined)                patch.video_url = updates.videoUrl ?? null;
-    if (updates.ebayVideoId !== undefined)             patch.ebay_video_id = updates.ebayVideoId ?? null;
-    if (updates.ebayVideoStatus !== undefined)         patch.ebay_video_status = updates.ebayVideoStatus ?? null;
+    if (updates.videoUrl !== undefined)
+      patch.video_url = updates.videoUrl ?? null;
+    if (updates.ebayVideoId !== undefined)
+      patch.ebay_video_id = updates.ebayVideoId ?? null;
+    if (updates.ebayVideoStatus !== undefined)
+      patch.ebay_video_status = updates.ebayVideoStatus ?? null;
     // Cost of Goods Sold
-    if (updates.cogs !== undefined)                    patch.cogs = updates.cogs ?? null;
-    if (updates.cogsSource !== undefined)              patch.cogs_source = updates.cogsSource ?? null;
-    if (updates.cogsAcquiredAt !== undefined)          patch.cogs_acquired_at = updates.cogsAcquiredAt?.toISOString() ?? null;
-    if (updates.domain !== undefined)                  patch.domain = updates.domain ?? null;
+    if (updates.cogs !== undefined) patch.cogs = updates.cogs ?? null;
+    if (updates.cogsSource !== undefined)
+      patch.cogs_source = updates.cogsSource ?? null;
+    if (updates.cogsAcquiredAt !== undefined)
+      patch.cogs_acquired_at = updates.cogsAcquiredAt?.toISOString() ?? null;
+    if (updates.domain !== undefined) patch.domain = updates.domain ?? null;
 
     const { error } = await supabase.from("drafts").update(patch).eq("id", id);
 
@@ -231,7 +297,7 @@ export function useDrafts() {
       return false;
     } else {
       setDrafts((prev) =>
-        prev.map((d) => (d.id === id ? { ...d, ...updates } : d))
+        prev.map((d) => (d.id === id ? { ...d, ...updates } : d)),
       );
       return true;
     }
@@ -244,7 +310,7 @@ export function useDrafts() {
    */
   const markDraftPublished = async (
     id: string,
-    meta: { sku: string; offerId: string; listingId: string | null }
+    meta: { sku: string; offerId: string; listingId: string | null },
   ): Promise<boolean> => {
     const success = await updateDraft(id, {
       publishStatus: "published",
@@ -255,12 +321,16 @@ export function useDrafts() {
       lastPublishError: undefined,
     });
     if (success) {
-      console.log(`markDraftPublished: draft ${id} marked as published in database`);
+      console.log(
+        `markDraftPublished: draft ${id} marked as published in database`,
+      );
       // Remove from active drafts list — published items appear in Dashboard
       setDrafts((prev) => prev.filter((d) => d.id !== id));
       return true;
     } else {
-      console.error(`markDraftPublished: failed to update draft ${id} in database`);
+      console.error(
+        `markDraftPublished: failed to update draft ${id} in database`,
+      );
       return false;
     }
   };
@@ -269,7 +339,9 @@ export function useDrafts() {
    * Mark a draft as failed with an error message.
    */
   const markDraftFailed = async (id: string, errorMsg: string) => {
-    console.error(`markDraftFailed: draft ${id} failed with error: ${errorMsg}`);
+    console.error(
+      `markDraftFailed: draft ${id} failed with error: ${errorMsg}`,
+    );
     await updateDraft(id, {
       publishStatus: "failed",
       lastPublishError: errorMsg,

@@ -100,7 +100,9 @@ export async function getCategoryAspects(
   try {
     const resp = await fetch(
       `${base}/commerce/taxonomy/v1/category_tree/0/get_item_aspects_for_category?category_id=${
-        encodeURIComponent(categoryId)
+        encodeURIComponent(
+          categoryId,
+        )
       }`,
       {
         headers: {
@@ -117,7 +119,7 @@ export async function getCategoryAspects(
     const recommended: string[] = [];
     const allowedValues: Record<string, string[]> = {};
 
-    for (const aspect of (data.aspects ?? [])) {
+    for (const aspect of data.aspects ?? []) {
       const name: string = aspect.localizedAspectName;
       if (!name) continue;
       const constraint = aspect.aspectConstraint ?? {};
@@ -127,7 +129,8 @@ export async function getCategoryAspects(
         recommended.push(name);
       }
       if (
-        Array.isArray(aspect.aspectValues) && aspect.aspectValues.length > 0
+        Array.isArray(aspect.aspectValues) &&
+        aspect.aspectValues.length > 0
       ) {
         allowedValues[name] = aspect.aspectValues
           .slice(0, 20)

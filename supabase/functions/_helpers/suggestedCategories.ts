@@ -160,7 +160,12 @@ const _LEGACY_BOOTSTRAP_BREADCRUMBS: Record<string, string> = {
 // ── eBay App Token (lazy, cached per-module-invocation) ──────────────────────
 let _ebayTokenCache: { token: string; base: string } | null = null;
 
-async function getEbayAppToken(): Promise<{ token: string; base: string } | null> {
+async function getEbayAppToken(): Promise<
+  {
+    token: string;
+    base: string;
+  } | null
+> {
   // Guard: Deno only (not available in Node.js test environments)
   if (typeof Deno === "undefined") return null;
 
@@ -174,7 +179,7 @@ async function getEbayAppToken(): Promise<{ token: string; base: string } | null
     const resp = await fetch(`${base}/identity/v1/oauth2/token`, {
       method: "POST",
       headers: {
-        "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+        Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
@@ -194,7 +199,10 @@ async function getEbayAppToken(): Promise<{ token: string; base: string } | null
  * reconstruct the full breadcrumb. Result is written to ebay_taxonomy_cache so
  * subsequent lookups hit the DB instead of calling the API again.
  */
-async function fetchLiveBreadcrumb(cid: string, svc: any): Promise<string | null> {
+async function fetchLiveBreadcrumb(
+  cid: string,
+  svc: any,
+): Promise<string | null> {
   const ebay = await getEbayAppToken();
   if (!ebay) return null;
 
@@ -206,9 +214,11 @@ async function fetchLiveBreadcrumb(cid: string, svc: any): Promise<string | null
     try {
       resp = await fetch(
         `${ebay.base}/commerce/taxonomy/v1/category_tree/0/get_category_subtree?category_id=${
-          encodeURIComponent(currentId)
+          encodeURIComponent(
+            currentId,
+          )
         }`,
-        { headers: { "Authorization": `Bearer ${ebay.token}` } },
+        { headers: { Authorization: `Bearer ${ebay.token}` } },
       );
     } catch {
       break;
@@ -252,7 +262,9 @@ async function fetchLiveBreadcrumb(cid: string, svc: any): Promise<string | null
         },
         { onConflict: "category_id" },
       );
-    } catch (_) { /* cache write failure is non-fatal */ }
+    } catch (_) {
+      /* cache write failure is non-fatal */
+    }
   }
   return breadcrumb;
 }
@@ -285,7 +297,9 @@ async function lookupBreadcrumb(cid: string, svc: any): Promise<string | null> {
         .eq("category_id", cid)
         .maybeSingle();
       if (row?.breadcrumb) return row.breadcrumb as string;
-    } catch (_) { /* ignore */ }
+    } catch (_) {
+      /* ignore */
+    }
 
     // Tier 2: legacy category_mappings
     try {
@@ -296,7 +310,9 @@ async function lookupBreadcrumb(cid: string, svc: any): Promise<string | null> {
         .maybeSingle();
       if (row?.breadcrumb) return row.breadcrumb as string;
       if (row?.category_name) return row.category_name as string;
-    } catch (_) { /* ignore */ }
+    } catch (_) {
+      /* ignore */
+    }
   }
 
   // Tier 3: live eBay API (also seeds DB for next time)

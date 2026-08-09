@@ -1,5 +1,14 @@
 import { useState } from "react";
-import { Check, Crown, Zap, Loader2, ExternalLink, ArrowLeft, Store, Sparkles } from "lucide-react";
+import {
+  Check,
+  Crown,
+  Zap,
+  Loader2,
+  ExternalLink,
+  ArrowLeft,
+  Store,
+  Sparkles,
+} from "lucide-react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth, PLANS, PlanKey } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,8 +20,14 @@ export default function BillingPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const {
-    currentPlan, isPaid, isShop, subscription, usage,
-    refreshSubscription, currentPlanLimits, planFeatures,
+    currentPlan,
+    isPaid,
+    isShop,
+    subscription,
+    usage,
+    refreshSubscription,
+    currentPlanLimits,
+    planFeatures,
   } = useAuth();
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
@@ -28,10 +43,14 @@ export default function BillingPage() {
     setCheckoutLoading(planKey);
     try {
       const plan = PLANS[planKey];
-      if (!("priceId" in plan)) throw new Error("No price configured for this plan");
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { priceId: plan.priceId },
-      });
+      if (!("priceId" in plan))
+        throw new Error("No price configured for this plan");
+      const { data, error } = await supabase.functions.invoke(
+        "create-checkout",
+        {
+          body: { priceId: plan.priceId },
+        },
+      );
       if (error) throw error;
       if (data?.url) {
         window.open(data.url, "_blank");
@@ -46,7 +65,8 @@ export default function BillingPage() {
   const handleManage = async () => {
     setPortalLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("customer-portal");
+      const { data, error } =
+        await supabase.functions.invoke("customer-portal");
       if (error) throw error;
       if (data?.url) {
         window.open(data.url, "_blank");
@@ -74,13 +94,22 @@ export default function BillingPage() {
     <div className="min-h-screen bg-background pb-24">
       <header className="px-5 pt-12 pb-4 md:px-8 lg:px-12">
         <div className="max-w-5xl mx-auto flex items-center gap-2">
-          <button onClick={() => navigate("/home")} className="text-muted-foreground hover:text-foreground transition-colors">
+          <button
+            onClick={() => navigate("/home")}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto" />
+          <img
+            src={teckstartLogo}
+            alt="Sovereign Listing Suite"
+            className="h-12 w-auto"
+          />
           <div>
             <h1 className="text-lg font-bold text-foreground">Billing</h1>
-            <p className="text-xs text-muted-foreground">Manage your subscription</p>
+            <p className="text-xs text-muted-foreground">
+              Manage your subscription
+            </p>
           </div>
         </div>
       </header>
@@ -100,17 +129,25 @@ export default function BillingPage() {
         {/* Current usage */}
         <div className="bg-card border border-border rounded-xl p-4 space-y-3">
           <h2 className="text-sm font-semibold text-foreground">
-            {currentPlan === "free" ? "Rolling Window Credits" : "This Month's Usage"}
+            {currentPlan === "free"
+              ? "Rolling Window Credits"
+              : "This Month's Usage"}
           </h2>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">
-                {currentPlan === "free" ? "AI Analyses (Rolling)" : "AI Analyses"}
+                {currentPlan === "free"
+                  ? "AI Analyses (Rolling)"
+                  : "AI Analyses"}
               </p>
               <p className="text-lg font-bold text-foreground">
                 {usage.aiAnalysis}
                 <span className="text-xs font-normal text-muted-foreground">
-                  {" "}/ {currentPlanLimits.analysisLimit === Infinity ? "∞" : currentPlanLimits.analysisLimit}
+                  {" "}
+                  /{" "}
+                  {currentPlanLimits.analysisLimit === Infinity
+                    ? "∞"
+                    : currentPlanLimits.analysisLimit}
                 </span>
               </p>
               {currentPlan === "free" && (
@@ -124,39 +161,65 @@ export default function BillingPage() {
               <p className="text-lg font-bold text-foreground">
                 {usage.ebayPublish}
                 <span className="text-xs font-normal text-muted-foreground">
-                  {" "}/ {currentPlanLimits.publishLimit === Infinity ? "∞" : currentPlanLimits.publishLimit}
+                  {" "}
+                  /{" "}
+                  {currentPlanLimits.publishLimit === Infinity
+                    ? "∞"
+                    : currentPlanLimits.publishLimit}
                 </span>
               </p>
             </div>
           </div>
-          {currentPlan === "free" && usage.aiAnalysis >= currentPlanLimits.analysisLimit && (
-            <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-              <p className="text-xs font-medium text-amber-900 dark:text-amber-100">
-                🔄 Rolling window credits exhausted. They will reset on the 1st of each month.
-              </p>
-            </div>
-          )}
+          {currentPlan === "free" &&
+            usage.aiAnalysis >= currentPlanLimits.analysisLimit && (
+              <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+                <p className="text-xs font-medium text-amber-900 dark:text-amber-100">
+                  🔄 Rolling window credits exhausted. They will reset on the
+                  1st of each month.
+                </p>
+              </div>
+            )}
         </div>
 
         {/* Free tier requirements info */}
         {currentPlan === "free" && (
           <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-xl p-4 space-y-2">
-            <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100">Free Tier Requirements</h3>
+            <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+              Free Tier Requirements
+            </h3>
             <ul className="text-xs text-blue-800 dark:text-blue-200 space-y-1.5">
               <li className="flex items-start gap-2">
-                <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
-                <span><strong>eBay Account Required:</strong> You must connect an active eBay account to generate listings</span>
+                <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                  ✓
+                </span>
+                <span>
+                  <strong>eBay Account Required:</strong> You must connect an
+                  active eBay account to generate listings
+                </span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
-                <span><strong>Rolling Window:</strong> 6 analyses per month, resets on the same day each month</span>
+                <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                  ✓
+                </span>
+                <span>
+                  <strong>Rolling Window:</strong> 6 analyses per month, resets
+                  on the same day each month
+                </span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span>
-                <span><strong>One Account Per Org:</strong> You can only link one eBay account to your organization</span>
+                <span className="text-blue-600 dark:text-blue-400 mt-0.5">
+                  ✓
+                </span>
+                <span>
+                  <strong>One Account Per Org:</strong> You can only link one
+                  eBay account to your organization
+                </span>
               </li>
             </ul>
-            <Link to="/settings" className="inline-flex items-center gap-2 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 mt-2">
+            <Link
+              to="/settings"
+              className="inline-flex items-center gap-2 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 mt-2"
+            >
               Go to Settings
               <span>→</span>
             </Link>
@@ -165,7 +228,6 @@ export default function BillingPage() {
 
         {/* Plans Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-
           {/* ── Free ── */}
           <PlanCard
             name="Free"
@@ -288,9 +350,21 @@ interface PlanCardProps {
 }
 
 function PlanCard({
-  name, price, period, icon: Icon, isCurrent, badge, features,
-  currentPlan, planKey, tierOrder,
-  onUpgrade, onManage, checkoutLoading, portalLoading, subscriptionEnd,
+  name,
+  price,
+  period,
+  icon: Icon,
+  isCurrent,
+  badge,
+  features,
+  currentPlan,
+  planKey,
+  tierOrder,
+  onUpgrade,
+  onManage,
+  checkoutLoading,
+  portalLoading,
+  subscriptionEnd,
 }: PlanCardProps) {
   const currentIndex = tierOrder.indexOf(currentPlan);
   const thisIndex = tierOrder.indexOf(planKey);
@@ -299,9 +373,11 @@ function PlanCard({
   const isPaidPlan = planKey !== "free";
 
   return (
-    <div className={`bg-card border rounded-xl p-5 space-y-4 relative overflow-hidden ${
-      isCurrent ? "border-primary ring-2 ring-primary/20" : "border-border"
-    }`}>
+    <div
+      className={`bg-card border rounded-xl p-5 space-y-4 relative overflow-hidden ${
+        isCurrent ? "border-primary ring-2 ring-primary/20" : "border-border"
+      }`}
+    >
       {badge && !isCurrent && (
         <span className="absolute top-3 right-3 text-[10px] font-semibold bg-primary text-primary-foreground px-2 py-0.5 rounded-full uppercase tracking-wider">
           {badge}
@@ -320,12 +396,19 @@ function PlanCard({
 
       <p className="text-2xl font-bold text-foreground">
         {price}
-        {period && <span className="text-sm font-normal text-muted-foreground">{period}</span>}
+        {period && (
+          <span className="text-sm font-normal text-muted-foreground">
+            {period}
+          </span>
+        )}
       </p>
 
       <ul className="space-y-2">
         {features.map((f) => (
-          <li key={f} className="flex items-center gap-2 text-sm text-muted-foreground">
+          <li
+            key={f}
+            className="flex items-center gap-2 text-sm text-muted-foreground"
+          >
             <Check className="w-4 h-4 text-primary flex-shrink-0" />
             {f}
           </li>
@@ -336,14 +419,21 @@ function PlanCard({
       {isCurrent && isPaidPlan ? (
         <div className="space-y-2 pt-2">
           <p className="text-xs text-muted-foreground">
-            Renews {subscriptionEnd ? new Date(subscriptionEnd).toLocaleDateString() : "—"}
+            Renews{" "}
+            {subscriptionEnd
+              ? new Date(subscriptionEnd).toLocaleDateString()
+              : "—"}
           </p>
           <button
             onClick={onManage}
             disabled={portalLoading}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-secondary text-foreground text-sm font-medium hover:bg-secondary/80 transition-colors disabled:opacity-60"
           >
-            {portalLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink className="w-4 h-4" />}
+            {portalLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <ExternalLink className="w-4 h-4" />
+            )}
             Manage Subscription
           </button>
         </div>
@@ -358,18 +448,33 @@ function PlanCard({
             disabled={checkoutLoading !== null}
             className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
           >
-            {checkoutLoading === planKey ? <Loader2 className="w-4 h-4 animate-spin" /> : <Icon className="w-4 h-4" />}
+            {checkoutLoading === planKey ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Icon className="w-4 h-4" />
+            )}
             Upgrade to {name}
           </button>
           <div className="bg-muted/50 rounded-lg p-3 space-y-2">
             <p className="text-xs text-muted-foreground">
-              <span className="font-semibold">Refund Policy:</span> Prorated refunds allowed within 30 days of purchase.
+              <span className="font-semibold">Refund Policy:</span> Prorated
+              refunds allowed within 30 days of purchase.
             </p>
             <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
               <span>By proceeding, you agree to our</span>
-              <Link to="/terms" className="text-primary hover:underline font-medium">Terms</Link>
+              <Link
+                to="/terms"
+                className="text-primary hover:underline font-medium"
+              >
+                Terms
+              </Link>
               <span>and</span>
-              <Link to="/privacy" className="text-primary hover:underline font-medium">Privacy Policy</Link>
+              <Link
+                to="/privacy"
+                className="text-primary hover:underline font-medium"
+              >
+                Privacy Policy
+              </Link>
             </div>
           </div>
         </div>
@@ -380,7 +485,9 @@ function PlanCard({
             disabled={portalLoading}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-border text-muted-foreground text-sm font-medium hover:bg-secondary/50 transition-colors disabled:opacity-60"
           >
-            {portalLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            {portalLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : null}
             Downgrade
           </button>
         </div>

@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
  * Terminal test script to verify eBay Coin Condition mandate compliance.
- * 
+ *
  * Usage:
  *   npm run test:coin-compliance
- *   
+ *
  * Or directly:
  *   node e2e/scripts/test-coin-conditions.js
- * 
+ *
  * Tests:
  *   ✓ Graded coins with valid PCGS/NGC/ANACS/ICG/CAC/ICCS companies
  *   ✓ Raw coins with exact eBay four-tier condition strings
@@ -44,9 +44,14 @@ const VALID_GRADE_PATTERN = /^[A-Z]{1,3}\s+\d{1,2}(?:\s+[A-Z]{2,})?$/;
 function validateGradedCoinCondition(detail) {
   const errors = [];
 
-  if (typeof detail?.gradingCompany !== "string" || !detail.gradingCompany.trim()) {
+  if (
+    typeof detail?.gradingCompany !== "string" ||
+    !detail.gradingCompany.trim()
+  ) {
     errors.push("Grading company is required");
-  } else if (!ALLOWED_GRADING_COMPANIES.has(detail.gradingCompany.trim().toUpperCase())) {
+  } else if (
+    !ALLOWED_GRADING_COMPANIES.has(detail.gradingCompany.trim().toUpperCase())
+  ) {
     errors.push(
       `Grading company must be one of: ${Array.from(ALLOWED_GRADING_COMPANIES).join(", ")}. Got: ${detail.gradingCompany}`,
     );
@@ -60,8 +65,13 @@ function validateGradedCoinCondition(detail) {
     );
   }
 
-  if (detail?.certificationNumber !== undefined && typeof detail.certificationNumber !== "string") {
-    errors.push(`Certification number must be a string if provided. Got: ${typeof detail.certificationNumber}`);
+  if (
+    detail?.certificationNumber !== undefined &&
+    typeof detail.certificationNumber !== "string"
+  ) {
+    errors.push(
+      `Certification number must be a string if provided. Got: ${typeof detail.certificationNumber}`,
+    );
   }
 
   return {
@@ -258,7 +268,9 @@ for (const [description, detail, shouldPass] of testCases) {
     failedCount++;
     console.log(`✗ ${description}`);
     console.log(`  Status: FAIL ✗`);
-    console.log(`  Expected: ${shouldPass ? "valid" : "invalid"}, Got: ${result.valid ? "valid" : "invalid"}`);
+    console.log(
+      `  Expected: ${shouldPass ? "valid" : "invalid"}, Got: ${result.valid ? "valid" : "invalid"}`,
+    );
     if (result.errors.length > 0) {
       console.log(`  Errors: ${result.errors.join("; ")}`);
     }
@@ -268,18 +280,26 @@ for (const [description, detail, shouldPass] of testCases) {
 
 // Summary
 console.log("=".repeat(80));
-console.log(`Test Results: ${passedCount} passed, ${failedCount} failed out of ${testCases.length} total`);
+console.log(
+  `Test Results: ${passedCount} passed, ${failedCount} failed out of ${testCases.length} total`,
+);
 console.log("=".repeat(80));
 
 if (failedCount === 0) {
-  console.log("\n✅ All tests passed! Coin condition validation is working correctly.\n");
+  console.log(
+    "\n✅ All tests passed! Coin condition validation is working correctly.\n",
+  );
   console.log("Compliance Status:");
   console.log("  ✓ Graded coins: PCGS, NGC, ANACS, ICG, CAC, ICCS enforced");
   console.log("  ✓ Raw coins: Four-tier condition strings strictly validated");
   console.log("  ✓ Grade format: Letter + Space + Number pattern enforced");
-  console.log("  ✓ Certification number: Optional, must be string if present\n");
+  console.log(
+    "  ✓ Certification number: Optional, must be string if present\n",
+  );
   process.exit(0);
 } else {
-  console.log(`\n❌ ${failedCount} test(s) failed! Please review the errors above.\n`);
+  console.log(
+    `\n❌ ${failedCount} test(s) failed! Please review the errors above.\n`,
+  );
   process.exit(1);
 }

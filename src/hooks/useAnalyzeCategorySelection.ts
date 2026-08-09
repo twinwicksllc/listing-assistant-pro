@@ -63,36 +63,42 @@ export function useAnalyzeCategorySelection({
    * disappear and the graded value can't be captured. This is the #1 cause of
    * "I switched to silver bullion but there's no place to enter the grade."
    */
-  const warnIfGradedIntoBullion = useCallback((categoryId: string) => {
-    const isGraded = coinConditionDetail?.type === "graded" || !!isSlabbed;
-    if (!isGraded) return;
-    const breadcrumb = getEbayCategoryBreadcrumb(categoryId) || undefined;
-    if (isBullionCategory(categoryId, breadcrumb)) {
-      toast.warning(
-        "This is a graded/slabbed coin, but bullion categories don't have a Grade field. " +
-          "Use a Coins: World or Coins: US category (e.g. South Pacific 3392 for Cook Islands) so the grade shows and can be published.",
-        { duration: 8000 },
-      );
-    }
-  }, [coinConditionDetail, isSlabbed]);
+  const warnIfGradedIntoBullion = useCallback(
+    (categoryId: string) => {
+      const isGraded = coinConditionDetail?.type === "graded" || !!isSlabbed;
+      if (!isGraded) return;
+      const breadcrumb = getEbayCategoryBreadcrumb(categoryId) || undefined;
+      if (isBullionCategory(categoryId, breadcrumb)) {
+        toast.warning(
+          "This is a graded/slabbed coin, but bullion categories don't have a Grade field. " +
+            "Use a Coins: World or Coins: US category (e.g. South Pacific 3392 for Cook Islands) so the grade shows and can be published.",
+          { duration: 8000 },
+        );
+      }
+    },
+    [coinConditionDetail, isSlabbed],
+  );
 
-  const keepFilledSpecificsOnly = useCallback((prev: ItemSpecifics): ItemSpecifics => {
-    const next: ItemSpecifics = {};
-    for (const [key, value] of Object.entries(prev)) {
-      if (key.startsWith("_")) {
-        next[key] = value;
-        continue;
+  const keepFilledSpecificsOnly = useCallback(
+    (prev: ItemSpecifics): ItemSpecifics => {
+      const next: ItemSpecifics = {};
+      for (const [key, value] of Object.entries(prev)) {
+        if (key.startsWith("_")) {
+          next[key] = value;
+          continue;
+        }
+        if (typeof value === "string") {
+          if (value.trim().length > 0) next[key] = value;
+          continue;
+        }
+        if (value !== null && value !== undefined) {
+          next[key] = value;
+        }
       }
-      if (typeof value === "string") {
-        if (value.trim().length > 0) next[key] = value;
-        continue;
-      }
-      if (value !== null && value !== undefined) {
-        next[key] = value;
-      }
-    }
-    return next;
-  }, []);
+      return next;
+    },
+    [],
+  );
 
   const selectedSuggestedCategory = useMemo(
     () => suggestedCategories.find((c) => c.categoryId === ebayCategoryId),
@@ -108,15 +114,21 @@ export function useAnalyzeCategorySelection({
     setShowCategoryConfirm(true);
   }, [customCategoryInput, setPendingCategoryId, setShowCategoryConfirm]);
 
-  const updateCustomCategoryInput = useCallback((rawValue: string) => {
-    setCustomCategoryInput(rawValue.replace(/\D/g, ""));
-  }, [setCustomCategoryInput]);
+  const updateCustomCategoryInput = useCallback(
+    (rawValue: string) => {
+      setCustomCategoryInput(rawValue.replace(/\D/g, ""));
+    },
+    [setCustomCategoryInput],
+  );
 
-  const handleCustomCategoryInputKeyDown = useCallback((key: string) => {
-    if (key === "Enter") {
-      confirmCustomCategoryInput();
-    }
-  }, [confirmCustomCategoryInput]);
+  const handleCustomCategoryInputKeyDown = useCallback(
+    (key: string) => {
+      if (key === "Enter") {
+        confirmCustomCategoryInput();
+      }
+    },
+    [confirmCustomCategoryInput],
+  );
 
   const cancelCustomCategoryMode = useCallback(() => {
     setIsCustomCategoryMode(false);
@@ -135,60 +147,63 @@ export function useAnalyzeCategorySelection({
    * useAnalyzeCategoryAspects will re-populate ebayMetadata once its async fetch
    * for the new category ID completes.
    */
-  const handleCategorySelectChange = useCallback((value: string) => {
-    if (value === "__custom__") {
-      setIsCustomCategoryMode(true);
+  const handleCategorySelectChange = useCallback(
+    (value: string) => {
+      if (value === "__custom__") {
+        setIsCustomCategoryMode(true);
+        setCustomCategoryInput("");
+        return;
+      }
+
+      // Same as handleCategoryDialogConfirm but without the confirm-dialog step
+      setEbayCategoryId(value);
       setCustomCategoryInput("");
-      return;
-    }
+      warnIfGradedIntoBullion(value);
 
-    // Same as handleCategoryDialogConfirm but without the confirm-dialog step
-    setEbayCategoryId(value);
-    setCustomCategoryInput("");
-    warnIfGradedIntoBullion(value);
+      // Derive new domain from the selected category
+      const breadcrumb = getEbayCategoryBreadcrumb(value);
+      const newDomain = deriveDomainFromCategory(value, breadcrumb);
+      setDomain(newDomain);
 
-    // Derive new domain from the selected category
-    const breadcrumb = getEbayCategoryBreadcrumb(value);
-    const newDomain = deriveDomainFromCategory(value, breadcrumb);
-    setDomain(newDomain);
+      // Clear coin condition detail if switching away from a coin category
+      const isCoinDomain = newDomain === "coins_bullion";
+      if (!isCoinDomain) {
+        setCoinConditionDetail(null);
+      }
 
-    // Clear coin condition detail if switching away from a coin category
-    const isCoinDomain = newDomain === "coins_bullion";
-    if (!isCoinDomain) {
-      setCoinConditionDetail(null);
-    }
+      // Preserve user-entered specifics while switching categories.
+      // useAnalyzeCategoryAspects will seed any missing fields for the new category.
+      setItemSpecifics((prev) => keepFilledSpecificsOnly(prev));
 
-    // Preserve user-entered specifics while switching categories.
-    // useAnalyzeCategoryAspects will seed any missing fields for the new category.
-    setItemSpecifics((prev) => keepFilledSpecificsOnly(prev));
+      // *** KEY FIX: clear stale requiredAspects / suggestedAspects immediately.
+      // If we leave the old metadata in place the publish-time validation will fire
+      // "Missing required eBay fields: Sport" (or whatever the OLD category required)
+      // even after the user has correctly switched to a coin/bullion category.
+      // useAnalyzeCategoryAspects will repopulate this once the async fetch finishes.
+      setEbayMetadata(null);
 
-    // *** KEY FIX: clear stale requiredAspects / suggestedAspects immediately.
-    // If we leave the old metadata in place the publish-time validation will fire
-    // "Missing required eBay fields: Sport" (or whatever the OLD category required)
-    // even after the user has correctly switched to a coin/bullion category.
-    // useAnalyzeCategoryAspects will repopulate this once the async fetch finishes.
-    setEbayMetadata(null);
-
-    // Reset condition to a sensible default for the new domain
-    if (isCoinDomain) {
-      setCondition("NEW");
-    } else if (newDomain === "trading_cards") {
-      setCondition("LIKE_NEW");
-    } else {
-      setCondition("USED_EXCELLENT");
-    }
-  }, [
-    setCustomCategoryInput,
-    setEbayCategoryId,
-    setIsCustomCategoryMode,
-    setDomain,
-    setCoinConditionDetail,
-    setItemSpecifics,
-    setEbayMetadata,
-    setCondition,
-    keepFilledSpecificsOnly,
-    warnIfGradedIntoBullion,
-  ]);
+      // Reset condition to a sensible default for the new domain
+      if (isCoinDomain) {
+        setCondition("NEW");
+      } else if (newDomain === "trading_cards") {
+        setCondition("LIKE_NEW");
+      } else {
+        setCondition("USED_EXCELLENT");
+      }
+    },
+    [
+      setCustomCategoryInput,
+      setEbayCategoryId,
+      setIsCustomCategoryMode,
+      setDomain,
+      setCoinConditionDetail,
+      setItemSpecifics,
+      setEbayMetadata,
+      setCondition,
+      keepFilledSpecificsOnly,
+      warnIfGradedIntoBullion,
+    ],
+  );
 
   /**
    * Called when the user confirms a category override (custom ID or suggestion switch).
@@ -197,61 +212,66 @@ export function useAnalyzeCategorySelection({
    * the newly selected category — preventing stale coin fields from appearing on
    * non-coin categories and vice versa.
    */
-  const handleCategoryDialogConfirm = useCallback((categoryId: string) => {
-    setEbayCategoryId(categoryId);
-    setCustomCategoryInput("");
-    setShowCategoryConfirm(false);
-    // Exit custom-input mode so the dropdown (now showing the confirmed
-    // category as its active selection) is rendered instead of the text box.
-    // Without this the page can stay stuck on the "Enter custom category ID"
-    // input and the user never sees the category they just confirmed.
-    setIsCustomCategoryMode(false);
-    setPendingCategoryId("");
-    warnIfGradedIntoBullion(categoryId);
+  const handleCategoryDialogConfirm = useCallback(
+    (categoryId: string) => {
+      setEbayCategoryId(categoryId);
+      setCustomCategoryInput("");
+      setShowCategoryConfirm(false);
+      // Exit custom-input mode so the dropdown (now showing the confirmed
+      // category as its active selection) is rendered instead of the text box.
+      // Without this the page can stay stuck on the "Enter custom category ID"
+      // input and the user never sees the category they just confirmed.
+      setIsCustomCategoryMode(false);
+      setPendingCategoryId("");
+      warnIfGradedIntoBullion(categoryId);
 
-    // --- Refresh domain-dependent state for the new category ---
-    const breadcrumb = getEbayCategoryBreadcrumb(categoryId);
-    const newDomain = deriveDomainFromCategory(categoryId, breadcrumb);
-    setDomain(newDomain);
+      // --- Refresh domain-dependent state for the new category ---
+      const breadcrumb = getEbayCategoryBreadcrumb(categoryId);
+      const newDomain = deriveDomainFromCategory(categoryId, breadcrumb);
+      setDomain(newDomain);
 
-    // Clear coin condition detail if the new category is not a coin category
-    const isCoinDomain = newDomain === "coins_bullion";
-    if (!isCoinDomain) {
-      setCoinConditionDetail(null);
-    }
+      // Clear coin condition detail if the new category is not a coin category
+      const isCoinDomain = newDomain === "coins_bullion";
+      if (!isCoinDomain) {
+        setCoinConditionDetail(null);
+      }
 
-    // Preserve user-entered specifics while switching categories.
-    // useAnalyzeCategoryAspects will seed any missing fields for the new category.
-    setItemSpecifics((prev) => keepFilledSpecificsOnly(prev));
+      // Preserve user-entered specifics while switching categories.
+      // useAnalyzeCategoryAspects will seed any missing fields for the new category.
+      setItemSpecifics((prev) => keepFilledSpecificsOnly(prev));
 
-    // Clear stale required/suggested aspect metadata — the new category's aspects
-    // will be populated by useAnalyzeCategoryAspects once its fetch completes.
-    setEbayMetadata(null);
+      // Clear stale required/suggested aspect metadata — the new category's aspects
+      // will be populated by useAnalyzeCategoryAspects once its fetch completes.
+      setEbayMetadata(null);
 
-    // Reset condition to a sensible default for the new domain
-    if (isCoinDomain) {
-      setCondition("NEW");
-    } else if (newDomain === "trading_cards") {
-      setCondition("LIKE_NEW");
-    } else {
-      setCondition("USED_EXCELLENT");
-    }
+      // Reset condition to a sensible default for the new domain
+      if (isCoinDomain) {
+        setCondition("NEW");
+      } else if (newDomain === "trading_cards") {
+        setCondition("LIKE_NEW");
+      } else {
+        setCondition("USED_EXCELLENT");
+      }
 
-    toast.success(`Category updated to ${categoryId} — item specifics refreshed`);
-  }, [
-    setEbayCategoryId,
-    setCustomCategoryInput,
-    setShowCategoryConfirm,
-    setIsCustomCategoryMode,
-    setPendingCategoryId,
-    setDomain,
-    setCoinConditionDetail,
-    setItemSpecifics,
-    setEbayMetadata,
-    setCondition,
-    keepFilledSpecificsOnly,
-    warnIfGradedIntoBullion,
-  ]);
+      toast.success(
+        `Category updated to ${categoryId} — item specifics refreshed`,
+      );
+    },
+    [
+      setEbayCategoryId,
+      setCustomCategoryInput,
+      setShowCategoryConfirm,
+      setIsCustomCategoryMode,
+      setPendingCategoryId,
+      setDomain,
+      setCoinConditionDetail,
+      setItemSpecifics,
+      setEbayMetadata,
+      setCondition,
+      keepFilledSpecificsOnly,
+      warnIfGradedIntoBullion,
+    ],
+  );
 
   const handleCategoryDialogCancel = useCallback(() => {
     setShowCategoryConfirm(false);

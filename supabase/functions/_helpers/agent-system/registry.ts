@@ -75,7 +75,13 @@ export const DOMAIN_REGISTRY: Record<Domain, DomainDefinition> = {
       `eBay leaf category ID "${itemName}" 2026 coin numismatic`,
       `eBay recently sold "${itemName}" price mint mark error premium`,
     ],
-    criticalAttributes: ["Year", "Mint Mark", "Grade", "Composition", "Certification"],
+    criticalAttributes: [
+      "Year",
+      "Mint Mark",
+      "Grade",
+      "Composition",
+      "Certification",
+    ],
   },
   electronics: {
     domain: "electronics",
@@ -93,7 +99,12 @@ export const DOMAIN_REGISTRY: Record<Domain, DomainDefinition> = {
       `eBay leaf category ID "${itemName}" electronics 2026`,
       `eBay recently sold "${itemName}" price with accessories`,
     ],
-    criticalAttributes: ["Model Number", "Storage Capacity", "Connectivity", "Included Accessories"],
+    criticalAttributes: [
+      "Model Number",
+      "Storage Capacity",
+      "Connectivity",
+      "Included Accessories",
+    ],
   },
   vintage_clothing: {
     domain: "vintage_clothing",
@@ -129,7 +140,13 @@ export const DOMAIN_REGISTRY: Record<Domain, DomainDefinition> = {
       `eBay leaf category ID "${itemName}" trading card 2026`,
       `eBay recently sold "${itemName}" card price variant`,
     ],
-    criticalAttributes: ["Set Name", "Card Number", "Year", "Parallel/Variant", "Grade"],
+    criticalAttributes: [
+      "Set Name",
+      "Card Number",
+      "Year",
+      "Parallel/Variant",
+      "Grade",
+    ],
   },
   jewelry: {
     domain: "jewelry",
@@ -179,7 +196,12 @@ export const DOMAIN_REGISTRY: Record<Domain, DomainDefinition> = {
       `eBay leaf category ID "${itemName}" car parts 2026`,
       `eBay recently sold "${itemName}" part compatibility price`,
     ],
-    criticalAttributes: ["Part Number", "Brand", "Fitment Type", "Placement on Vehicle"],
+    criticalAttributes: [
+      "Part Number",
+      "Brand",
+      "Fitment Type",
+      "Placement on Vehicle",
+    ],
   },
   sneakers: {
     domain: "sneakers",
@@ -197,7 +219,12 @@ export const DOMAIN_REGISTRY: Record<Domain, DomainDefinition> = {
       `eBay leaf category ID "${itemName}" sneakers 2026`,
       `eBay recently sold "${itemName}" price stockx comparison`,
     ],
-    criticalAttributes: ["SKU / Model Number", "Size", "Colorway", "Original Packaging"],
+    criticalAttributes: [
+      "SKU / Model Number",
+      "Size",
+      "Colorway",
+      "Original Packaging",
+    ],
   },
   luxury_handbags: {
     domain: "luxury_handbags",
@@ -215,7 +242,13 @@ export const DOMAIN_REGISTRY: Record<Domain, DomainDefinition> = {
       `eBay leaf category ID "${itemName}" luxury handbag 2026`,
       `eBay recently sold "${itemName}" price premium condition`,
     ],
-    criticalAttributes: ["Brand", "Model Name", "Material", "Date Code", "Accessories"],
+    criticalAttributes: [
+      "Brand",
+      "Model Name",
+      "Material",
+      "Date Code",
+      "Accessories",
+    ],
   },
   musical_instruments: {
     domain: "musical_instruments",
@@ -233,7 +266,12 @@ export const DOMAIN_REGISTRY: Record<Domain, DomainDefinition> = {
       `eBay leaf category ID "${itemName}" musical instrument 2026`,
       `eBay recently sold "${itemName}" price serial year`,
     ],
-    criticalAttributes: ["Brand", "Model Number", "Year of Manufacture", "Serial Number"],
+    criticalAttributes: [
+      "Brand",
+      "Model Number",
+      "Year of Manufacture",
+      "Serial Number",
+    ],
   },
   toys_collectibles: {
     domain: "toys_collectibles",
@@ -251,7 +289,12 @@ export const DOMAIN_REGISTRY: Record<Domain, DomainDefinition> = {
       `eBay leaf category ID "${itemName}" collectible 2026`,
       `eBay recently sold "${itemName}" price variant edition`,
     ],
-    criticalAttributes: ["Brand / Set", "Character / Series", "Year / Era", "Variant"],
+    criticalAttributes: [
+      "Brand / Set",
+      "Character / Series",
+      "Year / Era",
+      "Variant",
+    ],
   },
   home_garden_tools: {
     domain: "home_garden_tools",
@@ -269,6 +312,11 @@ export const DOMAIN_REGISTRY: Record<Domain, DomainDefinition> = {
       `eBay leaf category ID "${itemName}" tools 2026`,
       `eBay recently sold "${itemName}" price cordless corded`,
     ],
-    criticalAttributes: ["Brand", "Model Number", "Power Source", "Included Batteries"],
+    criticalAttributes: [
+      "Brand",
+      "Model Number",
+      "Power Source",
+      "Included Batteries",
+    ],
   },
 };

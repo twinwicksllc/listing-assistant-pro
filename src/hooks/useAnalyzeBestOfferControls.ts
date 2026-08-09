@@ -11,17 +11,26 @@ export function useAnalyzeBestOfferControls({
   setBestOfferAutoAcceptPrice,
   setBestOfferAutoDeclinePrice,
 }: UseAnalyzeBestOfferControlsParams) {
-  const toggleBestOffer = useCallback((enabled: boolean) => {
-    setBestOfferEnabled(enabled);
-  }, [setBestOfferEnabled]);
+  const toggleBestOffer = useCallback(
+    (enabled: boolean) => {
+      setBestOfferEnabled(enabled);
+    },
+    [setBestOfferEnabled],
+  );
 
-  const updateBestOfferAutoAccept = useCallback((rawValue: string) => {
-    setBestOfferAutoAcceptPrice(parseFloat(rawValue) || 0);
-  }, [setBestOfferAutoAcceptPrice]);
+  const updateBestOfferAutoAccept = useCallback(
+    (rawValue: string) => {
+      setBestOfferAutoAcceptPrice(parseFloat(rawValue) || 0);
+    },
+    [setBestOfferAutoAcceptPrice],
+  );
 
-  const updateBestOfferAutoDecline = useCallback((rawValue: string) => {
-    setBestOfferAutoDeclinePrice(parseFloat(rawValue) || 0);
-  }, [setBestOfferAutoDeclinePrice]);
+  const updateBestOfferAutoDecline = useCallback(
+    (rawValue: string) => {
+      setBestOfferAutoDeclinePrice(parseFloat(rawValue) || 0);
+    },
+    [setBestOfferAutoDeclinePrice],
+  );
 
   return {
     toggleBestOffer,

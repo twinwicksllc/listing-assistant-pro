@@ -53,7 +53,8 @@ export function ActionButtons({
       {videoIsProcessing && (
         <p className="text-xs text-center text-amber-600">
           <Loader2 className="inline w-3 h-3 animate-spin mr-1" />
-          Video is processing on eBay — save as draft now and publish once it's ready.
+          Video is processing on eBay — save as draft now and publish once it's
+          ready.
         </p>
       )}
     </div>

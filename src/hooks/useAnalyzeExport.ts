@@ -1,6 +1,10 @@
 import { useMemo } from "react";
 import { toast } from "sonner";
-import { exportListing, type ExportFormat, type ExportPlatform } from "@/lib/exportCSV";
+import {
+  exportListing,
+  type ExportFormat,
+  type ExportPlatform,
+} from "@/lib/exportCSV";
 import type { ItemSpecifics } from "@/types/listing";
 import type { SelectedPolicies } from "@/types/ebay-policies";
 
@@ -34,7 +38,12 @@ export function useAnalyzeExport({
   recordUsage,
 }: UseAnalyzeExportParams) {
   const downloadLabel = useMemo(
-    () => exportFormat === "csv" ? "CSV" : exportFormat === "excel" ? "Excel" : "Sheets",
+    () =>
+      exportFormat === "csv"
+        ? "CSV"
+        : exportFormat === "excel"
+          ? "Excel"
+          : "Sheets",
     [exportFormat],
   );
 
@@ -55,12 +64,14 @@ export function useAnalyzeExport({
 
     await recordUsage("export");
 
-    const platformLabel = exportPlatform === "ebay_file_exchange" ? "eBay" : "Facebook";
-    const formatLabel = exportFormat === "csv"
-      ? "CSV"
-      : exportFormat === "excel"
-      ? "Excel"
-      : "Google Sheets";
+    const platformLabel =
+      exportPlatform === "ebay_file_exchange" ? "eBay" : "Facebook";
+    const formatLabel =
+      exportFormat === "csv"
+        ? "CSV"
+        : exportFormat === "excel"
+          ? "Excel"
+          : "Google Sheets";
 
     toast.success(`${platformLabel} listing exported as ${formatLabel}`);
   };

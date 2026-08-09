@@ -1,28 +1,60 @@
 import { useState, useEffect } from "react";
 import {
-  Zap, Plus, Trash2, ToggleLeft, ToggleRight, Play, FlaskConical,
-  ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, Loader2,
-  ArrowLeft, Settings2,
+  Zap,
+  Plus,
+  Trash2,
+  ToggleLeft,
+  ToggleRight,
+  Play,
+  FlaskConical,
+  ChevronDown,
+  ChevronUp,
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
+  ArrowLeft,
+  Settings2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { useRepriceRules, useAutoReprice, useOptimizationHistory } from "@/hooks/useOptimization";
+import {
+  useRepriceRules,
+  useAutoReprice,
+  useOptimizationHistory,
+} from "@/hooks/useOptimization";
 import BottomNav from "@/components/BottomNav";
-import type { RepriceRuleInput, RepriceRuleType, RepriceRunResult } from "@/types/optimization";
+import type {
+  RepriceRuleInput,
+  RepriceRuleType,
+  RepriceRunResult,
+} from "@/types/optimization";
 import { RULE_TYPE_LABELS, RULE_TYPE_DESCRIPTIONS } from "@/types/optimization";
 
-const RULE_TYPES: RepriceRuleType[] = ["match_sold_avg", "match_avg", "match_lowest", "beat_lowest"];
+const RULE_TYPES: RepriceRuleType[] = [
+  "match_sold_avg",
+  "match_avg",
+  "match_lowest",
+  "beat_lowest",
+];
 
 // ----------------------------------------------------------------
 // Add/Edit Rule Dialog
@@ -39,10 +71,18 @@ function RuleDialog({
   initial?: Partial<RepriceRuleInput>;
 }) {
   const [ruleName, setRuleName] = useState(initial?.ruleName ?? "");
-  const [ruleType, setRuleType] = useState<RepriceRuleType>(initial?.ruleType ?? "match_sold_avg");
-  const [adjustmentPct, setAdjustmentPct] = useState(String(initial?.adjustmentPct ?? 0));
-  const [floorPrice, setFloorPrice] = useState(initial?.floorPrice ? String(initial.floorPrice) : "");
-  const [ceilingPrice, setCeilingPrice] = useState(initial?.ceilingPrice ? String(initial.ceilingPrice) : "");
+  const [ruleType, setRuleType] = useState<RepriceRuleType>(
+    initial?.ruleType ?? "match_sold_avg",
+  );
+  const [adjustmentPct, setAdjustmentPct] = useState(
+    String(initial?.adjustmentPct ?? 0),
+  );
+  const [floorPrice, setFloorPrice] = useState(
+    initial?.floorPrice ? String(initial.floorPrice) : "",
+  );
+  const [ceilingPrice, setCeilingPrice] = useState(
+    initial?.ceilingPrice ? String(initial.ceilingPrice) : "",
+  );
   const [isEnabled, setIsEnabled] = useState(initial?.isEnabled ?? true);
 
   const isValid = ruleName.trim().length > 0 && ruleType;
@@ -87,7 +127,10 @@ function RuleDialog({
           {/* Rule Type */}
           <div className="space-y-1.5">
             <Label>Pricing Strategy</Label>
-            <Select value={ruleType} onValueChange={(v) => setRuleType(v as RepriceRuleType)}>
+            <Select
+              value={ruleType}
+              onValueChange={(v) => setRuleType(v as RepriceRuleType)}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -99,7 +142,9 @@ function RuleDialog({
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">{RULE_TYPE_DESCRIPTIONS[ruleType]}</p>
+            <p className="text-xs text-muted-foreground">
+              {RULE_TYPE_DESCRIPTIONS[ruleType]}
+            </p>
           </div>
 
           {/* Adjustment % (for beat_lowest) */}
@@ -116,7 +161,9 @@ function RuleDialog({
                   step="0.5"
                   className="w-28"
                 />
-                <span className="text-sm text-muted-foreground">% {parseFloat(adjustmentPct) < 0 ? "below" : "above"} target</span>
+                <span className="text-sm text-muted-foreground">
+                  % {parseFloat(adjustmentPct) < 0 ? "below" : "above"} target
+                </span>
               </div>
             </div>
           )}
@@ -153,14 +200,18 @@ function RuleDialog({
           <div className="flex items-center justify-between rounded-lg border p-3">
             <div>
               <p className="text-sm font-medium">Enable Rule</p>
-              <p className="text-xs text-muted-foreground">Rule will apply during reprice runs</p>
+              <p className="text-xs text-muted-foreground">
+                Rule will apply during reprice runs
+              </p>
             </div>
             <Switch checked={isEnabled} onCheckedChange={setIsEnabled} />
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
           <Button onClick={handleSave} disabled={!isValid}>
             {initial?.ruleName ? "Save Changes" : "Create Rule"}
           </Button>
@@ -199,18 +250,28 @@ function DryRunDialog({
         <div className="flex-1 overflow-y-auto space-y-2 pr-1">
           {results.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground text-sm">
-              No listings would be updated. Rules may not match any listings, or prices are already at target.
+              No listings would be updated. Rules may not match any listings, or
+              prices are already at target.
             </div>
           ) : (
             results.map((r, i) => (
-              <div key={i} className="flex items-center justify-between p-3 rounded-lg border text-sm">
+              <div
+                key={i}
+                className="flex items-center justify-between p-3 rounded-lg border text-sm"
+              >
                 <div className="flex-1 min-w-0">
                   <p className="font-medium truncate">{r.title}</p>
-                  <p className="text-xs text-muted-foreground">Rule: {r.ruleApplied}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Rule: {r.ruleApplied}
+                  </p>
                 </div>
                 <div className="text-right flex-shrink-0 ml-3">
-                  <p className="text-muted-foreground line-through text-xs">${r.oldPrice.toFixed(2)}</p>
-                  <p className={`font-semibold ${r.newPrice < r.oldPrice ? "text-red-600" : "text-emerald-600"}`}>
+                  <p className="text-muted-foreground line-through text-xs">
+                    ${r.oldPrice.toFixed(2)}
+                  </p>
+                  <p
+                    className={`font-semibold ${r.newPrice < r.oldPrice ? "text-red-600" : "text-emerald-600"}`}
+                  >
                     ${r.newPrice.toFixed(2)}
                   </p>
                 </div>
@@ -222,23 +283,33 @@ function DryRunDialog({
         {results.length > 0 && (
           <div className="pt-3 border-t">
             <p className="text-xs text-muted-foreground mb-3">
-              {results.length} listing{results.length > 1 ? "s" : ""} will be updated. Review changes above then apply.
+              {results.length} listing{results.length > 1 ? "s" : ""} will be
+              updated. Review changes above then apply.
             </p>
             <div className="flex gap-2">
               <Button onClick={onApply} disabled={applying} className="flex-1">
                 {applying ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Applying…</>
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Applying…
+                  </>
                 ) : (
-                  <><Play className="w-4 h-4 mr-2" /> Apply {results.length} Change{results.length > 1 ? "s" : ""}</>
+                  <>
+                    <Play className="w-4 h-4 mr-2" /> Apply {results.length}{" "}
+                    Change{results.length > 1 ? "s" : ""}
+                  </>
                 )}
               </Button>
-              <Button variant="outline" onClick={onClose} disabled={applying}>Cancel</Button>
+              <Button variant="outline" onClick={onClose} disabled={applying}>
+                Cancel
+              </Button>
             </div>
           </div>
         )}
         {results.length === 0 && (
           <DialogFooter>
-            <Button variant="outline" onClick={onClose}>Close</Button>
+            <Button variant="outline" onClick={onClose}>
+              Close
+            </Button>
           </DialogFooter>
         )}
       </DialogContent>
@@ -252,9 +323,21 @@ function DryRunDialog({
 export default function RepriceRulesPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { rules, loading, fetchRules, addRule, updateRule, deleteRule, toggleRule } = useRepriceRules();
+  const {
+    rules,
+    loading,
+    fetchRules,
+    addRule,
+    updateRule,
+    deleteRule,
+    toggleRule,
+  } = useRepriceRules();
   const { runReprice, running } = useAutoReprice();
-  const { history, loading: histLoading, fetchHistory } = useOptimizationHistory();
+  const {
+    history,
+    loading: histLoading,
+    fetchHistory,
+  } = useOptimizationHistory();
 
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [dryRunDialogOpen, setDryRunDialogOpen] = useState(false);
@@ -298,7 +381,12 @@ export default function RepriceRulesPage() {
       {/* Header */}
       <div className="sticky top-0 z-10 bg-background border-b">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")} className="h-9 w-9">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate("/dashboard")}
+            className="h-9 w-9"
+          >
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div className="flex-1">
@@ -319,7 +407,9 @@ export default function RepriceRulesPage() {
               key={t}
               onClick={() => setTab(t)}
               className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors capitalize ${
-                tab === t ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+                tab === t
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               {t === "history" ? "History" : "Rules"}
@@ -368,8 +458,9 @@ export default function RepriceRulesPage() {
               <div className="flex gap-2 p-3 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-700">
                 <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <p>
-                  {enabledCount} rule{enabledCount > 1 ? "s are" : " is"} active.
-                  Use <strong>Dry Run</strong> to preview changes before applying.
+                  {enabledCount} rule{enabledCount > 1 ? "s are" : " is"}{" "}
+                  active. Use <strong>Dry Run</strong> to preview changes before
+                  applying.
                 </p>
               </div>
             )}
@@ -389,7 +480,8 @@ export default function RepriceRulesPage() {
                 </div>
                 <h3 className="font-semibold mb-1">No rules yet</h3>
                 <p className="text-sm text-muted-foreground max-w-xs mb-4">
-                  Create repricing rules to automatically adjust your listing prices based on market data.
+                  Create repricing rules to automatically adjust your listing
+                  prices based on market data.
                 </p>
                 <Button onClick={() => setAddDialogOpen(true)}>
                   <Plus className="w-4 h-4 mr-2" /> Create First Rule
@@ -398,86 +490,117 @@ export default function RepriceRulesPage() {
             )}
 
             {/* Rules list */}
-            {!loading && rules.map((rule) => {
-              const expanded = expandedRuleId === rule.id;
-              return (
-                <div
-                  key={rule.id}
-                  className={`rounded-xl border bg-card transition-all ${!rule.isEnabled ? "opacity-60" : ""}`}
-                >
+            {!loading &&
+              rules.map((rule) => {
+                const expanded = expandedRuleId === rule.id;
+                return (
                   <div
-                    className="flex items-center gap-3 p-4 cursor-pointer"
-                    onClick={() => setExpandedRuleId(expanded ? null : rule.id)}
+                    key={rule.id}
+                    className={`rounded-xl border bg-card transition-all ${!rule.isEnabled ? "opacity-60" : ""}`}
                   >
-                    {/* Toggle */}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); toggleRule(rule.id, !rule.isEnabled); }}
-                      className="flex-shrink-0"
-                    >
-                      {rule.isEnabled
-                        ? <ToggleRight className="w-6 h-6 text-primary" />
-                        : <ToggleLeft className="w-6 h-6 text-muted-foreground" />
+                    <div
+                      className="flex items-center gap-3 p-4 cursor-pointer"
+                      onClick={() =>
+                        setExpandedRuleId(expanded ? null : rule.id)
                       }
-                    </button>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-sm truncate">{rule.ruleName}</p>
-                        {!rule.isEnabled && (
-                          <Badge variant="outline" className="text-xs text-muted-foreground">Disabled</Badge>
+                    >
+                      {/* Toggle */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleRule(rule.id, !rule.isEnabled);
+                        }}
+                        className="flex-shrink-0"
+                      >
+                        {rule.isEnabled ? (
+                          <ToggleRight className="w-6 h-6 text-primary" />
+                        ) : (
+                          <ToggleLeft className="w-6 h-6 text-muted-foreground" />
                         )}
+                      </button>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-sm truncate">
+                            {rule.ruleName}
+                          </p>
+                          {!rule.isEnabled && (
+                            <Badge
+                              variant="outline"
+                              className="text-xs text-muted-foreground"
+                            >
+                              Disabled
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {RULE_TYPE_LABELS[rule.ruleType]}
+                        </p>
                       </div>
-                      <p className="text-xs text-muted-foreground">{RULE_TYPE_LABELS[rule.ruleType]}</p>
+
+                      {expanded ? (
+                        <ChevronUp className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      )}
                     </div>
 
-                    {expanded ? (
-                      <ChevronUp className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    {/* Expanded details */}
+                    {expanded && (
+                      <div className="px-4 pb-4 space-y-3 border-t pt-3">
+                        <p className="text-xs text-muted-foreground">
+                          {RULE_TYPE_DESCRIPTIONS[rule.ruleType]}
+                        </p>
+
+                        <div className="grid grid-cols-3 gap-2 text-sm">
+                          {rule.adjustmentPct !== 0 && (
+                            <div className="rounded-lg bg-muted/50 p-2 text-center">
+                              <p className="text-xs text-muted-foreground">
+                                Adjustment
+                              </p>
+                              <p className="font-medium">
+                                {rule.adjustmentPct > 0 ? "+" : ""}
+                                {rule.adjustmentPct}%
+                              </p>
+                            </div>
+                          )}
+                          {rule.floorPrice && (
+                            <div className="rounded-lg bg-muted/50 p-2 text-center">
+                              <p className="text-xs text-muted-foreground">
+                                Floor
+                              </p>
+                              <p className="font-medium">
+                                ${rule.floorPrice.toFixed(2)}
+                              </p>
+                            </div>
+                          )}
+                          {rule.ceilingPrice && (
+                            <div className="rounded-lg bg-muted/50 p-2 text-center">
+                              <p className="text-xs text-muted-foreground">
+                                Ceiling
+                              </p>
+                              <p className="font-medium">
+                                ${rule.ceilingPrice.toFixed(2)}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 text-red-600 border-red-200 hover:bg-red-50"
+                            onClick={() => deleteRule(rule.id)}
+                          >
+                            <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete
+                          </Button>
+                        </div>
+                      </div>
                     )}
                   </div>
-
-                  {/* Expanded details */}
-                  {expanded && (
-                    <div className="px-4 pb-4 space-y-3 border-t pt-3">
-                      <p className="text-xs text-muted-foreground">{RULE_TYPE_DESCRIPTIONS[rule.ruleType]}</p>
-
-                      <div className="grid grid-cols-3 gap-2 text-sm">
-                        {rule.adjustmentPct !== 0 && (
-                          <div className="rounded-lg bg-muted/50 p-2 text-center">
-                            <p className="text-xs text-muted-foreground">Adjustment</p>
-                            <p className="font-medium">{rule.adjustmentPct > 0 ? "+" : ""}{rule.adjustmentPct}%</p>
-                          </div>
-                        )}
-                        {rule.floorPrice && (
-                          <div className="rounded-lg bg-muted/50 p-2 text-center">
-                            <p className="text-xs text-muted-foreground">Floor</p>
-                            <p className="font-medium">${rule.floorPrice.toFixed(2)}</p>
-                          </div>
-                        )}
-                        {rule.ceilingPrice && (
-                          <div className="rounded-lg bg-muted/50 p-2 text-center">
-                            <p className="text-xs text-muted-foreground">Ceiling</p>
-                            <p className="font-medium">${rule.ceilingPrice.toFixed(2)}</p>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1 text-red-600 border-red-200 hover:bg-red-50"
-                          onClick={() => deleteRule(rule.id)}
-                        >
-                          <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                );
+              })}
           </>
         )}
 
@@ -502,51 +625,62 @@ export default function RepriceRulesPage() {
               </div>
             )}
 
-            {!histLoading && history.map((entry) => {
-              const typeColors: Record<string, string> = {
-                price: "bg-blue-100 text-blue-700",
-                title: "bg-purple-100 text-purple-700",
-                description: "bg-teal-100 text-teal-700",
-                reprice_rule: "bg-amber-100 text-amber-700",
-              };
-              const resultColors: Record<string, string> = {
-                accepted: "text-emerald-600",
-                dismissed: "text-muted-foreground",
-                pending: "text-amber-600",
-              };
+            {!histLoading &&
+              history.map((entry) => {
+                const typeColors: Record<string, string> = {
+                  price: "bg-blue-100 text-blue-700",
+                  title: "bg-purple-100 text-purple-700",
+                  description: "bg-teal-100 text-teal-700",
+                  reprice_rule: "bg-amber-100 text-amber-700",
+                };
+                const resultColors: Record<string, string> = {
+                  accepted: "text-emerald-600",
+                  dismissed: "text-muted-foreground",
+                  pending: "text-amber-600",
+                };
 
-              return (
-                <div key={entry.id} className="rounded-xl border bg-card p-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${typeColors[entry.optimizationType] ?? "bg-gray-100"}`}>
-                          {entry.optimizationType.replace("_", " ")}
-                        </span>
-                        <span className={`text-xs font-medium ${resultColors[entry.result] ?? ""}`}>
-                          {entry.result}
-                        </span>
-                        {entry.appliedBy === "auto" && (
-                          <Badge variant="outline" className="text-xs">auto</Badge>
+                return (
+                  <div key={entry.id} className="rounded-xl border bg-card p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-xs font-medium ${typeColors[entry.optimizationType] ?? "bg-gray-100"}`}
+                          >
+                            {entry.optimizationType.replace("_", " ")}
+                          </span>
+                          <span
+                            className={`text-xs font-medium ${resultColors[entry.result] ?? ""}`}
+                          >
+                            {entry.result}
+                          </span>
+                          {entry.appliedBy === "auto" && (
+                            <Badge variant="outline" className="text-xs">
+                              auto
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm font-medium truncate">
+                          {entry.listingTitle ?? entry.listingId}
+                        </p>
+                        {entry.oldValue && entry.newValue && (
+                          <p className="text-xs text-muted-foreground">
+                            {entry.oldValue} → {entry.newValue}
+                          </p>
+                        )}
+                        {entry.reasoning && (
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                            {entry.reasoning}
+                          </p>
                         )}
                       </div>
-                      <p className="text-sm font-medium truncate">{entry.listingTitle ?? entry.listingId}</p>
-                      {entry.oldValue && entry.newValue && (
-                        <p className="text-xs text-muted-foreground">
-                          {entry.oldValue} → {entry.newValue}
-                        </p>
-                      )}
-                      {entry.reasoning && (
-                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{entry.reasoning}</p>
-                      )}
+                      <time className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">
+                        {new Date(entry.appliedAt).toLocaleDateString()}
+                      </time>
                     </div>
-                    <time className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">
-                      {new Date(entry.appliedAt).toLocaleDateString()}
-                    </time>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
           </>
         )}
       </div>

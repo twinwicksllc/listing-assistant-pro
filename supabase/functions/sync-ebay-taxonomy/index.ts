@@ -28,7 +28,10 @@ const BATCH_SIZE = 300; // rows per upsert call
 // ── eBay token ────────────────────────────────────────────────────────────────
 
 async function getEbayAppToken(): Promise<
-  { token: string; base: string } | null
+  {
+    token: string;
+    base: string;
+  } | null
 > {
   const clientId = Deno.env.get("EBAY_CLIENT_ID");
   const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
@@ -41,7 +44,7 @@ async function getEbayAppToken(): Promise<
   const resp = await fetch(tokenUrl, {
     method: "POST",
     headers: {
-      "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
@@ -119,8 +122,13 @@ serve(async (req: Request) => {
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !supabaseServiceKey) {
     return new Response(
-      JSON.stringify({ error: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      JSON.stringify({
+        error: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY",
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 
@@ -130,8 +138,13 @@ serve(async (req: Request) => {
   const ebay = await getEbayAppToken();
   if (!ebay) {
     return new Response(
-      JSON.stringify({ error: "eBay credentials not configured (EBAY_CLIENT_ID / EBAY_CLIENT_SECRET)" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      JSON.stringify({
+        error: "eBay credentials not configured (EBAY_CLIENT_ID / EBAY_CLIENT_SECRET)",
+      }),
+      {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
   console.log("[sync-ebay-taxonomy] ✅ eBay token acquired");
@@ -142,17 +155,26 @@ serve(async (req: Request) => {
 
   const treeResp = await fetch(treeUrl, {
     headers: {
-      "Authorization": `Bearer ${ebay.token}`,
+      Authorization: `Bearer ${ebay.token}`,
       "Content-Type": "application/json",
     },
   });
 
   if (!treeResp.ok) {
     const errText = await treeResp.text();
-    console.error(`[sync-ebay-taxonomy] eBay tree fetch failed ${treeResp.status}:`, errText.slice(0, 300));
+    console.error(
+      `[sync-ebay-taxonomy] eBay tree fetch failed ${treeResp.status}:`,
+      errText.slice(0, 300),
+    );
     return new Response(
-      JSON.stringify({ error: `eBay API error ${treeResp.status}`, detail: errText.slice(0, 300) }),
-      { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      JSON.stringify({
+        error: `eBay API error ${treeResp.status}`,
+        detail: errText.slice(0, 300),
+      }),
+      {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 
@@ -169,8 +191,14 @@ serve(async (req: Request) => {
   const rootNode = treeJson.rootCategoryNode ?? treeJson.categoryTreeNode;
   if (!rootNode) {
     return new Response(
-      JSON.stringify({ error: "eBay response missing rootCategoryNode", keys: Object.keys(treeJson) }),
-      { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      JSON.stringify({
+        error: "eBay response missing rootCategoryNode",
+        keys: Object.keys(treeJson),
+      }),
+      {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 
@@ -192,7 +220,10 @@ serve(async (req: Request) => {
       .upsert(batch, { onConflict: "category_id" });
 
     if (error) {
-      console.error(`[sync-ebay-taxonomy] upsert error (batch ${i}):`, error.message);
+      console.error(
+        `[sync-ebay-taxonomy] upsert error (batch ${i}):`,
+        error.message,
+      );
       errors += batch.length;
     } else {
       upserted += batch.length;
@@ -212,6 +243,9 @@ serve(async (req: Request) => {
       errors,
       durationMs: totalMs,
     }),
-    { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    },
   );
 });

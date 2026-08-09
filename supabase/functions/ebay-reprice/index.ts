@@ -89,7 +89,11 @@ async function reviseFixedPriceItemContent(
 
   const itemFragments: string[] = [`<ItemID>${listingId}</ItemID>`];
   if (newTitle) itemFragments.push(`<Title>${newTitle}</Title>`);
-  if (newDescription) itemFragments.push(`<Description><![CDATA[${newDescription}]]></Description>`);
+  if (newDescription) {
+    itemFragments.push(
+      `<Description><![CDATA[${newDescription}]]></Description>`,
+    );
+  }
 
   const xml = `<?xml version="1.0" encoding="utf-8"?>
 <ReviseFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
@@ -183,7 +187,10 @@ async function updateInventoryItemTitle(
 
     if (!getResp.ok) {
       const err = await getResp.text();
-      return { success: false, error: `Failed to load inventory item: ${getResp.status} ${err.slice(0, 200)}` };
+      return {
+        success: false,
+        error: `Failed to load inventory item: ${getResp.status} ${err.slice(0, 200)}`,
+      };
     }
 
     const item = await getResp.json();
@@ -210,12 +217,18 @@ async function updateInventoryItemTitle(
 
     if (!putResp.ok) {
       const err = await putResp.text();
-      return { success: false, error: `Failed to update inventory title: ${putResp.status} ${err.slice(0, 200)}` };
+      return {
+        success: false,
+        error: `Failed to update inventory title: ${putResp.status} ${err.slice(0, 200)}`,
+      };
     }
 
     return { success: true };
   } catch (e) {
-    return { success: false, error: `Exception updating inventory title: ${e}` };
+    return {
+      success: false,
+      error: `Exception updating inventory title: ${e}`,
+    };
   }
 }
 
@@ -226,17 +239,23 @@ async function updateOfferDescription(
   newDescription: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const getResp = await fetch(`${apiBase}/sell/inventory/v1/offer/${offerId}`, {
-      headers: {
-        Authorization: `Bearer ${userToken}`,
-        "Content-Type": "application/json",
-        "Accept-Language": "en-US",
+    const getResp = await fetch(
+      `${apiBase}/sell/inventory/v1/offer/${offerId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+          "Content-Type": "application/json",
+          "Accept-Language": "en-US",
+        },
       },
-    });
+    );
 
     if (!getResp.ok) {
       const err = await getResp.text();
-      return { success: false, error: `Failed to load offer: ${getResp.status} ${err.slice(0, 200)}` };
+      return {
+        success: false,
+        error: `Failed to load offer: ${getResp.status} ${err.slice(0, 200)}`,
+      };
     }
 
     const offer = await getResp.json();
@@ -252,24 +271,33 @@ async function updateOfferDescription(
     delete nextOffer.createdDate;
     delete nextOffer.lastModifiedDate;
 
-    const putResp = await fetch(`${apiBase}/sell/inventory/v1/offer/${offerId}`, {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${userToken}`,
-        "Content-Type": "application/json",
-        "Accept-Language": "en-US",
+    const putResp = await fetch(
+      `${apiBase}/sell/inventory/v1/offer/${offerId}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+          "Content-Type": "application/json",
+          "Accept-Language": "en-US",
+        },
+        body: JSON.stringify(nextOffer),
       },
-      body: JSON.stringify(nextOffer),
-    });
+    );
 
     if (!putResp.ok) {
       const err = await putResp.text();
-      return { success: false, error: `Failed to update offer description: ${putResp.status} ${err.slice(0, 200)}` };
+      return {
+        success: false,
+        error: `Failed to update offer description: ${putResp.status} ${err.slice(0, 200)}`,
+      };
     }
 
     return { success: true };
   } catch (e) {
-    return { success: false, error: `Exception updating offer description: ${e}` };
+    return {
+      success: false,
+      error: `Exception updating offer description: ${e}`,
+    };
   }
 }
 
@@ -280,13 +308,19 @@ async function updateOfferDescription(
 async function bulkUpdateInventoryPrices(
   apiBase: string,
   userToken: string,
-  updates: Array<
-    { offerId: string; sku: string; newPrice: number; currency?: string }
-  >,
+  updates: Array<{
+    offerId: string;
+    sku: string;
+    newPrice: number;
+    currency?: string;
+  }>,
 ): Promise<
-  Array<
-    { offerId: string; success: boolean; statusCode?: number; error?: string }
-  >
+  Array<{
+    offerId: string;
+    success: boolean;
+    statusCode?: number;
+    error?: string;
+  }>
 > {
   // Group by SKU
   const bySku: Record<string, typeof updates> = {};
@@ -308,9 +342,12 @@ async function bulkUpdateInventoryPrices(
 
   // Split into batches of 25 (API limit)
   const BATCH_SIZE = 25;
-  const results: Array<
-    { offerId: string; success: boolean; statusCode?: number; error?: string }
-  > = [];
+  const results: Array<{
+    offerId: string;
+    success: boolean;
+    statusCode?: number;
+    error?: string;
+  }> = [];
 
   for (let i = 0; i < requestItems.length; i += BATCH_SIZE) {
     const batch = requestItems.slice(i, i + BATCH_SIZE);
@@ -351,9 +388,9 @@ async function bulkUpdateInventoryPrices(
         data = JSON.parse(respText);
       } catch {
         console.error(
-          `ebay-reprice: JSON parse error (length=${await resp.text().then(
-            (t) => t.length,
-          )})`,
+          `ebay-reprice: JSON parse error (length=${await resp
+            .text()
+            .then((t) => t.length)})`,
         );
         continue;
       }
@@ -389,8 +426,7 @@ async function bulkUpdateInventoryPrices(
               statusCode: 200,
             });
           } else {
-            const errMsg = r.errors?.[0]?.message ||
-              `Status code ${r.statusCode}`;
+            const errMsg = r.errors?.[0]?.message || `Status code ${r.statusCode}`;
             results.push({
               offerId: offer.offerId,
               success: false,
@@ -508,15 +544,22 @@ serve(async (req) => {
               `[ebay-reprice] Trading API fallback result:`,
               tradingResult.success ? "SUCCESS" : `FAILED: ${tradingResult.error}`,
             );
-            return new Response(
-              JSON.stringify(tradingResult),
-              { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-            );
+            return new Response(JSON.stringify(tradingResult), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
           } catch (fallbackErr) {
-            console.error(`[ebay-reprice] Trading API fallback exception:`, fallbackErr);
+            console.error(
+              `[ebay-reprice] Trading API fallback exception:`,
+              fallbackErr,
+            );
             return new Response(
-              JSON.stringify({ success: false, error: `Trading API fallback failed: ${fallbackErr}` }),
-              { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+              JSON.stringify({
+                success: false,
+                error: `Trading API fallback failed: ${fallbackErr}`,
+              }),
+              {
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              },
             );
           }
         }
@@ -568,7 +611,9 @@ serve(async (req) => {
                 success: inventoryResult.success,
                 error: inventoryResult.error,
               }),
-              { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+              {
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              },
             );
           }
           console.warn(
@@ -577,10 +622,9 @@ serve(async (req) => {
           );
         }
 
-        return new Response(
-          JSON.stringify(tradingResult),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
+        return new Response(JSON.stringify(tradingResult), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       return new Response(
@@ -618,7 +662,10 @@ serve(async (req) => {
 
       if (!wantsTitle && !wantsDescription) {
         return new Response(
-          JSON.stringify({ success: false, error: "Nothing to update: provide newTitle and/or newDescription" }),
+          JSON.stringify({
+            success: false,
+            error: "Nothing to update: provide newTitle and/or newDescription",
+          }),
           {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -637,7 +684,12 @@ serve(async (req) => {
 
       if (wantsTitle) {
         if (sku) {
-          const titleResult = await updateInventoryItemTitle(apiBase, token, sku, trimmedTitle);
+          const titleResult = await updateInventoryItemTitle(
+            apiBase,
+            token,
+            sku,
+            trimmedTitle,
+          );
           if (titleResult.success) {
             titleUpdated = true;
           } else if (listingId) {
@@ -692,7 +744,9 @@ serve(async (req) => {
           if (fallback.success) descriptionUpdated = true;
           else errors.push(fallback.error || "Failed to update description");
         } else {
-          errors.push("Cannot update description: missing offerId/sku/listingId");
+          errors.push(
+            "Cannot update description: missing offerId/sku/listingId",
+          );
         }
       }
 

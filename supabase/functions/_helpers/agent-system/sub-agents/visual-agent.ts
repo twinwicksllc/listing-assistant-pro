@@ -16,7 +16,9 @@ export async function runAgenticVisualAgent(
   supabase: ReturnType<typeof createClient<any>>,
 ): Promise<VisualInspectionResult> {
   const { invocationId, imageList } = context;
-  console.log(`[${invocationId}] VisualAgent: Running precision inspection for ${domainDef.domain}`);
+  console.log(
+    `[${invocationId}] VisualAgent: Running precision inspection for ${domainDef.domain}`,
+  );
 
   // --- RAG: Augmented Context from Domain-Specific Knowledge Base ---
   // Generalized lookup (see DOMAIN_RAG_CATEGORIES in registry.ts) - not hardcoded
@@ -29,7 +31,10 @@ export async function runAgenticVisualAgent(
     try {
       // Use pre-computed embedding from controller if available; fall back to generating one
       const embedding = context.queryEmbedding ??
-        await getEmbedding(apiKey, context.identification?.itemName || domainDef.domain);
+        (await getEmbedding(
+          apiKey,
+          context.identification?.itemName || domainDef.domain,
+        ));
       for (const category of ragCategories) {
         const results = await findSimilarContext(supabase, embedding, category);
         if (results.length > 0) {
@@ -57,7 +62,9 @@ export async function runAgenticVisualAgent(
     };
   });
 
-  const zoomTargets = domainDef.visionGoals.map((g) => `- **${g.region}**: ${g.rationale}`).join("\n");
+  const zoomTargets = domainDef.visionGoals
+    .map((g) => `- **${g.region}**: ${g.rationale}`)
+    .join("\n");
 
   const prompt =
     `You are an expert precision vision agent. Your task is to perform a detailed visual inspection of the item in the images.
@@ -105,12 +112,11 @@ You must return your findings in JSON format:
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{
-            parts: [
-              ...visionImages,
-              { text: prompt },
-            ],
-          }],
+          contents: [
+            {
+              parts: [...visionImages, { text: prompt }],
+            },
+          ],
           tools: [{ codeExecution: {} }],
         }),
       },
@@ -121,7 +127,9 @@ You must return your findings in JSON format:
 
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
     // Strip markdown code fences (```json...``` or ```...```) that Gemini sometimes adds around JSON
-    const cleanText = text.replace(/^```(?:json)?\s*/m, "").replace(/\s*```\s*$/m, "");
+    const cleanText = text
+      .replace(/^```(?:json)?\s*/m, "")
+      .replace(/\s*```\s*$/m, "");
     const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
 
     if (jsonMatch) {
@@ -130,9 +138,13 @@ You must return your findings in JSON format:
         const capturedAttributes = parsed?.capturedAttributes &&
             typeof parsed.capturedAttributes === "object"
           ? Object.fromEntries(
-            Object.entries(parsed.capturedAttributes as Record<string, unknown>)
-              .filter((entry): entry is [string, string] =>
-                typeof entry[0] === "string" && typeof entry[1] === "string"
+            Object.entries(
+              parsed.capturedAttributes as Record<string, unknown>,
+            )
+              .filter(
+                (entry): entry is [string, string] =>
+                  typeof entry[0] === "string" &&
+                  typeof entry[1] === "string",
               )
               .map(([k, v]) => [k.trim(), v.trim()]),
           )
@@ -145,7 +157,10 @@ You must return your findings in JSON format:
           capturedAttributes,
         };
       } catch (pErr) {
-        console.warn(`[${invocationId}] VisualAgent: Failed to parse JSON response:`, pErr);
+        console.warn(
+          `[${invocationId}] VisualAgent: Failed to parse JSON response:`,
+          pErr,
+        );
       }
     }
 

@@ -108,7 +108,9 @@ async function browseSearch(params: {
     try {
       const price = parseFloat(item?.price?.value ?? "0");
       if (!isNaN(price) && price > 0) prices.push(price);
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
 
   return { prices, count: prices.length, total };
@@ -145,7 +147,7 @@ async function scrapeEbaySoldData(
       method: "GET",
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; ListingAssistant/1.0)",
-        "Accept": "text/plain",
+        Accept: "text/plain",
       },
       signal: AbortSignal.timeout(20000),
     });
@@ -199,12 +201,12 @@ async function scrapeEbaySoldData(
     const highThreshold = parseFloat(overMatch[1].replace(/,/g, ""));
     minSoldPrice = Math.round(lowThreshold * 0.5 * 100) / 100;
     maxSoldPrice = Math.round(highThreshold * 1.5 * 100) / 100;
-    avgSoldPrice = Math.round((lowThreshold + highThreshold) / 2 * 100) / 100;
+    avgSoldPrice = Math.round(((lowThreshold + highThreshold) / 2) * 100) / 100;
     medianSoldPrice = avgSoldPrice;
   } else if (rangeMatch) {
     const rLow = parseFloat(rangeMatch[1].replace(/,/g, ""));
     const rHigh = parseFloat(rangeMatch[2].replace(/,/g, ""));
-    avgSoldPrice = Math.round((rLow + rHigh) / 2 * 100) / 100;
+    avgSoldPrice = Math.round(((rLow + rHigh) / 2) * 100) / 100;
     medianSoldPrice = avgSoldPrice;
     minSoldPrice = Math.round(rLow * 0.7 * 100) / 100;
     maxSoldPrice = Math.round(rHigh * 1.3 * 100) / 100;
@@ -385,12 +387,9 @@ serve(async (req) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[market-watch-refresh] Error:", msg);
-    return new Response(
-      JSON.stringify({ error: msg }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });

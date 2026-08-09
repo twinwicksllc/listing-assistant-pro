@@ -44,7 +44,10 @@ function makeMockFrameDataUrl(label: string): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
-function decodeDataUrl(dataUrl: string): { bytes: Uint8Array; mimeType: string } {
+function decodeDataUrl(dataUrl: string): {
+  bytes: Uint8Array;
+  mimeType: string;
+} {
   const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) {
     throw new Error("Invalid frame data URL format.");
@@ -82,16 +85,24 @@ serve(async (req: Request) => {
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: "Authentication required" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
-    const { data: ud } = await svc.auth.getUser(authHeader.replace("Bearer ", ""));
+    const { data: ud } = await svc.auth.getUser(
+      authHeader.replace("Bearer ", ""),
+    );
     const userId = ud?.user?.id;
     if (!userId) {
       return new Response(
         JSON.stringify({ error: "Authentication required" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -105,7 +116,10 @@ serve(async (req: Request) => {
     if (!videoUrl && incomingFrames.length === 0) {
       return new Response(
         JSON.stringify({ error: "videoUrl or frames payload is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -129,10 +143,14 @@ serve(async (req: Request) => {
           });
 
         if (uploadError) {
-          throw new Error(`Failed to store extracted frame ${idx + 1}: ${uploadError.message}`);
+          throw new Error(
+            `Failed to store extracted frame ${idx + 1}: ${uploadError.message}`,
+          );
         }
 
-        const { data: publicData } = svc.storage.from("listing-images").getPublicUrl(path);
+        const { data: publicData } = svc.storage
+          .from("listing-images")
+          .getPublicUrl(path);
         frames.push({
           url: publicData.publicUrl,
           timestampSec: Number(frame.timestampSec ?? idx),
@@ -180,13 +198,21 @@ serve(async (req: Request) => {
             : "Frames persisted to Supabase storage.",
         },
       }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   } catch (err) {
     console.error("video-frame-extract error:", err);
     return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : "Unexpected error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      JSON.stringify({
+        error: err instanceof Error ? err.message : "Unexpected error",
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 });

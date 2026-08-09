@@ -1,6 +1,19 @@
 import { useState, useCallback } from "react";
-import { Trash2, Copy, Plus, AlertCircle, AlertTriangle, CheckCircle, ChevronDown, ChevronUp } from "lucide-react";
-import type { BulkRow, BulkRowState, BulkRowStatus } from "@/types/bulk-listing";
+import {
+  Trash2,
+  Copy,
+  Plus,
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
+import type {
+  BulkRow,
+  BulkRowState,
+  BulkRowStatus,
+} from "@/types/bulk-listing";
 import { CONDITION_LABELS } from "@/types/listing";
 
 interface BulkDataTableProps {
@@ -11,16 +24,22 @@ interface BulkDataTableProps {
 }
 
 const STATUS_ICON: Record<BulkRowStatus, JSX.Element> = {
-  pending:    <div className="w-2 h-2 rounded-full bg-muted-foreground/40" />,
-  valid:      <CheckCircle className="w-3.5 h-3.5 text-green-500" />,
-  generating: <div className="w-3.5 h-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin" />,
-  ready:      <CheckCircle className="w-3.5 h-3.5 text-primary" />,
-  publishing: <div className="w-3.5 h-3.5 rounded-full border-2 border-yellow-500 border-t-transparent animate-spin" />,
-  published:  <CheckCircle className="w-3.5 h-3.5 text-green-600" />,
-  error:      <AlertCircle className="w-3.5 h-3.5 text-destructive" />,
+  pending: <div className="w-2 h-2 rounded-full bg-muted-foreground/40" />,
+  valid: <CheckCircle className="w-3.5 h-3.5 text-green-500" />,
+  generating: (
+    <div className="w-3.5 h-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+  ),
+  ready: <CheckCircle className="w-3.5 h-3.5 text-primary" />,
+  publishing: (
+    <div className="w-3.5 h-3.5 rounded-full border-2 border-yellow-500 border-t-transparent animate-spin" />
+  ),
+  published: <CheckCircle className="w-3.5 h-3.5 text-green-600" />,
+  error: <AlertCircle className="w-3.5 h-3.5 text-destructive" />,
 };
 
-const CONDITION_OPTIONS = Object.entries(CONDITION_LABELS).map(([value, label]) => ({ value, label }));
+const CONDITION_OPTIONS = Object.entries(CONDITION_LABELS).map(
+  ([value, label]) => ({ value, label }),
+);
 
 export default function BulkDataTable({
   rows,
@@ -29,21 +48,24 @@ export default function BulkDataTable({
   disabled = false,
 }: BulkDataTableProps) {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
-  const [editingCell, setEditingCell] = useState<{ rowIdx: number; field: string } | null>(null);
+  const [editingCell, setEditingCell] = useState<{
+    rowIdx: number;
+    field: string;
+  } | null>(null);
 
   const getState = useCallback(
     (rowIndex: number): BulkRowState | undefined =>
       rowStates.find((s) => s.rowIndex === rowIndex),
-    [rowStates]
+    [rowStates],
   );
 
   const updateRow = useCallback(
     (rowIndex: number, updates: Partial<BulkRow>) => {
       onRowsChange(
-        rows.map((r) => (r.rowIndex === rowIndex ? { ...r, ...updates } : r))
+        rows.map((r) => (r.rowIndex === rowIndex ? { ...r, ...updates } : r)),
       );
     },
-    [rows, onRowsChange]
+    [rows, onRowsChange],
   );
 
   const deleteRow = (rowIndex: number) => {
@@ -62,7 +84,8 @@ export default function BulkDataTable({
   };
 
   const addRow = () => {
-    const newIndex = rows.length > 0 ? Math.max(...rows.map((r) => r.rowIndex)) + 1 : 0;
+    const newIndex =
+      rows.length > 0 ? Math.max(...rows.map((r) => r.rowIndex)) + 1 : 0;
     onRowsChange([
       ...rows,
       {
@@ -128,10 +151,10 @@ export default function BulkDataTable({
                 hasErrors
                   ? "border-red-300 bg-red-50/30 dark:border-red-800 dark:bg-red-950/20"
                   : hasWarnings
-                  ? "border-yellow-300 bg-yellow-50/20 dark:border-yellow-800 dark:bg-yellow-950/10"
-                  : status === "published"
-                  ? "border-green-300 bg-green-50/20 dark:border-green-800 dark:bg-green-950/10"
-                  : "border-border bg-card"
+                    ? "border-yellow-300 bg-yellow-50/20 dark:border-yellow-800 dark:bg-yellow-950/10"
+                    : status === "published"
+                      ? "border-green-300 bg-green-50/20 dark:border-green-800 dark:bg-green-950/10"
+                      : "border-border bg-card"
               }`}
             >
               {/* Main row */}
@@ -148,7 +171,9 @@ export default function BulkDataTable({
                       autoFocus
                       value={row.title}
                       maxLength={80}
-                      onChange={(e) => updateRow(row.rowIndex, { title: e.target.value })}
+                      onChange={(e) =>
+                        updateRow(row.rowIndex, { title: e.target.value })
+                      }
                       onBlur={stopEdit}
                       onKeyDown={(e) => e.key === "Enter" && stopEdit()}
                       className="w-full bg-background border border-primary rounded px-2 py-1 text-xs text-foreground focus:outline-none"
@@ -159,7 +184,11 @@ export default function BulkDataTable({
                       disabled={disabled}
                       className="w-full text-left truncate text-xs text-foreground hover:text-primary transition-colors disabled:cursor-default"
                     >
-                      {row.title || <span className="text-muted-foreground italic">Click to add title...</span>}
+                      {row.title || (
+                        <span className="text-muted-foreground italic">
+                          Click to add title...
+                        </span>
+                      )}
                     </button>
                   )}
                   {/* Mobile: show key fields inline */}
@@ -174,12 +203,16 @@ export default function BulkDataTable({
                 <div className="hidden sm:block">
                   <select
                     value={row.condition}
-                    onChange={(e) => updateRow(row.rowIndex, { condition: e.target.value })}
+                    onChange={(e) =>
+                      updateRow(row.rowIndex, { condition: e.target.value })
+                    }
                     disabled={disabled}
                     className="w-full bg-transparent border border-border rounded px-1.5 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-60"
                   >
                     {CONDITION_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -193,7 +226,11 @@ export default function BulkDataTable({
                       min="0"
                       step="0.01"
                       value={row.price || ""}
-                      onChange={(e) => updateRow(row.rowIndex, { price: parseFloat(e.target.value) || 0 })}
+                      onChange={(e) =>
+                        updateRow(row.rowIndex, {
+                          price: parseFloat(e.target.value) || 0,
+                        })
+                      }
                       onBlur={stopEdit}
                       onKeyDown={(e) => e.key === "Enter" && stopEdit()}
                       className="w-full bg-background border border-primary rounded px-2 py-1 text-xs text-foreground focus:outline-none"
@@ -204,7 +241,12 @@ export default function BulkDataTable({
                       disabled={disabled}
                       className="w-full text-left text-xs text-foreground hover:text-primary transition-colors disabled:cursor-default"
                     >
-                      ${row.price > 0 ? row.price.toFixed(2) : <span className="text-muted-foreground">0.00</span>}
+                      $
+                      {row.price > 0 ? (
+                        row.price.toFixed(2)
+                      ) : (
+                        <span className="text-muted-foreground">0.00</span>
+                      )}
                     </button>
                   )}
                 </div>
@@ -217,7 +259,11 @@ export default function BulkDataTable({
                       type="text"
                       inputMode="numeric"
                       value={row.categoryId}
-                      onChange={(e) => updateRow(row.rowIndex, { categoryId: e.target.value.replace(/\D/g, "") })}
+                      onChange={(e) =>
+                        updateRow(row.rowIndex, {
+                          categoryId: e.target.value.replace(/\D/g, ""),
+                        })
+                      }
                       onBlur={stopEdit}
                       onKeyDown={(e) => e.key === "Enter" && stopEdit()}
                       className="w-full bg-background border border-primary rounded px-2 py-1 text-xs text-foreground focus:outline-none"
@@ -228,7 +274,9 @@ export default function BulkDataTable({
                       disabled={disabled}
                       className="w-full text-left text-xs text-foreground hover:text-primary transition-colors disabled:cursor-default"
                     >
-                      {row.categoryId || <span className="text-muted-foreground">—</span>}
+                      {row.categoryId || (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </button>
                   )}
                 </div>
@@ -241,7 +289,11 @@ export default function BulkDataTable({
                       type="number"
                       min="1"
                       value={row.quantity}
-                      onChange={(e) => updateRow(row.rowIndex, { quantity: parseInt(e.target.value) || 1 })}
+                      onChange={(e) =>
+                        updateRow(row.rowIndex, {
+                          quantity: parseInt(e.target.value) || 1,
+                        })
+                      }
                       onBlur={stopEdit}
                       onKeyDown={(e) => e.key === "Enter" && stopEdit()}
                       className="w-full bg-background border border-primary rounded px-2 py-1 text-xs text-foreground focus:outline-none"
@@ -264,7 +316,11 @@ export default function BulkDataTable({
                     className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
                     title={isExpanded ? "Collapse" : "Expand details"}
                   >
-                    {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    {isExpanded ? (
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    )}
                   </button>
                   <button
                     onClick={() => !disabled && duplicateRow(row.rowIndex)}
@@ -291,11 +347,17 @@ export default function BulkDataTable({
                   <div className="grid grid-cols-2 gap-2">
                     {/* Description */}
                     <div className="col-span-2 space-y-1">
-                      <label className="text-[10px] font-medium text-muted-foreground uppercase">Description</label>
+                      <label className="text-[10px] font-medium text-muted-foreground uppercase">
+                        Description
+                      </label>
                       <textarea
                         rows={3}
                         value={row.description ?? ""}
-                        onChange={(e) => updateRow(row.rowIndex, { description: e.target.value })}
+                        onChange={(e) =>
+                          updateRow(row.rowIndex, {
+                            description: e.target.value,
+                          })
+                        }
                         disabled={disabled}
                         placeholder="Leave blank to generate with AI..."
                         className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none disabled:opacity-60"
@@ -304,26 +366,40 @@ export default function BulkDataTable({
 
                     {/* Condition (mobile) */}
                     <div className="sm:hidden space-y-1">
-                      <label className="text-[10px] font-medium text-muted-foreground uppercase">Condition</label>
+                      <label className="text-[10px] font-medium text-muted-foreground uppercase">
+                        Condition
+                      </label>
                       <select
                         value={row.condition}
-                        onChange={(e) => updateRow(row.rowIndex, { condition: e.target.value })}
+                        onChange={(e) =>
+                          updateRow(row.rowIndex, { condition: e.target.value })
+                        }
                         disabled={disabled}
                         className="w-full bg-card border border-border rounded-lg px-2 py-1.5 text-xs text-foreground focus:outline-none"
                       >
                         {CONDITION_OPTIONS.map((o) => (
-                          <option key={o.value} value={o.value}>{o.label}</option>
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
                         ))}
                       </select>
                     </div>
 
                     {/* Price (mobile) */}
                     <div className="sm:hidden space-y-1">
-                      <label className="text-[10px] font-medium text-muted-foreground uppercase">Price ($)</label>
+                      <label className="text-[10px] font-medium text-muted-foreground uppercase">
+                        Price ($)
+                      </label>
                       <input
-                        type="number" min="0" step="0.01"
+                        type="number"
+                        min="0"
+                        step="0.01"
                         value={row.price || ""}
-                        onChange={(e) => updateRow(row.rowIndex, { price: parseFloat(e.target.value) || 0 })}
+                        onChange={(e) =>
+                          updateRow(row.rowIndex, {
+                            price: parseFloat(e.target.value) || 0,
+                          })
+                        }
                         disabled={disabled}
                         className="w-full bg-card border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none"
                       />
@@ -331,11 +407,18 @@ export default function BulkDataTable({
 
                     {/* Category ID (mobile) */}
                     <div className="sm:hidden space-y-1">
-                      <label className="text-[10px] font-medium text-muted-foreground uppercase">Category ID</label>
+                      <label className="text-[10px] font-medium text-muted-foreground uppercase">
+                        Category ID
+                      </label>
                       <input
-                        type="text" inputMode="numeric"
+                        type="text"
+                        inputMode="numeric"
                         value={row.categoryId}
-                        onChange={(e) => updateRow(row.rowIndex, { categoryId: e.target.value.replace(/\D/g, "") })}
+                        onChange={(e) =>
+                          updateRow(row.rowIndex, {
+                            categoryId: e.target.value.replace(/\D/g, ""),
+                          })
+                        }
                         disabled={disabled}
                         className="w-full bg-card border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none"
                       />
@@ -346,27 +429,35 @@ export default function BulkDataTable({
                       <label className="text-[10px] font-medium text-muted-foreground uppercase">
                         Image URLs ({row.imageUrls.length}/8)
                       </label>
-                      {(row.imageUrls.length > 0 ? row.imageUrls : [""]).map((url, imgIdx) => (
-                        <div key={imgIdx} className="flex gap-1">
-                          <input
-                            type="url"
-                            value={url}
-                            placeholder={`Image URL ${imgIdx + 1}`}
-                            onChange={(e) => {
-                              const next = [...row.imageUrls];
-                              next[imgIdx] = e.target.value;
-                              updateRow(row.rowIndex, {
-                                imageUrls: next.filter((u, i) => u || i < next.length - 1),
-                              });
-                            }}
-                            disabled={disabled}
-                            className="flex-1 bg-card border border-border rounded-lg px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-60"
-                          />
-                        </div>
-                      ))}
+                      {(row.imageUrls.length > 0 ? row.imageUrls : [""]).map(
+                        (url, imgIdx) => (
+                          <div key={imgIdx} className="flex gap-1">
+                            <input
+                              type="url"
+                              value={url}
+                              placeholder={`Image URL ${imgIdx + 1}`}
+                              onChange={(e) => {
+                                const next = [...row.imageUrls];
+                                next[imgIdx] = e.target.value;
+                                updateRow(row.rowIndex, {
+                                  imageUrls: next.filter(
+                                    (u, i) => u || i < next.length - 1,
+                                  ),
+                                });
+                              }}
+                              disabled={disabled}
+                              className="flex-1 bg-card border border-border rounded-lg px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-60"
+                            />
+                          </div>
+                        ),
+                      )}
                       {row.imageUrls.length < 8 && (
                         <button
-                          onClick={() => updateRow(row.rowIndex, { imageUrls: [...row.imageUrls, ""] })}
+                          onClick={() =>
+                            updateRow(row.rowIndex, {
+                              imageUrls: [...row.imageUrls, ""],
+                            })
+                          }
                           disabled={disabled}
                           className="text-xs text-primary hover:underline disabled:opacity-50"
                         >
@@ -377,12 +468,20 @@ export default function BulkDataTable({
 
                     {/* COGS */}
                     <div className="space-y-1">
-                      <label className="text-[10px] font-medium text-muted-foreground uppercase">COGS ($)</label>
+                      <label className="text-[10px] font-medium text-muted-foreground uppercase">
+                        COGS ($)
+                      </label>
                       <input
-                        type="number" min="0" step="0.01"
+                        type="number"
+                        min="0"
+                        step="0.01"
                         value={row.cogs ?? ""}
                         placeholder="0.00"
-                        onChange={(e) => updateRow(row.rowIndex, { cogs: parseFloat(e.target.value) || undefined })}
+                        onChange={(e) =>
+                          updateRow(row.rowIndex, {
+                            cogs: parseFloat(e.target.value) || undefined,
+                          })
+                        }
                         disabled={disabled}
                         className="w-full bg-card border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none"
                       />
@@ -390,12 +489,16 @@ export default function BulkDataTable({
 
                     {/* Consignor */}
                     <div className="space-y-1">
-                      <label className="text-[10px] font-medium text-muted-foreground uppercase">Consignor</label>
+                      <label className="text-[10px] font-medium text-muted-foreground uppercase">
+                        Consignor
+                      </label>
                       <input
                         type="text"
                         value={row.consignor ?? ""}
                         placeholder="Optional"
-                        onChange={(e) => updateRow(row.rowIndex, { consignor: e.target.value })}
+                        onChange={(e) =>
+                          updateRow(row.rowIndex, { consignor: e.target.value })
+                        }
                         disabled={disabled}
                         className="w-full bg-card border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none"
                       />
@@ -403,22 +506,33 @@ export default function BulkDataTable({
                   </div>
 
                   {/* Validation issues */}
-                  {state && (state.errors.length > 0 || state.warnings.length > 0) && (
-                    <div className="space-y-1 pt-1 border-t border-border/50">
-                      {state.errors.map((e, i) => (
-                        <div key={i} className="flex items-start gap-1.5 text-xs text-red-600 dark:text-red-400">
-                          <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                          <span><strong>{e.field}:</strong> {e.message}</span>
-                        </div>
-                      ))}
-                      {state.warnings.map((w, i) => (
-                        <div key={i} className="flex items-start gap-1.5 text-xs text-yellow-600 dark:text-yellow-400">
-                          <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                          <span><strong>{w.field}:</strong> {w.message}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  {state &&
+                    (state.errors.length > 0 || state.warnings.length > 0) && (
+                      <div className="space-y-1 pt-1 border-t border-border/50">
+                        {state.errors.map((e, i) => (
+                          <div
+                            key={i}
+                            className="flex items-start gap-1.5 text-xs text-red-600 dark:text-red-400"
+                          >
+                            <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                            <span>
+                              <strong>{e.field}:</strong> {e.message}
+                            </span>
+                          </div>
+                        ))}
+                        {state.warnings.map((w, i) => (
+                          <div
+                            key={i}
+                            className="flex items-start gap-1.5 text-xs text-yellow-600 dark:text-yellow-400"
+                          >
+                            <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                            <span>
+                              <strong>{w.field}:</strong> {w.message}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                   {/* Published link */}
                   {state?.status === "published" && state.ebayUrl && (

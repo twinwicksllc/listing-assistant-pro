@@ -5,7 +5,13 @@
  */
 
 import React, { useState } from "react";
-import { AlertTriangle, RefreshCw, Loader2, ChevronDown, Info } from "lucide-react";
+import {
+  AlertTriangle,
+  RefreshCw,
+  Loader2,
+  ChevronDown,
+  Info,
+} from "lucide-react";
 import { useEbayPolicies } from "@/hooks/useEbayPolicies";
 import {
   EbayFulfillmentPolicy,
@@ -64,7 +70,7 @@ const formatCacheAge = (ageMs: number | null): string => {
   const seconds = Math.floor(ageMs / 1000);
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
-  
+
   if (minutes < 1) return "just now";
   if (minutes < 60) return `${minutes}m ago`;
   if (hours < 24) return `${hours}h ago`;
@@ -90,9 +96,11 @@ const PolicyDropdown: React.FC<PolicyDropdownProps> = ({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <label className={`text-xs font-medium uppercase tracking-wide ${
-          error ? "text-destructive" : "text-muted-foreground"
-        }`}>
+        <label
+          className={`text-xs font-medium uppercase tracking-wide ${
+            error ? "text-destructive" : "text-muted-foreground"
+          }`}
+        >
           {label}
           {error && <span className="text-destructive ml-1">*</span>}
         </label>
@@ -158,8 +166,16 @@ export const EbayPolicySelector: React.FC<EbayPolicySelectorProps> = ({
   showDetails = false,
   policyErrors = {},
 }) => {
-  const { policies, selectedPolicies, selectPolicy, loading, error, refreshPolicies, hasPolicies, cacheAge } =
-    useEbayPolicies(userToken);
+  const {
+    policies,
+    selectedPolicies,
+    selectPolicy,
+    loading,
+    error,
+    refreshPolicies,
+    hasPolicies,
+    cacheAge,
+  } = useEbayPolicies(userToken);
 
   React.useEffect(() => {
     if (onPoliciesSelected && hasPolicies) {
@@ -174,7 +190,9 @@ export const EbayPolicySelector: React.FC<EbayPolicySelectorProps> = ({
           <AlertTriangle className="w-4 h-4 text-accent-foreground flex-shrink-0 mt-0.5" />
           <div className="text-xs text-accent-foreground">
             <p className="font-medium">eBay account not connected</p>
-            <p className="text-[11px] mt-1 opacity-90">Connect your eBay account in Settings to select policies.</p>
+            <p className="text-[11px] mt-1 opacity-90">
+              Connect your eBay account in Settings to select policies.
+            </p>
           </div>
         </div>
       </div>
@@ -186,7 +204,9 @@ export const EbayPolicySelector: React.FC<EbayPolicySelectorProps> = ({
       <div className="space-y-3">
         <div className="flex items-center justify-center gap-2 py-6">
           <Loader2 className="w-4 h-4 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Loading your eBay business policies…</p>
+          <p className="text-sm text-muted-foreground">
+            Loading your eBay business policies…
+          </p>
         </div>
       </div>
     );
@@ -194,22 +214,36 @@ export const EbayPolicySelector: React.FC<EbayPolicySelectorProps> = ({
 
   if (error) {
     return (
-      <div className={`rounded-lg p-4 border space-y-3 ${
-        error.type === "NO_POLICIES"
-          ? "bg-orange-500/10 border-orange-500/30"
-          : "bg-destructive/10 border-destructive/30"
-      }`}>
+      <div
+        className={`rounded-lg p-4 border space-y-3 ${
+          error.type === "NO_POLICIES"
+            ? "bg-orange-500/10 border-orange-500/30"
+            : "bg-destructive/10 border-destructive/30"
+        }`}
+      >
         <div className="flex items-start gap-2">
-          <AlertTriangle className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
-            error.type === "NO_POLICIES" ? "text-orange-500" : "text-destructive"
-          }`} />
+          <AlertTriangle
+            className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
+              error.type === "NO_POLICIES"
+                ? "text-orange-500"
+                : "text-destructive"
+            }`}
+          />
           <div className="flex-1">
-            <p className={`text-xs font-medium ${
-              error.type === "NO_POLICIES" ? "text-orange-600" : "text-destructive"
-            }`}>
-              {error.type === "INVALID_TOKEN" ? "Session Expired" : "Policy Loading Error"}
+            <p
+              className={`text-xs font-medium ${
+                error.type === "NO_POLICIES"
+                  ? "text-orange-600"
+                  : "text-destructive"
+              }`}
+            >
+              {error.type === "INVALID_TOKEN"
+                ? "Session Expired"
+                : "Policy Loading Error"}
             </p>
-            <p className="text-[11px] mt-1 text-muted-foreground">{error.message}</p>
+            <p className="text-[11px] mt-1 text-muted-foreground">
+              {error.message}
+            </p>
             <div className="flex gap-2 mt-2.5">
               {error.type === "INVALID_TOKEN" && (
                 <a
@@ -245,9 +279,12 @@ export const EbayPolicySelector: React.FC<EbayPolicySelectorProps> = ({
   if (!hasPolicies) {
     return (
       <div className="bg-secondary/50 rounded-lg p-4 border border-border space-y-2 text-center">
-        <p className="text-xs font-medium text-foreground">No policies configured</p>
+        <p className="text-xs font-medium text-foreground">
+          No policies configured
+        </p>
         <p className="text-[11px] text-muted-foreground">
-          Create business policies in your eBay Seller Hub before publishing listings.
+          Create business policies in your eBay Seller Hub before publishing
+          listings.
         </p>
         <a
           href="https://www.ebay.com/sh/ovw/policies"
@@ -315,19 +352,27 @@ export const EbayPolicySelector: React.FC<EbayPolicySelectorProps> = ({
         <div className="grid grid-cols-3 gap-3 pt-2 border-t border-border">
           {selectedPolicies.fulfillmentPolicyId && (
             <PolicyDetailCard
-              policy={policies.fulfillment.find((p) => p.fulfillmentPolicyId === selectedPolicies.fulfillmentPolicyId)}
+              policy={policies.fulfillment.find(
+                (p) =>
+                  p.fulfillmentPolicyId ===
+                  selectedPolicies.fulfillmentPolicyId,
+              )}
               type="Shipping"
             />
           )}
           {selectedPolicies.paymentPolicyId && (
             <PolicyDetailCard
-              policy={policies.payment.find((p) => p.paymentPolicyId === selectedPolicies.paymentPolicyId)}
+              policy={policies.payment.find(
+                (p) => p.paymentPolicyId === selectedPolicies.paymentPolicyId,
+              )}
               type="Payment"
             />
           )}
           {selectedPolicies.returnPolicyId && (
             <PolicyDetailCard
-              policy={policies.return.find((p) => p.returnPolicyId === selectedPolicies.returnPolicyId)}
+              policy={policies.return.find(
+                (p) => p.returnPolicyId === selectedPolicies.returnPolicyId,
+              )}
               type="Return"
             />
           )}
@@ -366,15 +411,24 @@ interface PolicyDetailCardProps {
   type: "Shipping" | "Payment" | "Return";
 }
 
-const PolicyDetailCard: React.FC<PolicyDetailCardProps> = ({ policy, type }) => {
+const PolicyDetailCard: React.FC<PolicyDetailCardProps> = ({
+  policy,
+  type,
+}) => {
   if (!policy) return null;
 
   return (
     <div className="rounded-lg bg-muted/50 p-2.5 space-y-1">
-      <p className="text-[10px] font-medium text-muted-foreground uppercase">{type}</p>
-      <p className="text-xs font-medium text-foreground line-clamp-2">{policy.name}</p>
+      <p className="text-[10px] font-medium text-muted-foreground uppercase">
+        {type}
+      </p>
+      <p className="text-xs font-medium text-foreground line-clamp-2">
+        {policy.name}
+      </p>
       {policy.description && (
-        <p className="text-[10px] text-muted-foreground line-clamp-2">{policy.description}</p>
+        <p className="text-[10px] text-muted-foreground line-clamp-2">
+          {policy.description}
+        </p>
       )}
     </div>
   );

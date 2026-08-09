@@ -16,7 +16,11 @@ interface WelcomeTourProps {
   onFinish: () => void;
 }
 
-export default function WelcomeTour({ steps, active, onFinish }: WelcomeTourProps) {
+export default function WelcomeTour({
+  steps,
+  active,
+  onFinish,
+}: WelcomeTourProps) {
   const [current, setCurrent] = useState(0);
   const [rect, setRect] = useState<DOMRect | null>(null);
 
@@ -93,7 +97,10 @@ export default function WelcomeTour({ steps, active, onFinish }: WelcomeTourProp
 
   // Clamp to viewport
   if (typeof tooltipStyle.left === "number") {
-    tooltipStyle.left = Math.max(16, Math.min(tooltipStyle.left as number, window.innerWidth - 316));
+    tooltipStyle.left = Math.max(
+      16,
+      Math.min(tooltipStyle.left as number, window.innerWidth - 316),
+    );
   }
 
   return createPortal(
@@ -134,7 +141,9 @@ export default function WelcomeTour({ steps, active, onFinish }: WelcomeTourProp
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
-        <p className="text-xs text-muted-foreground leading-relaxed mb-4">{step.description}</p>
+        <p className="text-xs text-muted-foreground leading-relaxed mb-4">
+          {step.description}
+        </p>
 
         <div className="flex items-center justify-between">
           {/* Dots */}
@@ -173,6 +182,6 @@ export default function WelcomeTour({ steps, active, onFinish }: WelcomeTourProp
         </div>
       </div>
     </>,
-    document.body
+    document.body,
   );
 }

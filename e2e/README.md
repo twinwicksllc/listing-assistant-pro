@@ -3,6 +3,7 @@
 ## Overview
 
 This project uses **Playwright** for end-to-end testing with two test suites:
+
 - **PR Smoke Tests** (`e2e-pr-smoke.yml`): Quick validation on every PR (~5-10 min)
 - **Weekly Full Lifecycle Tests** (`e2e-full-lifecycle.yml`): Comprehensive end-to-end validation weekly
 
@@ -60,6 +61,7 @@ Or use the fixture's dynamic email creation (each test creates a unique test acc
 ### 3. Set Up eBay Sandbox API
 
 **TODO:** You need to:
+
 1. Create/verify sandbox API credentials at [eBay Developer Program](https://developer.ebay.com/)
 2. Get **Sandbox API Key** and **Sandbox Token**
 3. Store in GitHub Secrets as `EBAY_SANDBOX_API_KEY`
@@ -76,45 +78,51 @@ Stripe test mode is already set up (4242 card number). No additional setup neede
 
 Add these to **Settings → Secrets and variables → Actions**:
 
-| Secret | Value | Example |
-|--------|-------|---------|
-| `QA_BASE_URL` | Staging/preview URL | `https://qa.sovereignlistingsuite.com` |
-| `SUPABASE_URL` | Supabase project URL | `https://your-project.supabase.co` |
-| `SUPABASE_ANON_KEY` | Supabase anon key | (from Settings → API in Supabase) |
-| `SUPABASE_SERVICE_KEY` | Supabase service key | (for cleanup functions) |
-| `EBAY_SANDBOX_API_KEY` | eBay sandbox API key | (get from eBay Developer) |
-| `STRIPE_TEST_CARD` | Test card number | `4242424242424242` |
+| Secret                 | Value                | Example                                |
+| ---------------------- | -------------------- | -------------------------------------- |
+| `QA_BASE_URL`          | Staging/preview URL  | `https://qa.sovereignlistingsuite.com` |
+| `SUPABASE_URL`         | Supabase project URL | `https://your-project.supabase.co`     |
+| `SUPABASE_ANON_KEY`    | Supabase anon key    | (from Settings → API in Supabase)      |
+| `SUPABASE_SERVICE_KEY` | Supabase service key | (for cleanup functions)                |
+| `EBAY_SANDBOX_API_KEY` | eBay sandbox API key | (get from eBay Developer)              |
+| `STRIPE_TEST_CARD`     | Test card number     | `4242424242424242`                     |
 
 ---
 
 ## Running Tests Locally
 
 ### Run all tests
+
 ```bash
 npx playwright test
 ```
 
 ### Run smoke tests only
+
 ```bash
 npx playwright test e2e/tests/smoke.spec.ts
 ```
 
 ### Run full lifecycle tests
+
 ```bash
 npx playwright test e2e/tests/full-lifecycle.spec.ts
 ```
 
 ### Run with UI (debug mode)
+
 ```bash
 npx playwright test --ui
 ```
 
 ### Run single test
+
 ```bash
 npx playwright test -g "can create an account"
 ```
 
 ### View HTML report
+
 ```bash
 npx playwright show-report
 ```
@@ -142,11 +150,11 @@ e2e/
 
 Create simple test images in `e2e/fixtures/`:
 
-| Photo | Type | Size | Purpose |
-|-------|------|------|---------|
-| `test-coin.jpg` | Coin/Bullion | 1-2MB | Validate coin-specific categories |
-| `test-electronics.jpg` | Electronics | 1-2MB | Validate non-collectible categories |
-| `test-clothing.jpg` | Apparel/Clothing | 1-2MB | General-purpose item test |
+| Photo                  | Type             | Size  | Purpose                             |
+| ---------------------- | ---------------- | ----- | ----------------------------------- |
+| `test-coin.jpg`        | Coin/Bullion     | 1-2MB | Validate coin-specific categories   |
+| `test-electronics.jpg` | Electronics      | 1-2MB | Validate non-collectible categories |
+| `test-clothing.jpg`    | Apparel/Clothing | 1-2MB | General-purpose item test           |
 
 **To create simple test images:**
 
@@ -164,6 +172,7 @@ convert -size 1024x1024 xc:green e2e/fixtures/test-clothing.jpg
 ## Test Data Cleanup
 
 **Automatic cleanup** runs after successful weekly tests:
+
 - Deletes test listings older than 7 days
 - Keeps most recent failed test artifacts for 30 days
 - Never deletes failed listings (for debugging)
@@ -175,8 +184,8 @@ convert -size 1024x1024 xc:green e2e/fixtures/test-clothing.jpg
 SELECT * FROM drafts WHERE created_by = 'qa0000000000test' ORDER BY created_at DESC;
 
 -- Delete test listings older than 7 days
-DELETE FROM drafts 
-WHERE created_by = 'qa0000000000test' 
+DELETE FROM drafts
+WHERE created_by = 'qa0000000000test'
 AND created_at < now() - interval '7 days';
 ```
 
@@ -185,21 +194,25 @@ AND created_at < now() - interval '7 days';
 ## Troubleshooting
 
 ### Tests timeout waiting for elements
+
 - Increase timeout in test: `{ timeout: 30_000 }`
 - Verify selectors match your actual UI
 - Check browser logs: `npx playwright test --debug`
 
 ### Stripe checkout not working in tests
+
 - Stripe embeds in iframes; selectors must use `frameLocator()`
 - Verify test card is `4242424242424242`
 - See `fillStripeTestCard()` helper for reference
 
 ### eBay API calls fail
+
 - Verify `EBAY_SANDBOX_API_KEY` is set
 - Confirm you're calling sandbox endpoints (not live)
 - Check rate limits (eBay allows ~100 req/min)
 
 ### Tests fail in CI but pass locally
+
 - Likely environment variable not set in GitHub Secrets
 - Check workflow logs for `undefined` errors
 - Run locally with same env vars: `BASE_URL=... npx playwright test`
@@ -209,10 +222,11 @@ AND created_at < now() - interval '7 days';
 ## Adding New Tests
 
 1. Create new file in `e2e/tests/`:
-```typescript
-import { test, expect, signUp, generateListing } from '../fixtures/helpers';
 
-test('new feature test', async ({ page, testUser }) => {
+```typescript
+import { test, expect, signUp, generateListing } from "../fixtures/helpers";
+
+test("new feature test", async ({ page, testUser }) => {
   await signUp(page, testUser);
   // ... your test steps
 });

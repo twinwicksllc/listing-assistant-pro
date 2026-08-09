@@ -17,12 +17,12 @@
 
 ## Recently Merged (last 5 PRs)
 
-| PR | Title | Merged |
-|----|-------|--------|
+| PR   | Title                                                                                 | Merged     |
+| ---- | ------------------------------------------------------------------------------------- | ---------- |
 | #362 | fix(ebay-publish): add Certification aspect for category 3360 + coin-condition bridge | 2026-06-03 |
-| #361 | ci: fix migration step hanging at 'Initialising login role' | 2026-06-03 |
-| #360 | fix(ebay-publish): proof set condition descriptor fix + IDOR hardening | 2026-06-02 |
-| #359 | (prior work — see git log) | — |
+| #361 | ci: fix migration step hanging at 'Initialising login role'                           | 2026-06-03 |
+| #360 | fix(ebay-publish): proof set condition descriptor fix + IDOR hardening                | 2026-06-02 |
+| #359 | (prior work — see git log)                                                            | —          |
 
 ---
 
@@ -35,6 +35,7 @@ _None currently open._
 ## In Progress / Planned
 
 ### 1. Stripe Payment Integration
+
 - [ ] Wire 3 pricing tiers into Stripe Products/Prices:
   - Starter: $19/mo or $190/yr
   - Pro: $49/mo or $490/yr
@@ -44,6 +45,7 @@ _None currently open._
 - Edge function: `supabase/functions/create-checkout/`, `supabase/functions/stripe-webhook/`
 
 ### 2. Large-File Splitting (Code Maintainability)
+
 - [ ] Split `supabase/functions/ebay-publish/index.ts` (~5100 lines) into modules
   - Pattern established by PRs #110/#111 (generate-initial-site split)
   - Priority sub-modules: aspect-builder, condition-descriptors, oauth-token, draft-builder
@@ -53,6 +55,7 @@ _None currently open._
 - [ ] Split `pagespeed.ts`
 
 ### 3. Outstanding Code Review Findings (from PR #360 session)
+
 - [ ] Quantity mismatch between draft creation and inventory update
 - [ ] OAuth token leakage in logs (token value appearing in console.log)
 - [ ] `isGrainBar()` false-positive risk on multi-word titles containing "grain"

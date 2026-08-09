@@ -49,19 +49,27 @@ export function VideoOnlyView({
   return (
     <div className="min-h-screen bg-background pb-8">
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-3">
-        <button onClick={onBack} className="text-muted-foreground hover:text-foreground transition-colors">
+        <button
+          onClick={onBack}
+          className="text-muted-foreground hover:text-foreground transition-colors"
+        >
           <ArrowLeft className="w-5 h-5" />
         </button>
         <h1 className="font-semibold text-foreground">Analyze Item</h1>
-        <span className="ml-auto text-xs text-muted-foreground">Video-first</span>
+        <span className="ml-auto text-xs text-muted-foreground">
+          Video-first
+        </span>
       </header>
 
       <div className="px-4 pt-4 max-w-lg mx-auto space-y-4">
         <div className="rounded-xl border border-border bg-card p-4 space-y-2">
-          <p className="text-sm font-semibold text-foreground">Upload a Video</p>
+          <p className="text-sm font-semibold text-foreground">
+            Upload a Video
+          </p>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Record or upload one video (max 10 seconds) for your listing media. AI item identification still needs
-            photos today. We are planning automatic key-frame extraction so video-only uploads can run
+            Record or upload one video (max 10 seconds) for your listing media.
+            AI item identification still needs photos today. We are planning
+            automatic key-frame extraction so video-only uploads can run
             identification in a future release.
           </p>
         </div>
@@ -78,14 +86,18 @@ export function VideoOnlyView({
         {videoIsProcessing && (
           <p className="text-xs text-center text-amber-600">
             <Loader2 className="inline w-3 h-3 animate-spin mr-1" />
-            Video is processing on eBay. You can save a draft and publish when it becomes LIVE.
+            Video is processing on eBay. You can save a draft and publish when
+            it becomes LIVE.
           </p>
         )}
 
         <div className="rounded-xl border border-border bg-card p-3 space-y-2">
-          <p className="text-xs font-medium text-foreground">AI Frame Extraction</p>
+          <p className="text-xs font-medium text-foreground">
+            AI Frame Extraction
+          </p>
           <p className="text-xs text-muted-foreground">
-            Extract representative frames from the uploaded video so AI identification can run without photos.
+            Extract representative frames from the uploaded video so AI
+            identification can run without photos.
           </p>
           <button
             type="button"
@@ -107,11 +119,15 @@ export function VideoOnlyView({
           </button>
 
           {!videoUrl && (
-            <p className="text-[11px] text-amber-600">Upload a video and wait for readiness to enable extraction.</p>
+            <p className="text-[11px] text-amber-600">
+              Upload a video and wait for readiness to enable extraction.
+            </p>
           )}
 
           {extractFramesMessage && (
-            <p className="text-[11px] text-muted-foreground">{extractFramesMessage}</p>
+            <p className="text-[11px] text-muted-foreground">
+              {extractFramesMessage}
+            </p>
           )}
 
           {extractFramesErrorCode && (
@@ -148,10 +164,18 @@ export function VideoOnlyView({
           {extractedFrames.length > 0 && (
             <div className="grid grid-cols-3 gap-2 pt-1">
               {extractedFrames.map((frame, idx) => (
-                <div key={`${frame.timestampSec}-${idx}`} className="rounded-md overflow-hidden border border-border bg-secondary">
-                  <img src={frame.url} alt={`Extracted frame ${idx + 1}`} className="w-full aspect-video object-cover" />
+                <div
+                  key={`${frame.timestampSec}-${idx}`}
+                  className="rounded-md overflow-hidden border border-border bg-secondary"
+                >
+                  <img
+                    src={frame.url}
+                    alt={`Extracted frame ${idx + 1}`}
+                    className="w-full aspect-video object-cover"
+                  />
                   <div className="px-1.5 py-1 text-[10px] text-muted-foreground">
-                    {frame.timestampSec.toFixed(1)}s • {Math.round(frame.score * 100)}%
+                    {frame.timestampSec.toFixed(1)}s •{" "}
+                    {Math.round(frame.score * 100)}%
                   </div>
                 </div>
               ))}

@@ -18,7 +18,7 @@ const CACHE_KEY = "ebay-business-policies-v2";
 const CACHE_TTL = 86400000; // 24 hours in milliseconds
 
 function pickPreferredFulfillment(
-  fulfillmentPolicies: EbayFulfillmentPolicy[]
+  fulfillmentPolicies: EbayFulfillmentPolicy[],
 ): EbayFulfillmentPolicy | null {
   if (!fulfillmentPolicies.length) return null;
 
@@ -61,9 +61,11 @@ export interface UseEbayPoliciesReturn {
  * @param userToken - Optional OAuth user token (edge function can also fetch from DB)
  * @returns Promise with policies object
  */
-async function fetchPoliciesViaEdgeFunction(
-  userToken: string | null
-): Promise<{ fulfillment: EbayFulfillmentPolicy[]; payment: EbayPaymentPolicy[]; return: EbayReturnPolicy[] }> {
+async function fetchPoliciesViaEdgeFunction(userToken: string | null): Promise<{
+  fulfillment: EbayFulfillmentPolicy[];
+  payment: EbayPaymentPolicy[];
+  return: EbayReturnPolicy[];
+}> {
   const { data, error } = await supabase.functions.invoke("ebay-publish", {
     body: {
       action: "get_policies",
@@ -86,12 +88,12 @@ async function fetchPoliciesViaEdgeFunction(
 
   if (data.policyErrors && Object.keys(data.policyErrors).length > 0) {
     const policyErrorMessages = Object.values(data.policyErrors).filter(
-      (message): message is string => typeof message === "string"
+      (message): message is string => typeof message === "string",
     );
     const error = new Error(
       policyErrorMessages.some((message) => message.includes("HTTP 401"))
         ? "INVALID_TOKEN"
-        : `eBay could not load your business policies: ${policyErrorMessages.join(", ")}`
+        : `eBay could not load your business policies: ${policyErrorMessages.join(", ")}`,
     );
     throw error;
   }
@@ -103,7 +105,7 @@ async function fetchPoliciesViaEdgeFunction(
       fulfillmentPolicyId: p.id,
       name: p.name,
       marketplaceId: "EBAY_US",
-    })
+    }),
   );
 
   const payment = (data.payment || []).map(
@@ -111,7 +113,7 @@ async function fetchPoliciesViaEdgeFunction(
       paymentPolicyId: p.id,
       name: p.name,
       marketplaceId: "EBAY_US",
-    })
+    }),
   );
 
   const returnPolicies = (data.returns || []).map(
@@ -120,7 +122,7 @@ async function fetchPoliciesViaEdgeFunction(
       name: p.name,
       marketplaceId: "EBAY_US",
       returnsAccepted: true,
-    })
+    }),
   );
 
   return { fulfillment, payment, return: returnPolicies };
@@ -170,14 +172,16 @@ export function useEbayPolicies(userToken: string | null) {
         if (age < CACHE_TTL) {
           setPolicies(parsed.data);
           setCacheAge(age);
-             // Auto-select first of each type if available. Prefer non-flat-rate fulfillment policies.
-             if (parsed.data.fulfillment.length > 0) {
-               const preferred = pickPreferredFulfillment(parsed.data.fulfillment);
-               setSelectedPolicies((prev) => ({
-                 ...prev,
-                 fulfillmentPolicyId: preferred?.fulfillmentPolicyId || parsed.data.fulfillment[0].fulfillmentPolicyId,
-               }));
-             }
+          // Auto-select first of each type if available. Prefer non-flat-rate fulfillment policies.
+          if (parsed.data.fulfillment.length > 0) {
+            const preferred = pickPreferredFulfillment(parsed.data.fulfillment);
+            setSelectedPolicies((prev) => ({
+              ...prev,
+              fulfillmentPolicyId:
+                preferred?.fulfillmentPolicyId ||
+                parsed.data.fulfillment[0].fulfillmentPolicyId,
+            }));
+          }
           if (parsed.data.payment.length > 0) {
             setSelectedPolicies((prev) => ({
               ...prev,
@@ -196,21 +200,37 @@ export function useEbayPolicies(userToken: string | null) {
       }
 
       // Fetch policies via edge function (no CORS issues, server-side token resolution)
-      const { fulfillment, payment, return: returnPolicies } = await fetchPoliciesViaEdgeFunction(userToken);
+      const {
+        fulfillment,
+        payment,
+        return: returnPolicies,
+      } = await fetchPoliciesViaEdgeFunction(userToken);
 
       // Check if any policies exist
-      if (fulfillment.length === 0 || payment.length === 0 || returnPolicies.length === 0) {
+      if (
+        fulfillment.length === 0 ||
+        payment.length === 0 ||
+        returnPolicies.length === 0
+      ) {
         setError({
           type: "NO_POLICIES",
-          message: "Some policy types are not configured. Please create them in eBay Seller Hub.",
+          message:
+            "Some policy types are not configured. Please create them in eBay Seller Hub.",
           timestamp: Date.now(),
         });
       }
 
-      const newPolicies: BusinessPolicies = { fulfillment, payment, return: returnPolicies };
+      const newPolicies: BusinessPolicies = {
+        fulfillment,
+        payment,
+        return: returnPolicies,
+      };
 
       // Cache the result with timestamp
-      const cacheData: CachedPolicies = { data: newPolicies, timestamp: Date.now() };
+      const cacheData: CachedPolicies = {
+        data: newPolicies,
+        timestamp: Date.now(),
+      };
       localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
       setCacheAge(0); // Freshly cached
 
@@ -226,7 +246,8 @@ export function useEbayPolicies(userToken: string | null) {
       console.error("Failed to load eBay policies:", err);
 
       let errorType: PolicyFetchError["type"] = "FETCH_ERROR";
-      const rawErrorMessage = err instanceof Error ? err.message : "Failed to load policies";
+      const rawErrorMessage =
+        err instanceof Error ? err.message : "Failed to load policies";
       let errorMessage = rawErrorMessage;
 
       if (rawErrorMessage === "INVALID_TOKEN") {
@@ -274,7 +295,7 @@ export function useEbayPolicies(userToken: string | null) {
         [type]: policyId,
       }));
     },
-    []
+    [],
   );
 
   /**
@@ -300,7 +321,10 @@ export function useEbayPolicies(userToken: string | null) {
     error,
     refreshPolicies,
     clearCache,
-    hasPolicies: policies.fulfillment.length > 0 && policies.payment.length > 0 && policies.return.length > 0,
+    hasPolicies:
+      policies.fulfillment.length > 0 &&
+      policies.payment.length > 0 &&
+      policies.return.length > 0,
     cacheAge,
   };
 }

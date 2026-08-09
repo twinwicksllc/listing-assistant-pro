@@ -12,7 +12,7 @@ const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
   console.error(
-    "Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY environment variables"
+    "Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY environment variables",
   );
   process.exit(1);
 }
@@ -75,7 +75,7 @@ async function setupDatabase() {
           verification_source: "user_verified",
           confidence: 100,
         },
-        { onConflict: "coin_type" }
+        { onConflict: "coin_type" },
       )
       .catch((e) => ({ error: e }));
 

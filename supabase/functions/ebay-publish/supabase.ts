@@ -33,7 +33,10 @@ export async function assertCallerOwnsUser(
   }
   // Validate the JWT using the service-role client (verifies against project JWT secret).
   const sc = createClient(supabaseUrl, supabaseServiceKey);
-  const { data: { user }, error: authErr } = await sc.auth.getUser(jwt);
+  const {
+    data: { user },
+    error: authErr,
+  } = await sc.auth.getUser(jwt);
   if (authErr || !user) {
     throw new Error("Unauthorized: invalid or expired session token.");
   }

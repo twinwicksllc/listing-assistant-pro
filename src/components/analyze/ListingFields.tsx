@@ -20,7 +20,16 @@ import {
   isCoinConditionValid,
 } from "@/lib/coinConditionValidator";
 
-const COIN_GRADING_COMPANIES = ["PCGS", "NGC", "ANACS", "ICG", "CAC", "ICCS", "PMG", "Legacy Currency Grading"] as const;
+const COIN_GRADING_COMPANIES = [
+  "PCGS",
+  "NGC",
+  "ANACS",
+  "ICG",
+  "CAC",
+  "ICCS",
+  "PMG",
+  "Legacy Currency Grading",
+] as const;
 const COIN_RAW_CONDITIONS = [
   "Uncirculated",
   "Extremely Fine to About Uncirculated",
@@ -175,14 +184,23 @@ export function ListingFields({
   applyRecommendedPrice,
   onNavigateToBilling,
 }: ListingFieldsProps) {
-  const coinConditionType = coinConditionDetail?.type ?? (isSlabbed ? "graded" : "raw");
-  const gradedDetail = coinConditionDetail?.type === "graded"
-    ? coinConditionDetail
-    : { type: "graded" as const, gradingCompany: "PCGS" as const, grade: "", certificationNumber: "" };
-  const rawDetail = coinConditionDetail?.type === "raw"
-    ? coinConditionDetail
-    : { type: "raw" as const, rawCondition: "Uncirculated" as const };
-  const coinConditionComplete = isCoinConditionDetailComplete(coinConditionDetail);
+  const coinConditionType =
+    coinConditionDetail?.type ?? (isSlabbed ? "graded" : "raw");
+  const gradedDetail =
+    coinConditionDetail?.type === "graded"
+      ? coinConditionDetail
+      : {
+          type: "graded" as const,
+          gradingCompany: "PCGS" as const,
+          grade: "",
+          certificationNumber: "",
+        };
+  const rawDetail =
+    coinConditionDetail?.type === "raw"
+      ? coinConditionDetail
+      : { type: "raw" as const, rawCondition: "Uncirculated" as const };
+  const coinConditionComplete =
+    isCoinConditionDetailComplete(coinConditionDetail);
 
   return (
     <div className="space-y-4">
@@ -191,33 +209,45 @@ export function ListingFields({
         <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-3 space-y-2">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold text-blue-900 dark:text-blue-100">Free Tier Credits</p>
+              <p className="text-xs font-semibold text-blue-900 dark:text-blue-100">
+                Free Tier Credits
+              </p>
               <p className="text-sm font-bold text-blue-900 dark:text-blue-100 mt-0.5">
-                {analysisMeta.creditsRemaining} / {analysisMeta.creditsUsed + analysisMeta.creditsRemaining}
+                {analysisMeta.creditsRemaining} /{" "}
+                {analysisMeta.creditsUsed + analysisMeta.creditsRemaining}
               </p>
             </div>
             <div className="text-right">
               <p className="text-xs text-blue-700 dark:text-blue-300">
-                {analysisMeta.creditsRemaining === 0 ? "Limit reached" : `${analysisMeta.creditsRemaining} remaining`}
+                {analysisMeta.creditsRemaining === 0
+                  ? "Limit reached"
+                  : `${analysisMeta.creditsRemaining} remaining`}
               </p>
               <p className="text-[10px] text-blue-600 dark:text-blue-400 mt-1">
-                Resets {new Date(analysisMeta.creditsResetAt).toLocaleDateString()}
+                Resets{" "}
+                {new Date(analysisMeta.creditsResetAt).toLocaleDateString()}
               </p>
             </div>
           </div>
-          {analysisMeta.creditsRemaining <= 2 && analysisMeta.creditsRemaining > 0 && (
-            <p className="text-xs text-blue-700 dark:text-blue-300">
-              💡 Running low on credits — upgrade to Pro for unlimited analyses
-            </p>
-          )}
+          {analysisMeta.creditsRemaining <= 2 &&
+            analysisMeta.creditsRemaining > 0 && (
+              <p className="text-xs text-blue-700 dark:text-blue-300">
+                💡 Running low on credits — upgrade to Pro for unlimited
+                analyses
+              </p>
+            )}
         </div>
       )}
 
       {/* Title */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">eBay Title</label>
-          <span className="text-xs text-muted-foreground">{title.length}/80</span>
+          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            eBay Title
+          </label>
+          <span className="text-xs text-muted-foreground">
+            {title.length}/80
+          </span>
         </div>
         <input
           value={title}
@@ -228,7 +258,9 @@ export function ListingFields({
 
       {/* Description */}
       <div className="space-y-1.5">
-        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Item Description</label>
+        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Item Description
+        </label>
         <textarea
           value={description}
           onChange={(e) => updateDescription(e.target.value)}
@@ -242,26 +274,35 @@ export function ListingFields({
             onChange={(e) => toggleAiFooter(e.target.checked)}
             className="h-4 w-4 rounded border-border text-primary focus:ring-ring accent-primary"
           />
-          <span className="text-xs text-muted-foreground">Append AI disclosure footer</span>
+          <span className="text-xs text-muted-foreground">
+            Append AI disclosure footer
+          </span>
         </label>
         {includeAiFooter && (
           <p className="text-[10px] text-muted-foreground italic bg-muted rounded-md px-2.5 py-1.5">
-            "Listing generated by Sovereign AI Assistant. All details should be verified by the buyer."
+            "Listing generated by Sovereign AI Assistant. All details should be
+            verified by the buyer."
           </p>
         )}
       </div>
 
       {/* Item Specifics + Category + Condition */}
-      {(displaySpecifics.length > 0 || coinConditionDetailRequired || !!ebayCategoryId) && (
+      {(displaySpecifics.length > 0 ||
+        coinConditionDetailRequired ||
+        !!ebayCategoryId) && (
         <div className="space-y-2">
           <div className="flex items-center gap-1.5">
             <Tag className="w-3.5 h-3.5 text-primary" />
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">eBay Item Specifics</label>
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              eBay Item Specifics
+            </label>
           </div>
 
           {/* Category selector */}
           <div className="space-y-1">
-            <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">eBay Category</label>
+            <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+              eBay Category
+            </label>
             {!isCustomCategoryMode ? (
               <>
                 <select
@@ -287,10 +328,13 @@ export function ListingFields({
                   )}
                   {ebayCategoryId && !hasSelectedCategoryInSuggestions && (
                     <option value={ebayCategoryId}>
-                      {getEbayCategoryBreadcrumb(ebayCategoryId) || `Category #${ebayCategoryId}`}
+                      {getEbayCategoryBreadcrumb(ebayCategoryId) ||
+                        `Category #${ebayCategoryId}`}
                     </option>
                   )}
-                  <option value="__custom__">✏️ Enter custom category ID...</option>
+                  <option value="__custom__">
+                    ✏️ Enter custom category ID...
+                  </option>
                 </select>
                 {selectedSuggestedCategory?.reason && (
                   <p className="text-[10px] text-muted-foreground italic px-1">
@@ -300,7 +344,9 @@ export function ListingFields({
               </>
             ) : (
               <div className="space-y-2 p-3 bg-card border border-primary rounded-lg">
-                <p className="text-[10px] font-medium text-muted-foreground">Enter custom eBay category ID</p>
+                <p className="text-[10px] font-medium text-muted-foreground">
+                  Enter custom eBay category ID
+                </p>
                 <input
                   autoFocus
                   type="text"
@@ -335,21 +381,32 @@ export function ListingFields({
             <div className="bg-card border border-border rounded-lg divide-y divide-border">
               {displaySpecifics.map(([key, value]) => {
                 const isRequired = ebayMetadata?.requiredAspects?.includes(key);
-                const isSuggested = ebayMetadata?.suggestedAspects?.includes(key);
+                const isSuggested =
+                  ebayMetadata?.suggestedAspects?.includes(key);
                 return (
-                  <div key={key} data-testid={`aspect-${key}`} className="flex items-center justify-between px-3 py-2">
+                  <div
+                    key={key}
+                    data-testid={`aspect-${key}`}
+                    className="flex items-center justify-between px-3 py-2"
+                  >
                     <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
                       {key}
                       {isRequired && (
-                        <span className="text-[9px] font-semibold text-red-500 uppercase tracking-wide">req</span>
+                        <span className="text-[9px] font-semibold text-red-500 uppercase tracking-wide">
+                          req
+                        </span>
                       )}
                       {isSuggested && !isRequired && (
-                        <span className="text-[9px] text-primary/60 uppercase tracking-wide">opt</span>
+                        <span className="text-[9px] text-primary/60 uppercase tracking-wide">
+                          opt
+                        </span>
                       )}
                     </span>
                     <input
                       value={(value as string) || ""}
-                      onChange={(e) => updateItemSpecificValue(key, e.target.value)}
+                      onChange={(e) =>
+                        updateItemSpecificValue(key, e.target.value)
+                      }
                       className="text-xs text-foreground text-right bg-transparent border-none focus:outline-none focus:ring-0 max-w-[55%]"
                     />
                   </div>
@@ -360,7 +417,9 @@ export function ListingFields({
 
           {/* Condition */}
           <div className="flex items-center justify-between bg-card border border-border rounded-lg px-3 py-2">
-            <span className="text-xs font-medium text-muted-foreground">Condition</span>
+            <span className="text-xs font-medium text-muted-foreground">
+              Condition
+            </span>
             <select
               value={condition}
               onChange={(e) => updateCondition(e.target.value)}
@@ -378,7 +437,9 @@ export function ListingFields({
             <div className="space-y-3 rounded-xl border border-border bg-card p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Coin Condition Details</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Coin Condition Details
+                  </p>
                   <p className="text-[11px] text-muted-foreground mt-1">
                     Required by eBay for Coins & Paper Money listings.
                   </p>
@@ -409,102 +470,172 @@ export function ListingFields({
                 <div className="space-y-2">
                   <div className="grid grid-cols-2 gap-2">
                     <label className="space-y-1">
-                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Grading Company</span>
+                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                        Grading Company
+                      </span>
                       <select
-                        value={coinConditionDetail?.type === "graded" ? coinConditionDetail.gradingCompany : ""}
-                        onChange={(e) => updateCoinConditionDetail({
-                          type: "graded",
-                          gradingCompany: e.target.value as CoinConditionDetail & { type: "graded" }["gradingCompany"],
-                          grade: coinConditionDetail?.type === "graded" ? coinConditionDetail.grade : "",
-                          certificationNumber: coinConditionDetail?.type === "graded" ? coinConditionDetail.certificationNumber : undefined,
-                        })}
+                        value={
+                          coinConditionDetail?.type === "graded"
+                            ? coinConditionDetail.gradingCompany
+                            : ""
+                        }
+                        onChange={(e) =>
+                          updateCoinConditionDetail({
+                            type: "graded",
+                            gradingCompany: e.target
+                              .value as CoinConditionDetail &
+                              { type: "graded" }["gradingCompany"],
+                            grade:
+                              coinConditionDetail?.type === "graded"
+                                ? coinConditionDetail.grade
+                                : "",
+                            certificationNumber:
+                              coinConditionDetail?.type === "graded"
+                                ? coinConditionDetail.certificationNumber
+                                : undefined,
+                          })
+                        }
                         className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       >
                         <option value="">— Select a grading company —</option>
                         {COIN_GRADING_COMPANIES.map((company) => (
-                          <option key={company} value={company}>{company}</option>
+                          <option key={company} value={company}>
+                            {company}
+                          </option>
                         ))}
                       </select>
                     </label>
 
                     <label className="space-y-1">
-                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Grade</span>
+                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                        Grade
+                      </span>
                       <input
-                        value={coinConditionDetail?.type === "graded" ? coinConditionDetail.grade : ""}
-                        onChange={(e) => updateCoinConditionDetail({
-                          type: "graded",
-                          gradingCompany: coinConditionDetail?.type === "graded" ? coinConditionDetail.gradingCompany : "PCGS",
-                          grade: e.target.value,
-                          certificationNumber: coinConditionDetail?.type === "graded" ? coinConditionDetail.certificationNumber : undefined,
-                        })}
+                        value={
+                          coinConditionDetail?.type === "graded"
+                            ? coinConditionDetail.grade
+                            : ""
+                        }
+                        onChange={(e) =>
+                          updateCoinConditionDetail({
+                            type: "graded",
+                            gradingCompany:
+                              coinConditionDetail?.type === "graded"
+                                ? coinConditionDetail.gradingCompany
+                                : "PCGS",
+                            grade: e.target.value,
+                            certificationNumber:
+                              coinConditionDetail?.type === "graded"
+                                ? coinConditionDetail.certificationNumber
+                                : undefined,
+                          })
+                        }
                         placeholder="MS 65"
                         className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       />
-                      <p className="text-[9px] text-muted-foreground italic">Format: &quot;MS 65&quot; or &quot;PR 70 DCAM&quot;</p>
+                      <p className="text-[9px] text-muted-foreground italic">
+                        Format: &quot;MS 65&quot; or &quot;PR 70 DCAM&quot;
+                      </p>
                     </label>
                   </div>
 
                   <label className="space-y-1 block">
-                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Certification Number</span>
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                      Certification Number
+                    </span>
                     <input
-                      value={coinConditionDetail?.type === "graded" ? coinConditionDetail.certificationNumber ?? "" : ""}
-                      onChange={(e) => updateCoinConditionDetail({
-                        type: "graded",
-                        gradingCompany: coinConditionDetail?.type === "graded" ? coinConditionDetail.gradingCompany : "PCGS",
-                        grade: coinConditionDetail?.type === "graded" ? coinConditionDetail.grade : "",
-                        certificationNumber: e.target.value.trim() || undefined,
-                      })}
+                      value={
+                        coinConditionDetail?.type === "graded"
+                          ? (coinConditionDetail.certificationNumber ?? "")
+                          : ""
+                      }
+                      onChange={(e) =>
+                        updateCoinConditionDetail({
+                          type: "graded",
+                          gradingCompany:
+                            coinConditionDetail?.type === "graded"
+                              ? coinConditionDetail.gradingCompany
+                              : "PCGS",
+                          grade:
+                            coinConditionDetail?.type === "graded"
+                              ? coinConditionDetail.grade
+                              : "",
+                          certificationNumber:
+                            e.target.value.trim() || undefined,
+                        })
+                      }
                       placeholder="Optional if not visible"
                       className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </label>
 
                   {/* Real-time validation feedback for graded coins */}
-                  {coinConditionDetail && coinConditionDetail.type === "graded" && !isCoinConditionValid(coinConditionDetail) && (
-                    <div className="flex items-start gap-2 bg-red-50 dark:bg-red-950 rounded-lg p-2.5 border border-red-200 dark:border-red-800">
-                      <AlertCircle className="w-3.5 h-3.5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                      <div className="text-[10px] text-red-700 dark:text-red-300">
-                        {formatValidationErrors(
-                          validateCoinConditionDetail(coinConditionDetail).errors,
-                        ).split("\n").map((line, i) => (
-                          <div key={i}>{line}</div>
-                        ))}
+                  {coinConditionDetail &&
+                    coinConditionDetail.type === "graded" &&
+                    !isCoinConditionValid(coinConditionDetail) && (
+                      <div className="flex items-start gap-2 bg-red-50 dark:bg-red-950 rounded-lg p-2.5 border border-red-200 dark:border-red-800">
+                        <AlertCircle className="w-3.5 h-3.5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                        <div className="text-[10px] text-red-700 dark:text-red-300">
+                          {formatValidationErrors(
+                            validateCoinConditionDetail(coinConditionDetail)
+                              .errors,
+                          )
+                            .split("\n")
+                            .map((line, i) => (
+                              <div key={i}>{line}</div>
+                            ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
                 </div>
               ) : (
                 <div className="space-y-2">
                   <label className="space-y-1 block">
-                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Raw Coin Condition</span>
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                      Raw Coin Condition
+                    </span>
                     <select
-                      value={coinConditionDetail?.type === "raw" ? coinConditionDetail.rawCondition : ""}
-                      onChange={(e) => updateCoinConditionDetail({
-                        type: "raw",
-                        rawCondition: e.target.value as CoinConditionDetail & { type: "raw" }["rawCondition"],
-                      })}
+                      value={
+                        coinConditionDetail?.type === "raw"
+                          ? coinConditionDetail.rawCondition
+                          : ""
+                      }
+                      onChange={(e) =>
+                        updateCoinConditionDetail({
+                          type: "raw",
+                          rawCondition: e.target.value as CoinConditionDetail &
+                            { type: "raw" }["rawCondition"],
+                        })
+                      }
                       className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     >
                       <option value="">— Select a condition tier —</option>
                       {COIN_RAW_CONDITIONS.map((rawCondition) => (
-                        <option key={rawCondition} value={rawCondition}>{rawCondition}</option>
+                        <option key={rawCondition} value={rawCondition}>
+                          {rawCondition}
+                        </option>
                       ))}
                     </select>
                   </label>
 
                   {/* Real-time validation feedback for raw coins */}
-                  {coinConditionDetail && coinConditionDetail.type === "raw" && !isCoinConditionValid(coinConditionDetail) && (
-                    <div className="flex items-start gap-2 bg-red-50 dark:bg-red-950 rounded-lg p-2.5 border border-red-200 dark:border-red-800">
-                      <AlertCircle className="w-3.5 h-3.5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                      <div className="text-[10px] text-red-700 dark:text-red-300">
-                        {formatValidationErrors(
-                          validateCoinConditionDetail(coinConditionDetail).errors,
-                        ).split("\n").map((line, i) => (
-                          <div key={i}>{line}</div>
-                        ))}
+                  {coinConditionDetail &&
+                    coinConditionDetail.type === "raw" &&
+                    !isCoinConditionValid(coinConditionDetail) && (
+                      <div className="flex items-start gap-2 bg-red-50 dark:bg-red-950 rounded-lg p-2.5 border border-red-200 dark:border-red-800">
+                        <AlertCircle className="w-3.5 h-3.5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                        <div className="text-[10px] text-red-700 dark:text-red-300">
+                          {formatValidationErrors(
+                            validateCoinConditionDetail(coinConditionDetail)
+                              .errors,
+                          )
+                            .split("\n")
+                            .map((line, i) => (
+                              <div key={i}>{line}</div>
+                            ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
                 </div>
               )}
 
@@ -519,7 +650,8 @@ export function ListingFields({
                 <div className="flex items-start gap-2 bg-green-50 dark:bg-green-950 rounded-lg p-2.5 border border-green-200 dark:border-green-800">
                   <Check className="w-3.5 h-3.5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
                   <p className="text-[10px] text-green-700 dark:text-green-300">
-                    ✓ {describeCoinCondition(coinConditionDetail!)} — Ready to publish
+                    ✓ {describeCoinCondition(coinConditionDetail!)} — Ready to
+                    publish
                   </p>
                 </div>
               )}
@@ -529,78 +661,95 @@ export function ListingFields({
       )}
 
       {/* AI Suggested Grade — coins/cards only */}
-      {suggestedGrade && !isSlabbed && (domain === "coins_bullion" || domain === "trading_cards") && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">AI-Estimated Grade</label>
-          </div>
+      {suggestedGrade &&
+        !isSlabbed &&
+        (domain === "coins_bullion" || domain === "trading_cards") && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-primary" />
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                AI-Estimated Grade
+              </label>
+            </div>
 
-          <div className={`bg-card border rounded-xl p-4 space-y-3 ${gradeConfirmed ? "border-primary" : "border-accent"}`}>
-            <div className="flex items-center justify-between">
-              <span className="text-2xl font-bold text-foreground">{suggestedGrade}</span>
-              {gradeConfirmed ? (
-                <span className="flex items-center gap-1 text-xs font-medium text-primary bg-primary/10 px-2 py-1 rounded-full">
-                  <Check className="w-3 h-3" /> Confirmed
+            <div
+              className={`bg-card border rounded-xl p-4 space-y-3 ${gradeConfirmed ? "border-primary" : "border-accent"}`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-2xl font-bold text-foreground">
+                  {suggestedGrade}
                 </span>
+                {gradeConfirmed ? (
+                  <span className="flex items-center gap-1 text-xs font-medium text-primary bg-primary/10 px-2 py-1 rounded-full">
+                    <Check className="w-3 h-3" /> Confirmed
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-xs font-medium text-accent-foreground bg-accent px-2 py-1 rounded-full">
+                    <AlertTriangle className="w-3 h-3" /> Pending
+                  </span>
+                )}
+              </div>
+
+              {gradingRationale && (
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <p className="text-xs font-medium text-muted-foreground mb-1">
+                    Grading Rationale
+                  </p>
+                  <p className="text-xs text-foreground leading-relaxed">
+                    {gradingRationale}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex items-start gap-2 bg-accent/30 rounded-lg p-2.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-accent-foreground flex-shrink-0 mt-0.5" />
+                <p className="text-[10px] text-accent-foreground leading-relaxed">
+                  <strong>Disclaimer:</strong> This is an AI-estimated grade
+                  based on photo analysis only. It is NOT a substitute for
+                  professional grading by PCGS, NGC, or other certification
+                  services. Actual grade may differ.
+                </p>
+              </div>
+
+              {!gradeConfirmed ? (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => acceptSuggestedGrade(suggestedGrade)}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold transition-all hover:opacity-90 active:scale-[0.98]"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    Accept Grade
+                  </button>
+                  <button
+                    onClick={dismissSuggestedGrade}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-secondary text-foreground text-xs font-semibold transition-all hover:bg-secondary/80 active:scale-[0.98]"
+                  >
+                    <XIcon className="w-3.5 h-3.5" />
+                    Dismiss
+                  </button>
+                </div>
               ) : (
-                <span className="flex items-center gap-1 text-xs font-medium text-accent-foreground bg-accent px-2 py-1 rounded-full">
-                  <AlertTriangle className="w-3 h-3" /> Pending
-                </span>
+                <button
+                  onClick={undoGradeConfirmation}
+                  className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+                >
+                  Undo confirmation
+                </button>
               )}
             </div>
-
-            {gradingRationale && (
-              <div className="bg-muted/50 rounded-lg p-3">
-                <p className="text-xs font-medium text-muted-foreground mb-1">Grading Rationale</p>
-                <p className="text-xs text-foreground leading-relaxed">{gradingRationale}</p>
-              </div>
-            )}
-
-            <div className="flex items-start gap-2 bg-accent/30 rounded-lg p-2.5">
-              <AlertTriangle className="w-3.5 h-3.5 text-accent-foreground flex-shrink-0 mt-0.5" />
-              <p className="text-[10px] text-accent-foreground leading-relaxed">
-                <strong>Disclaimer:</strong> This is an AI-estimated grade based on photo analysis only. It is NOT a
-                substitute for professional grading by PCGS, NGC, or other certification services. Actual grade may
-                differ.
-              </p>
-            </div>
-
-            {!gradeConfirmed ? (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => acceptSuggestedGrade(suggestedGrade)}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold transition-all hover:opacity-90 active:scale-[0.98]"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  Accept Grade
-                </button>
-                <button
-                  onClick={dismissSuggestedGrade}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-secondary text-foreground text-xs font-semibold transition-all hover:bg-secondary/80 active:scale-[0.98]"
-                >
-                  <XIcon className="w-3.5 h-3.5" />
-                  Dismiss
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={undoGradeConfirmation}
-                className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
-              >
-                Undo confirmation
-              </button>
-            )}
           </div>
-        </div>
-      )}
+        )}
 
       {/* Consignor */}
       <div className="space-y-1.5">
         <div className="flex items-center gap-1.5">
           <UserCircle className="w-3.5 h-3.5 text-primary" />
-          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Consignor</label>
-          <span className="text-[10px] text-muted-foreground/60 ml-auto">Optional</span>
+          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Consignor
+          </label>
+          <span className="text-[10px] text-muted-foreground/60 ml-auto">
+            Optional
+          </span>
         </div>
         <input
           value={consignor}
@@ -625,10 +774,26 @@ export function ListingFields({
         condition={condition}
         priceMin={priceMin}
         priceMax={priceMax}
-        metalType={planFeatures.hasMeltProtection && metalType !== "none" ? metalType : undefined}
-        metalWeightOz={planFeatures.hasMeltProtection && metalType !== "none" ? metalWeightOz : undefined}
-        meltValue={planFeatures.hasMeltProtection && metalType !== "none" ? meltValue : null}
-        spotPrices={planFeatures.hasMeltProtection && metalType !== "none" ? spotPrices : null}
+        metalType={
+          planFeatures.hasMeltProtection && metalType !== "none"
+            ? metalType
+            : undefined
+        }
+        metalWeightOz={
+          planFeatures.hasMeltProtection && metalType !== "none"
+            ? metalWeightOz
+            : undefined
+        }
+        meltValue={
+          planFeatures.hasMeltProtection && metalType !== "none"
+            ? meltValue
+            : null
+        }
+        spotPrices={
+          planFeatures.hasMeltProtection && metalType !== "none"
+            ? spotPrices
+            : null
+        }
         onApplyPrice={applyRecommendedPrice}
       />
     </div>

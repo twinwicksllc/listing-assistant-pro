@@ -11,10 +11,22 @@ export const BULK_TEMPLATES: Record<BulkTemplateId, BulkTemplate> = {
     defaultCategoryId: "11116",
     defaultCondition: "USED_EXCELLENT",
     columns: [
-      "title", "condition", "price", "quantity", "categoryId",
-      "imageUrl1", "imageUrl2",
+      "title",
+      "condition",
+      "price",
+      "quantity",
+      "categoryId",
+      "imageUrl1",
+      "imageUrl2",
     ],
-    itemSpecificKeys: ["Year", "Mint Location", "Grade", "Denomination", "Composition", "Certification"],
+    itemSpecificKeys: [
+      "Year",
+      "Mint Location",
+      "Grade",
+      "Denomination",
+      "Composition",
+      "Certification",
+    ],
     sampleRows: [
       {
         title: "1921 Morgan Silver Dollar MS-63 Uncirculated",
@@ -23,12 +35,12 @@ export const BULK_TEMPLATES: Record<BulkTemplateId, BulkTemplate> = {
         quantity: "1",
         categoryId: "39464",
         imageUrl1: "",
-        "Item_Specific_Year": "1921",
+        Item_Specific_Year: "1921",
         "Item_Specific_Mint Location": "Philadelphia",
-        "Item_Specific_Grade": "MS-63",
-        "Item_Specific_Denomination": "$1",
-        "Item_Specific_Composition": "Silver",
-        "Item_Specific_Certification": "Uncertified",
+        Item_Specific_Grade: "MS-63",
+        Item_Specific_Denomination: "$1",
+        Item_Specific_Composition: "Silver",
+        Item_Specific_Certification: "Uncertified",
       },
       {
         title: "1964 Kennedy Half Dollar BU Roll 20 Coins 90% Silver",
@@ -37,10 +49,10 @@ export const BULK_TEMPLATES: Record<BulkTemplateId, BulkTemplate> = {
         quantity: "1",
         categoryId: "11116",
         imageUrl1: "",
-        "Item_Specific_Year": "1964",
-        "Item_Specific_Composition": "Silver",
-        "Item_Specific_Denomination": "50C",
-        "Item_Specific_Certification": "Uncertified",
+        Item_Specific_Year: "1964",
+        Item_Specific_Composition: "Silver",
+        Item_Specific_Denomination: "50C",
+        Item_Specific_Certification: "Uncertified",
       },
     ],
   },
@@ -53,10 +65,23 @@ export const BULK_TEMPLATES: Record<BulkTemplateId, BulkTemplate> = {
     defaultCategoryId: "15032",
     defaultCondition: "USED_EXCELLENT",
     columns: [
-      "title", "condition", "price", "quantity", "categoryId",
-      "imageUrl1", "imageUrl2", "imageUrl3",
+      "title",
+      "condition",
+      "price",
+      "quantity",
+      "categoryId",
+      "imageUrl1",
+      "imageUrl2",
+      "imageUrl3",
     ],
-    itemSpecificKeys: ["Brand", "Model", "Storage Capacity", "Color", "Connectivity", "MPN"],
+    itemSpecificKeys: [
+      "Brand",
+      "Model",
+      "Storage Capacity",
+      "Color",
+      "Connectivity",
+      "MPN",
+    ],
     sampleRows: [
       {
         title: "Apple iPhone 13 128GB Space Gray Unlocked Excellent",
@@ -65,11 +90,11 @@ export const BULK_TEMPLATES: Record<BulkTemplateId, BulkTemplate> = {
         quantity: "1",
         categoryId: "15032",
         imageUrl1: "",
-        "Item_Specific_Brand": "Apple",
-        "Item_Specific_Model": "iPhone 13",
+        Item_Specific_Brand: "Apple",
+        Item_Specific_Model: "iPhone 13",
         "Item_Specific_Storage Capacity": "128 GB",
-        "Item_Specific_Color": "Space Gray",
-        "Item_Specific_Connectivity": "Unlocked",
+        Item_Specific_Color: "Space Gray",
+        Item_Specific_Connectivity: "Unlocked",
       },
     ],
   },
@@ -82,10 +107,22 @@ export const BULK_TEMPLATES: Record<BulkTemplateId, BulkTemplate> = {
     defaultCategoryId: "11450",
     defaultCondition: "USED_EXCELLENT",
     columns: [
-      "title", "condition", "price", "quantity", "categoryId",
-      "imageUrl1", "imageUrl2",
+      "title",
+      "condition",
+      "price",
+      "quantity",
+      "categoryId",
+      "imageUrl1",
+      "imageUrl2",
     ],
-    itemSpecificKeys: ["Brand", "Size", "Color", "Style", "Material", "Department"],
+    itemSpecificKeys: [
+      "Brand",
+      "Size",
+      "Color",
+      "Style",
+      "Material",
+      "Department",
+    ],
     sampleRows: [
       {
         title: "Nike Air Max 90 White Black Men's Size 10 Running Shoes",
@@ -94,11 +131,11 @@ export const BULK_TEMPLATES: Record<BulkTemplateId, BulkTemplate> = {
         quantity: "1",
         categoryId: "15709",
         imageUrl1: "",
-        "Item_Specific_Brand": "Nike",
-        "Item_Specific_Size": "10",
-        "Item_Specific_Color": "White/Black",
-        "Item_Specific_Style": "Athletic",
-        "Item_Specific_Department": "Men",
+        Item_Specific_Brand: "Nike",
+        Item_Specific_Size: "10",
+        Item_Specific_Color: "White/Black",
+        Item_Specific_Style: "Athletic",
+        Item_Specific_Department: "Men",
       },
     ],
   },
@@ -111,10 +148,21 @@ export const BULK_TEMPLATES: Record<BulkTemplateId, BulkTemplate> = {
     defaultCategoryId: "267",
     defaultCondition: "USED_EXCELLENT",
     columns: [
-      "title", "condition", "price", "quantity", "categoryId",
+      "title",
+      "condition",
+      "price",
+      "quantity",
+      "categoryId",
       "imageUrl1",
     ],
-    itemSpecificKeys: ["Author", "ISBN", "Format", "Publication Year", "Genre", "Language"],
+    itemSpecificKeys: [
+      "Author",
+      "ISBN",
+      "Format",
+      "Publication Year",
+      "Genre",
+      "Language",
+    ],
     sampleRows: [
       {
         title: "The Great Gatsby F. Scott Fitzgerald Scribner Paperback",
@@ -123,10 +171,10 @@ export const BULK_TEMPLATES: Record<BulkTemplateId, BulkTemplate> = {
         quantity: "1",
         categoryId: "267",
         imageUrl1: "",
-        "Item_Specific_Author": "F. Scott Fitzgerald",
-        "Item_Specific_Format": "Paperback",
-        "Item_Specific_Language": "English",
-        "Item_Specific_Genre": "Classic Literature",
+        Item_Specific_Author: "F. Scott Fitzgerald",
+        Item_Specific_Format: "Paperback",
+        Item_Specific_Language: "English",
+        Item_Specific_Genre: "Classic Literature",
       },
     ],
   },
@@ -139,10 +187,20 @@ export const BULK_TEMPLATES: Record<BulkTemplateId, BulkTemplate> = {
     defaultCategoryId: "",
     defaultCondition: "USED_EXCELLENT",
     columns: [
-      "title", "description", "condition", "price", "quantity", "categoryId",
-      "format", "imageUrl1", "imageUrl2",
-      "fulfillmentPolicyId", "paymentPolicyId", "returnPolicyId",
-      "cogs", "consignor",
+      "title",
+      "description",
+      "condition",
+      "price",
+      "quantity",
+      "categoryId",
+      "format",
+      "imageUrl1",
+      "imageUrl2",
+      "fulfillmentPolicyId",
+      "paymentPolicyId",
+      "returnPolicyId",
+      "cogs",
+      "consignor",
     ],
     itemSpecificKeys: ["Brand", "Type", "Color", "Material", "Size"],
     sampleRows: [
@@ -167,7 +225,7 @@ export const BULK_TEMPLATES: Record<BulkTemplateId, BulkTemplate> = {
 export function generateTemplateCsv(templateId: BulkTemplateId): string {
   const template = BULK_TEMPLATES[templateId];
   const itemSpecificHeaders = template.itemSpecificKeys.map(
-    (k) => `Item_Specific_${k}`
+    (k) => `Item_Specific_${k}`,
   );
 
   // Build header row
@@ -205,7 +263,9 @@ export function generateTemplateCsv(templateId: BulkTemplateId): string {
   const dataRows = template.sampleRows.map((row) => {
     return headers.map((h) => {
       // Try direct mapping
-      const fieldKey = Object.keys(fieldLabels).find((k) => fieldLabels[k] === h);
+      const fieldKey = Object.keys(fieldLabels).find(
+        (k) => fieldLabels[k] === h,
+      );
       if (fieldKey && row[fieldKey] !== undefined) return `"${row[fieldKey]}"`;
       if (row[h] !== undefined) return `"${row[h]}"`;
       return '""';

@@ -1,9 +1,25 @@
 import { useState, useEffect } from "react";
 import {
-  X, Save, Loader2, DollarSign, Gavel, ShoppingCart, Tag,
-  UserCircle, Truck, CreditCard, RotateCcw, AlertCircle, Clock,
+  X,
+  Save,
+  Loader2,
+  DollarSign,
+  Gavel,
+  ShoppingCart,
+  Tag,
+  UserCircle,
+  Truck,
+  CreditCard,
+  RotateCcw,
+  AlertCircle,
+  Clock,
 } from "lucide-react";
-import { ListingDraft, ListingFormat, AuctionDuration, getConditionsForCategory } from "@/types/listing";
+import {
+  ListingDraft,
+  ListingFormat,
+  AuctionDuration,
+  getConditionsForCategory,
+} from "@/types/listing";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -32,70 +48,107 @@ interface Policies {
 // Conditions are now computed dynamically from the draft's category — see getConditionsForCategory()
 
 const AUCTION_DURATIONS: { value: AuctionDuration; label: string }[] = [
-  { value: "Days_1",  label: "1 Day" },
-  { value: "Days_3",  label: "3 Days" },
-  { value: "Days_5",  label: "5 Days" },
-  { value: "Days_7",  label: "7 Days (recommended)" },
+  { value: "Days_1", label: "1 Day" },
+  { value: "Days_3", label: "3 Days" },
+  { value: "Days_5", label: "5 Days" },
+  { value: "Days_7", label: "7 Days (recommended)" },
   { value: "Days_10", label: "10 Days" },
 ];
 
-export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }: EditDraftModalProps) {
+export default function EditDraftModal({
+  draft,
+  onClose,
+  onSaved,
+  updateDraft,
+}: EditDraftModalProps) {
   const { user, planFeatures } = useAuth();
 
-  const [title, setTitle]               = useState(draft.title);
-  const [description, setDescription]   = useState(draft.description);
-  const [listingFormat, setListingFormat] = useState<ListingFormat>(draft.listingFormat ?? "FIXED_PRICE");
+  const [title, setTitle] = useState(draft.title);
+  const [description, setDescription] = useState(draft.description);
+  const [listingFormat, setListingFormat] = useState<ListingFormat>(
+    draft.listingFormat ?? "FIXED_PRICE",
+  );
   // listingPrice is always saved by AnalyzePage.handleSave (never null/undefined for new drafts).
   // We use it directly. If somehow missing (very old draft), fall back to priceMin as last resort.
   const [listingPrice, setListingPrice] = useState<number>(
     draft.listingPrice != null && draft.listingPrice > 0
       ? draft.listingPrice
-      : draft.priceMin ?? 0
+      : (draft.priceMin ?? 0),
   );
   const [auctionDuration, setAuctionDuration] = useState<AuctionDuration>(
-    draft.auctionDuration ?? "Days_7"
+    draft.auctionDuration ?? "Days_7",
   );
-  const [condition, setCondition]       = useState(draft.condition ?? "USED_EXCELLENT");
-  const [consignor, setConsignor]       = useState(draft.consignor ?? "");
-  const [cogs, setCogs]                 = useState<number | undefined>(draft.cogs);
-  const [ebayCategoryId, setEbayCategoryId] = useState(draft.ebayCategoryId ?? "");
+  const [condition, setCondition] = useState(
+    draft.condition ?? "USED_EXCELLENT",
+  );
+  const [consignor, setConsignor] = useState(draft.consignor ?? "");
+  const [cogs, setCogs] = useState<number | undefined>(draft.cogs);
+  const [ebayCategoryId, setEbayCategoryId] = useState(
+    draft.ebayCategoryId ?? "",
+  );
   // Track whether the user has changed the category ID so we can clear the stale breadcrumb
   const [categoryChanged, setCategoryChanged] = useState(false);
   const [customCategoryInput, setCustomCategoryInput] = useState(false);
   const [itemSpecifics, setItemSpecifics] = useState<Record<string, string>>(
-    (draft.itemSpecifics as Record<string, string>) ?? {}
+    (draft.itemSpecifics as Record<string, string>) ?? {},
   );
 
   // Policy state — seeded directly from the saved draft values so the selects
   // show the correct selection immediately, before the options list loads.
-  const [policies, setPolicies]                     = useState<Policies | null>(null);
-  const [policiesLoading, setPoliciesLoading]       = useState(false);
-  const [policiesError, setPoliciesError]           = useState("");
-  const [ebayConnected, setEbayConnected]           = useState(false);
-  const [fulfillmentPolicyId, setFulfillmentPolicyId] = useState(draft.fulfillmentPolicyId ?? "");
-  const [paymentPolicyId, setPaymentPolicyId]         = useState(draft.paymentPolicyId ?? "");
-  const [returnPolicyId, setReturnPolicyId]           = useState(draft.returnPolicyId ?? "");
+  const [policies, setPolicies] = useState<Policies | null>(null);
+  const [policiesLoading, setPoliciesLoading] = useState(false);
+  const [policiesError, setPoliciesError] = useState("");
+  const [ebayConnected, setEbayConnected] = useState(false);
+  const [fulfillmentPolicyId, setFulfillmentPolicyId] = useState(
+    draft.fulfillmentPolicyId ?? "",
+  );
+  const [paymentPolicyId, setPaymentPolicyId] = useState(
+    draft.paymentPolicyId ?? "",
+  );
+  const [returnPolicyId, setReturnPolicyId] = useState(
+    draft.returnPolicyId ?? "",
+  );
 
   // Multi-quantity (Fixed Price only)
   const [quantity, setQuantity] = useState(draft.quantity ?? 1);
-  const [pricingMode, setPricingMode] = useState<'per_item' | 'total'>(draft.pricingMode ?? 'per_item');
+  const [pricingMode, setPricingMode] = useState<"per_item" | "total">(
+    draft.pricingMode ?? "per_item",
+  );
 
   // Video upload — seed from saved draft values
   const [storedEbayToken, setStoredEbayToken] = useState<string | null>(null);
-  const [videoUrl, setVideoUrl] = useState<string | null>(draft.videoUrl ?? null);
-  const [ebayVideoId, setEbayVideoId] = useState<string | null>(draft.ebayVideoId ?? null);
-  const [ebayVideoStatus, setEbayVideoStatus] = useState<string | null>(draft.ebayVideoStatus ?? null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(
+    draft.videoUrl ?? null,
+  );
+  const [ebayVideoId, setEbayVideoId] = useState<string | null>(
+    draft.ebayVideoId ?? null,
+  );
+  const [ebayVideoStatus, setEbayVideoStatus] = useState<string | null>(
+    draft.ebayVideoStatus ?? null,
+  );
 
   // Package weight and dimensions
-  const [packageWeightLb, setPackageWeightLb] = useState<number>(draft.packageWeightLb ?? 0);
-  const [packageWeightOz, setPackageWeightOz] = useState<number>(draft.packageWeightOz ?? 0);
-  const [packageLengthIn, setPackageLengthIn] = useState<number>(draft.packageLengthIn ?? 0);
-  const [packageWidthIn, setPackageWidthIn] = useState<number>(draft.packageWidthIn ?? 0);
-  const [packageHeightIn, setPackageHeightIn] = useState<number>(draft.packageHeightIn ?? 0);
+  const [packageWeightLb, setPackageWeightLb] = useState<number>(
+    draft.packageWeightLb ?? 0,
+  );
+  const [packageWeightOz, setPackageWeightOz] = useState<number>(
+    draft.packageWeightOz ?? 0,
+  );
+  const [packageLengthIn, setPackageLengthIn] = useState<number>(
+    draft.packageLengthIn ?? 0,
+  );
+  const [packageWidthIn, setPackageWidthIn] = useState<number>(
+    draft.packageWidthIn ?? 0,
+  );
+  const [packageHeightIn, setPackageHeightIn] = useState<number>(
+    draft.packageHeightIn ?? 0,
+  );
 
   const [saving, setSaving] = useState(false);
 
-  const displaySpecifics = Object.entries(itemSpecifics).filter(([, v]) => v !== undefined);
+  const displaySpecifics = Object.entries(itemSpecifics).filter(
+    ([, v]) => v !== undefined,
+  );
 
   // Fetch eBay policies on mount.
   // Token lookup order mirrors usePublishDraft:
@@ -115,16 +168,25 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
       let ebayToken: string | null = null;
       if (user?.id) {
         try {
-          const { data, error: tokenError } = await supabase.functions.invoke("ebay-publish", {
-            body: { action: "get_stored_token", userId: user.id },
-          });
+          const { data, error: tokenError } = await supabase.functions.invoke(
+            "ebay-publish",
+            {
+              body: { action: "get_stored_token", userId: user.id },
+            },
+          );
           if (tokenError) {
             console.warn("EditDraftModal: get_stored_token error:", tokenError);
           } else if (data?.token) {
             ebayToken = data.token;
-            console.log("EditDraftModal: token resolved from server-side profiles");
+            console.log(
+              "EditDraftModal: token resolved from server-side profiles",
+            );
           } else {
-            console.log("EditDraftModal: get_stored_token returned no token (noToken:", data?.noToken, ")");
+            console.log(
+              "EditDraftModal: get_stored_token returned no token (noToken:",
+              data?.noToken,
+              ")",
+            );
           }
         } catch (e) {
           console.warn("EditDraftModal: get_stored_token threw:", e);
@@ -138,7 +200,9 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
       if (!ebayToken) {
         ebayToken = localStorage.getItem("ebay-user-token");
         if (ebayToken) {
-          console.log("EditDraftModal: token resolved from localStorage fallback");
+          console.log(
+            "EditDraftModal: token resolved from localStorage fallback",
+          );
         }
       }
 
@@ -154,7 +218,11 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
       setStoredEbayToken(ebayToken);
 
       const { data, error } = await supabase.functions.invoke("ebay-publish", {
-        body: { action: "get_policies", userToken: ebayToken, userId: user?.id ?? null },
+        body: {
+          action: "get_policies",
+          userToken: ebayToken,
+          userId: user?.id ?? null,
+        },
       });
 
       if (cancelled) return;
@@ -164,28 +232,41 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
         console.error("EditDraftModal: get_policies invoke error:", detail);
         setPoliciesError(`Could not load eBay policies: ${detail}`);
       } else if (data?.error) {
-        console.error("EditDraftModal: get_policies returned error:", data.error);
+        console.error(
+          "EditDraftModal: get_policies returned error:",
+          data.error,
+        );
         setPoliciesError(`Could not load eBay policies: ${data.error}`);
       } else {
         setPolicies(data as Policies);
 
         if (data?.policyErrors && Object.keys(data.policyErrors).length > 0) {
-          console.warn("EditDraftModal: some policy types had errors:", data.policyErrors);
+          console.warn(
+            "EditDraftModal: some policy types had errors:",
+            data.policyErrors,
+          );
         }
 
         // Auto-select the first policy of each type ONLY when the draft had no saved
         // policy. Use the functional updater so we never overwrite an already-set value.
-        setFulfillmentPolicyId((prev) => (!prev && data.fulfillment?.length > 0) ? data.fulfillment[0].id : prev);
-        setPaymentPolicyId((prev)      => (!prev && data.payment?.length > 0)    ? data.payment[0].id    : prev);
-        setReturnPolicyId((prev)       => (!prev && data.returns?.length > 0)    ? data.returns[0].id    : prev);
+        setFulfillmentPolicyId((prev) =>
+          !prev && data.fulfillment?.length > 0 ? data.fulfillment[0].id : prev,
+        );
+        setPaymentPolicyId((prev) =>
+          !prev && data.payment?.length > 0 ? data.payment[0].id : prev,
+        );
+        setReturnPolicyId((prev) =>
+          !prev && data.returns?.length > 0 ? data.returns[0].id : prev,
+        );
       }
 
       setPoliciesLoading(false);
     };
 
     loadPolicies();
-    return () => { cancelled = true; };
-   
+    return () => {
+      cancelled = true;
+    };
   }, [user?.id]);
 
   // When user types a new category ID, track that it differs from the saved value
@@ -199,8 +280,11 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
   // - If the user changed the category ID, show "Category #<id>" (stale breadcrumb is misleading)
   // - Otherwise show the saved breadcrumb, falling back to "Category #<id>"
   const displayBreadcrumb = categoryChanged
-    ? (ebayCategoryId ? `Category #${ebayCategoryId}` : "")
-    : (draft.ebayCategoryBreadcrumb || (ebayCategoryId ? `Category #${ebayCategoryId}` : ""));
+    ? ebayCategoryId
+      ? `Category #${ebayCategoryId}`
+      : ""
+    : draft.ebayCategoryBreadcrumb ||
+      (ebayCategoryId ? `Category #${ebayCategoryId}` : "");
 
   const handleSave = async () => {
     if (!title.trim()) {
@@ -217,27 +301,28 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
 
     // When the category ID was changed, clear the stale breadcrumb in the DB so it
     // does not show misleading text from the original category going forward.
-    const newCategoryId  = ebayCategoryId || undefined;
-    const newBreadcrumb  = categoryChanged
-      ? undefined                         // clear stale breadcrumb when ID changed
-      : draft.ebayCategoryBreadcrumb;     // keep existing breadcrumb if ID unchanged
+    const newCategoryId = ebayCategoryId || undefined;
+    const newBreadcrumb = categoryChanged
+      ? undefined // clear stale breadcrumb when ID changed
+      : draft.ebayCategoryBreadcrumb; // keep existing breadcrumb if ID unchanged
 
     const updates: Partial<ListingDraft> = {
       title: title.slice(0, 80),
       description,
       listingFormat,
       listingPrice,
-      auctionDuration: listingFormat === "AUCTION" ? auctionDuration : undefined,
+      auctionDuration:
+        listingFormat === "AUCTION" ? auctionDuration : undefined,
       condition,
       consignor,
       cogs: cogs ?? undefined,
       cogsSource: cogs != null ? (draft.cogsSource ?? "manual") : undefined,
-      ebayCategoryId:        newCategoryId,
+      ebayCategoryId: newCategoryId,
       ebayCategoryBreadcrumb: newBreadcrumb,
       itemSpecifics,
       fulfillmentPolicyId: fulfillmentPolicyId || undefined,
-      paymentPolicyId:     paymentPolicyId     || undefined,
-      returnPolicyId:      returnPolicyId      || undefined,
+      paymentPolicyId: paymentPolicyId || undefined,
+      returnPolicyId: returnPolicyId || undefined,
       quantity: quantity > 1 ? quantity : 1,
       pricingMode,
       videoUrl: videoUrl ?? undefined,
@@ -263,11 +348,12 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
     /* Backdrop */
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm px-0 sm:px-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       {/* Sheet / Modal */}
       <div className="w-full sm:max-w-lg bg-background rounded-t-2xl sm:rounded-2xl border border-border shadow-xl flex flex-col max-h-[92dvh]">
-
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-border flex-shrink-0">
           <div className="flex items-center gap-2">
@@ -277,8 +363,12 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
               className="w-10 h-10 rounded-lg object-cover border border-border"
             />
             <div>
-              <p className="text-sm font-semibold text-foreground leading-tight line-clamp-1">{draft.title}</p>
-              <p className="text-[10px] text-muted-foreground">{draft.createdAt.toLocaleDateString()}</p>
+              <p className="text-sm font-semibold text-foreground leading-tight line-clamp-1">
+                {draft.title}
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                {draft.createdAt.toLocaleDateString()}
+              </p>
             </div>
           </div>
           <button
@@ -291,12 +381,15 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
 
         {/* Scrollable body */}
         <div className="overflow-y-auto flex-1 px-4 py-4 space-y-4">
-
           {/* Title */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">eBay Title</label>
-              <span className="text-xs text-muted-foreground">{title.length}/80</span>
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                eBay Title
+              </label>
+              <span className="text-xs text-muted-foreground">
+                {title.length}/80
+              </span>
             </div>
             <input
               value={title}
@@ -307,7 +400,9 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
 
           {/* Description */}
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Description</label>
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Description
+            </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -320,7 +415,9 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
           <div className="space-y-3">
             <div className="flex items-center gap-1.5">
               <DollarSign className="w-3.5 h-3.5 text-primary" />
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Listing Format & Price</label>
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Listing Format & Price
+              </label>
             </div>
 
             <div className="flex gap-2">
@@ -350,7 +447,9 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
 
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">
-                {listingFormat === "AUCTION" ? "Starting Bid ($)" : "Listing Price ($)"}
+                {listingFormat === "AUCTION"
+                  ? "Starting Bid ($)"
+                  : "Listing Price ($)"}
               </label>
               <input
                 type="number"
@@ -358,7 +457,9 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
                 step="0.01"
                 value={listingPrice || ""}
                 placeholder="0.00"
-                onChange={(e) => setListingPrice(parseFloat(e.target.value) || 0)}
+                onChange={(e) =>
+                  setListingPrice(parseFloat(e.target.value) || 0)
+                }
                 className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
@@ -367,41 +468,52 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
             {listingFormat === "FIXED_PRICE" && (
               <div className="space-y-2">
                 <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Quantity Available</label>
+                  <label className="text-xs text-muted-foreground">
+                    Quantity Available
+                  </label>
                   <input
                     type="number"
                     min="1"
                     step="1"
                     value={quantity}
                     onChange={(e) => {
-                      const q = Math.max(1, Math.floor(parseFloat(e.target.value) || 1));
+                      const q = Math.max(
+                        1,
+                        Math.floor(parseFloat(e.target.value) || 1),
+                      );
                       setQuantity(q);
-                      if (q === 1) setPricingMode('per_item');
+                      if (q === 1) setPricingMode("per_item");
                     }}
                     className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
                 {quantity > 1 && (
                   <div className="space-y-1 pl-1">
-                    <label className="text-xs text-muted-foreground">Listing price is…</label>
+                    <label className="text-xs text-muted-foreground">
+                      Listing price is…
+                    </label>
                     <div className="flex gap-2">
-                      {(['per_item', 'total'] as const).map((mode) => (
+                      {(["per_item", "total"] as const).map((mode) => (
                         <button
                           key={mode}
                           onClick={() => setPricingMode(mode)}
                           className={`flex-1 py-2 rounded-lg text-xs font-medium border transition-colors ${
                             pricingMode === mode
-                              ? 'border-primary bg-primary/10 text-primary'
-                              : 'border-border bg-card text-muted-foreground hover:border-primary/40'
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border bg-card text-muted-foreground hover:border-primary/40"
                           }`}
                         >
-                          {mode === 'per_item' ? 'Per item' : 'Total for all'}
+                          {mode === "per_item" ? "Per item" : "Total for all"}
                         </button>
                       ))}
                     </div>
-                    {pricingMode === 'total' && listingPrice > 0 && (
+                    {pricingMode === "total" && listingPrice > 0 && (
                       <p className="text-xs text-muted-foreground pt-0.5">
-                        eBay will list at <span className="font-medium text-foreground">${(listingPrice / quantity).toFixed(2)}</span> per item
+                        eBay will list at{" "}
+                        <span className="font-medium text-foreground">
+                          ${(listingPrice / quantity).toFixed(2)}
+                        </span>{" "}
+                        per item
                       </p>
                     )}
                   </div>
@@ -414,7 +526,9 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
               <div className="space-y-1.5">
                 <div className="flex items-center gap-1.5">
                   <Clock className="w-3 h-3 text-muted-foreground" />
-                  <label className="text-xs text-muted-foreground font-medium">Auction Duration</label>
+                  <label className="text-xs text-muted-foreground font-medium">
+                    Auction Duration
+                  </label>
                 </div>
                 <div className="bg-card border border-border rounded-lg divide-y divide-border">
                   {AUCTION_DURATIONS.map((d) => (
@@ -435,7 +549,8 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
                   ))}
                 </div>
                 <p className="text-[10px] text-muted-foreground">
-                  eBay requires an explicit duration for auction listings (1, 3, 5, 7, or 10 days).
+                  eBay requires an explicit duration for auction listings (1, 3,
+                  5, 7, or 10 days).
                 </p>
               </div>
             )}
@@ -445,7 +560,9 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
           <div className="bg-muted/50 rounded-lg px-3 py-2.5 space-y-2">
             <div className="flex items-center gap-2">
               <Tag className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">eBay Category</p>
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                eBay Category
+              </p>
             </div>
             {customCategoryInput ? (
               <div className="space-y-1.5">
@@ -472,11 +589,17 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
                   {ebayCategoryId ? (
                     <>
                       {/* displayBreadcrumb reflects any unsaved category change live */}
-                      <p className="text-xs text-foreground leading-snug">{displayBreadcrumb}</p>
-                      <p className="text-[10px] font-mono text-muted-foreground/60 mt-0.5">ID: {ebayCategoryId}</p>
+                      <p className="text-xs text-foreground leading-snug">
+                        {displayBreadcrumb}
+                      </p>
+                      <p className="text-[10px] font-mono text-muted-foreground/60 mt-0.5">
+                        ID: {ebayCategoryId}
+                      </p>
                     </>
                   ) : (
-                    <p className="text-xs text-muted-foreground italic">No category set</p>
+                    <p className="text-xs text-muted-foreground italic">
+                      No category set
+                    </p>
                   )}
                 </div>
                 <button
@@ -494,16 +617,26 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
             <div className="space-y-2">
               <div className="flex items-center gap-1.5">
                 <Tag className="w-3.5 h-3.5 text-primary" />
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Item Specifics</label>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Item Specifics
+                </label>
               </div>
               <div className="bg-card border border-border rounded-lg divide-y divide-border">
                 {displaySpecifics.map(([key, value]) => (
-                  <div key={key} className="flex items-center justify-between px-3 py-2">
-                    <span className="text-xs font-medium text-muted-foreground">{key}</span>
+                  <div
+                    key={key}
+                    className="flex items-center justify-between px-3 py-2"
+                  >
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {key}
+                    </span>
                     <input
                       value={value ?? ""}
                       onChange={(e) =>
-                        setItemSpecifics((prev) => ({ ...prev, [key]: e.target.value }))
+                        setItemSpecifics((prev) => ({
+                          ...prev,
+                          [key]: e.target.value,
+                        }))
                       }
                       className="text-xs text-foreground text-right bg-transparent border-none focus:outline-none focus:ring-0 max-w-[55%]"
                     />
@@ -513,14 +646,22 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
 
               {/* Condition */}
               <div className="flex items-center justify-between bg-card border border-border rounded-lg px-3 py-2">
-                <span className="text-xs font-medium text-muted-foreground">Condition</span>
+                <span className="text-xs font-medium text-muted-foreground">
+                  Condition
+                </span>
                 <select
                   value={condition}
                   onChange={(e) => setCondition(e.target.value)}
                   className="text-xs text-foreground bg-transparent border-none focus:outline-none cursor-pointer text-right"
                 >
-                  {getConditionsForCategory(ebayCategoryId || undefined, undefined, draft.ebayCategoryBreadcrumb).map((c) => (
-                    <option key={c.value} value={c.value}>{c.label}</option>
+                  {getConditionsForCategory(
+                    ebayCategoryId || undefined,
+                    undefined,
+                    draft.ebayCategoryBreadcrumb,
+                  ).map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -530,14 +671,22 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
           {/* Condition (standalone if no item specifics) */}
           {displaySpecifics.length === 0 && (
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Condition</label>
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Condition
+              </label>
               <select
                 value={condition}
                 onChange={(e) => setCondition(e.target.value)}
                 className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               >
-                {getConditionsForCategory(ebayCategoryId || undefined, undefined, draft.ebayCategoryBreadcrumb).map((c) => (
-                  <option key={c.value} value={c.value}>{c.label}</option>
+                {getConditionsForCategory(
+                  ebayCategoryId || undefined,
+                  undefined,
+                  draft.ebayCategoryBreadcrumb,
+                ).map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
                 ))}
               </select>
             </div>
@@ -547,8 +696,12 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
           <div className="space-y-1.5">
             <div className="flex items-center gap-1.5">
               <UserCircle className="w-3.5 h-3.5 text-primary" />
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Consignor</label>
-              <span className="text-[10px] text-muted-foreground/60 ml-auto">Optional</span>
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Consignor
+              </label>
+              <span className="text-[10px] text-muted-foreground/60 ml-auto">
+                Optional
+              </span>
             </div>
             <input
               value={consignor}
@@ -570,7 +723,9 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
           <div className="space-y-3">
             <div className="flex items-center gap-1.5">
               <Truck className="w-3.5 h-3.5 text-primary" />
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">eBay Business Policies</label>
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                eBay Business Policies
+              </label>
               {policiesLoading && (
                 <Loader2 className="w-3 h-3 animate-spin text-muted-foreground ml-auto" />
               )}
@@ -586,7 +741,9 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
             {!policiesError && !policiesLoading && !ebayConnected && (
               <div className="flex items-start gap-2 bg-muted/50 border border-border rounded-lg px-3 py-2.5">
                 <AlertCircle className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-muted-foreground">Connect your eBay account in Settings to manage policies.</p>
+                <p className="text-xs text-muted-foreground">
+                  Connect your eBay account in Settings to manage policies.
+                </p>
               </div>
             )}
 
@@ -597,17 +754,22 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
                 - Once loaded: render the select with the saved value already highlighted   */}
             {ebayConnected && (
               <div className="bg-card border border-border rounded-lg divide-y divide-border">
-
                 {/* Fulfillment / Shipping */}
                 <div className="flex items-center justify-between px-3 py-2.5 gap-3">
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <Truck className="w-3.5 h-3.5 text-muted-foreground" />
-                    <span className="text-xs font-medium text-muted-foreground">Shipping</span>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Shipping
+                    </span>
                   </div>
                   {policiesLoading ? (
-                    <span className="text-xs text-muted-foreground italic">Loading…</span>
+                    <span className="text-xs text-muted-foreground italic">
+                      Loading…
+                    </span>
                   ) : policies && policies.fulfillment.length === 0 ? (
-                    <span className="text-xs text-destructive">No policies found</span>
+                    <span className="text-xs text-destructive">
+                      No policies found
+                    </span>
                   ) : (
                     <select
                       value={fulfillmentPolicyId}
@@ -616,7 +778,9 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
                     >
                       <option value="">— Select —</option>
                       {(policies?.fulfillment ?? []).map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
                       ))}
                     </select>
                   )}
@@ -626,12 +790,18 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
                 <div className="flex items-center justify-between px-3 py-2.5 gap-3">
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <CreditCard className="w-3.5 h-3.5 text-muted-foreground" />
-                    <span className="text-xs font-medium text-muted-foreground">Payment</span>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Payment
+                    </span>
                   </div>
                   {policiesLoading ? (
-                    <span className="text-xs text-muted-foreground italic">Loading…</span>
+                    <span className="text-xs text-muted-foreground italic">
+                      Loading…
+                    </span>
                   ) : policies && policies.payment.length === 0 ? (
-                    <span className="text-xs text-destructive">No policies found</span>
+                    <span className="text-xs text-destructive">
+                      No policies found
+                    </span>
                   ) : (
                     <select
                       value={paymentPolicyId}
@@ -640,7 +810,9 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
                     >
                       <option value="">— Select —</option>
                       {(policies?.payment ?? []).map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
                       ))}
                     </select>
                   )}
@@ -650,12 +822,18 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
                 <div className="flex items-center justify-between px-3 py-2.5 gap-3">
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <RotateCcw className="w-3.5 h-3.5 text-muted-foreground" />
-                    <span className="text-xs font-medium text-muted-foreground">Returns</span>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Returns
+                    </span>
                   </div>
                   {policiesLoading ? (
-                    <span className="text-xs text-muted-foreground italic">Loading…</span>
+                    <span className="text-xs text-muted-foreground italic">
+                      Loading…
+                    </span>
                   ) : policies && policies.returns.length === 0 ? (
-                    <span className="text-xs text-destructive">No policies found</span>
+                    <span className="text-xs text-destructive">
+                      No policies found
+                    </span>
                   ) : (
                     <select
                       value={returnPolicyId}
@@ -664,12 +842,13 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
                     >
                       <option value="">— Select —</option>
                       {(policies?.returns ?? []).map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
                       ))}
                     </select>
                   )}
                 </div>
-
               </div>
             )}
           </div>
@@ -678,8 +857,12 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
           <div className="space-y-3">
             <div className="flex items-center gap-1.5">
               <Truck className="w-3.5 h-3.5 text-primary" />
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Package Weight & Dimensions</label>
-              <span className="text-[10px] text-muted-foreground/60 ml-auto">Optional</span>
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Package Weight & Dimensions
+              </label>
+              <span className="text-[10px] text-muted-foreground/60 ml-auto">
+                Optional
+              </span>
             </div>
 
             {/* Weight section */}
@@ -693,7 +876,9 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
                     step="0.1"
                     placeholder="Lbs"
                     value={packageWeightLb || ""}
-                    onChange={(e) => setPackageWeightLb(parseFloat(e.target.value) || 0)}
+                    onChange={(e) =>
+                      setPackageWeightLb(parseFloat(e.target.value) || 0)
+                    }
                     className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                   <p className="text-[10px] text-muted-foreground mt-1">Lbs</p>
@@ -705,7 +890,9 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
                     step="0.1"
                     placeholder="Oz"
                     value={packageWeightOz || ""}
-                    onChange={(e) => setPackageWeightOz(parseFloat(e.target.value) || 0)}
+                    onChange={(e) =>
+                      setPackageWeightOz(parseFloat(e.target.value) || 0)
+                    }
                     className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                   <p className="text-[10px] text-muted-foreground mt-1">Oz</p>
@@ -715,7 +902,9 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
 
             {/* Dimensions section */}
             <div className="space-y-2">
-              <label className="text-xs text-muted-foreground">Dimensions (inches)</label>
+              <label className="text-xs text-muted-foreground">
+                Dimensions (inches)
+              </label>
               <div className="flex gap-2">
                 <div className="flex-1">
                   <input
@@ -724,7 +913,9 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
                     step="0.1"
                     placeholder="Length"
                     value={packageLengthIn || ""}
-                    onChange={(e) => setPackageLengthIn(parseFloat(e.target.value) || 0)}
+                    onChange={(e) =>
+                      setPackageLengthIn(parseFloat(e.target.value) || 0)
+                    }
                     className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                   <p className="text-[10px] text-muted-foreground mt-1">L</p>
@@ -736,7 +927,9 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
                     step="0.1"
                     placeholder="Width"
                     value={packageWidthIn || ""}
-                    onChange={(e) => setPackageWidthIn(parseFloat(e.target.value) || 0)}
+                    onChange={(e) =>
+                      setPackageWidthIn(parseFloat(e.target.value) || 0)
+                    }
                     className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                   <p className="text-[10px] text-muted-foreground mt-1">W</p>
@@ -748,13 +941,17 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
                     step="0.1"
                     placeholder="Height"
                     value={packageHeightIn || ""}
-                    onChange={(e) => setPackageHeightIn(parseFloat(e.target.value) || 0)}
+                    onChange={(e) =>
+                      setPackageHeightIn(parseFloat(e.target.value) || 0)
+                    }
                     className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                   <p className="text-[10px] text-muted-foreground mt-1">H</p>
                 </div>
               </div>
-              <p className="text-[10px] text-muted-foreground">eBay uses this to calculate shipping costs.</p>
+              <p className="text-[10px] text-muted-foreground">
+                eBay uses this to calculate shipping costs.
+              </p>
             </div>
           </div>
 
@@ -781,7 +978,6 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
               />
             </div>
           )}
-
         </div>
 
         {/* Footer */}
@@ -792,9 +988,13 @@ export default function EditDraftModal({ draft, onClose, onSaved, updateDraft }:
             className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
           >
             {saving ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" /> Saving…
+              </>
             ) : (
-              <><Save className="w-4 h-4" /> Save Changes</>
+              <>
+                <Save className="w-4 h-4" /> Save Changes
+              </>
             )}
           </button>
         </div>

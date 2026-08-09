@@ -62,16 +62,18 @@ function isLikelyGradedCoin(
 ): boolean {
   if (slabOcrResult?.isSlabbed) return true;
 
-  const combined = `${identification.itemName ?? ""} ${(identification.keywords ?? []).join(" ")}`
-    .toLowerCase();
+  const combined =
+    `${identification.itemName ?? ""} ${(identification.keywords ?? []).join(" ")}`.toLowerCase();
   return /\b(pcgs|ngc|anacs|icg|cac|iccs|graded|certified|slab(?:bed)?)\b/.test(
     combined,
   );
 }
 
-function resolveGradedFriendlyWorldCoinCategory(
-  countryText?: string | null,
-): { categoryId: string; categoryName: string; breadcrumb: string } {
+function resolveGradedFriendlyWorldCoinCategory(countryText?: string | null): {
+  categoryId: string;
+  categoryName: string;
+  breadcrumb: string;
+} {
   const country = (countryText ?? "").trim().toLowerCase();
   if (SOUTH_PACIFIC_COUNTRIES.has(country)) {
     return {
@@ -93,13 +95,16 @@ function resolveDomainFallbackCategory(
 ): { categoryId: string; categoryName: string; breadcrumb: string } | null {
   if (identification.domain !== "coins_bullion") return null;
 
-  const combined = `${identification.itemName ?? ""} ${(identification.keywords ?? []).join(" ")}`.toLowerCase();
+  const combined =
+    `${identification.itemName ?? ""} ${(identification.keywords ?? []).join(" ")}`.toLowerCase();
   let metal = identification.metalType ?? "none";
 
   if (metal === "none" || !metal) {
     if (/\bamerican\s+silver\s+eagles?\b|\bae\b|\bsilver\b/.test(combined)) {
       metal = "silver";
-    } else if (/\bamerican\s+gold\s+eagles?\b|\bgold\b|\bbuffalo\b/.test(combined)) {
+    } else if (
+      /\bamerican\s+gold\s+eagles?\b|\bgold\b|\bbuffalo\b/.test(combined)
+    ) {
       metal = "gold";
     } else if (/\bplatinum\b/.test(combined)) {
       metal = "platinum";
@@ -115,10 +120,14 @@ function resolveDomainFallbackCategory(
   // Grade item specific) or the 45243 rollup — escape to a graded-friendly
   // World Coin leaf instead.
   const isGraded = isLikelyGradedCoin(identification, slabOcrResult);
-  const isNamedUsBullionCoin = /\bamerican\s+silver\s+eagles?\b|\bae\b|\bamerican\s+gold\s+eagles?\b/
-    .test(combined);
-  const isNamedUsSilverDollar = /morgan|peace|walking liberty|franklin|kennedy|barber|seated|bust/
-    .test(combined);
+  const isNamedUsBullionCoin =
+    /\bamerican\s+silver\s+eagles?\b|\bae\b|\bamerican\s+gold\s+eagles?\b/.test(
+      combined,
+    );
+  const isNamedUsSilverDollar =
+    /morgan|peace|walking liberty|franklin|kennedy|barber|seated|bust/.test(
+      combined,
+    );
   const detectedCountry =
     [...SOUTH_PACIFIC_COUNTRIES].find((c) => combined.includes(c)) ?? null;
 
@@ -154,7 +163,8 @@ function resolveDomainFallbackCategory(
       return {
         categoryId: "41111",
         categoryName: "American Silver Eagles",
-        breadcrumb: "Coins & Paper Money > Coins: US > Silver > American Silver Eagles",
+        breadcrumb:
+          "Coins & Paper Money > Coins: US > Silver > American Silver Eagles",
       };
     }
     if (/\bbar\b|\bingot\b|\bround\b/.test(combined)) {
@@ -164,7 +174,11 @@ function resolveDomainFallbackCategory(
         breadcrumb: "Coins & Paper Money > Bullion > Silver > Bars & Rounds",
       };
     }
-    if (/morgan|peace|walking liberty|franklin|kennedy|barber|seated|bust/.test(combined)) {
+    if (
+      /morgan|peace|walking liberty|franklin|kennedy|barber|seated|bust/.test(
+        combined,
+      )
+    ) {
       return {
         categoryId: "39465",
         categoryName: "US Silver Dollars",
@@ -184,7 +198,11 @@ function resolveDomainFallbackCategory(
     return resolveGradedFriendlyWorldCoinCategory(detectedCountry);
   }
 
-  return { categoryId: "45243", categoryName: "World Coins", breadcrumb: "Coins & Paper Money > Coins: World" };
+  return {
+    categoryId: "45243",
+    categoryName: "World Coins",
+    breadcrumb: "Coins & Paper Money > Coins: World",
+  };
 }
 
 describe("isLikelyGradedCoin", () => {
@@ -239,7 +257,9 @@ describe("isLikelyGradedCoin", () => {
 
 describe("resolveGradedFriendlyWorldCoinCategory", () => {
   it("routes Cook Islands to 3392 (South Pacific)", () => {
-    expect(resolveGradedFriendlyWorldCoinCategory("Cook Islands").categoryId).toBe("3392");
+    expect(
+      resolveGradedFriendlyWorldCoinCategory("Cook Islands").categoryId,
+    ).toBe("3392");
   });
 
   it("routes Fiji, Niue, Palau, Tuvalu, Tokelau, Samoa, Solomon Islands, Kiribati, Nauru, Vanuatu, Tonga to 3392", () => {
@@ -262,16 +282,30 @@ describe("resolveGradedFriendlyWorldCoinCategory", () => {
   });
 
   it("routes unknown/other countries to 256 (graded-friendly default)", () => {
-    expect(resolveGradedFriendlyWorldCoinCategory("China").categoryId).toBe("256");
+    expect(resolveGradedFriendlyWorldCoinCategory("China").categoryId).toBe(
+      "256",
+    );
     expect(resolveGradedFriendlyWorldCoinCategory(null).categoryId).toBe("256");
-    expect(resolveGradedFriendlyWorldCoinCategory(undefined).categoryId).toBe("256");
+    expect(resolveGradedFriendlyWorldCoinCategory(undefined).categoryId).toBe(
+      "256",
+    );
     expect(resolveGradedFriendlyWorldCoinCategory("").categoryId).toBe("256");
   });
 
   it("NEVER returns 45243", () => {
-    const samples = ["Cook Islands", "China", "Australia", "", null, undefined, "Random Country"];
+    const samples = [
+      "Cook Islands",
+      "China",
+      "Australia",
+      "",
+      null,
+      undefined,
+      "Random Country",
+    ];
     for (const s of samples) {
-      expect(resolveGradedFriendlyWorldCoinCategory(s).categoryId).not.toBe("45243");
+      expect(resolveGradedFriendlyWorldCoinCategory(s).categoryId).not.toBe(
+        "45243",
+      );
     }
   });
 });

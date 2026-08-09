@@ -182,7 +182,11 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { userId, dryRun = false, listingIds } = body as {
+    const {
+      userId,
+      dryRun = false,
+      listingIds,
+    } = body as {
       userId?: string;
       dryRun?: boolean;
       listingIds?: string[];
@@ -269,21 +273,23 @@ serve(async (req) => {
         );
         continue;
       }
-      let listings: EbayListing[] = (listingsData.listings ?? []).map((l: {
-        listingId?: string | null;
-        offerId?: string | null;
-        sku?: string;
-        title?: string;
-        price?: number;
-        categoryId?: string | null;
-      }) => ({
-        listingId: l.listingId ?? null,
-        offerId: l.offerId ?? null,
-        sku: l.sku ?? "",
-        title: l.title ?? "",
-        price: l.price ?? 0,
-        categoryId: l.categoryId ?? null,
-      }));
+      let listings: EbayListing[] = (listingsData.listings ?? []).map(
+        (l: {
+          listingId?: string | null;
+          offerId?: string | null;
+          sku?: string;
+          title?: string;
+          price?: number;
+          categoryId?: string | null;
+        }) => ({
+          listingId: l.listingId ?? null,
+          offerId: l.offerId ?? null,
+          sku: l.sku ?? "",
+          title: l.title ?? "",
+          price: l.price ?? 0,
+          categoryId: l.categoryId ?? null,
+        }),
+      );
 
       // Filter to specific listings if provided
       if (listingIds && listingIds.length > 0) {
@@ -304,8 +310,11 @@ serve(async (req) => {
         const matchingRule = (rules as RepriceRule[]).find((rule) => {
           if (!rule.is_enabled) return false;
           if (
-            rule.category_filter && listing.categoryId !== rule.category_filter
-          ) return false;
+            rule.category_filter &&
+            listing.categoryId !== rule.category_filter
+          ) {
+            return false;
+          }
           return true;
         });
 
@@ -386,12 +395,9 @@ serve(async (req) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[auto-reprice-cron] Error:", msg);
-    return new Response(
-      JSON.stringify({ error: msg }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });

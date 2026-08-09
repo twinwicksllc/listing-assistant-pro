@@ -33,8 +33,8 @@ async function fetchActiveListings(
     `${supabaseUrl}/rest/v1/profiles?id=eq.${userId}&select=ebay_access_token,ebay_token_expires_at`,
     {
       headers: {
-        "apikey": serviceKey,
-        "Authorization": `Bearer ${serviceKey}`,
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
       },
     },
   );
@@ -71,7 +71,7 @@ async function fetchActiveListings(
     {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${serviceKey}`,
+        Authorization: `Bearer ${serviceKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ userToken: token }),
@@ -163,7 +163,7 @@ async function refreshCompetitorData(
       {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${serviceKey}`,
+          Authorization: `Bearer ${serviceKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -278,13 +278,10 @@ serve(async (req) => {
       "[competitor-prices-cron] Failed to fetch users:",
       usersErr.message,
     );
-    return new Response(
-      JSON.stringify({ error: usersErr.message }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+    return new Response(JSON.stringify({ error: usersErr.message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   const userIds: string[] = (users ?? []).map((u: { id: string }) => u.id);
@@ -361,8 +358,7 @@ serve(async (req) => {
 
   console.log("[competitor-prices-cron] Completed:", summary);
 
-  return new Response(
-    JSON.stringify({ success: true, ...summary }),
-    { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-  );
+  return new Response(JSON.stringify({ success: true, ...summary }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 });

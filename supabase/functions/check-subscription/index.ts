@@ -39,9 +39,10 @@ serve(async (req) => {
     if (!authHeader) throw new Error("No authorization header provided");
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await supabase.auth.getUser(
-      token,
-    );
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser(token);
     if (userError || !user?.email) throw new Error("User not authenticated");
     logStep("User authenticated", { userId: user.id });
 
@@ -135,11 +136,12 @@ serve(async (req) => {
           user_id: user.id,
           stripe_sub_id: sub.id,
           stripe_cust_id: customerId,
-          product_id: sub.items.data[0]?.price?.product as string ?? null,
+          product_id: (sub.items.data[0]?.price?.product as string) ?? null,
           price_id: sub.items.data[0]?.price?.id ?? null,
           status: sub.status,
-          current_period_end: new Date(sub.current_period_end * 1000)
-            .toISOString(),
+          current_period_end: new Date(
+            sub.current_period_end * 1000,
+          ).toISOString(),
           cancel_at_period_end: sub.cancel_at_period_end,
           updated_at: new Date().toISOString(),
         },

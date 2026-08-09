@@ -1,6 +1,15 @@
 import { useState, useEffect } from "react";
-import { X, AlertCircle, CheckCircle2, Loader2, HelpCircle } from "lucide-react";
-import { EBAY_CATEGORY_BREADCRUMBS, getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
+import {
+  X,
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+  HelpCircle,
+} from "lucide-react";
+import {
+  EBAY_CATEGORY_BREADCRUMBS,
+  getEbayCategoryBreadcrumb,
+} from "@/lib/ebayCategoryMap";
 import { supabase } from "@/integrations/supabase/client";
 
 interface CategoryConfirmDialogProps {
@@ -8,7 +17,12 @@ interface CategoryConfirmDialogProps {
   categoryId: string;
   onConfirm: (categoryId: string) => void;
   onCancel: () => void;
-  suggestedCategories?: Array<{ categoryId: string; categoryName: string; reason: string; breadcrumb?: string }>;
+  suggestedCategories?: Array<{
+    categoryId: string;
+    categoryName: string;
+    reason: string;
+    breadcrumb?: string;
+  }>;
 }
 
 type LookupState = "known" | "unknown" | "empty";
@@ -70,9 +84,12 @@ export default function CategoryConfirmDialog({
       setLoading(false);
 
       try {
-        const { data, error } = await supabase.functions.invoke("category-lookup", {
-          body: { action: "verify", categoryId },
-        });
+        const { data, error } = await supabase.functions.invoke(
+          "category-lookup",
+          {
+            body: { action: "verify", categoryId },
+          },
+        );
 
         if (error) {
           console.warn("Category lookup error:", error);
@@ -113,7 +130,9 @@ export default function CategoryConfirmDialog({
   // - Remote check passed as valid
   // - Unknown but remote check failed/timed out (user can still use if they verified it)
   // Disallow only when: empty OR (unknown AND explicitly invalid on eBay)
-  const canConfirm = lookupState !== "empty" && !(lookupState === "unknown" && remoteState === "invalid");
+  const canConfirm =
+    lookupState !== "empty" &&
+    !(lookupState === "unknown" && remoteState === "invalid");
 
   /** Display string: prefer full breadcrumb, fall back to categoryName */
   const displayPath = breadcrumb || categoryName;
@@ -123,7 +142,9 @@ export default function CategoryConfirmDialog({
       <div className="bg-card border border-border rounded-xl shadow-lg max-w-md w-full space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h2 className="text-sm font-bold text-foreground">Confirm eBay Category</h2>
+          <h2 className="text-sm font-bold text-foreground">
+            Confirm eBay Category
+          </h2>
           <button
             onClick={onCancel}
             className="p-1 rounded hover:bg-secondary text-muted-foreground transition-colors"
@@ -143,15 +164,21 @@ export default function CategoryConfirmDialog({
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Category ID</p>
-                  <p className="text-sm font-bold text-foreground">{categoryId}</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Category ID
+                  </p>
+                  <p className="text-sm font-bold text-foreground">
+                    {categoryId}
+                  </p>
                 </div>
               </div>
 
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Category Path</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Category Path
+                  </p>
                   {breadcrumb ? (
                     <p className="text-sm text-foreground leading-relaxed">
                       {breadcrumb.split(" > ").map((seg, i, arr) => (
@@ -161,7 +188,12 @@ export default function CategoryConfirmDialog({
                           ) : (
                             <span className="text-muted-foreground">{seg}</span>
                           )}
-                          {i < arr.length - 1 && <span className="text-muted-foreground/50"> › </span>}
+                          {i < arr.length - 1 && (
+                            <span className="text-muted-foreground/50">
+                              {" "}
+                              ›{" "}
+                            </span>
+                          )}
                         </span>
                       ))}
                     </p>
@@ -180,24 +212,32 @@ export default function CategoryConfirmDialog({
               <div className="flex items-start gap-3">
                 <HelpCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-xs font-medium text-amber-600 dark:text-amber-400 uppercase tracking-wide">Category ID</p>
-                  <p className="text-sm font-bold text-foreground">{categoryId}</p>
+                  <p className="text-xs font-medium text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+                    Category ID
+                  </p>
+                  <p className="text-sm font-bold text-foreground">
+                    {categoryId}
+                  </p>
                 </div>
               </div>
 
               {remoteState === "checking" ? (
                 <div className="flex items-center gap-2 py-2">
                   <Loader2 className="w-4 h-4 text-primary animate-spin" />
-                  <p className="text-xs text-muted-foreground">Verifying category on eBay...</p>
+                  <p className="text-xs text-muted-foreground">
+                    Verifying category on eBay...
+                  </p>
                 </div>
               ) : remoteState === "invalid" ? (
                 <div className="flex items-start gap-3">
                   <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-xs font-medium text-destructive uppercase tracking-wide">Invalid Category</p>
+                    <p className="text-xs font-medium text-destructive uppercase tracking-wide">
+                      Invalid Category
+                    </p>
                     <p className="text-sm text-foreground/80">
-                      This category ID does not appear to exist on eBay. Please double-check
-                      the number and try again.
+                      This category ID does not appear to exist on eBay. Please
+                      double-check the number and try again.
                     </p>
                   </div>
                 </div>
@@ -205,11 +245,14 @@ export default function CategoryConfirmDialog({
                 <div className="flex items-start gap-3">
                   <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-xs font-medium text-amber-600 dark:text-amber-400 uppercase tracking-wide">Not in local category list</p>
+                    <p className="text-xs font-medium text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+                      Not in local category list
+                    </p>
                     <p className="text-sm text-foreground/80">
-                      This ID isn't in our built-in category list, but eBay has thousands of
-                      categories we don't map locally. If you verified this ID on eBay, it
-                      will work fine — you can still confirm below.
+                      This ID isn't in our built-in category list, but eBay has
+                      thousands of categories we don't map locally. If you
+                      verified this ID on eBay, it will work fine — you can
+                      still confirm below.
                     </p>
                   </div>
                 </div>
@@ -221,7 +264,8 @@ export default function CategoryConfirmDialog({
                 ) : remoteState === "invalid" ? (
                   "This category ID does not appear to exist on eBay. Please verify the number and try again."
                 ) : (
-                  <>Tip: verify at{' '}
+                  <>
+                    Tip: verify at{" "}
                     <a
                       href={`https://www.ebay.com/b/bn_${categoryId}`}
                       target="_blank"
@@ -237,20 +281,32 @@ export default function CategoryConfirmDialog({
               {/* Show AI-suggested categories as alternatives */}
               {suggestedCategories && suggestedCategories.length > 0 && (
                 <div className="space-y-2 pt-2 border-t border-amber-500/20">
-                  <p className="text-xs font-medium text-amber-600 dark:text-amber-400">AI-Recommended Categories</p>
+                  <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                    AI-Recommended Categories
+                  </p>
                   <div className="space-y-1.5">
                     {suggestedCategories.map((cat) => {
                       // Always prioritize breadcrumb, then use frontend map as fallback
-                      const displayBreadcrumb = cat.breadcrumb || getEbayCategoryBreadcrumb(cat.categoryId) || cat.categoryName || `Category #${cat.categoryId}`;
+                      const displayBreadcrumb =
+                        cat.breadcrumb ||
+                        getEbayCategoryBreadcrumb(cat.categoryId) ||
+                        cat.categoryName ||
+                        `Category #${cat.categoryId}`;
                       return (
                         <button
                           key={cat.categoryId}
                           onClick={() => onConfirm(cat.categoryId)}
                           className="w-full text-left p-2 text-xs rounded-lg hover:bg-primary/10 border border-transparent hover:border-primary/30 transition-colors cursor-pointer"
                         >
-                          <p className="font-semibold text-foreground">#{cat.categoryId}</p>
-                          <p className="text-muted-foreground text-[11px]">{displayBreadcrumb}</p>
-                          <p className="text-[10px] text-primary/70 italic">{cat.reason}</p>
+                          <p className="font-semibold text-foreground">
+                            #{cat.categoryId}
+                          </p>
+                          <p className="text-muted-foreground text-[11px]">
+                            {displayBreadcrumb}
+                          </p>
+                          <p className="text-[10px] text-primary/70 italic">
+                            {cat.reason}
+                          </p>
                         </button>
                       );
                     })}
@@ -261,7 +317,9 @@ export default function CategoryConfirmDialog({
           ) : (
             <div className="flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-destructive">Please enter a category ID.</p>
+              <p className="text-sm text-destructive">
+                Please enter a category ID.
+              </p>
             </div>
           )}
         </div>
@@ -283,7 +341,11 @@ export default function CategoryConfirmDialog({
               <span className="flex items-center justify-center gap-1.5">
                 <Loader2 className="w-3 h-3 animate-spin" /> Checking…
               </span>
-            ) : lookupState === "unknown" ? "Use Anyway" : "Confirm"}
+            ) : lookupState === "unknown" ? (
+              "Use Anyway"
+            ) : (
+              "Confirm"
+            )}
           </button>
         </div>
       </div>

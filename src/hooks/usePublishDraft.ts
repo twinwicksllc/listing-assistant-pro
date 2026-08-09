@@ -10,15 +10,17 @@ import { buildPackageWeightAndSizePayload } from "@/lib/packageWeightAndSize";
 
 /**
  * Sequential publishing with retry logic.
- * 
+ *
  * Publishes drafts one at a time to avoid token refresh race conditions.
  * Implements exponential backoff retry (up to 3 attempts) for transient failures.
- * 
+ *
  * Returns: "ok" | "auth_redirect" | "error"
  */
 export function usePublishDraft() {
-  const { canPublish, recordUsage, isOwner, user, currentPlanLimits } = useAuth();
-  const { markDraftPublished, markDraftFailed, updateDraft, removeDraft } = useDrafts();
+  const { canPublish, recordUsage, isOwner, user, currentPlanLimits } =
+    useAuth();
+  const { markDraftPublished, markDraftFailed, updateDraft, removeDraft } =
+    useDrafts();
   const navigate = useNavigate();
 
   // Queue management: tracks pending drafts and prevents concurrent publishes
@@ -37,7 +39,11 @@ export function usePublishDraft() {
         .single();
 
       if (error || !data) {
-        if (error) console.warn("fetchProfileLocation: failed to load profile location", error.message);
+        if (error)
+          console.warn(
+            "fetchProfileLocation: failed to load profile location",
+            error.message,
+          );
         return { postalCode: null, city: null };
       }
 
@@ -46,7 +52,10 @@ export function usePublishDraft() {
         city: (data as any).city ?? null,
       };
     } catch (err: unknown) {
-      console.warn("fetchProfileLocation: unexpected error", err?.message ?? err);
+      console.warn(
+        "fetchProfileLocation: unexpected error",
+        err?.message ?? err,
+      );
       return { postalCode: null, city: null };
     }
   }, [user?.id]);
@@ -71,7 +80,7 @@ export function usePublishDraft() {
   /**
    * Retrieve the eBay user token and location data (postal code + city).
    * Prefers server-side storage (Supabase profiles) over localStorage.
-   * 
+   *
    * Flow:
    * 1. Try get_stored_token from ebay-publish (returns token + location from profiles table)   * 2. If no token, fall back to localStorage + return null for location
    */
@@ -84,11 +93,17 @@ export function usePublishDraft() {
     // 1. Try server-side stored token (secure, preferred)
     if (user?.id) {
       try {
-        const { data, error } = await supabase.functions.invoke("ebay-publish", {
-          body: { action: "get_stored_token", userId: user.id },
-        });
+        const { data, error } = await supabase.functions.invoke(
+          "ebay-publish",
+          {
+            body: { action: "get_stored_token", userId: user.id },
+          },
+        );
         if (!error && data?.token) {
-          const location = await fillMissingLocation(data.postalCode ?? null, data.city ?? null);
+          const location = await fillMissingLocation(
+            data.postalCode ?? null,
+            data.city ?? null,
+          );
           console.log("getEbayToken: server-side token found:", {
             tokenExists: !!data.token,
             postalCode: location.postalCode || "NOT_SET",
@@ -103,7 +118,10 @@ export function usePublishDraft() {
           };
         }
         if (!error && data?.isExpired) {
-          const location = await fillMissingLocation(data.postalCode ?? null, data.city ?? null);
+          const location = await fillMissingLocation(
+            data.postalCode ?? null,
+            data.city ?? null,
+          );
           // Token is expired and refresh failed
           console.log("getEbayToken: token expired, refresh failed", {
             postalCode: location.postalCode || "NOT_SET",
@@ -125,11 +143,18 @@ export function usePublishDraft() {
     // 2. Fall back to localStorage (legacy / backwards compat)
     const localToken = localStorage.getItem("ebay-user-token");
     const location = await fillMissingLocation(null, null);
-    console.log("getEbayToken: using localStorage token (no server-side token found)", {
-      postalCode: location.postalCode || "NOT_SET",
-      city: location.city || "NOT_SET",
-    });
-    return { token: localToken, postalCode: location.postalCode, city: location.city };
+    console.log(
+      "getEbayToken: using localStorage token (no server-side token found)",
+      {
+        postalCode: location.postalCode || "NOT_SET",
+        city: location.city || "NOT_SET",
+      },
+    );
+    return {
+      token: localToken,
+      postalCode: location.postalCode,
+      city: location.city,
+    };
   }, [user?.id, fillMissingLocation]);
 
   /**
@@ -146,13 +171,16 @@ export function usePublishDraft() {
       // --- Pre-flight checks ---
       if (!isOwner) {
         toast.error("Publishing is restricted to the account owner.");
-        await markDraftFailed(draft.id, "Publishing restricted to account owner");
+        await markDraftFailed(
+          draft.id,
+          "Publishing restricted to account owner",
+        );
         return false;
       }
 
       if (!canPublish) {
         toast.error(
-          `Monthly publish limit reached (${currentPlanLimits.publishLimit}). Upgrade for more listings.`
+          `Monthly publish limit reached (${currentPlanLimits.publishLimit}). Upgrade for more listings.`,
         );
         navigate("/billing");
         await markDraftFailed(draft.id, "Monthly publish limit reached");
@@ -161,16 +189,23 @@ export function usePublishDraft() {
 
       // --- Policy validation: warn if no policies explicitly selected ---
       const hasPolicies =
-        draft.fulfillmentPolicyId && draft.paymentPolicyId && draft.returnPolicyId;
+        draft.fulfillmentPolicyId &&
+        draft.paymentPolicyId &&
+        draft.returnPolicyId;
       if (!hasPolicies) {
         toast.warning(
           `"${draft.title}" — no eBay policies selected. The first available policy of each type will be used automatically.`,
-          { duration: 5000 }
+          { duration: 5000 },
         );
       }
 
       // --- Get fresh token (with proactive refresh inside getEbayToken) ---
-      const { token: ebayToken, postalCode, city, isExpired } = await getEbayToken();
+      const {
+        token: ebayToken,
+        postalCode,
+        city,
+        isExpired,
+      } = await getEbayToken();
 
       console.log(`publishWithRetry [attempt ${attempt}/${maxRetries}]:`, {
         draftId: draft.id,
@@ -183,28 +218,39 @@ export function usePublishDraft() {
           // Token was expired and refresh failed — need re-auth
           if (attempt < maxRetries) {
             const delayMs = baseDelayMs * Math.pow(2, attempt - 1);
-            console.log(`publishWithRetry: token expired, waiting ${delayMs}ms before retry`);
-            await new Promise(resolve => setTimeout(resolve, delayMs));
+            console.log(
+              `publishWithRetry: token expired, waiting ${delayMs}ms before retry`,
+            );
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
             return publishWithRetry(draft, attempt + 1);
           } else {
-            console.error(`publishWithRetry: max retries reached, token expired`);
+            console.error(
+              `publishWithRetry: max retries reached, token expired`,
+            );
             await markDraftFailed(draft.id, "eBay session expired after retry");
-            toast.error("eBay session expired. Please reconnect and try again.");
+            toast.error(
+              "eBay session expired. Please reconnect and try again.",
+            );
             return false;
           }
         } else {
           // No token at all — trigger OAuth
           const pendingIds: string[] = JSON.parse(
-            localStorage.getItem("pending_draft_ids") || "[]"
+            localStorage.getItem("pending_draft_ids") || "[]",
           );
           if (!pendingIds.includes(draft.id)) pendingIds.push(draft.id);
           localStorage.setItem("pending_draft_ids", JSON.stringify(pendingIds));
 
-          const { data, error } = await supabase.functions.invoke("ebay-publish", {
-            body: { action: "get_auth_url" },
-          });
+          const { data, error } = await supabase.functions.invoke(
+            "ebay-publish",
+            {
+              body: { action: "get_auth_url" },
+            },
+          );
           if (error || data?.error) {
-            toast.error(data?.error || error?.message || "Failed to get auth URL");
+            toast.error(
+              data?.error || error?.message || "Failed to get auth URL",
+            );
             await markDraftFailed(draft.id, "Failed to get eBay auth URL");
             return false;
           }
@@ -221,7 +267,10 @@ export function usePublishDraft() {
       let resolvedImageUrl = draft.imageUrl;
       let resolvedImageUrls: string[] | undefined = undefined;
 
-      if (Array.isArray((draft as any).imageUrls) && (draft as any).imageUrls.length > 0) {
+      if (
+        Array.isArray((draft as any).imageUrls) &&
+        (draft as any).imageUrls.length > 0
+      ) {
         // Upload any data: URLs and preserve remote URLs
         resolvedImageUrls = [];
         for (const img of (draft as any).imageUrls) {
@@ -254,13 +303,17 @@ export function usePublishDraft() {
         description: draft.description,
         listingFormat: draft.listingFormat ?? "FIXED_PRICE",
         listingPrice: draft.listingPrice ?? 0,
-        auctionStartPrice: draft.listingFormat === "AUCTION" ? (draft.listingPrice ?? 0) : 0,
+        auctionStartPrice:
+          draft.listingFormat === "AUCTION" ? (draft.listingPrice ?? 0) : 0,
         auctionBuyItNow: null,
-        auctionDuration: draft.listingFormat === "AUCTION"
-          ? (draft.auctionDuration || "Days_7")
-          : undefined,
+        auctionDuration:
+          draft.listingFormat === "AUCTION"
+            ? draft.auctionDuration || "Days_7"
+            : undefined,
         // Include either `imageUrls` (preferred) or legacy `imageUrl`.
-        ...(resolvedImageUrls ? { imageUrls: resolvedImageUrls } : { imageUrl: resolvedImageUrl }),
+        ...(resolvedImageUrls
+          ? { imageUrls: resolvedImageUrls }
+          : { imageUrl: resolvedImageUrl }),
         condition: draft.condition ?? "USED_EXCELLENT",
         ebayCategoryId: draft.ebayCategoryId ?? "",
         itemSpecifics: draft.itemSpecifics ?? {},
@@ -268,10 +321,14 @@ export function usePublishDraft() {
         paymentPolicyId: draft.paymentPolicyId ?? null,
         returnPolicyId: draft.returnPolicyId ?? null,
         // Only attach video if it has fully processed — LIVE status required by eBay
-        ebayVideoId: draft.ebayVideoStatus === "LIVE" ? (draft.ebayVideoId ?? null) : null,
+        ebayVideoId:
+          draft.ebayVideoStatus === "LIVE" ? (draft.ebayVideoId ?? null) : null,
         // Quantity & pricing mode
         quantity: (draft.quantity ?? 1) > 1 ? draft.quantity : undefined,
-        pricingMode: (draft.quantity ?? 1) > 1 ? (draft.pricingMode ?? 'per_item') : undefined,
+        pricingMode:
+          (draft.quantity ?? 1) > 1
+            ? (draft.pricingMode ?? "per_item")
+            : undefined,
         // Package weight & dimensions
         packageWeightAndSize: buildPackageWeightAndSizePayload({
           weightLb: draft.packageWeightLb,
@@ -282,10 +339,13 @@ export function usePublishDraft() {
         }),
       };
 
-      console.log(`publishWithRetry [attempt ${attempt}/${maxRetries}]: invoking ebay-publish`, {
-        draftId: draft.id,
-        title: draft.title,
-      });
+      console.log(
+        `publishWithRetry [attempt ${attempt}/${maxRetries}]: invoking ebay-publish`,
+        {
+          draftId: draft.id,
+          title: draft.title,
+        },
+      );
 
       const { data, error } = await supabase.functions.invoke("ebay-publish", {
         body: publishPayload,
@@ -306,7 +366,7 @@ export function usePublishDraft() {
               onClick: () =>
                 window.open(
                   "https://developer.ebay.com/api-docs/sell/inventory/resources/offer/methods/createOffer",
-                  "_blank"
+                  "_blank",
                 ),
             },
             duration: 10000,
@@ -319,7 +379,8 @@ export function usePublishDraft() {
             description: data.error,
             action: {
               label: "Open Seller Hub",
-              onClick: () => window.open("https://www.ebay.com/sh/ovw/policies", "_blank"),
+              onClick: () =>
+                window.open("https://www.ebay.com/sh/ovw/policies", "_blank"),
             },
             duration: 10000,
           });
@@ -335,17 +396,27 @@ export function usePublishDraft() {
         }
 
         // --- Transient failures: retry with exponential backoff ---
-        if (errMsg.includes("401") || errMsg.includes("expired") || errMsg.includes("session")) {
+        if (
+          errMsg.includes("401") ||
+          errMsg.includes("expired") ||
+          errMsg.includes("session")
+        ) {
           localStorage.removeItem("ebay-user-token");
           if (attempt < maxRetries) {
             const delayMs = baseDelayMs * Math.pow(2, attempt - 1);
-            console.log(`publishWithRetry [attempt ${attempt}/${maxRetries}]: token error, retrying in ${delayMs}ms`);
-            await new Promise(resolve => setTimeout(resolve, delayMs));
+            console.log(
+              `publishWithRetry [attempt ${attempt}/${maxRetries}]: token error, retrying in ${delayMs}ms`,
+            );
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
             return publishWithRetry(draft, attempt + 1);
           } else {
-            console.error(`publishWithRetry: max retries reached for token error`);
+            console.error(
+              `publishWithRetry: max retries reached for token error`,
+            );
             await markDraftFailed(draft.id, "eBay session expired after retry");
-            toast.error("eBay session expired. Please reconnect and try again.");
+            toast.error(
+              "eBay session expired. Please reconnect and try again.",
+            );
             return false;
           }
         }
@@ -357,11 +428,14 @@ export function usePublishDraft() {
       }
 
       // --- Success ---
-      console.log(`publishWithRetry: success [attempt ${attempt}/${maxRetries}]`, {
-        draftId: draft.id,
-        listingId: data.listingId,
-        offerId: data.offerId,
-      });
+      console.log(
+        `publishWithRetry: success [attempt ${attempt}/${maxRetries}]`,
+        {
+          draftId: draft.id,
+          listingId: data.listingId,
+          offerId: data.offerId,
+        },
+      );
 
       await markDraftPublished(draft.id, {
         sku: data.sku,
@@ -437,7 +511,18 @@ export function usePublishDraft() {
       await recordUsage("ebay_publish");
       return true;
     },
-    [canPublish, isOwner, navigate, recordUsage, getEbayToken, markDraftPublished, markDraftFailed, updateDraft, removeDraft, user?.id]
+    [
+      canPublish,
+      isOwner,
+      navigate,
+      recordUsage,
+      getEbayToken,
+      markDraftPublished,
+      markDraftFailed,
+      updateDraft,
+      removeDraft,
+      user?.id,
+    ],
   );
 
   /**
@@ -473,7 +558,7 @@ export function usePublishDraft() {
 
       // Small delay between publishes to avoid overwhelming the API
       if (publishQueueRef.current.length > 0) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
     }
 
@@ -504,7 +589,7 @@ export function usePublishDraft() {
       // Return "ok" immediately (actual result will be shown via toasts)
       return "ok";
     },
-    [processPublishQueue]
+    [processPublishQueue],
   );
 
   return { publishDraft };

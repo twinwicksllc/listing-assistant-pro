@@ -70,11 +70,19 @@ export function useAnalyzeConditionOptions({
       domain,
       getEbayCategoryBreadcrumb(ebayCategoryId) || undefined,
     );
-  }, [domain, ebayCategoryId, ebayMetadata?.allowedConditions, ebayMetadata?.isCoinCategory]);
+  }, [
+    domain,
+    ebayCategoryId,
+    ebayMetadata?.allowedConditions,
+    ebayMetadata?.isCoinCategory,
+  ]);
 
-  const updateCondition = useCallback((value: string) => {
-    setCondition(value);
-  }, [setCondition]);
+  const updateCondition = useCallback(
+    (value: string) => {
+      setCondition(value);
+    },
+    [setCondition],
+  );
 
   return {
     conditionOptions,

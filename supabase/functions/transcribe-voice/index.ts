@@ -129,10 +129,9 @@ serve(async (req) => {
       console.error("Failed to log gemini usage:", logErr);
     }
 
-    return new Response(
-      JSON.stringify({ transcript }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return new Response(JSON.stringify({ transcript }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (e) {
     console.error("transcribe-voice error:", e);
     return new Response(

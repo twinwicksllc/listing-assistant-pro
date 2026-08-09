@@ -74,7 +74,7 @@ async function applyRule(
 
   // Apply adjustment percentage (if not already applied for beat_lowest)
   if (rule.rule_type !== "beat_lowest") {
-    basePrice += (rule.adjustment_pct * 0.01) * basePrice;
+    basePrice += rule.adjustment_pct * 0.01 * basePrice;
   }
 
   // Apply floor/ceiling constraints
@@ -94,10 +94,9 @@ serve(async (req) => {
     const { userId, dryRun = false } = await req.json();
 
     if (!userId) {
-      return new Response(
-        JSON.stringify({ error: "userId required" }),
-        { status: 400 },
-      );
+      return new Response(JSON.stringify({ error: "userId required" }), {
+        status: 400,
+      });
     }
 
     // Fetch enabled rules for this user
@@ -213,15 +212,13 @@ serve(async (req) => {
       }
     }
 
-    return new Response(
-      JSON.stringify({ success: true, updated }),
-      { status: 200 },
-    );
+    return new Response(JSON.stringify({ success: true, updated }), {
+      status: 200,
+    });
   } catch (error) {
     console.error("Auto-reprice trigger error:", error);
-    return new Response(
-      JSON.stringify({ error: "Internal server error" }),
-      { status: 500 },
-    );
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
+      status: 500,
+    });
   }
 });

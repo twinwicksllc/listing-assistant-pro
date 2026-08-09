@@ -17,25 +17,40 @@ export function useAnalyzeListingFieldHandlers({
   setConsignor,
   setItemSpecifics,
 }: UseAnalyzeListingFieldHandlersParams) {
-  const updateTitle = useCallback((rawValue: string) => {
-    setTitle(rawValue.slice(0, 80));
-  }, [setTitle]);
+  const updateTitle = useCallback(
+    (rawValue: string) => {
+      setTitle(rawValue.slice(0, 80));
+    },
+    [setTitle],
+  );
 
-  const updateDescription = useCallback((value: string) => {
-    setDescription(value);
-  }, [setDescription]);
+  const updateDescription = useCallback(
+    (value: string) => {
+      setDescription(value);
+    },
+    [setDescription],
+  );
 
-  const toggleAiFooter = useCallback((checked: boolean) => {
-    setIncludeAiFooter(checked);
-  }, [setIncludeAiFooter]);
+  const toggleAiFooter = useCallback(
+    (checked: boolean) => {
+      setIncludeAiFooter(checked);
+    },
+    [setIncludeAiFooter],
+  );
 
-  const updateConsignor = useCallback((value: string) => {
-    setConsignor(value);
-  }, [setConsignor]);
+  const updateConsignor = useCallback(
+    (value: string) => {
+      setConsignor(value);
+    },
+    [setConsignor],
+  );
 
-  const updateItemSpecificValue = useCallback((key: string, value: string) => {
-    setItemSpecifics((prev) => ({ ...prev, [key]: value }));
-  }, [setItemSpecifics]);
+  const updateItemSpecificValue = useCallback(
+    (key: string, value: string) => {
+      setItemSpecifics((prev) => ({ ...prev, [key]: value }));
+    },
+    [setItemSpecifics],
+  );
 
   return {
     updateTitle,

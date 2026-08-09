@@ -24,9 +24,7 @@ interface SoldItem {
 // scraper, especially for niche/coin queries like "1909-S VDB".
 // Returns [] on any failure so the caller can fall back to Jina.
 // ----------------------------------------------------------------
-async function fetchViaCompetitorSearch(
-  query: string,
-): Promise<SoldItem[]> {
+async function fetchViaCompetitorSearch(query: string): Promise<SoldItem[]> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
     Deno.env.get("SUPABASE_ANON_KEY");
@@ -45,8 +43,8 @@ async function fetchViaCompetitorSearch(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${serviceKey}`,
-          "apikey": serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+          apikey: serviceKey,
         },
         body: JSON.stringify({ title: query }),
         signal: AbortSignal.timeout(20000),
@@ -61,7 +59,11 @@ async function fetchViaCompetitorSearch(
     }
 
     const data = await resp.json();
-    if (data?.noData || !Array.isArray(data?.items) || data.items.length === 0) {
+    if (
+      data?.noData ||
+      !Array.isArray(data?.items) ||
+      data.items.length === 0
+    ) {
       console.log(
         `[ebay-pricing] competitor-search returned no items — falling back to Jina`,
       );
@@ -116,7 +118,7 @@ async function scrapeEbaySoldListings(query: string): Promise<SoldItem[]> {
 
   const resp = await fetch(jinaUrl, {
     headers: {
-      "Accept": "text/plain,text/markdown,*/*",
+      Accept: "text/plain,text/markdown,*/*",
       "User-Agent": "Mozilla/5.0 (compatible; ListingAssistantBot/1.0)",
     },
     signal: AbortSignal.timeout(20000),
@@ -195,12 +197,14 @@ function parseSoldItemsFromMarkdown(
     let condition = "Pre-Owned";
     const blockLower = block.toLowerCase();
     if (
-      blockLower.includes("new in") || blockLower.includes("brand new") ||
+      blockLower.includes("new in") ||
+      blockLower.includes("brand new") ||
       blockLower.includes("sealed")
     ) {
       condition = "New";
     } else if (
-      blockLower.includes("uncirculated") || blockLower.includes("ms-") ||
+      blockLower.includes("uncirculated") ||
+      blockLower.includes("ms-") ||
       blockLower.includes(" ms ")
     ) {
       condition = "Uncirculated";
@@ -329,7 +333,9 @@ function filterOutliers(items: SoldItem[]): SoldItem[] {
   if (filtered.length >= 3) {
     console.log(
       `[ebay-pricing] Outlier filter: ${items.length} → ${filtered.length} items (fence $${lo.toFixed(2)}–$${
-        hi.toFixed(2)
+        hi.toFixed(
+          2,
+        )
       })`,
     );
     return filtered;
@@ -376,7 +382,7 @@ serve(async (req) => {
     // Primary path: official eBay Browse API via ebay-competitor-search.
     // Higher recall + Gemini-optimised query. Falls through to Jina on empty.
     let soldItems: SoldItem[] = await fetchViaCompetitorSearch(query);
-    let source: "browse_api" | "jina" = soldItems.length > 0 ? "browse_api" : "jina";
+    const source: "browse_api" | "jina" = soldItems.length > 0 ? "browse_api" : "jina";
 
     if (soldItems.length === 0) {
       // Fallback: scrape sold listings via Jina
@@ -435,7 +441,9 @@ serve(async (req) => {
       for (let i = 0; i < 5; i++) {
         const bucketMin = lowPrice + i * bucketSize;
         const bucketMax = bucketMin + bucketSize;
-        const count = prices.filter((p) => p >= bucketMin && (i === 4 ? p <= bucketMax : p < bucketMax)).length;
+        const count = prices.filter(
+          (p) => p >= bucketMin && (i === 4 ? p <= bucketMax : p < bucketMax),
+        ).length;
         histogram.push({
           bucket: `$${bucketMin.toFixed(0)}–$${bucketMax.toFixed(0)}`,
           count,

@@ -1,5 +1,17 @@
 import { useState, useEffect } from "react";
-import { Trash2, FileText, ShoppingCart, Gavel, Tag, Pencil, Send, Loader2, CheckSquare, Square, AlertTriangle } from "lucide-react";
+import {
+  Trash2,
+  FileText,
+  ShoppingCart,
+  Gavel,
+  Tag,
+  Pencil,
+  Send,
+  Loader2,
+  CheckSquare,
+  Square,
+  AlertTriangle,
+} from "lucide-react";
 import DraftPriceAdvisor from "@/components/DraftPriceAdvisor";
 import { useDrafts } from "@/hooks/useDrafts";
 import { usePublishDraft } from "@/hooks/usePublishDraft";
@@ -15,16 +27,21 @@ export default function DraftsPage() {
   const { publishDraft } = usePublishDraft();
   const { isOwner } = useAuth();
 
-  const [editingDraft, setEditingDraft]     = useState<ListingDraft | null>(null);
-  const [selectedIds, setSelectedIds]       = useState<Set<string>>(new Set());
-  const [publishing, setPublishing]         = useState(false);
-  const [publishingIds, setPublishingIds]   = useState<Set<string>>(new Set());
-  const [spotPrices, setSpotPrices]         = useState<{ gold: number; silver: number; platinum: number } | null>(null);
+  const [editingDraft, setEditingDraft] = useState<ListingDraft | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [publishing, setPublishing] = useState(false);
+  const [publishingIds, setPublishingIds] = useState<Set<string>>(new Set());
+  const [spotPrices, setSpotPrices] = useState<{
+    gold: number;
+    silver: number;
+    platinum: number;
+  } | null>(null);
 
   // Fetch spot prices once when any draft has precious metal content
   useEffect(() => {
     const hasMetal = drafts.some(
-      (d) => d.metalType && d.metalType !== "none" && (d.metalWeightOz ?? 0) > 0
+      (d) =>
+        d.metalType && d.metalType !== "none" && (d.metalWeightOz ?? 0) > 0,
     );
     if (!hasMetal || spotPrices) return;
 
@@ -70,7 +87,7 @@ export default function DraftsPage() {
     setPublishing(true);
 
     let successCount = 0;
-    let errorCount   = 0;
+    let errorCount = 0;
 
     for (const draft of toPublish) {
       setPublishingIds((prev) => new Set(prev).add(draft.id));
@@ -105,9 +122,13 @@ export default function DraftsPage() {
     setPublishing(false);
 
     if (successCount > 0 && errorCount === 0) {
-      toast.success(`${successCount} listing${successCount !== 1 ? "s" : ""} published to eBay!`);
+      toast.success(
+        `${successCount} listing${successCount !== 1 ? "s" : ""} published to eBay!`,
+      );
     } else if (successCount > 0 && errorCount > 0) {
-      toast.warning(`${successCount} published, ${errorCount} failed. Check errors above.`);
+      toast.warning(
+        `${successCount} published, ${errorCount} failed. Check errors above.`,
+      );
     }
   };
 
@@ -123,7 +144,6 @@ export default function DraftsPage() {
 
   return (
     <div className="min-h-screen bg-background pb-24">
-
       {/* ── Header ── */}
       <header className="px-5 pt-12 pb-4">
         <div className="flex items-start justify-between gap-3">
@@ -147,9 +167,14 @@ export default function DraftsPage() {
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
             >
               {publishing ? (
-                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Publishing…</>
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Publishing…
+                </>
               ) : (
-                <><Send className="w-3.5 h-3.5" /> Publish Selected{selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}</>
+                <>
+                  <Send className="w-3.5 h-3.5" /> Publish Selected
+                  {selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}
+                </>
               )}
             </button>
           )}
@@ -178,7 +203,9 @@ export default function DraftsPage() {
             <div className="w-14 h-14 rounded-2xl bg-secondary flex items-center justify-center mx-auto">
               <FileText className="w-7 h-7 text-muted-foreground" />
             </div>
-            <p className="text-muted-foreground text-sm">No drafts yet. Capture an item to get started!</p>
+            <p className="text-muted-foreground text-sm">
+              No drafts yet. Capture an item to get started!
+            </p>
           </div>
         )}
 
@@ -188,14 +215,18 @@ export default function DraftsPage() {
               ? draft.listingPrice
               : (draft.priceMin + draft.priceMax) / 2;
 
-          const isAuction      = draft.listingFormat === "AUCTION";
-          const isSelected     = selectedIds.has(draft.id);
+          const isAuction = draft.listingFormat === "AUCTION";
+          const isSelected = selectedIds.has(draft.id);
           const isBeingPublished = publishingIds.has(draft.id);
 
           // Melt value alert: check if listing price is below precious metal melt floor
-          const metalKey = draft.metalType?.toLowerCase() as keyof typeof spotPrices;
+          const metalKey =
+            draft.metalType?.toLowerCase() as keyof typeof spotPrices;
           const liveMelt =
-            spotPrices && metalKey && metalKey !== "none" && (draft.metalWeightOz ?? 0) > 0
+            spotPrices &&
+            metalKey &&
+            metalKey !== "none" &&
+            (draft.metalWeightOz ?? 0) > 0
               ? spotPrices[metalKey] * (draft.metalWeightOz ?? 0)
               : null;
           const isBelowMelt = liveMelt !== null && displayPrice < liveMelt;
@@ -204,7 +235,9 @@ export default function DraftsPage() {
             <div
               key={draft.id}
               className={`bg-card border rounded-xl p-3 flex gap-3 transition-colors ${
-                isSelected ? "border-primary ring-1 ring-primary/30" : "border-border"
+                isSelected
+                  ? "border-primary ring-1 ring-primary/30"
+                  : "border-border"
               }`}
             >
               {/* Checkbox */}
@@ -229,7 +262,9 @@ export default function DraftsPage() {
 
               {/* Content */}
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground line-clamp-2 leading-snug">{draft.title}</p>
+                <p className="text-sm font-medium text-foreground line-clamp-2 leading-snug">
+                  {draft.title}
+                </p>
 
                 {/* Price + Format badge */}
                 <div className="flex items-center gap-2 mt-1.5">
@@ -244,19 +279,25 @@ export default function DraftsPage() {
                     }`}
                   >
                     {isAuction ? (
-                      <><Gavel className="w-2.5 h-2.5" /> Auction</>
+                      <>
+                        <Gavel className="w-2.5 h-2.5" /> Auction
+                      </>
                     ) : (
-                      <><ShoppingCart className="w-2.5 h-2.5" /> Buy It Now</>
+                      <>
+                        <ShoppingCart className="w-2.5 h-2.5" /> Buy It Now
+                      </>
                     )}
                   </span>
                   {isBeingPublished && (
                     <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400">
-                      <Loader2 className="w-2.5 h-2.5 animate-spin" /> Publishing…
+                      <Loader2 className="w-2.5 h-2.5 animate-spin" />{" "}
+                      Publishing…
                     </span>
                   )}
                   {isBelowMelt && liveMelt && (
                     <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400">
-                      <AlertTriangle className="w-2.5 h-2.5" /> Below melt (${liveMelt.toFixed(2)})
+                      <AlertTriangle className="w-2.5 h-2.5" /> Below melt ($
+                      {liveMelt.toFixed(2)})
                     </span>
                   )}
                 </div>
@@ -266,7 +307,8 @@ export default function DraftsPage() {
                   <div className="flex items-start gap-1 mt-1">
                     <Tag className="w-3 h-3 text-muted-foreground flex-shrink-0 mt-0.5" />
                     <p className="text-[10px] text-muted-foreground leading-tight line-clamp-2">
-                      {draft.ebayCategoryBreadcrumb || `Category #${draft.ebayCategoryId}`}
+                      {draft.ebayCategoryBreadcrumb ||
+                        `Category #${draft.ebayCategoryId}`}
                     </p>
                   </div>
                 )}

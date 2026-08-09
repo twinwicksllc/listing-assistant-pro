@@ -84,7 +84,8 @@ function buildSearchQueries(domain: Domain, itemName: string): string[] {
       // e.g. "$10 Eagle" (39471) from "$5 Half Eagle" (39470) or "$20 Double Eagle" (39467)
       const denomHint = /\$20|double eagle|twenty dollar/i.test(base)
         ? "Double Eagle $20 gold coin Pre-1933"
-        : /\$10|ten dollar|eagle gold/i.test(base) && !/half eagle|\$5|five dollar/i.test(base)
+        : /\$10|ten dollar|eagle gold/i.test(base) &&
+            !/half eagle|\$5|five dollar/i.test(base)
         ? "Eagle $10 gold coin Pre-1933"
         : /half eagle|\$5|five dollar/i.test(base)
         ? "Half Eagle $5 gold coin Pre-1933"
@@ -287,7 +288,8 @@ async function fetchWithTimeout(
 // ─── Utility: extract JSON from possibly-fenced model output ─────────────────
 
 function extractJson(raw: string): string {
-  let text = raw.trim()
+  let text = raw
+    .trim()
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```\s*$/, "")
     .trim();
@@ -309,9 +311,10 @@ async function runStageA(
   domain: Domain,
   itemName: string,
   label: string,
-): Promise<
-  { marketAnalysis: string | null; groundedCategoryId: string | null }
-> {
+): Promise<{
+  marketAnalysis: string | null;
+  groundedCategoryId: string | null;
+}> {
   const searchQueries = buildSearchQueries(domain, itemName);
 
   const systemInstruction = `You are an expert eBay listing analyst. Use the Google Search tool to find:
@@ -341,15 +344,16 @@ After searching, return ONLY a single valid JSON object (no markdown, no code bl
         parts: [
           {
             text: `Find the eBay leaf category ID and recent sold prices for this ${
-              domain.replace("_", " ")
+              domain.replace(
+                "_",
+                " ",
+              )
             } item: "${itemName}".`,
           },
         ],
       },
     ],
-    tools: [
-      { googleSearch: {} },
-    ],
+    tools: [{ googleSearch: {} }],
     generationConfig: {
       temperature: 0.1,
       maxOutputTokens: 800,
@@ -473,7 +477,10 @@ identification_correction should ONLY describe genuine misidentification errors 
     : "";
 
   const systemInstruction = `You are an expert visual analyst performing an agentic inspection of a ${
-    domain.replace("_", " ")
+    domain.replace(
+      "_",
+      " ",
+    )
   } item for eBay listing purposes.
 
 Using the code_execution tool, perform a Think-Act-Observe inspection loop on the provided image(s):
@@ -510,15 +517,16 @@ Return ONLY a single valid JSON object (no markdown, no code blocks):
           ...imageParts,
           {
             text: `Perform agentic visual inspection on this ${
-              domain.replace("_", " ")
+              domain.replace(
+                "_",
+                " ",
+              )
             } item: "${itemName}". Use code execution to zoom into and examine the key regions listed in your instructions.`,
           },
         ],
       },
     ],
-    tools: [
-      { codeExecution: {} },
-    ],
+    tools: [{ codeExecution: {} }],
     generationConfig: {
       temperature: 0.1,
       maxOutputTokens: 1200,
@@ -571,7 +579,9 @@ Return ONLY a single valid JSON object (no markdown, no code blocks):
   }
 
   const zoomRegions = Array.isArray(parsed.zoom_regions_examined)
-    ? parsed.zoom_regions_examined.map(String).filter((s: string) => s.length > 0)
+    ? parsed.zoom_regions_examined
+      .map(String)
+      .filter((s: string) => s.length > 0)
     : [];
   const keyFindings = typeof parsed.key_findings === "string" ? parsed.key_findings.trim() : "";
   const confidenceBoost = typeof parsed.confidence_boost === "number"
@@ -590,7 +600,10 @@ Return ONLY a single valid JSON object (no markdown, no code blocks):
     if (noveltyPattern.test(identificationCorrection)) {
       console.warn(
         `${label}[StageB] ⚠️  Suppressed false novelty identification_correction for coins_bullion: "${
-          identificationCorrection.slice(0, 120)
+          identificationCorrection.slice(
+            0,
+            120,
+          )
         }"`,
       );
       identificationCorrection = undefined;

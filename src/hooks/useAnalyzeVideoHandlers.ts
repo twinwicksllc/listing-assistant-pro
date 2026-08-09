@@ -11,11 +11,14 @@ export function useAnalyzeVideoHandlers({
   setVideoUrl,
   setEbayVideoStatus,
 }: UseAnalyzeVideoHandlersParams) {
-  const onVideoReady = useCallback((id: string, url: string) => {
-    setEbayVideoId(id);
-    setVideoUrl(url);
-    setEbayVideoStatus("LIVE");
-  }, [setEbayVideoId, setEbayVideoStatus, setVideoUrl]);
+  const onVideoReady = useCallback(
+    (id: string, url: string) => {
+      setEbayVideoId(id);
+      setVideoUrl(url);
+      setEbayVideoStatus("LIVE");
+    },
+    [setEbayVideoId, setEbayVideoStatus, setVideoUrl],
+  );
 
   const onVideoRemoved = useCallback(() => {
     setEbayVideoId(null);
@@ -23,9 +26,12 @@ export function useAnalyzeVideoHandlers({
     setEbayVideoStatus(null);
   }, [setEbayVideoId, setEbayVideoStatus, setVideoUrl]);
 
-  const onVideoStatusChange = useCallback((status: string) => {
-    setEbayVideoStatus(status);
-  }, [setEbayVideoStatus]);
+  const onVideoStatusChange = useCallback(
+    (status: string) => {
+      setEbayVideoStatus(status);
+    },
+    [setEbayVideoStatus],
+  );
 
   return {
     onVideoReady,

@@ -4,16 +4,33 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { compressVideo } from "@/utils/videoCompression";
 
-type UploadStatus = "idle" | "recording" | "compressing" | "uploading_storage" | "uploading_ebay" | "processing" | "live" | "failed";
+type UploadStatus =
+  | "idle"
+  | "recording"
+  | "compressing"
+  | "uploading_storage"
+  | "uploading_ebay"
+  | "processing"
+  | "live"
+  | "failed";
 
-const ACCEPTED_VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm", "video/x-msvideo"];
+const ACCEPTED_VIDEO_TYPES = [
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+  "video/x-msvideo",
+];
 const MAX_VIDEO_SIZE_MB = 500;
 const MAX_VIDEO_SIZE_BYTES = MAX_VIDEO_SIZE_MB * 1024 * 1024;
 // eBay Sell Video API requires clips between 3s and 60s; we cap at 10s as a product choice.
 const MAX_VIDEO_DURATION_SEC = 10;
 const MIN_VIDEO_DURATION_SEC = 3;
 
-const VIDEO_FAILURE_STATUSES = new Set(["FAILED", "PROCESSING_FAILED", "BLOCKED"]);
+const VIDEO_FAILURE_STATUSES = new Set([
+  "FAILED",
+  "PROCESSING_FAILED",
+  "BLOCKED",
+]);
 
 function getVideoDuration(file: File): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -34,9 +51,18 @@ function getVideoDuration(file: File): Promise<number> {
 
 function pickRecorderMimeType(): string {
   // Safari can record directly to MP4 (eBay-safe); Chrome/Firefox only support WebM.
-  const candidates = ["video/mp4", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
+  const candidates = [
+    "video/mp4",
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    "video/webm",
+  ];
   for (const type of candidates) {
-    if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported?.(type)) return type;
+    if (
+      typeof MediaRecorder !== "undefined" &&
+      MediaRecorder.isTypeSupported?.(type)
+    )
+      return type;
   }
   return "";
 }
@@ -89,10 +115,14 @@ export function VideoUploadInput({
 
   const [status, setStatus] = useState<UploadStatus>(resolveInitialStatus);
   const [videoId, setVideoId] = useState<string | null>(initialVideoId ?? null);
-  const [videoUrl, setVideoUrl] = useState<string | null>(initialVideoUrl ?? null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(
+    initialVideoUrl ?? null,
+  );
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
-  const [recordSecondsLeft, setRecordSecondsLeft] = useState(MAX_VIDEO_DURATION_SEC);
+  const [recordSecondsLeft, setRecordSecondsLeft] = useState(
+    MAX_VIDEO_DURATION_SEC,
+  );
   const [recordedFormatWarning, setRecordedFormatWarning] = useState(false);
   const [enableCompression, setEnableCompression] = useState(true);
   const [compressionProgress, setCompressionProgress] = useState(0);
@@ -148,7 +178,11 @@ export function VideoUploadInput({
 
       try {
         const { data } = await supabase.functions.invoke("ebay-publish", {
-          body: { action: "get_video_status", userToken: token, videoId: vidId },
+          body: {
+            action: "get_video_status",
+            userToken: token,
+            videoId: vidId,
+          },
         });
 
         if (!mountedRef.current) return;
@@ -164,7 +198,9 @@ export function VideoUploadInput({
           stopPolling();
           setStatus("failed");
           onStatusChange?.("FAILED");
-          setErrorMsg("eBay could not process this video. Please try a different file.");
+          setErrorMsg(
+            "eBay could not process this video. Please try a different file.",
+          );
         }
         // PENDING / PROCESSING → keep polling
       } catch {
@@ -196,12 +232,16 @@ export function VideoUploadInput({
     }
     if (durationSec != null && Number.isFinite(durationSec)) {
       if (durationSec > MAX_VIDEO_DURATION_SEC + 0.5) {
-        setErrorMsg(`Video is ${durationSec.toFixed(1)}s — please keep it to ${MAX_VIDEO_DURATION_SEC} seconds or less.`);
+        setErrorMsg(
+          `Video is ${durationSec.toFixed(1)}s — please keep it to ${MAX_VIDEO_DURATION_SEC} seconds or less.`,
+        );
         setStatus("failed");
         return;
       }
       if (durationSec < MIN_VIDEO_DURATION_SEC) {
-        setErrorMsg(`Video is too short (${durationSec.toFixed(1)}s). eBay requires at least ${MIN_VIDEO_DURATION_SEC} seconds.`);
+        setErrorMsg(
+          `Video is too short (${durationSec.toFixed(1)}s). eBay requires at least ${MIN_VIDEO_DURATION_SEC} seconds.`,
+        );
         setStatus("failed");
         return;
       }
@@ -244,11 +284,18 @@ export function VideoUploadInput({
           clearInterval(progressInterval);
           setCompressionProgress(1);
 
-          fileToUpload = new File([compressionResult.blob], compressionResult.filename, {
-            type: "video/mp4",
-          });
+          fileToUpload = new File(
+            [compressionResult.blob],
+            compressionResult.filename,
+            {
+              type: "video/mp4",
+            },
+          );
 
-          const savedMB = ((1 - compressionResult.compressionRatio) * 100).toFixed(1);
+          const savedMB = (
+            (1 - compressionResult.compressionRatio) *
+            100
+          ).toFixed(1);
           setCompressionInfo({
             originalSize: compressionResult.originalSize,
             compressedSize: compressionResult.compressedSize,
@@ -276,11 +323,17 @@ export function VideoUploadInput({
 
       const { error: storageError } = await supabase.storage
         .from("listing-images")
-        .upload(path, fileToUpload, { contentType: fileToUpload.type, upsert: false });
+        .upload(path, fileToUpload, {
+          contentType: fileToUpload.type,
+          upsert: false,
+        });
 
-      if (storageError) throw new Error(`Storage upload failed: ${storageError.message}`);
+      if (storageError)
+        throw new Error(`Storage upload failed: ${storageError.message}`);
 
-      const { data: urlData } = supabase.storage.from("listing-images").getPublicUrl(path);
+      const { data: urlData } = supabase.storage
+        .from("listing-images")
+        .getPublicUrl(path);
       const publicUrl = urlData.publicUrl;
       setVideoUrl(publicUrl);
       videoUrlRef.current = publicUrl;
@@ -352,7 +405,10 @@ export function VideoUploadInput({
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state !== "inactive"
+    ) {
       mediaRecorderRef.current.stop();
     }
     stopRecordTimer();
@@ -373,7 +429,9 @@ export function VideoUploadInput({
       }
 
       const mimeType = pickRecorderMimeType();
-      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
       recordedChunksRef.current = [];
 
@@ -387,9 +445,13 @@ export function VideoUploadInput({
         const isMp4 = usedMimeType.includes("mp4");
         setRecordedFormatWarning(!isMp4);
 
-        const blob = new Blob(recordedChunksRef.current, { type: usedMimeType });
+        const blob = new Blob(recordedChunksRef.current, {
+          type: usedMimeType,
+        });
         const ext = isMp4 ? "mp4" : "webm";
-        const file = new File([blob], `recording-${Date.now()}.${ext}`, { type: usedMimeType });
+        const file = new File([blob], `recording-${Date.now()}.${ext}`, {
+          type: usedMimeType,
+        });
         await uploadFile(file);
       };
 
@@ -406,7 +468,9 @@ export function VideoUploadInput({
         }
       }, 1000);
     } catch {
-      setErrorMsg("Camera/microphone access denied. Please enable permissions or upload a video file instead.");
+      setErrorMsg(
+        "Camera/microphone access denied. Please enable permissions or upload a video file instead.",
+      );
       setStatus("failed");
     }
   };
@@ -434,8 +498,13 @@ export function VideoUploadInput({
     failed: errorMsg ?? "Video processing failed",
   };
 
-  const isLoading = status === "compressing" || status === "uploading_storage" || status === "uploading_ebay" || status === "processing";
-  const canRemove = status === "live" || status === "failed" || status === "processing";
+  const isLoading =
+    status === "compressing" ||
+    status === "uploading_storage" ||
+    status === "uploading_ebay" ||
+    status === "processing";
+  const canRemove =
+    status === "live" || status === "failed" || status === "processing";
   const canRetry = status === "failed";
 
   return (
@@ -471,7 +540,11 @@ export function VideoUploadInput({
               <span className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
               Recording… {recordSecondsLeft}s left
             </span>
-            <button type="button" onClick={stopRecording} className="text-destructive hover:underline font-medium">
+            <button
+              type="button"
+              onClick={stopRecording}
+              className="text-destructive hover:underline font-medium"
+            >
               Stop
             </button>
           </div>
@@ -489,7 +562,10 @@ export function VideoUploadInput({
             className="w-4 h-4 rounded border-border cursor-pointer"
             disabled={status !== "idle"}
           />
-          <label htmlFor="enable-compression" className="text-xs text-muted-foreground cursor-pointer flex items-center gap-1.5 flex-1">
+          <label
+            htmlFor="enable-compression"
+            className="text-xs text-muted-foreground cursor-pointer flex items-center gap-1.5 flex-1"
+          >
             <Zap className="w-3.5 h-3.5 text-amber-500" />
             Optimize video size (2.5 Mbps, 720p)
           </label>
@@ -549,18 +625,26 @@ export function VideoUploadInput({
       {status !== "idle" && status !== "recording" && (
         <div className="flex items-center gap-2 py-2.5 px-3 rounded-lg border border-border bg-card text-xs">
           {/* Status icon */}
-          {isLoading && <Loader2 className="w-4 h-4 flex-shrink-0 animate-spin text-primary" />}
-          {status === "live" && <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-green-500" />}
-          {status === "failed" && <XCircle className="w-4 h-4 flex-shrink-0 text-destructive" />}
+          {isLoading && (
+            <Loader2 className="w-4 h-4 flex-shrink-0 animate-spin text-primary" />
+          )}
+          {status === "live" && (
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-green-500" />
+          )}
+          {status === "failed" && (
+            <XCircle className="w-4 h-4 flex-shrink-0 text-destructive" />
+          )}
 
           {/* Message */}
-          <p className={`flex-1 min-w-0 leading-snug ${
-            status === "live"
-              ? "text-green-600 dark:text-green-400 font-medium"
-              : status === "failed"
-              ? "text-destructive"
-              : "text-muted-foreground"
-          }`}>
+          <p
+            className={`flex-1 min-w-0 leading-snug ${
+              status === "live"
+                ? "text-green-600 dark:text-green-400 font-medium"
+                : status === "failed"
+                  ? "text-destructive"
+                  : "text-muted-foreground"
+            }`}
+          >
             {statusLabel[status]}
           </p>
 

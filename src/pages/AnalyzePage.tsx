@@ -5,7 +5,10 @@ import CategoryConfirmDialog from "@/components/CategoryConfirmDialog";
 import { useDrafts } from "@/hooks/useDrafts";
 import { supabase } from "@/integrations/supabase/client";
 import type { ItemSpecifics, CoinConditionDetail } from "@/types/listing";
-import { isCoinConditionDetailComplete, isCoinConditionDetailRequired } from "@/types/listing";
+import {
+  isCoinConditionDetailComplete,
+  isCoinConditionDetailRequired,
+} from "@/types/listing";
 import { useAuth } from "@/contexts/AuthContext";
 import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
 import type { SelectedPolicies } from "@/types/ebay-policies";
@@ -37,7 +40,6 @@ import { PackageDimensions } from "@/components/analyze/PackageDimensions";
 import { ExportSection } from "@/components/analyze/ExportSection";
 import { ActionButtons } from "@/components/analyze/ActionButtons";
 
-
 // Sanitise AI responses that occasionally return HTML tags instead of markdown
 function htmlToPlainMarkdown(text: string): string {
   if (!text) return text;
@@ -61,20 +63,37 @@ function htmlToPlainMarkdown(text: string): string {
 }
 
 export default function AnalyzePage() {
-  const { canAnalyze, canPublish, usage, recordUsage, isOwner, currentPlanLimits, planFeatures, currentPlan, user } = useAuth();
+  const {
+    canAnalyze,
+    canPublish,
+    usage,
+    recordUsage,
+    isOwner,
+    currentPlanLimits,
+    planFeatures,
+    currentPlan,
+    user,
+  } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const { addDraft } = useDrafts();
 
   const state = location.state as any;
-  const imageUrls: string[] = state?.imageUrls ?? (state?.imageUrl ? [state.imageUrl] : []);
+  const imageUrls: string[] =
+    state?.imageUrls ?? (state?.imageUrl ? [state.imageUrl] : []);
   const videoOnlyMode = !!state?.videoOnly && imageUrls.length === 0;
   const fromVideoExtraction = !!state?.fromVideoExtraction;
-  const selectedVideoFile = state?.selectedVideoFile instanceof File ? state.selectedVideoFile : undefined;
+  const selectedVideoFile =
+    state?.selectedVideoFile instanceof File
+      ? state.selectedVideoFile
+      : undefined;
   const voiceNote: string = state?.voiceNote || "";
-  const initialVideoUrl = typeof state?.videoUrl === "string" ? state.videoUrl : null;
-  const initialEbayVideoId = typeof state?.ebayVideoId === "string" ? state.ebayVideoId : null;
-  const initialEbayVideoStatus = typeof state?.ebayVideoStatus === "string" ? state.ebayVideoStatus : null;
+  const initialVideoUrl =
+    typeof state?.videoUrl === "string" ? state.videoUrl : null;
+  const initialEbayVideoId =
+    typeof state?.ebayVideoId === "string" ? state.ebayVideoId : null;
+  const initialEbayVideoStatus =
+    typeof state?.ebayVideoStatus === "string" ? state.ebayVideoStatus : null;
 
   const [generated, setGenerated] = useState(false);
   const [title, setTitle] = useState("");
@@ -86,7 +105,14 @@ export default function AnalyzePage() {
   const [metalType, setMetalType] = useState<string>("none");
   const [metalWeightOz, setMetalWeightOz] = useState<number>(0);
   const [ebayCategoryId, setEbayCategoryId] = useState<string>("");
-  const [suggestedCategories, setSuggestedCategories] = useState<Array<{ categoryId: string; categoryName: string; reason: string; breadcrumb?: string }>>([]);
+  const [suggestedCategories, setSuggestedCategories] = useState<
+    Array<{
+      categoryId: string;
+      categoryName: string;
+      reason: string;
+      breadcrumb?: string;
+    }>
+  >([]);
   const [itemSpecifics, setItemSpecifics] = useState<ItemSpecifics>({});
   const [condition, setCondition] = useState<string>("USED_EXCELLENT");
   const { exportPlatform, exportFormat, setExportPlatform, setExportFormat } =
@@ -95,9 +121,14 @@ export default function AnalyzePage() {
   const [gradingRationale, setGradingRationale] = useState<string>("");
   const [isSlabbed, setIsSlabbed] = useState(false);
   const [gradeConfirmed, setGradeConfirmed] = useState(false);
-  const [coinConditionDetail, setCoinConditionDetail] = useState<CoinConditionDetail | null>(null);
+  const [coinConditionDetail, setCoinConditionDetail] =
+    useState<CoinConditionDetail | null>(null);
   const [meltValue, setMeltValue] = useState<number | null>(null);
-  const [spotPrices, setSpotPrices] = useState<{ gold: number; silver: number; platinum: number } | null>(null);
+  const [spotPrices, setSpotPrices] = useState<{
+    gold: number;
+    silver: number;
+    platinum: number;
+  } | null>(null);
   const [consignor, setConsignor] = useState("");
   const [cogs, setCogs] = useState<number | undefined>(undefined);
   const [includeAiFooter, setIncludeAiFooter] = useState(true);
@@ -124,38 +155,66 @@ export default function AnalyzePage() {
     paymentPolicyId: null,
     returnPolicyId: null,
   });
-  const [listingFormat, setListingFormat] = useState<"FIXED_PRICE" | "AUCTION">("FIXED_PRICE");
+  const [listingFormat, setListingFormat] = useState<"FIXED_PRICE" | "AUCTION">(
+    "FIXED_PRICE",
+  );
   const [listingPrice, setListingPrice] = useState(0);
   const [auctionStartPrice, setAuctionStartPrice] = useState(0);
   const [auctionBuyItNowEnabled, setAuctionBuyItNowEnabled] = useState(false);
   const [auctionBuyItNow, setAuctionBuyItNow] = useState(0);
   const [bestOfferEnabled, setBestOfferEnabled] = useState(false);
-  const [bestOfferAutoAcceptPrice, setBestOfferAutoAcceptPrice] = useState<number>(0);
-  const [bestOfferAutoDeclinePrice, setBestOfferAutoDeclinePrice] = useState<number>(0);
+  const [bestOfferAutoAcceptPrice, setBestOfferAutoAcceptPrice] =
+    useState<number>(0);
+  const [bestOfferAutoDeclinePrice, setBestOfferAutoDeclinePrice] =
+    useState<number>(0);
   const [quantity, setQuantity] = useState(1);
-  const [pricingMode, setPricingMode] = useState<"per_item" | "total">("per_item");
+  const [pricingMode, setPricingMode] = useState<"per_item" | "total">(
+    "per_item",
+  );
   const [videoUrl, setVideoUrl] = useState<string | null>(initialVideoUrl);
-  const [ebayVideoId, setEbayVideoId] = useState<string | null>(initialEbayVideoId);
-  const [ebayVideoStatus, setEbayVideoStatus] = useState<string | null>(initialEbayVideoStatus);
-  const terminalVideoStatuses = new Set(["LIVE", "FAILED", "PROCESSING_FAILED", "BLOCKED"]);
-  const videoIsProcessing = !!ebayVideoId && !terminalVideoStatuses.has(String(ebayVideoStatus || "").toUpperCase());
+  const [ebayVideoId, setEbayVideoId] = useState<string | null>(
+    initialEbayVideoId,
+  );
+  const [ebayVideoStatus, setEbayVideoStatus] = useState<string | null>(
+    initialEbayVideoStatus,
+  );
+  const terminalVideoStatuses = new Set([
+    "LIVE",
+    "FAILED",
+    "PROCESSING_FAILED",
+    "BLOCKED",
+  ]);
+  const videoIsProcessing =
+    !!ebayVideoId &&
+    !terminalVideoStatuses.has(String(ebayVideoStatus || "").toUpperCase());
   const [packageWeightLb, setPackageWeightLb] = useState<number>(0);
   const [packageWeightOz, setPackageWeightOz] = useState<number>(0);
   const [packageLengthIn, setPackageLengthIn] = useState<number>(0);
   const [packageWidthIn, setPackageWidthIn] = useState<number>(0);
   const [packageHeightIn, setPackageHeightIn] = useState<number>(0);
 
-  const AI_FOOTER = "\n\n---\nListing generated by Sovereign AI Assistant. All details should be verified by the buyer.";
-  const getDescriptionWithFooter = () => (includeAiFooter ? description + AI_FOOTER : description);
+  const AI_FOOTER =
+    "\n\n---\nListing generated by Sovereign AI Assistant. All details should be verified by the buyer.";
+  const getDescriptionWithFooter = () =>
+    includeAiFooter ? description + AI_FOOTER : description;
   // Prefer the local breadcrumb map, but fall back to the backend-provided
   // breadcrumb from the matching suggested category. Without this fallback, a
   // category whose ID is not yet in the local map (e.g. 11966 Standing Liberty
   // Quarters) yields an undefined breadcrumb, so the coin detection can't fire
   // via the breadcrumb regex and the Raw/Graded selector never appears.
-  const backendBreadcrumb = suggestedCategories.find((c) => c.categoryId === ebayCategoryId)?.breadcrumb;
-  const categoryBreadcrumb = getEbayCategoryBreadcrumb(ebayCategoryId) || backendBreadcrumb || undefined;
-  const coinConditionDetailRequired = isCoinConditionDetailRequired(ebayCategoryId, domain, categoryBreadcrumb, ebayMetadata?.isCoinCategory ?? false);
-  const coinConditionDetailComplete = isCoinConditionDetailComplete(coinConditionDetail);
+  const backendBreadcrumb = suggestedCategories.find(
+    (c) => c.categoryId === ebayCategoryId,
+  )?.breadcrumb;
+  const categoryBreadcrumb =
+    getEbayCategoryBreadcrumb(ebayCategoryId) || backendBreadcrumb || undefined;
+  const coinConditionDetailRequired = isCoinConditionDetailRequired(
+    ebayCategoryId,
+    domain,
+    categoryBreadcrumb,
+    ebayMetadata?.isCoinCategory ?? false,
+  );
+  const coinConditionDetailComplete =
+    isCoinConditionDetailComplete(coinConditionDetail);
 
   // ââ Hooks ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
@@ -258,19 +317,24 @@ export default function AnalyzePage() {
     setPackageHeightIn(0);
 
     const nextCoinConditionDetail = data.coinConditionDetail ?? null;
-    
+
     // If slab OCR successfully extracted grader/grade/cert number, use those to populate form
     // This provides a fallback if Gemini didn't return coinConditionDetail
     let coinConditionDetailToUse = nextCoinConditionDetail;
-    if (!coinConditionDetailToUse && data.slabOcrData?.grader && data.slabOcrData?.grade) {
+    if (
+      !coinConditionDetailToUse &&
+      data.slabOcrData?.grader &&
+      data.slabOcrData?.grade
+    ) {
       coinConditionDetailToUse = {
         type: "graded" as const,
-        gradingCompany: data.slabOcrData.grader as "PCGS" | "NGC" | "ANACS" | "ICG" | "CAC" | "ICCS",
+        gradingCompany: data.slabOcrData.grader as
+          "PCGS" | "NGC" | "ANACS" | "ICG" | "CAC" | "ICCS",
         grade: data.slabOcrData.grade,
         certificationNumber: data.slabOcrData.certNumber || undefined,
       };
     }
-    
+
     if (data._meta) setAnalysisMeta(data._meta);
     if (data._ebayMetadata) {
       setEbayMetadata(data._ebayMetadata);
@@ -290,13 +354,18 @@ export default function AnalyzePage() {
     setCondition(data.condition || "USED_EXCELLENT");
     setSuggestedGrade(data.suggestedGrade || "");
     setGradingRationale(data.gradingRationale || "");
-    setIsSlabbed(coinConditionDetailToUse?.type === "graded" ? true : (data.isSlabbed ?? false));
+    setIsSlabbed(
+      coinConditionDetailToUse?.type === "graded"
+        ? true
+        : (data.isSlabbed ?? false),
+    );
     setCoinConditionDetail(coinConditionDetailToUse);
     setMeltValue(data.meltValue ?? null);
     setSpotPrices(data.spotPrices ?? null);
     setGradeConfirmed(false);
     setDomain(data.domain || "general");
-    const aiMid = ((data.priceMin || 0) + (data.priceMax || data.priceMin || 0)) / 2;
+    const aiMid =
+      ((data.priceMin || 0) + (data.priceMax || data.priceMin || 0)) / 2;
     setListingPrice(parseFloat(aiMid.toFixed(2)) || 0);
     setAuctionStartPrice(parseFloat((data.priceMin || 0).toFixed(2)) || 0);
     setGenerated(true);
@@ -322,7 +391,11 @@ export default function AnalyzePage() {
     priceMin,
     priceMax,
     listingPrice:
-      listingPrice > 0 ? listingPrice : auctionStartPrice > 0 ? auctionStartPrice : parseFloat(((priceMin + priceMax) / 2).toFixed(2)),
+      listingPrice > 0
+        ? listingPrice
+        : auctionStartPrice > 0
+          ? auctionStartPrice
+          : parseFloat(((priceMin + priceMax) / 2).toFixed(2)),
     listingFormat,
     createdAt: new Date(),
     ebayCategoryId,
@@ -341,8 +414,14 @@ export default function AnalyzePage() {
     metalType: metalType !== "none" ? metalType : undefined,
     metalWeightOz: metalWeightOz > 0 ? metalWeightOz : undefined,
     bestOfferEnabled: bestOfferEnabled || undefined,
-    bestOfferAutoAcceptPrice: bestOfferEnabled && bestOfferAutoAcceptPrice > 0 ? bestOfferAutoAcceptPrice : undefined,
-    bestOfferAutoDeclinePrice: bestOfferEnabled && bestOfferAutoDeclinePrice > 0 ? bestOfferAutoDeclinePrice : undefined,
+    bestOfferAutoAcceptPrice:
+      bestOfferEnabled && bestOfferAutoAcceptPrice > 0
+        ? bestOfferAutoAcceptPrice
+        : undefined,
+    bestOfferAutoDeclinePrice:
+      bestOfferEnabled && bestOfferAutoDeclinePrice > 0
+        ? bestOfferAutoDeclinePrice
+        : undefined,
     quantity: quantity > 1 ? quantity : undefined,
     pricingMode: quantity > 1 ? pricingMode : undefined,
     videoUrl: videoUrl ?? undefined,
@@ -440,18 +519,22 @@ export default function AnalyzePage() {
     setAuctionBuyItNow,
   });
 
-  const { onVideoReady, onVideoRemoved, onVideoStatusChange } = useAnalyzeVideoHandlers({
-    setEbayVideoId,
-    setVideoUrl,
-    setEbayVideoStatus,
-  });
-
-  const { toggleBestOffer, updateBestOfferAutoAccept, updateBestOfferAutoDecline } =
-    useAnalyzeBestOfferControls({
-      setBestOfferEnabled,
-      setBestOfferAutoAcceptPrice,
-      setBestOfferAutoDeclinePrice,
+  const { onVideoReady, onVideoRemoved, onVideoStatusChange } =
+    useAnalyzeVideoHandlers({
+      setEbayVideoId,
+      setVideoUrl,
+      setEbayVideoStatus,
     });
+
+  const {
+    toggleBestOffer,
+    updateBestOfferAutoAccept,
+    updateBestOfferAutoDecline,
+  } = useAnalyzeBestOfferControls({
+    setBestOfferEnabled,
+    setBestOfferAutoAcceptPrice,
+    setBestOfferAutoDeclinePrice,
+  });
 
   const { conditionOptions, updateCondition } = useAnalyzeConditionOptions({
     ebayMetadata,
@@ -468,28 +551,40 @@ export default function AnalyzePage() {
       setGradingRationale,
     });
 
-  const { updateTitle, updateDescription, toggleAiFooter, updateConsignor, updateItemSpecificValue } =
-    useAnalyzeListingFieldHandlers({
-      setTitle,
-      setDescription,
-      setIncludeAiFooter,
-      setConsignor,
-      setItemSpecifics,
-    });
+  const {
+    updateTitle,
+    updateDescription,
+    toggleAiFooter,
+    updateConsignor,
+    updateItemSpecificValue,
+  } = useAnalyzeListingFieldHandlers({
+    setTitle,
+    setDescription,
+    setIncludeAiFooter,
+    setConsignor,
+    setItemSpecifics,
+  });
 
   const setCoinConditionDetailType = (type: "graded" | "raw") => {
     if (type === "graded") {
-      const gradedDetail = coinConditionDetail?.type === "graded"
-        ? coinConditionDetail
-        : { type: "graded" as const, gradingCompany: "PCGS" as const, grade: "", certificationNumber: undefined };
+      const gradedDetail =
+        coinConditionDetail?.type === "graded"
+          ? coinConditionDetail
+          : {
+              type: "graded" as const,
+              gradingCompany: "PCGS" as const,
+              grade: "",
+              certificationNumber: undefined,
+            };
       setCoinConditionDetail(gradedDetail);
       setIsSlabbed(true);
       return;
     }
 
-    const rawDetail = coinConditionDetail?.type === "raw"
-      ? coinConditionDetail
-      : { type: "raw" as const, rawCondition: "Uncirculated" as const };
+    const rawDetail =
+      coinConditionDetail?.type === "raw"
+        ? coinConditionDetail
+        : { type: "raw" as const, rawCondition: "Uncirculated" as const };
     setCoinConditionDetail(rawDetail);
     setIsSlabbed(false);
   };
@@ -529,7 +624,7 @@ export default function AnalyzePage() {
   // so the user can see and fill in required/suggested fields for the new category.
   // We only exclude the internal _coinConditionDetail key (prefixed with _).
   const displaySpecifics = Object.entries(itemSpecifics).filter(
-    ([k, v]) => !k.startsWith("_") && (v !== null && v !== undefined),
+    ([k, v]) => !k.startsWith("_") && v !== null && v !== undefined,
   );
 
   // ââ Video-only early return ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
@@ -589,7 +684,9 @@ export default function AnalyzePage() {
           <div className="flex items-start gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2.5">
             <Video className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
             <div>
-              <p className="text-xs font-medium text-foreground">Video attached</p>
+              <p className="text-xs font-medium text-foreground">
+                Video attached
+              </p>
               <p className="text-xs text-muted-foreground">
                 {ebayVideoStatus === "LIVE"
                   ? "Ready on eBay and included when you publish this listing."
@@ -603,10 +700,12 @@ export default function AnalyzePage() {
           <div className="space-y-2">
             <div className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary/10 text-primary font-semibold text-sm">
               <Loader2 className="w-4 h-4 animate-spin" />
-              Analyzing {imageUrls.length} photo{imageUrls.length !== 1 && "s"} with AI...
+              Analyzing {imageUrls.length} photo{imageUrls.length !== 1 && "s"}{" "}
+              with AI...
             </div>
             <p className="text-center text-xs text-muted-foreground">
-              {usage.aiAnalysis}/{currentPlanLimits.analysisLimit} analyses used this month
+              {usage.aiAnalysis}/{currentPlanLimits.analysisLimit} analyses used
+              this month
             </p>
           </div>
         ) : !generated ? (
@@ -620,7 +719,8 @@ export default function AnalyzePage() {
               Retry Analysis
             </button>
             <p className="text-center text-xs text-muted-foreground">
-              {usage.aiAnalysis}/{currentPlanLimits.analysisLimit} analyses used this month
+              {usage.aiAnalysis}/{currentPlanLimits.analysisLimit} analyses used
+              this month
               {!canAnalyze && (
                 <button
                   onClick={() => navigate("/billing")}
@@ -649,11 +749,15 @@ export default function AnalyzePage() {
               suggestedCategories={suggestedCategories}
               isCustomCategoryMode={isCustomCategoryMode}
               customCategoryInput={customCategoryInput}
-              hasSelectedCategoryInSuggestions={hasSelectedCategoryInSuggestions}
+              hasSelectedCategoryInSuggestions={
+                hasSelectedCategoryInSuggestions
+              }
               selectedSuggestedCategory={selectedSuggestedCategory}
               handleCategorySelectChange={handleCategorySelectChange}
               updateCustomCategoryInput={updateCustomCategoryInput}
-              handleCustomCategoryInputKeyDown={handleCustomCategoryInputKeyDown}
+              handleCustomCategoryInputKeyDown={
+                handleCustomCategoryInputKeyDown
+              }
               confirmCustomCategoryInput={confirmCustomCategoryInput}
               cancelCustomCategoryMode={cancelCustomCategoryMode}
               condition={condition}

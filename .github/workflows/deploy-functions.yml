@@ -5,8 +5,8 @@ on:
     branches:
       - main
     paths:
-      - 'supabase/functions/**'
-      - 'supabase/migrations/**'
+      - "supabase/functions/**"
+      - "supabase/migrations/**"
   workflow_dispatch:
 
 permissions:

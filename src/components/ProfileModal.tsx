@@ -12,11 +12,11 @@ interface ProfileModalProps {
 export default function ProfileModal({ open, onClose }: ProfileModalProps) {
   const { user } = useAuth();
   const [displayName, setDisplayName] = useState("");
-  const [avatarUrl, setAvatarUrl]     = useState<string | null>(null);
-  const [postalCode, setPostalCode]   = useState("");
-  const [city, setCity]               = useState("");
-  const [loading, setLoading]         = useState(false);
-  const [saving, setSaving]           = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [postalCode, setPostalCode] = useState("");
+  const [city, setCity] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -50,19 +50,17 @@ export default function ProfileModal({ open, onClose }: ProfileModalProps) {
     if (!user) return;
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .upsert(
-          {
-            id: user.id,
-            display_name: displayName.trim() || null,
-            avatar_url: avatarUrl,
-            postal_code: postalCode.trim() || null,
-            city: city.trim() || null,
-            updated_at: new Date().toISOString(),
-          } as any,
-          { onConflict: "id" }
-        );
+      const { error } = await supabase.from("profiles").upsert(
+        {
+          id: user.id,
+          display_name: displayName.trim() || null,
+          avatar_url: avatarUrl,
+          postal_code: postalCode.trim() || null,
+          city: city.trim() || null,
+          updated_at: new Date().toISOString(),
+        } as any,
+        { onConflict: "id" },
+      );
 
       if (error) throw error;
       toast.success("Profile updated!");
@@ -107,7 +105,10 @@ export default function ProfileModal({ open, onClose }: ProfileModalProps) {
       toast.success("Avatar uploaded!");
     } catch (err: unknown) {
       console.error("Avatar upload error:", err);
-      if (err.message?.includes("Bucket not found") || err.message?.includes("bucket")) {
+      if (
+        err.message?.includes("Bucket not found") ||
+        err.message?.includes("bucket")
+      ) {
         toast.error("Avatar storage not configured yet. Display name saved.");
       } else {
         toast.error(err.message || "Failed to upload avatar");
@@ -135,7 +136,9 @@ export default function ProfileModal({ open, onClose }: ProfileModalProps) {
       <div className="relative bg-card border border-border rounded-2xl w-full max-w-sm shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border">
-          <h2 className="text-base font-semibold text-foreground">Edit Profile</h2>
+          <h2 className="text-base font-semibold text-foreground">
+            Edit Profile
+          </h2>
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
@@ -163,7 +166,9 @@ export default function ProfileModal({ open, onClose }: ProfileModalProps) {
                     />
                   ) : (
                     <div className="w-20 h-20 rounded-full bg-primary/10 border-2 border-border flex items-center justify-center">
-                      <span className="text-2xl font-bold text-primary">{initials}</span>
+                      <span className="text-2xl font-bold text-primary">
+                        {initials}
+                      </span>
                     </div>
                   )}
                   <button
@@ -178,7 +183,9 @@ export default function ProfileModal({ open, onClose }: ProfileModalProps) {
                     )}
                   </button>
                 </div>
-                <p className="text-xs text-muted-foreground">Tap camera to change photo</p>
+                <p className="text-xs text-muted-foreground">
+                  Tap camera to change photo
+                </p>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -249,11 +256,17 @@ export default function ProfileModal({ open, onClose }: ProfileModalProps) {
 
                 {/* Zip / Postal Code */}
                 <div className="space-y-1.5">
-                  <label className="text-xs text-muted-foreground">ZIP / Postal Code</label>
+                  <label className="text-xs text-muted-foreground">
+                    ZIP / Postal Code
+                  </label>
                   <input
                     type="text"
                     value={postalCode}
-                    onChange={(e) => setPostalCode(e.target.value.replace(/[^0-9A-Za-z\s-]/g, ""))}
+                    onChange={(e) =>
+                      setPostalCode(
+                        e.target.value.replace(/[^0-9A-Za-z\s-]/g, ""),
+                      )
+                    }
                     placeholder="e.g. 60601"
                     maxLength={10}
                     className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"

@@ -135,20 +135,23 @@ Deno.test("analyze-item: general domain fallback", async () => {
   assert(result.category, "Category should be returned");
 });
 
-Deno.test("analyze-item: multiple calls with same item should be consistent", async () => {
-  const item = await getTestItemByDomain("coins_bullion");
-  const voiceNote = item.title;
+Deno.test(
+  "analyze-item: multiple calls with same item should be consistent",
+  async () => {
+    const item = await getTestItemByDomain("coins_bullion");
+    const voiceNote = item.title;
 
-  const result1 = await callAnalyzeItem({ voiceNote });
-  const result2 = await callAnalyzeItem({ voiceNote });
+    const result1 = await callAnalyzeItem({ voiceNote });
+    const result2 = await callAnalyzeItem({ voiceNote });
 
-  assertEquals(result1.domain, result2.domain, "Domain should be consistent");
-  assertEquals(
-    result1.category,
-    result2.category,
-    "Category should be consistent",
-  );
-});
+    assertEquals(result1.domain, result2.domain, "Domain should be consistent");
+    assertEquals(
+      result1.category,
+      result2.category,
+      "Category should be consistent",
+    );
+  },
+);
 
 Deno.test("analyze-item: response has required fields", async () => {
   const item = await getTestItemByDomain("coins_bullion");

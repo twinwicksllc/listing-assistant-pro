@@ -1,6 +1,7 @@
 ## Code Review Action Items
 
 **Completed During Review:**
+
 - ✅ Removed unused `watchedValues` variable from AnalyzePage
 - ✅ Added JSDoc documentation to `arePoliciesSelected()` helper
 - ✅ Verified all imports and exports are properly connected
@@ -13,6 +14,7 @@
 ## Future Improvements (Optional)
 
 ### Documentation Updates
+
 - [ ] **Update `EBAY_POLICY_SELECTION_GUIDE.md`**
   - Change "1-hour cache" → "24-hour cache"
   - Add section on form validation integration
@@ -26,7 +28,9 @@
 - [ ] **Consider consolidating** `EbayPolicySelectorIntegration.md` into main README.md
 
 ### Testing Additions (Non-blocking)
+
 - [ ] Add unit tests for Zod schema validation:
+
   ```tsx
   describe('listingFormSchema', () => {
     test('rejects missing title', () => {...});
@@ -38,6 +42,7 @@
 - [ ] Add E2E test for draft-to-publish flow with policies
 
 ### Code Quality
+
 - [ ] Consider using `FormField` from `src/components/ui/form.tsx` for more type-safe form handling (optional, current approach is solid)
 
 ---

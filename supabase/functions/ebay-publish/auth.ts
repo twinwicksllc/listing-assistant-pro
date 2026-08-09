@@ -23,14 +23,14 @@ export interface EbayActionHandlerContext {
 /**
  * Generate and return the eBay OAuth consent URL.
  */
-export async function handleGetAuthUrl(
-  { clientId, authBase }: EbayActionHandlerContext,
-): Promise<Response> {
+export async function handleGetAuthUrl({
+  clientId,
+  authBase,
+}: EbayActionHandlerContext): Promise<Response> {
   if (!clientId) throw new Error("eBay API credentials not configured");
   if (!authBase) throw new Error("eBay auth endpoint not configured");
 
-  const ruName = Deno.env.get("EBAY_RUNAME") ||
-    Deno.env.get("EBAY_REDIRECT_URI");
+  const ruName = Deno.env.get("EBAY_RUNAME") || Deno.env.get("EBAY_REDIRECT_URI");
   if (!ruName) throw new Error("EBAY_RUNAME not configured");
 
   const scopes = EBAY_OAUTH_SCOPES.join(" ");
@@ -53,14 +53,25 @@ export async function handleGetAuthUrl(
  * Stores token server-side in Supabase profiles table.
  * Also validates user identity and enforces one-account rule.
  */
-export async function handleExchangeCode(
-  { req, payload, clientId, clientSecret, ebayEnv, tokenUrl }: EbayActionHandlerContext,
-): Promise<Response> {
-  if (!clientId || !clientSecret) throw new Error("eBay API credentials not configured");
-  if (!ebayEnv || !tokenUrl) throw new Error("eBay OAuth endpoint not configured");
+export async function handleExchangeCode({
+  req,
+  payload,
+  clientId,
+  clientSecret,
+  ebayEnv,
+  tokenUrl,
+}: EbayActionHandlerContext): Promise<Response> {
+  if (!clientId || !clientSecret) {
+    throw new Error("eBay API credentials not configured");
+  }
+  if (!ebayEnv || !tokenUrl) {
+    throw new Error("eBay OAuth endpoint not configured");
+  }
 
   const { code, userId } = payload;
-  if (!code || typeof code !== "string") throw new Error("No authorization code provided");
+  if (!code || typeof code !== "string") {
+    throw new Error("No authorization code provided");
+  }
 
   // Security: verify the caller owns the userId they claim to be storing tokens for.
   if (userId) {
@@ -71,8 +82,7 @@ export async function handleExchangeCode(
     }
   }
 
-  const ruName = Deno.env.get("EBAY_RUNAME") ||
-    Deno.env.get("EBAY_REDIRECT_URI");
+  const ruName = Deno.env.get("EBAY_RUNAME") || Deno.env.get("EBAY_REDIRECT_URI");
   if (!ruName) {
     throw new Error(
       "eBay callback URI not configured. Contact admin to set EBAY_RUNAME.",
@@ -108,10 +118,10 @@ export async function handleExchangeCode(
     try {
       const json = JSON.parse(txt);
       errorMsg = json.error_description || json.error || txt;
-    } catch { /* not JSON */ }
-    throw new Error(
-      `eBay token exchange failed (${resp.status}): ${errorMsg}`,
-    );
+    } catch {
+      /* not JSON */
+    }
+    throw new Error(`eBay token exchange failed (${resp.status}): ${errorMsg}`);
   }
 
   const tokenData = await resp.json();
@@ -140,21 +150,20 @@ export async function handleExchangeCode(
       const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
       if (supabaseUrl && supabaseServiceKey) {
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
-        const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000)
-          .toISOString();
+        const expiresAt = new Date(
+          Date.now() + tokenData.expires_in * 1000,
+        ).toISOString();
 
         // upsert with onConflict: "id" — creates the row if missing, updates if present
-        const { error: upsertError } = await supabase
-          .from("profiles")
-          .upsert(
-            {
-              id: userId,
-              ebay_access_token: tokenData.access_token,
-              ebay_refresh_token: tokenData.refresh_token ?? null,
-              ebay_token_expires_at: expiresAt,
-            },
-            { onConflict: "id" },
-          );
+        const { error: upsertError } = await supabase.from("profiles").upsert(
+          {
+            id: userId,
+            ebay_access_token: tokenData.access_token,
+            ebay_refresh_token: tokenData.refresh_token ?? null,
+            ebay_token_expires_at: expiresAt,
+          },
+          { onConflict: "id" },
+        );
 
         if (upsertError) {
           console.warn(
@@ -188,10 +197,7 @@ export async function handleExchangeCode(
       }
     } catch (storeErr) {
       // Non-fatal — still return the token to the client as fallback
-      console.warn(
-        "exchange_code: token storage error (non-fatal):",
-        storeErr,
-      );
+      console.warn("exchange_code: token storage error (non-fatal):", storeErr);
     }
   }
 
@@ -216,8 +222,7 @@ export async function handleExchangeCode(
     }
     const identity = await identityRes.json();
     const newUsername = identity?.userId ?? identity?.username ?? null;
-    const accountType = (identity?.accountType ?? "")?.toLowerCase() ??
-      "individual";
+    const accountType = (identity?.accountType ?? "")?.toLowerCase() ?? "individual";
 
     // Determine tier for one-account enforcement (OQ-3: gate on LA subscription, not eBay account type)
     let tierForOneAccountCheck: "starter" | "pro" | "unlimited" = "starter";
@@ -231,13 +236,13 @@ export async function handleExchangeCode(
           .eq("id", userId)
           .maybeSingle();
         _userEmailForStripe = profileData?.email ?? null;
-      } catch { /* non-fatal */ }
+      } catch {
+        /* non-fatal */
+      }
     }
     if (_userEmailForStripe && _stripeSecretKey) {
       try {
-        const { default: Stripe } = await import(
-          "https://esm.sh/stripe@18.5.0"
-        );
+        const { default: Stripe } = await import("https://esm.sh/stripe@18.5.0");
         const stripe = new Stripe(_stripeSecretKey, {
           apiVersion: "2025-08-27.basil",
         });
@@ -267,10 +272,7 @@ export async function handleExchangeCode(
 
     // Check for existing eBay username (one-account rule for non-Unlimited)
     if (userId && _identitySupabaseUrl && _identityServiceKey) {
-      const supabase = createClient(
-        _identitySupabaseUrl,
-        _identityServiceKey,
-      );
+      const supabase = createClient(_identitySupabaseUrl, _identityServiceKey);
       const { data: existingProfile } = await supabase
         .from("profiles")
         .select("ebay_username")
@@ -336,10 +338,16 @@ export async function handleExchangeCode(
 /**
  * Refresh an expired eBay user token using the stored refresh token.
  */
-export async function handleRefreshToken(
-  { req, payload, clientId, clientSecret, tokenUrl }: EbayActionHandlerContext,
-): Promise<Response> {
-  if (!clientId || !clientSecret) throw new Error("eBay API credentials not configured");
+export async function handleRefreshToken({
+  req,
+  payload,
+  clientId,
+  clientSecret,
+  tokenUrl,
+}: EbayActionHandlerContext): Promise<Response> {
+  if (!clientId || !clientSecret) {
+    throw new Error("eBay API credentials not configured");
+  }
   if (!tokenUrl) throw new Error("eBay OAuth endpoint not configured");
 
   const { userId } = payload;
@@ -352,7 +360,12 @@ export async function handleRefreshToken(
   }
 
   // Security: verify the caller owns the userId before rotating their token.
-  await assertCallerOwnsUser(req, String(userId), supabaseUrl, supabaseServiceKey);
+  await assertCallerOwnsUser(
+    req,
+    String(userId),
+    supabaseUrl,
+    supabaseServiceKey,
+  );
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   const { data, error } = await supabase
@@ -414,8 +427,9 @@ export async function handleRefreshToken(
   }
 
   // Store the new access token (and new refresh token if provided)
-  const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000)
-    .toISOString();
+  const expiresAt = new Date(
+    Date.now() + tokenData.expires_in * 1000,
+  ).toISOString();
   const updatePatch: Record<string, string> = {
     ebay_access_token: tokenData.access_token,
     ebay_token_expires_at: expiresAt,
@@ -455,9 +469,13 @@ export async function handleRefreshToken(
 /**
  * Retrieve stored eBay token for a user with proactive refresh if token is expiring soon.
  */
-export async function handleGetStoredToken(
-  { req, payload, clientId, clientSecret, tokenUrl }: EbayActionHandlerContext,
-): Promise<Response> {
+export async function handleGetStoredToken({
+  req,
+  payload,
+  clientId,
+  clientSecret,
+  tokenUrl,
+}: EbayActionHandlerContext): Promise<Response> {
   if (!tokenUrl) throw new Error("eBay OAuth endpoint not configured");
 
   const { userId } = payload;
@@ -470,7 +488,12 @@ export async function handleGetStoredToken(
   }
 
   // Security: verify the caller owns the userId before returning their stored token.
-  await assertCallerOwnsUser(req, String(userId), supabaseUrl, supabaseServiceKey);
+  await assertCallerOwnsUser(
+    req,
+    String(userId),
+    supabaseUrl,
+    supabaseServiceKey,
+  );
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   const { data, error } = await supabase
@@ -556,10 +579,7 @@ export async function handleGetStoredToken(
           if (tokenData.refresh_token) {
             updatePatch.ebay_refresh_token = tokenData.refresh_token;
           }
-          await supabase.from("profiles").update(updatePatch).eq(
-            "id",
-            userId,
-          );
+          await supabase.from("profiles").update(updatePatch).eq("id", userId);
           console.log(
             "get_stored_token: proactive refresh succeeded, new expiry:",
             newExpiresAt,

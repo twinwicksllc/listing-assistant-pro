@@ -1,8 +1,18 @@
 import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  ArrowLeft, ArrowRight, Layers, Sparkles, Send, Download,
-  CheckCircle, AlertCircle, Crown, Loader2, RefreshCw, Info,
+  ArrowLeft,
+  ArrowRight,
+  Layers,
+  Sparkles,
+  Send,
+  Download,
+  CheckCircle,
+  AlertCircle,
+  Crown,
+  Loader2,
+  RefreshCw,
+  Info,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,30 +25,57 @@ import BulkDataTable from "@/components/BulkDataTable";
 import BulkProgressBar from "@/components/BulkProgressBar";
 import { EbayPolicySelector } from "@/components/EbayPolicySelector";
 import type { SelectedPolicies } from "@/types/ebay-policies";
-import type { BulkRow, BulkRowState, BulkPublishResult, ColumnMapping } from "@/types/bulk-listing";
+import type {
+  BulkRow,
+  BulkRowState,
+  BulkPublishResult,
+  ColumnMapping,
+} from "@/types/bulk-listing";
 import type { ParsedFile } from "@/lib/bulkCsvParser";
 import { autoDetectMappings, applyMappings } from "@/lib/bulkCsvParser";
 import { BULK_TEMPLATES, downloadTemplateCsv } from "@/lib/bulkTemplates";
-import { rawToBulkRow, validateAllRows, countValidRows, countErrorRows, getValidRows } from "@/lib/bulkValidation";
+import {
+  rawToBulkRow,
+  validateAllRows,
+  countValidRows,
+  countErrorRows,
+  getValidRows,
+} from "@/lib/bulkValidation";
 import type { BulkTemplate } from "@/types/bulk-listing";
 
 // ─── Step labels ───────────────────────────────────────────────────────────────
 
-const STEPS = ["Upload", "Map Columns", "Review & Generate", "Publish"] as const;
+const STEPS = [
+  "Upload",
+  "Map Columns",
+  "Review & Generate",
+  "Publish",
+] as const;
 type Step = 0 | 1 | 2 | 3;
 
 // ─── Main component ────────────────────────────────────────────────────────────
 
 export default function BulkListingPage() {
   const navigate = useNavigate();
-  const { user, isOwner, isLister, isPaid, currentPlan, isPro, isShop, isUnlimited } = useAuth();
+  const {
+    user,
+    isOwner,
+    isLister,
+    isPaid,
+    currentPlan,
+    isPro,
+    isShop,
+    isUnlimited,
+  } = useAuth();
 
   // Step state
   const [step, setStep] = useState<Step>(0);
 
   // Step 1 — Upload
   const [parsedFile, setParsedFile] = useState<ParsedFile | null>(null);
-  const [selectedTemplate, setSelectedTemplate] = useState<BulkTemplate | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<BulkTemplate | null>(
+    null,
+  );
 
   // Step 2 — Column mapping
   const [mappings, setMappings] = useState<ColumnMapping[]>([]);
@@ -58,7 +95,11 @@ export default function BulkListingPage() {
   // Step 4 — Publish
   const [publishing, setPublishing] = useState(false);
   const [publishResults, setPublishResults] = useState<BulkPublishResult[]>([]);
-  const [publishSummary, setPublishSummary] = useState({ published: 0, failed: 0, total: 0 });
+  const [publishSummary, setPublishSummary] = useState({
+    published: 0,
+    failed: 0,
+    total: 0,
+  });
   const [publishDone, setPublishDone] = useState(false);
 
   // Plan gating
@@ -99,16 +140,21 @@ export default function BulkListingPage() {
       rowIndex: idx,
       title: raw["title"] || raw["Title"] || "",
       description: raw["description"] || raw["Description"] || undefined,
-      condition: raw["condition"] || raw["Condition"] || template.defaultCondition,
+      condition:
+        raw["condition"] || raw["Condition"] || template.defaultCondition,
       price: parseFloat(raw["price"] || raw["Price"] || "0") || 0,
       quantity: parseInt(raw["quantity"] || raw["Quantity"] || "1") || 1,
-      categoryId: raw["categoryId"] || raw["Category_ID"] || template.defaultCategoryId,
+      categoryId:
+        raw["categoryId"] || raw["Category_ID"] || template.defaultCategoryId,
       format: "FIXED_PRICE",
       imageUrls: [raw["imageUrl1"] || raw["Image_URL_1"] || ""].filter(Boolean),
       itemSpecifics: Object.fromEntries(
         Object.entries(raw)
           .filter(([k]) => /^item[_\s-]?specific/i.test(k))
-          .map(([k, v]) => [k.replace(/^item[_\s-]?specific[_\s-]?/i, ""), v as string])
+          .map(([k, v]) => [
+            k.replace(/^item[_\s-]?specific[_\s-]?/i, ""),
+            v as string,
+          ]),
       ),
     }));
     setRows(sampleRows);
@@ -120,11 +166,13 @@ export default function BulkListingPage() {
 
   const applyMappingsAndProceed = useCallback(() => {
     if (!parsedFile) return;
-    const requiredMapped = ["title", "condition", "price", "categoryId"].every((f) =>
-      mappings.some((m) => m.mappedTo === f)
+    const requiredMapped = ["title", "condition", "price", "categoryId"].every(
+      (f) => mappings.some((m) => m.mappedTo === f),
     );
     if (!requiredMapped) {
-      toast.error("Please map all required fields: Title, Condition, Price, Category ID");
+      toast.error(
+        "Please map all required fields: Title, Condition, Price, Category ID",
+      );
       return;
     }
     const mapped = applyMappings(parsedFile.rows, mappings);
@@ -153,7 +201,7 @@ export default function BulkListingPage() {
 
     if (rowsNeedingDesc.length > descGenLimit) {
       toast.error(
-        `Your plan allows AI descriptions for up to ${descGenLimit} rows. ${rowsNeedingDesc.length} rows need descriptions.${!isPro ? " Upgrade to Pro for more." : ""}`
+        `Your plan allows AI descriptions for up to ${descGenLimit} rows. ${rowsNeedingDesc.length} rows need descriptions.${!isPro ? " Upgrade to Pro for more." : ""}`,
       );
       return;
     }
@@ -166,8 +214,8 @@ export default function BulkListingPage() {
       prev.map((s) =>
         rowsNeedingDesc.some((r) => r.rowIndex === s.rowIndex)
           ? { ...s, status: "generating" }
-          : s
-      )
+          : s,
+      ),
     );
 
     try {
@@ -182,7 +230,7 @@ export default function BulkListingPage() {
 
       const { data, error } = await supabase.functions.invoke(
         "bulk-generate-descriptions",
-        { body: { rows: descRows } }
+        { body: { rows: descRows } },
       );
 
       if (error) throw new Error(error.message);
@@ -204,14 +252,18 @@ export default function BulkListingPage() {
           status: updated.find((r) => r.rowIndex === s.rowIndex)?.description
             ? "ready"
             : s.status,
-        }))
+        })),
       );
 
-      const successCount = results.filter((r: any) => r.description && !r.error).length;
+      const successCount = results.filter(
+        (r: any) => r.description && !r.error,
+      ).length;
       const failCount = results.filter((r: any) => r.error).length;
 
       if (failCount > 0) {
-        toast.warning(`Generated ${successCount} descriptions · ${failCount} failed`);
+        toast.warning(
+          `Generated ${successCount} descriptions · ${failCount} failed`,
+        );
       } else {
         toast.success(`Generated ${successCount} AI descriptions! ✨`);
       }
@@ -219,7 +271,9 @@ export default function BulkListingPage() {
       toast.error(err.message || "Failed to generate descriptions");
       // Reset generating status
       setRowStates((prev) =>
-        prev.map((s) => (s.status === "generating" ? { ...s, status: "valid" } : s))
+        prev.map((s) =>
+          s.status === "generating" ? { ...s, status: "valid" } : s,
+        ),
       );
     } finally {
       setGeneratingDescriptions(false);
@@ -243,16 +297,23 @@ export default function BulkListingPage() {
     }
 
     if (validRows.length > publishLimit) {
-      toast.error(`Your plan allows publishing up to ${publishLimit} listings at once.`);
+      toast.error(
+        `Your plan allows publishing up to ${publishLimit} listings at once.`,
+      );
       return;
     }
 
     // Apply selected policies to all rows (if not already set per-row)
     const rowsWithPolicies = validRows.map((r) => ({
       ...r,
-      fulfillmentPolicyId: r.fulfillmentPolicyId || selectedPolicies.fulfillmentPolicyId || undefined,
-      paymentPolicyId: r.paymentPolicyId || selectedPolicies.paymentPolicyId || undefined,
-      returnPolicyId: r.returnPolicyId || selectedPolicies.returnPolicyId || undefined,
+      fulfillmentPolicyId:
+        r.fulfillmentPolicyId ||
+        selectedPolicies.fulfillmentPolicyId ||
+        undefined,
+      paymentPolicyId:
+        r.paymentPolicyId || selectedPolicies.paymentPolicyId || undefined,
+      returnPolicyId:
+        r.returnPolicyId || selectedPolicies.returnPolicyId || undefined,
     }));
 
     setPublishing(true);
@@ -265,8 +326,8 @@ export default function BulkListingPage() {
       prev.map((s) =>
         validRows.some((r) => r.rowIndex === s.rowIndex)
           ? { ...s, status: "publishing" }
-          : s
-      )
+          : s,
+      ),
     );
 
     try {
@@ -300,7 +361,7 @@ export default function BulkListingPage() {
               : undefined,
             errorMessage: result.error,
           };
-        })
+        }),
       );
 
       if (data.failed === 0) {
@@ -312,8 +373,10 @@ export default function BulkListingPage() {
       toast.error(err.message || "Bulk publish failed");
       setRowStates((prev) =>
         prev.map((s) =>
-          s.status === "publishing" ? { ...s, status: "error", errorMessage: err.message } : s
-        )
+          s.status === "publishing"
+            ? { ...s, status: "error", errorMessage: err.message }
+            : s,
+        ),
       );
     } finally {
       setPublishing(false);
@@ -327,7 +390,9 @@ export default function BulkListingPage() {
     const failed = publishResults.filter((r) => !r.success);
     if (failed.length === 0) return;
 
-    const failedRows = rows.filter((r) => failed.some((f) => f.rowIndex === r.rowIndex));
+    const failedRows = rows.filter((r) =>
+      failed.some((f) => f.rowIndex === r.rowIndex),
+    );
     const lines = [
       '"Row","Title","Price","Category ID","Error"',
       ...failedRows.map((r) => {
@@ -336,7 +401,9 @@ export default function BulkListingPage() {
       }),
     ];
 
-    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob([lines.join("\n")], {
+      type: "text/csv;charset=utf-8;",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -352,7 +419,7 @@ export default function BulkListingPage() {
   const errorCount = countErrorRows(rowStates);
   const readyCount = rowStates.filter((s) => s.status === "ready").length;
   const publishableCount = rowStates.filter(
-    (s) => s.status === "valid" || s.status === "ready"
+    (s) => s.status === "valid" || s.status === "ready",
   ).length;
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -361,15 +428,22 @@ export default function BulkListingPage() {
     <div className="min-h-screen bg-background pb-24">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-3">
-        <button onClick={() => navigate("/home")} className="text-muted-foreground hover:text-foreground transition-colors">
+        <button
+          onClick={() => navigate("/home")}
+          className="text-muted-foreground hover:text-foreground transition-colors"
+        >
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div className="flex items-center gap-2">
           <Layers className="w-5 h-5 text-primary" />
-          <h1 className="font-semibold text-foreground">Bulk Listing Generator</h1>
+          <h1 className="font-semibold text-foreground">
+            Bulk Listing Generator
+          </h1>
         </div>
         {rows.length > 0 && (
-          <span className="ml-auto text-xs text-muted-foreground">{rows.length} rows</span>
+          <span className="ml-auto text-xs text-muted-foreground">
+            {rows.length} rows
+          </span>
         )}
       </header>
 
@@ -378,20 +452,26 @@ export default function BulkListingPage() {
         <div className="flex items-center gap-1 mb-6">
           {STEPS.map((label, i) => (
             <div key={i} className="flex items-center gap-1 flex-1">
-              <div className={`flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold transition-colors ${
-                i < step
-                  ? "bg-green-500 text-white"
-                  : i === step
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary text-muted-foreground"
-              }`}>
+              <div
+                className={`flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold transition-colors ${
+                  i < step
+                    ? "bg-green-500 text-white"
+                    : i === step
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-muted-foreground"
+                }`}
+              >
                 {i < step ? <CheckCircle className="w-3.5 h-3.5" /> : i + 1}
               </div>
-              <span className={`text-[10px] font-medium hidden sm:block ${i === step ? "text-foreground" : "text-muted-foreground"}`}>
+              <span
+                className={`text-[10px] font-medium hidden sm:block ${i === step ? "text-foreground" : "text-muted-foreground"}`}
+              >
                 {label}
               </span>
               {i < STEPS.length - 1 && (
-                <div className={`flex-1 h-px mx-1 ${i < step ? "bg-green-500" : "bg-border"}`} />
+                <div
+                  className={`flex-1 h-px mx-1 ${i < step ? "bg-green-500" : "bg-border"}`}
+                />
               )}
             </div>
           ))}
@@ -401,7 +481,9 @@ export default function BulkListingPage() {
         {step === 0 && (
           <div className="space-y-6">
             <div className="space-y-1">
-              <h2 className="text-base font-semibold text-foreground">Upload your listing file</h2>
+              <h2 className="text-base font-semibold text-foreground">
+                Upload your listing file
+              </h2>
               <p className="text-xs text-muted-foreground">
                 Upload a CSV or Excel file, or start from one of our templates.
               </p>
@@ -412,10 +494,18 @@ export default function BulkListingPage() {
               <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-xl">
                 <Crown className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                 <div className="text-xs">
-                  <p className="font-semibold text-amber-900 dark:text-amber-100">Free tier: up to {publishLimit} listings</p>
+                  <p className="font-semibold text-amber-900 dark:text-amber-100">
+                    Free tier: up to {publishLimit} listings
+                  </p>
                   <p className="text-amber-700 dark:text-amber-300 mt-0.5">
-                    Upgrade to Pro for 50 listings or Shop for unlimited bulk publishing.{" "}
-                    <button onClick={() => navigate("/billing")} className="underline font-medium">Upgrade →</button>
+                    Upgrade to Pro for 50 listings or Shop for unlimited bulk
+                    publishing.{" "}
+                    <button
+                      onClick={() => navigate("/billing")}
+                      className="underline font-medium"
+                    >
+                      Upgrade →
+                    </button>
                   </p>
                 </div>
               </div>
@@ -427,7 +517,9 @@ export default function BulkListingPage() {
             {/* Divider */}
             <div className="flex items-center gap-3">
               <div className="flex-1 h-px bg-border" />
-              <span className="text-xs text-muted-foreground">or start from a template</span>
+              <span className="text-xs text-muted-foreground">
+                or start from a template
+              </span>
               <div className="flex-1 h-px bg-border" />
             </div>
 
@@ -459,10 +551,13 @@ export default function BulkListingPage() {
         {step === 1 && parsedFile && (
           <div className="space-y-4">
             <div className="space-y-1">
-              <h2 className="text-base font-semibold text-foreground">Map your columns</h2>
+              <h2 className="text-base font-semibold text-foreground">
+                Map your columns
+              </h2>
               <p className="text-xs text-muted-foreground">
                 Tell us which CSV column maps to each listing field.
-                <span className="text-primary font-medium"> Bold</span> = required.
+                <span className="text-primary font-medium"> Bold</span> =
+                required.
               </p>
             </div>
 
@@ -495,14 +590,22 @@ export default function BulkListingPage() {
         {step === 2 && (
           <div className="space-y-4">
             <div className="space-y-1">
-              <h2 className="text-base font-semibold text-foreground">Review & generate descriptions</h2>
+              <h2 className="text-base font-semibold text-foreground">
+                Review & generate descriptions
+              </h2>
               <div className="flex gap-3 text-xs">
-                <span className="text-green-600 dark:text-green-400 font-medium">{validCount} ready</span>
+                <span className="text-green-600 dark:text-green-400 font-medium">
+                  {validCount} ready
+                </span>
                 {errorCount > 0 && (
-                  <span className="text-destructive font-medium">{errorCount} errors</span>
+                  <span className="text-destructive font-medium">
+                    {errorCount} errors
+                  </span>
                 )}
                 {readyCount > 0 && (
-                  <span className="text-primary font-medium">{readyCount} with AI descriptions</span>
+                  <span className="text-primary font-medium">
+                    {readyCount} with AI descriptions
+                  </span>
                 )}
               </div>
             </div>
@@ -513,7 +616,8 @@ export default function BulkListingPage() {
                 <Sparkles className="w-5 h-5 text-primary flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold text-foreground">
-                    {rows.filter((r) => !r.description).length} rows need descriptions
+                    {rows.filter((r) => !r.description).length} rows need
+                    descriptions
                   </p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">
                     AI will write compelling eBay descriptions for each item
@@ -588,13 +692,15 @@ export default function BulkListingPage() {
         {step === 3 && (
           <div className="space-y-4">
             <div className="space-y-1">
-              <h2 className="text-base font-semibold text-foreground">Publish to eBay</h2>
+              <h2 className="text-base font-semibold text-foreground">
+                Publish to eBay
+              </h2>
               <p className="text-xs text-muted-foreground">
                 {publishDone
                   ? "Publishing complete. Review results below."
                   : publishing
-                  ? "Publishing your listings to eBay..."
-                  : `${publishableCount} listings ready to publish.`}
+                    ? "Publishing your listings to eBay..."
+                    : `${publishableCount} listings ready to publish.`}
               </p>
             </div>
 
@@ -605,12 +711,20 @@ export default function BulkListingPage() {
                 <div className="p-4 bg-card border border-border rounded-xl space-y-3">
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div className="text-center p-2 bg-green-50 dark:bg-green-950 rounded-lg">
-                      <p className="text-2xl font-bold text-green-600 dark:text-green-400">{publishableCount}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Ready to publish</p>
+                      <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                        {publishableCount}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Ready to publish
+                      </p>
                     </div>
                     <div className="text-center p-2 bg-red-50 dark:bg-red-950 rounded-lg">
-                      <p className="text-2xl font-bold text-red-600 dark:text-red-400">{errorCount}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Have errors</p>
+                      <p className="text-2xl font-bold text-red-600 dark:text-red-400">
+                        {errorCount}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Have errors
+                      </p>
                     </div>
                   </div>
 
@@ -618,8 +732,12 @@ export default function BulkListingPage() {
                     <div className="flex items-start gap-2 p-2.5 bg-amber-50 dark:bg-amber-950 rounded-lg">
                       <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                       <p className="text-xs text-amber-700 dark:text-amber-300">
-                        {errorCount} rows have validation errors and will be skipped.{" "}
-                        <button onClick={() => setStep(2)} className="underline font-medium">
+                        {errorCount} rows have validation errors and will be
+                        skipped.{" "}
+                        <button
+                          onClick={() => setStep(2)}
+                          className="underline font-medium"
+                        >
                           Go back to fix them
                         </button>
                       </p>
@@ -630,8 +748,14 @@ export default function BulkListingPage() {
                     <div className="flex items-start gap-2 p-2.5 bg-amber-50 dark:bg-amber-950 rounded-lg">
                       <Crown className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                       <p className="text-xs text-amber-700 dark:text-amber-300">
-                        Your plan allows {publishLimit} at once. Only the first {publishLimit} will be published.{" "}
-                        <button onClick={() => navigate("/billing")} className="underline font-medium">Upgrade →</button>
+                        Your plan allows {publishLimit} at once. Only the first{" "}
+                        {publishLimit} will be published.{" "}
+                        <button
+                          onClick={() => navigate("/billing")}
+                          className="underline font-medium"
+                        >
+                          Upgrade →
+                        </button>
                       </p>
                     </div>
                   )}
@@ -641,7 +765,12 @@ export default function BulkListingPage() {
                       <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
                       <p className="text-xs text-red-700 dark:text-red-300">
                         No eBay account connected.{" "}
-                        <button onClick={() => navigate("/settings")} className="underline font-medium">Connect eBay →</button>
+                        <button
+                          onClick={() => navigate("/settings")}
+                          className="underline font-medium"
+                        >
+                          Connect eBay →
+                        </button>
                       </p>
                     </div>
                   )}
@@ -674,7 +803,9 @@ export default function BulkListingPage() {
                 failed={publishSummary.failed}
                 inProgress={publishing}
                 results={publishResults}
-                onDownloadErrors={publishSummary.failed > 0 ? downloadErrorReport : undefined}
+                onDownloadErrors={
+                  publishSummary.failed > 0 ? downloadErrorReport : undefined
+                }
               />
             )}
 

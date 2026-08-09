@@ -153,7 +153,9 @@ async function browseSearch(params: {
           });
         }
       }
-    } catch { /* skip malformed */ }
+    } catch {
+      /* skip malformed */
+    }
   }
 
   console.log(
@@ -186,7 +188,7 @@ async function scrapeEbaySoldData(
       method: "GET",
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; ListingAssistant/1.0)",
-        "Accept": "text/plain",
+        Accept: "text/plain",
       },
       signal: AbortSignal.timeout(20000),
     });
@@ -243,13 +245,13 @@ async function scrapeEbaySoldData(
     // Estimate: min is ~50% of lower bucket threshold, max is ~150% of upper threshold
     minSoldPrice = Math.round(lowThreshold * 0.5 * 100) / 100;
     maxSoldPrice = Math.round(highThreshold * 1.5 * 100) / 100;
-    avgSoldPrice = Math.round((lowThreshold + highThreshold) / 2 * 100) / 100;
+    avgSoldPrice = Math.round(((lowThreshold + highThreshold) / 2) * 100) / 100;
     medianSoldPrice = avgSoldPrice;
   } else if (rangeMatch) {
     // Only a range bucket visible
     const rLow = parseFloat(rangeMatch[1].replace(/,/g, ""));
     const rHigh = parseFloat(rangeMatch[2].replace(/,/g, ""));
-    avgSoldPrice = Math.round((rLow + rHigh) / 2 * 100) / 100;
+    avgSoldPrice = Math.round(((rLow + rHigh) / 2) * 100) / 100;
     medianSoldPrice = avgSoldPrice;
     minSoldPrice = Math.round(rLow * 0.7 * 100) / 100;
     maxSoldPrice = Math.round(rHigh * 1.3 * 100) / 100;
@@ -335,10 +337,9 @@ serve(async (req) => {
     const cached = cache.get(cacheKey);
     if (cached && cached.expiresAt > now) {
       console.log(`[keyword-research] Cache hit for "${query}"`);
-      return new Response(
-        JSON.stringify({ ...cached.data, fromCache: true }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ ...cached.data, fromCache: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";

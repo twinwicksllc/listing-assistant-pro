@@ -8,7 +8,10 @@ interface BulkUploadZoneProps {
   disabled?: boolean;
 }
 
-export default function BulkUploadZone({ onFileParsed, disabled = false }: BulkUploadZoneProps) {
+export default function BulkUploadZone({
+  onFileParsed,
+  disabled = false,
+}: BulkUploadZoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [parsing, setParsing] = useState(false);
@@ -37,7 +40,7 @@ export default function BulkUploadZone({ onFileParsed, disabled = false }: BulkU
         setParsing(false);
       }
     },
-    [onFileParsed]
+    [onFileParsed],
   );
 
   const onDrop = useCallback(
@@ -48,7 +51,7 @@ export default function BulkUploadZone({ onFileParsed, disabled = false }: BulkU
       const file = e.dataTransfer.files[0];
       if (file) handleFile(file);
     },
-    [disabled, handleFile]
+    [disabled, handleFile],
   );
 
   const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -71,9 +74,12 @@ export default function BulkUploadZone({ onFileParsed, disabled = false }: BulkU
           <FileText className="w-8 h-8 text-primary flex-shrink-0" />
         )}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-foreground truncate">{parsedFile.fileName}</p>
+          <p className="text-sm font-semibold text-foreground truncate">
+            {parsedFile.fileName}
+          </p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {parsedFile.rowCount} rows · {parsedFile.headers.length} columns detected
+            {parsedFile.rowCount} rows · {parsedFile.headers.length} columns
+            detected
           </p>
         </div>
         <button
@@ -89,14 +95,18 @@ export default function BulkUploadZone({ onFileParsed, disabled = false }: BulkU
 
   return (
     <div
-      onDragOver={(e) => { e.preventDefault(); if (!disabled) setDragging(true); }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!disabled) setDragging(true);
+      }}
       onDragLeave={() => setDragging(false)}
       onDrop={onDrop}
       onClick={() => !disabled && inputRef.current?.click()}
       className={`relative flex flex-col items-center justify-center gap-3 p-8 rounded-xl border-2 border-dashed cursor-pointer transition-all select-none
-        ${dragging
-          ? "border-primary bg-primary/5 scale-[0.99]"
-          : "border-border hover:border-primary/50 hover:bg-secondary/50"
+        ${
+          dragging
+            ? "border-primary bg-primary/5 scale-[0.99]"
+            : "border-border hover:border-primary/50 hover:bg-secondary/50"
         }
         ${disabled ? "opacity-50 cursor-not-allowed" : ""}
       `}
@@ -117,8 +127,12 @@ export default function BulkUploadZone({ onFileParsed, disabled = false }: BulkU
         </>
       ) : (
         <>
-          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors ${dragging ? "bg-primary/20" : "bg-secondary"}`}>
-            <Upload className={`w-7 h-7 transition-colors ${dragging ? "text-primary" : "text-muted-foreground"}`} />
+          <div
+            className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors ${dragging ? "bg-primary/20" : "bg-secondary"}`}
+          >
+            <Upload
+              className={`w-7 h-7 transition-colors ${dragging ? "text-primary" : "text-muted-foreground"}`}
+            />
           </div>
           <div className="text-center space-y-1">
             <p className="text-sm font-semibold text-foreground">

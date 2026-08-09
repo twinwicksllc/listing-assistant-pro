@@ -37,9 +37,12 @@ export default class ErrorBoundary extends Component<Props, State> {
               <AlertTriangle className="w-8 h-8 text-destructive" />
             </div>
             <div className="space-y-2">
-              <h1 className="text-xl font-bold text-foreground">Something went wrong</h1>
+              <h1 className="text-xl font-bold text-foreground">
+                Something went wrong
+              </h1>
               <p className="text-sm text-muted-foreground">
-                The app encountered an unexpected error. Please reload to try again.
+                The app encountered an unexpected error. Please reload to try
+                again.
               </p>
             </div>
             <button

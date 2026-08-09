@@ -29,13 +29,23 @@ export default function ForgotPasswordPage() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
         <div className="w-full max-w-sm space-y-6 text-center">
-          <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto mx-auto" />
-          <h1 className="text-xl font-bold text-foreground">Check your email</h1>
+          <img
+            src={teckstartLogo}
+            alt="Sovereign Listing Suite"
+            className="h-12 w-auto mx-auto"
+          />
+          <h1 className="text-xl font-bold text-foreground">
+            Check your email
+          </h1>
           <p className="text-sm text-muted-foreground">
-            If an account exists for <span className="font-medium text-foreground">{email}</span>, 
-            we've sent a password reset link.
+            If an account exists for{" "}
+            <span className="font-medium text-foreground">{email}</span>, we've
+            sent a password reset link.
           </p>
-          <Link to="/login" className="inline-block text-sm text-primary font-medium hover:underline">
+          <Link
+            to="/login"
+            className="inline-block text-sm text-primary font-medium hover:underline"
+          >
             Back to Sign In
           </Link>
         </div>
@@ -47,14 +57,22 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
       <div className="w-full max-w-sm space-y-8">
         <div className="flex flex-col items-center gap-2">
-          <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto" />
+          <img
+            src={teckstartLogo}
+            alt="Sovereign Listing Suite"
+            className="h-12 w-auto"
+          />
           <h1 className="text-xl font-bold text-foreground">Reset password</h1>
-          <p className="text-sm text-muted-foreground">We'll send you a reset link</p>
+          <p className="text-sm text-muted-foreground">
+            We'll send you a reset link
+          </p>
         </div>
 
         <form onSubmit={handleReset} className="space-y-4">
           <div className="space-y-2">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Email</label>
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Email
+            </label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
@@ -79,7 +97,10 @@ export default function ForgotPasswordPage() {
         </form>
 
         <p className="text-center text-sm text-muted-foreground">
-          <Link to="/login" className="text-primary font-medium hover:underline">
+          <Link
+            to="/login"
+            className="text-primary font-medium hover:underline"
+          >
             Back to Sign In
           </Link>
         </p>

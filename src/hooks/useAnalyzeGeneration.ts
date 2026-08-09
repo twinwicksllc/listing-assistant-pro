@@ -27,7 +27,9 @@ export function useAnalyzeGeneration({
 
   const handleGenerate = useCallback(async () => {
     if (!canAnalyze) {
-      toast.error(`Monthly analysis limit reached (${analysisLimit}). Upgrade for more listings.`);
+      toast.error(
+        `Monthly analysis limit reached (${analysisLimit}). Upgrade for more listings.`,
+      );
       onRequireBilling();
       return;
     }
@@ -35,12 +37,18 @@ export function useAnalyzeGeneration({
     setGenerating(true);
     try {
       const { data, error } = await supabase.functions.invoke("analyze-item", {
-        body: { images: imageUrls, voiceNote, ...(ebayCategoryId ? { categoryId: ebayCategoryId } : {}) },
+        body: {
+          images: imageUrls,
+          voiceNote,
+          ...(ebayCategoryId ? { categoryId: ebayCategoryId } : {}),
+        },
       });
 
       if (error) {
         if (error.status === 429) {
-          toast.error("Monthly AI analysis limit reached. Upgrade to Pro or Unlimited.");
+          toast.error(
+            "Monthly AI analysis limit reached. Upgrade to Pro or Unlimited.",
+          );
           onRequireSettings();
           setGenerating(false);
           return;

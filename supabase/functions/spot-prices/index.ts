@@ -13,7 +13,10 @@ const CACHE_TTL_MINUTES = 15;
 // Last updated: August 2026
 const FALLBACK = { gold: 3400, silver: 64, platinum: 1350 };
 
-function isValidSpotPrice(metal: "gold" | "silver" | "platinum", value: unknown): boolean {
+function isValidSpotPrice(
+  metal: "gold" | "silver" | "platinum",
+  value: unknown,
+): boolean {
   const num = Number(value);
   if (!Number.isFinite(num) || num <= 0) return false;
 
@@ -85,7 +88,12 @@ async function getSpotPrices(
   const ageMinutes = fetchedAt ? (now.getTime() - fetchedAt.getTime()) / 60000 : Infinity;
 
   // 2. If cache is fresh (< 15 min) and not forced to refresh, return it immediately
-  if (cached && cachedSanitized?.valid && ageMinutes < CACHE_TTL_MINUTES && !forceRefresh) {
+  if (
+    cached &&
+    cachedSanitized?.valid &&
+    ageMinutes < CACHE_TTL_MINUTES &&
+    !forceRefresh
+  ) {
     return {
       gold: cachedSanitized.gold,
       silver: cachedSanitized.silver,
@@ -163,16 +171,14 @@ async function getSpotPrices(
   }
 
   // 5. Upsert fresh prices into DB so all users share the update
-  const { error: upsertErr } = await svc
-    .from("spot_price_cache")
-    .upsert({
-      id: 1,
-      gold: prices.gold,
-      silver: prices.silver,
-      platinum: prices.platinum,
-      fetched_at: now.toISOString(),
-      source,
-    });
+  const { error: upsertErr } = await svc.from("spot_price_cache").upsert({
+    id: 1,
+    gold: prices.gold,
+    silver: prices.silver,
+    platinum: prices.platinum,
+    fetched_at: now.toISOString(),
+    source,
+  });
 
   if (upsertErr) {
     console.error("Failed to upsert spot_price_cache:", upsertErr);

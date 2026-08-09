@@ -36,7 +36,9 @@ export default function DraftPriceAdvisor({
       >
         <TrendingUp className="w-3.5 h-3.5" />
         Price Advisor
-        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
+        <ChevronDown
+          className={`w-3.5 h-3.5 transition-transform ${open ? "rotate-180" : ""}`}
+        />
       </button>
 
       {/* Inline panel */}

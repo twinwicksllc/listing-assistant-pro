@@ -50,13 +50,10 @@ export function captureException(
   const errorMsg = error instanceof Error ? error.message : String(error);
   const errorStack = error instanceof Error ? error.stack : "";
 
-  console.error(
-    `[Error] ${errorMsg}`,
-    {
-      ...(context && { context }),
-      ...(errorStack && { stack: errorStack.split("\n").slice(0, 3) }),
-    },
-  );
+  console.error(`[Error] ${errorMsg}`, {
+    ...(context && { context }),
+    ...(errorStack && { stack: errorStack.split("\n").slice(0, 3) }),
+  });
 }
 
 /**

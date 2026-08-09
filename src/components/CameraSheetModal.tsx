@@ -1,5 +1,15 @@
 import { useRef, useState, useEffect, useCallback } from "react";
-import { X, Camera, CheckCircle, RotateCcw, Trash2, Zap, ZapOff, FlipHorizontal, ZoomIn } from "lucide-react";
+import {
+  X,
+  Camera,
+  CheckCircle,
+  RotateCcw,
+  Trash2,
+  Zap,
+  ZapOff,
+  FlipHorizontal,
+  ZoomIn,
+} from "lucide-react";
 
 interface CameraSheetModalProps {
   open: boolean;
@@ -7,13 +17,19 @@ interface CameraSheetModalProps {
   onDone: (photos: string[]) => void;
 }
 
-export default function CameraSheetModal({ open, onClose, onDone }: CameraSheetModalProps) {
+export default function CameraSheetModal({
+  open,
+  onClose,
+  onDone,
+}: CameraSheetModalProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   const [queue, setQueue] = useState<string[]>([]);
-  const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
+  const [facingMode, setFacingMode] = useState<"environment" | "user">(
+    "environment",
+  );
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
   const [capturing, setCapturing] = useState(false);
@@ -35,9 +51,30 @@ export default function CameraSheetModal({ open, onClose, onDone }: CameraSheetM
     try {
       // Try multiple facingMode constraint variants for broader device compatibility.
       const variants: MediaStreamConstraints[] = [
-        { video: { facingMode: { exact: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false },
-        { video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
-        { video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+        {
+          video: {
+            facingMode: { exact: facing },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+          audio: false,
+        },
+        {
+          video: {
+            facingMode: { ideal: facing },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        },
+        {
+          video: {
+            facingMode: facing,
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        },
         { video: true, audio: false },
       ];
 
@@ -69,16 +106,24 @@ export default function CameraSheetModal({ open, onClose, onDone }: CameraSheetM
           const p = videoRef.current.play();
           if (p && typeof p.then === "function") {
             await p.catch((e) => {
-              console.warn("video.play() rejected, will try again after short delay", e);
+              console.warn(
+                "video.play() rejected, will try again after short delay",
+                e,
+              );
             });
           }
         } catch (e) {
-          console.warn("Failed to attach stream to video element or play immediately:", e);
+          console.warn(
+            "Failed to attach stream to video element or play immediately:",
+            e,
+          );
         }
         // Ensure play after microtask to improve reliability
         setTimeout(() => {
           try {
-            videoRef.current?.play().catch((e) => console.warn("video.play() async fail:", e));
+            videoRef.current
+              ?.play()
+              .catch((e) => console.warn("video.play() async fail:", e));
           } catch (e) {
             console.warn("video.play() final attempt failed:", e);
           }
@@ -88,8 +133,8 @@ export default function CameraSheetModal({ open, onClose, onDone }: CameraSheetM
       // Check torch and zoom support
       const track = stream.getVideoTracks()[0];
       const capabilities = track.getCapabilities?.() as any;
-      setTorchSupported(!!(capabilities?.torch));
-      
+      setTorchSupported(!!capabilities?.torch);
+
       // Check zoom support
       if (capabilities?.zoom) {
         setZoomSupported(true);
@@ -104,7 +149,9 @@ export default function CameraSheetModal({ open, onClose, onDone }: CameraSheetM
     } catch (err: unknown) {
       console.error("Camera error:", err);
       if (err.name === "NotAllowedError") {
-        setCameraError("Camera access denied. Please allow camera access in your browser settings.");
+        setCameraError(
+          "Camera access denied. Please allow camera access in your browser settings.",
+        );
       } else if (err.name === "NotFoundError") {
         setCameraError("No camera found on this device.");
       } else {
@@ -151,7 +198,9 @@ export default function CameraSheetModal({ open, onClose, onDone }: CameraSheetM
     if (!streamRef.current || !torchSupported) return;
     const track = streamRef.current.getVideoTracks()[0];
     try {
-      await (track as any).applyConstraints({ advanced: [{ torch: !torchOn }] });
+      await (track as any).applyConstraints({
+        advanced: [{ torch: !torchOn }],
+      });
       setTorchOn(!torchOn);
     } catch (e) {
       console.warn("Torch toggle failed:", e);
@@ -188,7 +237,10 @@ export default function CameraSheetModal({ open, onClose, onDone }: CameraSheetM
     canvas.height = video.videoHeight || 720;
 
     const ctx = canvas.getContext("2d");
-    if (!ctx) { setCapturing(false); return; }
+    if (!ctx) {
+      setCapturing(false);
+      return;
+    }
 
     // Mirror if front camera
     if (facingMode === "user") {
@@ -251,7 +303,11 @@ export default function CameraSheetModal({ open, onClose, onDone }: CameraSheetM
               onClick={toggleTorch}
               className="w-10 h-10 flex items-center justify-center rounded-full bg-black/40 text-white"
             >
-              {torchOn ? <Zap className="w-5 h-5 text-yellow-400" /> : <ZapOff className="w-5 h-5" />}
+              {torchOn ? (
+                <Zap className="w-5 h-5 text-yellow-400" />
+              ) : (
+                <ZapOff className="w-5 h-5" />
+              )}
             </button>
           )}
           <button
@@ -377,7 +433,9 @@ export default function CameraSheetModal({ open, onClose, onDone }: CameraSheetM
               title={`Use ${queue.length} photo${queue.length !== 1 ? "s" : ""}`}
             >
               <CheckCircle className="w-6 h-6 text-white" />
-              <span className="text-[10px] text-white font-bold mt-0.5">{queue.length}</span>
+              <span className="text-[10px] text-white font-bold mt-0.5">
+                {queue.length}
+              </span>
             </button>
           ) : (
             <div className="w-14 h-14" />

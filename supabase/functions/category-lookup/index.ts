@@ -34,7 +34,7 @@ const ALWAYS_GENERIC_TERMS = new Set([
 // Domain-specific terms: generic OUTSIDE their domain, meaningful INSIDE it (EA-P1-C)
 // Key = the potentially-generic word; Value = domain keywords that make it meaningful
 const DOMAIN_SPECIFIC_TERMS: Record<string, string[]> = {
-  "card": [
+  card: [
     "pokemon",
     "trading",
     "baseball",
@@ -54,7 +54,7 @@ const DOMAIN_SPECIFIC_TERMS: Record<string, string[]> = {
     "sport",
     "sports",
   ],
-  "cards": [
+  cards: [
     "pokemon",
     "trading",
     "baseball",
@@ -68,8 +68,8 @@ const DOMAIN_SPECIFIC_TERMS: Record<string, string[]> = {
     "sport",
     "sports",
   ],
-  "trading": ["card", "cards", "pokemon", "tcg", "mtg"],
-  "collectible": [
+  trading: ["card", "cards", "pokemon", "tcg", "mtg"],
+  collectible: [
     "beanie",
     "funko",
     "pop",
@@ -81,7 +81,7 @@ const DOMAIN_SPECIFIC_TERMS: Record<string, string[]> = {
     "figure",
     "action",
   ],
-  "collectibles": [
+  collectibles: [
     "beanie",
     "funko",
     "pop",
@@ -93,7 +93,7 @@ const DOMAIN_SPECIFIC_TERMS: Record<string, string[]> = {
     "figure",
     "action",
   ],
-  "toy": [
+  toy: [
     "beanie",
     "baby",
     "plush",
@@ -105,8 +105,8 @@ const DOMAIN_SPECIFIC_TERMS: Record<string, string[]> = {
     "hot",
     "wheels",
   ],
-  "toys": ["beanie", "baby", "plush", "action", "figure", "lego"],
-  "coin": [
+  toys: ["beanie", "baby", "plush", "action", "figure", "lego"],
+  coin: [
     "penny",
     "nickel",
     "dime",
@@ -124,7 +124,7 @@ const DOMAIN_SPECIFIC_TERMS: Record<string, string[]> = {
     "proof",
     "bullion",
   ],
-  "coins": [
+  coins: [
     "penny",
     "nickel",
     "dime",
@@ -138,12 +138,12 @@ const DOMAIN_SPECIFIC_TERMS: Record<string, string[]> = {
     "silver",
     "gold",
   ],
-  "lot": ["coin", "coins", "card", "cards"],
-  "set": ["coin", "coins", "proof", "mint", "card", "cards", "lego"],
-  "collection": ["coin", "coins", "card", "cards"],
-  "vintage": ["coin", "coins", "toy", "toys", "card", "cards"],
-  "antique": ["coin", "coins", "toy", "toys"],
-  "rare": ["coin", "coins", "card", "cards", "pokemon"],
+  lot: ["coin", "coins", "card", "cards"],
+  set: ["coin", "coins", "proof", "mint", "card", "cards", "lego"],
+  collection: ["coin", "coins", "card", "cards"],
+  vintage: ["coin", "coins", "toy", "toys", "card", "cards"],
+  antique: ["coin", "coins", "toy", "toys"],
+  rare: ["coin", "coins", "card", "cards", "pokemon"],
 };
 
 // Stopwords removed during normalization (#6) — true English stopwords ONLY (EA-P2-D)
@@ -300,14 +300,18 @@ function generateRequestId(): string {
 
 // ── Helper: Normalize item type for consistent matching ──────────────────────
 function normalizeItemType(input: string): string {
-  return (input || "").toLowerCase().trim()
+  return (input || "")
+    .toLowerCase()
+    .trim()
     .replace(/[^a-z0-9\s-]/g, "")
     .replace(/\s+/g, " ");
 }
 
 // ── Helper: Deep normalization for dedup (#6) ────────────────────────────────
 function deepNormalize(input: string): string {
-  return (input || "").toLowerCase().trim()
+  return (input || "")
+    .toLowerCase()
+    .trim()
     .replace(/[^a-z0-9\s]/g, "")
     .replace(/\s+/g, " ")
     .split(" ")
@@ -318,7 +322,8 @@ function deepNormalize(input: string): string {
 
 // ── Helper: Extract meaningful tokens from a string ──────────────────────────
 function meaningfulTokens(input: string): string[] {
-  return (input || "").toLowerCase()
+  return (input || "")
+    .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, "")
     .split(/\s+/)
     .filter((w) => w.length > 2 && !STOPWORDS.has(w));
@@ -387,7 +392,7 @@ function computeEffectiveScore(
   // Recency bonus (decays over time for non-verified sources)
   let recencyBonus = 0;
   if (source.startsWith("db_")) {
-    recencyBonus = Math.max(0, 5 - (daysSinceUpdate / 30)); // Lose 1 point per month
+    recencyBonus = Math.max(0, 5 - daysSinceUpdate / 30); // Lose 1 point per month
   }
 
   // Generic penalty (#1)
@@ -403,15 +408,23 @@ function computeEffectiveScore(
     100,
     Math.max(
       0,
-      rawScore + sourceWeight + similarityBonus + recencyBonus -
-        genericPenalty - ambiguityPenalty - nonLeafPenalty,
+      rawScore +
+        sourceWeight +
+        similarityBonus +
+        recencyBonus -
+        genericPenalty -
+        ambiguityPenalty -
+        nonLeafPenalty,
     ),
   );
 }
 
 // ── Helper: Get eBay app token (client credentials) ──────────────────────────
 async function getEbayAppToken(): Promise<
-  { token: string; base: string } | null
+  {
+    token: string;
+    base: string;
+  } | null
 > {
   const clientId = Deno.env.get("EBAY_CLIENT_ID");
   const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
@@ -426,7 +439,7 @@ async function getEbayAppToken(): Promise<
   const tokenResp = await fetch(tokenUrl, {
     method: "POST",
     headers: {
-      "Authorization": `Basic ${credentials}`,
+      Authorization: `Basic ${credentials}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
@@ -470,7 +483,8 @@ async function fetchCategorySuggestions(
 
   // Truncate long queries to the 6 most meaningful terms
   if (query.length > 180) {
-    const meaningful = query.split(" ")
+    const meaningful = query
+      .split(" ")
       .filter((w) => w.length > 2 && !STOPWORDS.has(w.toLowerCase()))
       .slice(0, 6);
     query = meaningful.join(" ").trim();
@@ -489,14 +503,16 @@ async function fetchCategorySuggestions(
   );
 
   const url = `${base}/commerce/taxonomy/v1/category_tree/${CATEGORY_TREE_ID}/get_category_suggestions?q=${
-    encodeURIComponent(query)
+    encodeURIComponent(
+      query,
+    )
   }`;
 
   try {
     const resp = await fetch(url, {
       method: "GET",
       headers: {
-        "Authorization": `Bearer ${appToken}`,
+        Authorization: `Bearer ${appToken}`,
         "Content-Type": "application/json",
       },
     });
@@ -504,7 +520,8 @@ async function fetchCategorySuggestions(
     // EA-P3-C: Retry on 400 with shortened query (up to 2 retries)
     if (resp.status === 400 && retryCount < 2) {
       const words = query.split(" ").filter((w) => w.length > 2);
-      const shorter = words.slice(0, Math.max(2, Math.floor(words.length / 2)))
+      const shorter = words
+        .slice(0, Math.max(2, Math.floor(words.length / 2)))
         .join(" ");
       if (shorter.length >= 3 && shorter !== query) {
         console.log(
@@ -555,7 +572,9 @@ async function fetchCategorySuggestions(
       const ancestors = s.categoryTreeNodeAncestors || [];
 
       const ancestorNames = ancestors
-        .sort((a: any, b: any) => (a.categoryTreeNodeLevel || 0) - (b.categoryTreeNodeLevel || 0))
+        .sort(
+          (a: any, b: any) => (a.categoryTreeNodeLevel || 0) - (b.categoryTreeNodeLevel || 0),
+        )
         .map((a: any) => a.categoryName)
         .reverse();
       ancestorNames.push(cat.categoryName);
@@ -581,14 +600,16 @@ async function fetchItemAspects(
 ): Promise<AspectInfo[]> {
   const url =
     `${base}/commerce/taxonomy/v1/category_tree/${CATEGORY_TREE_ID}/get_item_aspects_for_category?category_id=${
-      encodeURIComponent(categoryId)
+      encodeURIComponent(
+        categoryId,
+      )
     }`;
 
   try {
     const resp = await fetch(url, {
       method: "GET",
       headers: {
-        "Authorization": `Bearer ${appToken}`,
+        Authorization: `Bearer ${appToken}`,
         "Content-Type": "application/json",
       },
     });
@@ -616,7 +637,8 @@ async function fetchItemAspects(
 
     return aspects.map((a: any) => {
       const constraint = a.aspectConstraint || {};
-      const values = (a.aspectValues || []).map((v: any) => v.localizedValue)
+      const values = (a.aspectValues || [])
+        .map((v: any) => v.localizedValue)
         .filter(Boolean);
 
       return {
@@ -642,17 +664,21 @@ async function verifyCategoryLeafActive(
   categoryId: string,
   appToken: string,
   base: string,
-): Promise<
-  { isLeaf: boolean; isActive: boolean; categoryName: string | null }
-> {
+): Promise<{
+  isLeaf: boolean;
+  isActive: boolean;
+  categoryName: string | null;
+}> {
   try {
     const url = `${base}/commerce/taxonomy/v1/category_tree/${CATEGORY_TREE_ID}/get_category_subtree?category_id=${
-      encodeURIComponent(categoryId)
+      encodeURIComponent(
+        categoryId,
+      )
     }`;
     const resp = await fetch(url, {
       method: "GET",
       headers: {
-        "Authorization": `Bearer ${appToken}`,
+        Authorization: `Bearer ${appToken}`,
         "Content-Type": "application/json",
       },
     });
@@ -718,12 +744,14 @@ async function fetchBreadcrumb(
 
   for (let depth = 0; depth < MAX_DEPTH; depth++) {
     const url = `${base}/commerce/taxonomy/v1/category_tree/${CATEGORY_TREE_ID}/get_category_subtree?category_id=${
-      encodeURIComponent(currentId)
+      encodeURIComponent(
+        currentId,
+      )
     }`;
     const resp = await fetch(url, {
       method: "GET",
       headers: {
-        "Authorization": `Bearer ${appToken}`,
+        Authorization: `Bearer ${appToken}`,
         "Content-Type": "application/json",
       },
     });
@@ -768,10 +796,12 @@ async function fetchBreadcrumb(
 }
 
 // ── Helper: Ask Gemini for category (last-resort fallback, tier 4) ───────────
-async function askGeminiForCategory(
-  itemDescription: string,
-): Promise<
-  { categoryId: string; categoryName: string; confidence: number } | null
+async function askGeminiForCategory(itemDescription: string): Promise<
+  {
+    categoryId: string;
+    categoryName: string;
+    confidence: number;
+  } | null
 > {
   const geminiKey = Deno.env.get("GEMINI_API_KEY");
   if (!geminiKey) {
@@ -929,13 +959,13 @@ async function safePersistMapping(
   }
 
   // Gate 3: Determine status based on source (#2)
-  const status = (source === "ebay_api" && confidence >= 85) ? "approved" : "quarantine";
+  const status = source === "ebay_api" && confidence >= 85 ? "approved" : "quarantine";
 
   // Compute effective_score (#8)
   const sourceWeightMap: Record<string, number> = {
-    "ebay_api": 5,
-    "gemini_ai": 0,
-    "ai_auto": -10,
+    ebay_api: 5,
+    gemini_ai: 0,
+    ai_auto: -10,
   };
   const effectiveScore = Math.min(
     100,
@@ -1106,7 +1136,7 @@ export async function handleRequest(req: Request): Promise<Response> {
           );
 
           // EA-P2-C: Lower raw scores to leave room for penalties (was 90-3*i)
-          const rawScore = 80 - (i * 4); // 80, 76, 72, 68, 64 for ranks 1-5
+          const rawScore = 80 - i * 4; // 80, 76, 72, 68, 64 for ranks 1-5
 
           // Verify leaf status for top candidate (#4) — needed BEFORE scoring for penalty
           let verifiedLeaf: boolean | null = null;
@@ -1151,7 +1181,9 @@ export async function handleRequest(req: Request): Promise<Response> {
 
       // ── Tier 3: DB fuzzy match (approved only, gated) (#1) ───────────
       const dbFuzzyStart = Date.now();
-      const keywords = normalizedKey.split(" ").filter((w) => w.length > 3 && !STOPWORDS.has(w));
+      const keywords = normalizedKey
+        .split(" ")
+        .filter((w) => w.length > 3 && !STOPWORDS.has(w));
       let fuzzyMatches: any[] = [];
 
       for (const kw of keywords.slice(0, 3)) {
@@ -1209,7 +1241,9 @@ export async function handleRequest(req: Request): Promise<Response> {
         if (effectiveScore < FUZZY_MIN_SIMILARITY * 100) {
           console.log(
             `category-lookup: fuzzy candidate "${candidateText}" rejected — effective score ${
-              effectiveScore.toFixed(1)
+              effectiveScore.toFixed(
+                1,
+              )
             } < ${FUZZY_MIN_SIMILARITY * 100}`,
           );
           continue;
@@ -1223,7 +1257,9 @@ export async function handleRequest(req: Request): Promise<Response> {
           rawScore: row.confidence ?? 70,
           effectiveScore,
           reason: `DB fuzzy match "${candidateText}" (overlap=${tokenOverlap}, generic=${isGeneric}, days=${
-            Math.round(daysSinceUpdate)
+            Math.round(
+              daysSinceUpdate,
+            )
           })`,
           verifiedLeaf: null,
           verifiedActive: null,
@@ -1322,17 +1358,22 @@ export async function handleRequest(req: Request): Promise<Response> {
       allCandidates.sort((a, b) => b.effectiveScore - a.effectiveScore);
 
       // Check for deterministic lock (#3): if top eBay candidate is strong enough, lock it
-      const topEbay = allCandidates.find((c) => c.source === "ebay_api" && c.rank === 1);
+      const topEbay = allCandidates.find(
+        (c) => c.source === "ebay_api" && c.rank === 1,
+      );
       let winner: LookupCandidate | null = null;
       let lockReason = "";
 
       if (
-        topEbay && topEbay.effectiveScore >= DETERMINISTIC_LOCK_THRESHOLD &&
+        topEbay &&
+        topEbay.effectiveScore >= DETERMINISTIC_LOCK_THRESHOLD &&
         topEbay.verifiedLeaf !== false
       ) {
         winner = topEbay;
         lockReason = `Deterministic lock: eBay top-1 score ${
-          topEbay.effectiveScore.toFixed(1)
+          topEbay.effectiveScore.toFixed(
+            1,
+          )
         } >= ${DETERMINISTIC_LOCK_THRESHOLD}`;
       } else {
         // Take highest effective score, preferring verified leaf
@@ -1359,7 +1400,8 @@ export async function handleRequest(req: Request): Promise<Response> {
           candidate_name: c.categoryName,
           candidate_score: c.effectiveScore,
           candidate_rank: c.rank,
-          was_selected: winner !== null && c.categoryId === winner.categoryId &&
+          was_selected: winner !== null &&
+            c.categoryId === winner.categoryId &&
             c.source === winner.source,
           reason_selected: c === winner ? lockReason : c.reason,
           verified_leaf: c.verifiedLeaf,
@@ -1667,7 +1709,9 @@ export async function handleRequest(req: Request): Promise<Response> {
           dbCategoryName = local.category_name;
           dbBreadcrumb = local.breadcrumb || local.category_name;
         }
-      } catch (_) { /* continue */ }
+      } catch (_) {
+        /* continue */
+      }
 
       // Always perform remote verification with leaf check (#4, RC-5)
       const ebayAuth = await getEbayAppToken();
@@ -1705,7 +1749,8 @@ export async function handleRequest(req: Request): Promise<Response> {
           isActive: verification.isActive,
           source: "remote",
           categoryName: breadcrumbResult.categoryName ||
-            verification.categoryName || dbCategoryName,
+            verification.categoryName ||
+            dbCategoryName,
           breadcrumb: breadcrumbResult.breadcrumb || dbBreadcrumb,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -1723,9 +1768,7 @@ export async function handleRequest(req: Request): Promise<Response> {
       const authHeader = req.headers.get("authorization");
       if (authHeader) {
         const token = authHeader.replace(/^Bearer\s+/i, "");
-        const { data: userData, error: userErr } = await supabase.auth.getUser(
-          token,
-        );
+        const { data: userData, error: userErr } = await supabase.auth.getUser(token);
         if (userErr || !userData?.user?.id) {
           return new Response(
             JSON.stringify({ error: "Invalid authorization token" }),
@@ -1736,11 +1779,13 @@ export async function handleRequest(req: Request): Promise<Response> {
           );
         }
         const userId = userData.user.id;
-        const { data: profile } = await supabase.from("profiles").select(
-          "is_admin",
-        ).eq("id", userId).maybeSingle();
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("is_admin")
+          .eq("id", userId)
+          .maybeSingle();
         const isAdmin = profile?.is_admin === true;
-        const source = isAdmin ? (verificationSource || "user_verified") : "ai_auto";
+        const source = isAdmin ? verificationSource || "user_verified" : "ai_auto";
         const status = isAdmin ? "approved" : "quarantine";
 
         if (!categoryId) {
@@ -1880,7 +1925,7 @@ export async function handleRequest(req: Request): Promise<Response> {
         const newScore = Math.max(0, (existing.effective_score || 50) - 10);
 
         // Auto-reject if 3+ failures and no successes
-        const newStatus = (newFailCount >= 3 && successCount === 0) ? "rejected" : undefined;
+        const newStatus = newFailCount >= 3 && successCount === 0 ? "rejected" : undefined;
 
         let demoteUpdateQuery = supabase
           .from("category_mappings")
@@ -1940,8 +1985,8 @@ export async function handleRequest(req: Request): Promise<Response> {
         console.log(`category-lookup: fetching conditions for category ${cid}`);
         const resp = await fetch(url, {
           headers: {
-            "Authorization": `Bearer ${ebayAuth.token}`,
-            "Accept": "application/json",
+            Authorization: `Bearer ${ebayAuth.token}`,
+            Accept: "application/json",
             "Accept-Encoding": "gzip",
           },
         });
@@ -1996,8 +2041,7 @@ export async function handleRequest(req: Request): Promise<Response> {
         }
 
         // Extract the policy for our category
-        const policy = policies.find((p: any) => p.categoryId === cid) ||
-          policies[0];
+        const policy = policies.find((p: any) => p.categoryId === cid) || policies[0];
 
         // Transform conditions into a cleaner format for frontend consumption
         const conditions = (policy.itemConditions || []).map((cond: any) => ({

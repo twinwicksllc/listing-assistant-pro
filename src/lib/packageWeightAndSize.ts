@@ -49,17 +49,19 @@ export function buildPackageWeightAndSizePayload(
 
   return {
     ...(hasWeight
-      ? { weight: { value: Number(totalLb.toFixed(4)), unit: "POUND" as const } }
+      ? {
+          weight: { value: Number(totalLb.toFixed(4)), unit: "POUND" as const },
+        }
       : {}),
     ...(hasAnyDim
       ? {
-        dimensions: {
-          ...(l > 0 ? { length: l } : {}),
-          ...(w > 0 ? { width: w } : {}),
-          ...(h > 0 ? { height: h } : {}),
-          unit: "INCH" as const,
-        },
-      }
+          dimensions: {
+            ...(l > 0 ? { length: l } : {}),
+            ...(w > 0 ? { width: w } : {}),
+            ...(h > 0 ? { height: h } : {}),
+            unit: "INCH" as const,
+          },
+        }
       : {}),
   };
 }

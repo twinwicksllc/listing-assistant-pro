@@ -3,7 +3,10 @@
  * Helper to generate embeddings using Gemini's gemini-embedding-001 model.
  */
 
-export async function getEmbedding(apiKey: string, text: string): Promise<number[]> {
+export async function getEmbedding(
+  apiKey: string,
+  text: string,
+): Promise<number[]> {
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${apiKey}`,
     {

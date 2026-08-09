@@ -1,4 +1,11 @@
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  ReactNode,
+} from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -128,7 +135,9 @@ interface AuthContextType {
   // Usage gates
   canAnalyze: boolean;
   canPublish: boolean;
-  recordUsage: (actionType: "ai_analysis" | "ebay_publish" | "optimize" | "export") => Promise<void>;
+  recordUsage: (
+    actionType: "ai_analysis" | "ebay_publish" | "optimize" | "export",
+  ) => Promise<void>;
   org: OrgState;
   isOwner: boolean;
   isLister: boolean;
@@ -150,7 +159,14 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   signOut: async () => {},
-  subscription: { subscribed: false, productId: null, subscriptionEnd: null, status: null, cancelAtPeriodEnd: false, loading: true },
+  subscription: {
+    subscribed: false,
+    productId: null,
+    subscriptionEnd: null,
+    status: null,
+    cancelAtPeriodEnd: false,
+    loading: true,
+  },
   usage: { aiAnalysis: 0, ebayPublish: 0 },
   refreshSubscription: async () => {},
   refreshUsage: async () => {},
@@ -184,8 +200,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     cancelAtPeriodEnd: false,
     loading: true,
   });
-  const [usage, setUsage] = useState<UsageState>({ aiAnalysis: 0, ebayPublish: 0 });
-  const [org, setOrg] = useState<OrgState>({ orgId: null, orgName: null, role: null, loading: true });
+  const [usage, setUsage] = useState<UsageState>({
+    aiAnalysis: 0,
+    ebayPublish: 0,
+  });
+  const [org, setOrg] = useState<OrgState>({
+    orgId: null,
+    orgName: null,
+    role: null,
+    loading: true,
+  });
 
   const refreshOrg = useCallback(async () => {
     try {
@@ -219,7 +243,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshSubscription = useCallback(async () => {
     try {
-      const { data, error } = await supabase.functions.invoke("check-subscription");
+      const { data, error } =
+        await supabase.functions.invoke("check-subscription");
       if (error) throw error;
       setSubscription({
         subscribed: data.subscribed ?? false,
@@ -260,27 +285,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const recordUsage = useCallback(async (actionType: "ai_analysis" | "ebay_publish" | "optimize" | "export") => {
-    const user = (await supabase.auth.getUser()).data.user;
-    if (!user) return;
-    await supabase.from("usage_tracking").insert({ user_id: user.id, action_type: actionType });
-    await refreshUsage();
-  }, [refreshUsage]);
+  const recordUsage = useCallback(
+    async (
+      actionType: "ai_analysis" | "ebay_publish" | "optimize" | "export",
+    ) => {
+      const user = (await supabase.auth.getUser()).data.user;
+      if (!user) return;
+      await supabase
+        .from("usage_tracking")
+        .insert({ user_id: user.id, action_type: actionType });
+      await refreshUsage();
+    },
+    [refreshUsage],
+  );
 
   useEffect(() => {
-    const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-        setLoading(false);
-        if (session) {
-          setTimeout(() => { refreshSubscription(); refreshUsage(); refreshOrg(); }, 0);
-        } else {
-          setSubscription({ subscribed: false, productId: null, subscriptionEnd: null, status: null, cancelAtPeriodEnd: false, loading: false });
-          setUsage({ aiAnalysis: 0, ebayPublish: 0 });
-          setOrg({ orgId: null, orgName: null, role: null, loading: false });
-        }
+    const {
+      data: { subscription: authSub },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setLoading(false);
+      if (session) {
+        setTimeout(() => {
+          refreshSubscription();
+          refreshUsage();
+          refreshOrg();
+        }, 0);
+      } else {
+        setSubscription({
+          subscribed: false,
+          productId: null,
+          subscriptionEnd: null,
+          status: null,
+          cancelAtPeriodEnd: false,
+          loading: false,
+        });
+        setUsage({ aiAnalysis: 0, ebayPublish: 0 });
+        setOrg({ orgId: null, orgName: null, role: null, loading: false });
       }
-    );
+    });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -309,7 +352,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ─── Derived tier values ────────────────────────────────────────────────────
   const isAdmin = ADMIN_EMAILS.includes(session?.user?.email ?? "");
-  const isActivePaid = subscription.subscribed || subscription.status === "trialing";
+  const isActivePaid =
+    subscription.subscribed || subscription.status === "trialing";
 
   // Determine current plan from product ID
   const resolvedPlan: PlanKey = (() => {

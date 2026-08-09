@@ -24,7 +24,9 @@ export function ExportSection({
     <div className="space-y-2">
       <div className="flex items-center gap-1.5">
         <Download className="w-3.5 h-3.5 text-primary" />
-        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Export Listing</label>
+        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Export Listing
+        </label>
       </div>
 
       {/* Platform toggle */}

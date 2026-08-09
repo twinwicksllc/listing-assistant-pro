@@ -13,7 +13,13 @@ const corsHeaders = {
 };
 
 // eBay coin category mandate: these parent IDs require conditionDescriptors (ID 1007) per June 2026 mandate
-const COIN_MANDATE_PARENT_IDS = new Set(["253", "256", "3377", "4733", "18466"]);
+const COIN_MANDATE_PARENT_IDS = new Set([
+  "253",
+  "256",
+  "3377",
+  "4733",
+  "18466",
+]);
 
 // Table initialization deferred - will be created by category-lookup on first use
 async function ensureTableExists() {
@@ -57,8 +63,7 @@ function isCoinDomainCategory(
 ): boolean {
   if (!categoryId) return false;
 
-  const categoryText = `${categoryName || ""} ${breadcrumb || ""}`
-    .toLowerCase();
+  const categoryText = `${categoryName || ""} ${breadcrumb || ""}`.toLowerCase();
 
   if (
     /(coins?\b|paper money|bullion|exonumia|ancient|medieval|numis)/i.test(
@@ -86,8 +91,7 @@ function isSneakerDomainCategory(
 ): boolean {
   if (!categoryId) return false;
 
-  const categoryText = `${categoryName || ""} ${breadcrumb || ""}`
-    .toLowerCase();
+  const categoryText = `${categoryName || ""} ${breadcrumb || ""}`.toLowerCase();
 
   // Positive match: any footwear/athletic-shoe breadcrumb
   return /(sneakers?|athletic shoes|footwear|shoes\b)/i.test(categoryText);
@@ -99,10 +103,10 @@ function isKnownWrongDomainForSneakers(
   categoryName: string | null | undefined,
   breadcrumb: string | null | undefined,
 ): boolean {
-  const categoryText = `${categoryName || ""} ${breadcrumb || ""}`
-    .toLowerCase();
-  return /(action figures|posters|handbags|electronics|trading cards|coins)/i
-    .test(categoryText);
+  const categoryText = `${categoryName || ""} ${breadcrumb || ""}`.toLowerCase();
+  return /(action figures|posters|handbags|electronics|trading cards|coins)/i.test(
+    categoryText,
+  );
 }
 
 function isAutoPartsDomainCategory(
@@ -112,11 +116,11 @@ function isAutoPartsDomainCategory(
 ): boolean {
   if (!categoryId) return false;
 
-  const categoryText = `${categoryName || ""} ${breadcrumb || ""}`
-    .toLowerCase();
+  const categoryText = `${categoryName || ""} ${breadcrumb || ""}`.toLowerCase();
 
-  return /(ebay motors|auto parts|automotive|car & truck parts|motorcycle parts|parts & accessories)/i
-    .test(categoryText);
+  return /(ebay motors|auto parts|automotive|car & truck parts|motorcycle parts|parts & accessories)/i.test(
+    categoryText,
+  );
 }
 
 // Categories that are clearly the wrong domain for an auto-part listing, even
@@ -125,10 +129,10 @@ function isKnownWrongDomainForAutoParts(
   categoryName: string | null | undefined,
   breadcrumb: string | null | undefined,
 ): boolean {
-  const categoryText = `${categoryName || ""} ${breadcrumb || ""}`
-    .toLowerCase();
-  return /(home & garden|toys? & hobbies|clothing|electronics|coins)/i
-    .test(categoryText);
+  const categoryText = `${categoryName || ""} ${breadcrumb || ""}`.toLowerCase();
+  return /(home & garden|toys? & hobbies|clothing|electronics|coins)/i.test(
+    categoryText,
+  );
 }
 
 // South Pacific countries whose World Coin listings belong in the 3392 leaf
@@ -167,8 +171,7 @@ function isLikelyGradedCoin(
 ): boolean {
   if (slabOcrResult?.isSlabbed) return true;
 
-  const combined = `${identification.itemName ?? ""} ${(identification.keywords ?? []).join(" ")}`
-    .toLowerCase();
+  const combined = `${identification.itemName ?? ""} ${(identification.keywords ?? []).join(" ")}`.toLowerCase();
   return /\b(pcgs|ngc|anacs|icg|cac|iccs|graded|certified|slab(?:bed)?)\b/.test(
     combined,
   );
@@ -184,9 +187,11 @@ function isLikelyGradedCoin(
  * NEVER returned here — it is a rollup/parent category that rejects the
  * Graded condition (LIKE_NEW / 2750) at publish time.
  */
-function resolveGradedFriendlyWorldCoinCategory(
-  countryText?: string | null,
-): { categoryId: string; categoryName: string; breadcrumb: string } {
+function resolveGradedFriendlyWorldCoinCategory(countryText?: string | null): {
+  categoryId: string;
+  categoryName: string;
+  breadcrumb: string;
+} {
   const country = (countryText ?? "").trim().toLowerCase();
   if (SOUTH_PACIFIC_COUNTRIES.has(country)) {
     return {
@@ -226,7 +231,9 @@ function resolveDomainFallbackCategory(
   if (metal === "none" || !metal) {
     if (/\bamerican\s+silver\s+eagles?\b|\base\b|\bsilver\b/.test(combined)) {
       metal = "silver";
-    } else if (/\bamerican\s+gold\s+eagles?\b|\bgold\b|\bbuffalo\b/.test(combined)) {
+    } else if (
+      /\bamerican\s+gold\s+eagles?\b|\bgold\b|\bbuffalo\b/.test(combined)
+    ) {
       metal = "gold";
     } else if (/\bplatinum\b/.test(combined)) {
       metal = "platinum";
@@ -247,10 +254,12 @@ function resolveDomainFallbackCategory(
   // foreign/world coin (e.g. a colorized silver Cook Islands commemorative
   // whose description happens to mention "silver").
   const isGraded = isLikelyGradedCoin(identification, slabOcrResult);
-  const isNamedUsBullionCoin = /\bamerican\s+silver\s+eagles?\b|\bae\b|\bamerican\s+gold\s+eagles?\b/
-    .test(combined);
-  const isNamedUsSilverDollar = /morgan|peace|walking liberty|franklin|kennedy|barber|seated|bust/
-    .test(combined);
+  const isNamedUsBullionCoin = /\bamerican\s+silver\s+eagles?\b|\bae\b|\bamerican\s+gold\s+eagles?\b/.test(
+    combined,
+  );
+  const isNamedUsSilverDollar = /morgan|peace|walking liberty|franklin|kennedy|barber|seated|bust/.test(
+    combined,
+  );
   // Best-effort country detection from itemName/keywords text so a graded
   // South Pacific coin (e.g. Cook Islands) lands on the 3392 leaf rather than
   // the generic 256 default. This mirrors SOUTH_PACIFIC_COUNTRIES.
@@ -382,8 +391,7 @@ serve(async (req: Request) => {
     // Parse body first (can only call req.json() once)
     const body = await req.json();
     console.log(
-      `[${invocationId}] ✓ Body parsed: ${body.images?.length} images, voiceNote=${!!body
-        .voiceNote}`,
+      `[${invocationId}] ✓ Body parsed: ${body.images?.length} images, voiceNote=${!!body.voiceNote}`,
     );
 
     // --- Server-side usage limit enforcement ---
@@ -435,9 +443,7 @@ serve(async (req: Request) => {
     const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
     if (!isAdmin && STRIPE_SECRET_KEY && userEmail) {
       try {
-        const { default: Stripe } = await import(
-          "https://esm.sh/stripe@18.5.0"
-        );
+        const { default: Stripe } = await import("https://esm.sh/stripe@18.5.0");
         const stripe = new Stripe(STRIPE_SECRET_KEY, {
           apiVersion: "2025-08-27.basil",
         });
@@ -578,7 +584,10 @@ serve(async (req: Request) => {
       spotSilver = 64,
       spotPlatinum = 1350;
 
-    const isValidSpotPrice = (metal: "gold" | "silver" | "platinum", value: unknown): boolean => {
+    const isValidSpotPrice = (
+      metal: "gold" | "silver" | "platinum",
+      value: unknown,
+    ): boolean => {
       const num = Number(value);
       if (!Number.isFinite(num) || num <= 0) return false;
       if (metal === "gold") return num >= 500 && num <= 10000;
@@ -638,8 +647,7 @@ serve(async (req: Request) => {
     // --- End spot prices ---
 
     // Support both single image (legacy) and multiple images
-    const imageList: string[] = body.images ??
-      (body.imageBase64 ? [body.imageBase64] : []);
+    const imageList: string[] = body.images ?? (body.imageBase64 ? [body.imageBase64] : []);
     const voiceNote: string = body.voiceNote || "";
     // User-provided category override — if set, this is treated as an absolute lock
     // and the category-lookup pipeline is skipped entirely.
@@ -686,9 +694,7 @@ serve(async (req: Request) => {
     // ─── STAGE 1 & 2: Modular Agent Controller ───────────────────────────────
     // Replaces the old linear Pass 1 / Pre-Pass 0 / Slab OCR sequence with a
     // modular Controller that handles Identification, Parallel Vision, and Grounding.
-    const { ListingAgentController } = await import(
-      "../_helpers/agent-system/controller.ts"
-    );
+    const { ListingAgentController } = await import("../_helpers/agent-system/controller.ts");
     const controller = new ListingAgentController(GEMINI_API_KEY, svc);
 
     const agentResult = await controller.run({
@@ -702,8 +708,7 @@ serve(async (req: Request) => {
     prePassResult = agentResult.visualFindings
       ? {
         marketAnalysis: agentResult.marketReport?.marketAnalysis ?? null,
-        groundedCategoryId: agentResult.marketReport?.groundedCategoryId ??
-          null,
+        groundedCategoryId: agentResult.marketReport?.groundedCategoryId ?? null,
         agenticInspection: agentResult.visualFindings,
       }
       : null;
@@ -722,8 +727,7 @@ serve(async (req: Request) => {
     // keywords for unambiguous numismatic terms and self-correct the domain
     // here so the rest of the pipeline benefits, not just this one guard.
     if (identification.domain !== "coins_bullion") {
-      const _domainCheckText = `${identification.itemName} ${identification.keywords.join(" ")}`
-        .toLowerCase();
+      const _domainCheckText = `${identification.itemName} ${identification.keywords.join(" ")}`.toLowerCase();
       const _COIN_DOMAIN_SIGNAL_RE =
         /\b(coin|coins|cent|cents|trime|dime|dimes|nickel|nickels|penny|pennies|quarter|quarters|half dollar|silver dollar|gold dollar|morgan dollar|peace dollar|eisenhower dollar|kennedy half|franklin half|walking liberty|barber (?:dime|quarter|half)|mercury dime|roosevelt dime|buffalo nickel|jefferson nickel|wheat penny|indian head|proof set|mint set|bullion|troy oz|fine silver|fine gold|numismatic|ngc|pcgs|anacs|icg)\b/i;
       if (_COIN_DOMAIN_SIGNAL_RE.test(_domainCheckText)) {
@@ -901,8 +905,7 @@ serve(async (req: Request) => {
               groundedVerifyData.isLeaf === true &&
               groundedVerifyData.valid !== false
             ) {
-              const groundedCategoryName = groundedVerifyData.categoryName ||
-                "";
+              const groundedCategoryName = groundedVerifyData.categoryName || "";
               const groundedBreadcrumb = groundedVerifyData.breadcrumb ||
                 groundedVerifyData.categoryName ||
                 "";
@@ -958,8 +961,7 @@ serve(async (req: Request) => {
         const pass1Query = identification.keywords.length > 0
           ? `${identification.itemName} ${identification.keywords.slice(0, 3).join(" ")}`
           : identification.itemName;
-        const searchQuery = (pass1Query !== "item" ? pass1Query : voiceNote) ||
-          "";
+        const searchQuery = (pass1Query !== "item" ? pass1Query : voiceNote) || "";
         if (searchQuery.trim().length > 2) {
           const _lookupUrl = Deno.env.get("SUPABASE_URL");
           const _lookupKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -991,8 +993,7 @@ serve(async (req: Request) => {
               }
 
               if (lookupData && lookupData.found) {
-                const score = lookupData.effectiveScore ||
-                  lookupData.confidence || 0;
+                const score = lookupData.effectiveScore || lookupData.confidence || 0;
                 const isVerifiedLeaf = lookupData.verifiedLeaf !== false;
                 const source = lookupData.source || "";
 
@@ -1013,8 +1014,7 @@ serve(async (req: Request) => {
                 if (isLockable && isDomainCompatible) {
                   lockedCategoryId = lookupData.categoryId;
                   lockedCategoryName = lookupData.categoryName || "";
-                  lockedBreadcrumb = lookupData.breadcrumb ||
-                    lookupData.categoryName || "";
+                  lockedBreadcrumb = lookupData.breadcrumb || lookupData.categoryName || "";
                   categoryHints +=
                     `\n- **LOCKED CATEGORY** (verified, high-confidence): **${lockedCategoryId}** — ${lockedBreadcrumb}. YOU MUST USE THIS CATEGORY ID. Do not override.`;
                   console.log(
@@ -1084,7 +1084,10 @@ serve(async (req: Request) => {
     // + item name.  This guarantees Pass 2 always has the correct eBay aspects
     // schema, removing the need for post-lookup correction in the common case.
     if (!lockedCategoryId && !userCategoryId) {
-      const fallback = resolveDomainFallbackCategory(identification, slabOcrResult);
+      const fallback = resolveDomainFallbackCategory(
+        identification,
+        slabOcrResult,
+      );
       if (fallback) {
         lockedCategoryId = fallback.categoryId;
         lockedCategoryName = fallback.categoryName;
@@ -1243,9 +1246,7 @@ serve(async (req: Request) => {
     // ─── Build domain-specific system prompt ─────────────────────────────────
     let systemPrompt: string;
     try {
-      const { buildSystemPrompt } = await import(
-        "../_helpers/domainPrompts.ts"
-      );
+      const { buildSystemPrompt } = await import("../_helpers/domainPrompts.ts");
       systemPrompt = buildSystemPrompt(identification.domain, {
         itemName: identification.itemName,
         imageCount: imageList.length,
@@ -1554,12 +1555,12 @@ Seller's note: "${voiceNote}"`;
               .replace(/^_|_$/g, "");
           return INVALID_CONDITION_STRINGS.has(mapped.toUpperCase()) ? null : mapped;
         })
-        .filter((value: string | null): value is string => typeof value === "string" && value.length > 0)
+        .filter(
+          (value: string | null): value is string => typeof value === "string" && value.length > 0,
+        )
       : [];
     const conditionEnum: string[] = categoryConditions?.conditions?.length > 0
-      ? [
-        ...new Set<string>(mappedConditionEnums),
-      ]
+      ? [...new Set<string>(mappedConditionEnums)]
       : [
         "NEW",
         "USED_EXCELLENT",
@@ -1609,9 +1610,18 @@ Seller's note: "${voiceNote}"`;
       // present even if eBay marks them as "suggested". This ensures the AI
       // populates them using the Visual Agent's findings.
       if (isCoinCategoryForSchema) {
-        const criticalFields = ["Certification", "Year", "Denomination", "Composition", "Strike Type"];
+        const criticalFields = [
+          "Certification",
+          "Year",
+          "Denomination",
+          "Composition",
+          "Strike Type",
+        ];
         for (const field of criticalFields) {
-          if (itemSpecificsSchema.properties[field] && !itemSpecificsSchema.required.includes(field)) {
+          if (
+            itemSpecificsSchema.properties[field] &&
+            !itemSpecificsSchema.required.includes(field)
+          ) {
             itemSpecificsSchema.required.push(field);
           }
         }
@@ -2036,9 +2046,7 @@ Seller's note: "${voiceNote}"`;
 
     // --- Build suggestedCategories (dedupe, backfill names via exact DB lookup) ---
     try {
-      const { buildSuggestedCategories } = await import(
-        "../_helpers/suggestedCategories.ts"
-      );
+      const { buildSuggestedCategories } = await import("../_helpers/suggestedCategories.ts");
       listing.suggestedCategories = await buildSuggestedCategories(
         listing,
         svc,
@@ -2192,8 +2200,7 @@ Seller's note: "${voiceNote}"`;
               postLookupData = {};
             }
             if (postLookupData.found && postLookupData.verifiedLeaf !== false) {
-              const postScore = postLookupData.effectiveScore ||
-                postLookupData.confidence || 0;
+              const postScore = postLookupData.effectiveScore || postLookupData.confidence || 0;
               const postSource = postLookupData.source || "";
               const postIsLeaf = postLookupData.verifiedLeaf === true;
 
@@ -2347,8 +2354,7 @@ Seller's note: "${voiceNote}"`;
                   listing.suggestedCategories.unshift({
                     categoryId: postLookupData.categoryId,
                     categoryName: postLookupData.categoryName,
-                    breadcrumb: postLookupData.breadcrumb ||
-                      postLookupData.categoryName,
+                    breadcrumb: postLookupData.breadcrumb || postLookupData.categoryName,
                     reason: `Post-lookup verified (score=${postScore}, source=${postSource})`,
                   });
                   // Dedupe
@@ -2392,9 +2398,7 @@ Seller's note: "${voiceNote}"`;
                 ? (listing.itemSpecifics["Country of Origin"] as string)
                 : null;
               if (isLikelyGradedCoin(identification, slabOcrResult)) {
-                const gradedFallback = resolveGradedFriendlyWorldCoinCategory(
-                  _countryHint,
-                );
+                const gradedFallback = resolveGradedFriendlyWorldCoinCategory(_countryHint);
                 console.warn(
                   `analyze-item: DOMAIN-MISMATCH SAFETY: coins_bullion GRADED item but AI returned category ${listing.ebayCategoryId} ` +
                     `and post-lookup found nothing — forcing fallback to graded-friendly World Coins (${gradedFallback.categoryId}) instead of 45243`,
@@ -2504,7 +2508,8 @@ Seller's note: "${voiceNote}"`;
                 description: aspect.required ? `REQUIRED: ${aspect.name}` : aspect.name,
               };
               if (
-                Array.isArray(aspect.values) && aspect.values.length > 0 &&
+                Array.isArray(aspect.values) &&
+                aspect.values.length > 0 &&
                 aspect.values.length < 50
               ) {
                 prop.enum = aspect.values;
@@ -2526,7 +2531,11 @@ Seller's note: "${voiceNote}"`;
             }
             const seedContext = Object.keys(survivingSpecifics).length > 0
               ? `\n\nSome previously extracted values (may be correct, verify against the images):\n${
-                Object.entries(survivingSpecifics).map(([k, v]) => `  ${k}: ${v}`).join("\n")
+                Object.entries(
+                  survivingSpecifics,
+                )
+                  .map(([k, v]) => `  ${k}: ${v}`)
+                  .join("\n")
               }`
               : "";
 
@@ -2581,14 +2590,15 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
 
             if (regenResp.ok) {
               const regenData = await regenResp.json();
-              const regenCall = regenData?.choices?.[0]?.message?.tool_calls
-                ?.[0];
+              const regenCall = regenData?.choices?.[0]?.message?.tool_calls?.[0];
               if (regenCall?.function?.arguments) {
                 const regenSpecifics = JSON.parse(regenCall.function.arguments);
                 listing.itemSpecifics = regenSpecifics;
                 console.log(
                   `[${invocationId}] analyze-item: Pass 2.5 regenerated itemSpecifics for corrected category ${listing.ebayCategoryId}: ${
-                    JSON.stringify(Object.keys(regenSpecifics))
+                    JSON.stringify(
+                      Object.keys(regenSpecifics),
+                    )
                   }`,
                 );
               }
@@ -2707,9 +2717,7 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
     //   • Jewelry: hallmarks, brand signatures, karat
     // Findings are AUTHORITATIVE and OVERRIDE the main model's output.
     try {
-      const { extractKeyDetails, applyDetailOverrides } = await import(
-        "../_helpers/detailExtractor.ts"
-      );
+      const { extractKeyDetails, applyDetailOverrides } = await import("../_helpers/detailExtractor.ts");
 
       // Build image lists for the detail extractor — use ALL images
       const detailBase64List: string[] = [];
@@ -2837,8 +2845,7 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
         }
       } else {
         console.log(
-          `[${invocationId}] Skipping post-AI competitor search (title=${!!listing
-            .title}, userId=${!!userId})`,
+          `[${invocationId}] Skipping post-AI competitor search (title=${!!listing.title}, userId=${!!userId})`,
         );
       }
     }
@@ -3032,14 +3039,18 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
     // This ensures ALL sub-categories of the mandated parent categories trigger
     // the Coin Condition Details panel per the eBay June 2026 mandate.
     const resolvedCategoryId = String(listing.ebayCategoryId ?? "");
-    const resolvedBreadcrumb = String((listing as any).ebayCategoryBreadcrumb ?? "");
+    const resolvedBreadcrumb = String(
+      (listing as any).ebayCategoryBreadcrumb ?? "",
+    );
     const isCoinCategoryFlag = identification.domain === "coins_bullion" ||
       COIN_MANDATE_PARENT_IDS.has(resolvedCategoryId) ||
-      /coin|paper money|currency|dollar|quarter|dime|nickel|penny|bullion|numismatic/i.test(resolvedBreadcrumb);
+      /coin|paper money|currency|dollar|quarter|dime|nickel|penny|bullion|numismatic/i.test(
+        resolvedBreadcrumb,
+      );
 
     // Build eBay metadata. Always emitted for coin listings so the frontend
     // always receives isCoinCategory even if eBay returned no aspects/conditions.
-    const ebayMetadata = (categoryAspects || categoryConditions || isCoinCategoryFlag)
+    const ebayMetadata = categoryAspects || categoryConditions || isCoinCategoryFlag
       ? {
         requiredAspects: categoryAspects?.aspects
           ?.filter((a: any) => a.required)

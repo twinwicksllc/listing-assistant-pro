@@ -11,17 +11,17 @@ import type {
 const CONDITION_MULTIPLIERS: Record<string, number> = {
   NEW: 1.0,
   LIKE_NEW: 0.95,
-  NEW_OTHER: 0.90,
+  NEW_OTHER: 0.9,
   NEW_WITH_DEFECTS: 0.85,
   CERTIFIED_REFURBISHED: 0.88,
   EXCELLENT_REFURBISHED: 0.82,
   VERY_GOOD_REFURBISHED: 0.75,
   GOOD_REFURBISHED: 0.68,
   SELLER_REFURBISHED: 0.72,
-  PRE_OWNED_GOOD: 0.80,
+  PRE_OWNED_GOOD: 0.8,
   PRE_OWNED_FAIR: 0.65,
-  PRE_OWNED_POOR: 0.50,
-  FOR_PARTS_OR_NOT_WORKING: 0.30,
+  PRE_OWNED_POOR: 0.5,
+  FOR_PARTS_OR_NOT_WORKING: 0.3,
 };
 
 const CONDITION_NOTES: Record<string, string> = {
@@ -29,9 +29,12 @@ const CONDITION_NOTES: Record<string, string> = {
   LIKE_NEW: "Like New items sell ~5% below market average",
   NEW_OTHER: "New Other items sell ~10% below market average",
   NEW_WITH_DEFECTS: "New with Defects items sell ~15% below market average",
-  CERTIFIED_REFURBISHED: "Certified Refurbished items sell ~12% below market average",
-  EXCELLENT_REFURBISHED: "Excellent Refurbished items sell ~18% below market average",
-  VERY_GOOD_REFURBISHED: "Very Good Refurbished items sell ~25% below market average",
+  CERTIFIED_REFURBISHED:
+    "Certified Refurbished items sell ~12% below market average",
+  EXCELLENT_REFURBISHED:
+    "Excellent Refurbished items sell ~18% below market average",
+  VERY_GOOD_REFURBISHED:
+    "Very Good Refurbished items sell ~25% below market average",
   GOOD_REFURBISHED: "Good Refurbished items sell ~32% below market average",
   SELLER_REFURBISHED: "Seller Refurbished items sell ~28% below market average",
   PRE_OWNED_GOOD: "Pre-Owned Good items sell ~20% below market average",
@@ -62,7 +65,10 @@ function round2(n: number): number {
 
 // ─── Confidence scoring ───────────────────────────────────────────────────────
 
-function getConfidence(compsCount: number): { confidence: PriceConfidence; reason: string } {
+function getConfidence(compsCount: number): {
+  confidence: PriceConfidence;
+  reason: string;
+} {
   if (compsCount >= 8) {
     return {
       confidence: "high",
@@ -91,7 +97,7 @@ function buildSuggestions(
   adjustedAvg: number,
   adjustedLow: number,
   adjustedHigh: number,
-  meltFloor?: number
+  meltFloor?: number,
 ): PriceSuggestion[] {
   const suggestions: PriceSuggestion[] = [];
 
@@ -157,10 +163,11 @@ export function buildPriceRecommendation(
   condition: string = "USED_EXCELLENT",
   priceMin: number = 0,
   priceMax: number = 0,
-  meltFloor?: number
+  meltFloor?: number,
 ): PriceRecommendation {
-  const multiplier = CONDITION_MULTIPLIERS[condition] ?? 0.80;
-  const conditionNote = CONDITION_NOTES[condition] ?? "Condition adjustment applied";
+  const multiplier = CONDITION_MULTIPLIERS[condition] ?? 0.8;
+  const conditionNote =
+    CONDITION_NOTES[condition] ?? "Condition adjustment applied";
 
   let marketAvg: number;
   let marketLow: number;
@@ -191,12 +198,16 @@ export function buildPriceRecommendation(
 
   const { confidence, reason } = getConfidence(compsCount);
 
-  const suggestions = buildSuggestions(adjustedAvg, adjustedLow, adjustedHigh, meltFloor);
+  const suggestions = buildSuggestions(
+    adjustedAvg,
+    adjustedLow,
+    adjustedHigh,
+    meltFloor,
+  );
 
   // Default recommended: "match" strategy, or "floor" if melt is above market
   let recommended =
-    suggestions.find((s) => s.strategy === "match") ??
-    suggestions[0];
+    suggestions.find((s) => s.strategy === "match") ?? suggestions[0];
 
   // If melt floor strategy price is above the match price, recommend floor instead
   const floorSuggestion = suggestions.find((s) => s.strategy === "floor");
@@ -230,8 +241,10 @@ export function confidenceColor(c: PriceConfidence): string {
 }
 
 export function confidenceBg(c: PriceConfidence): string {
-  if (c === "high") return "bg-green-50 dark:bg-green-950/40 border-green-200 dark:border-green-800";
-  if (c === "medium") return "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800";
+  if (c === "high")
+    return "bg-green-50 dark:bg-green-950/40 border-green-200 dark:border-green-800";
+  if (c === "medium")
+    return "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800";
   return "bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800";
 }
 

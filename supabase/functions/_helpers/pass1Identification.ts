@@ -117,7 +117,8 @@ export async function runPass1Identification(
               itemName: String(parsed.itemName).slice(0, 120),
               keywords: Array.isArray(parsed.keywords) ? parsed.keywords.slice(0, 7).map(String) : [],
               isMetal: Boolean(parsed.isMetal),
-              metalType: (parsed.metalType ?? "none") as Identification["metalType"],
+              metalType: (parsed.metalType ??
+                "none") as Identification["metalType"],
             };
             console.log(
               `[${invocationId}] ✓ Pass 1 identification succeeded:`,
@@ -141,7 +142,8 @@ export async function runPass1Identification(
                   itemName: String(parsed.itemName).slice(0, 120),
                   keywords: Array.isArray(parsed.keywords) ? parsed.keywords.slice(0, 7).map(String) : [],
                   isMetal: Boolean(parsed.isMetal),
-                  metalType: (parsed.metalType ?? "none") as Identification["metalType"],
+                  metalType: (parsed.metalType ??
+                    "none") as Identification["metalType"],
                 };
                 console.log(
                   `[${invocationId}] ✓ Pass 1 identification succeeded (extracted from text):`,

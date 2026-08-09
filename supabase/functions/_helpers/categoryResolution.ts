@@ -116,8 +116,7 @@ export function isCoinDomainCategory(
 ): boolean {
   if (!categoryId) return false;
 
-  const categoryText = `${categoryName || ""} ${breadcrumb || ""}`
-    .toLowerCase();
+  const categoryText = `${categoryName || ""} ${breadcrumb || ""}`.toLowerCase();
 
   if (
     /(coins?\b|paper money|bullion|exonumia|ancient|medieval|numis)/i.test(
@@ -146,7 +145,9 @@ export function isCategoryCompatibleWithDomain(
   }
 }
 
-export function isKnownParentCategory(categoryId: string | null | undefined): boolean {
+export function isKnownParentCategory(
+  categoryId: string | null | undefined,
+): boolean {
   if (!categoryId) return false;
   return KNOWN_PARENT_CATEGORIES.has(categoryId);
 }
@@ -158,9 +159,11 @@ export function isCoinDomainMismatch(
 ): boolean {
   if (domain !== "coins_bullion" || !categoryId) return false;
 
-  return !COINS_PAPER_MONEY_IDS.has(categoryId) &&
+  return (
+    !COINS_PAPER_MONEY_IDS.has(categoryId) &&
     (KNOWN_WRONG_DOMAIN_FOR_COINS.has(categoryId) ||
-      (postLookupBreadcrumb || "").toLowerCase().includes("coins"));
+      (postLookupBreadcrumb || "").toLowerCase().includes("coins"))
+  );
 }
 
 export function shouldForceWorldCoinsFallback(
@@ -171,8 +174,7 @@ export function shouldForceWorldCoinsFallback(
 
   if (["261186", "268"].includes(categoryId)) return true;
 
-  const looksCoinLikeRange = /^(3[0-9]|4[0-9]|1[0-9]|2[0-9]|45243|532|173685)/
-    .test(categoryId);
+  const looksCoinLikeRange = /^(3[0-9]|4[0-9]|1[0-9]|2[0-9]|45243|532|173685)/.test(categoryId);
 
   return !looksCoinLikeRange && parseInt(categoryId, 10) > 200000;
 }

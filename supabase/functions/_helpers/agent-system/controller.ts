@@ -29,7 +29,9 @@ export class ListingAgentController {
     const { invocationId, imageList, voiceNote } = context;
 
     // --- STEP 1: Sequential Identification (Runner) ---
-    console.log(`[${invocationId}] Controller: Starting Stage 1 (Identification)`);
+    console.log(
+      `[${invocationId}] Controller: Starting Stage 1 (Identification)`,
+    );
     const identificationRaw = await runPass1Identification(
       this.apiKey,
       imageList,
@@ -46,23 +48,32 @@ export class ListingAgentController {
       metalType: identificationRaw.metalType || "none",
     };
 
-    console.log(`[${invocationId}] Controller: Stage 1 Complete. Domain=${identification.domain}`);
+    console.log(
+      `[${invocationId}] Controller: Stage 1 Complete. Domain=${identification.domain}`,
+    );
 
     // Pre-compute item embedding once — shared by Visual and Market sub-agents
     // to avoid duplicate embedding API calls (would otherwise be identical for both).
     let queryEmbedding: number[] | undefined;
     try {
       queryEmbedding = await getEmbedding(this.apiKey, identification.itemName);
-      console.log(`[${invocationId}] Controller: Embedding pre-computed for "${identification.itemName}"`);
+      console.log(
+        `[${invocationId}] Controller: Embedding pre-computed for "${identification.itemName}"`,
+      );
     } catch (embErr) {
-      console.warn(`[${invocationId}] Controller: Embedding pre-computation failed (non-blocking):`, embErr);
+      console.warn(
+        `[${invocationId}] Controller: Embedding pre-computation failed (non-blocking):`,
+        embErr,
+      );
     }
 
     // Update context with identification and shared embedding for sub-agents
     const enrichedContext = { ...context, identification, queryEmbedding };
 
     // --- STEP 2: Parallel Burst (Visual + Market) ---
-    console.log(`[${invocationId}] Controller: Starting Stage 2 (Parallel Burst)`);
+    console.log(
+      `[${invocationId}] Controller: Starting Stage 2 (Parallel Burst)`,
+    );
 
     // We launch these concurrently to minimize latency
     const [visualFindings, marketReport] = await Promise.allSettled([
@@ -82,7 +93,8 @@ export class ListingAgentController {
     if (correction && boost >= 70) {
       const corrLower = correction.toLowerCase();
       if (
-        /coins?|bullion|numismatic|currency|paper money/.test(corrLower) && identification.domain !== "coins_bullion"
+        /coins?|bullion|numismatic|currency|paper money/.test(corrLower) &&
+        identification.domain !== "coins_bullion"
       ) {
         console.log(
           `[${invocationId}] Controller: identificationCorrection → upgrading domain to coins_bullion (boost=${boost})`,
@@ -90,10 +102,14 @@ export class ListingAgentController {
         identification.domain = "coins_bullion";
       }
       // Attempt to extract a more precise item name from the correction text
-      const nameMatch = correction.match(/(?:is|appears to be|actually a?n?)\s+([^.,"]{5,60})/i);
+      const nameMatch = correction.match(
+        /(?:is|appears to be|actually a?n?)\s+([^.,"]{5,60})/i,
+      );
       if (nameMatch?.[1]) {
         const correctedName = nameMatch[1].trim();
-        if (correctedName.toLowerCase() !== identification.itemName.toLowerCase()) {
+        if (
+          correctedName.toLowerCase() !== identification.itemName.toLowerCase()
+        ) {
           console.log(
             `[${invocationId}] Controller: identificationCorrection → itemName "${identification.itemName}" → "${correctedName}"`,
           );
@@ -109,7 +125,9 @@ export class ListingAgentController {
     };
   }
 
-  private async runVisualAgent(context: AgentContext): Promise<VisualInspectionResult> {
+  private async runVisualAgent(
+    context: AgentContext,
+  ): Promise<VisualInspectionResult> {
     const domainDef = DOMAIN_REGISTRY[context.identification!.domain];
     return await runAgenticVisualAgent(
       this.apiKey,
@@ -119,13 +137,10 @@ export class ListingAgentController {
     );
   }
 
-  private async runMarketAgent(context: AgentContext): Promise<MarketDataReport> {
+  private async runMarketAgent(
+    context: AgentContext,
+  ): Promise<MarketDataReport> {
     const domainDef = DOMAIN_REGISTRY[context.identification!.domain];
-    return await runMarketAgent(
-      this.apiKey,
-      domainDef,
-      context,
-      this.supabase,
-    );
+    return await runMarketAgent(this.apiKey, domainDef, context, this.supabase);
   }
 }

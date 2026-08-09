@@ -29,8 +29,11 @@ serve(async (req) => {
 
     // Calculate start of current month
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-      .toISOString();
+    const startOfMonth = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      1,
+    ).toISOString();
 
     // Query gemini_usage for this month
     const { data: usageData, error: usageErr } = await svc
@@ -115,14 +118,18 @@ serve(async (req) => {
               <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <h2 style="color: #dc2626; margin-bottom: 16px;">⚠️ Monthly AI Cost Alert</h2>
                 <p style="color: #374151; font-size: 16px;">Your Gemini AI costs have exceeded the <strong>$${
-              COST_THRESHOLD.toFixed(2)
+              COST_THRESHOLD.toFixed(
+                2,
+              )
             }</strong> monthly threshold.</p>
                 <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 20px; margin: 20px 0;">
                   <table style="width: 100%; border-collapse: collapse;">
                     <tr>
                       <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Current Month Cost</td>
                       <td style="padding: 8px 0; text-align: right; font-weight: bold; font-size: 18px; color: #dc2626;">$${
-              totalCost.toFixed(2)
+              totalCost.toFixed(
+                2,
+              )
             }</td>
                     </tr>
                     <tr>
@@ -182,12 +189,9 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("[COST-ALERT-CRON] Error:", error);
-    return new Response(
-      JSON.stringify({ error: (error as Error).message }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 500,
-      },
-    );
+    return new Response(JSON.stringify({ error: (error as Error).message }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+    });
   }
 });

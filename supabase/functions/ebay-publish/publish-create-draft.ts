@@ -43,9 +43,14 @@ export interface CreateDraftContext {
  * location/policies, applies category-aware condition/aspect normalization,
  * and publishes the offer live.
  */
-export async function handleCreateDraft(
-  { req, payload, apiBase, ebayEnv, clientId, clientSecret }: CreateDraftContext,
-): Promise<Response> {
+export async function handleCreateDraft({
+  req,
+  payload,
+  apiBase,
+  ebayEnv,
+  clientId,
+  clientSecret,
+}: CreateDraftContext): Promise<Response> {
   const {
     userId,
     userToken,
@@ -83,16 +88,19 @@ export async function handleCreateDraft(
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (supabaseUrl && supabaseServiceKey) {
-      await assertCallerOwnsUser(req, String(userId), supabaseUrl, supabaseServiceKey);
+      await assertCallerOwnsUser(
+        req,
+        String(userId),
+        supabaseUrl,
+        supabaseServiceKey,
+      );
     }
   }
 
   console.log(
     `create_draft: starting publish - title="${title}", format=${listingFormat}, env=${ebayEnv}`,
   );
-  console.log(
-    `create_draft: received condition from payload: ${condition}`,
-  );
+  console.log(`create_draft: received condition from payload: ${condition}`);
   console.log(
     `create_draft: postalCode from payload:`,
     postalCode,
@@ -107,7 +115,9 @@ export async function handleCreateDraft(
   );
   console.log(
     `create_draft: received ebayCategoryId=${ebayCategoryId}, condition=${condition}, itemSpecifics=${
-      JSON.stringify(itemSpecifics || {})
+      JSON.stringify(
+        itemSpecifics || {},
+      )
     }`,
   );
   console.log(
@@ -146,25 +156,28 @@ export async function handleCreateDraft(
     const _rerouteIS = itemSpecifics && typeof itemSpecifics === "object"
       ? (itemSpecifics as Record<string, unknown>)
       : {};
-    const _rerouteCcd = _rerouteIS._coinConditionDetail as
-      | { type?: string }
-      | null
-      | undefined;
+    const _rerouteCcd = _rerouteIS._coinConditionDetail as { type?: string } | null | undefined;
     const _rerouteCert = typeof _rerouteIS.Certification === "string"
       ? (_rerouteIS.Certification as string)
       : undefined;
     const _rerouteGraded = _rerouteCcd?.type === "graded" ||
-      (String(condition ?? "").toUpperCase() === "LIKE_NEW") ||
-      (!!_rerouteCert && _rerouteCert.trim().toLowerCase() !== "uncertified" &&
+      String(condition ?? "").toUpperCase() === "LIKE_NEW" ||
+      (!!_rerouteCert &&
+        _rerouteCert.trim().toLowerCase() !== "uncertified" &&
         _rerouteCert.trim() !== "");
 
     // Parent world-coin categories that reject the Graded (2750) condition.
     const GRADED_UNFRIENDLY_WORLD_PARENTS = new Set(["45243"]);
 
-    if (_rerouteGraded && GRADED_UNFRIENDLY_WORLD_PARENTS.has(finalCategoryId)) {
-      const country =
-        (typeof _rerouteIS["Country of Origin"] === "string" ? (_rerouteIS["Country of Origin"] as string) : "")
-          .trim().toLowerCase();
+    if (
+      _rerouteGraded &&
+      GRADED_UNFRIENDLY_WORLD_PARENTS.has(finalCategoryId)
+    ) {
+      const country = (
+        typeof _rerouteIS["Country of Origin"] === "string" ? (_rerouteIS["Country of Origin"] as string) : ""
+      )
+        .trim()
+        .toLowerCase();
 
       // South Pacific leaf (3392): Cook Islands, Fiji, Niue, Palau, Tuvalu,
       // Tokelau, Samoa, Solomon Islands, Kiribati, Nauru, Vanuatu, Tonga.
@@ -207,9 +220,7 @@ export async function handleCreateDraft(
   //   - Fixed values for known categories (Composition, Fineness for silver dollars, etc.)
   //   - Drops placeholder values (none / unknown / n/a / other / etc.)
 
-  const { categoryForAspects, dynamicRuleApplied } = await resolveAspectCategory(
-    String(finalCategoryId ?? ""),
-  );
+  const { categoryForAspects, dynamicRuleApplied } = await resolveAspectCategory(String(finalCategoryId ?? ""));
 
   let aspects: Record<string, string[]>;
   try {
@@ -238,10 +249,7 @@ export async function handleCreateDraft(
     const _bridgeIS = itemSpecifics && typeof itemSpecifics === "object"
       ? (itemSpecifics as Record<string, unknown>)
       : {};
-    const _ccd = _bridgeIS._coinConditionDetail as
-      | { type?: string; graded?: { company?: string } }
-      | null
-      | undefined;
+    const _ccd = _bridgeIS._coinConditionDetail as { type?: string; graded?: { company?: string } } | null | undefined;
     if (_ccd) {
       if (_ccd.type === "graded" && _ccd.graded?.company) {
         aspects["Certification"] = [_ccd.graded.company];
@@ -269,7 +277,7 @@ export async function handleCreateDraft(
   // Extract the item Type (e.g., "Coin", "Round", "Bar") from itemSpecifics
   // This is used to disambiguate coins from bullion when validating conditions
   const itemType = itemSpecifics && typeof itemSpecifics === "object"
-    ? (itemSpecifics as Record<string, unknown>).Type as string | undefined
+    ? ((itemSpecifics as Record<string, unknown>).Type as string | undefined)
     : undefined;
 
   const packageWeightAndSize = buildPackageWeightAndSize(
@@ -317,22 +325,34 @@ export async function handleCreateDraft(
   let conditionId = CONDITION_ID_MAP[conditionEnum];
   let effectiveConditionEnum = conditionEnum;
   let conditionDesc = CONDITION_DESCRIPTIONS[conditionEnum] ??
-    conditionEnum.replace(/_/g, " ").toLowerCase()
+    conditionEnum
+      .replace(/_/g, " ")
+      .toLowerCase()
       .replace(/\b\w/g, (c: string) => c.toUpperCase());
 
   if (
     (!conditionId ||
-      ["DIGITAL_GOOD", "CERTIFIED_PRE_OWNED", "REMANUFACTURED", "RETREAD", "DAMAGED"].includes(conditionEnum)) &&
+      [
+        "DIGITAL_GOOD",
+        "CERTIFIED_PRE_OWNED",
+        "REMANUFACTURED",
+        "RETREAD",
+        "DAMAGED",
+      ].includes(conditionEnum)) &&
     finalCategoryId
   ) {
     const dynamicConditions = await fetchDynamicCategoryConditions(finalCategoryId);
-    const matchedCondition = dynamicConditions.find((candidate) =>
-      normalizeConditionDescriptorToEnum(candidate.conditionDescription) === conditionEnum
+    const matchedCondition = dynamicConditions.find(
+      (candidate) =>
+        normalizeConditionDescriptorToEnum(candidate.conditionDescription) ===
+          conditionEnum,
     );
     if (matchedCondition) {
       conditionId = matchedCondition.conditionId;
       conditionDesc = matchedCondition.conditionDescription;
-      conditionEnum = normalizeConditionDescriptorToEnum(matchedCondition.conditionDescription) || conditionEnum;
+      conditionEnum = normalizeConditionDescriptorToEnum(
+        matchedCondition.conditionDescription,
+      ) || conditionEnum;
     }
   }
 
@@ -429,8 +449,12 @@ export async function handleCreateDraft(
 
   // Add video if it has been uploaded and is LIVE on eBay
   if (payloadEbayVideoId) {
-    (inventoryBody.product as Record<string, unknown>).videoIds = [String(payloadEbayVideoId)];
-    console.log(`create_draft: attaching ebayVideoId=${payloadEbayVideoId} to product.videoIds`);
+    (inventoryBody.product as Record<string, unknown>).videoIds = [
+      String(payloadEbayVideoId),
+    ];
+    console.log(
+      `create_draft: attaching ebayVideoId=${payloadEbayVideoId} to product.videoIds`,
+    );
   }
 
   // ── eBay June 2026 Coin Condition Descriptors (MANDATORY) ──────────────────
@@ -503,7 +527,9 @@ export async function handleCreateDraft(
         );
         console.log(
           `create_draft: synthesized coinConditionDetail from condition/itemSpecifics: ${
-            JSON.stringify(coinConditionDetailRaw)
+            JSON.stringify(
+              coinConditionDetailRaw,
+            )
           }`,
         );
       }
@@ -650,7 +676,9 @@ export async function handleCreateDraft(
     const missing = [
       !fulfillmentPolicyId && "Fulfillment (Shipping)",
       !returnPolicyId && "Return",
-    ].filter(Boolean).join(", ");
+    ]
+      .filter(Boolean)
+      .join(", ");
 
     console.error(
       `create_draft: missing required policies for sku ${sku}: ${missing}. draftFulfillment=${draftFulfillmentPolicyId}, draftReturn=${draftReturnPolicyId}`,
@@ -680,7 +708,11 @@ export async function handleCreateDraft(
   // the incoming package dimensions exceed that service's limits, return a clear error
   // to the client so the user can choose a different policy or adjust dimensions.
   try {
-    if (fulfillmentPolicyId && payloadPackageWeightAndSize && typeof fulfillmentPolicyId === "string") {
+    if (
+      fulfillmentPolicyId &&
+      payloadPackageWeightAndSize &&
+      typeof fulfillmentPolicyId === "string"
+    ) {
       const policyResp = await fetchWithTimeout(
         `${apiBase}/sell/account/v1/fulfillment_policy/${encodeURIComponent(String(fulfillmentPolicyId))}`,
         { headers: authHeaders, timeout: 8000 },
@@ -694,15 +726,22 @@ export async function handleCreateDraft(
           const shipOptions = policyJson?.shippingOptions || policyJson?.shipping || [];
           if (Array.isArray(shipOptions)) {
             shipOptions.forEach((opt: any) => {
-              if (opt?.shippingServices && Array.isArray(opt.shippingServices)) {
+              if (
+                opt?.shippingServices &&
+                Array.isArray(opt.shippingServices)
+              ) {
                 opt.shippingServices.forEach((s: any) => {
-                  if (s?.shippingServiceCode) policyServices.push(String(s.shippingServiceCode));
+                  if (s?.shippingServiceCode) {
+                    policyServices.push(String(s.shippingServiceCode));
+                  }
                   if (s?.name) policyServices.push(String(s.name));
                 });
               }
               if (opt?.services && Array.isArray(opt.services)) {
                 opt.services.forEach((s: any) => {
-                  if (s?.serviceCode) policyServices.push(String(s.serviceCode));
+                  if (s?.serviceCode) {
+                    policyServices.push(String(s.serviceCode));
+                  }
                   if (s?.name) policyServices.push(String(s.name));
                 });
               }
@@ -714,9 +753,12 @@ export async function handleCreateDraft(
 
         // Normalize and search for indicators of the Small Flat Rate Box
         const normalized = policyServices.map((s) => (s || "").toString().toLowerCase());
-        const indicatesSmallFlatRate = normalized.some((s) =>
-          s.includes("small flat rate") || s.includes("priority mail small") ||
-          s.includes("uspsprioritymailsmallflatratebox") || s.includes("smallflatrate")
+        const indicatesSmallFlatRate = normalized.some(
+          (s) =>
+            s.includes("small flat rate") ||
+            s.includes("priority mail small") ||
+            s.includes("uspsprioritymailsmallflatratebox") ||
+            s.includes("smallflatrate"),
         );
 
         if (indicatesSmallFlatRate) {
@@ -728,7 +770,8 @@ export async function handleCreateDraft(
             // eBay error showed 8.6875 in — use that as a conservative per-side max for small flat rate
             const SMALL_FLAT_RATE_SIDE_MAX = 8.6875;
             if (
-              length > SMALL_FLAT_RATE_SIDE_MAX || width > SMALL_FLAT_RATE_SIDE_MAX ||
+              length > SMALL_FLAT_RATE_SIDE_MAX ||
+              width > SMALL_FLAT_RATE_SIDE_MAX ||
               height > SMALL_FLAT_RATE_SIDE_MAX
             ) {
               console.log(
@@ -742,7 +785,12 @@ export async function handleCreateDraft(
                   fulfillmentPolicyId: fulfillmentPolicyId,
                   offendingServiceHint: "USPS Priority Mail Small Flat Rate Box",
                 }),
-                { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+                {
+                  headers: {
+                    ...corsHeaders,
+                    "Content-Type": "application/json",
+                  },
+                },
               );
             }
           } else {
@@ -792,7 +840,7 @@ export async function handleCreateDraft(
     listingPrice: (() => {
       const rawQty = Number(payloadQuantity) || 1;
       const rawPrice = Number(listingPrice ?? 0);
-      return (pricingMode === "total" && rawQty > 1) ? rawPrice / rawQty : rawPrice;
+      return pricingMode === "total" && rawQty > 1 ? rawPrice / rawQty : rawPrice;
     })(),
     quantity: Number(payloadQuantity) || 1,
     condition: conditionEnum,
@@ -804,8 +852,7 @@ export async function handleCreateDraft(
     returnPolicyId,
     bestOfferEnabled: bestOfferEnabled === true,
     bestOfferAutoAcceptPrice: Number(bestOfferAutoAcceptPrice) || undefined,
-    bestOfferAutoDeclinePrice: Number(bestOfferAutoDeclinePrice) ||
-      undefined,
+    bestOfferAutoDeclinePrice: Number(bestOfferAutoDeclinePrice) || undefined,
   });
 
   console.log(
@@ -816,10 +863,7 @@ export async function handleCreateDraft(
       (offerBody as Record<string, unknown>).categoryId || "MISSING"
     }`,
   );
-  console.log(
-    `create_draft: offer body:`,
-    JSON.stringify(offerBody, null, 2),
-  );
+  console.log(`create_draft: offer body:`, JSON.stringify(offerBody, null, 2));
 
   const offerResp = await fetchWithTimeout(
     `${apiBase}/sell/inventory/v1/offer`,
@@ -836,11 +880,7 @@ export async function handleCreateDraft(
 
   if (!offerResp.ok) {
     const errText = await offerResp.text();
-    console.error(
-      "create_draft: eBay offer error:",
-      offerResp.status,
-      errText,
-    );
+    console.error("create_draft: eBay offer error:", offerResp.status, errText);
     console.error(
       "create_draft: offer request body:",
       JSON.stringify(offerBody, null, 2),
@@ -895,7 +935,7 @@ export async function handleCreateDraft(
       );
     }
   } else {
-    const parsedOfferData = await offerResp.json() as Record<string, unknown>;
+    const parsedOfferData = (await offerResp.json()) as Record<string, unknown>;
     offerData = parsedOfferData;
     offerId = parsedOfferData.offerId as string | undefined;
     console.log(
@@ -929,11 +969,13 @@ export async function handleCreateDraft(
     try {
       const parsed = JSON.parse(publishErrText);
       const errs: Array<{ errorId?: number; message?: string }> = parsed?.errors ?? [];
-      isConditionIdError = errs.some((e) =>
-        e.errorId === 25021 || e.errorId === 25060 ||
-        /CONDITION_ID|condition id is invalid|Condition descriptor \d+ is not valid/i.test(
-          e.message ?? "",
-        )
+      isConditionIdError = errs.some(
+        (e) =>
+          e.errorId === 25021 ||
+          e.errorId === 25060 ||
+          /CONDITION_ID|condition id is invalid|Condition descriptor \d+ is not valid/i.test(
+            e.message ?? "",
+          ),
       );
     } catch {
       isConditionIdError = /CONDITION_ID|condition id is invalid|Condition descriptor \d+ is not valid/i.test(
@@ -955,7 +997,9 @@ export async function handleCreateDraft(
         ? ["NEW", "USED_GOOD"]
         : ["USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE"];
 
-      const retryConditions = candidates.filter((c) => c !== effectiveConditionEnum);
+      const retryConditions = candidates.filter(
+        (c) => c !== effectiveConditionEnum,
+      );
 
       if (retryConditions.length === 0) {
         console.error(
@@ -964,14 +1008,18 @@ export async function handleCreateDraft(
       } else {
         console.warn(
           `create_draft: publish failed with invalid condition for category ${finalCategoryId}; retrying with fallbacks: ${
-            retryConditions.join(", ")
+            retryConditions.join(
+              ", ",
+            )
           }`,
         );
       }
 
       for (const retryCondition of retryConditions) {
         const retryDescription = CONDITION_DESCRIPTIONS[retryCondition] ??
-          retryCondition.replace(/_/g, " ").toLowerCase()
+          retryCondition
+            .replace(/_/g, " ")
+            .toLowerCase()
             .replace(/\b\w/g, (ch: string) => ch.toUpperCase());
 
         const retryInventoryBody: Record<string, unknown> = {
@@ -994,7 +1042,10 @@ export async function handleCreateDraft(
           const invRetryErr = await invRetryResp.text();
           console.warn(
             `create_draft: retry inventory update failed for condition=${retryCondition}: ${invRetryResp.status} ${
-              invRetryErr.slice(0, 200)
+              invRetryErr.slice(
+                0,
+                200,
+              )
             }`,
           );
           continue;
@@ -1020,7 +1071,10 @@ export async function handleCreateDraft(
           const offerRetryErr = await offerRetryResp.text();
           console.warn(
             `create_draft: retry offer update failed for condition=${retryCondition}: ${offerRetryResp.status} ${
-              offerRetryErr.slice(0, 200)
+              offerRetryErr.slice(
+                0,
+                200,
+              )
             }`,
           );
           continue;
@@ -1048,7 +1102,10 @@ export async function handleCreateDraft(
         const publishRetryErr = await publishRetryResp.text();
         console.warn(
           `create_draft: publish retry failed for condition=${retryCondition}: ${publishRetryResp.status} ${
-            publishRetryErr.slice(0, 200)
+            publishRetryErr.slice(
+              0,
+              200,
+            )
           }`,
         );
         publishResp = publishRetryResp;
@@ -1118,11 +1175,17 @@ export async function handleCreateDraft(
 
       // Check for seller limit flavor of 25002 first
       for (const e of errors) {
-        if (e.errorId === 25002 && SELLER_LIMIT_PATTERNS.some((p) => p.test(e.message ?? ""))) {
+        if (
+          e.errorId === 25002 &&
+          SELLER_LIMIT_PATTERNS.some((p) => p.test(e.message ?? ""))
+        ) {
           isSellerLimitError = true;
           console.warn(
             `create_draft: errorId 25002 is a SELLER LIMIT error (not condition/category) — skipping demotion. Message: ${
-              e.message?.slice(0, 120)
+              e.message?.slice(
+                0,
+                120,
+              )
             }`,
           );
           // Undo any demotion that may have already fired for this category
@@ -1134,7 +1197,7 @@ export async function handleCreateDraft(
               await fetch(`${_repairUrl}/functions/v1/category-lookup`, {
                 method: "POST",
                 headers: {
-                  "Authorization": `Bearer ${_repairKey}`,
+                  Authorization: `Bearer ${_repairKey}`,
                   "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
@@ -1147,7 +1210,10 @@ export async function handleCreateDraft(
               );
             }
           } catch (repairErr) {
-            console.warn("create_draft: category repair failed (non-fatal):", repairErr);
+            console.warn(
+              "create_draft: category repair failed (non-fatal):",
+              repairErr,
+            );
           }
           break;
         }
@@ -1161,7 +1227,9 @@ export async function handleCreateDraft(
         if (has25002 && !isSellerLimitError) {
           // Check all 25002 errors in this response — if any is NOT a seller limit, it's a condition error
           const conditionError = errors.some(
-            (e) => e.errorId === 25002 && !SELLER_LIMIT_PATTERNS.some((p) => p.test(e.message ?? "")),
+            (e) =>
+              e.errorId === 25002 &&
+              !SELLER_LIMIT_PATTERNS.some((p) => p.test(e.message ?? "")),
           );
           if (conditionError) shouldDemote = true;
         }
@@ -1184,7 +1252,7 @@ export async function handleCreateDraft(
           await fetch(`${_supabaseUrl}/functions/v1/category-lookup`, {
             method: "POST",
             headers: {
-              "Authorization": `Bearer ${_serviceKey}`,
+              Authorization: `Bearer ${_serviceKey}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
@@ -1216,8 +1284,9 @@ export async function handleCreateDraft(
       const rawMsg = String(firstError?.message ?? "");
       const policyBlockText = `${rawMsg} ${errText}`;
       const isPolicyBlocked =
-        /norfed liberty dollars|counterfeit coins policy|not permitted on ebay|do not attempt to relist/i
-          .test(policyBlockText);
+        /norfed liberty dollars|counterfeit coins policy|not permitted on ebay|do not attempt to relist/i.test(
+          policyBlockText,
+        );
 
       if (isPolicyBlocked) {
         userFriendlyError =
@@ -1227,7 +1296,9 @@ export async function handleCreateDraft(
           "eBay is experiencing a temporary issue. Please wait a minute and try publishing again. Your listing details are saved.";
       } else if (isSellerLimitError) {
         // Extract the human-readable portion of the seller limit message
-        const limitMatch = rawMsg.match(/You can list up to ([$\d,.]+) more[^.]*\./i);
+        const limitMatch = rawMsg.match(
+          /You can list up to ([$\d,.]+) more[^.]*\./i,
+        );
         const remaining = limitMatch ? limitMatch[1] : null;
         userFriendlyError = remaining
           ? `Your eBay account has reached its monthly selling limit. You have ${remaining} of listing capacity remaining this month. Visit eBay's Selling Limits page to request an increase.`
@@ -1235,11 +1306,17 @@ export async function handleCreateDraft(
       } else if (errorId === 25002 || errorId === 25060) {
         userFriendlyError =
           "The selected condition is not valid for this category. Please adjust the condition and try again.";
-      } else if (errorId === 21919288 || errorId === 25004 || errorId === 25005 || errorId === 25017) {
+      } else if (
+        errorId === 21919288 ||
+        errorId === 25004 ||
+        errorId === 25005 ||
+        errorId === 25017
+      ) {
         userFriendlyError =
           "The selected category is not valid for this item. Please choose a different category and try again.";
       } else {
-        userFriendlyError = firstError?.message || `Publish failed: ${publishResp.status}. Please try again.`;
+        userFriendlyError = firstError?.message ||
+          `Publish failed: ${publishResp.status}. Please try again.`;
       }
     } catch (_) {
       userFriendlyError = publishResp.status === 500
@@ -1264,15 +1341,16 @@ export async function handleCreateDraft(
   }
 
   const publishData = await publishResp.json();
-  const listingId = publishData.listingId ||
-    (offerData as any)?.listing?.listingId || null;
+  const listingId = publishData.listingId || (offerData as any)?.listing?.listingId || null;
 
   // Build affiliate URL — non-fatal, wrapped in try/catch
   const affiliateUrl = listingId ? buildListingUrl(listingId) : null;
 
   console.log(
     `create_draft: Successfully published: listingId=${listingId}, offerId=${offerId}, sku=${sku}, publishData keys: ${
-      Object.keys(publishData).join(", ")
+      Object.keys(
+        publishData,
+      ).join(", ")
     }`,
   );
 
@@ -1284,7 +1362,7 @@ export async function handleCreateDraft(
       await fetch(`${_supabaseUrl}/functions/v1/category-lookup`, {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${_serviceKey}`,
+          Authorization: `Bearer ${_serviceKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -1299,10 +1377,7 @@ export async function handleCreateDraft(
       );
     }
   } catch (promoteErr) {
-    console.warn(
-      "create_draft: promote call failed (non-fatal):",
-      promoteErr,
-    );
+    console.warn("create_draft: promote call failed (non-fatal):", promoteErr);
   }
 
   return new Response(

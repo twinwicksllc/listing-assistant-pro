@@ -278,7 +278,9 @@ function buildPriceSuggestion(
     reasoning: `Your price ($${currentPrice.toFixed(2)}) is ${Math.abs(pctDiff).toFixed(0)}% below the ${
       avgSoldPrice ? "avg sold" : "avg active"
     } price ($${target.toFixed(2)}). You may be leaving money on the table. Consider raising to $${
-      suggested.toFixed(2)
+      suggested.toFixed(
+        2,
+      )
     }.${market.demandSignal === "strong" ? " Strong demand supports a higher price." : ""}`,
     direction: "raise",
     confidence: absPctDiff > 20 ? "high" : "medium",
@@ -316,8 +318,9 @@ function buildTitleSuggestion(
   }
 
   // Check for excessive punctuation/symbols
-  const symbolCount = (title.match(new RegExp("[!@#$%^&*()_+=\\[\\]{};':\"\\\\|,.<>?]", "g")) || [])
-    .length;
+  const symbolCount = (
+    title.match(new RegExp("[!@#$%^&*()_+=\\[\\]{};':\"\\\\|,.<>?]", "g")) || []
+  ).length;
   if (symbolCount > 3) {
     issues.push(
       "Too many special characters — keep punctuation minimal for better readability",
@@ -339,7 +342,9 @@ function buildTitleSuggestion(
   if (foundFillers.length > 0) {
     issues.push(
       `Vague filler words detected ("${
-        foundFillers.join('", "')
+        foundFillers.join(
+          '", "',
+        )
       }"): replace with specific attributes (year, grade, mint mark, color, size, etc.)`,
     );
   }
@@ -407,7 +412,9 @@ async function buildDescriptionSuggestion(
   const issues: string[] = [];
 
   if (currentDesc.includes("<div") && currentDesc.includes("style=")) {
-    issues.push("Description contains heavy HTML styling — many mobile buyers prefer clean, fast-loading text");
+    issues.push(
+      "Description contains heavy HTML styling — many mobile buyers prefer clean, fast-loading text",
+    );
   }
 
   // Check for "wall of text" (long paragraphs without line breaks or bullets)
@@ -470,8 +477,7 @@ Respond ONLY with the optimized description text.`;
 
     if (resp.ok) {
       const data = await resp.json();
-      suggestedDescription = data.candidates?.[0]?.content?.parts?.[0]?.text ||
-        null;
+      suggestedDescription = data.candidates?.[0]?.content?.parts?.[0]?.text || null;
       if (suggestedDescription) {
         reasoning =
           "AI has restructured your description with better visual hierarchy, bullet points, and clear sections.";
@@ -610,7 +616,10 @@ serve(async (req) => {
 
     // Build suggestions
     const priceSuggestion = buildPriceSuggestion(listing, effectiveMarket);
-    const titleSuggestion = buildTitleSuggestion(listing.title, effectiveMarket);
+    const titleSuggestion = buildTitleSuggestion(
+      listing.title,
+      effectiveMarket,
+    );
     const descriptionSuggestion = await buildDescriptionSuggestion(listing);
     const opportunityScore = calcOpportunityScore(
       listing,
@@ -626,7 +635,9 @@ serve(async (req) => {
 
     console.log(
       `[optimize-listing] Done: score=${opportunityScore}, flags=[${
-        flags.join(",")
+        flags.join(
+          ",",
+        )
       }], priceDir=${priceSuggestion.direction}`,
     );
 
@@ -646,12 +657,9 @@ serve(async (req) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[optimize-listing] Error:", msg);
-    return new Response(
-      JSON.stringify({ error: msg }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });

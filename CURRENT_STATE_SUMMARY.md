@@ -1,7 +1,9 @@
 # Current State Summary - Listing Assistant Pro
+
 **Last Updated:** March 21, 2026 (Pulled from main)
 
 ## Recent Commits (Last 20)
+
 1. `90a718e` - fix: initialize competitorData early to prevent hoisting error
 2. `d628093` - refactor: move competitor search to post-AI analysis
 3. `eed7b1f` - fix: use voiceNote as fallback for competitor search query
@@ -13,20 +15,22 @@
 9. And more...
 
 ## Pricing Tiers (4-Tier System)
-| Tier | Price | Listings/Mo | Features |
-|------|-------|-------------|----------|
-| Free | $0 | 6 | Basic item recognition, Draft saving |
-| Starter | $19 | 25 | Basic AI enhancement, eBay publishing |
-| Pro | $49 | 200 | Voice notes, Melt protection, Analytics, Sold comps |
-| Shop | $99 | ~1,200 | Full features + Org/Team features |
+
+| Tier    | Price | Listings/Mo | Features                                            |
+| ------- | ----- | ----------- | --------------------------------------------------- |
+| Free    | $0    | 6           | Basic item recognition, Draft saving                |
+| Starter | $19   | 25          | Basic AI enhancement, eBay publishing               |
+| Pro     | $49   | 200         | Voice notes, Melt protection, Analytics, Sold comps |
+| Shop    | $99   | ~1,200      | Full features + Org/Team features                   |
 
 ## Stripe Integration
+
 - **Edge Functions:**
   - `create-checkout` - Creates Stripe checkout sessions
   - `customer-portal` - Stripe billing portal access
   - `stripe-webhook` - Handles Stripe events (checkout, subscription changes)
   - `check-subscription` - Returns user subscription status (cached in DB)
-  
+
 - **Database Tables:**
   - `subscriptions` - Stores Stripe subscription data
   - `profiles.stripe_customer_id` - Cached Stripe customer ID
@@ -37,6 +41,7 @@
   - Shop: `price_SHOP_PLACEHOLDER` / `prod_SHOP_PLACEHOLDER` (TODO: create in Stripe)
 
 ## Key Edge Functions
+
 - `analyze-item` - AI-powered item analysis with Gemini
 - `ebay-listings` - Fetches eBay listings with multi-window analytics (7d/30d/90d)
 - `ebay-pricing` - Fetches sold comps for pricing
@@ -47,6 +52,7 @@
 - `transcribe-voice` - Voice note transcription
 
 ## Database Schema Highlights
+
 - `profiles` - User profiles with eBay tokens, stripe_customer_id, ebay_username
 - `drafts` - Listing drafts
 - `usage_tracking` - Usage analytics with org_id for per-org quotas
@@ -56,6 +62,7 @@
 - `competitor_prices` - Competitor price snapshots
 
 ## Free Tier Implementation
+
 - Per-org rolling-window quota system
 - `free_tier_reset_day` anchors the credit reset to signup day
 - `get_free_tier_window_start()` PL/pgSQL function for window calculation
@@ -63,6 +70,7 @@
 - 6 credits per month for free tier
 
 ## Dashboard Features
+
 - Multi-window analytics (7d/30d/90d views)
 - Trend indicators (Hot 🔥 / Stable / Stale 📉)
 - Sort by views, watchers, impressions, transactions, trend
@@ -70,6 +78,7 @@
 - Competitor price cards
 
 ## Pending Tasks
+
 1. Create Shop tier Stripe products/prices (placeholder IDs)
 2. Confirm/replace Starter and Pro Stripe IDs
 3. Update `create-checkout` VALID_PRICES for Shop tier

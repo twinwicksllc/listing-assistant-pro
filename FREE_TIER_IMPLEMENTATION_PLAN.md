@@ -22,20 +22,22 @@
 ## 1. Current State Audit
 
 ### What already exists
-| Area | Current behaviour |
-|---|---|
-| Free (Starter) monthly analysis limit | **5/month**, reset on calendar-month boundary (1st of month) |
-| Free tier feature scope | Full AI response — title, description, pricing, melt value, grades, competitor data |
-| eBay account gate for free users | None — analysis runs with or without a connected eBay account |
-| One-account enforcement | None — a user can connect and reconnect to any eBay account |
-| eBay username stored in profiles | No — only raw tokens (`ebay_access_token`, `ebay_refresh_token`, `ebay_token_expires_at`) |
-| Credit counter location | `usage_tracking` table, `action_type = 'ai_analysis'` rows; counted per calendar month |
-| Reset anchor | Calendar month (1st → last day); Starter = 5, Pro = 50, Unlimited = ∞ |
-| Front-end credit display | BillingPage only — raw count vs. plan limit, no remaining indicator on Analyze/Dashboard |
-| Paid-tier gating | `AuthContext` + `analyze-item` edge function both enforce limits |
-| Admin bypass | `twinwicksllc@gmail.com` hard-coded in `AuthContext` and `analyze-item` |
+
+| Area                                  | Current behaviour                                                                         |
+| ------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Free (Starter) monthly analysis limit | **5/month**, reset on calendar-month boundary (1st of month)                              |
+| Free tier feature scope               | Full AI response — title, description, pricing, melt value, grades, competitor data       |
+| eBay account gate for free users      | None — analysis runs with or without a connected eBay account                             |
+| One-account enforcement               | None — a user can connect and reconnect to any eBay account                               |
+| eBay username stored in profiles      | No — only raw tokens (`ebay_access_token`, `ebay_refresh_token`, `ebay_token_expires_at`) |
+| Credit counter location               | `usage_tracking` table, `action_type = 'ai_analysis'` rows; counted per calendar month    |
+| Reset anchor                          | Calendar month (1st → last day); Starter = 5, Pro = 50, Unlimited = ∞                     |
+| Front-end credit display              | BillingPage only — raw count vs. plan limit, no remaining indicator on Analyze/Dashboard  |
+| Paid-tier gating                      | `AuthContext` + `analyze-item` edge function both enforce limits                          |
+| Admin bypass                          | `twinwicksllc@gmail.com` hard-coded in `AuthContext` and `analyze-item`                   |
 
 ### What must change
+
 - Starter limit: 5 → **6**
 - Reset boundary: calendar-month → **rolling window anchored to reset_day**
 - Free tier AI output: full response → **title + description + condition + eBay category + item specifics** (all fields needed to publish); pricing, melt value, competitor data, grading rationale locked to paid (OQ-1 RESOLVED: BROAD)
@@ -192,6 +194,7 @@ starter: { name: "Starter", price: 0, analysisLimit: 6, publishLimit: 6 },
 Code inspection confirms the current OAuth scopes in `ebay-publish/index.ts` are: `api_scope`, `sell.inventory`, `sell.account`, `sell.fulfillment.readonly`. The `https://api.ebay.com/oauth/api_scope/commerce.identity.readonly` scope is **absent**. Every part of §3.2 (username capture, one-account rule) depends on calling the Identity API with the user token. Without this scope, the Identity API returns 403 for production tokens. Adding this scope retroactively forces all existing connected users to re-authorize.
 
 **Action required before Phase 2:**
+
 1. Add `https://api.ebay.com/oauth/api_scope/commerce.identity.readonly` to the scopes list in `get_auth_url`
 2. **Re-auth strategy: Option B selected (OQ-5 RESOLVED — forced re-auth).** On migration deploy, NULL all `profiles.ebay_access_token`, `profiles.ebay_refresh_token`, and `profiles.ebay_token_expires_at`. Every existing connected user will be prompted to reconnect on their next eBay-dependent action. The deployment migration must include this step (see §7 Phase 6 checklist).
 3. Note: `ebay-user/index.ts` already calls the Identity API today (OQ-15 RESOLVED: confirmed working in production with live tokens — no `commerce.identity.readonly` scope needed to read `ebay-user` today, but it will be needed after the scope change).
@@ -203,6 +206,7 @@ Code inspection confirms the current OAuth scopes in `ebay-publish/index.ts` are
 **Action required:** ~~Audit `AnalyzePage.handleGenerate()` for `recordUsage` calls.~~ **OQ-12 RESOLVED.**
 
 Audit complete. Findings:
+
 - **`src/pages/AnalyzePage.tsx` line 151**: `await recordUsage("ai_analysis")` — **DOUBLE-COUNT. Remove this line.** `analyze-item` already inserts a server-side usage row. This client-side call causes every analysis to count twice.
 - **Line 344**: `await recordUsage("ebay_publish")` — **SAFE. Keep.** Confirmed: `ebay-publish` edge function does NOT insert to `usage_tracking`. This client-side call is the sole tracking point for publish events.
 - **Line 874**: `recordUsage("export")` — **SAFE. Keep.** No server-side counterpart.
@@ -222,28 +226,32 @@ Audit complete. Findings:
 ### 3.1 `analyze-item/index.ts` — Primary changes
 
 #### 3.1.1 eBay account gate (free users only)
+
 ```ts
 // After tier detection, before usage check:
-if (tier === 'starter') {
+if (tier === "starter") {
   // Check eBay connection (per-user — eBay token is stored on profiles, not orgs)
   const { data: profile } = await supabaseAdmin
-    .from('profiles')
-    .select('ebay_access_token')
-    .eq('id', userId)
+    .from("profiles")
+    .select("ebay_access_token")
+    .eq("id", userId)
     .single();
 
   if (!profile?.ebay_access_token) {
-    return new Response(JSON.stringify({
-      error: 'ebay_account_required',
-      message: 'Connect an eBay account to start generating listings.',
-    }), { status: 403 });
+    return new Response(
+      JSON.stringify({
+        error: "ebay_account_required",
+        message: "Connect an eBay account to start generating listings.",
+      }),
+      { status: 403 },
+    );
   }
 
   // Resolve org for per-org quota (OQ-4 RESOLVED: quota is per-org, not per-user)
   const { data: orgMember } = await supabaseAdmin
-    .from('organization_members')
-    .select('org_id, organizations(free_tier_reset_day)')
-    .eq('user_id', userId)
+    .from("organization_members")
+    .select("org_id, organizations(free_tier_reset_day)")
+    .eq("user_id", userId)
     .single();
 
   orgId = orgMember?.org_id ?? null;
@@ -252,14 +260,16 @@ if (tier === 'starter') {
 ```
 
 #### 3.1.2 Rolling-window credit count (replaces calendar-month count)
+
 ```ts
 // Replace existing calendar-month usage query for free users:
 let windowStart: string;
-if (tier === 'starter') {
+if (tier === "starter") {
   const resetDay = orgResetDay; // from org lookup in §3.1.1
   if (resetDay) {
-    const { data: ws } = await supabaseAdmin
-      .rpc('get_free_tier_window_start', { p_reset_day: resetDay });
+    const { data: ws } = await supabaseAdmin.rpc("get_free_tier_window_start", {
+      p_reset_day: resetDay,
+    });
     windowStart = ws;
   } else {
     // Org created before migration (NULL reset_day) — fresh-start window
@@ -267,35 +277,42 @@ if (tier === 'starter') {
   }
 } else {
   // Pro/Unlimited: continue using calendar month
-  windowStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+  windowStart = new Date(
+    new Date().getFullYear(),
+    new Date().getMonth(),
+    1,
+  ).toISOString();
 }
 
 // Per-org count for Starter; per-user count for paid tiers (OQ-4 RESOLVED)
 const usageQuery = supabaseAdmin
-  .from('usage_tracking')
-  .select('id', { count: 'exact', head: true })
-  .eq('action_type', 'ai_analysis')
-  .gte('created_at', windowStart);
+  .from("usage_tracking")
+  .select("id", { count: "exact", head: true })
+  .eq("action_type", "ai_analysis")
+  .gte("created_at", windowStart);
 
-if (tier === 'starter' && orgId) {
-  usageQuery.eq('org_id', orgId);
+if (tier === "starter" && orgId) {
+  usageQuery.eq("org_id", orgId);
 } else {
-  usageQuery.eq('user_id', userId);
+  usageQuery.eq("user_id", userId);
 }
 
 const { count: usageCount } = await usageQuery;
 
 const FREE_LIMIT = 6;
-const limit = tier === 'starter' ? FREE_LIMIT : tier === 'pro' ? 50 : Infinity;
+const limit = tier === "starter" ? FREE_LIMIT : tier === "pro" ? 50 : Infinity;
 
-if (tier !== 'unlimited' && usageCount >= limit) {
-  return new Response(JSON.stringify({
-    error: 'usage_limit_reached',
-    creditsUsed: usageCount,
-    creditsRemaining: 0,
-    creditsResetAt: computeNextResetAt(orgResetDay), // helper
-    tier,
-  }), { status: 429 });
+if (tier !== "unlimited" && usageCount >= limit) {
+  return new Response(
+    JSON.stringify({
+      error: "usage_limit_reached",
+      creditsUsed: usageCount,
+      creditsRemaining: 0,
+      creditsResetAt: computeNextResetAt(orgResetDay), // helper
+      tier,
+    }),
+    { status: 429 },
+  );
 }
 ```
 
@@ -308,6 +325,7 @@ if (tier !== 'unlimited' && usageCount >= limit) {
 > **Remove the previous §3.1.3 code** — the `analyze-item` function must NOT write `free_tier_reset_day` to `profiles` or `organizations`. Only the `handle_new_user` trigger writes it.
 
 #### 3.1.4 Restrict free-tier Gemini response
+
 After receiving the Gemini response and before returning it:
 
 Use an **allowlist** (not a denylist) to select which fields are returned for free users. A denylist requires someone to remember to add every new field added to the Gemini response in the future; an allowlist silently drops new fields until they are explicitly promoted — the safe default.
@@ -316,11 +334,15 @@ Use an **allowlist** (not a denylist) to select which fields are returned for fr
 // Allowlist approach — OQ-1 RESOLVED: BROAD free tier (all fields to publish; lock only paid-analysis fields)
 const FREE_TIER_ALLOWED_FIELDS = new Set([
   // Core listing fields (needed to publish to eBay)
-  'title', 'description', 'condition', 'conditionDescription',
-  'ebayCategoryId', 'suggestedCategories',
-  'itemSpecifics',          // includes Year, Denomination, Mint, Metal, Strike, etc.
-  'suggestedGrade',         // grade suggestion is free; grading RATIONALE is locked (paid)
-  'packageWeightAndSize',
+  "title",
+  "description",
+  "condition",
+  "conditionDescription",
+  "ebayCategoryId",
+  "suggestedCategories",
+  "itemSpecifics", // includes Year, Denomination, Mint, Metal, Strike, etc.
+  "suggestedGrade", // grade suggestion is free; grading RATIONALE is locked (paid)
+  "packageWeightAndSize",
   // Add new fields here intentionally when promoting to free tier
 ]);
 
@@ -331,10 +353,12 @@ const FREE_TIER_ALLOWED_FIELDS = new Set([
 //   gradingRationale           → detailed grading explanation (Pro+)
 //   competitorListings, competitors, comparables  → competitor data (Pro+)
 
-if (tier === 'starter') {
+if (tier === "starter") {
   const fullPayload = responsePayload;
   responsePayload = Object.fromEntries(
-    Object.entries(fullPayload).filter(([k]) => FREE_TIER_ALLOWED_FIELDS.has(k))
+    Object.entries(fullPayload).filter(([k]) =>
+      FREE_TIER_ALLOWED_FIELDS.has(k),
+    ),
   );
   // Also scrub grading rationale if nested inside itemSpecifics
   if ((responsePayload as any).itemSpecifics?.gradingRationale) {
@@ -346,6 +370,7 @@ if (tier === 'starter') {
 > **Note:** `suggestedGrade` is included in the free allowlist (needed to label a listing). `gradingRationale` (the detailed explanation supporting the grade) is locked — this is the paid differentiator.
 
 #### 3.1.5 Annotate all responses with credit metadata
+
 Add to every successful `analyze-item` response body (all tiers):
 
 ```ts
@@ -367,6 +392,7 @@ Add to every successful `analyze-item` response body (all tiers):
 ```
 
 #### 3.1.6 Helper: `computeNextResetAt`
+
 Private function at top of `analyze-item`:
 
 ```ts
@@ -401,7 +427,7 @@ function computeNextResetAt(resetDay: number | null): Date {
 
 ```ts
 // Guard: only run Identity API + one-account check on initial code exchange
-if (action === 'exchange_code') {
+if (action === "exchange_code") {
   // ... Identity API call and username write below ...
   // Token refresh paths skip this block entirely
 }
@@ -413,37 +439,44 @@ In the `exchange_code` action, after writing `ebay_access_token` to `profiles`:
 // After writing ebay_access_token to profiles:
 // Fetch account details from eBay Identity API
 const identityRes = await fetch(
-  'https://apiz.ebay.com/commerce/identity/v1/user/',
-  { headers: { Authorization: `Bearer ${accessToken}` } }
+  "https://apiz.ebay.com/commerce/identity/v1/user/",
+  { headers: { Authorization: `Bearer ${accessToken}` } },
 );
 const identity = await identityRes.json();
 const newUsername = identity?.userId ?? identity?.username ?? null;
-const accountType = identity?.accountType?.toLowerCase() ?? 'individual'; // 'individual' | 'business'
+const accountType = identity?.accountType?.toLowerCase() ?? "individual"; // 'individual' | 'business'
 
 // OQ-3 RESOLVED: only Unlimited LA plan subscribers may connect multiple eBay accounts.
 // Gate on LA subscription tier, NOT on eBay account type.
 // ebay_account_type is stored for informational/UI purposes only; it is NOT used here.
-const isUnlimitedTier = tier === 'unlimited'; // tier = LA plan, determined earlier in exchange_code
+const isUnlimitedTier = tier === "unlimited"; // tier = LA plan, determined earlier in exchange_code
 
 if (
   existingProfile?.ebay_username &&
   existingProfile.ebay_username !== newUsername &&
   !isUnlimitedTier
 ) {
-  return new Response(JSON.stringify({
-    error: 'account_already_linked',
-    message: `This Listing Assistant account is already linked to eBay user
+  return new Response(
+    JSON.stringify({
+      error: "account_already_linked",
+      message: `This Listing Assistant account is already linked to eBay user
               "${existingProfile.ebay_username}". Disconnect it before connecting a new account.`,
-  }), { status: 409 });
+    }),
+    { status: 409 },
+  );
 }
 
-await supabaseAdmin.from('profiles').update({
-  ebay_username: newUsername,
-  ebay_account_type: accountType,
-}).eq('id', userId);
+await supabaseAdmin
+  .from("profiles")
+  .update({
+    ebay_username: newUsername,
+    ebay_account_type: accountType,
+  })
+  .eq("id", userId);
 ```
 
 #### 3.2.2 `get_stored_token` — include username in response
+
 ```ts
 return { token, postalCode, city, isExpired, ebayUsername, ebayAccountType };
 ```
@@ -501,6 +534,7 @@ Register in `supabase/config.toml` under `[functions.get-free-credits]`.
 ### 4.1 `src/contexts/AuthContext.tsx`
 
 #### 4.1.1 New state
+
 ```ts
 interface FreeCredits {
   used: number;
@@ -511,7 +545,7 @@ interface FreeCredits {
 
 interface AuthContextType {
   // ... existing fields ...
-  freeCredits: FreeCredits | null;   // null for paid users
+  freeCredits: FreeCredits | null; // null for paid users
   ebayConnected: boolean;
   ebayUsername: string | null;
   refreshFreeCredits: () => Promise<void>;
@@ -519,12 +553,13 @@ interface AuthContextType {
 ```
 
 #### 4.1.2 `refreshFreeCredits()`
+
 ```ts
 const refreshFreeCredits = useCallback(async () => {
   if (!session) return;
-  const { data, error } = await supabase.functions.invoke('get-free-credits');
+  const { data, error } = await supabase.functions.invoke("get-free-credits");
   if (error || !data) return;
-  if (data.tier !== 'starter') {
+  if (data.tier !== "starter") {
     setFreeCredits(null);
     setEbayConnected(data.ebayConnected ?? false);
     setEbayUsername(data.ebayUsername ?? null);
@@ -542,6 +577,7 @@ const refreshFreeCredits = useCallback(async () => {
 ```
 
 #### 4.1.3 `canAnalyze` logic update
+
 ```ts
 // Replace the existing finalCanAnalyze expression:
 const finalCanAnalyze = isUnlimited
@@ -553,6 +589,7 @@ const finalCanAnalyze = isUnlimited
 ```
 
 #### 4.1.4 `canPublish` logic update (OQ-10 RESOLVED)
+
 ```ts
 // Starter publish limit = 6/month (aligned with analysis limit); also requires eBay connected.
 // Pro/Unlimited: keep existing logic.
@@ -577,49 +614,61 @@ const finalCanPublish = isUnlimited
 ### 4.2 `src/pages/AnalyzePage.tsx`
 
 #### 4.2.1 Pre-flight eBay gate (free users)
+
 Add at the top of `handleGenerate()`:
 
 ```tsx
 if (!isPaid && !isAdmin && !ebayConnected) {
-  toast.error('Connect an eBay account in Settings to start generating listings.');
-  navigate('/settings?tab=integrations');
+  toast.error(
+    "Connect an eBay account in Settings to start generating listings.",
+  );
+  navigate("/settings?tab=integrations");
   return;
 }
 ```
 
 #### 4.2.2 Credit exhaustion gate
+
 ```tsx
 if (!canAnalyze && !isAdmin) {
   // Replace the existing "Upgrade" modal with credits-specific messaging
-  setShowUpgrade(true);           // existing upgrade modal
-  setUpgradeReason('credits');    // new: drives modal copy
+  setShowUpgrade(true); // existing upgrade modal
+  setUpgradeReason("credits"); // new: drives modal copy
   return;
 }
 ```
 
 #### 4.2.3 Credit counter widget (visible after analysis for free users)
+
 After a successful analysis, if `!isPaid && !isAdmin`, show an inline banner:
 
 ```tsx
-{!isPaid && !isAdmin && freeCredits && (
-  <div className="flex items-center gap-2 text-sm text-muted-foreground border rounded-md px-3 py-2 mt-4">
-    <Sparkles className="h-4 w-4 text-amber-500" />
-    <span>
-      {freeCredits.remaining} of 6 free analyses remaining
-      {freeCredits.resetAt && (
-        <> · resets {formatDate(freeCredits.resetAt)}</>
+{
+  !isPaid && !isAdmin && freeCredits && (
+    <div className="flex items-center gap-2 text-sm text-muted-foreground border rounded-md px-3 py-2 mt-4">
+      <Sparkles className="h-4 w-4 text-amber-500" />
+      <span>
+        {freeCredits.remaining} of 6 free analyses remaining
+        {freeCredits.resetAt && (
+          <> · resets {formatDate(freeCredits.resetAt)}</>
+        )}
+      </span>
+      {freeCredits.remaining <= 1 && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => navigate("/billing")}
+        >
+          Upgrade
+        </Button>
       )}
-    </span>
-    {freeCredits.remaining <= 1 && (
-      <Button size="sm" variant="outline" onClick={() => navigate('/billing')}>
-        Upgrade
-      </Button>
-    )}
-  </div>
-)}
+    </div>
+  );
+}
 ```
 
 #### 4.2.4 Lock premium result sections for free users
+
 Wrap the Pricing, Melt Value, and Spot Price panels:
 
 ```tsx
@@ -644,6 +693,7 @@ Wrap the Pricing, Melt Value, and Spot Price panels:
 Apply the same lock pattern to: `gradingRationale` display, `meltValue` banner, `spotPrices` card.
 
 #### 4.2.5 Consume `_meta` from analyze-item response
+
 ```ts
 if (result._meta) {
   await refreshFreeCredits(); // triggers re-render of credit widget
@@ -655,27 +705,32 @@ if (result._meta) {
 ### 4.3 `src/pages/DashboardPage.tsx`
 
 #### 4.3.1 Free-credits card (free users only)
+
 Add a new summary card alongside the existing 4 cards:
 
 ```tsx
-{!isPaid && !isAdmin && freeCredits && (
-  <Card>
-    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-      <CardTitle className="text-sm font-medium">AI Credits</CardTitle>
-      <Sparkles className="h-4 w-4 text-amber-500" />
-    </CardHeader>
-    <CardContent>
-      <div className="text-2xl font-bold">{freeCredits.remaining}</div>
-      <p className="text-xs text-muted-foreground">
-        of 6 remaining · resets {freeCredits.resetAt ? formatDate(freeCredits.resetAt) : '—'}
-      </p>
-      <Progress value={(freeCredits.used / 6) * 100} className="mt-2 h-1.5" />
-    </CardContent>
-  </Card>
-)}
+{
+  !isPaid && !isAdmin && freeCredits && (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium">AI Credits</CardTitle>
+        <Sparkles className="h-4 w-4 text-amber-500" />
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold">{freeCredits.remaining}</div>
+        <p className="text-xs text-muted-foreground">
+          of 6 remaining · resets{" "}
+          {freeCredits.resetAt ? formatDate(freeCredits.resetAt) : "—"}
+        </p>
+        <Progress value={(freeCredits.used / 6) * 100} className="mt-2 h-1.5" />
+      </CardContent>
+    </Card>
+  );
+}
 ```
 
 #### 4.3.2 eBay connection prompt for free users
+
 If `!isPaid && !isAdmin && !ebayConnected`:
 
 ```tsx
@@ -683,8 +738,11 @@ If `!isPaid && !isAdmin && !ebayConnected`:
   <AlertTriangle className="h-4 w-4" />
   <AlertTitle>Connect your eBay account</AlertTitle>
   <AlertDescription>
-    Free tier analysis requires a connected eBay account.{' '}
-    <button className="underline" onClick={() => navigate('/settings?tab=integrations')}>
+    Free tier analysis requires a connected eBay account.{" "}
+    <button
+      className="underline"
+      onClick={() => navigate("/settings?tab=integrations")}
+    >
       Connect in Settings →
     </button>
   </AlertDescription>
@@ -696,99 +754,121 @@ If `!isPaid && !isAdmin && !ebayConnected`:
 ### 4.4 `src/pages/SettingsPage.tsx` — Integrations tab
 
 #### 4.4.1 Show connected username
+
 Replace the generic "Connected" green dot with:
 
 ```tsx
-{ebayConnected ? (
-  <div className="flex items-center gap-2">
-    <Check className="h-4 w-4 text-green-500" />
-    <span className="text-sm font-medium">
-      Connected as <strong>{ebayUsername ?? 'eBay Account'}</strong>
-    </span>
-    {ebayAccountType === 'business' && (
-      <Badge variant="outline" className="text-xs">Business</Badge>
-    )}
-  </div>
-) : (
-  <div className="flex items-center gap-2">
-    <X className="h-4 w-4 text-red-500" />
-    <span className="text-sm text-muted-foreground">Not connected</span>
-  </div>
-)}
+{
+  ebayConnected ? (
+    <div className="flex items-center gap-2">
+      <Check className="h-4 w-4 text-green-500" />
+      <span className="text-sm font-medium">
+        Connected as <strong>{ebayUsername ?? "eBay Account"}</strong>
+      </span>
+      {ebayAccountType === "business" && (
+        <Badge variant="outline" className="text-xs">
+          Business
+        </Badge>
+      )}
+    </div>
+  ) : (
+    <div className="flex items-center gap-2">
+      <X className="h-4 w-4 text-red-500" />
+      <span className="text-sm text-muted-foreground">Not connected</span>
+    </div>
+  );
+}
 ```
 
 #### 4.4.2 Free-tier credit summary in Integrations tab
+
 For Starter users, below the eBay connection status:
 
 ```tsx
-{!isPaid && !isAdmin && freeCredits && (
-  <div className="rounded-md bg-muted p-3 mt-3 text-sm space-y-1">
-    <p className="font-medium">Free tier usage</p>
-    <p className="text-muted-foreground">
-      {freeCredits.used} of 6 analyses used this period
-      {freeCredits.resetAt && ` · resets ${formatDate(freeCredits.resetAt)}`}
-    </p>
-    <Progress value={(freeCredits.used / 6) * 100} className="h-1.5 mt-1" />
-  </div>
-)}
+{
+  !isPaid && !isAdmin && freeCredits && (
+    <div className="rounded-md bg-muted p-3 mt-3 text-sm space-y-1">
+      <p className="font-medium">Free tier usage</p>
+      <p className="text-muted-foreground">
+        {freeCredits.used} of 6 analyses used this period
+        {freeCredits.resetAt && ` · resets ${formatDate(freeCredits.resetAt)}`}
+      </p>
+      <Progress value={(freeCredits.used / 6) * 100} className="h-1.5 mt-1" />
+    </div>
+  );
+}
 ```
 
 #### 4.4.3 One-account notice for Starter and Pro users
+
 ```tsx
-{!isUnlimited && !isAdmin && (
-  <p className="text-xs text-muted-foreground mt-2">
-    Free and Pro accounts may connect one eBay account. To use multiple accounts, upgrade to Unlimited.
-  </p>
-)}
+{
+  !isUnlimited && !isAdmin && (
+    <p className="text-xs text-muted-foreground mt-2">
+      Free and Pro accounts may connect one eBay account. To use multiple
+      accounts, upgrade to Unlimited.
+    </p>
+  );
+}
 ```
 
-> **OQ-3 RESOLVED:** Only Unlimited-tier subscribers are exempt from the one-account rule (supports multi-user orgs). Starter *and* Pro users are both subject to the single-account limit.
+> **OQ-3 RESOLVED:** Only Unlimited-tier subscribers are exempt from the one-account rule (supports multi-user orgs). Starter _and_ Pro users are both subject to the single-account limit.
 
 ---
 
 ### 4.5 `src/pages/BillingPage.tsx`
 
 #### 4.5.1 Update Starter plan description
+
 - Change `analysisLimit` display from 5 → **6**
 - Add note: "Requires connected eBay account"
 - Add note: "Rolling monthly window (resets on your signup day)"
 
 #### 4.5.2 Credit widget on BillingPage
+
 Show current window progress for Starter users:
 
 ```tsx
-{!isPaid && !isAdmin && freeCredits && (
-  <div className="border rounded-lg p-4 mb-6">
-    <h3 className="font-semibold text-sm mb-2">This Month's AI Credits</h3>
-    <div className="flex justify-between text-sm mb-1">
-      <span>{freeCredits.used} used</span>
-      <span>{freeCredits.remaining} remaining</span>
+{
+  !isPaid && !isAdmin && freeCredits && (
+    <div className="border rounded-lg p-4 mb-6">
+      <h3 className="font-semibold text-sm mb-2">This Month's AI Credits</h3>
+      <div className="flex justify-between text-sm mb-1">
+        <span>{freeCredits.used} used</span>
+        <span>{freeCredits.remaining} remaining</span>
+      </div>
+      <Progress value={(freeCredits.used / 6) * 100} />
+      {freeCredits.resetAt && (
+        <p className="text-xs text-muted-foreground mt-1">
+          Resets {formatDate(freeCredits.resetAt)}
+        </p>
+      )}
+      {freeCredits.remaining === 0 && (
+        <Alert variant="destructive" className="mt-3">
+          <AlertTitle>Credits exhausted</AlertTitle>
+          <AlertDescription>
+            Upgrade to Pro for 50 analyses/month, or Unlimited for unrestricted
+            access.
+          </AlertDescription>
+        </Alert>
+      )}
     </div>
-    <Progress value={(freeCredits.used / 6) * 100} />
-    {freeCredits.resetAt && (
-      <p className="text-xs text-muted-foreground mt-1">
-        Resets {formatDate(freeCredits.resetAt)}
-      </p>
-    )}
-    {freeCredits.remaining === 0 && (
-      <Alert variant="destructive" className="mt-3">
-        <AlertTitle>Credits exhausted</AlertTitle>
-        <AlertDescription>
-          Upgrade to Pro for 50 analyses/month, or Unlimited for unrestricted access.
-        </AlertDescription>
-      </Alert>
-    )}
-  </div>
-)}
+  );
+}
 ```
 
 #### 4.5.3 Upgrade CTA on credit exhaustion
+
 On the Pro card, when credits are exhausted for a Starter user, add a highlighted CTA:
 
 ```tsx
-{!isPaid && freeCredits?.remaining === 0 && (
-  <Badge variant="destructive" className="mb-2">Credits used up — Upgrade now</Badge>
-)}
+{
+  !isPaid && freeCredits?.remaining === 0 && (
+    <Badge variant="destructive" className="mb-2">
+      Credits used up — Upgrade now
+    </Badge>
+  );
+}
 ```
 
 ---
@@ -798,11 +878,13 @@ On the Pro card, when credits are exhausted for a Starter user, add a highlighte
 Add a small credit counter badge on the Analyze nav item for free users:
 
 ```tsx
-{!isPaid && !isAdmin && freeCredits && (
-  <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-amber-500 text-white text-[10px] flex items-center justify-center font-bold">
-    {freeCredits.remaining}
-  </span>
-)}
+{
+  !isPaid && !isAdmin && freeCredits && (
+    <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-amber-500 text-white text-[10px] flex items-center justify-center font-bold">
+      {freeCredits.remaining}
+    </span>
+  );
+}
 ```
 
 Badge is **always visible** for free users (OQ-9 RESOLVED: always visible). The count provides constant visibility into remaining credits without requiring the user to navigate to the Billing page.
@@ -813,12 +895,12 @@ Badge is **always visible** for free users (OQ-9 RESOLVED: always visible). The 
 
 ### 5.1 Reset-day edge cases
 
-| Scenario | Behaviour |
-|---|---|
-| User first analyzes on March 31st | `reset_day = 31`; April window starts April 30 (last day); May window starts May 31 |
-| User first analyzes on Feb 28 (non-leap) | `reset_day = 28`; Month N window starts on 28th each month |
-| User first analyzes on Feb 29 (leap year) | `reset_day = 29`; Non-leap Feb window starts Feb 28 (clamped) |
-| User has never analyzed | `free_tier_reset_day = NULL`; `canAnalyze` = true (up to the first analysis); window computed as "starting now" |
+| Scenario                                   | Behaviour                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| User first analyzes on March 31st          | `reset_day = 31`; April window starts April 30 (last day); May window starts May 31                                                                                                                                                                                                                                                                                           |
+| User first analyzes on Feb 28 (non-leap)   | `reset_day = 28`; Month N window starts on 28th each month                                                                                                                                                                                                                                                                                                                    |
+| User first analyzes on Feb 29 (leap year)  | `reset_day = 29`; Non-leap Feb window starts Feb 28 (clamped)                                                                                                                                                                                                                                                                                                                 |
+| User has never analyzed                    | `free_tier_reset_day = NULL`; `canAnalyze` = true (up to the first analysis); window computed as "starting now"                                                                                                                                                                                                                                                               |
 | **Known inequity (V1 accepted trade-off)** | A user first analyzing on the 31st is anchored there permanently. In 30-day months their window is clamped to the 30th, giving them a marginally shorter period. A user analyzing on the 1st always gets a full calendar-month window. There is no admin tool to adjust `reset_day`. Document this for support escalations; treat as a V1 known limitation rather than a bug. |
 
 ### 5.2 Time zone
@@ -839,6 +921,7 @@ If `ebay_access_token` exists but is expired (`ebay_token_expires_at < now()`), 
 ### 5.5 Disconnect-then-reconnect eBay account
 
 When a Starter user disconnects and reconnects:
+
 - Same username: allowed (no data loss)
 - Different username: blocked with `account_already_linked` error (§3.2.1)
 - If user wants to switch: must use the "Disconnect" flow first, which clears `ebay_username` in `profiles`; then the one-account check passes for the new username
@@ -856,9 +939,9 @@ Only `REVOKE UPDATE (free_tier_reset_day)` — the column that is genuinely expl
 **This plan adopts Option A.** The checklist (§7) is updated accordingly. `handleDisconnectEbay()` becomes:
 
 ```ts
-const { error } = await supabase.functions.invoke('disconnect-ebay');
+const { error } = await supabase.functions.invoke("disconnect-ebay");
 if (error) {
-  toast.error('Failed to disconnect eBay account');
+  toast.error("Failed to disconnect eBay account");
 } else {
   localStorage.removeItem(EBAY_TOKEN_KEY);
   localStorage.removeItem("ebay-refresh-token");
@@ -870,7 +953,7 @@ if (error) {
 
 ### 5.6 Org / lister accounts
 
-**OQ-4 RESOLVED — per-org quota.** An org gets ONE shared quota (6 analyses/month) regardless of how many listers are in the org. An org lister's analyses decrement from the *org-level* counter (`usage_tracking.org_id`). The `analyze-item` edge function counts via `WHERE org_id = <orgId>`, so all users in the same org share the same 6-analysis window. This is enforced server-side; each member cannot individually exhaust credits ahead of teammates.
+**OQ-4 RESOLVED — per-org quota.** An org gets ONE shared quota (6 analyses/month) regardless of how many listers are in the org. An org lister's analyses decrement from the _org-level_ counter (`usage_tracking.org_id`). The `analyze-item` edge function counts via `WHERE org_id = <orgId>`, so all users in the same org share the same 6-analysis window. This is enforced server-side; each member cannot individually exhaust credits ahead of teammates.
 
 ### 5.7 Admin bypass correctness
 
@@ -879,6 +962,7 @@ if (error) {
 ### 5.8 `types.ts` is stale
 
 The Supabase-generated `types.ts` does not reflect:
+
 - `profiles.ebay_username`, `ebay_account_type`, `free_tier_reset_day` (to be added)
 - `profiles.ebay_access_token`, `ebay_refresh_token`, `ebay_token_expires_at`, `postal_code`, `city`
 - `drafts.publish_status`, `published_at`, `ebay_sku`, …
@@ -899,6 +983,7 @@ The existing Pro usage counter uses `date_trunc('month', now())` (calendar month
 ### 5.10 Gemini cost on free tier
 
 The analyze-item function still calls `gemini-2.5-flash` for free-tier users even though the response is stripped before delivery. Consider:
+
 - Using `gemini-2.0-flash` for free-tier analyses (lower cost, sufficient for title/description)
 - Passing a shorter/simplified prompt for free users that excludes pricing computation instructions
 - Single prompt toggle: add a `tier` variable to the system prompt and instruct the model to skip pricing when `tier === 'starter'`
@@ -909,18 +994,19 @@ This is a cost optimization, not a correctness issue; defer to a follow-up task 
 
 ## 6. Security & Abuse Notes
 
-| Threat | Mitigation |
-|---|---|
-| Client bypasses credit check by calling edge function directly | `analyze-item` enforces the count server-side; client-side `canAnalyze` is UI-only |
-| User creates multiple Listing Assistant accounts to reset free credits | Each Supabase user has a separate quota; email verification (Supabase default) provides deterrence. Rate-limit new signups with Supabase Auth settings if abuse detected |
-| eBay account shared across multiple Listing Assistant users | One-account rule (§3.2.1) blocks this at token-store time |
-| Race condition double-spend on credits | Accept the race (§5.3 Option B). Max over-count is ≤1–2 per burst; advisory lock not recommended in edge function context |
-| Raw eBay tokens exposed to client | `get_stored_token` never returns `access_token`; only metadata (`username`, `postalCode`, `city`, `isExpired`). `analyze-item` and `ebay-publish` use the token server-side only |
-| `ebay_username` spoofing | `ebay_username` is written only by the server-side `store_token` action after an actual eBay Identity API call; the client cannot write `profiles` directly (RLS: users can only update their own row, and the username column should be excluded from client-updatable columns) |
-| `free_tier_reset_day` manipulation | Same RLS concern — add a Postgres policy or trigger preventing client-direct updates to `free_tier_reset_day`; only the `analyze-item` service-role write path should set it |
-| Admin email list hard-coded | Consider migrating `ADMIN_EMAILS` to a `profiles.is_admin BOOLEAN` column set by DB admins, or an environment variable. Current hard-coding creates a maintenance vector |
+| Threat                                                                 | Mitigation                                                                                                                                                                                                                                                                       |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Client bypasses credit check by calling edge function directly         | `analyze-item` enforces the count server-side; client-side `canAnalyze` is UI-only                                                                                                                                                                                               |
+| User creates multiple Listing Assistant accounts to reset free credits | Each Supabase user has a separate quota; email verification (Supabase default) provides deterrence. Rate-limit new signups with Supabase Auth settings if abuse detected                                                                                                         |
+| eBay account shared across multiple Listing Assistant users            | One-account rule (§3.2.1) blocks this at token-store time                                                                                                                                                                                                                        |
+| Race condition double-spend on credits                                 | Accept the race (§5.3 Option B). Max over-count is ≤1–2 per burst; advisory lock not recommended in edge function context                                                                                                                                                        |
+| Raw eBay tokens exposed to client                                      | `get_stored_token` never returns `access_token`; only metadata (`username`, `postalCode`, `city`, `isExpired`). `analyze-item` and `ebay-publish` use the token server-side only                                                                                                 |
+| `ebay_username` spoofing                                               | `ebay_username` is written only by the server-side `store_token` action after an actual eBay Identity API call; the client cannot write `profiles` directly (RLS: users can only update their own row, and the username column should be excluded from client-updatable columns) |
+| `free_tier_reset_day` manipulation                                     | Same RLS concern — add a Postgres policy or trigger preventing client-direct updates to `free_tier_reset_day`; only the `analyze-item` service-role write path should set it                                                                                                     |
+| Admin email list hard-coded                                            | Consider migrating `ADMIN_EMAILS` to a `profiles.is_admin BOOLEAN` column set by DB admins, or an environment variable. Current hard-coding creates a maintenance vector                                                                                                         |
 
 ### RLS additions required
+
 Add to the migration or a separate migration:
 
 ```sql
@@ -953,6 +1039,7 @@ REVOKE UPDATE (free_tier_reset_day)
 ## 7. Complete Implementation Checklist
 
 ### Phase 1 — Data layer
+
 - [ ] **Migration:** `20260318100000_free_tier_tracking.sql`
   - [ ] Add `profiles.ebay_username TEXT`
   - [ ] Add `profiles.ebay_account_type TEXT CHECK (...)`
@@ -970,6 +1057,7 @@ REVOKE UPDATE (free_tier_reset_day)
 ### Phase 2 — Edge functions
 
 #### Pre-coding (resolve before any Phase 2 work)
+
 - [ ] **Add `commerce.identity.readonly` OAuth scope** to `get_auth_url` in `ebay-publish` (§3.0.1 — OQ-5 RESOLVED: Option B hard reset selected; see Phase 6 for token-clear step)
 - [ ] **Remove `recordUsage('ai_analysis')` at ~line 151 of `AnalyzePage.tsx`** (OQ-12 RESOLVED: confirmed double-count; `analyze-item` is the sole insertion point)
 - [x] ~~**Verify `subscriptions` table** exists in production DB~~ — **DONE: Confirmed present; unrestricted RLS warning noted (§2.4 / OQ-11)**
@@ -977,6 +1065,7 @@ REVOKE UPDATE (free_tier_reset_day)
 - [x] ~~**Test `ebay-user` in production** with a live token~~ — **DONE: Confirmed working (OQ-15)**
 
 #### `analyze-item`
+
 - [ ] Add eBay account gate for Starter users (403 `ebay_account_required`)
 - [ ] Resolve org for per-org quota (lookup `organization_members` by `user_id` to get `org_id` + `free_tier_reset_day`) (OQ-4 RESOLVED)
 - [ ] Replace calendar-month usage count with `get_free_tier_window_start` RPC call; count via `org_id` for Starter (OQ-4)
@@ -989,6 +1078,7 @@ REVOKE UPDATE (free_tier_reset_day)
 - [ ] Return `429` with credit metadata on exhaustion
 
 #### `ebay-publish` (`exchange_code` action only — NOT token refresh)
+
 - [ ] **Prerequisite:** `commerce.identity.readonly` scope added to `get_auth_url` (pre-coding item above)
 - [ ] In `exchange_code` action only (guard with `if (action === 'exchange_code')`): call eBay Identity API for username + accountType
 - [ ] Enforce one-account rule before writing token (409 `account_already_linked`)
@@ -997,6 +1087,7 @@ REVOKE UPDATE (free_tier_reset_day)
 - [ ] Verify token **refresh** path does NOT call Identity API or overwrite `ebay_username`
 
 #### New: `get-free-credits`
+
 - [x] ~~**Prerequisite:** Confirm `subscriptions` table existence~~ — **DONE (OQ-11 RESOLVED)**
 - [ ] Create `supabase/functions/get-free-credits/index.ts`
 - [ ] Auth → tier detection (query `subscriptions` table — confirmed present; fix unrestricted RLS first per §2.4)
@@ -1006,6 +1097,7 @@ REVOKE UPDATE (free_tier_reset_day)
 - [ ] Register in `supabase/config.toml`
 
 #### New: `disconnect-ebay`
+
 - [ ] Create `supabase/functions/disconnect-ebay/index.ts` (runs as service role)
 - [ ] Auth → extract userId from JWT
 - [ ] Clear: `ebay_access_token`, `ebay_refresh_token`, `ebay_token_expires_at`, `ebay_username`, `ebay_account_type`
@@ -1013,10 +1105,12 @@ REVOKE UPDATE (free_tier_reset_day)
 - [ ] Register in `supabase/config.toml`
 
 #### `ebay-user`
+
 - [ ] Confirmed: already calls Identity API and returns `username`, `accountType`, `userId` (see §3.4)
 - [ ] Coordinate with `exchange_code` to avoid a duplicate Identity API call (§3.4)
 
 ### Phase 3 — `AuthContext`
+
 - [ ] Add `freeCredits: FreeCredits | null` state
 - [ ] Add `ebayConnected: boolean` state
 - [ ] Add `ebayUsername: string | null` state
@@ -1030,6 +1124,7 @@ REVOKE UPDATE (free_tier_reset_day)
 ### Phase 4 — Front-end pages & components
 
 #### `AnalyzePage.tsx`
+
 - [ ] Pre-flight gate: navigate to Settings if no eBay connected (Starter)
 - [ ] Credit-exhaustion gate: show upgrade modal with `'credits'` reason
 - [ ] Credit counter widget below results (Starter only)
@@ -1040,10 +1135,12 @@ REVOKE UPDATE (free_tier_reset_day)
 - [ ] Consume `_meta` from response → call `refreshFreeCredits()`
 
 #### `DashboardPage.tsx`
+
 - [ ] "AI Credits" summary card for Starter users
 - [ ] "Connect eBay account" alert banner if not connected (Starter)
 
 #### `SettingsPage.tsx`
+
 - [ ] Show `ebayUsername` instead of generic "Connected"
 - [ ] Show `ebayAccountType` badge for business accounts
 - [ ] Free-tier credit summary in Integrations tab
@@ -1051,15 +1148,18 @@ REVOKE UPDATE (free_tier_reset_day)
 - [ ] Update `handleDisconnectEbay()`: call `disconnect-ebay` edge function instead of direct Supabase update (§5.5 Option A)
 
 #### `BillingPage.tsx`
+
 - [ ] Update Starter limits text: 5 → 6, add eBay-required note
 - [ ] Credit usage widget (progress bar + reset date)
 - [ ] Exhaustion alert with upgrade CTA
 - [ ] Highlight Pro upgrade card when credits exhausted
 
 #### `BottomNav.tsx`
+
 - [ ] Credit badge on Analyze nav item — **always visible** for free users (OQ-9 RESOLVED: removed ≤ 2 threshold)
 
 ### Phase 5 — Testing
+
 - [ ] Unit test `computeNextResetAt()` for Feb 28/29/30/31, Apr 30/31, Dec 31 inputs
 - [ ] Unit test `get_free_tier_window_start()` PL/pgSQL function (day before/after reset, end-of-month cases)
 - [ ] Integration test `analyze-item`: free user with no eBay → 403; free user with eBay + 6 used → 429; free user response lacks `priceMin`
@@ -1068,6 +1168,7 @@ REVOKE UPDATE (free_tier_reset_day)
 - [ ] Test race condition: two simultaneous requests as same free user may both succeed at the limit boundary (≤1 over-count is accepted per §5.3 Option B); document the accepted behavior
 
 ### Phase 6 — Deployment
+
 - [ ] Apply migration to staging; run `supabase gen types typescript` and commit updated `types.ts`
 - [ ] Deploy edge functions: `analyze-item`, `ebay-publish`, `get-free-credits`, `ebay-user`
 - [ ] Smoke test on staging with a free test account
@@ -1090,24 +1191,24 @@ REVOKE UPDATE (free_tier_reset_day)
 
 All 15 open questions have been answered by the product owner. No open questions remain. See the table below for the final resolutions.
 
-| # | Status | Question | Resolution |
-|---|---|---|---|
-| **OQ-1** | ✅ RESOLVED | Free tier scope | **Broad.** Free tier includes all fields needed to publish to eBay: title, description, condition, ebayCategoryId, suggestedCategories, itemSpecifics, suggestedGrade. Locked for paid only: priceMin/Max, meltValue, spotPrices, pricingNotes, gradingRationale, competitor data. See §3.1.4. |
-| **OQ-2** | ✅ RESOLVED | Reset day anchor | **Account creation (Option A).** `free_tier_reset_day` is set by the `handle_new_user` DB trigger at org creation time. `analyze-item` does NOT write this field. See §3.1.3. |
-| **OQ-3** | ✅ RESOLVED | One-account exemption | **Unlimited LA plan only.** Only Unlimited-tier subscribers may connect multiple eBay accounts (multi-user orgs). Starter and Pro are both subject to the one-account limit. `ebay_account_type` is stored for display only; NOT used in access control. See §3.2.1, §4.4.3. |
-| **OQ-4** | ✅ RESOLVED | Org/team quota | **Per-org.** An org gets ONE 6-analysis quota regardless of number of listers. `analyze-item` counts via `WHERE org_id = <orgId>`. `usage_tracking` gains an `org_id` column. See §2.1, §2.3, §3.1.1–3.1.2, §5.6. |
-| **OQ-5** | ✅ RESOLVED | eBay Identity scope / re-auth | **Option B selected — hard reset.** On migration deploy to production, NULL all `ebay_access_token`, `ebay_refresh_token`, `ebay_token_expires_at` rows. All existing connected users must reconnect. Required to obtain tokens with `commerce.identity.readonly` scope. See §3.0.1, §7 Phase 6. |
-| **OQ-6** | ✅ RESOLVED | `ebay-user` coordination | `ebay-user/index.ts` already calls Identity API and returns `username`, `accountType`, `userId`. Does not persist to `profiles`. `exchange_code` path in §3.2.1 handles the write. See §3.4. |
-| **OQ-7** | ✅ RESOLVED | Existing users with NULL reset_day | **Fresh start acceptable.** Existing users get a new 6-credit window starting from deploy date. Admin account is Unlimited — unaffected. No backfill of prior usage counts required. See §5.1 table. |
-| **OQ-8** | ✅ RESOLVED | Gemini model for free tier | **Keep `gemini-2.5-flash`** for free-tier analyses. No model downgrade. Cost optimization deferred to a follow-up task. See §5.10. |
-| **OQ-9** | ✅ RESOLVED | Credit badge visibility threshold | **Always visible** for free users. Removed `<= 2` threshold from BottomNav badge. See §4.6. |
-| **OQ-10** | ✅ RESOLVED | `canPublish` for free tier | Free tier gets **6 publishes/month** (aligned with 6 analyses). `PLANS.starter.publishLimit` updated from 3 → 6. `canPublish` for Starter also requires `ebayConnected`. See §2.5, §4.1.4. |
-| **OQ-11** | ✅ RESOLVED | `subscriptions` table existence | **Confirmed present** in production. Has an "unrestricted" RLS warning — add a user-scoped SELECT policy before coding `get-free-credits`. See §2.4. |
-| **OQ-12** | ✅ RESOLVED | Double-counted `ai_analysis` rows | `AnalyzePage.tsx` line 151 `recordUsage('ai_analysis')` **must be removed** (double-counts with `analyze-item` server-side insert). Line 344 `recordUsage('ebay_publish')` must stay (no server-side counterpart). See §3.0.2. |
-| **OQ-13** | ✅ RESOLVED | Token write paths in `ebay-publish` | `refresh_token` action's `updatePatch` only contains token fields (`ebay_access_token`, `ebay_token_expires_at`, optionally `ebay_refresh_token`) — never `ebay_username` or `ebay_account_type`. Refresh path is already safe. Identity API call must be guarded to `exchange_code` action only. See §3.2.1. |
-| **OQ-14** | ✅ RESOLVED | Existing users with 5+ analyses this month | Covered by OQ-7 resolution: fresh start is acceptable. Existing usage rows remain but `free_tier_reset_day = NULL` means the rolling window starts at deploy date, giving all existing users a clean 6-credit window. |
-| **OQ-15** | ✅ RESOLVED | `ebay-user` in production without identity scope | **Confirmed working** in production with current tokens. No scope change needed for `ebay-user` itself. The scope addition in `get_auth_url` affects new token grants only; existing `ebay-user` calls continue to work until those tokens are cleared (Option B). See §3.0.1. |
+| #         | Status      | Question                                         | Resolution                                                                                                                                                                                                                                                                                                    |
+| --------- | ----------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **OQ-1**  | ✅ RESOLVED | Free tier scope                                  | **Broad.** Free tier includes all fields needed to publish to eBay: title, description, condition, ebayCategoryId, suggestedCategories, itemSpecifics, suggestedGrade. Locked for paid only: priceMin/Max, meltValue, spotPrices, pricingNotes, gradingRationale, competitor data. See §3.1.4.                |
+| **OQ-2**  | ✅ RESOLVED | Reset day anchor                                 | **Account creation (Option A).** `free_tier_reset_day` is set by the `handle_new_user` DB trigger at org creation time. `analyze-item` does NOT write this field. See §3.1.3.                                                                                                                                 |
+| **OQ-3**  | ✅ RESOLVED | One-account exemption                            | **Unlimited LA plan only.** Only Unlimited-tier subscribers may connect multiple eBay accounts (multi-user orgs). Starter and Pro are both subject to the one-account limit. `ebay_account_type` is stored for display only; NOT used in access control. See §3.2.1, §4.4.3.                                  |
+| **OQ-4**  | ✅ RESOLVED | Org/team quota                                   | **Per-org.** An org gets ONE 6-analysis quota regardless of number of listers. `analyze-item` counts via `WHERE org_id = <orgId>`. `usage_tracking` gains an `org_id` column. See §2.1, §2.3, §3.1.1–3.1.2, §5.6.                                                                                             |
+| **OQ-5**  | ✅ RESOLVED | eBay Identity scope / re-auth                    | **Option B selected — hard reset.** On migration deploy to production, NULL all `ebay_access_token`, `ebay_refresh_token`, `ebay_token_expires_at` rows. All existing connected users must reconnect. Required to obtain tokens with `commerce.identity.readonly` scope. See §3.0.1, §7 Phase 6.              |
+| **OQ-6**  | ✅ RESOLVED | `ebay-user` coordination                         | `ebay-user/index.ts` already calls Identity API and returns `username`, `accountType`, `userId`. Does not persist to `profiles`. `exchange_code` path in §3.2.1 handles the write. See §3.4.                                                                                                                  |
+| **OQ-7**  | ✅ RESOLVED | Existing users with NULL reset_day               | **Fresh start acceptable.** Existing users get a new 6-credit window starting from deploy date. Admin account is Unlimited — unaffected. No backfill of prior usage counts required. See §5.1 table.                                                                                                          |
+| **OQ-8**  | ✅ RESOLVED | Gemini model for free tier                       | **Keep `gemini-2.5-flash`** for free-tier analyses. No model downgrade. Cost optimization deferred to a follow-up task. See §5.10.                                                                                                                                                                            |
+| **OQ-9**  | ✅ RESOLVED | Credit badge visibility threshold                | **Always visible** for free users. Removed `<= 2` threshold from BottomNav badge. See §4.6.                                                                                                                                                                                                                   |
+| **OQ-10** | ✅ RESOLVED | `canPublish` for free tier                       | Free tier gets **6 publishes/month** (aligned with 6 analyses). `PLANS.starter.publishLimit` updated from 3 → 6. `canPublish` for Starter also requires `ebayConnected`. See §2.5, §4.1.4.                                                                                                                    |
+| **OQ-11** | ✅ RESOLVED | `subscriptions` table existence                  | **Confirmed present** in production. Has an "unrestricted" RLS warning — add a user-scoped SELECT policy before coding `get-free-credits`. See §2.4.                                                                                                                                                          |
+| **OQ-12** | ✅ RESOLVED | Double-counted `ai_analysis` rows                | `AnalyzePage.tsx` line 151 `recordUsage('ai_analysis')` **must be removed** (double-counts with `analyze-item` server-side insert). Line 344 `recordUsage('ebay_publish')` must stay (no server-side counterpart). See §3.0.2.                                                                                |
+| **OQ-13** | ✅ RESOLVED | Token write paths in `ebay-publish`              | `refresh_token` action's `updatePatch` only contains token fields (`ebay_access_token`, `ebay_token_expires_at`, optionally `ebay_refresh_token`) — never `ebay_username` or `ebay_account_type`. Refresh path is already safe. Identity API call must be guarded to `exchange_code` action only. See §3.2.1. |
+| **OQ-14** | ✅ RESOLVED | Existing users with 5+ analyses this month       | Covered by OQ-7 resolution: fresh start is acceptable. Existing usage rows remain but `free_tier_reset_day = NULL` means the rolling window starts at deploy date, giving all existing users a clean 6-credit window.                                                                                         |
+| **OQ-15** | ✅ RESOLVED | `ebay-user` in production without identity scope | **Confirmed working** in production with current tokens. No scope change needed for `ebay-user` itself. The scope addition in `get_auth_url` affects new token grants only; existing `ebay-user` calls continue to work until those tokens are cleared (Option B). See §3.0.1.                                |
 
 ---
 
-*End of document. All open questions resolved. Implementation ready to begin. Start with Phase 1 (migration) → Phase 2 pre-coding items (`commerce.identity.readonly` scope addition, `recordUsage` double-count removal, tier detection refactor) → Phase 2 edge functions → Phase 3 AuthContext → Phase 4 UI → Phase 5 tests → Phase 6 deployment (include token-clear step for OQ-5 Option B re-auth).*
+_End of document. All open questions resolved. Implementation ready to begin. Start with Phase 1 (migration) → Phase 2 pre-coding items (`commerce.identity.readonly` scope addition, `recordUsage` double-count removal, tier detection refactor) → Phase 2 edge functions → Phase 3 AuthContext → Phase 4 UI → Phase 5 tests → Phase 6 deployment (include token-clear step for OQ-5 Option B re-auth)._

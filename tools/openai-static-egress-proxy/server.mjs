@@ -1,7 +1,8 @@
 import { createServer } from "node:http";
 
 const PORT = Number(process.env.PORT || 8080);
-const OPENAI_API_KEY = process.env.NEW_OPENAI_API_KEY || process.env.OPENAI_API_KEY || "";
+const OPENAI_API_KEY =
+  process.env.NEW_OPENAI_API_KEY || process.env.OPENAI_API_KEY || "";
 const PROXY_AUTH_TOKEN = process.env.PROXY_AUTH_TOKEN || "";
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 const MAX_BODY_BYTES = 6 * 1024 * 1024;
@@ -79,7 +80,7 @@ const server = createServer(async (req, res) => {
     const upstream = await fetch(OPENAI_URL, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
@@ -87,7 +88,8 @@ const server = createServer(async (req, res) => {
 
     const text = await upstream.text();
     res.writeHead(upstream.status, {
-      "Content-Type": upstream.headers.get("content-type") || "application/json",
+      "Content-Type":
+        upstream.headers.get("content-type") || "application/json",
     });
     res.end(text);
   } catch (err) {
