@@ -26,8 +26,7 @@ interface SoldItem {
 // ----------------------------------------------------------------
 async function fetchViaCompetitorSearch(query: string): Promise<SoldItem[]> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceKey =
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
     Deno.env.get("SUPABASE_ANON_KEY");
 
   if (!supabaseUrl || !serviceKey) {
@@ -73,10 +72,7 @@ async function fetchViaCompetitorSearch(query: string): Promise<SoldItem[]> {
 
     const mapped: SoldItem[] = data.items
       .map((it: any): SoldItem | null => {
-        const price =
-          typeof it?.price === "number"
-            ? it.price
-            : parseFloat(String(it?.price ?? "0"));
+        const price = typeof it?.price === "number" ? it.price : parseFloat(String(it?.price ?? "0"));
         if (!isFinite(price) || price <= 0) return null;
         return {
           title: String(it?.title ?? query),
@@ -336,9 +332,11 @@ function filterOutliers(items: SoldItem[]): SoldItem[] {
   const filtered = items.filter((i) => i.price >= lo && i.price <= hi);
   if (filtered.length >= 3) {
     console.log(
-      `[ebay-pricing] Outlier filter: ${items.length} → ${filtered.length} items (fence $${lo.toFixed(2)}–$${hi.toFixed(
-        2,
-      )})`,
+      `[ebay-pricing] Outlier filter: ${items.length} → ${filtered.length} items (fence $${lo.toFixed(2)}–$${
+        hi.toFixed(
+          2,
+        )
+      })`,
     );
     return filtered;
   }
@@ -352,9 +350,7 @@ function median(nums: number[]): number {
   if (nums.length === 0) return 0;
   const sorted = [...nums].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 !== 0
-    ? sorted[mid]
-    : (sorted[mid - 1] + sorted[mid]) / 2;
+  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 // ----------------------------------------------------------------
@@ -386,8 +382,7 @@ serve(async (req) => {
     // Primary path: official eBay Browse API via ebay-competitor-search.
     // Higher recall + Gemini-optimised query. Falls through to Jina on empty.
     let soldItems: SoldItem[] = await fetchViaCompetitorSearch(query);
-    const source: "browse_api" | "jina" =
-      soldItems.length > 0 ? "browse_api" : "jina";
+    const source: "browse_api" | "jina" = soldItems.length > 0 ? "browse_api" : "jina";
 
     if (soldItems.length === 0) {
       // Fallback: scrape sold listings via Jina
@@ -420,26 +415,19 @@ serve(async (req) => {
     soldItems = filterOutliers(soldItems);
 
     const prices = soldItems.map((i) => i.price).sort((a, b) => a - b);
-    const averagePrice =
-      prices.length > 0
-        ? parseFloat(
-            (prices.reduce((a, b) => a + b, 0) / prices.length).toFixed(2),
-          )
-        : 0;
+    const averagePrice = prices.length > 0
+      ? parseFloat(
+        (prices.reduce((a, b) => a + b, 0) / prices.length).toFixed(2),
+      )
+      : 0;
 
     const lowPrice = prices.length > 0 ? Math.min(...prices) : 0;
     const highPrice = prices.length > 0 ? Math.max(...prices) : 0;
     const medianPrice = parseFloat(median(prices).toFixed(2));
 
     // Percentile stats (p25, p75) for IQR-based pricing
-    const p25 =
-      prices.length > 0
-        ? prices[Math.max(0, Math.ceil(0.25 * prices.length) - 1)]
-        : 0;
-    const p75 =
-      prices.length > 0
-        ? prices[Math.max(0, Math.ceil(0.75 * prices.length) - 1)]
-        : 0;
+    const p25 = prices.length > 0 ? prices[Math.max(0, Math.ceil(0.25 * prices.length) - 1)] : 0;
+    const p75 = prices.length > 0 ? prices[Math.max(0, Math.ceil(0.75 * prices.length) - 1)] : 0;
 
     // Price histogram buckets (5 buckets for mini chart)
     const histogram: {

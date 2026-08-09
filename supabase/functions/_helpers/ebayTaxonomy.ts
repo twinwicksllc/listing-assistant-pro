@@ -17,10 +17,9 @@ export async function getEbayAppToken(
     return _cachedToken.token;
   }
 
-  const tokenUrl =
-    ebayEnv === "production"
-      ? "https://api.ebay.com/identity/v1/oauth2/token"
-      : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
+  const tokenUrl = ebayEnv === "production"
+    ? "https://api.ebay.com/identity/v1/oauth2/token"
+    : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
 
   try {
     const credentials = btoa(`${clientId}:${clientSecret}`);
@@ -56,10 +55,7 @@ export async function getCategorySuggestions(
   appToken: string,
   ebayEnv: string,
 ): Promise<Array<{ categoryId: string; categoryName: string }>> {
-  const base =
-    ebayEnv === "production"
-      ? "https://api.ebay.com"
-      : "https://api.sandbox.ebay.com";
+  const base = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
 
   try {
     const resp = await fetch(
@@ -97,18 +93,17 @@ export async function getCategoryAspects(
   recommended: string[];
   allowedValues: Record<string, string[]>;
 }> {
-  const base =
-    ebayEnv === "production"
-      ? "https://api.ebay.com"
-      : "https://api.sandbox.ebay.com";
+  const base = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
 
   const empty = { required: [], recommended: [], allowedValues: {} };
 
   try {
     const resp = await fetch(
-      `${base}/commerce/taxonomy/v1/category_tree/0/get_item_aspects_for_category?category_id=${encodeURIComponent(
-        categoryId,
-      )}`,
+      `${base}/commerce/taxonomy/v1/category_tree/0/get_item_aspects_for_category?category_id=${
+        encodeURIComponent(
+          categoryId,
+        )
+      }`,
       {
         headers: {
           Authorization: `Bearer ${appToken}`,

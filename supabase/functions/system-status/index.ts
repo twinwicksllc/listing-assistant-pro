@@ -27,8 +27,7 @@ serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("Unauthorized");
     const token = authHeader.replace("Bearer ", "");
-    const { data: userData, error: userError } =
-      await supabaseClient.auth.getUser(token);
+    const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
     if (userError || !userData.user) throw new Error("Unauthorized");
     if (userData.user.email !== ADMIN_EMAIL) {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
@@ -44,8 +43,8 @@ serve(async (req) => {
       stripeStatus.mode = stripeKey.startsWith("sk_live_")
         ? "live"
         : stripeKey.startsWith("sk_test_")
-          ? "test"
-          : "unknown";
+        ? "test"
+        : "unknown";
       const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
       const subs = await stripe.subscriptions.list({
         status: "active",
@@ -60,10 +59,7 @@ serve(async (req) => {
     const ebayStatus = { ok: false, error: "" };
     try {
       const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-      const apiBase =
-        ebayEnv === "production"
-          ? "https://api.ebay.com"
-          : "https://api.sandbox.ebay.com";
+      const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
       const resp = await fetch(
         `${apiBase}/buy/browse/v1/item_summary/search?q=test&limit=1`,
         {
@@ -261,8 +257,7 @@ serve(async (req) => {
           (sum: number, r: any) => sum + (r.completion_tokens || 0),
           0,
         );
-        openaiUsage.totalTokens =
-          openaiUsage.inputTokens + openaiUsage.outputTokens;
+        openaiUsage.totalTokens = openaiUsage.inputTokens + openaiUsage.outputTokens;
         openaiUsage.estimatedCost = openaiRows.reduce(
           (sum: number, r: any) => sum + rowCost(r),
           0,

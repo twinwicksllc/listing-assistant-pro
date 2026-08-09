@@ -30,52 +30,38 @@ const _LEGACY_BOOTSTRAP_BREADCRUMBS: Record<string, string> = {
   "11981": "Coins & Paper Money > Coins: US > Dollars > Eisenhower (1971-78)",
   "39464": "Coins & Paper Money > Coins: US > Dollars > Morgan (1878-1921)",
   "11980": "Coins & Paper Money > Coins: US > Dollars > Peace (1921-35)",
-  "11971":
-    "Coins & Paper Money > Coins: US > Half Dollars > Barber (1892-1915)",
-  "41099":
-    "Coins & Paper Money > Coins: US > Half Dollars > Liberty Walking (1916-47)",
-  "41102":
-    "Coins & Paper Money > Coins: US > Half Dollars > Kennedy (1964-Now)",
-  "11973":
-    "Coins & Paper Money > Coins: US > Half Dollars > Franklin (1948-1963)",
+  "11971": "Coins & Paper Money > Coins: US > Half Dollars > Barber (1892-1915)",
+  "41099": "Coins & Paper Money > Coins: US > Half Dollars > Liberty Walking (1916-47)",
+  "41102": "Coins & Paper Money > Coins: US > Half Dollars > Kennedy (1964-Now)",
+  "11973": "Coins & Paper Money > Coins: US > Half Dollars > Franklin (1948-1963)",
   "41109": "Coins & Paper Money > Coins: US > Proof Sets",
   "526": "Coins & Paper Money > Coins: US > Mint Sets",
   "253": "Coins & Paper Money > Coins: US",
-  "11116":
-    "Coins & Paper Money > Coins: US > Pennies > Lincoln Memorial (1959-2008)",
+  "11116": "Coins & Paper Money > Coins: US > Pennies > Lincoln Memorial (1959-2008)",
   "11118": "Coins & Paper Money > Coins: US > Half Dollars",
-  "40149":
-    "Coins & Paper Money > Coins: US > Quarters > Washington (1932-1998)",
+  "40149": "Coins & Paper Money > Coins: US > Quarters > Washington (1932-1998)",
   "40150": "Coins & Paper Money > Coins: US > Dimes > Roosevelt (1946-Now)",
   "40151": "Coins & Paper Money > Coins: US > Dimes > Mercury (1916-1945)",
   "40152": "Coins & Paper Money > Coins: US > Nickels > Jefferson (1938-Now)",
   "40153": "Coins & Paper Money > Coins: US > Nickels > Buffalo (1913-1938)",
-  "40154":
-    "Coins & Paper Money > Coins: US > Pennies > Indian Head (1859-1909)",
-  "40155":
-    "Coins & Paper Money > Coins: US > Pennies > Lincoln Wheat (1909-1958)",
-  "40156":
-    "Coins & Paper Money > Coins: US > Half Dollars > Kennedy (1964-Now)",
-  "40157":
-    "Coins & Paper Money > Coins: US > Half Dollars > Franklin (1948-1963)",
+  "40154": "Coins & Paper Money > Coins: US > Pennies > Indian Head (1859-1909)",
+  "40155": "Coins & Paper Money > Coins: US > Pennies > Lincoln Wheat (1909-1958)",
+  "40156": "Coins & Paper Money > Coins: US > Half Dollars > Kennedy (1964-Now)",
+  "40157": "Coins & Paper Money > Coins: US > Half Dollars > Franklin (1948-1963)",
   "39461": "Coins & Paper Money > Coins: US > Half Dollars > Commemorative",
-  "40158":
-    "Coins & Paper Money > Coins: US > Dollars > Sacagawea/Native American",
+  "40158": "Coins & Paper Money > Coins: US > Dollars > Sacagawea/Native American",
   "40159": "Coins & Paper Money > Coins: US > Dollars > Presidential",
   "40160": "Coins & Paper Money > Coins: US > Dollars > Susan B. Anthony",
   "41111": "Coins & Paper Money > Coins: US > Dollars > American Silver Eagle",
-  "164743":
-    "Coins & Paper Money > Coins: US > Quarters > 50 States & Territories",
-  "39455":
-    "Coins & Paper Money > Coins: US > Pennies > Lincoln Wheat (1909-1958)",
+  "164743": "Coins & Paper Money > Coins: US > Quarters > 50 States & Territories",
+  "39455": "Coins & Paper Money > Coins: US > Pennies > Lincoln Wheat (1909-1958)",
   "40161": "Coins & Paper Money > Coins: US > Gold Coins > $20 Double Eagle",
   "40162": "Coins & Paper Money > Coins: US > Gold Coins > $10 Eagle",
   "40163": "Coins & Paper Money > Coins: US > Gold Coins > $5 Half Eagle",
   "40164": "Coins & Paper Money > Coins: US > Gold Coins > $2.50 Quarter Eagle",
   "40165": "Coins & Paper Money > Coins: US > Gold Coins > $1 Gold",
   "40166": "Coins & Paper Money > Coins: US > Gold Coins > American Gold Eagle",
-  "40167":
-    "Coins & Paper Money > Coins: US > Gold Coins > American Gold Buffalo",
+  "40167": "Coins & Paper Money > Coins: US > Gold Coins > American Gold Buffalo",
   "261064": "Coins & Paper Money > Bullion > Gold > Coins",
   "261068": "Coins & Paper Money > Bullion > Silver > Coins",
   "261069": "Coins & Paper Money > Bullion > Silver > Bars & Rounds",
@@ -115,8 +101,7 @@ const _LEGACY_BOOTSTRAP_BREADCRUMBS: Record<string, string> = {
   "233": "Toys & Hobbies > Puzzles",
 
   // ── Trading Cards ────────────────────────────────────────────────────────
-  "261328":
-    "Sports Mem, Cards & Fan Shop > Sports Trading Cards > Basketball Cards",
+  "261328": "Sports Mem, Cards & Fan Shop > Sports Trading Cards > Basketball Cards",
   "183454": "Toys & Hobbies > Collectible Card Games > Pokémon > Cards",
   "2536": "Toys & Hobbies > Collectible Card Games",
   "64482": "Sports Mem, Cards & Fan Shop > Sports Trading Cards",
@@ -175,10 +160,12 @@ const _LEGACY_BOOTSTRAP_BREADCRUMBS: Record<string, string> = {
 // ── eBay App Token (lazy, cached per-module-invocation) ──────────────────────
 let _ebayTokenCache: { token: string; base: string } | null = null;
 
-async function getEbayAppToken(): Promise<{
-  token: string;
-  base: string;
-} | null> {
+async function getEbayAppToken(): Promise<
+  {
+    token: string;
+    base: string;
+  } | null
+> {
   // Guard: Deno only (not available in Node.js test environments)
   if (typeof Deno === "undefined") return null;
 
@@ -187,10 +174,7 @@ async function getEbayAppToken(): Promise<{
   const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
   const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "production";
   if (!clientId || !clientSecret) return null;
-  const base =
-    ebayEnv === "production"
-      ? "https://api.ebay.com"
-      : "https://api.sandbox.ebay.com";
+  const base = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
   try {
     const resp = await fetch(`${base}/identity/v1/oauth2/token`, {
       method: "POST",
@@ -229,9 +213,11 @@ async function fetchLiveBreadcrumb(
     let resp: Response;
     try {
       resp = await fetch(
-        `${ebay.base}/commerce/taxonomy/v1/category_tree/0/get_category_subtree?category_id=${encodeURIComponent(
-          currentId,
-        )}`,
+        `${ebay.base}/commerce/taxonomy/v1/category_tree/0/get_category_subtree?category_id=${
+          encodeURIComponent(
+            currentId,
+          )
+        }`,
         { headers: { Authorization: `Bearer ${ebay.token}` } },
       );
     } catch {
@@ -379,13 +365,10 @@ export async function buildSuggestedCategories(listing: any, svc: any) {
       if (!cid || seen.has(cid)) continue;
       seen.add(cid);
       // Prefer live DB lookup, but accept any breadcrumb upstream already resolved
-      const breadcrumb =
-        (await lookupBreadcrumb(cid, svc)) ?? s.breadcrumb ?? null;
+      const breadcrumb = (await lookupBreadcrumb(cid, svc)) ?? s.breadcrumb ?? null;
       finalSuggestions.push({
         categoryId: cid,
-        categoryName: breadcrumb
-          ? leafName(breadcrumb)
-          : (s.categoryName ?? null),
+        categoryName: breadcrumb ? leafName(breadcrumb) : (s.categoryName ?? null),
         breadcrumb,
         reason: s.reason ?? "AI suggestion",
       });

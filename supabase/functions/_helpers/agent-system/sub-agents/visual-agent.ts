@@ -30,8 +30,7 @@ export async function runAgenticVisualAgent(
   if (ragCategories.length > 0) {
     try {
       // Use pre-computed embedding from controller if available; fall back to generating one
-      const embedding =
-        context.queryEmbedding ??
+      const embedding = context.queryEmbedding ??
         (await getEmbedding(
           apiKey,
           context.identification?.itemName || domainDef.domain,
@@ -67,15 +66,16 @@ export async function runAgenticVisualAgent(
     .map((g) => `- **${g.region}**: ${g.rationale}`)
     .join("\n");
 
-  const prompt = `You are an expert precision vision agent. Your task is to perform a detailed visual inspection of the item in the images.
+  const prompt =
+    `You are an expert precision vision agent. Your task is to perform a detailed visual inspection of the item in the images.
 Domain: ${domainDef.domain}
 Item Identification: ${context.identification?.itemName}
 
 ${
-  ragContext
-    ? `### VERIFIED REFERENCE STANDARDS:\nUse these verified domain standards to guide your inspection:\n${ragContext}\n`
-    : ""
-}
+      ragContext
+        ? `### VERIFIED REFERENCE STANDARDS:\nUse these verified domain standards to guide your inspection:\n${ragContext}\n`
+        : ""
+    }
 
 ### PRECISION INSPECTION GOALS:
 ${zoomTargets}
@@ -103,10 +103,7 @@ You must return your findings in JSON format:
 
   // Use the stronger model for coins_bullion — precision slab label reading demands it.
   // For other domains, gemini-2.0-flash is fast and sufficient.
-  const visualModel =
-    domainDef.domain === "coins_bullion"
-      ? "gemini-3.1-pro-preview"
-      : "gemini-2.0-flash";
+  const visualModel = domainDef.domain === "coins_bullion" ? "gemini-3.1-pro-preview" : "gemini-2.0-flash";
 
   try {
     const response = await fetch(
@@ -138,21 +135,20 @@ You must return your findings in JSON format:
     if (jsonMatch) {
       try {
         const parsed = JSON.parse(jsonMatch[0]);
-        const capturedAttributes =
-          parsed?.capturedAttributes &&
-          typeof parsed.capturedAttributes === "object"
-            ? Object.fromEntries(
-                Object.entries(
-                  parsed.capturedAttributes as Record<string, unknown>,
-                )
-                  .filter(
-                    (entry): entry is [string, string] =>
-                      typeof entry[0] === "string" &&
-                      typeof entry[1] === "string",
-                  )
-                  .map(([k, v]) => [k.trim(), v.trim()]),
+        const capturedAttributes = parsed?.capturedAttributes &&
+            typeof parsed.capturedAttributes === "object"
+          ? Object.fromEntries(
+            Object.entries(
+              parsed.capturedAttributes as Record<string, unknown>,
+            )
+              .filter(
+                (entry): entry is [string, string] =>
+                  typeof entry[0] === "string" &&
+                  typeof entry[1] === "string",
               )
-            : undefined;
+              .map(([k, v]) => [k.trim(), v.trim()]),
+          )
+          : undefined;
         return {
           zoomRegionsExamined: parsed.zoomRegionsExamined || [],
           keyFindings: parsed.keyFindings || "Incomplete findings provided.",

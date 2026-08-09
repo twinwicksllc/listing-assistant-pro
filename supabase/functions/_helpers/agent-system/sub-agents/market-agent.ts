@@ -26,8 +26,7 @@ export async function runMarketAgent(
   let ragContext = "";
   try {
     // Use pre-computed embedding from controller if available; fall back to generating one
-    const embedding =
-      context.queryEmbedding ?? (await getEmbedding(apiKey, itemName));
+    const embedding = context.queryEmbedding ?? (await getEmbedding(apiKey, itemName));
     const results = await findSimilarContext(
       supabase,
       embedding,
@@ -50,10 +49,10 @@ Item: ${itemName}
 Domain: ${domainDef.domain}
 
 ${
-  ragContext
-    ? `### INTERNAL SALES HISTORY:\nThe following items from our internal sales history are similar to this item:\n${ragContext}\n`
-    : ""
-}
+    ragContext
+      ? `### INTERNAL SALES HISTORY:\nThe following items from our internal sales history are similar to this item:\n${ragContext}\n`
+      : ""
+  }
 
 ### TASKS:
 1. Find the most accurate 2026 eBay Leaf Category ID for this item.
@@ -99,8 +98,7 @@ Return your report in JSON format:
       try {
         const parsed = JSON.parse(jsonMatch[0]);
         return {
-          marketAnalysis:
-            parsed.marketAnalysis ||
+          marketAnalysis: parsed.marketAnalysis ||
             "Search completed with no detailed analysis.",
           groundedCategoryId: parsed.groundedCategoryId || null,
         };

@@ -132,10 +132,10 @@ function normalizeConditionDescriptorToEnum(
 
   return (
     aliases[lowered] ??
-    raw
-      .toUpperCase()
-      .replace(/[^A-Z0-9]+/g, "_")
-      .replace(/^_|_$/g, "")
+      raw
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, "_")
+        .replace(/^_|_$/g, "")
   );
 }
 
@@ -163,20 +163,20 @@ async function fetchDynamicCategoryConditions(
     const data = await resp.json();
     return Array.isArray(data?.conditions)
       ? data.conditions
-          .map((condition: any) => ({
-            conditionId: Number(condition.conditionId),
-            conditionDescription: String(
-              condition.conditionDescription ?? "",
-            ).trim(),
-          }))
-          .filter(
-            (condition: {
-              conditionId: number;
-              conditionDescription: string;
-            }) =>
-              Number.isFinite(condition.conditionId) &&
-              condition.conditionDescription,
-          )
+        .map((condition: any) => ({
+          conditionId: Number(condition.conditionId),
+          conditionDescription: String(
+            condition.conditionDescription ?? "",
+          ).trim(),
+        }))
+        .filter(
+          (condition: {
+            conditionId: number;
+            conditionDescription: string;
+          }) =>
+            Number.isFinite(condition.conditionId) &&
+            condition.conditionDescription,
+        )
       : [];
   } catch {
     return [];
@@ -214,13 +214,12 @@ async function resolveConditionForCategory(
     const match = dynamicConditions.find(
       (candidate) =>
         normalizeConditionDescriptorToEnum(candidate.conditionDescription) ===
-        conditionEnum,
+          conditionEnum,
     );
     if (match) {
       conditionId = match.conditionId;
       conditionDescription = match.conditionDescription;
-      conditionEnum =
-        normalizeConditionDescriptorToEnum(match.conditionDescription) ||
+      conditionEnum = normalizeConditionDescriptorToEnum(match.conditionDescription) ||
         conditionEnum;
     }
   }
@@ -287,16 +286,13 @@ serve(async (req: Request) => {
     // Determine tier
     const ADMIN_EMAILS = ["twinwicksllc@gmail.com"];
     const isAdmin = userEmail ? ADMIN_EMAILS.includes(userEmail) : false;
-    let tier: "starter" | "pro" | "unlimited" | "admin" = isAdmin
-      ? "admin"
-      : "starter";
+    let tier: "starter" | "pro" | "unlimited" | "admin" = isAdmin ? "admin" : "starter";
 
     if (!isAdmin) {
       const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
       if (STRIPE_SECRET_KEY && userEmail) {
         try {
-          const { default: Stripe } =
-            await import("https://esm.sh/stripe@18.5.0");
+          const { default: Stripe } = await import("https://esm.sh/stripe@18.5.0");
           const stripe = new Stripe(STRIPE_SECRET_KEY, {
             apiVersion: "2025-08-27.basil",
           });
@@ -376,10 +372,7 @@ serve(async (req: Request) => {
     }
 
     const ebayEnv = Deno.env.get("EBAY_ENV") || "production";
-    const apiBase =
-      ebayEnv === "sandbox"
-        ? "https://api.sandbox.ebay.com"
-        : "https://api.ebay.com";
+    const apiBase = ebayEnv === "sandbox" ? "https://api.sandbox.ebay.com" : "https://api.ebay.com";
 
     const authHeaders = {
       Authorization: `Bearer ${userToken}`,
@@ -458,9 +451,7 @@ serve(async (req: Request) => {
           return null;
         }
         const policies = data[`${policyType}Policies`] || [];
-        return Array.isArray(policies) && policies.length > 0
-          ? policies[0][`${policyType}PolicyId`] || null
-          : null;
+        return Array.isArray(policies) && policies.length > 0 ? policies[0][`${policyType}PolicyId`] || null : null;
       } catch {
         return null;
       }
@@ -507,12 +498,12 @@ serve(async (req: Request) => {
             ...(imageUrls.length > 0 ? { imageUrls } : {}),
             ...(row.itemSpecifics && Object.keys(row.itemSpecifics).length > 0
               ? {
-                  aspects: Object.fromEntries(
-                    Object.entries(row.itemSpecifics)
-                      .filter(([, v]) => v)
-                      .map(([k, v]) => [k, [v]]),
-                  ),
-                }
+                aspects: Object.fromEntries(
+                  Object.entries(row.itemSpecifics)
+                    .filter(([, v]) => v)
+                    .map(([k, v]) => [k, [v]]),
+                ),
+              }
               : {}),
           },
           condition: conditionEnum,
@@ -540,8 +531,7 @@ serve(async (req: Request) => {
         }
 
         // Step 2: Build offer
-        const fulfillmentPolicyId =
-          row.fulfillmentPolicyId || defaultFulfillment;
+        const fulfillmentPolicyId = row.fulfillmentPolicyId || defaultFulfillment;
         const returnPolicyId = row.returnPolicyId || defaultReturn;
 
         if (!fulfillmentPolicyId) {
@@ -556,36 +546,33 @@ serve(async (req: Request) => {
           format: row.format,
           categoryId: row.categoryId,
           listingDescription: row.description || row.title,
-          pricingSummary:
-            row.format === "AUCTION"
-              ? {
-                  auctionStartPrice: {
-                    value: String((row.auctionStartPrice ?? 0.99).toFixed(2)),
+          pricingSummary: row.format === "AUCTION"
+            ? {
+              auctionStartPrice: {
+                value: String((row.auctionStartPrice ?? 0.99).toFixed(2)),
+                currency: "USD",
+              },
+              ...(row.buyItNowPrice
+                ? {
+                  auctionReservePrice: {
+                    value: String(row.buyItNowPrice.toFixed(2)),
                     currency: "USD",
                   },
-                  ...(row.buyItNowPrice
-                    ? {
-                        auctionReservePrice: {
-                          value: String(row.buyItNowPrice.toFixed(2)),
-                          currency: "USD",
-                        },
-                      }
-                    : {}),
                 }
-              : {
-                  price: {
-                    value: String((row.price || 0.99).toFixed(2)),
-                    currency: "USD",
-                  },
-                },
+                : {}),
+            }
+            : {
+              price: {
+                value: String((row.price || 0.99).toFixed(2)),
+                currency: "USD",
+              },
+            },
           quantityLimitPerBuyer: 10,
           includeCatalogProductDetails: false,
           listingPolicies: {
             fulfillmentPolicyId,
             ...(returnPolicyId ? { returnPolicyId } : {}),
-            ...(row.paymentPolicyId
-              ? { paymentPolicyId: row.paymentPolicyId }
-              : {}),
+            ...(row.paymentPolicyId ? { paymentPolicyId: row.paymentPolicyId } : {}),
           },
           merchantLocationKey,
           conditionId,

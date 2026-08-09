@@ -37,10 +37,6 @@
       "prettier --write",
       "eslint --fix"
     ],
-    "*.{js,jsx,ts,tsx}": [
-      "prettier --write",
-      "eslint --fix"
-    ],
     "supabase/functions/**/*.{ts,tsx}": [
       "deno fmt"
     ],

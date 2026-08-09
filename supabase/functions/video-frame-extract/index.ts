@@ -4,8 +4,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Max-Age": "86400",
 };
 
@@ -112,9 +111,7 @@ serve(async (req: Request) => {
     const maxFrames = Math.max(1, Math.min(12, body.maxFrames ?? 6));
     const strategy = body.strategy ?? "scene_change";
     const telemetry = body.telemetry ?? {};
-    const incomingFrames = Array.isArray(body.frames)
-      ? body.frames.slice(0, maxFrames)
-      : [];
+    const incomingFrames = Array.isArray(body.frames) ? body.frames.slice(0, maxFrames) : [];
 
     if (!videoUrl && incomingFrames.length === 0) {
       return new Response(
@@ -126,8 +123,7 @@ serve(async (req: Request) => {
       );
     }
 
-    let frames: Array<{ url: string; timestampSec: number; score: number }> =
-      [];
+    let frames: Array<{ url: string; timestampSec: number; score: number }> = [];
     let mocked = false;
 
     if (incomingFrames.length > 0) {
@@ -195,8 +191,7 @@ serve(async (req: Request) => {
           extractionMode: mocked ? "mock_fallback" : "client_persisted",
           userId,
           durationSec: 8.4,
-          framesExamined:
-            incomingFrames.length > 0 ? incomingFrames.length : 24,
+          framesExamined: incomingFrames.length > 0 ? incomingFrames.length : 24,
           framesSelected: frames.length,
           message: mocked
             ? "Debug mock response only (no production fallback frames)."

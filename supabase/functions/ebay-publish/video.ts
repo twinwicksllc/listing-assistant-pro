@@ -18,12 +18,8 @@ export interface VideoHandlerContext {
 
 function getMediaVideoBaseCandidates(ebayEnv: string): string[] {
   const isProduction = ebayEnv === "production";
-  const restBase = isProduction
-    ? "https://api.ebay.com"
-    : "https://api.sandbox.ebay.com";
-  const mediaGatewayBase = isProduction
-    ? "https://apim.ebay.com"
-    : "https://apim.sandbox.ebay.com";
+  const restBase = isProduction ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
+  const mediaGatewayBase = isProduction ? "https://apim.ebay.com" : "https://apim.sandbox.ebay.com";
 
   // eBay documents Media API resources under the apim v1_beta gateway.
   // Keep observed alternates as fallbacks for account/environment differences.
@@ -125,8 +121,7 @@ async function pollVideoStatusWithRetry(
           return {
             videoId,
             status: normalizedStatus,
-            statusMessage:
-              lastStatus.statusMessage ?? lastStatus.status_message ?? null,
+            statusMessage: lastStatus.statusMessage ?? lastStatus.status_message ?? null,
             attempts: attempt,
             processingTimeMs,
           };
@@ -138,9 +133,11 @@ async function pollVideoStatusWithRetry(
           maxDelayMs,
         );
         console.log(
-          `pollVideoStatus: videoId=${videoId} still processing (${normalizedStatus}), waiting ${exponentialBackoff.toFixed(
-            0,
-          )}ms before retry`,
+          `pollVideoStatus: videoId=${videoId} still processing (${normalizedStatus}), waiting ${
+            exponentialBackoff.toFixed(
+              0,
+            )
+          }ms before retry`,
         );
         await new Promise((resolve) => setTimeout(resolve, exponentialBackoff));
         continue;
@@ -177,9 +174,7 @@ async function pollVideoStatusWithRetry(
 
   // All retries exhausted
   const processingTimeMs = Date.now() - startTimeMs;
-  const lastStatusStr = lastStatus
-    ? String(lastStatus.videoStatus ?? lastStatus.status ?? "UNKNOWN")
-    : "UNKNOWN";
+  const lastStatusStr = lastStatus ? String(lastStatus.videoStatus ?? lastStatus.status ?? "UNKNOWN") : "UNKNOWN";
   throw new Error(
     `Video processing timeout after ${maxAttempts} attempts (${processingTimeMs}ms): status=${lastStatusStr}. ${
       lastError ? `Last error: ${lastError.message}` : ""
@@ -347,7 +342,8 @@ export async function handleUploadVideo({
       return new Response(
         JSON.stringify({
           error: "token_env_mismatch",
-          message: `Provided user token appears to be for '${tokenEnvDetected}' but the function is configured for '${ebayEnv}'. Use a ${ebayEnv} user token or set EBAY_ENVIRONMENT to '${tokenEnvDetected}'.`,
+          message:
+            `Provided user token appears to be for '${tokenEnvDetected}' but the function is configured for '${ebayEnv}'. Use a ${ebayEnv} user token or set EBAY_ENVIRONMENT to '${tokenEnvDetected}'.`,
         }),
         {
           status: 400,
@@ -360,8 +356,7 @@ export async function handleUploadVideo({
   }
 
   let videoId: string | null = null;
-  const endpointErrors: Array<{ url: string; status: number; body: string }> =
-    [];
+  const endpointErrors: Array<{ url: string; status: number; body: string }> = [];
 
   for (const candidateBase of mediaApiCandidates) {
     videoCreateUrl = candidateBase;
@@ -465,9 +460,11 @@ export async function handleUploadVideo({
 
   if (!videoId) {
     throw new Error(
-      `eBay video create failed across endpoint variants: ${endpointErrors
-        .map((e) => `${e.status}@${e.url}`)
-        .join(", ")}`,
+      `eBay video create failed across endpoint variants: ${
+        endpointErrors
+          .map((e) => `${e.status}@${e.url}`)
+          .join(", ")
+      }`,
     );
   }
 
@@ -581,8 +578,7 @@ export async function handleGetVideoStatus({
       videoId,
       status: normalizedStatus,
       rawStatus,
-      statusMessage:
-        statusData.statusMessage ?? statusData.status_message ?? null,
+      statusMessage: statusData.statusMessage ?? statusData.status_message ?? null,
       // Include additional metadata for debugging
       debugData: {
         fullResponse: statusData,
@@ -612,8 +608,7 @@ export async function handlePollVideoStatusUntilLive({
   );
   const mediaApiBase = mediaApiCandidates[0]; // Use primary endpoint for polling
 
-  const maxWaitSeconds =
-    typeof maxWaitMs === "number" ? Math.floor(maxWaitMs / 1000) : 300; // Default 5 min
+  const maxWaitSeconds = typeof maxWaitMs === "number" ? Math.floor(maxWaitMs / 1000) : 300; // Default 5 min
   const maxAttempts = Math.ceil(maxWaitSeconds / 2); // 2 seconds base retry
 
   try {

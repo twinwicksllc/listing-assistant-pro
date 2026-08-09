@@ -73,16 +73,13 @@ serve(async (req: Request) => {
     // Determine tier
     const ADMIN_EMAILS = ["twinwicksllc@gmail.com"];
     const isAdmin = userEmail ? ADMIN_EMAILS.includes(userEmail) : false;
-    let tier: "starter" | "pro" | "unlimited" | "admin" = isAdmin
-      ? "admin"
-      : "starter";
+    let tier: "starter" | "pro" | "unlimited" | "admin" = isAdmin ? "admin" : "starter";
 
     if (!isAdmin) {
       const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
       if (STRIPE_SECRET_KEY && userEmail) {
         try {
-          const { default: Stripe } =
-            await import("https://esm.sh/stripe@18.5.0");
+          const { default: Stripe } = await import("https://esm.sh/stripe@18.5.0");
           const stripe = new Stripe(STRIPE_SECRET_KEY, {
             apiVersion: "2025-08-27.basil",
           });
@@ -127,8 +124,7 @@ serve(async (req: Request) => {
     }
 
     const configuredProxyUrl = Deno.env.get("OPENAI_PROXY_URL")?.trim();
-    const openAiEndpoint =
-      configuredProxyUrl || "https://api.openai.com/v1/chat/completions";
+    const openAiEndpoint = configuredProxyUrl || "https://api.openai.com/v1/chat/completions";
     const usingProxy = Boolean(configuredProxyUrl);
     const openAiKey = Deno.env.get("NEW_OPENAI_API_KEY");
     if (!usingProxy && !openAiKey) {
@@ -149,19 +145,19 @@ serve(async (req: Request) => {
     for (const row of rows) {
       try {
         // Build a concise prompt from the row data
-        const specificsText =
-          row.itemSpecifics && Object.keys(row.itemSpecifics).length > 0
-            ? Object.entries(row.itemSpecifics)
-                .map(([k, v]) => `${k}: ${v}`)
-                .join(", ")
-            : "N/A";
+        const specificsText = row.itemSpecifics && Object.keys(row.itemSpecifics).length > 0
+          ? Object.entries(row.itemSpecifics)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(", ")
+          : "N/A";
 
         const conditionLabel = (row.condition ?? "PRE_OWNED_GOOD")
           .replace(/_/g, " ")
           .toLowerCase()
           .replace(/\b\w/g, (c) => c.toUpperCase());
 
-        const prompt = `Write a compelling eBay listing description for this item. I want a HUMAN-sounding description that is professional but conversational. Imagine you are an enthusiastic eBay seller.
+        const prompt =
+          `Write a compelling eBay listing description for this item. I want a HUMAN-sounding description that is professional but conversational. Imagine you are an enthusiastic eBay seller.
 
 Title: ${row.title}
 Condition: ${conditionLabel}
@@ -197,9 +193,7 @@ TONE RULES:
           headers: {
             "Content-Type": "application/json",
             ...(usingProxy ? {} : { Authorization: `Bearer ${openAiKey}` }),
-            ...(openAiProxyAuthToken
-              ? { "X-Proxy-Auth": openAiProxyAuthToken }
-              : {}),
+            ...(openAiProxyAuthToken ? { "X-Proxy-Auth": openAiProxyAuthToken } : {}),
           },
           body: JSON.stringify({
             model: "gpt-4o-mini",
@@ -241,8 +235,7 @@ TONE RULES:
           const completionTokens = oaiUsage.completion_tokens ?? 0;
           const totalTokens = oaiUsage.total_tokens ?? 0;
           // gpt-4o-mini pricing: $0.15/1M input, $0.60/1M output
-          const costUsd =
-            promptTokens * 0.00000015 + completionTokens * 0.0000006;
+          const costUsd = promptTokens * 0.00000015 + completionTokens * 0.0000006;
           svc
             .from("gemini_usage")
             .insert({
@@ -260,7 +253,7 @@ TONE RULES:
               console.warn(
                 "Failed to log OpenAI bulk-descriptions usage:",
                 String(e),
-              ),
+              )
             );
         }
 

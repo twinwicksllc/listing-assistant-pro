@@ -63,8 +63,7 @@ async function reviseFixedPriceItem(
       xmlText.includes("<Ack>Failure</Ack>") ||
       xmlText.includes("<Ack>PartialFailure</Ack>")
     ) {
-      const errMsg =
-        xmlText.match(/<LongMessage>([\s\S]*?)<\/LongMessage>/)?.[1] ||
+      const errMsg = xmlText.match(/<LongMessage>([\s\S]*?)<\/LongMessage>/)?.[1] ||
         xmlText.match(/<ShortMessage>([\s\S]*?)<\/ShortMessage>/)?.[1] ||
         "Unknown Trading API error";
       return { success: false, error: errMsg };
@@ -125,8 +124,7 @@ async function reviseFixedPriceItemContent(
       xmlText.includes("<Ack>Failure</Ack>") ||
       xmlText.includes("<Ack>PartialFailure</Ack>")
     ) {
-      const errMsg =
-        xmlText.match(/<LongMessage>([\s\S]*?)<\/LongMessage>/)?.[1] ||
+      const errMsg = xmlText.match(/<LongMessage>([\s\S]*?)<\/LongMessage>/)?.[1] ||
         xmlText.match(/<ShortMessage>([\s\S]*?)<\/ShortMessage>/)?.[1] ||
         "Unknown Trading API error";
       return { success: false, error: errMsg };
@@ -428,8 +426,7 @@ async function bulkUpdateInventoryPrices(
               statusCode: 200,
             });
           } else {
-            const errMsg =
-              r.errors?.[0]?.message || `Status code ${r.statusCode}`;
+            const errMsg = r.errors?.[0]?.message || `Status code ${r.statusCode}`;
             results.push({
               offerId: offer.offerId,
               success: false,
@@ -467,10 +464,7 @@ serve(async (req) => {
     const { action, userToken, userId } = body;
 
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-    const apiBase =
-      ebayEnv === "production"
-        ? "https://api.ebay.com"
-        : "https://api.sandbox.ebay.com";
+    const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
 
     console.log(`ebay-reprice: action=${action}, env=${ebayEnv}`);
 
@@ -529,8 +523,7 @@ serve(async (req) => {
 
         // If Inventory API fails, try to extract the full error message and check for fallback-worthy errors
         const errorMsg = result.error || "";
-        const shouldFallback =
-          !result.success &&
+        const shouldFallback = !result.success &&
           (errorMsg.includes("not currently supported") ||
             errorMsg.includes("Inventory-based listing management")) &&
           listingId;
@@ -549,9 +542,7 @@ serve(async (req) => {
             );
             console.log(
               `[ebay-reprice] Trading API fallback result:`,
-              tradingResult.success
-                ? "SUCCESS"
-                : `FAILED: ${tradingResult.error}`,
+              tradingResult.success ? "SUCCESS" : `FAILED: ${tradingResult.error}`,
             );
             return new Response(JSON.stringify(tradingResult), {
               headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -595,8 +586,7 @@ serve(async (req) => {
 
         // eBay may reject this if the listing is actually Inventory-managed.
         // In that case, look up the offerId by SKU and retry via Inventory API.
-        const isInventoryItem =
-          !tradingResult.success &&
+        const isInventoryItem = !tradingResult.success &&
           (tradingResult.error?.includes("not allowed for inventory") ||
             tradingResult.error?.includes("Inventory-based listing"));
 
@@ -614,9 +604,7 @@ serve(async (req) => {
             const inventoryResult = inventoryResults[0];
             console.log(
               `[ebay-reprice] Inventory API retry for offerId=${resolvedOfferId}: ` +
-                (inventoryResult.success
-                  ? "SUCCESS"
-                  : `FAILED: ${inventoryResult.error}`),
+                (inventoryResult.success ? "SUCCESS" : `FAILED: ${inventoryResult.error}`),
             );
             return new Response(
               JSON.stringify({
@@ -762,8 +750,7 @@ serve(async (req) => {
         }
       }
 
-      const success =
-        (wantsTitle ? titleUpdated : true) &&
+      const success = (wantsTitle ? titleUpdated : true) &&
         (wantsDescription ? descriptionUpdated : true);
 
       return new Response(

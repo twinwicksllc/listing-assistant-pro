@@ -50,9 +50,7 @@ serve(async (req) => {
                 {
                   type: "input_audio",
                   input_audio: {
-                    data: audioBase64.includes(",")
-                      ? audioBase64.split(",")[1]
-                      : audioBase64,
+                    data: audioBase64.includes(",") ? audioBase64.split(",")[1] : audioBase64,
                     format: "wav",
                   },
                 },

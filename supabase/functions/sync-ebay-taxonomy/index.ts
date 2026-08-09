@@ -19,8 +19,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 const CATEGORY_TREE_ID = "0"; // EBAY_US
@@ -28,19 +27,18 @@ const BATCH_SIZE = 300; // rows per upsert call
 
 // ── eBay token ────────────────────────────────────────────────────────────────
 
-async function getEbayAppToken(): Promise<{
-  token: string;
-  base: string;
-} | null> {
+async function getEbayAppToken(): Promise<
+  {
+    token: string;
+    base: string;
+  } | null
+> {
   const clientId = Deno.env.get("EBAY_CLIENT_ID");
   const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
   const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "production";
   if (!clientId || !clientSecret) return null;
 
-  const base =
-    ebayEnv === "production"
-      ? "https://api.ebay.com"
-      : "https://api.sandbox.ebay.com";
+  const base = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
   const tokenUrl = `${base}/identity/v1/oauth2/token`;
 
   const resp = await fetch(tokenUrl, {
@@ -141,8 +139,7 @@ serve(async (req: Request) => {
   if (!ebay) {
     return new Response(
       JSON.stringify({
-        error:
-          "eBay credentials not configured (EBAY_CLIENT_ID / EBAY_CLIENT_SECRET)",
+        error: "eBay credentials not configured (EBAY_CLIENT_ID / EBAY_CLIENT_SECRET)",
       }),
       {
         status: 400,

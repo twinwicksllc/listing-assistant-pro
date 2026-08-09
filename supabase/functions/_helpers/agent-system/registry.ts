@@ -57,16 +57,13 @@ export const DOMAIN_REGISTRY: Record<Domain, DomainDefinition> = {
     domain: "coins_bullion",
     visionGoals: [
       {
-        region:
-          "certification slab label (PCGS/NGC/ANACS/ICG/PMG/Legacy Currency Grading text)",
+        region: "certification slab label (PCGS/NGC/ANACS/ICG/PMG/Legacy Currency Grading text)",
         rationale:
           "Extract authoritative year, denomination, grade, cert number, and any special designations (e.g. EPQ, DCAM, NET). Read each digit carefully — misreads of slab labels are a known AI failure mode.",
       },
       {
-        region:
-          "PMG or Legacy Currency Grading label (for paper money/banknotes)",
-        rationale:
-          "Extract grade, serial number, and EPQ/NET designation from currency slab labels if present.",
+        region: "PMG or Legacy Currency Grading label (for paper money/banknotes)",
+        rationale: "Extract grade, serial number, and EPQ/NET designation from currency slab labels if present.",
       },
       {
         region: "date and mint mark on coin face",
@@ -188,8 +185,7 @@ export const DOMAIN_REGISTRY: Record<Domain, DomainDefinition> = {
     visionGoals: [
       {
         region: "stamped part number or manufacturer logo",
-        rationale:
-          "Extract precise part number for fitment/compatibility data.",
+        rationale: "Extract precise part number for fitment/compatibility data.",
       },
       {
         region: "connectors, threads, or mounting points",

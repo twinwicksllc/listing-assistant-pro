@@ -25,9 +25,7 @@ export async function assertCallerOwnsUser(
   supabaseServiceKey: string,
 ): Promise<void> {
   const authHeader = req.headers.get("Authorization");
-  const jwt = authHeader?.startsWith("Bearer ")
-    ? authHeader.slice(7).trim()
-    : null;
+  const jwt = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
   if (!jwt) {
     throw new Error(
       "Unauthorized: missing Authorization header for token action.",

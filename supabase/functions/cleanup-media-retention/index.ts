@@ -4,8 +4,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers":
-    "authorization, apikey, x-cleanup-secret, content-type",
+  "Access-Control-Allow-Headers": "authorization, apikey, x-cleanup-secret, content-type",
   "Access-Control-Max-Age": "86400",
 };
 
@@ -87,12 +86,10 @@ async function getBucketStats(adminClient: any): Promise<BucketStats> {
     }
 
     const payload = await response.json();
-    const sizeBytes =
-      Number(payload?.size ?? payload?.total_size ?? payload?.bytes ?? 0) || 0;
-    const objectCount =
-      Number(
-        payload?.objects ?? payload?.object_count ?? payload?.count ?? 0,
-      ) || 0;
+    const sizeBytes = Number(payload?.size ?? payload?.total_size ?? payload?.bytes ?? 0) || 0;
+    const objectCount = Number(
+      payload?.objects ?? payload?.object_count ?? payload?.count ?? 0,
+    ) || 0;
     return { sizeBytes, objectCount };
   } catch (err) {
     console.warn("cleanup-media-retention: bucket stats request error", err);
@@ -115,7 +112,7 @@ serve(async (req: Request) => {
 
   const isAuthorized = Boolean(
     serviceKey &&
-    (providedAuth === serviceKey || providedSecret === expectedSecret),
+      (providedAuth === serviceKey || providedSecret === expectedSecret),
   );
   if (!serviceKey || !isAuthorized) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -181,16 +178,12 @@ serve(async (req: Request) => {
           return refs.some((value) => value === publicUrl);
         });
 
-        const activeDraft = referencedDrafts.find((draft) =>
-          isDraftStillActive(draft),
-        );
-        const draftAgeDays = activeDraft
-          ? getAgeDays(activeDraft.created_at, activeDraft.created_at)
-          : null;
+        const activeDraft = referencedDrafts.find((draft) => isDraftStillActive(draft));
+        const draftAgeDays = activeDraft ? getAgeDays(activeDraft.created_at, activeDraft.created_at) : null;
         const shouldKeepForActiveDraft = Boolean(
           activeDraft &&
-          draftAgeDays !== null &&
-          draftAgeDays < DRAFT_GRACE_DAYS,
+            draftAgeDays !== null &&
+            draftAgeDays < DRAFT_GRACE_DAYS,
         );
 
         if (shouldKeepForActiveDraft) {
@@ -218,18 +211,15 @@ serve(async (req: Request) => {
         deletedCount += 1;
 
         for (const draft of referencedDrafts) {
-          const nextImageUrl =
-            draft.image_url === publicUrl ? "" : draft.image_url;
+          const nextImageUrl = draft.image_url === publicUrl ? "" : draft.image_url;
           const nextImageUrls = Array.isArray(draft.image_urls)
             ? draft.image_urls.filter((url) => url !== publicUrl)
             : null;
-          const nextVideoUrl =
-            draft.video_url === publicUrl ? null : draft.video_url;
+          const nextVideoUrl = draft.video_url === publicUrl ? null : draft.video_url;
 
           const updatePayload: Partial<DraftRow> = {
             image_url: nextImageUrl,
-            image_urls:
-              nextImageUrls && nextImageUrls.length > 0 ? nextImageUrls : null,
+            image_urls: nextImageUrls && nextImageUrls.length > 0 ? nextImageUrls : null,
             video_url: nextVideoUrl,
           };
 

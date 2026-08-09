@@ -16,10 +16,7 @@ serve(async (req) => {
     if (!userToken) throw new Error("No eBay user token provided");
 
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-    const apiBase =
-      ebayEnv === "production"
-        ? "https://api.ebay.com"
-        : "https://api.sandbox.ebay.com";
+    const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
 
     const authHeaders = {
       Authorization: `Bearer ${userToken}`,

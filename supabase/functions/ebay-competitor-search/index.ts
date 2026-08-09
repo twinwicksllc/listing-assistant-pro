@@ -212,14 +212,16 @@ async function geminiSearchQuery(
 ): Promise<string | null> {
   const label = "[ebay-competitor-search][Gemini]";
 
-  const priceContext =
-    yourPrice && yourPrice > 0
-      ? `\nSeller's listed price: $${yourPrice.toFixed(
-          2,
-        )} USD — the search results should be for items in a similar price range`
-      : "";
+  const priceContext = yourPrice && yourPrice > 0
+    ? `\nSeller's listed price: $${
+      yourPrice.toFixed(
+        2,
+      )
+    } USD — the search results should be for items in a similar price range`
+    : "";
 
-  const prompt = `You are an eBay search specialist. Given a listing title, produce the shortest, most effective eBay keyword search string (≤8 words) to find comparable active listings at a similar price point.
+  const prompt =
+    `You are an eBay search specialist. Given a listing title, produce the shortest, most effective eBay keyword search string (≤8 words) to find comparable active listings at a similar price point.
 
 Rules:
 - Keep: brand, model, year, mint mark, grade/certification (e.g. PCGS MS63, NGC AU58), size, color, key identifiers
@@ -267,8 +269,7 @@ eBay search keywords:`;
     }
 
     const data = await resp.json();
-    const text: string =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+    const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
 
     if (!text || text.length < 3) {
       console.warn(`${label} Empty response — falling back to heuristic`);
@@ -310,10 +311,9 @@ async function getEbayAppToken(ebayEnv: string): Promise<string> {
   }
 
   const credentials = btoa(`${clientId}:${clientSecret}`);
-  const tokenUrl =
-    ebayEnv === "production"
-      ? "https://api.ebay.com/identity/v1/oauth2/token"
-      : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
+  const tokenUrl = ebayEnv === "production"
+    ? "https://api.ebay.com/identity/v1/oauth2/token"
+    : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
 
   const resp = await fetch(tokenUrl, {
     method: "POST",
@@ -369,10 +369,7 @@ async function fetchEbayCompetitors(params: {
     filterMode = "fixed",
   } = params;
 
-  const apiBase =
-    ebayEnv === "production"
-      ? "https://api.ebay.com"
-      : "https://api.sandbox.ebay.com";
+  const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
 
   const searchParams = new URLSearchParams({
     q: searchQuery,
@@ -428,8 +425,7 @@ async function fetchEbayCompetitors(params: {
   }
 
   if (!resp || !resp.ok) {
-    const errBody =
-      (await resp?.text?.().catch(() => "(could not read body)")) ??
+    const errBody = (await resp?.text?.().catch(() => "(could not read body)")) ??
       "(no response)";
     console.error(
       `[ebay-competitor-search] Browse API failed: ${resp?.status} — ${errBody.slice(0, 300)}`,
@@ -464,8 +460,7 @@ async function fetchEbayCompetitors(params: {
         condition: String(item?.condition ?? "Pre-Owned"),
         itemId: item?.itemId ? String(item.itemId) : undefined,
         itemUrl: item?.itemWebUrl ?? null,
-        imageUrl:
-          item?.image?.imageUrl ?? item?.thumbnailImages?.[0]?.imageUrl ?? null,
+        imageUrl: item?.image?.imageUrl ?? item?.thumbnailImages?.[0]?.imageUrl ?? null,
       });
     } catch {
       // Skip malformed items
@@ -486,9 +481,7 @@ function median(nums: number[]): number {
   if (nums.length === 0) return 0;
   const sorted = [...nums].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 !== 0
-    ? sorted[mid]
-    : (sorted[mid - 1] + sorted[mid]) / 2;
+  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 // ----------------------------------------------------------------
@@ -509,9 +502,11 @@ function priceAnchorFilter(
   const filtered = prices.filter((p) => p >= lower && p <= upper);
   if (filtered.length !== prices.length) {
     console.log(
-      `[ebay-competitor-search] Price-anchor filter ($${lower.toFixed(2)}-$${upper.toFixed(
-        2,
-      )}): ${prices.length} → ${filtered.length} prices (removed ${
+      `[ebay-competitor-search] Price-anchor filter ($${lower.toFixed(2)}-$${
+        upper.toFixed(
+          2,
+        )
+      }): ${prices.length} → ${filtered.length} prices (removed ${
         prices.length - filtered.length
       } price-mismatched items)`,
     );
@@ -632,8 +627,7 @@ serve(async (req) => {
           .maybeSingle();
 
         if (cachedFresh) {
-          const cacheAgeMs =
-            Date.now() - new Date(cachedFresh.fetched_at).getTime();
+          const cacheAgeMs = Date.now() - new Date(cachedFresh.fetched_at).getTime();
           const cacheAgeMins = Math.round(cacheAgeMs / 60000);
           const cacheExpiresAt = new Date(
             new Date(cachedFresh.fetched_at).getTime() + CACHE_TTL_MS,
@@ -643,8 +637,7 @@ serve(async (req) => {
           );
           return new Response(
             JSON.stringify({
-              searchQuery:
-                cachedFresh.gemini_search_query ?? cachedFresh.search_query,
+              searchQuery: cachedFresh.gemini_search_query ?? cachedFresh.search_query,
               avgPrice: cachedFresh.avg_price,
               minPrice: cachedFresh.min_price,
               maxPrice: cachedFresh.max_price,
@@ -790,22 +783,20 @@ serve(async (req) => {
     // Then apply IQR outlier removal for the remaining items.
     const anchoredPrices = priceAnchorFilter(prices, yourPrice);
     const cleanPrices = removeOutliers(anchoredPrices);
-    const avgPrice =
-      cleanPrices.reduce((s, p) => s + p, 0) / cleanPrices.length;
+    const avgPrice = cleanPrices.reduce((s, p) => s + p, 0) / cleanPrices.length;
     const minPrice = Math.min(...cleanPrices);
     const maxPrice = Math.max(...cleanPrices);
     const medianPrice = median(cleanPrices);
     // Use median as basis for priceDelta — more robust than avg for skewed distributions
-    const priceDelta =
-      yourPrice != null
-        ? Math.round((yourPrice - medianPrice) * 100) / 100
-        : null;
+    const priceDelta = yourPrice != null ? Math.round((yourPrice - medianPrice) * 100) / 100 : null;
     const priceDistribution = buildDistribution(cleanPrices);
 
     console.log(
-      `[ebay-competitor-search] Stats (after outlier removal): avg=$${avgPrice.toFixed(2)}, median=$${medianPrice.toFixed(
-        2,
-      )}, n=${cleanPrices.length} (raw: ${count}, query="${chosenQuery}", category=${chosenCategoryId ?? "any"})`,
+      `[ebay-competitor-search] Stats (after outlier removal): avg=$${avgPrice.toFixed(2)}, median=$${
+        medianPrice.toFixed(
+          2,
+        )
+      }, n=${cleanPrices.length} (raw: ${count}, query="${chosenQuery}", category=${chosenCategoryId ?? "any"})`,
     );
 
     // ------------------------------------------------------------------
@@ -910,8 +901,7 @@ serve(async (req) => {
           );
           return new Response(
             JSON.stringify({
-              searchQuery:
-                staleCached.gemini_search_query ?? staleCached.search_query,
+              searchQuery: staleCached.gemini_search_query ?? staleCached.search_query,
               avgPrice: staleCached.avg_price,
               minPrice: staleCached.min_price,
               maxPrice: staleCached.max_price,

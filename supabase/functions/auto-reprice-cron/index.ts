@@ -293,9 +293,7 @@ serve(async (req) => {
 
       // Filter to specific listings if provided
       if (listingIds && listingIds.length > 0) {
-        listings = listings.filter((l) =>
-          listingIds.includes(l.listingId ?? ""),
-        );
+        listings = listings.filter((l) => listingIds.includes(l.listingId ?? ""));
       }
 
       // Limit to top 20 per run to avoid rate limits

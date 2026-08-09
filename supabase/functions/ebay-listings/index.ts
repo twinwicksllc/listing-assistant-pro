@@ -94,11 +94,10 @@ async function fetchAnalyticsForWindow(
     // (NOT in a "metricHeaders" field — that field does not exist in the response)
     // Fall back to our hardcoded request order if header is missing/empty,
     // since eBay guarantees values are returned in the same order as requested.
-    const headerMetrics: string[] =
-      Array.isArray(trafficData.header?.metrics) &&
-      trafficData.header.metrics.length > 0
-        ? (trafficData.header.metrics as any[]).map((h: any) => h.key as string)
-        : ANALYTICS_METRICS_ARRAY;
+    const headerMetrics: string[] = Array.isArray(trafficData.header?.metrics) &&
+        trafficData.header.metrics.length > 0
+      ? (trafficData.header.metrics as any[]).map((h: any) => h.key as string)
+      : ANALYTICS_METRICS_ARRAY;
 
     console.log(
       `Analytics API (${days}d): metric order = [${headerMetrics.join(", ")}]`,
@@ -128,9 +127,11 @@ async function fetchAnalyticsForWindow(
         );
       } else {
         console.log(
-          `Analytics API (${days}d): TRANSACTION metric not found in response! metricHeaders: ${metricHeaders.join(
-            ", ",
-          )}`,
+          `Analytics API (${days}d): TRANSACTION metric not found in response! metricHeaders: ${
+            metricHeaders.join(
+              ", ",
+            )
+          }`,
         );
       }
     }
@@ -456,9 +457,11 @@ async function fetchFinancesTransactions(
     }
 
     console.log(
-      `Finances API (30d): refunds=$${result.refunds30d.toFixed(2)}, nonSale=$${result.nonSale30d.toFixed(
-        2,
-      )}, disputes=$${result.disputes30d.toFixed(2)}, credits=$${result.credits30d.toFixed(2)}`,
+      `Finances API (30d): refunds=$${result.refunds30d.toFixed(2)}, nonSale=$${
+        result.nonSale30d.toFixed(
+          2,
+        )
+      }, disputes=$${result.disputes30d.toFixed(2)}, credits=$${result.credits30d.toFixed(2)}`,
     );
   } catch (e) {
     console.warn("Finances API: transaction fetch error (non-fatal):", e);
@@ -542,9 +545,11 @@ async function fetchShippingLabelCosts(
     }
 
     console.log(
-      `Finances API: label costs - 7d=$${result.labels7d.toFixed(2)}, 30d=$${result.labels30d.toFixed(2)}, 90d=$${result.labels90d.toFixed(
-        2,
-      )}`,
+      `Finances API: label costs - 7d=$${result.labels7d.toFixed(2)}, 30d=$${result.labels30d.toFixed(2)}, 90d=$${
+        result.labels90d.toFixed(
+          2,
+        )
+      }`,
     );
   } catch (e) {
     console.warn(
@@ -645,9 +650,7 @@ async function fetchOrderCounts(
       }
 
       const lineItemCount = order.lineItems?.length ?? 1;
-      const createdAt = order.creationDate
-        ? new Date(order.creationDate)
-        : null;
+      const createdAt = order.creationDate ? new Date(order.creationDate) : null;
       if (!createdAt) continue;
 
       // ── Financial extraction ──────────────────────────────────────────────
@@ -770,8 +773,7 @@ async function fetchOrderCounts(
 
     // Adjust net profit: subtract refunds, non-sale charges, disputes; add credits
     for (const w of [financial.w7, financial.w30, financial.w90]) {
-      w.netProfit =
-        w.netProfit - w.refunds - w.nonSaleCharges - w.disputes + w.credits;
+      w.netProfit = w.netProfit - w.refunds - w.nonSaleCharges - w.disputes + w.credits;
     }
 
     if (data.total && data.total > orders.length) {
@@ -784,9 +786,11 @@ async function fetchOrderCounts(
       `Fulfillment API: orders7d=${counts.orders7d}, orders30d=${counts.orders30d}, orders90d=${counts.orders90d}`,
     );
     console.log(
-      `Fulfillment API (30d): revenue=$${financial.w30.revenue.toFixed(2)}, fees=$${financial.w30.ebayFees.toFixed(
-        2,
-      )}, labels=$${financial.w30.shippingLabels.toFixed(2)}, net=$${financial.w30.netProfit.toFixed(2)}`,
+      `Fulfillment API (30d): revenue=$${financial.w30.revenue.toFixed(2)}, fees=$${
+        financial.w30.ebayFees.toFixed(
+          2,
+        )
+      }, labels=$${financial.w30.shippingLabels.toFixed(2)}, net=$${financial.w30.netProfit.toFixed(2)}`,
     );
   } catch (e) {
     console.error("Fulfillment API error (non-fatal):", e);
@@ -950,11 +954,9 @@ async function fetchTradingAPIListingsRaw(
         const quantitySold = parseInt(get("QuantitySold") || "0", 10);
         const quantityAvailable = quantity - quantitySold;
         const listingStatus = get("ListingStatus");
-        const isCompletedOrEnded =
-          listingStatus === "Completed" || listingStatus === "Ended";
+        const isCompletedOrEnded = listingStatus === "Completed" || listingStatus === "Ended";
         const isSingleQtySold = quantity === 1 && quantitySold >= 1;
-        const isGenuinelyActive =
-          quantityAvailable > 0 && !isCompletedOrEnded && !isSingleQtySold;
+        const isGenuinelyActive = quantityAvailable > 0 && !isCompletedOrEnded && !isSingleQtySold;
         if (!listingId || !isGenuinelyActive) continue;
 
         const priceStr = get("CurrentPrice") || get("BuyItNowPrice") || "0";
@@ -968,8 +970,7 @@ async function fetchTradingAPIListingsRaw(
           title: get("Title") || listingId,
           imageUrl: get("GalleryURL") || get("PictureURL") || "",
           price: parseFloat(priceStr) || 0,
-          currency:
-            item.match(/<CurrentPrice currencyID="([^"]+)"/)?.[1] || "USD",
+          currency: item.match(/<CurrentPrice currencyID="([^"]+)"/)?.[1] || "USD",
           status: "Active",
           categoryId: get("CategoryID") || "",
           listingId,
@@ -1034,12 +1035,12 @@ async function fetchListingsViaTradingAPI(
       fetchOrderCounts(apiBase, ebayHeaders),
       includeSold
         ? fetchSoldListings(apiBase, ebayHeaders).catch((e: any) => {
-            console.error(
-              "Trading API fallback: fetchSoldListings CRASHED (non-fatal):",
-              e?.message ?? e,
-            );
-            return [] as any[];
-          })
+          console.error(
+            "Trading API fallback: fetchSoldListings CRASHED (non-fatal):",
+            e?.message ?? e,
+          );
+          return [] as any[];
+        })
         : Promise.resolve([] as any[]),
     ]);
     console.log(
@@ -1077,9 +1078,7 @@ async function fetchListingsViaTradingAPI(
       );
     }
 
-    const allListings = includeSold
-      ? [...finalListings, ...soldListings]
-      : finalListings;
+    const allListings = includeSold ? [...finalListings, ...soldListings] : finalListings;
 
     return new Response(
       JSON.stringify({
@@ -1205,9 +1204,7 @@ async function fetchSoldListings(
         const title = line.title ?? "";
         const quantity = Number(line.quantity ?? 1);
         const price = Number(line.lineItemCost?.value ?? 0);
-        const imageUrl = line.legacyVariationId
-          ? ""
-          : (line.image?.imageUrl ?? "");
+        const imageUrl = line.legacyVariationId ? "" : (line.image?.imageUrl ?? "");
 
         results.push({
           offerId: null,
@@ -1273,10 +1270,7 @@ serve(async (req) => {
       "token prefix =",
       userToken ? userToken.substring(0, 20) + "..." : "NONE",
     );
-    const apiBase =
-      ebayEnv === "production"
-        ? "https://api.ebay.com"
-        : "https://api.sandbox.ebay.com";
+    const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
 
     if (!userToken) {
       return new Response(JSON.stringify({ listings: [], needsAuth: true }), {
@@ -1465,34 +1459,37 @@ serve(async (req) => {
       .map((l: any) => l.listingId)
       .filter(Boolean) as string[];
     console.log(
-      `ebay-listings: Found ${listingIds.length} listings with IDs for analytics lookup: ${listingIds
-        .slice(0, 3)
-        .join(", ")}${listingIds.length > 3 ? "..." : ""}`,
+      `ebay-listings: Found ${listingIds.length} listings with IDs for analytics lookup: ${
+        listingIds
+          .slice(0, 3)
+          .join(", ")
+      }${listingIds.length > 3 ? "..." : ""}`,
     );
     console.log(
-      `ebay-listings: First 5 listing keys (listingId|sku): ${listings
-        .slice(0, 5)
-        .map((l) => `${l.listingId || "null"}|${l.sku}`)
-        .join(", ")}`,
+      `ebay-listings: First 5 listing keys (listingId|sku): ${
+        listings
+          .slice(0, 5)
+          .map((l) => `${l.listingId || "null"}|${l.sku}`)
+          .join(", ")
+      }`,
     );
 
-    const [watchMap, { a7, a30, a90 }, orderCounts, soldItemsRaw] =
-      await Promise.all([
-        fetchWatchDataForListings(listingIds, tradingUrl, userToken),
-        fetchAllAnalytics(apiBase, ebayHeaders),
-        fetchOrderCounts(apiBase, ebayHeaders),
-        // Fetch sold listings in parallel so it doesn't add to sequential execution time.
-        // Running it after the other fetches caused the edge function to time out.
-        includeSold
-          ? fetchSoldListings(apiBase, ebayHeaders).catch((e: any) => {
-              console.error(
-                "fetchSoldListings CRASHED (non-fatal):",
-                e?.message ?? e,
-              );
-              return [] as any[];
-            })
-          : Promise.resolve([] as any[]),
-      ]);
+    const [watchMap, { a7, a30, a90 }, orderCounts, soldItemsRaw] = await Promise.all([
+      fetchWatchDataForListings(listingIds, tradingUrl, userToken),
+      fetchAllAnalytics(apiBase, ebayHeaders),
+      fetchOrderCounts(apiBase, ebayHeaders),
+      // Fetch sold listings in parallel so it doesn't add to sequential execution time.
+      // Running it after the other fetches caused the edge function to time out.
+      includeSold
+        ? fetchSoldListings(apiBase, ebayHeaders).catch((e: any) => {
+          console.error(
+            "fetchSoldListings CRASHED (non-fatal):",
+            e?.message ?? e,
+          );
+          return [] as any[];
+        })
+        : Promise.resolve([] as any[]),
+    ]);
 
     console.log(
       `ebay-listings: Analytics merge - a7 ${Object.keys(a7).length} items, a30 ${Object.keys(a30).length} items, a90 ${
@@ -1614,9 +1611,7 @@ serve(async (req) => {
       );
     }
 
-    const allListings = includeSold
-      ? [...enrichedListings, ...soldListings]
-      : enrichedListings;
+    const allListings = includeSold ? [...enrichedListings, ...soldListings] : enrichedListings;
 
     return new Response(
       JSON.stringify({

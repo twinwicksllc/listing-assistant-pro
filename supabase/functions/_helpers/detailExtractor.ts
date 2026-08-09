@@ -134,8 +134,7 @@ export interface ToolDetails {
   brand: string | null;
   modelNumber: string | null;
   modelNumberConfidence: "confirmed" | "likely" | "not_visible";
-  powerSource:
-    "Corded" | "Cordless/Battery" | "Manual" | "Pneumatic" | "Unknown";
+  powerSource: "Corded" | "Cordless/Battery" | "Manual" | "Pneumatic" | "Unknown";
   condition: string | null; // rust, wear, missing parts, etc.
   includedAccessories: string[]; // batteries, chargers, cases, bits, etc.
 }
@@ -647,7 +646,8 @@ export async function extractKeyDetails(
         parts: [
           ...imageParts,
           {
-            text: `Examine these ${imageParts.length} photograph(s) of "${itemName}" and extract the specific identification details requested. Look at EVERY image — the key details may be on any side of the item.`,
+            text:
+              `Examine these ${imageParts.length} photograph(s) of "${itemName}" and extract the specific identification details requested. Look at EVERY image — the key details may be on any side of the item.`,
           },
         ],
       },
@@ -792,9 +792,7 @@ export async function extractKeyDetails(
         storageCapacity: parsed.storageCapacity ?? null,
         colorFinish: parsed.colorFinish ?? null,
         serialNumber: parsed.serialNumber ?? null,
-        includedAccessories: Array.isArray(parsed.includedAccessories)
-          ? parsed.includedAccessories
-          : [],
+        includedAccessories: Array.isArray(parsed.includedAccessories) ? parsed.includedAccessories : [],
         cosmeticCondition: parsed.cosmeticCondition ?? null,
         functionalIndicators: parsed.functionalIndicators ?? null,
       };
@@ -869,19 +867,16 @@ export async function extractKeyDetails(
         modelNumberConfidence: parsed.modelNumberConfidence ?? "not_visible",
         powerSource: parsed.powerSource ?? "Unknown",
         condition: parsed.condition ?? null,
-        includedAccessories: Array.isArray(parsed.includedAccessories)
-          ? parsed.includedAccessories
-          : [],
+        includedAccessories: Array.isArray(parsed.includedAccessories) ? parsed.includedAccessories : [],
       };
       console.log(`${label} ✓ Tool details extracted:`, result.toolDetails);
     }
 
     return result;
   } catch (err) {
-    const reason =
-      err instanceof Error && err.name === "AbortError"
-        ? `timed out after ${DETAIL_TIMEOUT_MS}ms`
-        : String(err);
+    const reason = err instanceof Error && err.name === "AbortError"
+      ? `timed out after ${DETAIL_TIMEOUT_MS}ms`
+      : String(err);
     console.warn(`${label} Failed: ${reason}`);
     return null;
   }
@@ -1036,8 +1031,7 @@ export function applyDetailOverrides(
       ) {
         const title = listing.title as string;
         // Check if title has wrong mint info or is missing mint mark
-        const mintMarkInTitle =
-          /\b([OSDW]|CC)\s*(?:mint|mark)?\b/i.test(title) ||
+        const mintMarkInTitle = /\b([OSDW]|CC)\s*(?:mint|mark)?\b/i.test(title) ||
           /\bPhiladelphia\b/i.test(title) ||
           /\bNew Orleans\b/i.test(title) ||
           /\bSan Francisco\b/i.test(title) ||
@@ -1186,8 +1180,8 @@ export function applyDetailOverrides(
     // This ensures melt value is always calculated for precious metal coins.
     const seriesLower = (
       cd.series ??
-      listing.itemSpecifics?.["Series"] ??
-      ""
+        listing.itemSpecifics?.["Series"] ??
+        ""
     ).toLowerCase();
     const titleLower = (listing.title ?? "").toLowerCase();
     const combinedText = `${seriesLower} ${titleLower}`;
@@ -1195,18 +1189,20 @@ export function applyDetailOverrides(
     // Determine metal type from series/title if not already set
     if (!listing.metalType || listing.metalType === "none") {
       if (
-        /morgan|peace|american silver eagle|silver dollar|silver dime|silver quarter|silver half|mercury dime|barber|walking liberty|franklin half|silver bar|silver round|silver bullion/.test(
-          combinedText,
-        )
+        /morgan|peace|american silver eagle|silver dollar|silver dime|silver quarter|silver half|mercury dime|barber|walking liberty|franklin half|silver bar|silver round|silver bullion/
+          .test(
+            combinedText,
+          )
       ) {
         listing.metalType = "silver";
         console.log(
           `${label} BACKSTOP metalType -> "silver" (derived from series/title)`,
         );
       } else if (
-        /gold eagle|gold buffalo|double eagle|gold sovereign|half eagle|quarter eagle|indian head gold|\$2\.5|\$5 gold|\$10 gold|\$20 gold|gold bar|gold round|gold bullion|gold coin/.test(
-          combinedText,
-        )
+        /gold eagle|gold buffalo|double eagle|gold sovereign|half eagle|quarter eagle|indian head gold|\$2\.5|\$5 gold|\$10 gold|\$20 gold|gold bar|gold round|gold bullion|gold coin/
+          .test(
+            combinedText,
+          )
       ) {
         listing.metalType = "gold";
         console.log(
@@ -1275,9 +1271,7 @@ export function applyDetailOverrides(
     if (card.parallel) {
       const oldFeatures = specs["Features"] ?? "";
       if (!oldFeatures.toLowerCase().includes(card.parallel.toLowerCase())) {
-        specs["Features"] = oldFeatures
-          ? `${oldFeatures}, ${card.parallel}`
-          : card.parallel;
+        specs["Features"] = oldFeatures ? `${oldFeatures}, ${card.parallel}` : card.parallel;
         console.log(
           `${label} OVERRIDE Features: added parallel "${card.parallel}"`,
         );
@@ -1318,9 +1312,7 @@ export function applyDetailOverrides(
     // ── Rookie designation ──
     if (card.rookie) {
       if (!specs["Features"]?.toLowerCase().includes("rookie")) {
-        specs["Features"] = specs["Features"]
-          ? `${specs["Features"]}, Rookie`
-          : "Rookie";
+        specs["Features"] = specs["Features"] ? `${specs["Features"]}, Rookie` : "Rookie";
       }
       if (
         listing.title &&

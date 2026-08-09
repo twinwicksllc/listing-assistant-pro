@@ -77,17 +77,15 @@ async function getSpotPrices(
 
   const cachedSanitized = cached
     ? sanitizeSpotPrices({
-        gold: cached.gold,
-        silver: cached.silver,
-        platinum: cached.platinum,
-      })
+      gold: cached.gold,
+      silver: cached.silver,
+      platinum: cached.platinum,
+    })
     : null;
 
   const now = new Date();
   const fetchedAt = cached?.fetched_at ? new Date(cached.fetched_at) : null;
-  const ageMinutes = fetchedAt
-    ? (now.getTime() - fetchedAt.getTime()) / 60000
-    : Infinity;
+  const ageMinutes = fetchedAt ? (now.getTime() - fetchedAt.getTime()) / 60000 : Infinity;
 
   // 2. If cache is fresh (< 15 min) and not forced to refresh, return it immediately
   if (
@@ -132,9 +130,7 @@ async function getSpotPrices(
       const parsedPrices = {
         gold: goldMatch ? parseFloat(goldMatch[1].replace(/,/g, "")) : 0,
         silver: silverMatch ? parseFloat(silverMatch[1].replace(/,/g, "")) : 0,
-        platinum: platinumMatch
-          ? parseFloat(platinumMatch[1].replace(/,/g, ""))
-          : 0,
+        platinum: platinumMatch ? parseFloat(platinumMatch[1].replace(/,/g, "")) : 0,
       };
 
       const prices = sanitizeSpotPrices(parsedPrices);
@@ -160,14 +156,13 @@ async function getSpotPrices(
   }
 
   // 4. If live fetch failed, use existing cached values or hardcoded fallback
-  const prices =
-    fresh ??
+  const prices = fresh ??
     (cachedSanitized
       ? {
-          gold: cachedSanitized.gold,
-          silver: cachedSanitized.silver,
-          platinum: cachedSanitized.platinum,
-        }
+        gold: cachedSanitized.gold,
+        silver: cachedSanitized.silver,
+        platinum: cachedSanitized.platinum,
+      }
       : FALLBACK);
 
   if (!fresh) {
@@ -213,8 +208,7 @@ serve(async (req) => {
     const url = new URL(req.url);
     const forceRefresh = url.searchParams.get("force_refresh") === "true";
 
-    const { gold, silver, platinum, fetched_at, source, refreshed } =
-      await getSpotPrices(svc, forceRefresh);
+    const { gold, silver, platinum, fetched_at, source, refreshed } = await getSpotPrices(svc, forceRefresh);
 
     // If body has metalType & weightOz, also calculate melt value
     let meltValue: number | null = null;
@@ -230,14 +224,13 @@ serve(async (req) => {
     }
 
     if (metalType && weightOz && weightOz > 0) {
-      const spotPrice =
-        metalType === "gold"
-          ? gold
-          : metalType === "silver"
-            ? silver
-            : metalType === "platinum"
-              ? platinum
-              : 0;
+      const spotPrice = metalType === "gold"
+        ? gold
+        : metalType === "silver"
+        ? silver
+        : metalType === "platinum"
+        ? platinum
+        : 0;
       meltValue = parseFloat((spotPrice * weightOz).toFixed(2));
     }
 

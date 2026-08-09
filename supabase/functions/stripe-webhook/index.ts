@@ -114,10 +114,9 @@ serve(async (req) => {
       case "invoice.payment_failed": {
         const invoice = event.data.object as Stripe.Invoice;
         // invoice.subscription can be a string ID or an expanded object
-        const subId =
-          typeof invoice.subscription === "string"
-            ? invoice.subscription
-            : (invoice.subscription as any)?.id;
+        const subId = typeof invoice.subscription === "string"
+          ? invoice.subscription
+          : (invoice.subscription as any)?.id;
         if (subId) {
           logStep("Payment failed, marking past_due", { subId });
           const { error } = await supabase
@@ -139,14 +138,10 @@ serve(async (req) => {
         // (period_end, product_id, price_id, status) stay current rather
         // than only patching the status column.
         const invoice = event.data.object as Stripe.Invoice;
-        const subId =
-          typeof invoice.subscription === "string"
-            ? invoice.subscription
-            : (invoice.subscription as any)?.id;
-        const custId =
-          typeof invoice.customer === "string"
-            ? invoice.customer
-            : (invoice.customer as any)?.id;
+        const subId = typeof invoice.subscription === "string"
+          ? invoice.subscription
+          : (invoice.subscription as any)?.id;
+        const custId = typeof invoice.customer === "string" ? invoice.customer : (invoice.customer as any)?.id;
         if (subId && custId) {
           logStep("Payment recovered, re-fetching subscription from Stripe", {
             subId,

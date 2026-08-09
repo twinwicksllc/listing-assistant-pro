@@ -4,12 +4,7 @@
  * Implements: Sequential ID -> Parallel Burst (Visual + Market)
  */
 
-import {
-  AgentContext,
-  Identification,
-  MarketDataReport,
-  VisualInspectionResult,
-} from "./pipelineContracts.ts";
+import { AgentContext, Identification, MarketDataReport, VisualInspectionResult } from "./pipelineContracts.ts";
 import { DOMAIN_REGISTRY } from "./registry.ts";
 import { runPass1Identification } from "../pass1Identification.ts";
 import { runAgenticVisualAgent } from "./sub-agents/visual-agent.ts";
@@ -86,10 +81,8 @@ export class ListingAgentController {
       this.runMarketAgent(enrichedContext),
     ]);
 
-    const visualResult =
-      visualFindings.status === "fulfilled" ? visualFindings.value : null;
-    const marketResult =
-      marketReport.status === "fulfilled" ? marketReport.value : null;
+    const visualResult = visualFindings.status === "fulfilled" ? visualFindings.value : null;
+    const marketResult = marketReport.status === "fulfilled" ? marketReport.value : null;
 
     // Close the feedback loop: apply the Visual Agent's identificationCorrection back to
     // identification so that Slab OCR eligibility, domain fallback, and isCoinCategoryFlag

@@ -86,16 +86,16 @@ function buildSearchQueries(domain: Domain, itemName: string): string[] {
         ? "Double Eagle $20 gold coin Pre-1933"
         : /\$10|ten dollar|eagle gold/i.test(base) &&
             !/half eagle|\$5|five dollar/i.test(base)
-          ? "Eagle $10 gold coin Pre-1933"
-          : /half eagle|\$5|five dollar/i.test(base)
-            ? "Half Eagle $5 gold coin Pre-1933"
-            : /quarter eagle|\$2\.50|two and a half/i.test(base)
-              ? "Quarter Eagle $2.50 gold coin Pre-1933"
-              : /\$3|three dollar/i.test(base)
-                ? "Three Dollar gold coin Pre-1933"
-                : /gold dollar|\$1 gold|one dollar gold/i.test(base)
-                  ? "Gold Dollar coin Pre-1933"
-                  : "";
+        ? "Eagle $10 gold coin Pre-1933"
+        : /half eagle|\$5|five dollar/i.test(base)
+        ? "Half Eagle $5 gold coin Pre-1933"
+        : /quarter eagle|\$2\.50|two and a half/i.test(base)
+        ? "Quarter Eagle $2.50 gold coin Pre-1933"
+        : /\$3|three dollar/i.test(base)
+        ? "Three Dollar gold coin Pre-1933"
+        : /gold dollar|\$1 gold|one dollar gold/i.test(base)
+        ? "Gold Dollar coin Pre-1933"
+        : "";
       const coinQuery = denomHint
         ? `eBay leaf category ID "${base}" ${denomHint} 2026 numismatic`
         : `eBay leaf category ID "${base}" 2026 coin bullion numismatic`;
@@ -154,14 +154,12 @@ function getZoomTargets(domain: Domain): ZoomTarget[] {
         },
         {
           region: "date digits on coin face",
-          rationale:
-            "Critical for correct year — but if a slab label is present, DEFER to the label's year. " +
+          rationale: "Critical for correct year — but if a slab label is present, DEFER to the label's year. " +
             "Misreading 1964 vs 1965 Kennedy Half Dollar changes silver content from 90% to 40%",
         },
         {
           region: "mint mark — EXACT locations by series",
-          rationale:
-            "CRITICAL: Examine the correct region for this specific coin series. " +
+          rationale: "CRITICAL: Examine the correct region for this specific coin series. " +
             "Morgan Dollar: reverse BELOW the eagle's tail feathers, above 'ONE DOLLAR'. " +
             "Peace Dollar: reverse at base of eagle's right wing. " +
             "Pre-1933 Gold: check both obverse above date AND reverse under eagle. " +
@@ -173,21 +171,18 @@ function getZoomTargets(domain: Domain): ZoomTarget[] {
         },
         {
           region: "edge reeds",
-          rationale:
-            "Helps verify denomination and detect cleaned/altered coins",
+          rationale: "Helps verify denomination and detect cleaned/altered coins",
         },
         {
           region: "surface fields",
-          rationale:
-            "Detect bag marks, cleaning lines, PVC damage, artificial toning",
+          rationale: "Detect bag marks, cleaning lines, PVC damage, artificial toning",
         },
       ];
     case "trading_cards":
       return [
         {
           region: "card number and set symbol",
-          rationale:
-            "Identifies exact set and print run; critical for parallel identification",
+          rationale: "Identifies exact set and print run; critical for parallel identification",
         },
         {
           region: "corners and edges",
@@ -195,21 +190,18 @@ function getZoomTargets(domain: Domain): ZoomTarget[] {
         },
         {
           region: "surface centering",
-          rationale:
-            "Left/right and top/bottom centering affects grade and value significantly",
+          rationale: "Left/right and top/bottom centering affects grade and value significantly",
         },
         {
           region: "holographic or foil pattern",
-          rationale:
-            "Identifies parallel type (refractor, prizm, etc.) and its value tier",
+          rationale: "Identifies parallel type (refractor, prizm, etc.) and its value tier",
         },
       ];
     case "jewelry":
       return [
         {
           region: "hallmarks and stamps",
-          rationale:
-            "Karat, maker's mark, assay office mark — determines metal purity and authenticity",
+          rationale: "Karat, maker's mark, assay office mark — determines metal purity and authenticity",
         },
         {
           region: "clasp and findings",
@@ -217,54 +209,45 @@ function getZoomTargets(domain: Domain): ZoomTarget[] {
         },
         {
           region: "stone clarity and color",
-          rationale:
-            "Visible inclusions, chips, or loose stones affect value significantly",
+          rationale: "Visible inclusions, chips, or loose stones affect value significantly",
         },
         {
           region: "brand signatures",
-          rationale:
-            "Hidden signatures (Tiffany, Cartier, etc.) dramatically increase value",
+          rationale: "Hidden signatures (Tiffany, Cartier, etc.) dramatically increase value",
         },
       ];
     case "electronics":
       return [
         {
           region: "model number sticker",
-          rationale:
-            "Exact model/SKU determines correct eBay category and price point",
+          rationale: "Exact model/SKU determines correct eBay category and price point",
         },
         {
           region: "ports and connectors",
-          rationale:
-            "Damaged ports (bent pins, broken USB-C) are major value detractors",
+          rationale: "Damaged ports (bent pins, broken USB-C) are major value detractors",
         },
         {
           region: "screen condition",
-          rationale:
-            "Dead pixels, scratches, backlight bleed affect condition grade",
+          rationale: "Dead pixels, scratches, backlight bleed affect condition grade",
         },
         {
           region: "serial/IMEI sticker",
-          rationale:
-            "Confirms device identity and can indicate carrier lock status",
+          rationale: "Confirms device identity and can indicate carrier lock status",
         },
       ];
     case "vintage_clothing":
       return [
         {
           region: "brand and size label",
-          rationale:
-            "Vintage sizing runs 1–2 sizes smaller; correct size drives search traffic",
+          rationale: "Vintage sizing runs 1–2 sizes smaller; correct size drives search traffic",
         },
         {
           region: "care instruction label",
-          rationale:
-            "Absence of care label = pre-1971 US; helps date the piece",
+          rationale: "Absence of care label = pre-1971 US; helps date the piece",
         },
         {
           region: "fabric and seam condition",
-          rationale:
-            "Rips, snags, thin spots, and seam separation are critical disclosures",
+          rationale: "Rips, snags, thin spots, and seam separation are critical disclosures",
         },
         {
           region: "union label if present",
@@ -360,10 +343,12 @@ After searching, return ONLY a single valid JSON object (no markdown, no code bl
         role: "user",
         parts: [
           {
-            text: `Find the eBay leaf category ID and recent sold prices for this ${domain.replace(
-              "_",
-              " ",
-            )} item: "${itemName}".`,
+            text: `Find the eBay leaf category ID and recent sold prices for this ${
+              domain.replace(
+                "_",
+                " ",
+              )
+            } item: "${itemName}".`,
           },
         ],
       },
@@ -418,16 +403,14 @@ After searching, return ONLY a single valid JSON object (no markdown, no code bl
     return { marketAnalysis: null, groundedCategoryId: null };
   }
 
-  const marketAnalysis =
-    typeof parsed.market_analysis === "string" &&
-    parsed.market_analysis.trim().length > 5
-      ? parsed.market_analysis.trim()
-      : null;
-  const groundedCategoryId =
-    typeof parsed.grounded_category_id === "string" &&
-    /^\d+$/.test(parsed.grounded_category_id.trim())
-      ? parsed.grounded_category_id.trim()
-      : null;
+  const marketAnalysis = typeof parsed.market_analysis === "string" &&
+      parsed.market_analysis.trim().length > 5
+    ? parsed.market_analysis.trim()
+    : null;
+  const groundedCategoryId = typeof parsed.grounded_category_id === "string" &&
+      /^\d+$/.test(parsed.grounded_category_id.trim())
+    ? parsed.grounded_category_id.trim()
+    : null;
 
   console.log(
     `${label}[StageA] ✓ model=${GROUNDING_MODEL} categoryId=${groundedCategoryId} hasAnalysis=${!!marketAnalysis}`,
@@ -481,23 +464,24 @@ async function runStageB(
     day: "numeric",
   });
   const thisYear = new Date().getFullYear();
-  const coinTemporalGuard =
-    domain === "coins_bullion"
-      ? `\n\n**⚠️ CRITICAL COIN VALIDITY RULE — MANDATORY before writing identification_correction**:
+  const coinTemporalGuard = domain === "coins_bullion"
+    ? `\n\n**⚠️ CRITICAL COIN VALIDITY RULE — MANDATORY before writing identification_correction**:
 TODAY'S DATE: ${todayFormatted} (Year ${thisYear})
 The US Mint, Royal Canadian Mint, Perth Mint, Royal Mint (UK), and ALL major world mints produce REAL, LEGAL-TENDER coins every single year, including ${
-          thisYear - 1
-        }, ${thisYear}, and ${
-          thisYear + 1
-        }. A coin dated in these years is a GENUINE government-issued coin — NOT a novelty, fantasy, tribute round, or replica.
+      thisYear - 1
+    }, ${thisYear}, and ${
+      thisYear + 1
+    }. A coin dated in these years is a GENUINE government-issued coin — NOT a novelty, fantasy, tribute round, or replica.
 FORBIDDEN: Do NOT set identification_correction to anything containing "novelty", "fantasy", "tribute", "replica", "exonumia", or "not a real coin" based solely on the coin's date or because you believe that year is "in the future." This applies to ALL coins — raw/ungraded in a capsule or holder, professionally slabbed, or loose.
 identification_correction should ONLY describe genuine misidentification errors such as: "This is a Peace Dollar, not a Morgan Dollar" or "Denomination is Half Dollar, not Silver Dollar." If no genuine misidentification exists, return null for identification_correction.`
-      : "";
+    : "";
 
-  const systemInstruction = `You are an expert visual analyst performing an agentic inspection of a ${domain.replace(
-    "_",
-    " ",
-  )} item for eBay listing purposes.
+  const systemInstruction = `You are an expert visual analyst performing an agentic inspection of a ${
+    domain.replace(
+      "_",
+      " ",
+    )
+  } item for eBay listing purposes.
 
 Using the code_execution tool, perform a Think-Act-Observe inspection loop on the provided image(s):
 
@@ -532,10 +516,12 @@ Return ONLY a single valid JSON object (no markdown, no code blocks):
         parts: [
           ...imageParts,
           {
-            text: `Perform agentic visual inspection on this ${domain.replace(
-              "_",
-              " ",
-            )} item: "${itemName}". Use code execution to zoom into and examine the key regions listed in your instructions.`,
+            text: `Perform agentic visual inspection on this ${
+              domain.replace(
+                "_",
+                " ",
+              )
+            } item: "${itemName}". Use code execution to zoom into and examine the key regions listed in your instructions.`,
           },
         ],
       },
@@ -594,33 +580,31 @@ Return ONLY a single valid JSON object (no markdown, no code blocks):
 
   const zoomRegions = Array.isArray(parsed.zoom_regions_examined)
     ? parsed.zoom_regions_examined
-        .map(String)
-        .filter((s: string) => s.length > 0)
+      .map(String)
+      .filter((s: string) => s.length > 0)
     : [];
-  const keyFindings =
-    typeof parsed.key_findings === "string" ? parsed.key_findings.trim() : "";
-  const confidenceBoost =
-    typeof parsed.confidence_boost === "number"
-      ? Math.min(100, Math.max(0, Math.round(parsed.confidence_boost)))
-      : 0;
-  let identificationCorrection: string | undefined =
-    typeof parsed.identification_correction === "string" &&
-    parsed.identification_correction.trim().length > 5
-      ? parsed.identification_correction.trim()
-      : undefined;
+  const keyFindings = typeof parsed.key_findings === "string" ? parsed.key_findings.trim() : "";
+  const confidenceBoost = typeof parsed.confidence_boost === "number"
+    ? Math.min(100, Math.max(0, Math.round(parsed.confidence_boost)))
+    : 0;
+  let identificationCorrection: string | undefined = typeof parsed.identification_correction === "string" &&
+      parsed.identification_correction.trim().length > 5
+    ? parsed.identification_correction.trim()
+    : undefined;
 
   // Safety filter: if the pre-pass erroneously classifies a current-year
   // government coin as novelty/fantasy/tribute/replica based on its date,
   // null out the correction so it never reaches Pass 2 as "authoritative".
   if (domain === "coins_bullion" && identificationCorrection) {
-    const noveltyPattern =
-      /\b(novelty|fantasy|tribute|replica|exonumia|not a real coin|not genuine|fake)\b/i;
+    const noveltyPattern = /\b(novelty|fantasy|tribute|replica|exonumia|not a real coin|not genuine|fake)\b/i;
     if (noveltyPattern.test(identificationCorrection)) {
       console.warn(
-        `${label}[StageB] ⚠️  Suppressed false novelty identification_correction for coins_bullion: "${identificationCorrection.slice(
-          0,
-          120,
-        )}"`,
+        `${label}[StageB] ⚠️  Suppressed false novelty identification_correction for coins_bullion: "${
+          identificationCorrection.slice(
+            0,
+            120,
+          )
+        }"`,
       );
       identificationCorrection = undefined;
     }
@@ -676,10 +660,9 @@ export async function runAgenticPrePass(
     // Run both stages concurrently — neither blocks the other
     const [stageASettled, stageBSettled] = await Promise.allSettled([
       runStageA(apiKey, domain, itemName, label).catch((err) => {
-        const reason =
-          err instanceof Error && err.name === "AbortError"
-            ? `timed out after ${STAGE_A_TIMEOUT_MS}ms`
-            : String(err);
+        const reason = err instanceof Error && err.name === "AbortError"
+          ? `timed out after ${STAGE_A_TIMEOUT_MS}ms`
+          : String(err);
         console.warn(`${label}[StageA] Failed: ${reason}`);
         return { marketAnalysis: null, groundedCategoryId: null };
       }),
@@ -691,22 +674,19 @@ export async function runAgenticPrePass(
         imageMimeTypes,
         label,
       ).catch((err) => {
-        const reason =
-          err instanceof Error && err.name === "AbortError"
-            ? `timed out after ${STAGE_B_TIMEOUT_MS}ms`
-            : String(err);
+        const reason = err instanceof Error && err.name === "AbortError"
+          ? `timed out after ${STAGE_B_TIMEOUT_MS}ms`
+          : String(err);
         console.warn(`${label}[StageB] Failed: ${reason}`);
         return null;
       }),
     ]);
 
-    const stageA =
-      stageASettled.status === "fulfilled"
-        ? stageASettled.value
-        : { marketAnalysis: null, groundedCategoryId: null };
+    const stageA = stageASettled.status === "fulfilled"
+      ? stageASettled.value
+      : { marketAnalysis: null, groundedCategoryId: null };
 
-    const stageB =
-      stageBSettled.status === "fulfilled" ? stageBSettled.value : null;
+    const stageB = stageBSettled.status === "fulfilled" ? stageBSettled.value : null;
 
     const result: PrePassResult = {
       marketAnalysis: stageA.marketAnalysis,
@@ -715,8 +695,7 @@ export async function runAgenticPrePass(
     };
 
     // Return null only if both stages produced nothing useful
-    const hasAnyResult =
-      result.marketAnalysis !== null ||
+    const hasAnyResult = result.marketAnalysis !== null ||
       result.groundedCategoryId !== null ||
       result.agenticInspection !== null;
 
@@ -730,8 +709,7 @@ export async function runAgenticPrePass(
       stageB_model: VISION_MODEL,
       hasMarketAnalysis: !!result.marketAnalysis,
       groundedCategoryId: result.groundedCategoryId,
-      inspectionRegions:
-        result.agenticInspection?.zoomRegionsExamined?.length ?? 0,
+      inspectionRegions: result.agenticInspection?.zoomRegionsExamined?.length ?? 0,
       confidenceBoost: result.agenticInspection?.confidenceBoost ?? 0,
       hasCorrection: !!result.agenticInspection?.identificationCorrection,
     });

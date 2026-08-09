@@ -52,8 +52,7 @@ serve(async (req) => {
       totalOutputTokens += row.completion_tokens || 0;
     }
 
-    const totalCost =
-      totalInputTokens * COST_PER_INPUT_TOKEN +
+    const totalCost = totalInputTokens * COST_PER_INPUT_TOKEN +
       totalOutputTokens * COST_PER_OUTPUT_TOKEN;
 
     console.log(
@@ -118,16 +117,20 @@ serve(async (req) => {
             html: `
               <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <h2 style="color: #dc2626; margin-bottom: 16px;">⚠️ Monthly AI Cost Alert</h2>
-                <p style="color: #374151; font-size: 16px;">Your Gemini AI costs have exceeded the <strong>$${COST_THRESHOLD.toFixed(
-                  2,
-                )}</strong> monthly threshold.</p>
+                <p style="color: #374151; font-size: 16px;">Your Gemini AI costs have exceeded the <strong>$${
+              COST_THRESHOLD.toFixed(
+                2,
+              )
+            }</strong> monthly threshold.</p>
                 <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 20px; margin: 20px 0;">
                   <table style="width: 100%; border-collapse: collapse;">
                     <tr>
                       <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Current Month Cost</td>
-                      <td style="padding: 8px 0; text-align: right; font-weight: bold; font-size: 18px; color: #dc2626;">$${totalCost.toFixed(
-                        2,
-                      )}</td>
+                      <td style="padding: 8px 0; text-align: right; font-weight: bold; font-size: 18px; color: #dc2626;">$${
+              totalCost.toFixed(
+                2,
+              )
+            }</td>
                     </tr>
                     <tr>
                       <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Total API Requests</td>

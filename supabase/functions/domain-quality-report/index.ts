@@ -18,8 +18,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 const ADMIN_EMAIL = "twinwicksllc@gmail.com";
@@ -50,8 +49,7 @@ serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("Unauthorized");
     const token = authHeader.replace("Bearer ", "");
-    const { data: userData, error: userError } =
-      await supabase.auth.getUser(token);
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
     if (userError || !userData.user) throw new Error("Unauthorized");
     if (userData.user.email !== ADMIN_EMAIL) {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
@@ -71,7 +69,7 @@ serve(async (req) => {
       time_to_sale_days: number | null;
     }> = [];
     const pageSize = 1000;
-    for (let offset = 0; ; offset += pageSize) {
+    for (let offset = 0;; offset += pageSize) {
       const { data, error } = await supabase
         .from("listing_financials")
         .select("domain, net_profit, sale_price, cogs, time_to_sale_days")
@@ -134,22 +132,12 @@ serve(async (req) => {
       ([domain, agg]) => ({
         domain,
         soldCount: agg.count,
-        avgNetProfit:
-          agg.count > 0
-            ? parseFloat((agg.netProfitSum / agg.count).toFixed(2))
-            : null,
-        avgSalePrice:
-          agg.count > 0
-            ? parseFloat((agg.salePriceSum / agg.count).toFixed(2))
-            : null,
-        avgMarginPct:
-          agg.marginCount > 0
-            ? parseFloat((agg.marginSum / agg.marginCount).toFixed(1))
-            : null,
-        avgTimeToSaleDays:
-          agg.timeToSaleCount > 0
-            ? parseFloat((agg.timeToSaleSum / agg.timeToSaleCount).toFixed(1))
-            : null,
+        avgNetProfit: agg.count > 0 ? parseFloat((agg.netProfitSum / agg.count).toFixed(2)) : null,
+        avgSalePrice: agg.count > 0 ? parseFloat((agg.salePriceSum / agg.count).toFixed(2)) : null,
+        avgMarginPct: agg.marginCount > 0 ? parseFloat((agg.marginSum / agg.marginCount).toFixed(1)) : null,
+        avgTimeToSaleDays: agg.timeToSaleCount > 0
+          ? parseFloat((agg.timeToSaleSum / agg.timeToSaleCount).toFixed(1))
+          : null,
         timeToSaleSampleSize: agg.timeToSaleCount,
       }),
     );
@@ -165,31 +153,25 @@ serve(async (req) => {
     // loop identifies >= 1 domain for refinement based on real data."
     const MIN_SAMPLE = 3;
     const eligibleForTimeToSale = metrics.filter(
-      (m) =>
-        m.timeToSaleSampleSize >= MIN_SAMPLE && m.avgTimeToSaleDays != null,
+      (m) => m.timeToSaleSampleSize >= MIN_SAMPLE && m.avgTimeToSaleDays != null,
     );
     const eligibleForMargin = metrics.filter(
       (m) => m.soldCount >= MIN_SAMPLE && m.avgMarginPct != null,
     );
 
-    const longestTimeToSale =
-      eligibleForTimeToSale.length > 0
-        ? eligibleForTimeToSale.reduce((a, b) =>
-            a.avgTimeToSaleDays! > b.avgTimeToSaleDays! ? a : b,
-          )
-        : null;
-    const lowestMargin =
-      eligibleForMargin.length > 0
-        ? eligibleForMargin.reduce((a, b) =>
-            a.avgMarginPct! < b.avgMarginPct! ? a : b,
-          )
-        : null;
+    const longestTimeToSale = eligibleForTimeToSale.length > 0
+      ? eligibleForTimeToSale.reduce((a, b) => a.avgTimeToSaleDays! > b.avgTimeToSaleDays! ? a : b)
+      : null;
+    const lowestMargin = eligibleForMargin.length > 0
+      ? eligibleForMargin.reduce((a, b) => a.avgMarginPct! < b.avgMarginPct! ? a : b)
+      : null;
 
     const refinementCandidates: Array<{ domain: string; reason: string }> = [];
     if (longestTimeToSale) {
       refinementCandidates.push({
         domain: longestTimeToSale.domain,
-        reason: `Longest average time-to-sale (${longestTimeToSale.avgTimeToSaleDays} days, n=${longestTimeToSale.timeToSaleSampleSize}) - consider reviewing pricing/description prompts for this domain.`,
+        reason:
+          `Longest average time-to-sale (${longestTimeToSale.avgTimeToSaleDays} days, n=${longestTimeToSale.timeToSaleSampleSize}) - consider reviewing pricing/description prompts for this domain.`,
       });
     }
     if (
@@ -198,7 +180,8 @@ serve(async (req) => {
     ) {
       refinementCandidates.push({
         domain: lowestMargin.domain,
-        reason: `Lowest average margin (${lowestMargin.avgMarginPct}%, n=${lowestMargin.soldCount}) - consider reviewing pricing guidance for this domain.`,
+        reason:
+          `Lowest average margin (${lowestMargin.avgMarginPct}%, n=${lowestMargin.soldCount}) - consider reviewing pricing guidance for this domain.`,
       });
     }
 
@@ -208,7 +191,8 @@ serve(async (req) => {
         refinementCandidates,
         sampleInfo: {
           totalSoldWithKnownDomain: rows.length,
-          note: "Rejection-rate and edit-rate are not included - no instrumentation exists yet to track listing edits or eBay publish rejections. See COMPREHENSIVE_LISTING_TYPES_ROADMAP.md Phase 4 for details.",
+          note:
+            "Rejection-rate and edit-rate are not included - no instrumentation exists yet to track listing edits or eBay publish rejections. See COMPREHENSIVE_LISTING_TYPES_ROADMAP.md Phase 4 for details.",
         },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },

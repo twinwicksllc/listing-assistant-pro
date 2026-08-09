@@ -3,8 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -31,9 +30,11 @@ async function fetchShippingLabelCosts(
     // Filter for SHIPPING_LABEL transactions within the date range
     // Note: transactionDate filter uses the same format as fulfillment API
     const filterValue = `transactionType:{SHIPPING_LABEL},transactionDate:[${fromStr}..${toStr}]`;
-    const transactionsUrl = `${financesApiBase}/sell/finances/v1/transaction?filter=${encodeURIComponent(
-      filterValue,
-    )}&limit=200`;
+    const transactionsUrl = `${financesApiBase}/sell/finances/v1/transaction?filter=${
+      encodeURIComponent(
+        filterValue,
+      )
+    }&limit=200`;
 
     console.log(
       "Fetching shipping label transactions from Finances API:",
@@ -116,9 +117,11 @@ async function fetchEbayFees(
     let hasMore = true;
 
     while (hasMore) {
-      const transactionsUrl = `${financesApiBase}/sell/finances/v1/transaction?filter=${encodeURIComponent(
-        filterValue,
-      )}&limit=${limit}&offset=${offset}`;
+      const transactionsUrl = `${financesApiBase}/sell/finances/v1/transaction?filter=${
+        encodeURIComponent(
+          filterValue,
+        )
+      }&limit=${limit}&offset=${offset}`;
 
       console.log(
         `Fetching Finances API transactions (offset=${offset}):`,
@@ -218,9 +221,7 @@ serve(async (req) => {
 
     // ── Date range ───────────────────────────────────────────────────────────
     const now = new Date();
-    const fromDate = startDate
-      ? new Date(startDate)
-      : new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+    const fromDate = startDate ? new Date(startDate) : new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
     const toDate = endDate ? new Date(endDate) : now;
 
     // eBay expects ISO 8601 dates without milliseconds for the filter
@@ -259,9 +260,11 @@ serve(async (req) => {
       // If we get a 400/404 with creationdate, try lastmodifieddate as fallback
       if (ordersResp.status === 400 || ordersResp.status === 404) {
         const filterValue2 = `lastmodifieddate:[${fromStr}..${toStr}]`;
-        const ordersUrlStr2 = `${apiBase}/sell/fulfillment/v1/order?filter=${encodeURIComponent(
-          filterValue2,
-        )}&limit=200`;
+        const ordersUrlStr2 = `${apiBase}/sell/fulfillment/v1/order?filter=${
+          encodeURIComponent(
+            filterValue2,
+          )
+        }&limit=200`;
         console.log("Retrying with lastmodifieddate:", ordersUrlStr2);
 
         const ordersResp2 = await fetch(ordersUrlStr2, {
@@ -376,10 +379,7 @@ async function processOrders(
   const rawOrders: any[] = ordersData.orders ?? [];
 
   // Use the marketplace from the first order if possible, fallback to EBAY_US
-  const marketplaceId =
-    rawOrders.length > 0
-      ? (rawOrders[0].marketplaceId ?? "EBAY_US")
-      : "EBAY_US";
+  const marketplaceId = rawOrders.length > 0 ? (rawOrders[0].marketplaceId ?? "EBAY_US") : "EBAY_US";
 
   // Broaden the finances search range to catch fees that settled before or after the
   // order creation/modification window. We go 15 days back from fromStr.
@@ -456,10 +456,9 @@ async function processOrders(
       let feeAmt = 0;
       if (financesFeeForOrder !== null) {
         // Apportion fee based on this line's share of total order value
-        feeAmt =
-          orderTotalValue > 0
-            ? (lineTotal / orderTotalValue) * financesFeeForOrder
-            : financesFeeForOrder / (order.lineItems?.length || 1);
+        feeAmt = orderTotalValue > 0
+          ? (lineTotal / orderTotalValue) * financesFeeForOrder
+          : financesFeeForOrder / (order.lineItems?.length || 1);
       } else {
         feeAmt = fallbackFeeAmt;
       }
@@ -554,8 +553,7 @@ async function processOrders(
     // unitCogs: the cost of a single unit (as stored in listing_cogs)
     // Prefer listing ID over SKU — it's the most stable eBay identifier.
     // Match by listing ID first (most precise), then fall back to SKU
-    const unitCogs =
-      (fo.ebayListingId ? (cogsByListingId[fo.ebayListingId] ?? null) : null) ??
+    const unitCogs = (fo.ebayListingId ? (cogsByListingId[fo.ebayListingId] ?? null) : null) ??
       (fo.ebaySku ? (cogsBySku[fo.ebaySku] ?? null) : null) ??
       null;
 
@@ -566,16 +564,12 @@ async function processOrders(
     //   salePrice + shippingCollected - shippingLabelCost - ebayFees - (unitCogs x quantity)
     // salePrice already reflects lineItemCost x quantity (set in the lineItems loop above).
     // shippingLabelCost is fetched from Finances API for accurate P&L.
-    const netProfit =
-      fo.salePrice +
+    const netProfit = fo.salePrice +
       fo.shippingCollected -
       fo.shippingLabelCost -
       fo.ebayFees -
       (totalLineCogs ?? 0);
-    const margin =
-      totalLineCogs != null && fo.salePrice > 0
-        ? (netProfit / fo.salePrice) * 100
-        : null;
+    const margin = totalLineCogs != null && fo.salePrice > 0 ? (netProfit / fo.salePrice) * 100 : null;
 
     totalRevenue += fo.salePrice;
     totalFees += fo.ebayFees;
@@ -614,10 +608,9 @@ async function processOrders(
   // shippingNet = collected - labels (actual label costs from Finances API)
   const totalShippingNet = totalShippingCollected - totalShippingLabels;
   const overallNet = totalRevenue + totalShippingNet - totalFees - totalCogs;
-  const avgMargin =
-    itemsWithCogs > 0 && totalRevenue > 0
-      ? parseFloat(((overallNet / totalRevenue) * 100).toFixed(1))
-      : null;
+  const avgMargin = itemsWithCogs > 0 && totalRevenue > 0
+    ? parseFloat(((overallNet / totalRevenue) * 100).toFixed(1))
+    : null;
 
   // ── Phase 1 dual-write: upsert into listing_financials ────────────────────
   // This is fire-and-forget: errors are logged but never affect the response.
@@ -749,20 +742,15 @@ async function dualWriteFinancials(
   );
 
   const toRow = (it: (typeof items)[number]) => {
-    const domain =
-      (it.ebayListingId ? domainByListingId[it.ebayListingId] : undefined) ??
+    const domain = (it.ebayListingId ? domainByListingId[it.ebayListingId] : undefined) ??
       (it.ebaySku ? domainBySku[it.ebaySku] : undefined) ??
       null;
-    const publishedAt =
-      (it.ebayListingId
-        ? publishedAtByListingId[it.ebayListingId]
-        : undefined) ??
+    const publishedAt = (it.ebayListingId ? publishedAtByListingId[it.ebayListingId] : undefined) ??
       (it.ebaySku ? publishedAtBySku[it.ebaySku] : undefined) ??
       null;
     let timeToSaleDays: number | null = null;
     if (publishedAt) {
-      const days =
-        (new Date(it.soldAt).getTime() - new Date(publishedAt).getTime()) /
+      const days = (new Date(it.soldAt).getTime() - new Date(publishedAt).getTime()) /
         (1000 * 60 * 60 * 24);
       if (Number.isFinite(days) && days >= 0) {
         timeToSaleDays = parseFloat(days.toFixed(2));

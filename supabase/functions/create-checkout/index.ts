@@ -85,8 +85,7 @@ serve(async (req) => {
     }
 
     // Use a hardcoded app URL to prevent open-redirect via a crafted Origin header
-    const appUrl =
-      Deno.env.get("APP_URL") ?? "https://listing-assistant-pro.vercel.app";
+    const appUrl = Deno.env.get("APP_URL") ?? "https://listing-assistant-pro.vercel.app";
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       // client_reference_id lets the webhook reliably identify the user

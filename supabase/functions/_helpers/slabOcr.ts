@@ -86,7 +86,8 @@ export async function runSlabOcr(
     },
   }));
 
-  const systemPrompt = `You are a precise OCR engine specializing in reading text from professional coin grading slab labels (PCGS, NGC, ANACS, ICG, CAC, ICCS).
+  const systemPrompt =
+    `You are a precise OCR engine specializing in reading text from professional coin grading slab labels (PCGS, NGC, ANACS, ICG, CAC, ICCS).
 
 Your ONLY job is to read the printed text on the slab label and return it as structured JSON. Do NOT describe the coin. Do NOT guess. Only report what you can clearly read.
 
@@ -138,8 +139,7 @@ Return ONLY valid JSON, no markdown, no explanation:
   };
 
   try {
-    const openAiEndpoint =
-      configuredProxyUrl || "https://api.openai.com/v1/chat/completions";
+    const openAiEndpoint = configuredProxyUrl || "https://api.openai.com/v1/chat/completions";
     const openAiProxyAuthToken = Deno.env
       .get("OPENAI_PROXY_AUTH_TOKEN")
       ?.trim();
@@ -155,9 +155,7 @@ Return ONLY valid JSON, no markdown, no explanation:
         headers: {
           "Content-Type": "application/json",
           ...(usingProxy ? {} : { Authorization: `Bearer ${openAiApiKey}` }),
-          ...(openAiProxyAuthToken
-            ? { "X-Proxy-Auth": openAiProxyAuthToken }
-            : {}),
+          ...(openAiProxyAuthToken ? { "X-Proxy-Auth": openAiProxyAuthToken } : {}),
         },
         body: JSON.stringify(requestBody),
       },

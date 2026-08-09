@@ -136,11 +136,15 @@ export function buildSystemPrompt(domain: Domain, ctx: PromptContext): string {
 function pricingBlock(ctx: PromptContext): string {
   if (ctx.competitorData && ctx.competitorData.competitorCount > 0) {
     const d = ctx.competitorData;
-    return `MARKET DATA (${d.competitorCount} recently sold similar items): avg $${d.avgPrice.toFixed(2)}, range $${d.minPrice.toFixed(
-      2,
-    )}–$${d.maxPrice.toFixed(2)}, median $${d.medianPrice.toFixed(
-      2,
-    )}. Use the median as your target price and adjust ±10% based on condition relative to typical examples.`;
+    return `MARKET DATA (${d.competitorCount} recently sold similar items): avg $${d.avgPrice.toFixed(2)}, range $${
+      d.minPrice.toFixed(
+        2,
+      )
+    }–$${d.maxPrice.toFixed(2)}, median $${
+      d.medianPrice.toFixed(
+        2,
+      )
+    }. Use the median as your target price and adjust ±10% based on condition relative to typical examples.`;
   }
   return `No recent sold comps available. Estimate fair market value from domain knowledge and item condition.`;
 }
@@ -151,9 +155,11 @@ function categoryBlock(ctx: PromptContext): string {
     ctx.suggestedCategoryName || "Unknown"
   }" (ID: ${ctx.suggestedCategoryId}). Use this categoryId unless you are confident a more specific leaf category exists for this exact item.`;
   if (ctx.requiredAspects && ctx.requiredAspects.length > 0) {
-    s += `\nREQUIRED by eBay for this category — MUST populate all in itemSpecifics:\n  ${ctx.requiredAspects.join(
-      ", ",
-    )}`;
+    s += `\nREQUIRED by eBay for this category — MUST populate all in itemSpecifics:\n  ${
+      ctx.requiredAspects.join(
+        ", ",
+      )
+    }`;
   }
   if (ctx.recommendedAspects && ctx.recommendedAspects.length > 0) {
     s += `\nRECOMMENDED: ${ctx.recommendedAspects.slice(0, 12).join(", ")}`;
@@ -245,8 +251,7 @@ function prePassBlock(ctx: PromptContext): string {
       }
     }
     if (ins.identificationCorrection) {
-      const noveltyTerms =
-        /\b(novelty|fantasy|tribute|replica|exonumia|not a real coin|not genuine)\b/i;
+      const noveltyTerms = /\b(novelty|fantasy|tribute|replica|exonumia|not a real coin|not genuine)\b/i;
       if (noveltyTerms.test(ins.identificationCorrection)) {
         parts.push(
           `⚠️  PRE-PASS IDENTIFICATION NOTE: ${ins.identificationCorrection}`,
@@ -273,36 +278,40 @@ function prePassBlock(ctx: PromptContext): string {
 
 function buildCoinBullionPrompt(ctx: PromptContext): string {
   const spotLine = ctx.spotPrices
-    ? `- Current spot: Gold $${ctx.spotPrices.gold.toFixed(2)}/oz | Silver $${ctx.spotPrices.silver.toFixed(
+    ? `- Current spot: Gold $${ctx.spotPrices.gold.toFixed(2)}/oz | Silver $${
+      ctx.spotPrices.silver.toFixed(
         2,
-      )}/oz | Platinum $${ctx.spotPrices.platinum.toFixed(
+      )
+    }/oz | Platinum $${
+      ctx.spotPrices.platinum.toFixed(
         2,
-      )}/oz\n- **CRITICAL WEIGHT RULES**: metalWeightOz = fine troy oz of pure metal (not total coin weight). ALWAYS populate for precious metals:\n  • Morgan/Peace Silver Dollar (1878-1935): 0.7734oz Ag (26.73g × 90% silver)\n  • US 90% Silver Halves (Barber/Walking Liberty/Franklin/Kennedy 1964): 0.3618oz Ag\n  • Kennedy Half Dollar 1965-1970 (40% silver): 0.1479oz Ag\n  • US 90% Silver Quarters (pre-1965): 0.1809oz Ag\n  • US 90% Silver Dimes (Mercury/Roosevelt/Barber): 0.0724oz Ag\n  • American Silver Eagle: 1.0000oz Ag\n  • US Gold Eagles: $5=0.1209oz Au | $10=0.2419oz Au | $25=0.6044oz Au | $50=1.0000oz Au\n  • American Gold Buffalo: 1.0000oz Au\n  • Gold Sovereigns (British): 0.2354oz Au\n  • Pre-1933 US Gold: $20 Double Eagle=0.9675oz Au (90% = 0.8709oz fine) | $10 Eagle=0.4838oz Au | $5 Half Eagle=0.2419oz Au\n  • Silver Bars/Rounds: face weight in oz (e.g. "1 oz Silver Round" = 1.0000oz Ag)\n  • If coin type is recognizable but weight not listed above, use known standard weight. NEVER leave metalWeightOz as 0.\n- Melt floor: (spot × metalWeightOz × 1.19) — never price below this.`
+      )
+    }/oz\n- **CRITICAL WEIGHT RULES**: metalWeightOz = fine troy oz of pure metal (not total coin weight). ALWAYS populate for precious metals:\n  • Morgan/Peace Silver Dollar (1878-1935): 0.7734oz Ag (26.73g × 90% silver)\n  • US 90% Silver Halves (Barber/Walking Liberty/Franklin/Kennedy 1964): 0.3618oz Ag\n  • Kennedy Half Dollar 1965-1970 (40% silver): 0.1479oz Ag\n  • US 90% Silver Quarters (pre-1965): 0.1809oz Ag\n  • US 90% Silver Dimes (Mercury/Roosevelt/Barber): 0.0724oz Ag\n  • American Silver Eagle: 1.0000oz Ag\n  • US Gold Eagles: $5=0.1209oz Au | $10=0.2419oz Au | $25=0.6044oz Au | $50=1.0000oz Au\n  • American Gold Buffalo: 1.0000oz Au\n  • Gold Sovereigns (British): 0.2354oz Au\n  • Pre-1933 US Gold: $20 Double Eagle=0.9675oz Au (90% = 0.8709oz fine) | $10 Eagle=0.4838oz Au | $5 Half Eagle=0.2419oz Au\n  • Silver Bars/Rounds: face weight in oz (e.g. "1 oz Silver Round" = 1.0000oz Ag)\n  • If coin type is recognizable but weight not listed above, use known standard weight. NEVER leave metalWeightOz as 0.\n- Melt floor: (spot × metalWeightOz × 1.19) — never price below this.`
     : "";
 
   // Dynamic current-year statement based on actual current date
-  const currentYear = ctx.currentDate
-    ? ctx.currentDate.getFullYear()
-    : new Date().getFullYear();
+  const currentYear = ctx.currentDate ? ctx.currentDate.getFullYear() : new Date().getFullYear();
   const currentYearCoins = [
     currentYear - 2,
     currentYear - 1,
     currentYear,
     currentYear + 1,
   ].filter((y) => y >= 2020);
-  const currentYearStatement = `**CURRENT-YEAR COINS ARE REAL**: Coins dated ${currentYearCoins.join(
-    ", ",
-  )} are genuine government-issued coins. The US Mint and world mints actively produce coins with these dates. NEVER classify them as novelty, fantasy, replica, or tribute. A coin in a professional grading slab (PCGS, NGC, etc.) is by definition authentic and must use domain coins_bullion, NEVER exonumia or general.`;
+  const currentYearStatement = `**CURRENT-YEAR COINS ARE REAL**: Coins dated ${
+    currentYearCoins.join(
+      ", ",
+    )
+  } are genuine government-issued coins. The US Mint and world mints actively produce coins with these dates. NEVER classify them as novelty, fantasy, replica, or tribute. A coin in a professional grading slab (PCGS, NGC, etc.) is by definition authentic and must use domain coins_bullion, NEVER exonumia or general.`;
 
   return `You are a professional Numismatist and eBay Listing Expert specializing in coins, currency, and bullion.
 
 **TODAY'S DATE: ${
     ctx.currentDate
       ? ctx.currentDate.toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        })
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
       : "Unknown"
   }**
 
@@ -689,9 +698,11 @@ ${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}`;
 function buildJewelryPrompt(ctx: PromptContext): string {
   const pricing = pricingBlock(ctx);
   const spotLine = ctx.spotPrices
-    ? `\n- Current spot for reference (jewelry is rarely priced at pure melt, but this helps sanity-check metal value): Gold $${ctx.spotPrices.gold.toFixed(
+    ? `\n- Current spot for reference (jewelry is rarely priced at pure melt, but this helps sanity-check metal value): Gold $${
+      ctx.spotPrices.gold.toFixed(
         2,
-      )}/oz | Silver $${ctx.spotPrices.silver.toFixed(2)}/oz | Platinum $${ctx.spotPrices.platinum.toFixed(2)}/oz`
+      )
+    }/oz | Silver $${ctx.spotPrices.silver.toFixed(2)}/oz | Platinum $${ctx.spotPrices.platinum.toFixed(2)}/oz`
     : "";
   return `You are an expert jeweler/gemologist and eBay listing professional with deep knowledge of precious metals, gemstones, and fine and fashion jewelry.
 

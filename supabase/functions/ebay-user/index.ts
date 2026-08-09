@@ -45,10 +45,7 @@ serve(async (req) => {
     const { userToken } = await req.json();
 
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-    const apiBase =
-      ebayEnv === "production"
-        ? "https://api.ebay.com"
-        : "https://api.sandbox.ebay.com";
+    const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
 
     if (!userToken) {
       return new Response(JSON.stringify({ needsAuth: true }), {

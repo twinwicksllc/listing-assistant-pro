@@ -116,8 +116,7 @@ export function isCoinDomainCategory(
 ): boolean {
   if (!categoryId) return false;
 
-  const categoryText =
-    `${categoryName || ""} ${breadcrumb || ""}`.toLowerCase();
+  const categoryText = `${categoryName || ""} ${breadcrumb || ""}`.toLowerCase();
 
   if (
     /(coins?\b|paper money|bullion|exonumia|ancient|medieval|numis)/i.test(
@@ -175,8 +174,7 @@ export function shouldForceWorldCoinsFallback(
 
   if (["261186", "268"].includes(categoryId)) return true;
 
-  const looksCoinLikeRange =
-    /^(3[0-9]|4[0-9]|1[0-9]|2[0-9]|45243|532|173685)/.test(categoryId);
+  const looksCoinLikeRange = /^(3[0-9]|4[0-9]|1[0-9]|2[0-9]|45243|532|173685)/.test(categoryId);
 
   return !looksCoinLikeRange && parseInt(categoryId, 10) > 200000;
 }

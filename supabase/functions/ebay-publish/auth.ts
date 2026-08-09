@@ -30,14 +30,12 @@ export async function handleGetAuthUrl({
   if (!clientId) throw new Error("eBay API credentials not configured");
   if (!authBase) throw new Error("eBay auth endpoint not configured");
 
-  const ruName =
-    Deno.env.get("EBAY_RUNAME") || Deno.env.get("EBAY_REDIRECT_URI");
+  const ruName = Deno.env.get("EBAY_RUNAME") || Deno.env.get("EBAY_REDIRECT_URI");
   if (!ruName) throw new Error("EBAY_RUNAME not configured");
 
   const scopes = EBAY_OAUTH_SCOPES.join(" ");
 
-  const authUrl =
-    `${authBase}/oauth2/authorize?` +
+  const authUrl = `${authBase}/oauth2/authorize?` +
     `client_id=${encodeURIComponent(clientId)}` +
     `&redirect_uri=${encodeURIComponent(ruName)}` +
     `&response_type=code` +
@@ -84,8 +82,7 @@ export async function handleExchangeCode({
     }
   }
 
-  const ruName =
-    Deno.env.get("EBAY_RUNAME") || Deno.env.get("EBAY_REDIRECT_URI");
+  const ruName = Deno.env.get("EBAY_RUNAME") || Deno.env.get("EBAY_REDIRECT_URI");
   if (!ruName) {
     throw new Error(
       "eBay callback URI not configured. Contact admin to set EBAY_RUNAME.",
@@ -211,10 +208,7 @@ export async function handleExchangeCode({
     const _identitySupabaseUrl = Deno.env.get("SUPABASE_URL");
     const _identityServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const _stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
-    const identityBase =
-      ebayEnv === "production"
-        ? "https://apiz.ebay.com"
-        : "https://apiz.sandbox.ebay.com";
+    const identityBase = ebayEnv === "production" ? "https://apiz.ebay.com" : "https://apiz.sandbox.ebay.com";
 
     const identityRes = await fetch(
       `${identityBase}/commerce/identity/v1/user/`,
@@ -228,8 +222,7 @@ export async function handleExchangeCode({
     }
     const identity = await identityRes.json();
     const newUsername = identity?.userId ?? identity?.username ?? null;
-    const accountType =
-      (identity?.accountType ?? "")?.toLowerCase() ?? "individual";
+    const accountType = (identity?.accountType ?? "")?.toLowerCase() ?? "individual";
 
     // Determine tier for one-account enforcement (OQ-3: gate on LA subscription, not eBay account type)
     let tierForOneAccountCheck: "starter" | "pro" | "unlimited" = "starter";
@@ -249,8 +242,7 @@ export async function handleExchangeCode({
     }
     if (_userEmailForStripe && _stripeSecretKey) {
       try {
-        const { default: Stripe } =
-          await import("https://esm.sh/stripe@18.5.0");
+        const { default: Stripe } = await import("https://esm.sh/stripe@18.5.0");
         const stripe = new Stripe(_stripeSecretKey, {
           apiVersion: "2025-08-27.basil",
         });
@@ -295,7 +287,8 @@ export async function handleExchangeCode({
         return new Response(
           JSON.stringify({
             error: "account_already_linked",
-            message: `This Listing Assistant account is already linked to eBay user "${existingProfile.ebay_username}". Disconnect it before connecting a new account.`,
+            message:
+              `This Listing Assistant account is already linked to eBay user "${existingProfile.ebay_username}". Disconnect it before connecting a new account.`,
           }),
           {
             status: 409,
@@ -532,13 +525,9 @@ export async function handleGetStoredToken({
   }
 
   const now = new Date();
-  const expiresAt = data.ebay_token_expires_at
-    ? new Date(data.ebay_token_expires_at)
-    : null;
+  const expiresAt = data.ebay_token_expires_at ? new Date(data.ebay_token_expires_at) : null;
   // Consider token expired if it expires within 5 minutes (proactive refresh window)
-  const isExpiredOrExpiringSoon = expiresAt
-    ? expiresAt.getTime() - now.getTime() < REFRESH_BUFFER_MS
-    : true;
+  const isExpiredOrExpiringSoon = expiresAt ? expiresAt.getTime() - now.getTime() < REFRESH_BUFFER_MS : true;
 
   // Proactively refresh if token is expired or expiring within 5 minutes
   if (isExpiredOrExpiringSoon && data.ebay_refresh_token) {
