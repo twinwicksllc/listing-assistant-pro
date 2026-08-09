@@ -14,7 +14,7 @@ export const EBAY_OAUTH_SCOPES = [
   // "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly", // Dashboard analytics
   // "https://api.ebay.com/oauth/api_scope/sell.finances", // Financial data (shipping labels, etc)
   // "https://api.ebay.com/oauth/api_scope/sell.marketing", // eBay Video/promotions
-  "https://api.ebay.com/oauth/api_scope/commerce.media", // Media API (video uploads) - Required for eBay Media API
+  // "https://api.ebay.com/oauth/api_scope/commerce.media", // Media API (video uploads) - Not yet registered in eBay Developer Portal
   // "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly", // Identity API (username lookup)
 ];
 
