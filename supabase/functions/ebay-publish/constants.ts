@@ -1,20 +1,17 @@
 // OAuth scope constants
-// NOTE: If you get "invalid_scope" 400 error, the app may not have these scopes registered in eBay Developer Portal.
-// Start with the minimal set below and gradually add optional scopes after registering them:
-// - commerce.media: Requires special registration for Video Upload API
-// - commerce.identity.readonly: Requires special registration for Identity API
-// - sell.analytics.readonly: Requires registration for dashboard analytics
-// - sell.finances: Requires registration for shipping/financial data
+// NOTE: According to eBay documentation, sell.inventory scope grants access to both:
+// - Sell Inventory API (create/update listings)
+// - Commerce Media API (video uploads/management)
+// Additional optional scopes may be added after verifying they are registered for your app.
 export const EBAY_OAUTH_SCOPES = [
   "https://api.ebay.com/oauth/api_scope", // Base scope (required)
-  "https://api.ebay.com/oauth/api_scope/sell.inventory", // Sell inventory (required for listings)
+  "https://api.ebay.com/oauth/api_scope/sell.inventory", // Sell inventory (required for listings + video uploads)
   "https://api.ebay.com/oauth/api_scope/sell.account", // Account access (required)
   "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly", // Fulfillment (optional)
-  // Uncomment the scopes below after registering them in eBay Developer Portal:
+  // Uncomment the scopes below after confirming they are registered for your app:
   // "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly", // Dashboard analytics
   // "https://api.ebay.com/oauth/api_scope/sell.finances", // Financial data (shipping labels, etc)
-  // "https://api.ebay.com/oauth/api_scope/sell.marketing", // eBay Video/promotions
-  // "https://api.ebay.com/oauth/api_scope/commerce.media", // Media API (video uploads) - Not yet registered in eBay Developer Portal
+  // "https://api.ebay.com/oauth/api_scope/sell.marketing", // eBay marketing
   // "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly", // Identity API (username lookup)
 ];
 

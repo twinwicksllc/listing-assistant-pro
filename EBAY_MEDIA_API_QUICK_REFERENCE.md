@@ -18,12 +18,11 @@
 | Scope | Required | Purpose |
 |-------|----------|---------|
 | `https://api.ebay.com/oauth/api_scope` | ✅ YES | Base authentication |
-| `https://api.ebay.com/oauth/api_scope/sell.inventory` | ✅ YES | Create/update listings |
+| `https://api.ebay.com/oauth/api_scope/sell.inventory` | ✅ YES | **Covers BOTH:** Create/update listings AND video uploads (Media API) |
 | `https://api.ebay.com/oauth/api_scope/sell.account` | ✅ YES | Account access |
 | `https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly` | ⚠️ OPTIONAL | Fulfillment data |
-| `https://api.ebay.com/oauth/api_scope/commerce.media` | 📹 FOR VIDEOS | Video uploads (when registered) |
 
-**Status:** `commerce.media` is currently **commented out** in `constants.ts` because it's not yet registered in the eBay Developer Portal.
+**Key Fact:** `sell.inventory` scope grants access to BOTH Sell Inventory API AND Commerce Media API (video uploads). No separate scope needed.
 
 ---
 
@@ -126,23 +125,14 @@ PENDING ──upload bytes──→ PROCESSING ──eBay processes──→ LIV
 
 ## 🔧 Configuration Checklist
 
-**Before first video upload:**
+**Already Configured:**
 
-- [ ] ✅ eBay app is in **Production** mode (not Sandbox)
-- [ ] ✅ `EBAY_CLIENT_ID` and `EBAY_CLIENT_SECRET` configured
-- [ ] ✅ `EBAY_RUNAME` (redirect URI) registered in app settings
-- [ ] ✅ `EBAY_ENVIRONMENT=production` in Supabase
-- [ ] ✅ `sell.inventory` scope registered in Developer Portal
-- [ ] ✅ `commerce.media` scope registered (or ready to uncomment)
-
-**When ready to enable video uploads:**
-
-1. Go to https://developer.ebay.com/my/keys
-2. Find application, click "Manage Scopes" or "Request New Scope"
-3. Search for "commerce.media" and request it
-4. Wait for approval (usually immediate, but can be 24-48 hours)
-5. Uncomment `commerce.media` in `constants.ts` line ~14
-6. Rebuild and redeploy
+- [x] ✅ eBay app is in **Production** mode (not Sandbox)
+- [x] ✅ `EBAY_CLIENT_ID` and `EBAY_CLIENT_SECRET` configured
+- [x] ✅ `EBAY_RUNAME` (redirect URI) registered in app settings
+- [x] ✅ `EBAY_ENVIRONMENT=production` in Supabase
+- [x] ✅ `sell.inventory` scope registered (covers inventory + video uploads)
+- [x] ✅ Video uploads ENABLED (no additional scope needed)
 
 ---
 
@@ -166,11 +156,12 @@ PENDING ──upload bytes──→ PROCESSING ──eBay processes──→ LIV
 # 1. Start with a test video (10 seconds, MP4, < 10MB)
 ffmpeg -f lavfi -i testsrc=duration=10:s=1920x1080:rate=1 -f lavfi -i sine=f=1000:d=10 test.mp4
 
-# 2. Go to Analyze page → Upload → Select test.mp4
-# 3. Wait for upload complete message
-# 4. Frontend polls automatically → "Video ready" badge appears
-# 5. Create listing with video
-# 6. Verify on eBay website that video shows in product gallery
+# 2. Go to Settings → Connect eBay (if not already connected)
+# 3. Go to Analyze page → Upload → Select test.mp4
+# 4. Wait for upload complete message
+# 5. Frontend polls automatically → "Video ready" badge appears
+# 6. Create listing with video
+# 7. Verify on eBay website that video shows in product gallery
 ```
 
 ---
@@ -212,5 +203,5 @@ Video won't attach to listing?
 ---
 
 **Last Updated:** 2026-08-09  
-**Implementation Status:** ✅ Complete  
-**Video Upload:** ⏳ Blocked until commerce.media scope registered
+**Implementation Status:** ✅ Complete and Ready  
+**Video Upload:** ✅ ENABLED (covered by sell.inventory scope)

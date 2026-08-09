@@ -61,7 +61,7 @@ interface VideoPollingOptions {
  * Useful for waiting until eBay finishes processing a video (status changes from PROCESSING to LIVE or FAILED).
  * 
  * @param videoId eBay video ID to poll
- * @param userToken eBay user token with commerce.media scope
+ * @param userToken eBay user token with sell.inventory scope (which covers Media API)
  * @param mediaApiBase Base URL for Media API (e.g., https://api.ebay.com/commerce/media/v1)
  * @param options Polling configuration (maxAttempts, initialDelayMs, maxDelayMs)
  * @returns Video status object {videoId, status, statusMessage, attempts, processingTimeMs}
@@ -399,12 +399,11 @@ export async function handleUploadVideo(
     // Non-endpoint errors should fail fast.
     let guidance = "";
     if (resp.status === 401 || resp.status === 403) {
-      guidance = "Authentication/authorization issue. Token may be expired, lack required scopes (needs 'commerce.media' scope registered in eBay Developer Portal), or the account may not be authorized for video uploads. " +
-        "Verify: (1) commerce.media scope is registered at https://developer.ebay.com/my/keys, " +
+      guidance = "Authentication/authorization issue. Token may be expired, or the account may not be authorized for video uploads. " +
+        "Verify: (1) your eBay token includes 'sell.inventory' scope (which grants Media API access), " +
         "(2) your eBay app is in Production mode, (3) your eBay account has video upload permissions.";
     } else if (resp.status === 400) {
-      guidance = "Bad request. Check file size (typically < 500MB), title length, classification, and that the video format is supported (MP4, MOV, AVI, WebM). " +
-        "Also verify the commerce.media scope is registered in eBay Developer Portal.";
+      guidance = "Bad request. Check file size (typically < 500MB), title length, classification, and that the video format is supported (MP4, MOV, AVI, WebM).";
     } else if (resp.status === 422) {
       guidance = "Unprocessable entity. File format or metadata may be invalid. Verify video is valid MP4/MOV/AVI/WebM and meets eBay requirements.";
     }

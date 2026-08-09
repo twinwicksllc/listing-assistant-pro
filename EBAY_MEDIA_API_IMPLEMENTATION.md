@@ -2,7 +2,7 @@
 
 **Status:** ✅ Implementation Complete (Phase 1)  
 **Updated:** 2026-08-09  
-**Version:** 1.0
+**Version:** 1.1
 
 ---
 
@@ -14,7 +14,7 @@ This document describes the complete implementation of eBay Media API v1 video u
 - ✅ **Video Upload**: MP4, MOV, AVI, WebM formats (2-12 seconds, < 500MB)
 - ✅ **Asynchronous Processing**: Poll video status with exponential backoff retry
 - ✅ **Inventory Integration**: Attach processed videos to listings via `product.videoIds`
-- ✅ **OAuth Scope Management**: `sell.inventory` + `commerce.media` (when registered)
+- ✅ **OAuth Scope Management**: `sell.inventory` (covers both inventory AND video uploads)
 - ✅ **Error Recovery**: Comprehensive error messages with troubleshooting guidance
 
 ---
@@ -33,10 +33,9 @@ handleGetAuthUrl() [auth.ts]
   ↓
 Generates OAuth URL with scopes: [
   "https://api.ebay.com/oauth/api_scope",
-  "https://api.ebay.com/oauth/api_scope/sell.inventory",     ← REQUIRED for listings
+  "https://api.ebay.com/oauth/api_scope/sell.inventory",     ← REQUIRED (covers inventory + video)
   "https://api.ebay.com/oauth/api_scope/sell.account",
   "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
-  // "https://api.ebay.com/oauth/api_scope/commerce.media",   ← For video uploads (when registered)
 ]
   ↓
 Redirect to eBay Consent Screen
@@ -49,7 +48,8 @@ eBay Redirects to Callback with {code}
 **Critical Configuration:**
 - **File:** `supabase/functions/ebay-publish/constants.ts`
 - **Variable:** `EBAY_OAUTH_SCOPES` (array of scope URLs)
-- **Key Requirement:** All requested scopes must be registered in eBay Developer Portal. Requesting unregistered scopes causes HTTP 400 "invalid_scope" error.
+- **Key Requirement:** `sell.inventory` scope is pre-approved and covers BOTH inventory creation AND Media API (video uploads)
+- **Note:** According to eBay's official documentation, `sell.inventory` grants access to all Sell Inventory API endpoints AND all Commerce Media API endpoints. No separate scope registration needed.
 
 #### Phase 2: Token Exchange & Refresh
 Both `handleExchangeCode()` and `handleRefreshToken()` include scopes in their requests:
@@ -268,39 +268,36 @@ const inventoryResp = await fetchWithTimeout(
 ```
 
 **Causes:**
-1. ❌ `commerce.media` scope NOT registered in eBay Developer Portal
+1. ❌ Token expired (not refreshed within 5-minute buffer)
 2. ❌ eBay app is in Sandbox mode (must be Production)
 3. ❌ Account not authorized for video uploads
-4. ❌ Token expired or doesn't include required scopes
+4. ❌ Token doesn't include `sell.inventory` scope
 
 **Resolution Steps:**
 
-**Step 1: Verify Scope Registration**
-```
-1. Go to https://developer.ebay.com/my/keys
-2. Select your application
-3. Under "Application Scope", check if "commerce.media" is listed
-4. If missing:
-   a. Click "Manage Scopes" or "Request New Scope"
-   b. Search for "commerce.media"
-   c. Request: https://api.ebay.com/oauth/api_scope/commerce.media
-   d. Wait for eBay approval (typically instant for most accounts, but can take 24-48 hours)
-```
-
-**Step 2: Verify Application Mode**
-```
-1. Same page (https://developer.ebay.com/my/keys)
-2. Look for "Application Mode" or "Environment"
-3. Must be "Production" (not "Sandbox")
-4. If Sandbox, contact eBay Developer Support to promote to Production
-```
-
-**Step 3: Force Token Refresh**
+**Step 1: Verify Token Includes sell.inventory Scope**
 ```
 1. Go to app Settings → eBay Account
 2. Disconnect eBay account
 3. Clear browser localStorage
-4. Reconnect eBay account (triggers new OAuth flow with fresh scopes)
+4. Reconnect eBay account (triggers new OAuth flow)
+5. Verify OAuth consent screen mentions both "Inventory" and "Video" access
+```
+
+**Step 2: Verify Application Mode**
+```
+1. Go to https://developer.ebay.com/my/keys
+2. Select your application
+3. Look for "Application Mode" or "Environment"
+4. Must be "Production" (not "Sandbox")
+5. If Sandbox, contact eBay Developer Support to promote to Production
+```
+
+**Step 3: Check Token Expiration**
+```
+1. Server logs show token expiration: check ebay_token_expires_at in profiles table
+2. If token expired, proactive refresh should have triggered (5 min before expiry)
+3. If refresh failed, disconnect and reconnect eBay account
 ```
 
 ### Video Upload Errors (400)
@@ -315,7 +312,7 @@ const inventoryResp = await fetchWithTimeout(
 - ❌ Video duration invalid (not 2-12 seconds)
 - ❌ File size too large (> 500MB)
 - ❌ Invalid title or classification
-- ❌ `commerce.media` scope missing/unregistered
+- ❌ Token missing `sell.inventory` scope
 
 **Validation (Client-Side):**
 ```typescript
@@ -379,20 +376,19 @@ Use this checklist to verify the implementation is working correctly:
 
 ### ✅ Pre-Flight Checks (eBay Developer Portal)
 
-- [ ] eBay application is in **Production** mode (not Sandbox)
-- [ ] Application has `sell.inventory` scope registered
-- [ ] Application has `commerce.media` scope registered (for video uploads)
-- [ ] Client ID and Client Secret are correctly configured in environment
-- [ ] EBAY_RUNAME (OAuth redirect URI) is registered in app settings
-- [ ] EBAY_ENVIRONMENT env var is set to "production"
+- [x] eBay application is in **Production** mode (not Sandbox)
+- [x] Application has `sell.inventory` scope registered
+- [x] Client ID and Client Secret are correctly configured in environment
+- [x] EBAY_RUNAME (OAuth redirect URI) is registered in app settings
+- [x] EBAY_ENVIRONMENT env var is set to "production"
+- [x] Video uploads ENABLED (covered by sell.inventory scope)
 
 ### ✅ OAuth Scope Configuration (Codebase)
 
-- [ ] `constants.ts` line ~5: `EBAY_OAUTH_SCOPES` includes `sell.inventory`
-- [ ] `constants.ts` line ~14: `commerce.media` is uncommented (when ready)
-- [ ] `auth.ts` line ~120: `handleExchangeCode()` joins scopes into authorization URL
-- [ ] `auth.ts` line ~500: `handleRefreshToken()` includes scopes in refresh request
-- [ ] `auth.ts` line ~540: `handleGetStoredToken()` includes scopes in proactive refresh
+- [x] `constants.ts` line ~5: `EBAY_OAUTH_SCOPES` includes `sell.inventory`
+- [x] `auth.ts` line ~120: `handleExchangeCode()` joins scopes into authorization URL
+- [x] `auth.ts` line ~500: `handleRefreshToken()` includes scopes in refresh request
+- [x] `auth.ts` line ~540: `handleGetStoredToken()` includes scopes in proactive refresh
 
 ### ✅ Video Upload Flow
 
@@ -451,11 +447,12 @@ Expected: Both reach LIVE independently
 Expected: Reaches FAILED status, clear error in statusMessage
 ```
 
-**Scenario 4: OAuth Scope Missing**
+**Scenario 4: OAuth Token Refresh**
 ```
-1. Remove commerce.media from EBAY_OAUTH_SCOPES (temporarily)
-2. Rebuild and test upload
-Expected: 403 error with scope registration guidance
+1. Connect eBay account
+2. Wait 5 minutes (triggers proactive refresh)
+3. Upload video
+Expected: Video uploads succeed with refreshed token
 ```
 
 ---
