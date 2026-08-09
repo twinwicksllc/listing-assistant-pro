@@ -29,6 +29,9 @@
       "prettier --write",
       "eslint --fix"
     ],
+    "supabase/functions/**/*.{ts,tsx}": [
+      "deno fmt"
+    ],
     "*.{json,md,yml,yaml}": [
       "prettier --write"
     ]
