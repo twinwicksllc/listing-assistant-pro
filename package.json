@@ -25,6 +25,18 @@
     "test:coin-e2e": "playwright test e2e/tests/coin-condition-validation.spec.ts"
   },
   "lint-staged": {
+    "src/**/*.{js,jsx,ts,tsx}": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "e2e/**/*.{js,jsx,ts,tsx}": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "scripts/**/*.{js,jsx,ts,tsx}": [
+      "prettier --write",
+      "eslint --fix"
+    ],
     "*.{js,jsx,ts,tsx}": [
       "prettier --write",
       "eslint --fix"
