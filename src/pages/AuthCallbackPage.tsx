@@ -5,7 +5,7 @@ import { Loader2, AlertTriangle, RefreshCw } from "lucide-react";
 import teckstartLogo from "@/assets/teckstart-logo.png";
 
 // Storage key must match the storageKey set in supabase client.ts
-const STORAGE_KEY = 'sb-lister-auth-token';
+const STORAGE_KEY = "sb-lister-auth-token";
 
 /**
  * AuthCallbackPage
@@ -26,8 +26,8 @@ export default function AuthCallbackPage() {
 
   useEffect(() => {
     // Force service worker update check on auth callback
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
+    if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: "SKIP_WAITING" });
     }
 
     const code = searchParams.get("code");
@@ -49,7 +49,9 @@ export default function AuthCallbackPage() {
     }, 10000);
 
     // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (handled.current) return;
 
       if (event === "SIGNED_IN" && session) {
@@ -64,34 +66,38 @@ export default function AuthCallbackPage() {
     });
 
     // Check for existing session
-    supabase.auth.getSession().then(({ data: { session }, error: sessionError }) => {
-      if (sessionError) {
-        console.error("Session error:", sessionError);
+    supabase.auth
+      .getSession()
+      .then(({ data: { session }, error: sessionError }) => {
+        if (sessionError) {
+          console.error("Session error:", sessionError);
 
-        if (code && !retried) {
-          console.warn("PKCE exchange failed — clearing stale verifier from localStorage");
-          // Fix 5: Clear stale PKCE verifier so next attempt starts clean
-          localStorage.removeItem(`${STORAGE_KEY}-code-verifier`);
-          // Also clear any other stale auth state for this storage key
-          Object.keys(localStorage)
-            .filter(k => k.startsWith(STORAGE_KEY))
-            .forEach(k => {
-              console.log('[auth] clearing stale key:', k);
-              localStorage.removeItem(k);
-            });
+          if (code && !retried) {
+            console.warn(
+              "PKCE exchange failed — clearing stale verifier from localStorage",
+            );
+            // Fix 5: Clear stale PKCE verifier so next attempt starts clean
+            localStorage.removeItem(`${STORAGE_KEY}-code-verifier`);
+            // Also clear any other stale auth state for this storage key
+            Object.keys(localStorage)
+              .filter((k) => k.startsWith(STORAGE_KEY))
+              .forEach((k) => {
+                console.log("[auth] clearing stale key:", k);
+                localStorage.removeItem(k);
+              });
 
-          setError("Authentication failed. Please try signing in again.");
-          setRetried(true);
+            setError("Authentication failed. Please try signing in again.");
+            setRetried(true);
+          }
+          return;
         }
-        return;
-      }
 
-      if (session && !handled.current) {
-        handled.current = true;
-        clearTimeout(timeout);
-        navigate("/home");
-      }
-    });
+        if (session && !handled.current) {
+          handled.current = true;
+          clearTimeout(timeout);
+          navigate("/home");
+        }
+      });
 
     return () => {
       subscription.unsubscribe();
@@ -103,7 +109,11 @@ export default function AuthCallbackPage() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
         <div className="flex flex-col items-center gap-4 max-w-md text-center">
-          <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto" />
+          <img
+            src={teckstartLogo}
+            alt="Sovereign Listing Suite"
+            className="h-12 w-auto"
+          />
           <div className="flex items-center gap-2 text-destructive">
             <AlertTriangle className="w-5 h-5" />
             <span className="font-medium">Authentication Error</span>
@@ -120,8 +130,8 @@ export default function AuthCallbackPage() {
               onClick={() => {
                 // Clear all lister auth state and go back to login fresh
                 Object.keys(localStorage)
-                  .filter(k => k.startsWith(STORAGE_KEY))
-                  .forEach(k => localStorage.removeItem(k));
+                  .filter((k) => k.startsWith(STORAGE_KEY))
+                  .forEach((k) => localStorage.removeItem(k));
                 navigate("/login");
               }}
               className="flex items-center justify-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-secondary"
@@ -138,7 +148,11 @@ export default function AuthCallbackPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
       <div className="flex flex-col items-center gap-4">
-        <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto" />
+        <img
+          src={teckstartLogo}
+          alt="Sovereign Listing Suite"
+          className="h-12 w-auto"
+        />
         <Loader2 className="w-6 h-6 animate-spin text-primary" />
         <p className="text-sm text-muted-foreground">Signing you in...</p>
       </div>

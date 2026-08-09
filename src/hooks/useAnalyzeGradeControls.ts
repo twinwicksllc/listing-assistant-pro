@@ -2,7 +2,9 @@ import { useCallback } from "react";
 import { toast } from "sonner";
 import type { ItemSpecifics } from "@/types/listing";
 
-type SetItemSpecifics = (updater: (prev: ItemSpecifics) => ItemSpecifics) => void;
+type SetItemSpecifics = (
+  updater: (prev: ItemSpecifics) => ItemSpecifics,
+) => void;
 
 interface UseAnalyzeGradeControlsParams {
   setGradeConfirmed: (value: boolean) => void;
@@ -17,11 +19,14 @@ export function useAnalyzeGradeControls({
   setSuggestedGrade,
   setGradingRationale,
 }: UseAnalyzeGradeControlsParams) {
-  const acceptSuggestedGrade = useCallback((grade: string) => {
-    setGradeConfirmed(true);
-    setItemSpecifics((prev) => ({ ...prev, Grade: grade }));
-    toast.success(`Grade ${grade} applied to item specifics`);
-  }, [setGradeConfirmed, setItemSpecifics]);
+  const acceptSuggestedGrade = useCallback(
+    (grade: string) => {
+      setGradeConfirmed(true);
+      setItemSpecifics((prev) => ({ ...prev, Grade: grade }));
+      toast.success(`Grade ${grade} applied to item specifics`);
+    },
+    [setGradeConfirmed, setItemSpecifics],
+  );
 
   const dismissSuggestedGrade = useCallback(() => {
     setSuggestedGrade("");

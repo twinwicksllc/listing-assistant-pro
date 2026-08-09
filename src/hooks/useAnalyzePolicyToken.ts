@@ -18,13 +18,15 @@ export function useAnalyzePolicyToken({
 }: UseAnalyzePolicyTokenParams) {
   // Initialize with localStorage token for immediate availability
   // (especially for video-only flow before first analysis)
-  const [ebayTokenForPolicies, setEbayTokenForPolicies] = useState<string | null>(
-    () => localStorage.getItem("ebay-user-token")
-  );
+  const [ebayTokenForPolicies, setEbayTokenForPolicies] = useState<
+    string | null
+  >(() => localStorage.getItem("ebay-user-token"));
 
   // Stable function to load token from server or localStorage
   // Only depends on userId, not on listing data or publish payload
-  const loadTokenIndependently = useCallback(async (): Promise<string | null> => {
+  const loadTokenIndependently = useCallback(async (): Promise<
+    string | null
+  > => {
     if (!userId) return localStorage.getItem("ebay-user-token");
 
     try {
@@ -37,7 +39,10 @@ export function useAnalyzePolicyToken({
       }
       return data?.token ?? localStorage.getItem("ebay-user-token");
     } catch (e) {
-      console.error("useAnalyzePolicyToken: Failed to load token from server", e);
+      console.error(
+        "useAnalyzePolicyToken: Failed to load token from server",
+        e,
+      );
       return localStorage.getItem("ebay-user-token");
     }
   }, [userId]); // Only depends on userId—stable across form changes

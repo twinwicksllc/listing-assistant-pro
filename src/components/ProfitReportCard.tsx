@@ -5,10 +5,10 @@ interface ProfitReportCardProps {
   grossRevenue: number;
   totalCogs: number;
   ebayFees: number;
-  shippingNet: number;       // shippingCollected - shippingLabels
-  otherDeductions: number;   // refunds + nonSaleCharges + disputes - credits
+  shippingNet: number; // shippingCollected - shippingLabels
+  otherDeductions: number; // refunds + nonSaleCharges + disputes - credits
   netProfit: number;
-  trueMarginPct: number | null;  // null when no revenue
+  trueMarginPct: number | null; // null when no revenue
 }
 
 function fmtMoney(n: number): string {
@@ -21,7 +21,7 @@ function fmtMoney(n: number): string {
 }
 
 const PERIOD_LABELS: Record<string, string> = {
-  "7d":  "Last 7 Days",
+  "7d": "Last 7 Days",
   "30d": "Last 30 Days",
   "90d": "Last 90 Days",
 };
@@ -46,26 +46,30 @@ export default function ProfitReportCard({
     trueMarginPct == null
       ? Minus
       : trueMarginPct >= 20
-      ? TrendingUp
-      : trueMarginPct >= 0
-      ? Minus
-      : TrendingDown;
+        ? TrendingUp
+        : trueMarginPct >= 0
+          ? Minus
+          : TrendingDown;
 
   const marginColor =
     trueMarginPct == null
       ? "text-muted-foreground"
       : trueMarginPct >= 40
-      ? "text-emerald-600 dark:text-emerald-400"
-      : trueMarginPct >= 20
-      ? "text-amber-600 dark:text-amber-400"
-      : "text-red-500 dark:text-red-400";
+        ? "text-emerald-600 dark:text-emerald-400"
+        : trueMarginPct >= 20
+          ? "text-amber-600 dark:text-amber-400"
+          : "text-red-500 dark:text-red-400";
 
   const rows: { label: string; value: number; sign: "+" | "−" | "=" }[] = [
-    { label: "Gross Revenue",    value: grossRevenue,    sign: "+" },
-    { label: "Item Costs (COGS)", value: totalCogs,       sign: "−" },
-    { label: "eBay Fees",         value: ebayFees,        sign: "−" },
-    { label: "Shipping Net",      value: shippingNet,     sign: shippingNet >= 0 ? "+" : "−" },
-    { label: "Refunds & Other",   value: otherDeductions, sign: "−" },
+    { label: "Gross Revenue", value: grossRevenue, sign: "+" },
+    { label: "Item Costs (COGS)", value: totalCogs, sign: "−" },
+    { label: "eBay Fees", value: ebayFees, sign: "−" },
+    {
+      label: "Shipping Net",
+      value: shippingNet,
+      sign: shippingNet >= 0 ? "+" : "−",
+    },
+    { label: "Refunds & Other", value: otherDeductions, sign: "−" },
   ];
 
   return (
@@ -76,7 +80,9 @@ export default function ProfitReportCard({
           {PERIOD_LABELS[period]}
         </h3>
         {trueMarginPct != null && (
-          <div className={`flex items-center gap-1 text-xs font-medium ${marginColor}`}>
+          <div
+            className={`flex items-center gap-1 text-xs font-medium ${marginColor}`}
+          >
             <TrendIcon className="w-3.5 h-3.5" />
             <span>{trueMarginPct.toFixed(1)}% margin</span>
           </div>
@@ -89,10 +95,18 @@ export default function ProfitReportCard({
           if (value === 0) return null;
           const isNeg = sign === "−";
           return (
-            <div key={label} className="flex items-center justify-between text-xs">
+            <div
+              key={label}
+              className="flex items-center justify-between text-xs"
+            >
               <span className="text-muted-foreground">{label}</span>
-              <span className={isNeg ? "text-red-500 dark:text-red-400" : "text-foreground"}>
-                {isNeg ? "−" : "+"}{fmtMoney(value)}
+              <span
+                className={
+                  isNeg ? "text-red-500 dark:text-red-400" : "text-foreground"
+                }
+              >
+                {isNeg ? "−" : "+"}
+                {fmtMoney(value)}
               </span>
             </div>
           );
@@ -100,10 +114,15 @@ export default function ProfitReportCard({
 
         {/* Divider */}
         <div className="border-t border-border pt-1.5 mt-1">
-          <div className={`flex items-center justify-between rounded-lg px-2 py-1.5 ${profitBg}`}>
-            <span className={`text-xs font-bold ${profitColor}`}>True Net Profit</span>
+          <div
+            className={`flex items-center justify-between rounded-lg px-2 py-1.5 ${profitBg}`}
+          >
+            <span className={`text-xs font-bold ${profitColor}`}>
+              True Net Profit
+            </span>
             <span className={`text-sm font-bold ${profitColor}`}>
-              {profitPositive ? "+" : "−"}{fmtMoney(netProfit)}
+              {profitPositive ? "+" : "−"}
+              {fmtMoney(netProfit)}
             </span>
           </div>
         </div>

@@ -1,9 +1,19 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Receipt, RefreshCw, Loader2, AlertCircle, Download,
-  ArrowLeft, DollarSign, ShoppingCart, TrendingUp, TrendingDown,
-  Minus, Info, Lock,
+  Receipt,
+  RefreshCw,
+  Loader2,
+  AlertCircle,
+  Download,
+  ArrowLeft,
+  DollarSign,
+  ShoppingCart,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Info,
+  Lock,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -56,14 +66,16 @@ function fmtMoney(n: number): string {
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
-    month: "short", day: "numeric", year: "numeric",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
   });
 }
 
 function periodToDates(period: PeriodKey): { start: Date; end: Date } {
-  const end   = new Date();
+  const end = new Date();
   const start = new Date();
-  if (period === "7d")  start.setDate(end.getDate() - 7);
+  if (period === "7d") start.setDate(end.getDate() - 7);
   if (period === "30d") start.setDate(end.getDate() - 30);
   if (period === "90d") start.setDate(end.getDate() - 90);
   return { start, end };
@@ -71,9 +83,17 @@ function periodToDates(period: PeriodKey): { start: Date; end: Date } {
 
 function downloadCsv(items: ReportItem[]) {
   const headers = [
-    "Sold Date", "Title", "eBay Listing ID", "SKU",
-    "Sale Price", "Shipping Collected", "Shipping Label Cost", "eBay Fees", "Item Cost (COGS)",
-    "Net Profit", "Margin %",
+    "Sold Date",
+    "Title",
+    "eBay Listing ID",
+    "SKU",
+    "Sale Price",
+    "Shipping Collected",
+    "Shipping Label Cost",
+    "eBay Fees",
+    "Item Cost (COGS)",
+    "Net Profit",
+    "Margin %",
   ];
   const rows = items.map((r) => [
     fmtDate(r.soldAt),
@@ -90,9 +110,9 @@ function downloadCsv(items: ReportItem[]) {
   ]);
   const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
-  a.href     = url;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
   a.download = `profit-report-${new Date().toISOString().split("T")[0]}.csv`;
   a.click();
   URL.revokeObjectURL(url);
@@ -105,14 +125,14 @@ export default function ProfitReportPage() {
   const navigate = useNavigate();
   const canAccess = planFeatures.hasCogsTracking;
 
-  const [period, setPeriod]       = useState<PeriodKey>("30d");
-  const [items, setItems]         = useState<ReportItem[]>([]);
-  const [summary, setSummary]     = useState<ReportSummary | null>(null);
-  const [loading, setLoading]     = useState(false);
-  const [error, setError]         = useState<string | null>(null);
+  const [period, setPeriod] = useState<PeriodKey>("30d");
+  const [items, setItems] = useState<ReportItem[]>([]);
+  const [summary, setSummary] = useState<ReportSummary | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Summary cards for 7d / 30d / 90d (always fetched as 90d, sliced client-side)
-  const [allItems, setAllItems]   = useState<ReportItem[]>([]);
+  const [allItems, setAllItems] = useState<ReportItem[]>([]);
 
   const fetchReport = useCallback(async () => {
     if (!user?.id || !canAccess) return;
@@ -127,16 +147,21 @@ export default function ProfitReportPage() {
       // Get stored eBay token — try ebay-publish, fall back to localStorage
       let ebayToken: string | null = null;
       try {
-        const { data: tokenData } = await supabase.functions.invoke("ebay-publish", {
-          body: { action: "get_stored_token", userId: user.id },
-        });
+        const { data: tokenData } = await supabase.functions.invoke(
+          "ebay-publish",
+          {
+            body: { action: "get_stored_token", userId: user.id },
+          },
+        );
         if (tokenData?.token) {
           ebayToken = tokenData.token;
           localStorage.setItem("ebay-user-token", ebayToken!);
         } else if (tokenData?.isExpired) {
           localStorage.removeItem("ebay-user-token");
         }
-      } catch { /* fall through */ }
+      } catch {
+        /* fall through */
+      }
       if (!ebayToken) ebayToken = localStorage.getItem("ebay-user-token");
       if (!ebayToken) {
         setError("No eBay account connected. Please connect eBay in Settings.");
@@ -144,13 +169,16 @@ export default function ProfitReportPage() {
         return;
       }
 
-      const { data, error: fnErr } = await supabase.functions.invoke("cogs-report", {
-        body: {
-          userToken: ebayToken,
-          startDate: start.toISOString(),
-          endDate:   end.toISOString(),
+      const { data, error: fnErr } = await supabase.functions.invoke(
+        "cogs-report",
+        {
+          body: {
+            userToken: ebayToken,
+            startDate: start.toISOString(),
+            endDate: end.toISOString(),
+          },
         },
-      });
+      );
 
       if (fnErr || data?.error) {
         throw new Error(data?.error ?? fnErr?.message ?? "Unknown error");
@@ -159,15 +187,18 @@ export default function ProfitReportPage() {
       setAllItems(data.items ?? []);
 
       // Filter to selected period for table
-      const { start: periodStart } = periodToDates(period === "custom" ? "90d" : period);
+      const { start: periodStart } = periodToDates(
+        period === "custom" ? "90d" : period,
+      );
       const filtered = (data.items ?? []).filter(
-        (i: ReportItem) => new Date(i.soldAt) >= periodStart
+        (i: ReportItem) => new Date(i.soldAt) >= periodStart,
       );
       setItems(filtered);
       setSummary(data.summary ?? null);
     } catch (err: unknown) {
       console.error("cogs-report fetch error:", err);
-      const msg = err instanceof Error ? err.message : "Failed to load profit report";
+      const msg =
+        err instanceof Error ? err.message : "Failed to load profit report";
       setError(msg);
       toast.error("Failed to load profit report");
     } finally {
@@ -175,7 +206,9 @@ export default function ProfitReportPage() {
     }
   }, [user?.id, canAccess]);
 
-  useEffect(() => { fetchReport(); }, [fetchReport]);
+  useEffect(() => {
+    fetchReport();
+  }, [fetchReport]);
 
   // Re-filter table when period changes without re-fetching
   useEffect(() => {
@@ -188,14 +221,14 @@ export default function ProfitReportPage() {
   function buildCardProps(p: "7d" | "30d" | "90d") {
     const { start } = periodToDates(p);
     const subset = allItems.filter((i) => new Date(i.soldAt) >= start);
-    const rev        = subset.reduce((s, i) => s + i.salePrice, 0);
-    const cogs       = subset.reduce((s, i) => s + (i.cogs ?? 0), 0);
-    const fees       = subset.reduce((s, i) => s + i.ebayFees, 0);
-    const shipIn     = subset.reduce((s, i) => s + i.shippingCollected, 0);
-    const shipOut    = subset.reduce((s, i) => s + i.shippingLabelCost, 0);
+    const rev = subset.reduce((s, i) => s + i.salePrice, 0);
+    const cogs = subset.reduce((s, i) => s + (i.cogs ?? 0), 0);
+    const fees = subset.reduce((s, i) => s + i.ebayFees, 0);
+    const shipIn = subset.reduce((s, i) => s + i.shippingCollected, 0);
+    const shipOut = subset.reduce((s, i) => s + i.shippingLabelCost, 0);
     const shippingNet = shipIn - shipOut;
-    const net        = rev + shippingNet - fees - cogs;
-    const margin     = rev > 0 ? (net / rev) * 100 : null;
+    const net = rev + shippingNet - fees - cogs;
+    const margin = rev > 0 ? (net / rev) * 100 : null;
     return {
       grossRevenue: rev,
       totalCogs: cogs,
@@ -217,9 +250,9 @@ export default function ProfitReportPage() {
           </div>
           <h1 className="text-2xl font-bold text-foreground">Profit Report</h1>
           <p className="text-muted-foreground text-sm leading-relaxed">
-            The Profit Report shows a per-item P&L breakdown of every sold listing,
-            including COGS, eBay fees, and true net profit. Available on{" "}
-            <span className="font-semibold text-primary">Pro</span> and{" "}
+            The Profit Report shows a per-item P&L breakdown of every sold
+            listing, including COGS, eBay fees, and true net profit. Available
+            on <span className="font-semibold text-primary">Pro</span> and{" "}
             <span className="font-semibold text-primary">Shop</span> plans.
           </p>
           <button
@@ -241,7 +274,7 @@ export default function ProfitReportPage() {
   }
 
   const periodTabs: { key: PeriodKey; label: string }[] = [
-    { key: "7d",  label: "7d"  },
+    { key: "7d", label: "7d" },
     { key: "30d", label: "30d" },
     { key: "90d", label: "90d" },
   ];
@@ -251,26 +284,34 @@ export default function ProfitReportPage() {
       {/* Header */}
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="text-muted-foreground hover:text-foreground">
+          <button
+            onClick={() => navigate(-1)}
+            className="text-muted-foreground hover:text-foreground"
+          >
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2 flex-1">
             <Receipt className="w-5 h-5 text-primary" />
-            <h1 className="text-base font-semibold text-foreground">Profit Report</h1>
+            <h1 className="text-base font-semibold text-foreground">
+              Profit Report
+            </h1>
           </div>
           <button
             onClick={fetchReport}
             disabled={loading}
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
             Refresh
           </button>
         </div>
       </div>
 
       <div className="max-w-3xl mx-auto px-4 pt-4 space-y-5">
-
         {/* Error */}
         {error && (
           <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 text-red-600 dark:text-red-400 text-sm">
@@ -284,9 +325,10 @@ export default function ProfitReportPage() {
           <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs">
             <Info className="w-4 h-4 shrink-0 mt-0.5" />
             <span>
-              <strong>{summary.itemsWithoutCogs}</strong> sold item{summary.itemsWithoutCogs !== 1 ? "s" : ""} have
-              no cost recorded — their profit is calculated without COGS. Enter item costs
-              when creating or editing a draft to see true margins.
+              <strong>{summary.itemsWithoutCogs}</strong> sold item
+              {summary.itemsWithoutCogs !== 1 ? "s" : ""} have no cost recorded
+              — their profit is calculated without COGS. Enter item costs when
+              creating or editing a draft to see true margins.
             </span>
           </div>
         )}
@@ -360,16 +402,20 @@ export default function ProfitReportPage() {
                   >
                     {/* Title + date */}
                     <div className="min-w-0">
-                      <p className="text-xs font-medium text-foreground line-clamp-1">{item.title}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{fmtDate(item.soldAt)}</p>
+                      <p className="text-xs font-medium text-foreground line-clamp-1">
+                        {item.title}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {fmtDate(item.soldAt)}
+                      </p>
                       {item.margin != null && (
                         <span
                           className={`inline-block text-[10px] font-medium mt-0.5 ${
                             item.margin >= 40
                               ? "text-emerald-600 dark:text-emerald-400"
                               : item.margin >= 20
-                              ? "text-amber-600 dark:text-amber-400"
-                              : "text-red-500 dark:text-red-400"
+                                ? "text-amber-600 dark:text-amber-400"
+                                : "text-red-500 dark:text-red-400"
                           }`}
                         >
                           {item.margin.toFixed(1)}% margin
@@ -383,7 +429,9 @@ export default function ProfitReportPage() {
                     </span>
 
                     {/* COGS */}
-                    <span className={`text-xs text-right whitespace-nowrap ${item.cogs != null ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}>
+                    <span
+                      className={`text-xs text-right whitespace-nowrap ${item.cogs != null ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}
+                    >
                       {item.cogs != null ? `−${fmtMoney(item.cogs)}` : "—"}
                     </span>
 
@@ -394,7 +442,8 @@ export default function ProfitReportPage() {
 
                     {/* Shipping net (collected − label cost) */}
                     {(() => {
-                      const shipNet = item.shippingCollected - item.shippingLabelCost;
+                      const shipNet =
+                        item.shippingCollected - item.shippingLabelCost;
                       return (
                         <span
                           title={`Collected: ${fmtMoney(item.shippingCollected)} − Label: ${fmtMoney(item.shippingLabelCost)}`}
@@ -408,8 +457,11 @@ export default function ProfitReportPage() {
                     })()}
 
                     {/* Net profit */}
-                    <span className={`text-xs font-semibold text-right whitespace-nowrap ${profitColor}`}>
-                      {profitPos ? "+" : "−"}{fmtMoney(Math.abs(item.netProfit))}
+                    <span
+                      className={`text-xs font-semibold text-right whitespace-nowrap ${profitColor}`}
+                    >
+                      {profitPos ? "+" : "−"}
+                      {fmtMoney(Math.abs(item.netProfit))}
                     </span>
                   </div>
                 );
@@ -417,35 +469,49 @@ export default function ProfitReportPage() {
             </div>
 
             {/* Table footer totals */}
-            {items.length > 1 && (() => {
-              const totRev    = items.reduce((s, i) => s + i.salePrice, 0);
-              const totCogs   = items.reduce((s, i) => s + (i.cogs ?? 0), 0);
-              const totFees   = items.reduce((s, i) => s + i.ebayFees, 0);
-              const totShipIn = items.reduce((s, i) => s + i.shippingCollected, 0);
-              const totShipOut = items.reduce((s, i) => s + i.shippingLabelCost, 0);
-              const totShipNet = totShipIn - totShipOut;
-              const totProfit = items.reduce((s, i) => s + i.netProfit, 0);
-              const profitPos = totProfit >= 0;
-              return (
-                <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-x-4 px-4 py-2.5 bg-muted/40 border-t border-border text-[10px] font-bold text-foreground">
-                  <span>{items.length} items</span>
-                  <span className="text-right">{fmtMoney(totRev)}</span>
-                  <span className="text-right text-orange-600 dark:text-orange-400">
-                    {totCogs > 0 ? `−${fmtMoney(totCogs)}` : "—"}
-                  </span>
-                  <span className="text-right text-red-500 dark:text-red-400">−{fmtMoney(totFees)}</span>
-                  <span
-                    title={`Collected: ${fmtMoney(totShipIn)} − Labels: ${fmtMoney(totShipOut)}`}
-                    className="text-right text-muted-foreground"
-                  >
-                    {Math.abs(totShipNet) < 0.01 ? "≈$0" : `${totShipNet >= 0 ? "+" : "−"}${fmtMoney(Math.abs(totShipNet))}`}
-                  </span>
-                  <span className={`text-right ${profitPos ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
-                    {profitPos ? "+" : "−"}{fmtMoney(Math.abs(totProfit))}
-                  </span>
-                </div>
-              );
-            })()}
+            {items.length > 1 &&
+              (() => {
+                const totRev = items.reduce((s, i) => s + i.salePrice, 0);
+                const totCogs = items.reduce((s, i) => s + (i.cogs ?? 0), 0);
+                const totFees = items.reduce((s, i) => s + i.ebayFees, 0);
+                const totShipIn = items.reduce(
+                  (s, i) => s + i.shippingCollected,
+                  0,
+                );
+                const totShipOut = items.reduce(
+                  (s, i) => s + i.shippingLabelCost,
+                  0,
+                );
+                const totShipNet = totShipIn - totShipOut;
+                const totProfit = items.reduce((s, i) => s + i.netProfit, 0);
+                const profitPos = totProfit >= 0;
+                return (
+                  <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-x-4 px-4 py-2.5 bg-muted/40 border-t border-border text-[10px] font-bold text-foreground">
+                    <span>{items.length} items</span>
+                    <span className="text-right">{fmtMoney(totRev)}</span>
+                    <span className="text-right text-orange-600 dark:text-orange-400">
+                      {totCogs > 0 ? `−${fmtMoney(totCogs)}` : "—"}
+                    </span>
+                    <span className="text-right text-red-500 dark:text-red-400">
+                      −{fmtMoney(totFees)}
+                    </span>
+                    <span
+                      title={`Collected: ${fmtMoney(totShipIn)} − Labels: ${fmtMoney(totShipOut)}`}
+                      className="text-right text-muted-foreground"
+                    >
+                      {Math.abs(totShipNet) < 0.01
+                        ? "≈$0"
+                        : `${totShipNet >= 0 ? "+" : "−"}${fmtMoney(Math.abs(totShipNet))}`}
+                    </span>
+                    <span
+                      className={`text-right ${profitPos ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}
+                    >
+                      {profitPos ? "+" : "−"}
+                      {fmtMoney(Math.abs(totProfit))}
+                    </span>
+                  </div>
+                );
+              })()}
           </div>
         )}
 
@@ -453,10 +519,12 @@ export default function ProfitReportPage() {
         {!loading && !error && items.length === 0 && (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
             <Receipt className="w-10 h-10 text-muted-foreground/40" />
-            <p className="text-sm font-medium text-foreground">No sales in this period</p>
+            <p className="text-sm font-medium text-foreground">
+              No sales in this period
+            </p>
             <p className="text-xs text-muted-foreground max-w-xs">
-              Sold orders will appear here once eBay Fulfillment data is available.
-              Make sure your eBay account is connected in Settings.
+              Sold orders will appear here once eBay Fulfillment data is
+              available. Make sure your eBay account is connected in Settings.
             </p>
           </div>
         )}

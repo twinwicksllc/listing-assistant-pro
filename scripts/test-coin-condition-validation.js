@@ -2,10 +2,10 @@
 
 /**
  * Phase 2 Verification: Test Coin Condition Validation
- * 
+ *
  * This script tests the coin condition validation logic locally before publishing.
  * Run with: npm run test:coin-condition
- * 
+ *
  * Tests:
  * 1. Graded coins: Valid company + grade combo
  * 2. Graded coins: Invalid company rejection
@@ -30,20 +30,28 @@ function validateGradedCoin(company, grade, certNumber) {
   const errors = [];
 
   if (!company || !GRADING_COMPANIES.includes(company)) {
-    errors.push(`Invalid grading company: "${company}". Must be one of: ${GRADING_COMPANIES.join(", ")}`);
+    errors.push(
+      `Invalid grading company: "${company}". Must be one of: ${GRADING_COMPANIES.join(", ")}`,
+    );
   }
 
   if (!grade || grade.trim().length === 0) {
     errors.push("Grade is required (e.g., 'MS 65', 'PR 70 DCAM')");
   } else if (!/^[A-Z]{1,3}\s*\d{1,2}(\s+[A-Z]{2,})?$/.test(grade.trim())) {
     errors.push(
-      `Grade format invalid: "${grade}". Must match pattern: LETTER_CODE + NUMBER (e.g., 'MS 65', 'PR 70 DCAM')`
+      `Grade format invalid: "${grade}". Must match pattern: LETTER_CODE + NUMBER (e.g., 'MS 65', 'PR 70 DCAM')`,
     );
   }
 
-  if (certNumber !== undefined && certNumber !== null && certNumber.trim().length > 0) {
+  if (
+    certNumber !== undefined &&
+    certNumber !== null &&
+    certNumber.trim().length > 0
+  ) {
     if (certNumber.trim().length < 3) {
-      errors.push("Certification number must be at least 3 characters if provided");
+      errors.push(
+        "Certification number must be at least 3 characters if provided",
+      );
     }
   }
 
@@ -60,9 +68,9 @@ function validateRawCoin(condition) {
     errors.push("Raw condition tier is required");
   } else if (!RAW_CONDITION_TIERS.includes(condition)) {
     errors.push(
-      `Invalid raw condition: "${condition}". Must be one of:\n${RAW_CONDITION_TIERS.map((t) => `  - ${t}`).join(
-        "\n"
-      )}`
+      `Invalid raw condition: "${condition}". Must be one of:\n${RAW_CONDITION_TIERS.map(
+        (t) => `  - ${t}`,
+      ).join("\n")}`,
     );
   }
 
@@ -100,7 +108,7 @@ function runTests() {
     formatTest(
       "Test 1: Graded Coin (PCGS, MS 65, no cert)",
       passed,
-      passed ? "Accepted" : result.errors.join("; ")
+      passed ? "Accepted" : result.errors.join("; "),
     );
   }
 
@@ -113,7 +121,7 @@ function runTests() {
     formatTest(
       "Test 2: Graded Coin (NGC, PR 70 DCAM, with cert)",
       passed,
-      passed ? "Accepted" : result.errors.join("; ")
+      passed ? "Accepted" : result.errors.join("; "),
     );
   }
 
@@ -123,7 +131,11 @@ function runTests() {
     const passed = !result.valid; // Should fail
     if (passed) passCount++;
     else failCount++;
-    formatTest("Test 3: Reject invalid grading company (INVALID)", passed, result.errors[0]);
+    formatTest(
+      "Test 3: Reject invalid grading company (INVALID)",
+      passed,
+      result.errors[0],
+    );
   }
 
   // Test 4: Missing grade
@@ -141,7 +153,11 @@ function runTests() {
     const passed = !result.valid; // Should fail
     if (passed) passCount++;
     else failCount++;
-    formatTest("Test 5: Reject invalid grade format (65 MS)", passed, result.errors[0]);
+    formatTest(
+      "Test 5: Reject invalid grade format (65 MS)",
+      passed,
+      result.errors[0],
+    );
   }
 
   // Test 6: Valid raw condition (Uncirculated)
@@ -150,7 +166,11 @@ function runTests() {
     const passed = result.valid;
     if (passed) passCount++;
     else failCount++;
-    formatTest("Test 6: Raw Coin (Uncirculated)", passed, passed ? "Accepted" : result.errors.join("; "));
+    formatTest(
+      "Test 6: Raw Coin (Uncirculated)",
+      passed,
+      passed ? "Accepted" : result.errors.join("; "),
+    );
   }
 
   // Test 7: Valid raw condition (Extremely Fine to About Uncirculated)
@@ -162,7 +182,7 @@ function runTests() {
     formatTest(
       "Test 7: Raw Coin (Extremely Fine to About Uncirculated)",
       passed,
-      passed ? "Accepted" : result.errors.join("; ")
+      passed ? "Accepted" : result.errors.join("; "),
     );
   }
 
@@ -172,7 +192,11 @@ function runTests() {
     const passed = !result.valid; // Should fail
     if (passed) passCount++;
     else failCount++;
-    formatTest("Test 8: Reject invalid raw condition (Slightly Used)", passed, result.errors[0].split("\n")[0]);
+    formatTest(
+      "Test 8: Reject invalid raw condition (Slightly Used)",
+      passed,
+      result.errors[0].split("\n")[0],
+    );
   }
 
   // Test 9: Missing raw condition
@@ -181,7 +205,11 @@ function runTests() {
     const passed = !result.valid; // Should fail
     if (passed) passCount++;
     else failCount++;
-    formatTest("Test 9: Reject missing raw condition", passed, result.errors[0]);
+    formatTest(
+      "Test 9: Reject missing raw condition",
+      passed,
+      result.errors[0],
+    );
   }
 
   // Test 10: Cert number too short
@@ -190,7 +218,11 @@ function runTests() {
     const passed = !result.valid; // Should fail
     if (passed) passCount++;
     else failCount++;
-    formatTest("Test 10: Reject short cert number (< 3 chars)", passed, result.errors[1] || result.errors[0]);
+    formatTest(
+      "Test 10: Reject short cert number (< 3 chars)",
+      passed,
+      result.errors[1] || result.errors[0],
+    );
   }
 
   console.log(`\n=== Results: ${passCount} passed, ${failCount} failed ===\n`);

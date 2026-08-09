@@ -24,7 +24,12 @@ interface AddWatchDialogProps {
   initialQuery?: string;
 }
 
-function AddWatchDialog({ open, onClose, onAdd, initialQuery = "" }: AddWatchDialogProps) {
+function AddWatchDialog({
+  open,
+  onClose,
+  onAdd,
+  initialQuery = "",
+}: AddWatchDialogProps) {
   const [query, setQuery] = useState(initialQuery);
   const [label, setLabel] = useState("");
   const [saving, setSaving] = useState(false);
@@ -32,7 +37,10 @@ function AddWatchDialog({ open, onClose, onAdd, initialQuery = "" }: AddWatchDia
   const handleSave = async () => {
     if (!query.trim()) return;
     setSaving(true);
-    await onAdd({ searchQuery: query.trim(), label: label.trim() || undefined });
+    await onAdd({
+      searchQuery: query.trim(),
+      label: label.trim() || undefined,
+    });
     setSaving(false);
     setQuery("");
     setLabel("");
@@ -69,7 +77,9 @@ function AddWatchDialog({ open, onClose, onAdd, initialQuery = "" }: AddWatchDia
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
           <Button onClick={handleSave} disabled={saving || !query.trim()}>
             {saving ? "Saving…" : "Add Watch"}
           </Button>
@@ -109,7 +119,7 @@ export default function MarketResearchPage() {
     ? watches.filter(
         (w) =>
           w.label?.toLowerCase().includes(watchSearch.toLowerCase()) ||
-          w.searchQuery.toLowerCase().includes(watchSearch.toLowerCase())
+          w.searchQuery.toLowerCase().includes(watchSearch.toLowerCase()),
       )
     : watches;
 
@@ -125,7 +135,10 @@ export default function MarketResearchPage() {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => { setAddDialogQuery(""); setAddDialogOpen(true); }}
+            onClick={() => {
+              setAddDialogQuery("");
+              setAddDialogOpen(true);
+            }}
           >
             <Plus className="w-4 h-4 mr-1" />
             Watch
@@ -194,7 +207,9 @@ export default function MarketResearchPage() {
               <div className="flex flex-col items-center justify-center py-16 gap-3 text-center px-4">
                 <BookMarked className="w-10 h-10 text-muted-foreground/40" />
                 <p className="font-semibold">
-                  {watches.length === 0 ? "No saved watches yet" : "No watches match your filter"}
+                  {watches.length === 0
+                    ? "No saved watches yet"
+                    : "No watches match your filter"}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   {watches.length === 0
@@ -204,7 +219,10 @@ export default function MarketResearchPage() {
                 {watches.length === 0 && (
                   <Button
                     size="sm"
-                    onClick={() => { setAddDialogQuery(""); setAddDialogOpen(true); }}
+                    onClick={() => {
+                      setAddDialogQuery("");
+                      setAddDialogOpen(true);
+                    }}
                   >
                     <Plus className="w-4 h-4 mr-1" />
                     Add First Watch
@@ -232,7 +250,9 @@ export default function MarketResearchPage() {
         open={addDialogOpen}
         initialQuery={addDialogQuery}
         onClose={() => setAddDialogOpen(false)}
-        onAdd={async (params) => { await addWatch(params); }}
+        onAdd={async (params) => {
+          await addWatch(params);
+        }}
       />
 
       <BottomNav />

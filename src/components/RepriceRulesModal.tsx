@@ -20,7 +20,11 @@ interface RepriceRulesModalProps {
   onSaved: () => void;
 }
 
-export function RepriceRulesModal({ userId, onClose, onSaved }: RepriceRulesModalProps) {
+export function RepriceRulesModal({
+  userId,
+  onClose,
+  onSaved,
+}: RepriceRulesModalProps) {
   const [rules, setRules] = useState<(RepriceRule & { id: string })[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -145,7 +149,9 @@ export function RepriceRulesModal({ userId, onClose, onSaved }: RepriceRulesModa
       <div className="bg-card border border-border rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-lg">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h2 className="text-lg font-semibold text-foreground">Auto-Reprice Rules</h2>
+          <h2 className="text-lg font-semibold text-foreground">
+            Auto-Reprice Rules
+          </h2>
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
@@ -157,15 +163,21 @@ export function RepriceRulesModal({ userId, onClose, onSaved }: RepriceRulesModa
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {loading ? (
-            <div className="text-center py-8 text-muted-foreground">Loading rules...</div>
+            <div className="text-center py-8 text-muted-foreground">
+              Loading rules...
+            </div>
           ) : showForm ? (
             <div className="space-y-4">
               <div>
-                <label className="text-sm font-medium text-foreground">Rule Name *</label>
+                <label className="text-sm font-medium text-foreground">
+                  Rule Name *
+                </label>
                 <input
                   type="text"
                   value={form.rule_name}
-                  onChange={(e) => setForm({ ...form, rule_name: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, rule_name: e.target.value })
+                  }
                   placeholder="e.g., Beat Competition by 5%"
                   className="w-full mt-1 text-sm border border-border rounded px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
                 />
@@ -173,11 +185,16 @@ export function RepriceRulesModal({ userId, onClose, onSaved }: RepriceRulesModa
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-foreground">Strategy *</label>
+                  <label className="text-sm font-medium text-foreground">
+                    Strategy *
+                  </label>
                   <select
                     value={form.rule_type}
                     onChange={(e) =>
-                      setForm({ ...form, rule_type: e.target.value as RepriceRule["rule_type"] })
+                      setForm({
+                        ...form,
+                        rule_type: e.target.value as RepriceRule["rule_type"],
+                      })
                     }
                     className="w-full mt-1 text-sm border border-border rounded px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
                   >
@@ -189,25 +206,39 @@ export function RepriceRulesModal({ userId, onClose, onSaved }: RepriceRulesModa
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-foreground">Adjustment %</label>
+                  <label className="text-sm font-medium text-foreground">
+                    Adjustment %
+                  </label>
                   <input
                     type="number"
                     step="0.1"
                     value={form.adjustment_pct}
-                    onChange={(e) => setForm({ ...form, adjustment_pct: parseFloat(e.target.value) })}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        adjustment_pct: parseFloat(e.target.value),
+                      })
+                    }
                     placeholder="e.g., -5 for 5% below"
                     className="w-full mt-1 text-sm border border-border rounded px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-foreground">Floor Price ($)</label>
+                  <label className="text-sm font-medium text-foreground">
+                    Floor Price ($)
+                  </label>
                   <input
                     type="number"
                     step="0.01"
                     value={form.floor_price ?? ""}
                     onChange={(e) =>
-                      setForm({ ...form, floor_price: e.target.value ? parseFloat(e.target.value) : null })
+                      setForm({
+                        ...form,
+                        floor_price: e.target.value
+                          ? parseFloat(e.target.value)
+                          : null,
+                      })
                     }
                     placeholder="Min price allowed"
                     className="w-full mt-1 text-sm border border-border rounded px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
@@ -215,13 +246,20 @@ export function RepriceRulesModal({ userId, onClose, onSaved }: RepriceRulesModa
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-foreground">Ceiling Price ($)</label>
+                  <label className="text-sm font-medium text-foreground">
+                    Ceiling Price ($)
+                  </label>
                   <input
                     type="number"
                     step="0.01"
                     value={form.ceiling_price ?? ""}
                     onChange={(e) =>
-                      setForm({ ...form, ceiling_price: e.target.value ? parseFloat(e.target.value) : null })
+                      setForm({
+                        ...form,
+                        ceiling_price: e.target.value
+                          ? parseFloat(e.target.value)
+                          : null,
+                      })
                     }
                     placeholder="Max price allowed"
                     className="w-full mt-1 text-sm border border-border rounded px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
@@ -230,11 +268,18 @@ export function RepriceRulesModal({ userId, onClose, onSaved }: RepriceRulesModa
               </div>
 
               <div>
-                <label className="text-sm font-medium text-foreground">Category Filter (Optional)</label>
+                <label className="text-sm font-medium text-foreground">
+                  Category Filter (Optional)
+                </label>
                 <input
                   type="text"
                   value={form.category_filter ?? ""}
-                  onChange={(e) => setForm({ ...form, category_filter: e.target.value || null })}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      category_filter: e.target.value || null,
+                    })
+                  }
                   placeholder="e.g., coins,bullion (comma-separated)"
                   className="w-full mt-1 text-sm border border-border rounded px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
                 />
@@ -244,19 +289,23 @@ export function RepriceRulesModal({ userId, onClose, onSaved }: RepriceRulesModa
                 <p className="font-medium mb-1">How it works:</p>
                 <ul className="list-disc list-inside space-y-1">
                   <li>
-                    <strong>Match Lowest:</strong> Price set to lowest competitor price
+                    <strong>Match Lowest:</strong> Price set to lowest
+                    competitor price
                   </li>
                   <li>
-                    <strong>Beat Lowest:</strong> Price is adjustment% below lowest
+                    <strong>Beat Lowest:</strong> Price is adjustment% below
+                    lowest
                   </li>
                   <li>
                     <strong>Match Avg:</strong> Price set to market average
                   </li>
                   <li>
-                    <strong>Match Sold Avg:</strong> Price set to average of recently sold items
+                    <strong>Match Sold Avg:</strong> Price set to average of
+                    recently sold items
                   </li>
                   <li>
-                    <strong>Floor/Ceiling:</strong> Calculated price is clamped between these bounds
+                    <strong>Floor/Ceiling:</strong> Calculated price is clamped
+                    between these bounds
                   </li>
                 </ul>
               </div>
@@ -309,7 +358,9 @@ export function RepriceRulesModal({ userId, onClose, onSaved }: RepriceRulesModa
                       className="flex items-center gap-3 p-3 border border-border rounded-lg bg-secondary/20 hover:bg-secondary/30 transition-colors"
                     >
                       <button
-                        onClick={() => handleToggleRule(rule.id, rule.is_enabled)}
+                        onClick={() =>
+                          handleToggleRule(rule.id, rule.is_enabled)
+                        }
                         className="text-muted-foreground hover:text-foreground transition-colors"
                       >
                         {rule.is_enabled ? (
@@ -320,14 +371,21 @@ export function RepriceRulesModal({ userId, onClose, onSaved }: RepriceRulesModa
                       </button>
 
                       <div className="flex-1">
-                        <p className="font-medium text-sm text-foreground">{rule.rule_name}</p>
+                        <p className="font-medium text-sm text-foreground">
+                          {rule.rule_name}
+                        </p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {rule.rule_type === "match_lowest" && "Match lowest price"}
-                          {rule.rule_type === "beat_lowest" && `Beat lowest by ${rule.adjustment_pct}%`}
-                          {rule.rule_type === "match_avg" && "Match market average"}
-                          {rule.rule_type === "match_sold_avg" && "Match sold average"}
+                          {rule.rule_type === "match_lowest" &&
+                            "Match lowest price"}
+                          {rule.rule_type === "beat_lowest" &&
+                            `Beat lowest by ${rule.adjustment_pct}%`}
+                          {rule.rule_type === "match_avg" &&
+                            "Match market average"}
+                          {rule.rule_type === "match_sold_avg" &&
+                            "Match sold average"}
                           {rule.floor_price && ` • Floor: $${rule.floor_price}`}
-                          {rule.ceiling_price && ` • Ceiling: $${rule.ceiling_price}`}
+                          {rule.ceiling_price &&
+                            ` • Ceiling: $${rule.ceiling_price}`}
                         </p>
                       </div>
 

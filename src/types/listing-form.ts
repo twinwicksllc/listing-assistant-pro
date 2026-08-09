@@ -1,7 +1,10 @@
 import { z } from "zod";
 import type { SelectedPolicies } from "./ebay-policies";
 import type { CoinConditionDetail } from "./listing";
-import { isCoinConditionDetailRequired, isCoinConditionDetailComplete } from "./listing";
+import {
+  isCoinConditionDetailRequired,
+  isCoinConditionDetailComplete,
+} from "./listing";
 
 /**
  * Validation schema for listing form submission
@@ -91,7 +94,10 @@ export const listingFormSchema = z
       }
     }
     // eBay June 2026 Coin Condition Mandate: Strict validation at form level
-    if (data.coinConditionDetailRequired && !isCoinConditionDetailComplete(data.coinConditionDetail)) {
+    if (
+      data.coinConditionDetailRequired &&
+      !isCoinConditionDetailComplete(data.coinConditionDetail)
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["coinConditionDetail"],
@@ -115,21 +121,38 @@ export const validateCoinConditionPayload = (
 ): { valid: boolean; error?: string } => {
   if (!isCoinCategory) return { valid: true };
   if (!coinCondition) {
-    return { valid: false, error: "Coin listing requires condition details (graded or ungraded)." };
+    return {
+      valid: false,
+      error: "Coin listing requires condition details (graded or ungraded).",
+    };
   }
   if (!isCoinConditionDetailComplete(coinCondition)) {
-    return { valid: false, error: "Coin condition is incomplete. Fill all required fields." };
+    return {
+      valid: false,
+      error: "Coin condition is incomplete. Fill all required fields.",
+    };
   }
   if (coinCondition.type === "graded") {
     const allowed = ["PCGS", "NGC", "ANACS", "ICG", "CAC", "ICCS"];
     if (!allowed.includes(coinCondition.gradingCompany)) {
-      return { valid: false, error: `Invalid grading company: ${coinCondition.gradingCompany}` };
+      return {
+        valid: false,
+        error: `Invalid grading company: ${coinCondition.gradingCompany}`,
+      };
     }
   }
   if (coinCondition.type === "raw") {
-    const allowed = ["Uncirculated", "Extremely Fine to About Uncirculated", "Fine to Very Fine", "Below Fine"];
+    const allowed = [
+      "Uncirculated",
+      "Extremely Fine to About Uncirculated",
+      "Fine to Very Fine",
+      "Below Fine",
+    ];
     if (!allowed.includes(coinCondition.rawCondition)) {
-      return { valid: false, error: `Invalid raw condition: ${coinCondition.rawCondition}` };
+      return {
+        valid: false,
+        error: `Invalid raw condition: ${coinCondition.rawCondition}`,
+      };
     }
   }
   return { valid: true };
@@ -137,7 +160,7 @@ export const validateCoinConditionPayload = (
 
 /**
  * Helper to check if all policies are selected
- * 
+ *
  * Can be used in other components to gate UI based on policy selection status.
  * Example: Display a warning if policies are not selected before navigating away.
  */
@@ -153,7 +176,7 @@ export const arePoliciesSelected = (policies: SelectedPolicies): boolean => {
  * Helper to get policy validation errors
  */
 export const getPolicyValidationErrors = (
-  policies: SelectedPolicies
+  policies: SelectedPolicies,
 ): Record<string, string> => {
   const errors: Record<string, string> = {};
 

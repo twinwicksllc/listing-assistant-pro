@@ -13,10 +13,13 @@ export function useAnalyzeImageCarousel(imageCount: number) {
     setActivePhoto((p) => (p - 1 + imageCount) % imageCount);
   }, [imageCount]);
 
-  const selectPhoto = useCallback((index: number) => {
-    if (index < 0 || index >= imageCount) return;
-    setActivePhoto(index);
-  }, [imageCount]);
+  const selectPhoto = useCallback(
+    (index: number) => {
+      if (index < 0 || index >= imageCount) return;
+      setActivePhoto(index);
+    },
+    [imageCount],
+  );
 
   return {
     activePhoto,

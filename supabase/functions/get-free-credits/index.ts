@@ -4,7 +4,8 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
   "Access-Control-Max-Age": "86400",
 };
 
@@ -58,8 +59,8 @@ serve(async (req: Request) => {
         .limit(1);
 
       if (!subError && subs && subs.length > 0) {
-        const productId = subs[0].stripe_product_id ||
-          (subs[0] as any).product_id;
+        const productId =
+          subs[0].stripe_product_id || (subs[0] as any).product_id;
         if (productId === "prod_U70aT1KvuI2uDx") tier = "unlimited";
         else if (productId === "prod_U6zUiC1SYuPrGU") tier = "pro";
       }
@@ -80,20 +81,28 @@ serve(async (req: Request) => {
 
       if (orgMember && orgMember.length > 0) {
         orgId = orgMember[0].org_id;
-        orgResetDay = (orgMember[0].organizations as any)?.free_tier_reset_day ?? null;
+        orgResetDay =
+          (orgMember[0].organizations as any)?.free_tier_reset_day ?? null;
       }
     }
 
     // Get current rolling-window start for free users
     let windowStart: string;
     if (tier === "starter" && orgResetDay) {
-      const { data: wsData, error: wsErr } = await svc
-        .rpc("get_free_tier_window_start", { p_reset_day: orgResetDay });
-      windowStart = wsData ? new Date(wsData).toISOString() : new Date().toISOString();
+      const { data: wsData, error: wsErr } = await svc.rpc(
+        "get_free_tier_window_start",
+        { p_reset_day: orgResetDay },
+      );
+      windowStart = wsData
+        ? new Date(wsData).toISOString()
+        : new Date().toISOString();
     } else {
       // Pro/Unlimited: calendar month; or fresh start for NULL reset_day
-      windowStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-        .toISOString();
+      windowStart = new Date(
+        new Date().getFullYear(),
+        new Date().getMonth(),
+        1,
+      ).toISOString();
     }
 
     // Count per-org usage for Starter; per-user for Pro/Unlimited
@@ -128,18 +137,20 @@ serve(async (req: Request) => {
     const limitReached = tier !== "unlimited" && usageCount >= limit;
 
     // Successfully returning credit status
-    const creditsRemaining = tier === "starter"
-      ? Math.max(0, FREE_LIMIT - usageCount)
-      : tier === "pro"
-      ? Math.max(0, PRO_LIMIT - usageCount)
-      : null;
+    const creditsRemaining =
+      tier === "starter"
+        ? Math.max(0, FREE_LIMIT - usageCount)
+        : tier === "pro"
+          ? Math.max(0, PRO_LIMIT - usageCount)
+          : null;
 
     const responseData = {
       error: limitReached ? "usage_limit_reached" : null,
       tier,
       creditsUsed: usageCount,
       creditsRemaining,
-      creditsResetAt: tier === "starter" ? computeNextResetAt(orgResetDay) : null,
+      creditsResetAt:
+        tier === "starter" ? computeNextResetAt(orgResetDay) : null,
       limitReached,
       ebayConnected: false, // Placeholder: check profiles.ebay_access_token in full impl
     };
@@ -175,6 +186,9 @@ function computeNextResetAt(resetDay: number | null): string {
   const nextYear = nextMonth > 11 ? year + 1 : year;
   const nm = nextMonth % 12;
   const daysInNextMonth = new Date(nextYear, nm + 1, 0).getDate();
-  return new Date(nextYear, nm, Math.min(resetDay, daysInNextMonth))
-    .toISOString();
+  return new Date(
+    nextYear,
+    nm,
+    Math.min(resetDay, daysInNextMonth),
+  ).toISOString();
 }

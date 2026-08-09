@@ -18,8 +18,12 @@ export default function BulkTemplateCard({
       <div className="flex items-start gap-2">
         <span className="text-2xl flex-shrink-0">{template.icon}</span>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-foreground leading-tight">{template.label}</p>
-          <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{template.description}</p>
+          <p className="text-sm font-semibold text-foreground leading-tight">
+            {template.label}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
+            {template.description}
+          </p>
         </div>
       </div>
 

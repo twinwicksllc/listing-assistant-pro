@@ -90,7 +90,9 @@ export function ListingFormatPrice({
       {listingFormat === "FIXED_PRICE" && (
         <div className="space-y-3">
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Listing Price ($)</label>
+            <label className="text-xs text-muted-foreground">
+              Listing Price ($)
+            </label>
             <input
               type="number"
               min="0"
@@ -106,7 +108,9 @@ export function ListingFormatPrice({
           <div className="space-y-2">
             <div className="flex items-center gap-3">
               <div className="flex-1 space-y-1">
-                <label className="text-xs text-muted-foreground">Quantity Available</label>
+                <label className="text-xs text-muted-foreground">
+                  Quantity Available
+                </label>
                 <input
                   type="number"
                   min="1"
@@ -119,7 +123,9 @@ export function ListingFormatPrice({
             </div>
             {quantity > 1 && (
               <div className="space-y-1 pl-1">
-                <label className="text-xs text-muted-foreground">Listing price is…</label>
+                <label className="text-xs text-muted-foreground">
+                  Listing price is…
+                </label>
                 <div className="flex gap-2">
                   {(["per_item", "total"] as const).map((mode) => (
                     <button
@@ -156,7 +162,9 @@ export function ListingFormatPrice({
               onChange={(e) => onToggleBestOffer(e.target.checked)}
               className="h-4 w-4 rounded border-border accent-primary"
             />
-            <span className="text-xs text-muted-foreground">Accept Best Offers from buyers</span>
+            <span className="text-xs text-muted-foreground">
+              Accept Best Offers from buyers
+            </span>
           </label>
 
           {bestOfferEnabled && (
@@ -204,7 +212,9 @@ export function ListingFormatPrice({
       {listingFormat === "AUCTION" && (
         <div className="space-y-3">
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Starting Bid ($)</label>
+            <label className="text-xs text-muted-foreground">
+              Starting Bid ($)
+            </label>
             <input
               type="number"
               min="0"
@@ -222,11 +232,15 @@ export function ListingFormatPrice({
               onChange={(e) => onToggleAuctionBuyItNow(e.target.checked)}
               className="h-4 w-4 rounded border-border accent-primary"
             />
-            <span className="text-xs text-muted-foreground">Add Buy It Now price to auction</span>
+            <span className="text-xs text-muted-foreground">
+              Add Buy It Now price to auction
+            </span>
           </label>
           {auctionBuyItNowEnabled && (
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Buy It Now Price ($)</label>
+              <label className="text-xs text-muted-foreground">
+                Buy It Now Price ($)
+              </label>
               <input
                 type="number"
                 min="0"

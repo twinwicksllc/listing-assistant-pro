@@ -73,15 +73,16 @@ serve(async (req: Request) => {
     // Determine tier
     const ADMIN_EMAILS = ["twinwicksllc@gmail.com"];
     const isAdmin = userEmail ? ADMIN_EMAILS.includes(userEmail) : false;
-    let tier: "starter" | "pro" | "unlimited" | "admin" = isAdmin ? "admin" : "starter";
+    let tier: "starter" | "pro" | "unlimited" | "admin" = isAdmin
+      ? "admin"
+      : "starter";
 
     if (!isAdmin) {
       const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
       if (STRIPE_SECRET_KEY && userEmail) {
         try {
-          const { default: Stripe } = await import(
-            "https://esm.sh/stripe@18.5.0"
-          );
+          const { default: Stripe } =
+            await import("https://esm.sh/stripe@18.5.0");
           const stripe = new Stripe(STRIPE_SECRET_KEY, {
             apiVersion: "2025-08-27.basil",
           });
@@ -126,8 +127,8 @@ serve(async (req: Request) => {
     }
 
     const configuredProxyUrl = Deno.env.get("OPENAI_PROXY_URL")?.trim();
-    const openAiEndpoint = configuredProxyUrl ||
-      "https://api.openai.com/v1/chat/completions";
+    const openAiEndpoint =
+      configuredProxyUrl || "https://api.openai.com/v1/chat/completions";
     const usingProxy = Boolean(configuredProxyUrl);
     const openAiKey = Deno.env.get("NEW_OPENAI_API_KEY");
     if (!usingProxy && !openAiKey) {
@@ -139,26 +140,28 @@ serve(async (req: Request) => {
         },
       );
     }
-    const openAiProxyAuthToken = Deno.env.get("OPENAI_PROXY_AUTH_TOKEN")?.trim();
+    const openAiProxyAuthToken = Deno.env
+      .get("OPENAI_PROXY_AUTH_TOKEN")
+      ?.trim();
 
     const results: DescriptionResult[] = [];
 
     for (const row of rows) {
       try {
         // Build a concise prompt from the row data
-        const specificsText = row.itemSpecifics && Object.keys(row.itemSpecifics).length > 0
-          ? Object.entries(row.itemSpecifics)
-            .map(([k, v]) => `${k}: ${v}`)
-            .join(", ")
-          : "N/A";
+        const specificsText =
+          row.itemSpecifics && Object.keys(row.itemSpecifics).length > 0
+            ? Object.entries(row.itemSpecifics)
+                .map(([k, v]) => `${k}: ${v}`)
+                .join(", ")
+            : "N/A";
 
         const conditionLabel = (row.condition ?? "PRE_OWNED_GOOD")
           .replace(/_/g, " ")
           .toLowerCase()
           .replace(/\b\w/g, (c) => c.toUpperCase());
 
-        const prompt =
-          `Write a compelling eBay listing description for this item. I want a HUMAN-sounding description that is professional but conversational. Imagine you are an enthusiastic eBay seller.
+        const prompt = `Write a compelling eBay listing description for this item. I want a HUMAN-sounding description that is professional but conversational. Imagine you are an enthusiastic eBay seller.
 
 Title: ${row.title}
 Condition: ${conditionLabel}
@@ -189,32 +192,31 @@ TONE RULES:
 - No HTML, use plain Markdown.
 - Keep it under 300 words.`;
 
-        const response = await fetch(
-          openAiEndpoint,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(usingProxy ? {} : { Authorization: `Bearer ${openAiKey}` }),
-              ...(openAiProxyAuthToken ? { "X-Proxy-Auth": openAiProxyAuthToken } : {}),
-            },
-            body: JSON.stringify({
-              model: "gpt-4o-mini",
-              // user field: correlates requests to a user in OpenAI usage dashboard
-              ...(userId ? { user: `uid_${userId}` } : {}),
-              messages: [
-                {
-                  role: "system",
-                  content:
-                    "You are an expert eBay seller who writes honest, human-sounding listing descriptions. Write like a knowledgeable dealer talking to a fellow enthusiast - conversational but professional. Use contractions naturally. Always end with a 'Bottom line:' closing sentence. Never use: 'comprises', 'showcases', 'elevate your collection', 'delve into', 'museum-quality', 'in the realm of', 'features exceptional'. Use phrases like 'Here's what you're getting:', 'Let's be honest...', 'You're looking at...', 'What makes this special is...';",
-                },
-                { role: "user", content: prompt },
-              ],
-              max_tokens: 600,
-              temperature: 0.7,
-            }),
+        const response = await fetch(openAiEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(usingProxy ? {} : { Authorization: `Bearer ${openAiKey}` }),
+            ...(openAiProxyAuthToken
+              ? { "X-Proxy-Auth": openAiProxyAuthToken }
+              : {}),
           },
-        );
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            // user field: correlates requests to a user in OpenAI usage dashboard
+            ...(userId ? { user: `uid_${userId}` } : {}),
+            messages: [
+              {
+                role: "system",
+                content:
+                  "You are an expert eBay seller who writes honest, human-sounding listing descriptions. Write like a knowledgeable dealer talking to a fellow enthusiast - conversational but professional. Use contractions naturally. Always end with a 'Bottom line:' closing sentence. Never use: 'comprises', 'showcases', 'elevate your collection', 'delve into', 'museum-quality', 'in the realm of', 'features exceptional'. Use phrases like 'Here's what you're getting:', 'Let's be honest...', 'You're looking at...', 'What makes this special is...';",
+              },
+              { role: "user", content: prompt },
+            ],
+            max_tokens: 600,
+            temperature: 0.7,
+          }),
+        });
 
         if (!response.ok) {
           const errText = await response.text();
@@ -239,19 +241,27 @@ TONE RULES:
           const completionTokens = oaiUsage.completion_tokens ?? 0;
           const totalTokens = oaiUsage.total_tokens ?? 0;
           // gpt-4o-mini pricing: $0.15/1M input, $0.60/1M output
-          const costUsd = (promptTokens * 0.00000015) + (completionTokens * 0.00000060);
-          svc.from("gemini_usage").insert({
-            user_id: userId,
-            function_name: "bulk-generate-descriptions",
-            model: "gpt-4o-mini",
-            provider: "openai",
-            prompt_tokens: promptTokens,
-            completion_tokens: completionTokens,
-            total_tokens: totalTokens,
-            cost_usd: costUsd,
-          }).then(() => {}).catch((e: unknown) =>
-            console.warn("Failed to log OpenAI bulk-descriptions usage:", String(e))
-          );
+          const costUsd =
+            promptTokens * 0.00000015 + completionTokens * 0.0000006;
+          svc
+            .from("gemini_usage")
+            .insert({
+              user_id: userId,
+              function_name: "bulk-generate-descriptions",
+              model: "gpt-4o-mini",
+              provider: "openai",
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokens,
+              total_tokens: totalTokens,
+              cost_usd: costUsd,
+            })
+            .then(() => {})
+            .catch((e: unknown) =>
+              console.warn(
+                "Failed to log OpenAI bulk-descriptions usage:",
+                String(e),
+              ),
+            );
         }
 
         results.push({ rowIndex: row.rowIndex, description });

@@ -13,7 +13,10 @@ const CACHE_TTL_MINUTES = 15;
 // Last updated: August 2026
 const FALLBACK = { gold: 3400, silver: 64, platinum: 1350 };
 
-function isValidSpotPrice(metal: "gold" | "silver" | "platinum", value: unknown): boolean {
+function isValidSpotPrice(
+  metal: "gold" | "silver" | "platinum",
+  value: unknown,
+): boolean {
   const num = Number(value);
   if (!Number.isFinite(num) || num <= 0) return false;
 
@@ -74,18 +77,25 @@ async function getSpotPrices(
 
   const cachedSanitized = cached
     ? sanitizeSpotPrices({
-      gold: cached.gold,
-      silver: cached.silver,
-      platinum: cached.platinum,
-    })
+        gold: cached.gold,
+        silver: cached.silver,
+        platinum: cached.platinum,
+      })
     : null;
 
   const now = new Date();
   const fetchedAt = cached?.fetched_at ? new Date(cached.fetched_at) : null;
-  const ageMinutes = fetchedAt ? (now.getTime() - fetchedAt.getTime()) / 60000 : Infinity;
+  const ageMinutes = fetchedAt
+    ? (now.getTime() - fetchedAt.getTime()) / 60000
+    : Infinity;
 
   // 2. If cache is fresh (< 15 min) and not forced to refresh, return it immediately
-  if (cached && cachedSanitized?.valid && ageMinutes < CACHE_TTL_MINUTES && !forceRefresh) {
+  if (
+    cached &&
+    cachedSanitized?.valid &&
+    ageMinutes < CACHE_TTL_MINUTES &&
+    !forceRefresh
+  ) {
     return {
       gold: cachedSanitized.gold,
       silver: cachedSanitized.silver,
@@ -122,7 +132,9 @@ async function getSpotPrices(
       const parsedPrices = {
         gold: goldMatch ? parseFloat(goldMatch[1].replace(/,/g, "")) : 0,
         silver: silverMatch ? parseFloat(silverMatch[1].replace(/,/g, "")) : 0,
-        platinum: platinumMatch ? parseFloat(platinumMatch[1].replace(/,/g, "")) : 0,
+        platinum: platinumMatch
+          ? parseFloat(platinumMatch[1].replace(/,/g, ""))
+          : 0,
       };
 
       const prices = sanitizeSpotPrices(parsedPrices);
@@ -148,13 +160,14 @@ async function getSpotPrices(
   }
 
   // 4. If live fetch failed, use existing cached values or hardcoded fallback
-  const prices = fresh ??
+  const prices =
+    fresh ??
     (cachedSanitized
       ? {
-        gold: cachedSanitized.gold,
-        silver: cachedSanitized.silver,
-        platinum: cachedSanitized.platinum,
-      }
+          gold: cachedSanitized.gold,
+          silver: cachedSanitized.silver,
+          platinum: cachedSanitized.platinum,
+        }
       : FALLBACK);
 
   if (!fresh) {
@@ -163,16 +176,14 @@ async function getSpotPrices(
   }
 
   // 5. Upsert fresh prices into DB so all users share the update
-  const { error: upsertErr } = await svc
-    .from("spot_price_cache")
-    .upsert({
-      id: 1,
-      gold: prices.gold,
-      silver: prices.silver,
-      platinum: prices.platinum,
-      fetched_at: now.toISOString(),
-      source,
-    });
+  const { error: upsertErr } = await svc.from("spot_price_cache").upsert({
+    id: 1,
+    gold: prices.gold,
+    silver: prices.silver,
+    platinum: prices.platinum,
+    fetched_at: now.toISOString(),
+    source,
+  });
 
   if (upsertErr) {
     console.error("Failed to upsert spot_price_cache:", upsertErr);
@@ -202,7 +213,8 @@ serve(async (req) => {
     const url = new URL(req.url);
     const forceRefresh = url.searchParams.get("force_refresh") === "true";
 
-    const { gold, silver, platinum, fetched_at, source, refreshed } = await getSpotPrices(svc, forceRefresh);
+    const { gold, silver, platinum, fetched_at, source, refreshed } =
+      await getSpotPrices(svc, forceRefresh);
 
     // If body has metalType & weightOz, also calculate melt value
     let meltValue: number | null = null;
@@ -218,13 +230,14 @@ serve(async (req) => {
     }
 
     if (metalType && weightOz && weightOz > 0) {
-      const spotPrice = metalType === "gold"
-        ? gold
-        : metalType === "silver"
-        ? silver
-        : metalType === "platinum"
-        ? platinum
-        : 0;
+      const spotPrice =
+        metalType === "gold"
+          ? gold
+          : metalType === "silver"
+            ? silver
+            : metalType === "platinum"
+              ? platinum
+              : 0;
       meltValue = parseFloat((spotPrice * weightOz).toFixed(2));
     }
 

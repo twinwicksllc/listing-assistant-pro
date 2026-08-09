@@ -25,57 +25,50 @@ serve(async (req) => {
     // any request to the eBay Identity API.
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
     const jwtToken = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await supabase.auth.getUser(
-      jwtToken,
-    );
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser(jwtToken);
     if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const { userToken } = await req.json();
 
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-    const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
+    const apiBase =
+      ebayEnv === "production"
+        ? "https://api.ebay.com"
+        : "https://api.sandbox.ebay.com";
 
     if (!userToken) {
-      return new Response(
-        JSON.stringify({ needsAuth: true }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ needsAuth: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Fetch user info from eBay Identity API
-    const userResp = await fetch(
-      `${apiBase}/commerce/identity/v1/user/`,
-      {
-        headers: {
-          Authorization: `Bearer ${userToken}`,
-          "Content-Type": "application/json",
-          "Accept-Language": "en-US",
-        },
+    const userResp = await fetch(`${apiBase}/commerce/identity/v1/user/`, {
+      headers: {
+        Authorization: `Bearer ${userToken}`,
+        "Content-Type": "application/json",
+        "Accept-Language": "en-US",
       },
-    );
+    });
 
     if (userResp.status === 401 || userResp.status === 403) {
-      return new Response(
-        JSON.stringify({ needsAuth: true }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ needsAuth: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     if (!userResp.ok) {

@@ -11,8 +11,21 @@
  */
 
 import {
-  Camera, Upload, Sparkles, X, ArrowRight, ImagePlus,
-  Mic, MicOff, Loader2, HelpCircle, Layers, Info, Star, Trash2, Video,
+  Camera,
+  Upload,
+  Sparkles,
+  X,
+  ArrowRight,
+  ImagePlus,
+  Mic,
+  MicOff,
+  Loader2,
+  HelpCircle,
+  Layers,
+  Info,
+  Star,
+  Trash2,
+  Video,
 } from "lucide-react";
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -28,40 +41,51 @@ import UsageSummaryCard from "../components/UsageSummaryCard";
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const ACCEPTED_TYPES = [
-  "image/jpeg", "image/png", "image/webp", "image/heic",
-  "image/heif", "image/gif", "video/mp4", "video/quicktime", "video/webm",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+  "image/gif",
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
 ];
 const ACCEPT_STRING =
   "image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif,video/mp4,video/quicktime,video/webm";
 const MAX_FILE_SIZE_MB = 20;
-const MAX_FILE_SIZE    = MAX_FILE_SIZE_MB * 1024 * 1024;
+const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
 const MAX_RECORDING_SEC = 10;
 const TOUR_KEY = "sls_tour_seen";
 
 const TOUR_STEPS: TourStep[] = [
   {
-    target:      "capture-button",
-    title:       "📸 Capture Items",
-    description: "Tap here to take photos or upload images of items you want to list on eBay. You can add multiple photos at once.",
-    placement:   "bottom",
+    target: "capture-button",
+    title: "📸 Capture Items",
+    description:
+      "Tap here to take photos or upload images of items you want to list on eBay. You can add multiple photos at once.",
+    placement: "bottom",
   },
   {
-    target:      "image-optimizer",
-    title:       "✨ Auto Optimizer",
-    description: "Photos are automatically optimized when added—backgrounds are auto-cropped, items centered, and brightness normalized for professional listings.",
-    placement:   "top",
+    target: "image-optimizer",
+    title: "✨ Auto Optimizer",
+    description:
+      "Photos are automatically optimized when added—backgrounds are auto-cropped, items centered, and brightness normalized for professional listings.",
+    placement: "top",
   },
   {
-    target:      "analyze-tab",
-    title:       "🔍 Drafts & Analysis",
-    description: "After processing, your AI-generated listings appear in Drafts. Review titles, descriptions, and pricing before publishing to eBay.",
-    placement:   "top",
+    target: "analyze-tab",
+    title: "🔍 Drafts & Analysis",
+    description:
+      "After processing, your AI-generated listings appear in Drafts. Review titles, descriptions, and pricing before publishing to eBay.",
+    placement: "top",
   },
   {
-    target:      "help-button",
-    title:       "💡 Need Help?",
-    description: "You can replay this tour anytime by tapping the help icon in the header. Happy listing!",
-    placement:   "bottom",
+    target: "help-button",
+    title: "💡 Need Help?",
+    description:
+      "You can replay this tour anytime by tapping the help icon in the header. Happy listing!",
+    placement: "bottom",
   },
 ];
 
@@ -83,14 +107,15 @@ const GLOBAL_CSS = `
 
 // ── Styles ─────────────────────────────────────────────────────────────────────
 
-const BRAND     = "#0076B6";
+const BRAND = "#0076B6";
 const BRAND_DRK = "#005a8a";
-const BRAND_LT  = "#e6f4fb";
-const BG        = "linear-gradient(145deg, #e8f4fb 0%, #f0f6ff 40%, #eaf1f8 100%)";
-const FG        = "#141820";
-const MUTED     = "#6E7580";
-const BORDER    = "#D0D9E4";
-const FONT      = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+const BRAND_LT = "#e6f4fb";
+const BG = "linear-gradient(145deg, #e8f4fb 0%, #f0f6ff 40%, #eaf1f8 100%)";
+const FG = "#141820";
+const MUTED = "#6E7580";
+const BORDER = "#D0D9E4";
+const FONT =
+  "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 
 const cardFloat: React.CSSProperties = {
   background: "#ffffff",
@@ -98,7 +123,8 @@ const cardFloat: React.CSSProperties = {
   WebkitBackdropFilter: "blur(14px)",
   border: "1px solid #D8E4EF",
   borderRadius: 16,
-  boxShadow: "0 4px 6px -1px rgba(0,0,0,0.07), 0 10px 30px -5px rgba(0,80,140,0.10), 0 0 0 1px rgba(0,118,182,0.04)",
+  boxShadow:
+    "0 4px 6px -1px rgba(0,0,0,0.07), 0 10px 30px -5px rgba(0,80,140,0.10), 0 0 0 1px rgba(0,118,182,0.04)",
 };
 
 const S = {
@@ -201,9 +227,7 @@ const S = {
   dropZone: (dragging: boolean): React.CSSProperties => ({
     border: `2px dashed ${dragging ? BRAND : "#C8D0D9"}`,
     borderRadius: 24,
-    background: dragging
-      ? "rgba(0,118,182,0.06)"
-      : "rgba(0,118,182,0.025)",
+    background: dragging ? "rgba(0,118,182,0.06)" : "rgba(0,118,182,0.025)",
     boxShadow: dragging
       ? `0 0 0 4px rgba(0,118,182,0.12), inset 0 0 20px rgba(0,118,182,0.04)`
       : "none",
@@ -224,17 +248,13 @@ const S = {
     width: 96,
     height: 96,
     borderRadius: "50%",
-    background: dragging
-      ? `rgba(0,118,182,0.15)`
-      : `rgba(0,118,182,0.07)`,
+    background: dragging ? `rgba(0,118,182,0.15)` : `rgba(0,118,182,0.07)`,
     border: `2px dashed ${dragging ? BRAND : "rgba(0,118,182,0.3)"}`,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     transition: "all 0.25s ease",
-    boxShadow: dragging
-      ? `0 0 20px rgba(0,118,182,0.18)`
-      : "none",
+    boxShadow: dragging ? `0 0 20px rgba(0,118,182,0.18)` : "none",
   }),
 
   dropZoneCTA: {
@@ -359,7 +379,8 @@ const S = {
     fontSize: "0.75rem",
     fontWeight: 700,
     cursor: "pointer",
-    background: variant === "danger" ? "rgba(220,38,38,0.85)" : "rgba(255,255,255,0.15)",
+    background:
+      variant === "danger" ? "rgba(220,38,38,0.85)" : "rgba(255,255,255,0.15)",
     color: "#fff",
     backdropFilter: "blur(4px)",
     WebkitBackdropFilter: "blur(4px)",
@@ -404,7 +425,12 @@ const S = {
     borderRadius: 20,
     fontSize: "0.75rem",
     fontWeight: 600,
-    background: color === "blue" ? "rgba(0,118,182,0.1)" : color === "green" ? "rgba(34,197,94,0.1)" : "#EFF2F5",
+    background:
+      color === "blue"
+        ? "rgba(0,118,182,0.1)"
+        : color === "green"
+          ? "rgba(34,197,94,0.1)"
+          : "#EFF2F5",
     color: color === "blue" ? BRAND : color === "green" ? "#16a34a" : MUTED,
   }),
 
@@ -416,7 +442,8 @@ const S = {
   } as React.CSSProperties,
 
   tipBox: {
-    background: "linear-gradient(135deg, rgba(0,118,182,0.06) 0%, rgba(0,118,182,0.02) 100%)",
+    background:
+      "linear-gradient(135deg, rgba(0,118,182,0.06) 0%, rgba(0,118,182,0.02) 100%)",
     border: "1px solid rgba(0,118,182,0.15)",
     borderLeft: `3px solid ${BRAND}`,
     borderRadius: 12,
@@ -464,7 +491,14 @@ interface ThumbTileProps {
   onSetMain: (i: number) => void;
 }
 
-function ThumbTile({ url, index, isMain, isOptimizing, onRemove, onSetMain }: ThumbTileProps) {
+function ThumbTile({
+  url,
+  index,
+  isMain,
+  isOptimizing,
+  onRemove,
+  onSetMain,
+}: ThumbTileProps) {
   const [hovered, setHovered] = useState(false);
 
   if (isOptimizing) return <SkeletonTile />;
@@ -495,7 +529,10 @@ function ThumbTile({ url, index, isMain, isOptimizing, onRemove, onSetMain }: Th
       >
         <button
           style={S.thumbOverlayBtn("danger")}
-          onClick={(e) => { e.stopPropagation(); onRemove(index); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove(index);
+          }}
           title="Remove photo"
         >
           <Trash2 size={11} /> Remove
@@ -503,7 +540,10 @@ function ThumbTile({ url, index, isMain, isOptimizing, onRemove, onSetMain }: Th
         {!isMain && (
           <button
             style={S.thumbOverlayBtn("star")}
-            onClick={(e) => { e.stopPropagation(); onSetMain(index); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSetMain(index);
+            }}
             title="Set as main photo"
           >
             <Star size={11} /> Main
@@ -518,30 +558,36 @@ function ThumbTile({ url, index, isMain, isOptimizing, onRemove, onSetMain }: Th
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function HomePage2() {
-  const { recordUsage, planFeatures, usage, currentPlanLimits, currentPlan } = useAuth();
-  const cameraInputRef  = useRef<HTMLInputElement>(null);
+  const { recordUsage, planFeatures, usage, currentPlanLimits, currentPlan } =
+    useAuth();
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
-  const navigate        = useNavigate();
-  const isMobile        = useIsMobile();
+  const navigate = useNavigate();
+  const isMobile = useIsMobile();
 
-  const [stagedImages,      setStagedImages]      = useState<string[]>([]);
-  const [mainIndex,         setMainIndex]         = useState(0);
-  const [dragging,          setDragging]          = useState(false);
-  const [optimizing,        setOptimizing]        = useState(false);
-  const [optimizeProgress,  setOptimizeProgress]  = useState({ done: 0, total: 0 });
-  const [imagesOptimized,   setImagesOptimized]   = useState(false);
-  const [showTour,          setShowTour]          = useState(false);
+  const [stagedImages, setStagedImages] = useState<string[]>([]);
+  const [mainIndex, setMainIndex] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
+  const [optimizeProgress, setOptimizeProgress] = useState({
+    done: 0,
+    total: 0,
+  });
+  const [imagesOptimized, setImagesOptimized] = useState(false);
+  const [showTour, setShowTour] = useState(false);
 
   // Voice state
-  const [recording,     setRecording]     = useState(false);
-  const [transcribing,  setTranscribing]  = useState(false);
-  const [voiceNote,     setVoiceNote]     = useState("");
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [voiceNote, setVoiceNote] = useState("");
   const [recordingTime, setRecordingTime] = useState(0);
 
-  const mediaRecorderRef     = useRef<MediaRecorder | null>(null);
-  const chunksRef            = useRef<Blob[]>([]);
-  const timerRef             = useRef<ReturnType<typeof setInterval> | null>(null);
-  const autoOptimizeTimerRef = useRef<ReturnType<typeof setTimeout>  | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoOptimizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!localStorage.getItem(TOUR_KEY)) {
@@ -552,7 +598,8 @@ export default function HomePage2() {
 
   useEffect(() => {
     if (stagedImages.length === 0 || imagesOptimized || optimizing) return;
-    if (autoOptimizeTimerRef.current) clearTimeout(autoOptimizeTimerRef.current);
+    if (autoOptimizeTimerRef.current)
+      clearTimeout(autoOptimizeTimerRef.current);
     autoOptimizeTimerRef.current = setTimeout(async () => {
       setOptimizing(true);
       setOptimizeProgress({ done: 0, total: stagedImages.length });
@@ -564,12 +611,17 @@ export default function HomePage2() {
         setImagesOptimized(true);
         await recordUsage("optimize");
       } catch {
-        toast.error("Failed to optimize images.", { id: "optimize-images-error" });
+        toast.error("Failed to optimize images.", {
+          id: "optimize-images-error",
+        });
       } finally {
         setOptimizing(false);
       }
     }, 500);
-    return () => { if (autoOptimizeTimerRef.current) clearTimeout(autoOptimizeTimerRef.current); };
+    return () => {
+      if (autoOptimizeTimerRef.current)
+        clearTimeout(autoOptimizeTimerRef.current);
+    };
   }, [stagedImages, imagesOptimized, optimizing, recordUsage]);
 
   const handleTourFinish = () => {
@@ -577,47 +629,55 @@ export default function HomePage2() {
     localStorage.setItem(TOUR_KEY, "true");
   };
 
-  const openVideoFlow = useCallback((selectedVideoFile?: File) => {
-    navigate("/analyze", {
-      state: {
-        imageUrls: [],
-        voiceNote,
-        videoOnly: true,
-        selectedVideoFile,
-      },
-    });
-  }, [navigate, voiceNote]);
+  const openVideoFlow = useCallback(
+    (selectedVideoFile?: File) => {
+      navigate("/analyze", {
+        state: {
+          imageUrls: [],
+          voiceNote,
+          videoOnly: true,
+          selectedVideoFile,
+        },
+      });
+    },
+    [navigate, voiceNote],
+  );
 
-  const validateAndStageFiles = useCallback((files: FileList | File[] | null) => {
-    if (!files) return;
-    Array.from(files).forEach((file) => {
-      if (file.type.startsWith("video/")) {
-        toast.info("Video uploads use the Analyze video flow. Opening video upload…");
-        openVideoFlow(file);
-        return;
-      }
+  const validateAndStageFiles = useCallback(
+    (files: FileList | File[] | null) => {
+      if (!files) return;
+      Array.from(files).forEach((file) => {
+        if (file.type.startsWith("video/")) {
+          toast.info(
+            "Video uploads use the Analyze video flow. Opening video upload…",
+          );
+          openVideoFlow(file);
+          return;
+        }
 
-      if (!ACCEPTED_TYPES.includes(file.type)) {
-        toast.error(`"${file.name}" is not a supported format`);
-        return;
-      }
-      if (file.size > MAX_FILE_SIZE) {
-        toast.error(`"${file.name}" exceeds ${MAX_FILE_SIZE_MB}MB`);
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setStagedImages(prev => [...prev, e.target?.result as string]);
-        setImagesOptimized(false);
-      };
-      reader.readAsDataURL(file);
-    });
-  }, [openVideoFlow]);
+        if (!ACCEPTED_TYPES.includes(file.type)) {
+          toast.error(`"${file.name}" is not a supported format`);
+          return;
+        }
+        if (file.size > MAX_FILE_SIZE) {
+          toast.error(`"${file.name}" exceeds ${MAX_FILE_SIZE_MB}MB`);
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setStagedImages((prev) => [...prev, e.target?.result as string]);
+          setImagesOptimized(false);
+        };
+        reader.readAsDataURL(file);
+      });
+    },
+    [openVideoFlow],
+  );
 
   const removeImage = (i: number) => {
-    setStagedImages(prev => prev.filter((_, idx) => idx !== i));
+    setStagedImages((prev) => prev.filter((_, idx) => idx !== i));
     setImagesOptimized(false);
-    setMainIndex(prev => {
+    setMainIndex((prev) => {
       if (i === prev) return 0;
       if (i < prev) return prev - 1;
       return prev;
@@ -626,7 +686,7 @@ export default function HomePage2() {
 
   const setMainImage = (i: number) => {
     // Reorder: move selected image to index 0
-    setStagedImages(prev => {
+    setStagedImages((prev) => {
       const next = [...prev];
       const [picked] = next.splice(i, 1);
       next.unshift(picked);
@@ -636,18 +696,29 @@ export default function HomePage2() {
     toast.success("Main photo updated");
   };
 
-  const handleCapture   = () => { (isMobile ? cameraInputRef : galleryInputRef).current?.click(); };
-  const handleGallery   = () => { galleryInputRef.current?.click(); };
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => { validateAndStageFiles(e.target.files); e.target.value = ""; };
-  const handleProcess   = () => {
+  const handleCapture = () => {
+    (isMobile ? cameraInputRef : galleryInputRef).current?.click();
+  };
+  const handleGallery = () => {
+    galleryInputRef.current?.click();
+  };
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    validateAndStageFiles(e.target.files);
+    e.target.value = "";
+  };
+  const handleProcess = () => {
     if (!stagedImages.length) return;
     // Ensure main photo is first
     navigate("/analyze", { state: { imageUrls: stagedImages, voiceNote } });
   };
 
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current?.state !== "inactive") mediaRecorderRef.current?.stop();
-    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    if (mediaRecorderRef.current?.state !== "inactive")
+      mediaRecorderRef.current?.stop();
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
     setRecording(false);
     setRecordingTime(0);
   }, []);
@@ -655,22 +726,37 @@ export default function HomePage2() {
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr     = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+      const mr = new MediaRecorder(stream, {
+        mimeType: "audio/webm;codecs=opus",
+      });
       mediaRecorderRef.current = mr;
-      chunksRef.current        = [];
-      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
       mr.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop());
+        stream.getTracks().forEach((t) => t.stop());
         setTranscribing(true);
         try {
-          const blob   = new Blob(chunksRef.current, { type: "audio/webm" });
+          const blob = new Blob(chunksRef.current, { type: "audio/webm" });
           const reader = new FileReader();
-          const b64    = await new Promise<string>(res => { reader.onload = () => res(reader.result as string); reader.readAsDataURL(blob); });
-          const { data, error } = await supabase.functions.invoke("transcribe-voice", { body: { audioBase64: b64 } });
-          if (error || data?.error) throw new Error(data?.error || error?.message || "Transcription failed");
+          const b64 = await new Promise<string>((res) => {
+            reader.onload = () => res(reader.result as string);
+            reader.readAsDataURL(blob);
+          });
+          const { data, error } = await supabase.functions.invoke(
+            "transcribe-voice",
+            { body: { audioBase64: b64 } },
+          );
+          if (error || data?.error)
+            throw new Error(
+              data?.error || error?.message || "Transcription failed",
+            );
           const t = data.transcript || "";
-          if (t) { setVoiceNote(prev => prev ? `${prev} ${t}` : t); toast.success("Voice note transcribed!"); }
-          else toast.error("Couldn't detect any speech. Try again.");
+          if (t) {
+            setVoiceNote((prev) => (prev ? `${prev} ${t}` : t));
+            toast.success("Voice note transcribed!");
+          } else toast.error("Couldn't detect any speech. Try again.");
         } catch (e: any) {
           toast.error(e.message || "Failed to transcribe voice note.");
         } finally {
@@ -691,15 +777,33 @@ export default function HomePage2() {
     }
   }, [stopRecording]);
 
-  const handleDragOver  = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragging(true); }, []);
-  const handleDragLeave = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragging(false); }, []);
-  const handleDrop      = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragging(false); validateAndStageFiles(e.dataTransfer.files); }, [validateAndStageFiles]);
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(true);
+  }, []);
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+  }, []);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragging(false);
+      validateAndStageFiles(e.dataTransfer.files);
+    },
+    [validateAndStageFiles],
+  );
 
-  const planLabel = currentPlan === "free" ? "Free"
-    : currentPlan === "starter" ? "Starter"
-    : currentPlan === "pro" ? "Pro"
-    : currentPlan === "shop" ? "Shop"
-    : "Unlimited";
+  const planLabel =
+    currentPlan === "free"
+      ? "Free"
+      : currentPlan === "starter"
+        ? "Starter"
+        : currentPlan === "pro"
+          ? "Pro"
+          : currentPlan === "shop"
+            ? "Shop"
+            : "Unlimited";
 
   // ── Render: empty immersive drop zone ─────────────────────────────────────
 
@@ -713,9 +817,11 @@ export default function HomePage2() {
       data-tour="capture-button"
     >
       <div style={S.uploadIconWrap(dragging)}>
-        {isMobile
-          ? <Camera size={38} color={BRAND} strokeWidth={1.75} />
-          : <Upload size={38} color={BRAND} strokeWidth={1.75} />}
+        {isMobile ? (
+          <Camera size={38} color={BRAND} strokeWidth={1.75} />
+        ) : (
+          <Upload size={38} color={BRAND} strokeWidth={1.75} />
+        )}
       </div>
 
       <div>
@@ -723,7 +829,9 @@ export default function HomePage2() {
           {isMobile ? "Tap to capture or upload" : "Drop images here to start"}
         </p>
         <p style={S.dropZoneSub}>
-          {isMobile ? "Take a photo or choose from your camera roll" : "or click anywhere to browse files"}
+          {isMobile
+            ? "Take a photo or choose from your camera roll"
+            : "or click anywhere to browse files"}
         </p>
         <p style={S.dropZoneHint}>
           JPG, PNG, WebP, GIF, MP4, MOV · Max {MAX_FILE_SIZE_MB}MB per file
@@ -732,22 +840,39 @@ export default function HomePage2() {
 
       {/* Desktop shortcuts */}
       {!isMobile && (
-        <div style={{ display: "flex", gap: "0.625rem", marginTop: "0.25rem", flexWrap: "wrap", justifyContent: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: "0.625rem",
+            marginTop: "0.25rem",
+            flexWrap: "wrap",
+            justifyContent: "center",
+          }}
+        >
           <button
             style={S.btnSecondary}
-            onClick={e => { e.stopPropagation(); handleGallery(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleGallery();
+            }}
           >
             <Upload size={15} /> Browse Files
           </button>
           <button
             style={S.btnBrandOutline}
-            onClick={e => { e.stopPropagation(); openVideoFlow(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              openVideoFlow();
+            }}
           >
             <Video size={15} /> Start with Video
           </button>
           <button
             style={S.btnBrandOutline}
-            onClick={e => { e.stopPropagation(); navigate("/bulk"); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate("/bulk");
+            }}
           >
             <Layers size={15} /> Bulk List (CSV/Excel)
           </button>
@@ -759,7 +884,10 @@ export default function HomePage2() {
         <div style={{ marginTop: "0.25rem" }}>
           <button
             style={S.btnBrandOutline}
-            onClick={e => { e.stopPropagation(); openVideoFlow(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              openVideoFlow();
+            }}
           >
             <Video size={15} /> Start with Video
           </button>
@@ -778,14 +906,29 @@ export default function HomePage2() {
       onDrop={handleDrop}
     >
       {/* Gallery header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
         <span style={{ fontSize: "1rem", fontWeight: 700, color: FG }}>
           Item Photos ({stagedImages.length})
         </span>
         <button
           onClick={handleCapture}
-          style={{ display: "flex", alignItems: "center", gap: "0.375rem", background: "none", border: "none",
-                   color: BRAND, fontSize: "0.875rem", fontWeight: 600, cursor: "pointer" }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.375rem",
+            background: "none",
+            border: "none",
+            color: BRAND,
+            fontSize: "0.875rem",
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
         >
           <ImagePlus size={16} /> Add More
         </button>
@@ -793,9 +936,18 @@ export default function HomePage2() {
 
       {/* Drag-over cue when images already staged */}
       {dragging && (
-        <div style={{ border: `2px dashed ${BRAND}`, borderRadius: 14, padding: "1.5rem",
-                      textAlign: "center", color: BRAND, fontSize: "0.9375rem",
-                      fontWeight: 700, background: "rgba(0,118,182,0.04)" }}>
+        <div
+          style={{
+            border: `2px dashed ${BRAND}`,
+            borderRadius: 14,
+            padding: "1.5rem",
+            textAlign: "center",
+            color: BRAND,
+            fontSize: "0.9375rem",
+            fontWeight: 700,
+            background: "rgba(0,118,182,0.04)",
+          }}
+        >
           Drop files here to add
         </div>
       )}
@@ -817,10 +969,18 @@ export default function HomePage2() {
         <button
           onClick={handleCapture}
           style={{
-            aspectRatio: "1 / 1", borderRadius: 14, border: "2px dashed #B0B7BC",
-            background: "rgba(255,255,255,0.5)", cursor: "pointer", display: "flex",
-            flexDirection: "column", alignItems: "center", justifyContent: "center",
-            gap: "0.375rem", color: MUTED, transition: "all 0.15s",
+            aspectRatio: "1 / 1",
+            borderRadius: 14,
+            border: "2px dashed #B0B7BC",
+            background: "rgba(255,255,255,0.5)",
+            cursor: "pointer",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "0.375rem",
+            color: MUTED,
+            transition: "all 0.15s",
           }}
         >
           {isMobile ? <Camera size={22} /> : <Upload size={22} />}
@@ -830,20 +990,46 @@ export default function HomePage2() {
 
       {/* Auto-optimizer status */}
       <div style={S.optimizerBar} data-tour="image-optimizer">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.25rem" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: "0.25rem",
+          }}
+        >
           <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
             <Sparkles size={15} color={BRAND} />
-            <span style={{ fontSize: "0.875rem", fontWeight: 700, color: FG }}>Auto-Optimizer</span>
+            <span style={{ fontSize: "0.875rem", fontWeight: 700, color: FG }}>
+              Auto-Optimizer
+            </span>
           </div>
           {imagesOptimized && <span style={S.badge("green")}>✓ Complete</span>}
           {optimizing && (
-            <span style={{ ...S.badge("blue"), display: "flex", alignItems: "center", gap: "0.3rem" }}>
-              <Loader2 size={11} style={{ animation: "spin 1s linear infinite" }} />
+            <span
+              style={{
+                ...S.badge("blue"),
+                display: "flex",
+                alignItems: "center",
+                gap: "0.3rem",
+              }}
+            >
+              <Loader2
+                size={11}
+                style={{ animation: "spin 1s linear infinite" }}
+              />
               {optimizeProgress.done}/{optimizeProgress.total}
             </span>
           )}
         </div>
-        <p style={{ fontSize: "0.8125rem", color: MUTED, lineHeight: 1.5, margin: 0 }}>
+        <p
+          style={{
+            fontSize: "0.8125rem",
+            color: MUTED,
+            lineHeight: 1.5,
+            margin: 0,
+          }}
+        >
           {optimizing
             ? `Optimizing ${optimizeProgress.done}/${optimizeProgress.total} photo${optimizeProgress.total !== 1 ? "s" : ""}…`
             : imagesOptimized
@@ -854,11 +1040,21 @@ export default function HomePage2() {
 
       {/* Voice note */}
       {planFeatures.hasVoiceNotes ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+        <div
+          style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}
+        >
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <Mic size={15} color={BRAND} />
-            <span style={{ fontSize: "0.875rem", fontWeight: 700, color: FG }}>Voice Note</span>
-            <span style={{ fontSize: "0.8125rem", color: "#9BA3AD", marginLeft: "auto" }}>
+            <span style={{ fontSize: "0.875rem", fontWeight: 700, color: FG }}>
+              Voice Note
+            </span>
+            <span
+              style={{
+                fontSize: "0.8125rem",
+                color: "#9BA3AD",
+                marginLeft: "auto",
+              }}
+            >
               Optional · {MAX_RECORDING_SEC}s max
             </span>
           </div>
@@ -867,53 +1063,122 @@ export default function HomePage2() {
               onClick={recording ? stopRecording : startRecording}
               disabled={transcribing}
               style={{
-                display: "inline-flex", alignItems: "center", gap: "0.5rem",
-                padding: "0.625rem 1.25rem", borderRadius: 12,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                padding: "0.625rem 1.25rem",
+                borderRadius: 12,
                 background: recording ? "#dc2626" : "rgba(255,255,255,0.8)",
                 color: recording ? "#fff" : FG,
                 border: `1px solid ${recording ? "#dc2626" : BORDER}`,
-                fontSize: "0.9375rem", fontWeight: 600, cursor: "pointer",
+                fontSize: "0.9375rem",
+                fontWeight: 600,
+                cursor: "pointer",
                 opacity: transcribing ? 0.6 : 1,
                 boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
               }}
             >
-              {transcribing ? <><Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> Transcribing…</>
-               : recording   ? <><MicOff size={16} /> Stop ({MAX_RECORDING_SEC - recordingTime}s)</>
-               :               <><Mic size={16} /> Record Note</>}
+              {transcribing ? (
+                <>
+                  <Loader2
+                    size={16}
+                    style={{ animation: "spin 1s linear infinite" }}
+                  />{" "}
+                  Transcribing…
+                </>
+              ) : recording ? (
+                <>
+                  <MicOff size={16} /> Stop ({MAX_RECORDING_SEC - recordingTime}
+                  s)
+                </>
+              ) : (
+                <>
+                  <Mic size={16} /> Record Note
+                </>
+              )}
             </button>
             {voiceNote && !recording && !transcribing && (
               <button
                 onClick={() => setVoiceNote("")}
-                style={{ padding: "0.625rem 1rem", borderRadius: 12, border: "1px solid #fca5a5",
-                         background: "transparent", color: "#dc2626", fontSize: "0.875rem",
-                         fontWeight: 600, cursor: "pointer" }}
+                style={{
+                  padding: "0.625rem 1rem",
+                  borderRadius: 12,
+                  border: "1px solid #fca5a5",
+                  background: "transparent",
+                  color: "#dc2626",
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
               >
                 Clear
               </button>
             )}
           </div>
           {voiceNote && (
-            <div style={{ background: "rgba(0,118,182,0.04)", border: "1px solid rgba(0,118,182,0.12)", borderRadius: 12, padding: "0.875rem 1rem" }}>
-              <p style={{ fontSize: "0.75rem", fontWeight: 700, color: MUTED, marginBottom: "0.375rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            <div
+              style={{
+                background: "rgba(0,118,182,0.04)",
+                border: "1px solid rgba(0,118,182,0.12)",
+                borderRadius: 12,
+                padding: "0.875rem 1rem",
+              }}
+            >
+              <p
+                style={{
+                  fontSize: "0.75rem",
+                  fontWeight: 700,
+                  color: MUTED,
+                  marginBottom: "0.375rem",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                }}
+              >
                 Transcription
               </p>
               <textarea
                 value={voiceNote}
-                onChange={e => setVoiceNote(e.target.value)}
+                onChange={(e) => setVoiceNote(e.target.value)}
                 rows={2}
-                style={{ width: "100%", background: "transparent", border: "none", outline: "none",
-                         resize: "none", fontSize: "0.9375rem", color: FG, lineHeight: 1.5 }}
+                style={{
+                  width: "100%",
+                  background: "transparent",
+                  border: "none",
+                  outline: "none",
+                  resize: "none",
+                  fontSize: "0.9375rem",
+                  color: FG,
+                  lineHeight: 1.5,
+                }}
               />
             </div>
           )}
         </div>
       ) : (
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem",
-                      background: "rgba(255,255,255,0.6)", border: `1px solid ${BORDER}`, borderRadius: 14,
-                      padding: "0.875rem 1rem", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            background: "rgba(255,255,255,0.6)",
+            border: `1px solid ${BORDER}`,
+            borderRadius: 14,
+            padding: "0.875rem 1rem",
+            boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
+          }}
+        >
           <Mic size={18} color="#B0B7BC" />
           <div>
-            <p style={{ fontSize: "0.9rem", fontWeight: 700, color: MUTED, margin: 0 }}>Voice Notes</p>
+            <p
+              style={{
+                fontSize: "0.9rem",
+                fontWeight: 700,
+                color: MUTED,
+                margin: 0,
+              }}
+            >
+              Voice Notes
+            </p>
             <p style={{ fontSize: "0.8125rem", color: "#9BA3AD", margin: 0 }}>
               Upgrade to Pro ($49/mo) to add voice notes to your listings.
             </p>
@@ -925,13 +1190,17 @@ export default function HomePage2() {
       <button
         onClick={handleProcess}
         style={S.btnPrimary}
-        onMouseEnter={e => {
-          (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)";
-          (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 6px 22px rgba(0,118,182,0.44)";
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.transform =
+            "translateY(-2px)";
+          (e.currentTarget as HTMLButtonElement).style.boxShadow =
+            "0 6px 22px rgba(0,118,182,0.44)";
         }}
-        onMouseLeave={e => {
-          (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)";
-          (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 14px 0 rgba(0,118,182,0.38)";
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.transform =
+            "translateY(0)";
+          (e.currentTarget as HTMLButtonElement).style.boxShadow =
+            "0 4px 14px 0 rgba(0,118,182,0.38)";
         }}
       >
         <Sparkles size={18} />
@@ -953,7 +1222,15 @@ export default function HomePage2() {
 
   const TipsPanel = (
     <div style={S.tipsPanel}>
-      <h3 style={{ fontSize: "0.9375rem", fontWeight: 700, color: FG, margin: "0 0 0.25rem", letterSpacing: "-0.01em" }}>
+      <h3
+        style={{
+          fontSize: "0.9375rem",
+          fontWeight: 700,
+          color: FG,
+          margin: "0 0 0.25rem",
+          letterSpacing: "-0.01em",
+        }}
+      >
         Tips for Best Results
       </h3>
       {[
@@ -977,7 +1254,7 @@ export default function HomePage2() {
           title: "Bulk Listing",
           text: "Listing many items? Use the Bulk List CSV/Excel option.",
         },
-      ].map(tip => (
+      ].map((tip) => (
         <div key={tip.title} style={S.tipBox}>
           <div style={S.tipTitle}>
             <span>{tip.icon}</span> {tip.title}
@@ -985,10 +1262,25 @@ export default function HomePage2() {
           <p style={S.tipText}>{tip.text}</p>
         </div>
       ))}
-      <div style={{ padding: "0.625rem 0.875rem", borderRadius: 10, background: "#ffffff",
-                    border: `1px solid ${BORDER}`, fontSize: "0.75rem", color: MUTED,
-                    boxShadow: "0 2px 6px rgba(0,0,0,0.05)" }}>
-        <Info size={12} style={{ display: "inline", marginRight: "0.3rem", verticalAlign: "middle" }} />
+      <div
+        style={{
+          padding: "0.625rem 0.875rem",
+          borderRadius: 10,
+          background: "#ffffff",
+          border: `1px solid ${BORDER}`,
+          fontSize: "0.75rem",
+          color: MUTED,
+          boxShadow: "0 2px 6px rgba(0,0,0,0.05)",
+        }}
+      >
+        <Info
+          size={12}
+          style={{
+            display: "inline",
+            marginRight: "0.3rem",
+            verticalAlign: "middle",
+          }}
+        />
         Drag & drop images anywhere on this page.
       </div>
     </div>
@@ -1003,12 +1295,13 @@ export default function HomePage2() {
       <style>{GLOBAL_CSS}</style>
       <div style={S.page}>
         <div style={isDesktop ? S.pageInner : S.pageInnerMobile}>
-
           {/* Header */}
           <div style={S.headerBar}>
             <div>
               <h1 style={S.pageTitle}>Capture Item</h1>
-              <p style={S.pageSubtitle}>Upload photos to generate your eBay listing with AI</p>
+              <p style={S.pageSubtitle}>
+                Upload photos to generate your eBay listing with AI
+              </p>
             </div>
             <button
               onClick={() => setShowTour(true)}
@@ -1024,8 +1317,16 @@ export default function HomePage2() {
           <div style={S.usageSection}>
             <UsageSummaryCard
               metrics={[
-                { label: "AI Analyses", used: usage.aiAnalysis, limit: currentPlanLimits.analysisLimit },
-                { label: "eBay Publishes", used: usage.ebayPublish, limit: currentPlanLimits.publishLimit },
+                {
+                  label: "AI Analyses",
+                  used: usage.aiAnalysis,
+                  limit: currentPlanLimits.analysisLimit,
+                },
+                {
+                  label: "eBay Publishes",
+                  used: usage.ebayPublish,
+                  limit: currentPlanLimits.publishLimit,
+                },
               ]}
               planName={planLabel}
             />
@@ -1038,18 +1339,29 @@ export default function HomePage2() {
               <div style={S.uploadCard}>
                 <div style={S.cardHeader}>
                   <span style={S.cardTitle}>
-                    {stagedImages.length === 0 ? "Add Photos" : `Photos (${stagedImages.length})`}
+                    {stagedImages.length === 0
+                      ? "Add Photos"
+                      : `Photos (${stagedImages.length})`}
                   </span>
-                  {stagedImages.length > 0 && (
-                    imagesOptimized
-                      ? <span style={S.badge("green")}>✓ Optimized</span>
-                      : optimizing
-                        ? <span style={{ ...S.badge("blue"), display: "flex", alignItems: "center", gap: 4 }}>
-                            <Loader2 size={11} style={{ animation: "spin 1s linear infinite" }} />
-                            Optimizing…
-                          </span>
-                        : null
-                  )}
+                  {stagedImages.length > 0 &&
+                    (imagesOptimized ? (
+                      <span style={S.badge("green")}>✓ Optimized</span>
+                    ) : optimizing ? (
+                      <span
+                        style={{
+                          ...S.badge("blue"),
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
+                      >
+                        <Loader2
+                          size={11}
+                          style={{ animation: "spin 1s linear infinite" }}
+                        />
+                        Optimizing…
+                      </span>
+                    ) : null)}
                 </div>
                 <div style={S.cardBody}>
                   {stagedImages.length === 0 ? EmptyDropZone : StagingGallery}
@@ -1077,11 +1389,29 @@ export default function HomePage2() {
       </div>
 
       {/* Hidden inputs */}
-      <input ref={cameraInputRef}  type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
-      <input ref={galleryInputRef} type="file" accept={ACCEPT_STRING} multiple className="hidden" onChange={handleFileChange} />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+      <input
+        ref={galleryInputRef}
+        type="file"
+        accept={ACCEPT_STRING}
+        multiple
+        className="hidden"
+        onChange={handleFileChange}
+      />
 
       {/* Tour */}
-      <WelcomeTour steps={TOUR_STEPS} active={showTour} onFinish={handleTourFinish} />
+      <WelcomeTour
+        steps={TOUR_STEPS}
+        active={showTour}
+        onFinish={handleTourFinish}
+      />
     </AppShell>
   );
 }

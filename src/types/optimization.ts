@@ -23,7 +23,8 @@ export interface OptimizationItem {
   ebayUrl?: string | null;
 }
 
-export type OptimizationFlag = "overpriced" | "underpriced" | "stale" | "poor_title";
+export type OptimizationFlag =
+  "overpriced" | "underpriced" | "stale" | "poor_title";
 
 export interface OptimizationSuggestion {
   type: "price" | "title" | "description";
@@ -82,14 +83,15 @@ export interface OptimizeListingResult {
 // ----------------------------------------------------------------
 // Reprice Rules
 // ----------------------------------------------------------------
-export type RepriceRuleType = "match_lowest" | "beat_lowest" | "match_avg" | "match_sold_avg";
+export type RepriceRuleType =
+  "match_lowest" | "beat_lowest" | "match_avg" | "match_sold_avg";
 
 export interface RepriceRule {
   id: string;
   userId: string;
   ruleName: string;
   ruleType: RepriceRuleType;
-  adjustmentPct: number;   // e.g. -5 = 5% below, +5 = 5% above
+  adjustmentPct: number; // e.g. -5 = 5% below, +5 = 5% above
   floorPrice: number | null;
   ceilingPrice: number | null;
   categoryFilter: string | null;
@@ -111,7 +113,8 @@ export interface RepriceRuleInput {
 // ----------------------------------------------------------------
 // Optimization History
 // ----------------------------------------------------------------
-export type OptimizationType = "price" | "title" | "description" | "reprice_rule";
+export type OptimizationType =
+  "price" | "title" | "description" | "reprice_rule";
 export type OptimizationResult = "accepted" | "dismissed" | "pending";
 export type AppliedBy = "user" | "auto";
 
@@ -163,7 +166,9 @@ export const RULE_TYPE_LABELS: Record<RepriceRuleType, string> = {
 
 export const RULE_TYPE_DESCRIPTIONS: Record<RepriceRuleType, string> = {
   match_lowest: "Set your price equal to the current lowest competitor price",
-  beat_lowest: "Set your price below the current lowest competitor by the adjustment %",
+  beat_lowest:
+    "Set your price below the current lowest competitor by the adjustment %",
   match_avg: "Set your price to the average of all active competitor prices",
-  match_sold_avg: "Set your price to the average of recently sold prices (recommended)",
+  match_sold_avg:
+    "Set your price to the average of recently sold prices (recommended)",
 };

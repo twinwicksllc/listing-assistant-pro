@@ -124,7 +124,9 @@ export async function compressVideo(
   // Build compression command with hardware acceleration if available
   const args = buildCompressionCommand(bitrate, resolution, preset, optimized);
 
-  console.log(`[VideoCompressionUtil] FFmpeg command: ffmpeg ${args.join(" ")}`);
+  console.log(
+    `[VideoCompressionUtil] FFmpeg command: ffmpeg ${args.join(" ")}`,
+  );
 
   // Execute compression (this may take several seconds depending on video length)
   await ffmpeg.exec(args);
@@ -136,7 +138,15 @@ export async function compressVideo(
   // Get video duration from input for reference
   const duration = 0;
   try {
-    const probeArgs = ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1:0", "input_video"];
+    const probeArgs = [
+      "-v",
+      "error",
+      "-show_entries",
+      "format=duration",
+      "-of",
+      "default=noprint_wrappers=1:nokey=1:0",
+      "input_video",
+    ];
     await ffmpeg.exec(probeArgs);
     // Duration is logged but we can't easily parse it from FFmpeg output in this context
     // The client already has duration from VideoUploadInput, so this is just for logging
@@ -196,7 +206,7 @@ function buildCompressionCommand(
     "1080p": "1920x1080",
     "720p": "1280x720",
     "480p": "854x480",
-    "original": undefined,
+    original: undefined,
   };
   const scale = resolutionScales[resolution];
   if (scale) {

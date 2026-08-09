@@ -17,9 +17,10 @@ export async function getEbayAppToken(
     return _cachedToken.token;
   }
 
-  const tokenUrl = ebayEnv === "production"
-    ? "https://api.ebay.com/identity/v1/oauth2/token"
-    : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
+  const tokenUrl =
+    ebayEnv === "production"
+      ? "https://api.ebay.com/identity/v1/oauth2/token"
+      : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
 
   try {
     const credentials = btoa(`${clientId}:${clientSecret}`);
@@ -55,7 +56,10 @@ export async function getCategorySuggestions(
   appToken: string,
   ebayEnv: string,
 ): Promise<Array<{ categoryId: string; categoryName: string }>> {
-  const base = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
+  const base =
+    ebayEnv === "production"
+      ? "https://api.ebay.com"
+      : "https://api.sandbox.ebay.com";
 
   try {
     const resp = await fetch(
@@ -93,15 +97,18 @@ export async function getCategoryAspects(
   recommended: string[];
   allowedValues: Record<string, string[]>;
 }> {
-  const base = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
+  const base =
+    ebayEnv === "production"
+      ? "https://api.ebay.com"
+      : "https://api.sandbox.ebay.com";
 
   const empty = { required: [], recommended: [], allowedValues: {} };
 
   try {
     const resp = await fetch(
-      `${base}/commerce/taxonomy/v1/category_tree/0/get_item_aspects_for_category?category_id=${
-        encodeURIComponent(categoryId)
-      }`,
+      `${base}/commerce/taxonomy/v1/category_tree/0/get_item_aspects_for_category?category_id=${encodeURIComponent(
+        categoryId,
+      )}`,
       {
         headers: {
           Authorization: `Bearer ${appToken}`,
@@ -117,7 +124,7 @@ export async function getCategoryAspects(
     const recommended: string[] = [];
     const allowedValues: Record<string, string[]> = {};
 
-    for (const aspect of (data.aspects ?? [])) {
+    for (const aspect of data.aspects ?? []) {
       const name: string = aspect.localizedAspectName;
       if (!name) continue;
       const constraint = aspect.aspectConstraint ?? {};
@@ -127,7 +134,8 @@ export async function getCategoryAspects(
         recommended.push(name);
       }
       if (
-        Array.isArray(aspect.aspectValues) && aspect.aspectValues.length > 0
+        Array.isArray(aspect.aspectValues) &&
+        aspect.aspectValues.length > 0
       ) {
         allowedValues[name] = aspect.aspectValues
           .slice(0, 20)

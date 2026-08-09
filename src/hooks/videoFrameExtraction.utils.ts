@@ -3,7 +3,11 @@ export interface FrameQualityCandidate {
   qualityScore: number;
 }
 
-export function computeFrameQualityScore(imageData: Uint8ClampedArray, width: number, height: number): number {
+export function computeFrameQualityScore(
+  imageData: Uint8ClampedArray,
+  width: number,
+  height: number,
+): number {
   if (width <= 0 || height <= 0 || imageData.length < width * height * 4) {
     return 0;
   }
@@ -31,7 +35,8 @@ export function computeFrameQualityScore(imageData: Uint8ClampedArray, width: nu
       const luminance1 = 0.299 * r1 + 0.587 * g1 + 0.114 * b1;
       const luminance2 = 0.299 * r2 + 0.587 * g2 + 0.114 * b2;
       const luminance3 = 0.299 * r3 + 0.587 * g3 + 0.114 * b3;
-      gradientSum += Math.abs(luminance2 - luminance1) + Math.abs(luminance3 - luminance1);
+      gradientSum +=
+        Math.abs(luminance2 - luminance1) + Math.abs(luminance3 - luminance1);
       sampleCount += 2;
     }
   }
@@ -41,13 +46,20 @@ export function computeFrameQualityScore(imageData: Uint8ClampedArray, width: nu
   return Math.min(1, Math.max(0, normalized));
 }
 
-export function selectBestFrames(candidates: FrameQualityCandidate[], maxFrames: number): FrameQualityCandidate[] {
-  const sorted = [...candidates].sort((a, b) => b.qualityScore - a.qualityScore);
+export function selectBestFrames(
+  candidates: FrameQualityCandidate[],
+  maxFrames: number,
+): FrameQualityCandidate[] {
+  const sorted = [...candidates].sort(
+    (a, b) => b.qualityScore - a.qualityScore,
+  );
   const selected: FrameQualityCandidate[] = [];
   const selectedTimestamps: number[] = [];
 
   for (const candidate of sorted) {
-    const alreadySelected = selectedTimestamps.some((timestamp) => Math.abs(timestamp - candidate.timestampSec) < 0.75);
+    const alreadySelected = selectedTimestamps.some(
+      (timestamp) => Math.abs(timestamp - candidate.timestampSec) < 0.75,
+    );
     if (alreadySelected) continue;
 
     selected.push(candidate);

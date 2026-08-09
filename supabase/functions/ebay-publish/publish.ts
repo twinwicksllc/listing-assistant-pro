@@ -2,7 +2,9 @@ import { corsHeaders } from "./constants.ts";
 import { assertCallerOwnsUser, createClient } from "./supabase.ts";
 import { fetchWithTimeout } from "./fetch.ts";
 
-export function buildEbayJsonHeaders(accessToken: unknown): Record<string, string> {
+export function buildEbayJsonHeaders(
+  accessToken: unknown,
+): Record<string, string> {
   return {
     Authorization: `Bearer ${String(accessToken)}`,
     "Content-Type": "application/json",
@@ -21,9 +23,11 @@ export interface GetPoliciesContext {
  * Fetch eBay business policies (fulfillment, payment, return) for a user token.
  * Consolidated here to avoid CORS issues with a separate policies function.
  */
-export async function handleGetPolicies(
-  { req, payload, apiBase }: GetPoliciesContext,
-): Promise<Response> {
+export async function handleGetPolicies({
+  req,
+  payload,
+  apiBase,
+}: GetPoliciesContext): Promise<Response> {
   const { userToken, userId } = payload;
 
   // If no userToken provided directly, try to fetch it from server-side storage
@@ -34,7 +38,12 @@ export async function handleGetPolicies(
       const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
       if (supabaseUrl && supabaseServiceKey) {
         // Security: verify caller owns this userId before accessing their token
-        await assertCallerOwnsUser(req, String(userId), supabaseUrl, supabaseServiceKey);
+        await assertCallerOwnsUser(
+          req,
+          String(userId),
+          supabaseUrl,
+          supabaseServiceKey,
+        );
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
         const { data } = await supabase
           .from("profiles")
@@ -71,9 +80,10 @@ export async function handleGetPolicies(
   // Returns { policies, error } — error is non-null if the fetch failed.
   const fetchPoliciesSafe = async (
     policyType: string,
-  ): Promise<
-    { policies: Array<{ id: string; name: string }>; error: string | null }
-  > => {
+  ): Promise<{
+    policies: Array<{ id: string; name: string }>;
+    error: string | null;
+  }> => {
     try {
       const resp = await fetchWithTimeout(
         `${apiBase}/sell/account/v1/${policyType}_policy?marketplace_id=EBAY_US`,
@@ -102,10 +112,7 @@ export async function handleGetPolicies(
       );
       return { policies, error: null };
     } catch (fetchErr) {
-      console.warn(
-        `get_policies: ${policyType} policy fetch threw:`,
-        fetchErr,
-      );
+      console.warn(`get_policies: ${policyType} policy fetch threw:`, fetchErr);
       return { policies: [], error: `${policyType} policies fetch error` };
     }
   };
@@ -145,9 +152,10 @@ export interface BulkCreateDraftContext {
  * Bulk publish multiple drafts by looping server-side and re-invoking this
  * same function with action "create_draft" for each draft.
  */
-export async function handleBulkCreateDraft(
-  { req, payload }: BulkCreateDraftContext,
-): Promise<Response> {
+export async function handleBulkCreateDraft({
+  req,
+  payload,
+}: BulkCreateDraftContext): Promise<Response> {
   const { userId, userToken, drafts, postalCode } = payload;
   if (!userToken) throw new Error("No eBay user token provided");
   if (!Array.isArray(drafts) || drafts.length === 0) {
@@ -189,7 +197,9 @@ export async function handleBulkCreateDraft(
 
       // Defensively handle response: check status and parse JSON safely
       if (!singleResp.ok) {
-        const errText = await singleResp.text().catch(() => "(no response body)");
+        const errText = await singleResp
+          .text()
+          .catch(() => "(no response body)");
         results.push({
           draftId: draft.draftId,
           success: false,

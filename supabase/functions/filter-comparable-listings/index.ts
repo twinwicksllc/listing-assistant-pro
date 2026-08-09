@@ -34,8 +34,7 @@ async function extractListingAttributes(
   title: string,
   geminiKey: string,
 ): Promise<Record<string, string> | null> {
-  const prompt =
-    `You are a numismatic expert analyzing eBay coin listings. Extract key attributes from this listing title that affect value comparability.
+  const prompt = `You are a numismatic expert analyzing eBay coin listings. Extract key attributes from this listing title that affect value comparability.
 
 Title: "${title}"
 
@@ -113,11 +112,9 @@ async function scoreComparability(
   const prompt = `You are a numismatic expert comparing coin listings for market comparability.
 
 Your Listing Attributes:
-${
-    Object.entries(yourAttributes)
-      .map(([k, v]) => `- ${k}: ${v || "(not found)"}`)
-      .join("\n")
-  }
+${Object.entries(yourAttributes)
+  .map(([k, v]) => `- ${k}: ${v || "(not found)"}`)
+  .join("\n")}
 
 Competitor Listing Title: "${competitorTitle}"
 
@@ -192,9 +189,10 @@ async function fetchRawCompetitors(params: {
 }): Promise<unknown[]> {
   const { appId, searchQuery, categoryId, ebayEnv } = params;
 
-  const baseUrl = ebayEnv === "production"
-    ? "https://svcs.ebay.com/services/search/FindingService/v1"
-    : "https://svcs.sandbox.ebay.com/services/search/FindingService/v1";
+  const baseUrl =
+    ebayEnv === "production"
+      ? "https://svcs.ebay.com/services/search/FindingService/v1"
+      : "https://svcs.sandbox.ebay.com/services/search/FindingService/v1";
 
   const queryParams = new URLSearchParams({
     "OPERATION-NAME": "findItemsByKeywords",
@@ -234,8 +232,8 @@ async function fetchRawCompetitors(params: {
   const respText = await resp.text();
   const json = JSON.parse(respText);
 
-  const searchResult = json?.findItemsByKeywordsResponse?.[0]?.searchResult
-    ?.[0];
+  const searchResult =
+    json?.findItemsByKeywordsResponse?.[0]?.searchResult?.[0];
   if (!searchResult || searchResult["@count"] === "0") {
     console.log(`[filter-comparable-listings] No results found`);
     return [];
@@ -251,13 +249,11 @@ interface EbayItem {
   itemId?: string[];
   title?: any[];
   sellingStatus?: Array<{ currentPrice?: Array<{ __value__: string }> }>;
-  sellerInfo?: Array<
-    {
-      sellerUserName?: string[];
-      positiveFeedbackPercent?: string[];
-      feedbackScore?: string[];
-    }
-  >;
+  sellerInfo?: Array<{
+    sellerUserName?: string[];
+    positiveFeedbackPercent?: string[];
+    feedbackScore?: string[];
+  }>;
   condition?: Array<{ conditionId?: string[] }>;
   shippingInfo?: Array<{ shippingServiceCost?: Array<{ __value__: string }> }>;
   viewItemURL?: string[];
@@ -267,7 +263,10 @@ function parseEbayItem(item: EbayItem): ComparableListing | null {
   try {
     const itemId = item.itemId?.[0];
     const titleRaw = item.title?.[0];
-    const title = typeof titleRaw === "string" ? titleRaw : (titleRaw as any)?.toString?.() || String(titleRaw || "");
+    const title =
+      typeof titleRaw === "string"
+        ? titleRaw
+        : (titleRaw as any)?.toString?.() || String(titleRaw || "");
     const price = parseFloat(
       item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ ?? "0",
     );
@@ -323,13 +322,10 @@ serve(async (req: Request) => {
     const { title, categoryId, userId } = body;
 
     if (!title) {
-      return new Response(
-        JSON.stringify({ error: "title is required" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return new Response(JSON.stringify({ error: "title is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const geminiKey = Deno.env.get("GEMINI_API_KEY");
@@ -448,12 +444,9 @@ serve(async (req: Request) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[filter-comparable-listings] Error:", msg);
-    return new Response(
-      JSON.stringify({ error: msg }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });

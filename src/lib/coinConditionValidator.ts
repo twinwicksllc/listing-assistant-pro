@@ -109,7 +109,11 @@ export function validateGradedCoinCondition(
 
   // Validate certification number (optional, but if present must be string)
   const certNum = obj.certificationNumber;
-  if (certNum !== undefined && certNum !== null && typeof certNum !== "string") {
+  if (
+    certNum !== undefined &&
+    certNum !== null &&
+    typeof certNum !== "string"
+  ) {
     errors.push({
       field: "certificationNumber",
       message: "Certification number must be a string or omitted",
@@ -127,7 +131,15 @@ export function validateGradedCoinCondition(
     errors: [],
     normalized: {
       type: "graded",
-      gradingCompany: company as "PCGS" | "NGC" | "ANACS" | "ICG" | "CAC" | "ICCS" | "PMG" | "Legacy Currency Grading",
+      gradingCompany: company as
+        | "PCGS"
+        | "NGC"
+        | "ANACS"
+        | "ICG"
+        | "CAC"
+        | "ICCS"
+        | "PMG"
+        | "Legacy Currency Grading",
       grade,
       certificationNumber: certNum ? String(certNum).trim() : undefined,
     },
@@ -215,7 +227,8 @@ export function validateCoinConditionDetail(
       errors: [
         {
           field: "detail",
-          message: "Coin condition detail must be an object with type: 'graded' or 'raw'",
+          message:
+            "Coin condition detail must be an object with type: 'graded' or 'raw'",
           code: "INVALID_TYPE",
         },
       ],
@@ -246,7 +259,9 @@ export function validateCoinConditionDetail(
 /**
  * Format validation errors into a user-friendly message.
  */
-export function formatValidationErrors(errors: CoinConditionValidationError[]): string {
+export function formatValidationErrors(
+  errors: CoinConditionValidationError[],
+): string {
   if (errors.length === 0) return "";
   return errors.map((e) => `${e.field}: ${e.message}`).join("\n");
 }
@@ -255,7 +270,9 @@ export function formatValidationErrors(errors: CoinConditionValidationError[]): 
  * Check if a condition detail is complete and valid.
  * Used by UI to enable/disable publish button.
  */
-export function isCoinConditionValid(detail: CoinConditionDetail | null | undefined): boolean {
+export function isCoinConditionValid(
+  detail: CoinConditionDetail | null | undefined,
+): boolean {
   if (!detail) return false;
   const result = validateCoinConditionDetail(detail);
   return result.valid;
@@ -266,7 +283,9 @@ export function isCoinConditionValid(detail: CoinConditionDetail | null | undefi
  */
 export function describeCoinCondition(detail: CoinConditionDetail): string {
   if (detail.type === "graded") {
-    const cert = detail.certificationNumber ? ` (Cert: ${detail.certificationNumber})` : "";
+    const cert = detail.certificationNumber
+      ? ` (Cert: ${detail.certificationNumber})`
+      : "";
     return `${detail.gradingCompany} ${detail.grade}${cert}`;
   }
   return `Raw - ${detail.rawCondition}`;

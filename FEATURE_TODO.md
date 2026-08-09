@@ -1,10 +1,12 @@
 # Feature Enhancement Todo Checklist
+
 > **Last updated:** Auto-generated from FEATURE_PLANS.md
 > **5 features · ~120 tasks total**
 
 ---
 
 ## Legend
+
 - `[ ]` Not started
 - `[~]` In progress
 - `[x]` Complete
@@ -15,23 +17,28 @@
 ---
 
 ## 🏷️ Feature #1 — True Profit with COGS
+
 > **Branch:** `feature/cogs-true-profit` · **Complexity:** Medium · **Plans:** Pro + Shop
 
 ### 📦 Database
+
 - [ ] Migration: add `cogs`, `cogs_source`, `cogs_acquired_at` to `drafts` table
 - [ ] Migration: create `listing_cogs` table (id, user_id, org_id, ebay_sku, ebay_listing_id, title, cogs, source, acquired_at)
 - [ ] Run `supabase db push` to apply migrations
 
 ### 🔷 Types & Hooks
+
 - [ ] Add `cogs?`, `cogsSource?`, `cogsAcquiredAt?` to `ListingDraft` in `src/types/listing.ts`
 - [ ] Update `src/hooks/useDrafts.ts` — map new columns in `fetchDrafts`, `addDraft`, `updateDraft`
 
 ### 🧩 Components
+
 - [ ] Create `src/components/CogsInput.tsx` — reusable COGS entry widget with profit preview
 - [ ] Create `src/components/ProfitBadge.tsx` — color-coded margin % badge (green/yellow/red)
 - [ ] Create `src/components/ProfitReportCard.tsx` — summary card for P&L report page
 
 ### 📄 Page Updates
+
 - [ ] `src/pages/AnalyzePage.tsx` — add optional COGS field below Consignor, show "Est. profit" preview
 - [ ] `src/components/EditDraftModal.tsx` — add COGS section with real-time profit preview
 - [ ] `src/pages/DashboardPage.tsx` — add `cogsTotal` to `FinancialWindow` interface
@@ -40,12 +47,14 @@
 - [ ] `src/pages/DashboardPage.tsx` — add "Est. Profit" column to listings table (color-coded)
 
 ### 🆕 New Files
+
 - [ ] Create `src/pages/ProfitReportPage.tsx` — per-item P&L with weekly/monthly subtotals
 - [ ] Create `supabase/functions/cogs-report/index.ts` — joins Fulfillment API orders + COGS table
 - [ ] Register `/profit-report` route in `src/App.tsx` (ProtectedRoute, ownerOnly)
 - [ ] Gate P&L report behind Pro/Shop plan in `useAuth`
 
 ### ✅ Testing & Deploy
+
 - [ ] `npm run build` — verify zero TypeScript errors
 - [ ] Test: enter COGS in AnalyzePage → save draft → confirm DB values
 - [ ] Test: profit calculation on Dashboard with real order + COGS data
@@ -59,9 +68,11 @@
 ---
 
 ## 📊 Feature #4 — Smart Listing Insights
+
 > **Branch:** `feature/smart-listing-insights` · **Complexity:** Medium · **Plans:** Pro + Shop
 
 ### 🧠 Core Algorithm
+
 - [ ] Create `src/lib/listingHealthScore.ts` — `computeHealthScore(listing, allListings): HealthScore`
   - [ ] Views component (25 pts)
   - [ ] CTR component (20 pts)
@@ -75,12 +86,14 @@
 - [ ] Create `src/lib/duplicateDetection.ts` — `findDuplicates(listings): Map<id, id[]>` using Jaccard similarity
 
 ### 🧩 Components
+
 - [ ] Create `src/components/HealthScoreBadge.tsx` — circular score badge, color-coded by grade
 - [ ] Create `src/components/ListingInsightsSheet.tsx` — shadcn Sheet with flags list + action buttons
 - [ ] Create `src/components/InsightsBanner.tsx` — dismissible banner: "⚠️ X listings need attention"
 - [ ] Create `src/components/DuplicateDetector.tsx` — "Possible duplicate" inline badge
 
 ### 📄 Dashboard Updates
+
 - [ ] `src/pages/DashboardPage.tsx` — add `health` to `SortField` type
 - [ ] `src/pages/DashboardPage.tsx` — add "Health" column to listings table (renders `HealthScoreBadge`)
 - [ ] `src/pages/DashboardPage.tsx` — add `health` option to sort dropdown
@@ -90,10 +103,12 @@
 - [ ] `src/pages/DashboardPage.tsx` — add `DuplicateDetector` on each listing row
 
 ### 🔒 Plan Gating
+
 - [ ] Wrap health score computation in Pro/Shop check — show lock icon for Starter
 - [ ] Add upgrade prompt card when non-Pro user visits Dashboard
 
 ### ✅ Testing & Deploy
+
 - [ ] Test health score with: new listing, 0-view listing, high-CTR listing, stale listing
 - [ ] Test duplicate detection with known-similar coin titles
 - [ ] `npm run build` — verify zero TypeScript errors
@@ -107,14 +122,17 @@
 ---
 
 ## 🔍 Feature #5 — Market Research Tools
+
 > **Branch:** `feature/market-research-tools` · **Complexity:** High · **Plans:** Pro (limited) + Shop (full)
 
 ### 📦 Database
+
 - [ ] Migration: create `market_watches` table (id, user_id, org_id, query, category_id, label, prices, counts, sell_through_rate, last_checked_at)
 - [ ] Migration: create `market_price_history` table (id, watch_id, sampled_at, avg/min/max price, counts)
 - [ ] Run `supabase db push`
 
 ### ⚡ Edge Functions
+
 - [ ] Create `supabase/functions/market-watch-refresh/index.ts`
   - [ ] Call eBay `findItemsAdvanced` — active listing count + price range
   - [ ] Call eBay `findCompletedItems` — sold count + avg sold price
@@ -133,12 +151,14 @@
   - [ ] Return `{ activeCount, soldCount, sellThroughRate, avgSoldPrice, priceRange, topSellers }`
 
 ### 🧩 Components
+
 - [ ] Create `src/components/MarketWatchCard.tsx` — watch card with prices, trend arrow, refresh/delete buttons
 - [ ] Create `src/components/PriceTrendChart.tsx` — Recharts `LineChart` (avg/min/max lines, responsive)
 - [ ] Create `src/components/SellThroughMeter.tsx` — circular progress gauge (green/yellow/red)
 - [ ] Create `src/components/CategoryHeatMap.tsx` — category grid tiles for Dashboard widget
 
 ### 📄 New Page
+
 - [ ] Create `src/pages/MarketResearchPage.tsx`
   - [ ] Keyword search bar at top
   - [ ] `KeywordResearchResults` card (active/sold counts, sell-through %, avg price)
@@ -149,17 +169,21 @@
 - [ ] Register `/market` route in `src/App.tsx` (ProtectedRoute, ownerOnly)
 
 ### 🧭 Navigation
+
 - [ ] `src/components/BottomNav.tsx` — add "Market" tab, `TrendingUp` icon, show for Pro/Shop ownerOnly
 
 ### 📊 Dashboard Integration
+
 - [ ] `src/pages/DashboardPage.tsx` — add `CategoryHeatMap` widget below listings table
 
 ### 🔒 Plan Gating
+
 - [ ] Gate keyword research (save to watch) behind Pro+
 - [ ] Gate price history chart + cron refresh behind Shop
 - [ ] Gate > 5 saved watches behind Shop
 
 ### ✅ Testing & Deploy
+
 - [ ] Test `market-watch-refresh` with real eBay token + "Morgan Dollar" query
 - [ ] Test cron function processes correct watches
 - [ ] Test `PriceTrendChart` renders with 0 history points (empty state)
@@ -175,15 +199,18 @@
 ---
 
 ## ⚡ Feature #6 — Auto-Optimization
+
 > **Branch:** `feature/auto-optimization` · **Complexity:** High · **Plans:** Pro (view+price) + Shop (full AI)
 
 ### 📦 Database
+
 - [ ] Migration: create `relist_history` table (id, user_id, original/new listing_id, original/new price, reason, relisted_at)
 - [ ] Migration: create `reprice_rules` table (id, user_id, rule_type, rule_value, floor_price, apply_to, is_active, last_run_at)
 - [ ] Migration: create `optimization_suggestions` table (id, user_id, listing_id, suggestion_type, current_value, suggested_value, reason, priority, is_dismissed, is_applied)
 - [ ] Run `supabase db push`
 
 ### ⚡ Edge Functions
+
 - [ ] Create `supabase/functions/ebay-relist/index.ts`
   - [ ] Accept `{ userToken, listingId, newPrice?, reason }`
   - [ ] End current eBay listing via Inventory API
@@ -205,12 +232,14 @@
   - [ ] Return `{ overallScore: 1-5, breakdown: {...}, suggestions: string[] }`
 
 ### 🧩 Components
+
 - [ ] Create `src/components/ActionQueueCard.tsx` — suggestion row with Apply/Dismiss/Preview buttons
 - [ ] Create `src/components/TitleOptimizerModal.tsx` — side-by-side diff, Accept/Edit/Reject actions
 - [ ] Create `src/components/ImageScoreCard.tsx` — star rating, dimension breakdown bars, suggestions
 - [ ] Create `src/components/RepriceRuleBuilder.tsx` — rule type dropdown, %, floor price, scope selector
 
 ### 📄 New Page
+
 - [ ] Create `src/pages/OptimizationPage.tsx`
   - [ ] Summary stats row (price suggestions, relist candidates, title fixes, image issues)
   - [ ] Priority-sorted suggestion table with `ActionQueueCard` rows
@@ -220,19 +249,23 @@
 - [ ] Register `/optimize` route in `src/App.tsx` (ProtectedRoute, ownerOnly)
 
 ### 🧭 Navigation
+
 - [ ] `src/components/BottomNav.tsx` — add "Optimize" tab, `Zap` icon, Shop only, ownerOnly
 
 ### 📊 Dashboard Integration
+
 - [ ] `src/pages/DashboardPage.tsx` — add "⚡ Optimize" button on each listing row
   - [ ] On click: navigate to `/optimize?listing=<id>`
 
 ### 🔒 Plan Gating
+
 - [ ] Gate suggestion view (read only) behind Pro+
 - [ ] Gate apply reprice + relist behind Pro+
 - [ ] Gate title optimizer + image scorer behind Shop only
 - [ ] Gate auto-relist cron behind Shop only
 
 ### ✅ Testing & Deploy
+
 - [ ] Test `ebay-relist` with a real ended/stale listing
 - [ ] Test `title-optimizer` with "1921 Morgan Silver Dollar" + 3 competitor titles
 - [ ] Test `image-scorer` with a real listing image URL
@@ -249,20 +282,24 @@
 ---
 
 ## 📋 Feature #10 — Bulk Listing Generator
+
 > **Branch:** `feature/bulk-listing-generator` · **Complexity:** High · **Plans:** All paid (limited) + Shop (full)
 
 ### 📦 Dependencies
+
 - [ ] Add `papaparse` to `package.json` dependencies
 - [ ] Add `@types/papaparse` to `package.json` devDependencies
 - [ ] Run `npm install`
 
 ### 🔷 Types & Libraries
+
 - [ ] Create `src/types/bulk-listing.ts` — `BulkRow`, `BulkRowStatus`, `BulkRowValidation`, `BulkValidationIssue`, `BulkTemplate` types
 - [ ] Create `src/lib/bulkCsvParser.ts` — CSV parser (papaparse) + Excel parser (xlsx, already installed)
 - [ ] Create `src/lib/bulkTemplates.ts` — 5 templates: coins, electronics, clothing, books, generic
 - [ ] Create `src/lib/bulkValidation.ts` — per-row validation (title max 80, price > 0, valid condition, valid category pattern)
 
 ### ⚡ Edge Functions
+
 - [ ] Create `supabase/functions/bulk-generate-descriptions/index.ts`
   - [ ] Accept `{ rows: [{ title, condition, itemSpecifics, imageUrl? }], tier }`
   - [ ] Rate-limit loop: 5 rows/second
@@ -277,6 +314,7 @@
   - [ ] Enforce row cap: 50 rows for Pro, 1000 for Shop
 
 ### 🧩 Components
+
 - [ ] Create `src/components/BulkUploadZone.tsx`
   - [ ] Native file input styled as drag-drop zone
   - [ ] Accept `.csv` and `.xlsx`
@@ -301,6 +339,7 @@
   - [ ] "View on eBay" link per published row
 
 ### 📄 New Page
+
 - [ ] Create `src/pages/BulkListingPage.tsx` — 4-step wizard
   - [ ] **Step 1 — Upload:** CSV drag-drop zone + 5 template cards + "Download template" button
   - [ ] **Step 2 — Map Columns:** `BulkColumnMapper` + required fields checklist + "Next" CTA
@@ -318,15 +357,18 @@
 - [ ] Register `/bulk` route in `src/App.tsx` (ProtectedRoute)
 
 ### 🧭 Navigation & Discovery
+
 - [ ] `src/components/BottomNav.tsx` — add "Bulk" tab, `Layers` icon, show for isOwner or isLister
 - [ ] `src/pages/HomePage.tsx` — add "Bulk List" quick action card alongside "Capture"
 
 ### 🔒 Plan Gating
+
 - [ ] Gate AI description gen (> 25 rows) behind Shop plan
 - [ ] Gate bulk publish (> 50 listings) behind Shop plan
 - [ ] Show clear upgrade prompt for Free/Starter at row cap
 
 ### ✅ Testing & Deploy
+
 - [ ] Test CSV parser: upload coins template, verify all columns detected
 - [ ] Test Excel parser: upload .xlsx file, verify row mapping
 - [ ] Test column mapper: upload file with non-standard headers, verify manual mapping works
@@ -359,12 +401,12 @@
 
 ## 📈 Progress Summary
 
-| Feature | Tasks Total | Done | Remaining |
-|---|---|---|---|
-| #1 COGS True Profit | 22 | 0 | 22 |
-| #4 Smart Insights | 24 | 0 | 24 |
-| #5 Market Research | 28 | 0 | 28 |
-| #6 Auto-Optimization | 30 | 0 | 30 |
-| #10 Bulk Generator | 38 | 0 | 38 |
-| Cross-Feature | 6 | 0 | 6 |
-| **Total** | **148** | **0** | **148** |
+| Feature              | Tasks Total | Done  | Remaining |
+| -------------------- | ----------- | ----- | --------- |
+| #1 COGS True Profit  | 22          | 0     | 22        |
+| #4 Smart Insights    | 24          | 0     | 24        |
+| #5 Market Research   | 28          | 0     | 28        |
+| #6 Auto-Optimization | 30          | 0     | 30        |
+| #10 Bulk Generator   | 38          | 0     | 38        |
+| Cross-Feature        | 6           | 0     | 6         |
+| **Total**            | **148**     | **0** | **148**   |

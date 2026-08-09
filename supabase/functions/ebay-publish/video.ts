@@ -18,8 +18,12 @@ export interface VideoHandlerContext {
 
 function getMediaVideoBaseCandidates(ebayEnv: string): string[] {
   const isProduction = ebayEnv === "production";
-  const restBase = isProduction ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
-  const mediaGatewayBase = isProduction ? "https://apim.ebay.com" : "https://apim.sandbox.ebay.com";
+  const restBase = isProduction
+    ? "https://api.ebay.com"
+    : "https://api.sandbox.ebay.com";
+  const mediaGatewayBase = isProduction
+    ? "https://apim.ebay.com"
+    : "https://apim.sandbox.ebay.com";
 
   // eBay documents Media API resources under the apim v1_beta gateway.
   // Keep observed alternates as fallbacks for account/environment differences.
@@ -37,7 +41,13 @@ function isRetryableCreateEndpointStatus(status: number): boolean {
 
 function isRetryableStatusCode(status: number): boolean {
   // Transient errors that warrant a retry with backoff
-  return status === 500 || status === 502 || status === 503 || status === 504 || status === 429;
+  return (
+    status === 500 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504 ||
+    status === 429
+  );
 }
 
 function normalizeVideoStatus(rawStatus: string | null | undefined): string {
@@ -59,7 +69,7 @@ interface VideoPollingOptions {
 /**
  * Poll video status with exponential backoff retry logic.
  * Useful for waiting until eBay finishes processing a video (status changes from PROCESSING to LIVE or FAILED).
- * 
+ *
  * @param videoId eBay video ID to poll
  * @param userToken eBay user token with sell.inventory scope (which covers Media API)
  * @param mediaApiBase Base URL for Media API (e.g., https://api.ebay.com/commerce/media/v1)
@@ -100,18 +110,23 @@ async function pollVideoStatusWithRetry(
 
       if (resp.ok) {
         lastStatus = await readJsonObject(resp, "poll video status");
-        const rawStatus = String(lastStatus.videoStatus ?? lastStatus.status ?? "PENDING");
+        const rawStatus = String(
+          lastStatus.videoStatus ?? lastStatus.status ?? "PENDING",
+        );
         const normalizedStatus = normalizeVideoStatus(rawStatus);
         const processingTimeMs = Date.now() - startTimeMs;
 
-        console.log(`pollVideoStatus: videoId=${videoId} attempt=${attempt}/${maxAttempts} status=${normalizedStatus} elapsed=${processingTimeMs}ms`);
+        console.log(
+          `pollVideoStatus: videoId=${videoId} attempt=${attempt}/${maxAttempts} status=${normalizedStatus} elapsed=${processingTimeMs}ms`,
+        );
 
         // Video is done processing (LIVE or FAILED)
         if (normalizedStatus === "LIVE" || normalizedStatus === "FAILED") {
           return {
             videoId,
             status: normalizedStatus,
-            statusMessage: lastStatus.statusMessage ?? lastStatus.status_message ?? null,
+            statusMessage:
+              lastStatus.statusMessage ?? lastStatus.status_message ?? null,
             attempts: attempt,
             processingTimeMs,
           };
@@ -160,7 +175,9 @@ async function pollVideoStatusWithRetry(
 
   // All retries exhausted
   const processingTimeMs = Date.now() - startTimeMs;
-  const lastStatusStr = lastStatus ? String(lastStatus.videoStatus ?? lastStatus.status ?? "UNKNOWN") : "UNKNOWN";
+  const lastStatusStr = lastStatus
+    ? String(lastStatus.videoStatus ?? lastStatus.status ?? "UNKNOWN")
+    : "UNKNOWN";
   throw new Error(
     `Video processing timeout after ${maxAttempts} attempts (${processingTimeMs}ms): status=${lastStatusStr}. ${
       lastError ? `Last error: ${lastError.message}` : ""
@@ -175,10 +192,15 @@ function getResourceIdFromLocation(location: string | null): string | null {
   return resourceId ? decodeURIComponent(resourceId) : null;
 }
 
-async function readJsonObject(response: Response, operation: string): Promise<Record<string, unknown>> {
+async function readJsonObject(
+  response: Response,
+  operation: string,
+): Promise<Record<string, unknown>> {
   const text = await response.text();
   if (!text.trim()) {
-    throw new Error(`eBay ${operation} returned ${response.status} with an empty response body`);
+    throw new Error(
+      `eBay ${operation} returned ${response.status} with an empty response body`,
+    );
   }
 
   try {
@@ -232,13 +254,11 @@ async function probeTokenEnvironment(userToken: string): Promise<string> {
  * Upload a video to eBay Media API.
  * Validates format/duration server-side, creates video entity, uploads bytes, returns videoId.
  */
-export async function handleUploadVideo(
-  {
-    payload,
-    apiBase,
-    ebayEnv,
-  }: VideoHandlerContext,
-): Promise<Response> {
+export async function handleUploadVideo({
+  payload,
+  apiBase,
+  ebayEnv,
+}: VideoHandlerContext): Promise<Response> {
   const {
     userToken,
     videoUrl,
@@ -252,12 +272,18 @@ export async function handleUploadVideo(
 
   // Defense-in-depth: re-validate format/duration server-side even though the
   // client already enforces these (client checks can be bypassed).
-  if (contentType && !ALLOWED_VIDEO_CONTENT_TYPES.includes(String(contentType))) {
+  if (
+    contentType &&
+    !ALLOWED_VIDEO_CONTENT_TYPES.includes(String(contentType))
+  ) {
     return new Response(
       JSON.stringify({
         error: `Unsupported video format: ${contentType}. Use MP4, MOV, AVI, or WebM.`,
       }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 
@@ -267,7 +293,10 @@ export async function handleUploadVideo(
         JSON.stringify({
           error: `Video is too long (${durationSec.toFixed(1)}s). Maximum allowed is 10 seconds.`,
         }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
     if (durationSec < MIN_VIDEO_DURATION_SEC) {
@@ -275,13 +304,18 @@ export async function handleUploadVideo(
         JSON.stringify({
           error: `Video is too short (${durationSec.toFixed(1)}s). eBay requires at least 3 seconds.`,
         }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
   }
 
   // Step 1: Create the video entity in eBay
-  const mediaApiCandidates = getMediaVideoBaseCandidates(ebayEnv || "production");
+  const mediaApiCandidates = getMediaVideoBaseCandidates(
+    ebayEnv || "production",
+  );
   let mediaApiBase = mediaApiCandidates[0];
   let videoCreateUrl = mediaApiBase;
   const videoCreateBody = JSON.stringify({
@@ -311,10 +345,12 @@ export async function handleUploadVideo(
       return new Response(
         JSON.stringify({
           error: "token_env_mismatch",
-          message:
-            `Provided user token appears to be for '${tokenEnvDetected}' but the function is configured for '${ebayEnv}'. Use a ${ebayEnv} user token or set EBAY_ENVIRONMENT to '${tokenEnvDetected}'.`,
+          message: `Provided user token appears to be for '${tokenEnvDetected}' but the function is configured for '${ebayEnv}'. Use a ${ebayEnv} user token or set EBAY_ENVIRONMENT to '${tokenEnvDetected}'.`,
         }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
   } catch (probeErr) {
@@ -322,7 +358,8 @@ export async function handleUploadVideo(
   }
 
   let videoId: string | null = null;
-  const endpointErrors: Array<{ url: string; status: number; body: string }> = [];
+  const endpointErrors: Array<{ url: string; status: number; body: string }> =
+    [];
 
   for (const candidateBase of mediaApiCandidates) {
     videoCreateUrl = candidateBase;
@@ -341,7 +378,9 @@ export async function handleUploadVideo(
     });
 
     if (resp.ok) {
-      const locationVideoId = getResourceIdFromLocation(resp.headers.get("Location"));
+      const locationVideoId = getResourceIdFromLocation(
+        resp.headers.get("Location"),
+      );
       const responseText = await resp.text();
       let bodyVideoId: string | null = null;
 
@@ -358,11 +397,14 @@ export async function handleUploadVideo(
               `eBay video create returned ${resp.status} with invalid JSON and no Location video ID: ${String(error)}`,
             );
           }
-          console.warn("upload_video: ignoring invalid create response body because Location supplied video ID", {
-            requestUrl: videoCreateUrl,
-            status: resp.status,
-            body: responseText.slice(0, 200),
-          });
+          console.warn(
+            "upload_video: ignoring invalid create response body because Location supplied video ID",
+            {
+              requestUrl: videoCreateUrl,
+              status: resp.status,
+              body: responseText.slice(0, 200),
+            },
+          );
         }
       }
 
@@ -389,23 +431,29 @@ export async function handleUploadVideo(
     });
 
     if (isRetryableCreateEndpointStatus(resp.status)) {
-      console.warn("upload_video: retrying create on alternate media endpoint", {
-        status: resp.status,
-        requestUrl: videoCreateUrl,
-      });
+      console.warn(
+        "upload_video: retrying create on alternate media endpoint",
+        {
+          status: resp.status,
+          requestUrl: videoCreateUrl,
+        },
+      );
       continue;
     }
 
     // Non-endpoint errors should fail fast.
     let guidance = "";
     if (resp.status === 401 || resp.status === 403) {
-      guidance = "Authentication/authorization issue. Token may be expired, or the account may not be authorized for video uploads. " +
+      guidance =
+        "Authentication/authorization issue. Token may be expired, or the account may not be authorized for video uploads. " +
         "Verify: (1) your eBay token includes 'sell.inventory' scope (which grants Media API access), " +
         "(2) your eBay app is in Production mode, (3) your eBay account has video upload permissions.";
     } else if (resp.status === 400) {
-      guidance = "Bad request. Check file size (typically < 500MB), title length, classification, and that the video format is supported (MP4, MOV, AVI, WebM).";
+      guidance =
+        "Bad request. Check file size (typically < 500MB), title length, classification, and that the video format is supported (MP4, MOV, AVI, WebM).";
     } else if (resp.status === 422) {
-      guidance = "Unprocessable entity. File format or metadata may be invalid. Verify video is valid MP4/MOV/AVI/WebM and meets eBay requirements.";
+      guidance =
+        "Unprocessable entity. File format or metadata may be invalid. Verify video is valid MP4/MOV/AVI/WebM and meets eBay requirements.";
     }
 
     throw new Error(
@@ -415,9 +463,9 @@ export async function handleUploadVideo(
 
   if (!videoId) {
     throw new Error(
-      `eBay video create failed across endpoint variants: ${
-        endpointErrors.map((e) => `${e.status}@${e.url}`).join(", ")
-      }`,
+      `eBay video create failed across endpoint variants: ${endpointErrors
+        .map((e) => `${e.status}@${e.url}`)
+        .join(", ")}`,
     );
   }
 
@@ -460,18 +508,18 @@ export async function handleUploadVideo(
 /**
  * Get the processing status of an uploaded eBay video.
  */
-export async function handleGetVideoStatus(
-  {
-    payload,
-    apiBase,
-    ebayEnv,
-  }: VideoHandlerContext,
-): Promise<Response> {
+export async function handleGetVideoStatus({
+  payload,
+  apiBase,
+  ebayEnv,
+}: VideoHandlerContext): Promise<Response> {
   const { userToken, videoId } = payload;
   if (!userToken) throw new Error("No eBay user token provided");
   if (!videoId) throw new Error("No videoId provided");
 
-  const mediaApiCandidates = getMediaVideoBaseCandidates(ebayEnv || "production");
+  const mediaApiCandidates = getMediaVideoBaseCandidates(
+    ebayEnv || "production",
+  );
   let statusResp: Response | null = null;
   let statusData: Record<string, unknown> | null = null;
 
@@ -498,16 +546,24 @@ export async function handleGetVideoStatus(
     }
 
     const e = await resp.text();
-    throw new Error(`eBay get video status failed (${resp.status}) on ${candidateUrl}: ${e}`);
+    throw new Error(
+      `eBay get video status failed (${resp.status}) on ${candidateUrl}: ${e}`,
+    );
   }
 
   if (!statusResp || !statusData) {
-    throw new Error("eBay get video status failed: no endpoint variant returned success");
+    throw new Error(
+      "eBay get video status failed: no endpoint variant returned success",
+    );
   }
 
-  const rawStatus = String(statusData.videoStatus ?? statusData.status ?? "PENDING");
+  const rawStatus = String(
+    statusData.videoStatus ?? statusData.status ?? "PENDING",
+  );
   const normalizedStatus = normalizeVideoStatus(rawStatus);
-  console.log(`get_video_status: videoId=${videoId} status=${normalizedStatus} rawStatus=${rawStatus}`);
+  console.log(
+    `get_video_status: videoId=${videoId} status=${normalizedStatus} rawStatus=${rawStatus}`,
+  );
 
   // If video is FAILED, provide diagnostic information
   if (normalizedStatus === "FAILED") {
@@ -523,7 +579,8 @@ export async function handleGetVideoStatus(
       videoId,
       status: normalizedStatus,
       rawStatus,
-      statusMessage: statusData.statusMessage ?? statusData.status_message ?? null,
+      statusMessage:
+        statusData.statusMessage ?? statusData.status_message ?? null,
       // Include additional metadata for debugging
       debugData: {
         fullResponse: statusData,
@@ -539,25 +596,22 @@ export async function handleGetVideoStatus(
  * Poll eBay video status until it reaches LIVE or FAILED state.
  * Exported for frontend to use for monitoring video processing.
  */
-export async function handlePollVideoStatusUntilLive(
-  {
-    payload,
-    apiBase,
-    ebayEnv,
-  }: VideoHandlerContext,
-): Promise<Response> {
-  const {
-    userToken,
-    videoId,
-    maxWaitMs,
-  } = payload;
+export async function handlePollVideoStatusUntilLive({
+  payload,
+  apiBase,
+  ebayEnv,
+}: VideoHandlerContext): Promise<Response> {
+  const { userToken, videoId, maxWaitMs } = payload;
   if (!userToken) throw new Error("No eBay user token provided");
   if (!videoId) throw new Error("No videoId provided");
 
-  const mediaApiCandidates = getMediaVideoBaseCandidates(ebayEnv || "production");
+  const mediaApiCandidates = getMediaVideoBaseCandidates(
+    ebayEnv || "production",
+  );
   const mediaApiBase = mediaApiCandidates[0]; // Use primary endpoint for polling
 
-  const maxWaitSeconds = typeof maxWaitMs === "number" ? Math.floor(maxWaitMs / 1000) : 300; // Default 5 min
+  const maxWaitSeconds =
+    typeof maxWaitMs === "number" ? Math.floor(maxWaitMs / 1000) : 300; // Default 5 min
   const maxAttempts = Math.ceil(maxWaitSeconds / 2); // 2 seconds base retry
 
   try {
@@ -572,7 +626,10 @@ export async function handlePollVideoStatusUntilLive(
       },
     );
 
-    console.log(`poll_video_status_until_live: completed for videoId=${videoId}`, result);
+    console.log(
+      `poll_video_status_until_live: completed for videoId=${videoId}`,
+      result,
+    );
 
     return new Response(
       JSON.stringify({
@@ -583,7 +640,10 @@ export async function handlePollVideoStatusUntilLive(
     );
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error(`poll_video_status_until_live: failed for videoId=${videoId}:`, errorMessage);
+    console.error(
+      `poll_video_status_until_live: failed for videoId=${videoId}:`,
+      errorMessage,
+    );
 
     return new Response(
       JSON.stringify({

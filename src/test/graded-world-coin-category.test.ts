@@ -20,15 +20,21 @@ describe("graded world commemorative coin categories", () => {
 
   it("treats South Pacific / World Commemorative as coin categories requiring condition detail", () => {
     // These leaves support Grade, so the coin-condition panel must show for them.
-    expect(isCoinConditionDetailRequired("3392", undefined, undefined)).toBe(true);
-    expect(isCoinConditionDetailRequired("546", undefined, undefined)).toBe(true);
+    expect(isCoinConditionDetailRequired("3392", undefined, undefined)).toBe(
+      true,
+    );
+    expect(isCoinConditionDetailRequired("546", undefined, undefined)).toBe(
+      true,
+    );
   });
 
   it("flags true bullion leaves as bullion (no Grade field)", () => {
     expect(isBullionCategory("39489")).toBe(true); // Silver Bars & Rounds
     expect(isBullionCategory("39487")).toBe(true); // Silver Bullion lots (was mislabeled gold)
     expect(isBullionCategory("178906")).toBe(true); // Gold Bars & Rounds
-    expect(isBullionCategory(undefined, "Coins & Paper Money > Bullion > Silver")).toBe(true);
+    expect(
+      isBullionCategory(undefined, "Coins & Paper Money > Bullion > Silver"),
+    ).toBe(true);
   });
 
   it("does NOT flag world/ancient/medieval coin categories as bullion", () => {

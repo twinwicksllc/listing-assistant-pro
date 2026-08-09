@@ -2,8 +2,17 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { captureException, initSentry } from "../_helpers/sentry.ts";
 
 // Import extracted modules
-import { handleExchangeCode, handleGetAuthUrl, handleGetStoredToken, handleRefreshToken } from "./auth.ts";
-import { handleGetVideoStatus, handleUploadVideo, handlePollVideoStatusUntilLive } from "./video.ts";
+import {
+  handleExchangeCode,
+  handleGetAuthUrl,
+  handleGetStoredToken,
+  handleRefreshToken,
+} from "./auth.ts";
+import {
+  handleGetVideoStatus,
+  handleUploadVideo,
+  handlePollVideoStatusUntilLive,
+} from "./video.ts";
 import { corsHeaders } from "./constants.ts";
 import { handleBulkCreateDraft, handleGetPolicies } from "./publish.ts";
 import { handleCreateDraft } from "./publish-create-draft.ts";
@@ -40,7 +49,9 @@ serve(async (req) => {
         listingPrice: payload.listingPrice,
         hasUserToken: !!payload.userToken,
         hasPackageWeightAndSize: !!payload.packageWeightAndSize,
-        packageWeightAndSizeValue: JSON.stringify(payload.packageWeightAndSize ?? null),
+        packageWeightAndSizeValue: JSON.stringify(
+          payload.packageWeightAndSize ?? null,
+        ),
       });
     }
 
@@ -64,17 +75,29 @@ serve(async (req) => {
     // (exchange_code, refresh_token, get_auth_url, create_draft, bulk_create_draft).
     // get_stored_token and get_policies only need Supabase credentials, so we defer
     // this check to avoid blocking those actions when eBay app credentials are misconfigured.
-    const requiresEbayCredentials = !["get_stored_token", "get_policies", "upload_video", "get_video_status", "poll_video_status_until_live"]
-      .includes(action ?? "");
+    const requiresEbayCredentials = ![
+      "get_stored_token",
+      "get_policies",
+      "upload_video",
+      "get_video_status",
+      "poll_video_status_until_live",
+    ].includes(action ?? "");
     if (requiresEbayCredentials && (!clientId || !clientSecret)) {
       throw new Error("eBay API credentials not configured");
     }
 
-    const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
-    const authBase = ebayEnv === "production" ? "https://auth.ebay.com" : "https://auth.sandbox.ebay.com";
-    const tokenUrl = ebayEnv === "production"
-      ? "https://api.ebay.com/identity/v1/oauth2/token"
-      : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
+    const apiBase =
+      ebayEnv === "production"
+        ? "https://api.ebay.com"
+        : "https://api.sandbox.ebay.com";
+    const authBase =
+      ebayEnv === "production"
+        ? "https://auth.ebay.com"
+        : "https://auth.sandbox.ebay.com";
+    const tokenUrl =
+      ebayEnv === "production"
+        ? "https://api.ebay.com/identity/v1/oauth2/token"
+        : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
 
     // --- ACTION: Get OAuth consent URL ---
     if (action === "get_auth_url") {
@@ -83,17 +106,36 @@ serve(async (req) => {
 
     // --- ACTION: Exchange auth code for user token ---
     if (action === "exchange_code") {
-      return await handleExchangeCode({ req, payload, clientId, clientSecret, ebayEnv, tokenUrl });
+      return await handleExchangeCode({
+        req,
+        payload,
+        clientId,
+        clientSecret,
+        ebayEnv,
+        tokenUrl,
+      });
     }
 
     // --- ACTION: Silently refresh eBay access token using stored refresh token ---
     if (action === "refresh_token") {
-      return await handleRefreshToken({ req, payload, clientId, clientSecret, tokenUrl });
+      return await handleRefreshToken({
+        req,
+        payload,
+        clientId,
+        clientSecret,
+        tokenUrl,
+      });
     }
 
     // --- ACTION: Get stored eBay token for a user (with proactive refresh) ---
     if (action === "get_stored_token") {
-      return await handleGetStoredToken({ req, payload, clientId, clientSecret, tokenUrl });
+      return await handleGetStoredToken({
+        req,
+        payload,
+        clientId,
+        clientSecret,
+        tokenUrl,
+      });
     }
 
     // --- ACTION: Upload video to eBay Video API ---
@@ -108,12 +150,23 @@ serve(async (req) => {
 
     // --- ACTION: Poll eBay video status until LIVE or FAILED (with retry backoff) ---
     if (action === "poll_video_status_until_live") {
-      return await handlePollVideoStatusUntilLive({ payload, apiBase, ebayEnv });
+      return await handlePollVideoStatusUntilLive({
+        payload,
+        apiBase,
+        ebayEnv,
+      });
     }
 
     // --- ACTION: Publish a single draft to eBay ---
     if (action === "create_draft") {
-      return await handleCreateDraft({ req, payload, apiBase, ebayEnv, clientId, clientSecret });
+      return await handleCreateDraft({
+        req,
+        payload,
+        apiBase,
+        ebayEnv,
+        clientId,
+        clientSecret,
+      });
     }
 
     // --- ACTION: Bulk publish multiple drafts (server-side loop) ---
@@ -146,7 +199,8 @@ serve(async (req) => {
     // eBay API error strings (e.g. "Failed to create inventory item: 400 - {...}")
     // must NOT match here — they should be 500s so the client knows it's a server-side
     // eBay API failure, not a missing-parameter problem on the client side.
-    const isClientError = errorMsg.includes("not configured") ||
+    const isClientError =
+      errorMsg.includes("not configured") ||
       errorMsg.includes("not provided") ||
       errorMsg.includes("No authorization code") ||
       errorMsg.includes("No userId provided") ||

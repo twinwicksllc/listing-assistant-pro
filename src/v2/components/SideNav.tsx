@@ -1,6 +1,6 @@
 /**
  * SideNav — V2 Sidebar Navigation
- * 
+ *
  * Features:
  *   - Theme-aware sidebar (Vault Black / Deep Indigo) with dark/light toggle
  *   - Section-based collapsible navigation with v2-styled buttons
@@ -11,11 +11,24 @@
 
 import { useState } from "react";
 import {
-  Camera, FileText, LayoutDashboard, Layers,
-  TrendingUp, Zap, Receipt, DollarSign,
-  ShoppingCart, Users, Settings,
-  ChevronDown, ChevronUp, LogOut, Heart, LayoutList,
-  Sun, Moon,
+  Camera,
+  FileText,
+  LayoutDashboard,
+  Layers,
+  TrendingUp,
+  Zap,
+  Receipt,
+  DollarSign,
+  ShoppingCart,
+  Users,
+  Settings,
+  ChevronDown,
+  ChevronUp,
+  LogOut,
+  Heart,
+  LayoutList,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import teckstartLogo from "@/assets/teckstart-logo.png";
@@ -40,8 +53,8 @@ function useNavSections(isOwner: boolean): NavSection[] {
       key: "main",
       label: "Main",
       items: [
-        { path: "/home",      icon: Camera,         label: "Capture" },
-        { path: "/drafts",    icon: FileText,       label: "Drafts" },
+        { path: "/home", icon: Camera, label: "Capture" },
+        { path: "/drafts", icon: FileText, label: "Drafts" },
         { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
       ],
     },
@@ -49,28 +62,38 @@ function useNavSections(isOwner: boolean): NavSection[] {
       key: "manage",
       label: "Manage",
       items: [
-        { path: "/listings", icon: LayoutList,  label: "Edit Listings" },
-        { path: "/bulk",     icon: Layers,      label: "Bulk List" },
-        { path: "/market",   icon: TrendingUp,  label: "Market Research" },
-        ...(isOwner ? [{ path: "/reprice-rules", icon: Zap, label: "Optimize" }] : []),
+        { path: "/listings", icon: LayoutList, label: "Edit Listings" },
+        { path: "/bulk", icon: Layers, label: "Bulk List" },
+        { path: "/market", icon: TrendingUp, label: "Market Research" },
+        ...(isOwner
+          ? [{ path: "/reprice-rules", icon: Zap, label: "Optimize" }]
+          : []),
       ],
     },
-    ...(isOwner ? [{
-      key: "money",
-      label: "Money",
-      items: [
-        { path: "/profit-report",   icon: Receipt,      label: "P&L Report" },
-        { path: "/cogs-editor",     icon: DollarSign,   label: "COGS Editor" },
-        { path: "/historical-cogs", icon: ShoppingCart, label: "Backfill COGS" },
-      ],
-    }] : []),
+    ...(isOwner
+      ? [
+          {
+            key: "money",
+            label: "Money",
+            items: [
+              { path: "/profit-report", icon: Receipt, label: "P&L Report" },
+              { path: "/cogs-editor", icon: DollarSign, label: "COGS Editor" },
+              {
+                path: "/historical-cogs",
+                icon: ShoppingCart,
+                label: "Backfill COGS",
+              },
+            ],
+          },
+        ]
+      : []),
     {
       key: "account",
       label: "Account",
       items: [
-        { path: "/team",     icon: Users,    label: "Team" },
+        { path: "/team", icon: Users, label: "Team" },
         { path: "/settings", icon: Settings, label: "Settings" },
-        { path: "/billing",  icon: Heart,    label: "Billing" },
+        { path: "/billing", icon: Heart, label: "Billing" },
       ],
     },
   ];
@@ -79,18 +102,18 @@ function useNavSections(isOwner: boolean): NavSection[] {
 // ─── Component ─────────────────────────────────────────────────────────
 
 // Sidebar is always dark-chrome — Vault Black (dark mode) or Deep Indigo (light mode)
-const DARK_SIDEBAR_BG  = "hsl(222,25%,4%)";   // Vault Black  — matches --sidebar-background in :root
-const LIGHT_SIDEBAR_BG = "hsl(243,38%,16%)";  // Deep Indigo  — matches --sidebar-background in .light
+const DARK_SIDEBAR_BG = "hsl(222,25%,4%)"; // Vault Black  — matches --sidebar-background in :root
+const LIGHT_SIDEBAR_BG = "hsl(243,38%,16%)"; // Deep Indigo  — matches --sidebar-background in .light
 const ACTIVE_BG = "rgba(255,255,255,0.15)";
-const HOVER_BG  = "rgba(255,255,255,0.08)";
+const HOVER_BG = "rgba(255,255,255,0.08)";
 
 export default function SideNav() {
-  const location  = useLocation();
-  const navigate  = useNavigate();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { isOwner, signOut, user, currentPlan } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const sidebarBg = theme === "dark" ? DARK_SIDEBAR_BG : LIGHT_SIDEBAR_BG;
-  const sections  = useNavSections(isOwner);
+  const sections = useNavSections(isOwner);
 
   // All sections start expanded (per spec)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -105,7 +128,7 @@ export default function SideNav() {
   };
 
   const toggleSection = (key: string) => {
-    setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
+    setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   return (
@@ -127,23 +150,31 @@ export default function SideNav() {
       }}
     >
       {/* ─── Logo ──────────────────────────────────────────────────────── */}
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "0.75rem",
-        padding: "1.25rem 1.25rem 1rem",
-        borderBottom: "1px solid rgba(255,255,255,0.12)",
-      }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.75rem",
+          padding: "1.25rem 1.25rem 1rem",
+          borderBottom: "1px solid rgba(255,255,255,0.12)",
+        }}
+      >
         <img
           src={teckstartLogo}
           alt="Sovereign Listing Suite"
-          style={{ height: 32, width: "auto", maxWidth: 120, flexShrink: 0, objectFit: "contain" }}
+          style={{
+            height: 32,
+            width: "auto",
+            maxWidth: 120,
+            flexShrink: 0,
+            objectFit: "contain",
+          }}
         />
       </div>
 
       {/* ─── Navigation Sections ─────────────────────────────────────────── */}
       <div style={{ flex: 1, padding: "0.5rem 0" }}>
-        {sections.map(section => {
+        {sections.map((section) => {
           const isCollapsed = collapsed[section.key];
           return (
             <div key={section.key} style={{ marginBottom: "0.5rem" }}>
@@ -166,21 +197,25 @@ export default function SideNav() {
                   cursor: "pointer",
                   transition: "color 0.15s",
                 }}
-                onMouseEnter={e => {
+                onMouseEnter={(e) => {
                   e.currentTarget.style.color = "rgba(255,255,255,0.9)";
                 }}
-                onMouseLeave={e => {
+                onMouseLeave={(e) => {
                   e.currentTarget.style.color = "rgba(255,255,255,0.7)";
                 }}
               >
                 {section.label}
-                {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                {isCollapsed ? (
+                  <ChevronDown size={14} />
+                ) : (
+                  <ChevronUp size={14} />
+                )}
               </button>
 
               {/* Section items */}
               {!isCollapsed && (
                 <div>
-                  {section.items.map(item => {
+                  {section.items.map((item) => {
                     const active = isActive(item);
                     const Icon = item.icon;
                     return (
@@ -203,12 +238,12 @@ export default function SideNav() {
                           transition: "background 0.15s",
                           borderRadius: active ? 8 : 0,
                         }}
-                        onMouseEnter={e => {
+                        onMouseEnter={(e) => {
                           if (!active) {
                             e.currentTarget.style.background = HOVER_BG;
                           }
                         }}
-                        onMouseLeave={e => {
+                        onMouseLeave={(e) => {
                           if (!active) {
                             e.currentTarget.style.background = "transparent";
                           }
@@ -239,51 +274,65 @@ export default function SideNav() {
       </div>
 
       {/* ─── User & Sign Out ─────────────────────────────────────────────── */}
-      <div style={{
-        padding: "0.75rem 0.875rem 1.5rem",
-        borderTop: "1px solid rgba(255,255,255,0.12)",
-      }}>
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.625rem",
-          marginBottom: "0.625rem",
-        }}>
-          <div style={{
-            width: 32,
-            height: 32,
-            borderRadius: "50%",
-            background: "rgba(255,255,255,0.2)",
+      <div
+        style={{
+          padding: "0.75rem 0.875rem 1.5rem",
+          borderTop: "1px solid rgba(255,255,255,0.12)",
+        }}
+      >
+        <div
+          style={{
             display: "flex",
             alignItems: "center",
-            justifyContent: "center",
-            color: "#ffffff",
-            fontSize: "0.8125rem",
-            fontWeight: 600,
-          }}>
-            {user?.email?.[0]?.toUpperCase() || "U"}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{
+            gap: "0.625rem",
+            marginBottom: "0.625rem",
+          }}
+        >
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: "50%",
+              background: "rgba(255,255,255,0.2)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
               color: "#ffffff",
               fontSize: "0.8125rem",
               fontWeight: 600,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}>
+            }}
+          >
+            {user?.email?.[0]?.toUpperCase() || "U"}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                color: "#ffffff",
+                fontSize: "0.8125rem",
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
               {user?.email || "User"}
             </div>
-            <div style={{
-              color: "rgba(255,255,255,0.6)",
-              fontSize: "0.6875rem",
-              marginTop: "0.125rem",
-            }}>
-              {currentPlan === "free" ? "Free Plan"
-               : currentPlan === "starter" ? "Starter"
-               : currentPlan === "pro" ? "Pro"
-               : currentPlan === "shop" ? "Shop"
-               : "Unlimited"}
+            <div
+              style={{
+                color: "rgba(255,255,255,0.6)",
+                fontSize: "0.6875rem",
+                marginTop: "0.125rem",
+              }}
+            >
+              {currentPlan === "free"
+                ? "Free Plan"
+                : currentPlan === "starter"
+                  ? "Starter"
+                  : currentPlan === "pro"
+                    ? "Pro"
+                    : currentPlan === "shop"
+                      ? "Shop"
+                      : "Unlimited"}
             </div>
           </div>
         </div>
@@ -308,26 +357,30 @@ export default function SideNav() {
             cursor: "pointer",
             transition: "all 0.15s",
           }}
-          onMouseEnter={e => {
+          onMouseEnter={(e) => {
             e.currentTarget.style.background = "rgba(255,255,255,0.13)";
             e.currentTarget.style.borderColor = "rgba(255,255,255,0.25)";
           }}
-          onMouseLeave={e => {
+          onMouseLeave={(e) => {
             e.currentTarget.style.background = "rgba(255,255,255,0.08)";
             e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)";
           }}
         >
-          <span style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+          <span
+            style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}
+          >
             {theme === "dark" ? <Moon size={13} /> : <Sun size={13} />}
             {theme === "dark" ? "Dark" : "Light"}
           </span>
-          <span style={{
-            background: "rgba(255,255,255,0.12)",
-            borderRadius: 4,
-            padding: "0.0625rem 0.375rem",
-            fontSize: "0.6875rem",
-            color: "rgba(255,255,255,0.55)",
-          }}>
+          <span
+            style={{
+              background: "rgba(255,255,255,0.12)",
+              borderRadius: 4,
+              padding: "0.0625rem 0.375rem",
+              fontSize: "0.6875rem",
+              color: "rgba(255,255,255,0.55)",
+            }}
+          >
             toggle
           </span>
         </button>
@@ -350,11 +403,11 @@ export default function SideNav() {
             cursor: "pointer",
             transition: "all 0.15s",
           }}
-          onMouseEnter={e => {
+          onMouseEnter={(e) => {
             e.currentTarget.style.background = "rgba(255,255,255,0.15)";
             e.currentTarget.style.borderColor = "rgba(255,255,255,0.3)";
           }}
-          onMouseLeave={e => {
+          onMouseLeave={(e) => {
             e.currentTarget.style.background = "rgba(255,255,255,0.1)";
             e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)";
           }}

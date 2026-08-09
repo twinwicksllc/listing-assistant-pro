@@ -24,7 +24,15 @@ export interface ItemSpecifics {
 export type CoinConditionDetail =
   | {
       type: "graded";
-      gradingCompany: "PCGS" | "NGC" | "ANACS" | "ICG" | "CAC" | "ICCS" | "PMG" | "Legacy Currency Grading";
+      gradingCompany:
+        | "PCGS"
+        | "NGC"
+        | "ANACS"
+        | "ICG"
+        | "CAC"
+        | "ICCS"
+        | "PMG"
+        | "Legacy Currency Grading";
       /** Full grade string as on slab label, e.g. "MS 65", "PR 70 DCAM" */
       grade: string;
       /** Cert number — include when visible */
@@ -44,7 +52,8 @@ export type ListingFormat = "FIXED_PRICE" | "AUCTION";
 
 // Auction duration options for eBay listings
 // eBay Inventory API requires one of these exact values for AUCTION format
-export type AuctionDuration = "Days_1" | "Days_3" | "Days_5" | "Days_7" | "Days_10";
+export type AuctionDuration =
+  "Days_1" | "Days_3" | "Days_5" | "Days_7" | "Days_10";
 
 // Draft publish lifecycle status
 export type PublishStatus = "draft" | "publishing" | "published" | "failed";
@@ -58,21 +67,21 @@ export type PublishStatus = "draft" | "publishing" | "published" | "failed";
 // ----------------------------------------------------------------
 export const EBAY_CONDITION_ID_MAP: Record<string, number> = {
   NEW: 1000,
-  LIKE_NEW: 2750,                   // Like New / Open Box
-  VERY_GOOD: 3000,                  // Trading cards / media
+  LIKE_NEW: 2750, // Like New / Open Box
+  VERY_GOOD: 3000, // Trading cards / media
   GOOD: 4000,
   ACCEPTABLE: 5000,
-  NEW_OTHER: 1500,                  // New Other (without tags)
-  NEW_WITH_DEFECTS: 1750,           // New with defects
+  NEW_OTHER: 1500, // New Other (without tags)
+  NEW_WITH_DEFECTS: 1750, // New with defects
   CERTIFIED_REFURBISHED: 2000,
   EXCELLENT_REFURBISHED: 2010,
   VERY_GOOD_REFURBISHED: 2020,
   GOOD_REFURBISHED: 2030,
   SELLER_REFURBISHED: 2500,
-  USED_EXCELLENT: 3000,             // AU-50 to XF-45 (lightly circulated)
-  USED_VERY_GOOD: 4000,             // VF-20 to VF-35 (moderately circulated)
-  USED_GOOD: 5000,                  // F-12 to VG-10 (heavily circulated)
-  USED_ACCEPTABLE: 6000,            // G-4 to G-6 (heavily worn)
+  USED_EXCELLENT: 3000, // AU-50 to XF-45 (lightly circulated)
+  USED_VERY_GOOD: 4000, // VF-20 to VF-35 (moderately circulated)
+  USED_GOOD: 5000, // F-12 to VG-10 (heavily circulated)
+  USED_ACCEPTABLE: 6000, // G-4 to G-6 (heavily worn)
   FOR_PARTS_OR_NOT_WORKING: 7000,
   PRE_OWNED_GOOD: 3000,
   PRE_OWNED_FAIR: 5000,
@@ -130,25 +139,96 @@ export type ConditionOption = { value: string; label: string };
 // This ensures the category detection works with actual eBay leaf categories that can be published.
 const COIN_CATEGORY_IDS = new Set([
   // Original set
-  "11981","39464","39456","11980","11949","11971","11956","41099","41102","11973","41103","39455","41084",
-  "11950","41111","166679","41109","526","45243","39471","39472","39473","39474","39475",
+  "11981",
+  "39464",
+  "39456",
+  "11980",
+  "11949",
+  "11971",
+  "11956",
+  "41099",
+  "41102",
+  "11973",
+  "41103",
+  "39455",
+  "41084",
+  "11950",
+  "41111",
+  "166679",
+  "41109",
+  "526",
+  "45243",
+  "39471",
+  "39472",
+  "39473",
+  "39474",
+  "39475",
   // US Coins — Dimes (40149-40167 range includes Mercury dimes = 40151)
-  "40149","40150","40151","40152","40153","40154","40155","40156","40157",
-  "40158","40159","40160","40161","40162","40163","40164","40165","40166","40167",
+  "40149",
+  "40150",
+  "40151",
+  "40152",
+  "40153",
+  "40154",
+  "40155",
+  "40156",
+  "40157",
+  "40158",
+  "40159",
+  "40160",
+  "40161",
+  "40162",
+  "40163",
+  "40164",
+  "40165",
+  "40166",
+  "40167",
   // US Coins — parent/generic
-  "253","11116","11118","164743",
+  "253",
+  "11116",
+  "11118",
+  "164743",
   // eBay mandate coin parent categories (253=US, 256=World, 3377=Canada, 4733=Ancient, 18466=Medieval)
-  "256","3377","4733","18466",
+  "256",
+  "3377",
+  "4733",
+  "18466",
   // World / Ancient / Medieval / Exonumia / Bullion overlap
-  "532","173685","3360","3361","3411","45244",
-  "177652","177653","178906","166680","166681",
+  "532",
+  "173685",
+  "3360",
+  "3361",
+  "3411",
+  "45244",
+  "177652",
+  "177653",
+  "178906",
+  "166680",
+  "166681",
   // World Coins additional
-  "261064","261068","261069","261070","261071","261072","261073",
-  "261074","261075","261076",
+  "261064",
+  "261068",
+  "261069",
+  "261070",
+  "261071",
+  "261072",
+  "261073",
+  "261074",
+  "261075",
+  "261076",
   // Error coins / Proof sets / Rolls
-  "19167","19168","19169","11063",
+  "19167",
+  "19168",
+  "19169",
+  "11063",
   // US Coins — additional subtypes
-  "40196","40197","40198","40199","40200","40201","40202",
+  "40196",
+  "40197",
+  "40198",
+  "40199",
+  "40200",
+  "40201",
+  "40202",
   // 2026+ America the Beautiful Quarters
   "171526", // America the Beautiful Quarters (2026)
   // US Quarters — early & classic type leaves (verified against live eBay browse nodes 2026-07).
@@ -161,8 +241,8 @@ const COIN_CATEGORY_IDS = new Set([
   "11966", // Standing Liberty Quarters (1916-1930)
   "39461", // Washington Quarters (1932-1998)
   // World coin leaves that support Grade (graded-friendly, NOT bullion):
-  "3392",  // Coins: World > South Pacific (Cook Islands, Fiji, Niue, Palau, Tuvalu, etc.)
-  "546",   // World Commemorative Coins
+  "3392", // Coins: World > South Pacific (Cook Islands, Fiji, Niue, Palau, Tuvalu, etc.)
+  "546", // World Commemorative Coins
 ]);
 // Bullion leaves that DO NOT support the Grade item specific on eBay.
 // A graded/slabbed coin must NEVER be listed in one of these — it belongs in a
@@ -172,8 +252,21 @@ const COIN_CATEGORY_IDS = new Set([
 //   178906 Gold Bars & Rounds · 39488 Platinum Bullion · 3361 Silver: Other
 //   261068/261069 Bullion>Silver>Coins/Bars · 261071/178906 Gold · 166679 Other
 const BULLION_CATEGORY_IDS = new Set([
-  "39482","39489","39487","178906","39488","3361",
-  "261068","261069","261070","261071","261072","261073","166679","166680","166681",
+  "39482",
+  "39489",
+  "39487",
+  "178906",
+  "39488",
+  "3361",
+  "261068",
+  "261069",
+  "261070",
+  "261071",
+  "261072",
+  "261073",
+  "166679",
+  "166680",
+  "166681",
 ]);
 
 /**
@@ -185,10 +278,18 @@ export function isBullionCategory(
   breadcrumb?: string | undefined,
 ): boolean {
   if (categoryId && BULLION_CATEGORY_IDS.has(categoryId)) return true;
-  if (breadcrumb && /\bbullion\b|gold bar|silver bar|ingot/i.test(breadcrumb)) return true;
+  if (breadcrumb && /\bbullion\b|gold bar|silver bar|ingot/i.test(breadcrumb))
+    return true;
   return false;
 }
-const TRADING_CARD_CATEGORY_IDS = new Set(["261328","183454","2536","19107","64482","213"]);
+const TRADING_CARD_CATEGORY_IDS = new Set([
+  "261328",
+  "183454",
+  "2536",
+  "19107",
+  "64482",
+  "213",
+]);
 
 const GENERAL_MARKETPLACE_CONDITION_OPTIONS: ConditionOption[] = [
   { value: "NEW", label: "New" },
@@ -343,17 +444,40 @@ export function deriveDomainFromCategory(
   // correct domain-dependent UI (condition panel, item specifics, etc.).
   if (breadcrumb) {
     const bc = breadcrumb.toLowerCase();
-    if (/coins?|paper money|currency|bullion|numismatic/i.test(bc)) return "coins_bullion";
-    if (/trading card|sports card|pokemon|magic.*gathering|yu-?gi/i.test(bc)) return "trading_cards";
-    if (/ring|necklace|bracelet|earring|brooch|watch|jewel/i.test(bc)) return "jewelry";
-    if (/phone|tablet|laptop|console|camera|headphone|speaker|audio|tv|smart home/i.test(bc)) return "electronics";
-    if (/sneaker|athletic shoe|running shoe|jordan|yeezy/i.test(bc)) return "sneakers";
-    if (/handbag|tote|wallet|louis vuitton|chanel|herm/i.test(bc)) return "luxury_handbags";
-    if (/guitar|bass|keyboard|drum|instrument|pedal|microphone|dj/i.test(bc)) return "musical_instruments";
-    if (/action figure|diecast|lego|funko|comic|board game|doll|model kit/i.test(bc)) return "toys_collectibles";
-    if (/auto part|car part|truck part|motorcycle|engine|wheel|tire|exhaust|suspension/i.test(bc)) return "auto_parts";
-    if (/power tool|hand tool|lawn|garden|appliance|hvac|plumbing/i.test(bc)) return "home_garden_tools";
-    if (/vintage clothing|apparel|fashion|clothing|shoe/i.test(bc)) return "vintage_clothing";
+    if (/coins?|paper money|currency|bullion|numismatic/i.test(bc))
+      return "coins_bullion";
+    if (/trading card|sports card|pokemon|magic.*gathering|yu-?gi/i.test(bc))
+      return "trading_cards";
+    if (/ring|necklace|bracelet|earring|brooch|watch|jewel/i.test(bc))
+      return "jewelry";
+    if (
+      /phone|tablet|laptop|console|camera|headphone|speaker|audio|tv|smart home/i.test(
+        bc,
+      )
+    )
+      return "electronics";
+    if (/sneaker|athletic shoe|running shoe|jordan|yeezy/i.test(bc))
+      return "sneakers";
+    if (/handbag|tote|wallet|louis vuitton|chanel|herm/i.test(bc))
+      return "luxury_handbags";
+    if (/guitar|bass|keyboard|drum|instrument|pedal|microphone|dj/i.test(bc))
+      return "musical_instruments";
+    if (
+      /action figure|diecast|lego|funko|comic|board game|doll|model kit/i.test(
+        bc,
+      )
+    )
+      return "toys_collectibles";
+    if (
+      /auto part|car part|truck part|motorcycle|engine|wheel|tire|exhaust|suspension/i.test(
+        bc,
+      )
+    )
+      return "auto_parts";
+    if (/power tool|hand tool|lawn|garden|appliance|hvac|plumbing/i.test(bc))
+      return "home_garden_tools";
+    if (/vintage clothing|apparel|fashion|clothing|shoe/i.test(bc))
+      return "vintage_clothing";
   }
   return "general";
 }
@@ -375,7 +499,13 @@ export function isCoinConditionDetailRequired(
   //    the user manually changes the category before a new analysis runs.
   if (categoryId && COIN_CATEGORY_IDS.has(categoryId)) return true;
   // 4. Breadcrumb regex fallback — same manual-change use-case.
-  if (breadcrumb && /coin|paper money|currency|dollar|quarter|dime|nickel|penny|half eagle|double eagle|sovereign|bullion/i.test(breadcrumb)) return true;
+  if (
+    breadcrumb &&
+    /coin|paper money|currency|dollar|quarter|dime|nickel|penny|half eagle|double eagle|sovereign|bullion/i.test(
+      breadcrumb,
+    )
+  )
+    return true;
   return false;
 }
 
@@ -402,33 +532,52 @@ export function getConditionsForCategory(
   breadcrumb: string | undefined,
 ): ConditionOption[] {
   const normalizedBreadcrumb = breadcrumb?.toLowerCase() ?? "";
-  const isCoin = (categoryId && COIN_CATEGORY_IDS.has(categoryId))
-    || domain === "coins_bullion"
-    || (breadcrumb && /coin|paper money|currency|dollar|quarter|dime|nickel|penny|half eagle|double eagle|sovereign|bullion/i.test(breadcrumb));
-  const isBullion = (categoryId && BULLION_CATEGORY_IDS.has(categoryId))
-    || (breadcrumb && /bullion|gold bar|silver bar|ingot/i.test(breadcrumb));
-  const isTradingCard = (categoryId && TRADING_CARD_CATEGORY_IDS.has(categoryId))
-    || domain === "trading_cards"
-    || (breadcrumb && /trading card|sports card|pokemon|magic.*gathering/i.test(breadcrumb));
+  const isCoin =
+    (categoryId && COIN_CATEGORY_IDS.has(categoryId)) ||
+    domain === "coins_bullion" ||
+    (breadcrumb &&
+      /coin|paper money|currency|dollar|quarter|dime|nickel|penny|half eagle|double eagle|sovereign|bullion/i.test(
+        breadcrumb,
+      ));
+  const isBullion =
+    (categoryId && BULLION_CATEGORY_IDS.has(categoryId)) ||
+    (breadcrumb && /bullion|gold bar|silver bar|ingot/i.test(breadcrumb));
+  const isTradingCard =
+    (categoryId && TRADING_CARD_CATEGORY_IDS.has(categoryId)) ||
+    domain === "trading_cards" ||
+    (breadcrumb &&
+      /trading card|sports card|pokemon|magic.*gathering/i.test(breadcrumb));
 
   if (isCoin || isBullion) {
     // Coins & precious metals only — no "refurbished", no "defects", no "for parts"
     return [
-      { value: "NEW",           label: "New / Uncirculated (MS-60 to MS-70)" },
-      { value: "USED_EXCELLENT",label: "Used – Excellent (AU/XF — light wear)" },
-      { value: "USED_VERY_GOOD",label: "Used – Very Good (VF — moderate wear)" },
-      { value: "USED_GOOD",     label: "Used – Good (F — heavy wear)" },
-      { value: "USED_ACCEPTABLE",label: "Used – Acceptable (G — heavily worn)" },
-      { value: "FOR_PARTS_OR_NOT_WORKING", label: "Damaged / Holed / Not Collectible" },
+      { value: "NEW", label: "New / Uncirculated (MS-60 to MS-70)" },
+      {
+        value: "USED_EXCELLENT",
+        label: "Used – Excellent (AU/XF — light wear)",
+      },
+      {
+        value: "USED_VERY_GOOD",
+        label: "Used – Very Good (VF — moderate wear)",
+      },
+      { value: "USED_GOOD", label: "Used – Good (F — heavy wear)" },
+      {
+        value: "USED_ACCEPTABLE",
+        label: "Used – Acceptable (G — heavily worn)",
+      },
+      {
+        value: "FOR_PARTS_OR_NOT_WORKING",
+        label: "Damaged / Holed / Not Collectible",
+      },
     ];
   }
 
   if (isTradingCard) {
     return [
-      { value: "LIKE_NEW",      label: "Like New (Near Mint)" },
-      { value: "VERY_GOOD",     label: "Very Good (light play wear)" },
-      { value: "GOOD",          label: "Good (moderate play wear)" },
-      { value: "ACCEPTABLE",    label: "Acceptable (heavy wear)" },
+      { value: "LIKE_NEW", label: "Like New (Near Mint)" },
+      { value: "VERY_GOOD", label: "Very Good (light play wear)" },
+      { value: "GOOD", label: "Good (moderate play wear)" },
+      { value: "ACCEPTABLE", label: "Acceptable (heavy wear)" },
     ];
   }
 
@@ -440,23 +589,41 @@ export function getConditionsForCategory(
     return BUSINESS_CONDITION_OPTIONS;
   }
 
-  if (/cameras|cell phones|computers|electronics|home\s*&\s*garden|musical instruments|headphones|portable audio|video game consoles|smart home/.test(normalizedBreadcrumb)) {
+  if (
+    /cameras|cell phones|computers|electronics|home\s*&\s*garden|musical instruments|headphones|portable audio|video game consoles|smart home/.test(
+      normalizedBreadcrumb,
+    )
+  ) {
     return ELECTRONICS_CONDITION_OPTIONS;
   }
 
-  if (/clothing, shoes\s*&\s*accessories\s*>\s*clothing/.test(normalizedBreadcrumb)) {
+  if (
+    /clothing, shoes\s*&\s*accessories\s*>\s*clothing/.test(
+      normalizedBreadcrumb,
+    )
+  ) {
     return CLOTHING_CONDITION_OPTIONS;
   }
 
-  if (/clothing, shoes\s*&\s*accessories\s*>\s*shoes/.test(normalizedBreadcrumb)) {
+  if (
+    /clothing, shoes\s*&\s*accessories\s*>\s*shoes/.test(normalizedBreadcrumb)
+  ) {
     return SHOES_CONDITION_OPTIONS;
   }
 
-  if (/clothing, shoes\s*&\s*accessories\s*>\s*(jewelry\s*&\s*watches|sporting goods)/.test(normalizedBreadcrumb)) {
+  if (
+    /clothing, shoes\s*&\s*accessories\s*>\s*(jewelry\s*&\s*watches|sporting goods)/.test(
+      normalizedBreadcrumb,
+    )
+  ) {
     return JEWELRY_SPORTING_CONDITION_OPTIONS;
   }
 
-  if (/clothing, shoes\s*&\s*accessories\s*>\s*underwear/.test(normalizedBreadcrumb)) {
+  if (
+    /clothing, shoes\s*&\s*accessories\s*>\s*underwear/.test(
+      normalizedBreadcrumb,
+    )
+  ) {
     return UNDERWEAR_CONDITION_OPTIONS;
   }
 
@@ -484,21 +651,25 @@ export function getConditionsForCategory(
     return HEALTH_BEAUTY_CONDITION_OPTIONS;
   }
 
-  if (/baby|collectibles|crafts|dolls\s*&\s*bears|pet supplies|toys\s*&\s*hobbies/.test(normalizedBreadcrumb)) {
+  if (
+    /baby|collectibles|crafts|dolls\s*&\s*bears|pet supplies|toys\s*&\s*hobbies/.test(
+      normalizedBreadcrumb,
+    )
+  ) {
     return GENERAL_MARKETPLACE_CONDITION_OPTIONS;
   }
 
   // General / electronics / clothing / collectibles
   return [
-    { value: "NEW",                      label: "New" },
-    { value: "LIKE_NEW",                 label: "Like New / Open Box" },
-    { value: "NEW_OTHER",                label: "New Other (without tags)" },
-    { value: "USED_EXCELLENT",           label: "Used – Excellent" },
-    { value: "USED_VERY_GOOD",           label: "Used – Very Good" },
-    { value: "USED_GOOD",                label: "Used – Good" },
-    { value: "USED_ACCEPTABLE",          label: "Used – Acceptable" },
-    { value: "CERTIFIED_REFURBISHED",    label: "Certified Refurbished" },
-    { value: "SELLER_REFURBISHED",       label: "Seller Refurbished" },
+    { value: "NEW", label: "New" },
+    { value: "LIKE_NEW", label: "Like New / Open Box" },
+    { value: "NEW_OTHER", label: "New Other (without tags)" },
+    { value: "USED_EXCELLENT", label: "Used – Excellent" },
+    { value: "USED_VERY_GOOD", label: "Used – Very Good" },
+    { value: "USED_GOOD", label: "Used – Good" },
+    { value: "USED_ACCEPTABLE", label: "Used – Acceptable" },
+    { value: "CERTIFIED_REFURBISHED", label: "Certified Refurbished" },
+    { value: "SELLER_REFURBISHED", label: "Seller Refurbished" },
     { value: "FOR_PARTS_OR_NOT_WORKING", label: "For Parts or Not Working" },
   ];
 }
@@ -512,18 +683,23 @@ export interface ListingDraft {
   description: string;
   priceMin: number;
   priceMax: number;
-  listingPrice?: number;           // User-chosen listing price
-  listingFormat?: ListingFormat;   // FIXED_PRICE (BIN) or AUCTION
+  listingPrice?: number; // User-chosen listing price
+  listingFormat?: ListingFormat; // FIXED_PRICE (BIN) or AUCTION
   createdAt: Date;
   ebayCategoryId?: string;
   ebayCategoryBreadcrumb?: string; // e.g. "Coins > US > Dollars > Morgan"
-  suggestedCategories?: Array<{ categoryId: string; categoryName: string; reason: string; breadcrumb?: string }>;
+  suggestedCategories?: Array<{
+    categoryId: string;
+    categoryName: string;
+    reason: string;
+    breadcrumb?: string;
+  }>;
   // Item domain classified by Pass-1 AI identification (e.g. "coins_bullion",
   // "sneakers", "electronics"). Persisted so per-domain quality metrics
   // (time-to-sale, net profit) can be computed once a listing sells.
   domain?: string;
   itemSpecifics?: ItemSpecifics;
-  condition?: string;              // Internal enum: NEW, PRE_OWNED_GOOD, PRE_OWNED_FAIR, etc.
+  condition?: string; // Internal enum: NEW, PRE_OWNED_GOOD, PRE_OWNED_FAIR, etc.
   consignor?: string;
   fulfillmentPolicyId?: string;
   paymentPolicyId?: string;
@@ -532,33 +708,33 @@ export interface ListingDraft {
 
   // Best Offer settings (FIXED_PRICE only)
   bestOfferEnabled?: boolean;
-  bestOfferAutoAcceptPrice?: number;   // Optional: auto-accept offers >= this price
-  bestOfferAutoDeclinePrice?: number;  // Optional: auto-decline offers <= this price
+  bestOfferAutoAcceptPrice?: number; // Optional: auto-accept offers >= this price
+  bestOfferAutoDeclinePrice?: number; // Optional: auto-decline offers <= this price
 
   // Multi-quantity support (FIXED_PRICE only)
-  quantity?: number;                 // How many units are available (default 1)
-  pricingMode?: 'per_item' | 'total'; // Whether listingPrice is per-item or total for all units
+  quantity?: number; // How many units are available (default 1)
+  pricingMode?: "per_item" | "total"; // Whether listingPrice is per-item or total for all units
 
   // eBay video support (FIXED_PRICE only)
-  videoUrl?: string;           // Supabase Storage public URL for the raw video file
-  ebayVideoId?: string;        // eBay Video API videoId
-  ebayVideoStatus?: string;    // PENDING | PROCESSING | LIVE | FAILED
+  videoUrl?: string; // Supabase Storage public URL for the raw video file
+  ebayVideoId?: string; // eBay Video API videoId
+  ebayVideoStatus?: string; // PENDING | PROCESSING | LIVE | FAILED
 
   // Cost of Goods Sold — what the seller paid to acquire this item
-  cogs?: number;             // purchase cost in USD
-  cogsSource?: string;       // 'manual' | 'import' | 'consignor_split'
-  cogsAcquiredAt?: Date;     // date item was acquired (for aged-inventory reporting)
+  cogs?: number; // purchase cost in USD
+  cogsSource?: string; // 'manual' | 'import' | 'consignor_split'
+  cogsAcquiredAt?: Date; // date item was acquired (for aged-inventory reporting)
 
   // Precious metal content (used for melt-value floor alerts)
-  metalType?: string;        // "gold" | "silver" | "platinum" | "none"
-  metalWeightOz?: number;    // troy oz of precious metal content
+  metalType?: string; // "gold" | "silver" | "platinum" | "none"
+  metalWeightOz?: number; // troy oz of precious metal content
 
   // Package dimensions for eBay shipping (sent as packageWeightAndSize)
-  packageWeightLb?: number;  // whole-pound component of shipping weight
-  packageWeightOz?: number;  // oz component of shipping weight (0–15.99)
-  packageLengthIn?: number;  // package length in inches
-  packageWidthIn?: number;   // package width in inches
-  packageHeightIn?: number;  // package height in inches
+  packageWeightLb?: number; // whole-pound component of shipping weight
+  packageWeightOz?: number; // oz component of shipping weight (0–15.99)
+  packageLengthIn?: number; // package length in inches
+  packageWidthIn?: number; // package width in inches
+  packageHeightIn?: number; // package height in inches
 
   /**
    * eBay June 2026 structured coin condition requirement.

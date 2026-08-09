@@ -76,14 +76,14 @@ The `category-lookup` function implements a four-tier precedence system for cate
 
 ### Tier Definitions
 
-| Tier | Source | Weight | Description |
-|------|--------|--------|-------------|
-| 1 | `db_exact_user_verified` | +15 | User-approved mapping from admin UI |
-| 1 | `db_exact_ebay_api` | +10 | Previously persisted from eBay API |
-| 1 | `db_exact` | +8 | Other approved exact match from DB |
-| 2 | `ebay_api` | +12 | Fresh suggestion from eBay Taxonomy API |
-| 3 | `db_fuzzy` | +3 | Partial match from DB (gated) |
-| 4 | `gemini` | +5 | AI fallback when no better candidates |
+| Tier | Source                   | Weight | Description                             |
+| ---- | ------------------------ | ------ | --------------------------------------- |
+| 1    | `db_exact_user_verified` | +15    | User-approved mapping from admin UI     |
+| 1    | `db_exact_ebay_api`      | +10    | Previously persisted from eBay API      |
+| 1    | `db_exact`               | +8     | Other approved exact match from DB      |
+| 2    | `ebay_api`               | +12    | Fresh suggestion from eBay Taxonomy API |
+| 3    | `db_fuzzy`               | +3     | Partial match from DB (gated)           |
+| 4    | `gemini`                 | +5     | AI fallback when no better candidates   |
 
 ### Effective Score Computation (Deficiency #8)
 
@@ -91,16 +91,17 @@ The effective score formula balances multiple factors:
 
 ```
 effectiveScore = min(100, max(0,
-  rawScore 
-  + sourceWeight 
-  + similarityBonus 
-  + recencyBonus 
-  - genericPenalty 
+  rawScore
+  + sourceWeight
+  + similarityBonus
+  + recencyBonus
+  - genericPenalty
   - ambiguityPenalty
 ))
 ```
 
 Where:
+
 - **sourceWeight**: Based on tier (see table above)
 - **similarityBonus**: `(tokenOverlap / totalQueryTokens) * 15` — rewards semantic match
 - **recencyBonus**: `max(0, 5 - (daysSinceUpdate / 30))` for DB sources — decays over time
@@ -127,9 +128,11 @@ When an eBay API suggestion achieves an effective score ≥ 88 AND is verified a
 // Query approved mappings with exact item_type/coin_type match
 const { data: exactRows } = await supabase
   .from("category_mappings")
-  .select("ebay_category_id, category_name, confidence, verification_source, ...")
+  .select(
+    "ebay_category_id, category_name, confidence, verification_source, ...",
+  )
   .or(`item_type.eq.${normalizedKey},coin_type.eq.${normalizedKey}`)
-  .eq("status", "approved")  // Only approved rows (#2)
+  .eq("status", "approved") // Only approved rows (#2)
   .order("effective_score", { ascending: false })
   .limit(3);
 ```
@@ -144,17 +147,17 @@ const ebaySuggestions = await fetchCategorySuggestions(rawItemType, appToken, ba
 
 for (let i = 0; i < Math.min(ebaySuggestions.length, 5); i++) {
   const s = ebaySuggestions[i];
-  
+
   // Raw scores: 90, 87, 84, 81, 78 for ranks 1-5
   const rawScore = 90 - (i * 3);
-  
+
   // Verify leaf status for TOP candidate only (#4)
   if (i === 0) {
     const verification = await verifyCategoryLeafActive(s.categoryId, token, base);
     verifiedLeaf = verification.isLeaf;
     verifiedActive = verification.isActive;
   }
-  
+
   // Compute effective score with eBay source weight
   const effectiveScore = computeEffectiveScore("ebay_api", rawScore, ...);
 }
@@ -166,7 +169,9 @@ for (let i = 0; i < Math.min(ebaySuggestions.length, 5); i++) {
 
 ```typescript
 // Fuzzy match with gates (#1)
-const keywords = normalizedKey.split(" ").filter(w => w.length > 3 && !STOPWORDS.has(w));
+const keywords = normalizedKey
+  .split(" ")
+  .filter((w) => w.length > 3 && !STOPWORDS.has(w));
 
 for (const kw of keywords.slice(0, 3)) {
   const { data: fuzzy } = await supabase
@@ -180,18 +185,20 @@ for (const kw of keywords.slice(0, 3)) {
 // Apply gates
 for (const row of fuzzyMatches) {
   const tokenOverlap = computeTokenOverlap(queryTokens, candidateText);
-  
+
   // Gate 1: Minimum token overlap
   if (tokenOverlap < FUZZY_MIN_TOKEN_OVERLAP) {
-    console.log(`Rejected — token overlap ${tokenOverlap} < ${FUZZY_MIN_TOKEN_OVERLAP}`);
+    console.log(
+      `Rejected — token overlap ${tokenOverlap} < ${FUZZY_MIN_TOKEN_OVERLAP}`,
+    );
     continue;
   }
-  
+
   // Gate 2: Generic term penalty
   if (isGenericItemType(candidateText)) {
     effectiveScore -= 20; // Generic penalty
   }
-  
+
   // Gate 3: Minimum effective score
   if (effectiveScore < FUZZY_MIN_SIMILARITY * 100) {
     console.log(`Rejected — effective score ${effectiveScore} < 65`);
@@ -201,6 +208,7 @@ for (const row of fuzzyMatches) {
 ```
 
 **Deficiency #1 Compliance**: Fuzzy matches no longer blindly override eBay suggestions. They must pass:
+
 - Token overlap ≥ 2 meaningful words
 - Effective score ≥ 65 (after penalties)
 - Generic term check to prevent broad matches like "coin" → "Coins" category
@@ -209,8 +217,10 @@ for (const row of fuzzyMatches) {
 
 ```typescript
 // Only invoke Gemini if no good candidates exist
-const bestSoFar = allCandidates.reduce((best, c) => 
-  c.effectiveScore > (best?.effectiveScore ?? 0) ? c : best, null);
+const bestSoFar = allCandidates.reduce(
+  (best, c) => (c.effectiveScore > (best?.effectiveScore ?? 0) ? c : best),
+  null,
+);
 
 if (!bestSoFar || bestSoFar.effectiveScore < 70) {
   const geminiResult = await askGeminiForCategory(rawItemType);
@@ -225,9 +235,15 @@ if (!bestSoFar || bestSoFar.effectiveScore < 70) {
 allCandidates.sort((a, b) => b.effectiveScore - a.effectiveScore);
 
 // Check for deterministic lock (#3)
-const topEbay = allCandidates.find(c => c.source === "ebay_api" && c.rank === 1);
+const topEbay = allCandidates.find(
+  (c) => c.source === "ebay_api" && c.rank === 1,
+);
 
-if (topEbay && topEbay.effectiveScore >= DETERMINISTIC_LOCK_THRESHOLD && topEbay.verifiedLeaf !== false) {
+if (
+  topEbay &&
+  topEbay.effectiveScore >= DETERMINISTIC_LOCK_THRESHOLD &&
+  topEbay.verifiedLeaf !== false
+) {
   winner = topEbay;
   lockReason = `Deterministic lock: eBay top-1 score ${topEbay.effectiveScore} >= 88`;
 } else {
@@ -281,16 +297,20 @@ const lookupResp = await fetch(`${supabaseUrl}/functions/v1/category-lookup`, {
 
 if (lookupResp.ok) {
   const lookupData = await lookupResp.json();
-  
+
   if (lookupData.found) {
     const score = lookupData.effectiveScore || 0;
     const isVerifiedLeaf = lookupData.verifiedLeaf !== false;
     const source = lookupData.source || "";
-    
+
     // Deterministic lock: high-confidence verified result (#3)
-    const isLockable = score >= 88 && isVerifiedLeaf && 
-      (source === "ebay_api" || source.includes("user_verified") || source.includes("db_exact"));
-    
+    const isLockable =
+      score >= 88 &&
+      isVerifiedLeaf &&
+      (source === "ebay_api" ||
+        source.includes("user_verified") ||
+        source.includes("db_exact"));
+
     if (isLockable) {
       lockedCategoryId = lookupData.categoryId;
       categoryHints += `\n- **LOCKED CATEGORY** (verified, high-confidence): **${lockedCategoryId}** — ${breadcrumb}. YOU MUST USE THIS CATEGORY ID. Do not override.`;
@@ -337,17 +357,17 @@ async function safePersistMapping(supabase, normalizedKey, categoryId, ...) {
     console.log(`Skipping auto-persist — confidence ${confidence} < 85`);
     return false;
   }
-  
+
   // Gate 2: Verify leaf + active (#4)
   const verification = await verifyCategoryLeafActive(categoryId, ebayAuth);
   if (!verification.isLeaf || !verification.isActive) {
     console.warn(`Blocking persist of non-leaf/inactive category ${categoryId}`);
     return false;
   }
-  
+
   // Gate 3: Determine status based on source
   const status = (source === "ebay_api" && confidence >= 85) ? "approved" : "quarantine";
-  
+
   // Persist with deep-normalized key for dedup (#6)
   const normalized = deepNormalize(normalizedKey);
   await supabase.from("category_mappings").upsert({
@@ -361,12 +381,12 @@ async function safePersistMapping(supabase, normalizedKey, categoryId, ...) {
 
 ### Status Workflow
 
-| Source | Confidence | Resulting Status |
-|--------|------------|------------------|
-| eBay API | ≥ 85 | `approved` |
-| eBay API | < 85 | `quarantine` |
-| Gemini AI | Any | `quarantine` |
-| Admin UI | Any | `approved` (user_verified) |
+| Source    | Confidence | Resulting Status           |
+| --------- | ---------- | -------------------------- |
+| eBay API  | ≥ 85       | `approved`                 |
+| eBay API  | < 85       | `quarantine`               |
+| Gemini AI | Any        | `quarantine`               |
+| Admin UI  | Any        | `approved` (user_verified) |
 
 ### Deep Normalization (Deficiency #6)
 
@@ -374,12 +394,14 @@ To prevent near-duplicate entries from fragmenting the mapping table:
 
 ```typescript
 function deepNormalize(input: string): string {
-  return (input || "").toLowerCase().trim()
+  return (input || "")
+    .toLowerCase()
+    .trim()
     .replace(/[^a-z0-9\s]/g, "")
     .replace(/\s+/g, " ")
     .split(" ")
-    .filter(w => !STOPWORDS.has(w) && w.length > 1)
-    .sort()  // Sort tokens for order-independent matching
+    .filter((w) => !STOPWORDS.has(w) && w.length > 1)
+    .sort() // Sort tokens for order-independent matching
     .join(" ");
 }
 
@@ -401,16 +423,20 @@ After each eBay publish attempt, the system updates the category mapping's effec
 ```typescript
 if (action === "promote") {
   const newSuccessCount = (existing.publish_success_count || 0) + 1;
-  
-  await supabase.from("category_mappings").update({
-    status: "approved",
-    publish_success_count: newSuccessCount,
-    last_publish_success: new Date().toISOString(),
-  }).eq("ebay_category_id", categoryId);
+
+  await supabase
+    .from("category_mappings")
+    .update({
+      status: "approved",
+      publish_success_count: newSuccessCount,
+      last_publish_success: new Date().toISOString(),
+    })
+    .eq("ebay_category_id", categoryId);
 }
 ```
 
 Called by `ebay-publish` after successful listing publication:
+
 ```typescript
 // In ebay-publish/index.ts
 await fetch(`${supabaseUrl}/functions/v1/category-lookup`, {
@@ -429,15 +455,19 @@ await fetch(`${supabaseUrl}/functions/v1/category-lookup`, {
 if (action === "demote") {
   const newFailCount = (existing.publish_failure_count || 0) + 1;
   const newScore = Math.max(0, (existing.effective_score || 50) - 10);
-  
+
   // Auto-reject if 3+ failures and no successes
-  const newStatus = (newFailCount >= 3 && successCount === 0) ? "rejected" : undefined;
-  
-  await supabase.from("category_mappings").update({
-    publish_failure_count: newFailCount,
-    effective_score: newScore,
-    status: newStatus,
-  }).eq("ebay_category_id", categoryId);
+  const newStatus =
+    newFailCount >= 3 && successCount === 0 ? "rejected" : undefined;
+
+  await supabase
+    .from("category_mappings")
+    .update({
+      publish_failure_count: newFailCount,
+      effective_score: newScore,
+      status: newStatus,
+    })
+    .eq("ebay_category_id", categoryId);
 }
 ```
 
@@ -457,8 +487,8 @@ const { data: cached } = await supabase
   .from("category_aspects_cache")
   .select("aspects, fetched_at, expires_at")
   .eq("category_id", categoryId)
-  .eq("marketplace_id", "EBAY_US")        // Composite key component
-  .eq("category_tree_id", "0")            // Composite key component
+  .eq("marketplace_id", "EBAY_US") // Composite key component
+  .eq("category_tree_id", "0") // Composite key component
   .maybeSingle();
 ```
 
@@ -471,10 +501,28 @@ Coin-specific fixed values (Composition, Fineness, Denomination) are only applie
 ```typescript
 const COIN_FIXED_VALUES_ALLOWED_IDS = new Set([
   // Coins
-  "11981", "39464", "11980", "11971", "41099", "41102", "11973",
-  "39455", "41084", "11950", "41111", "41109", "526", "253", "45243",
+  "11981",
+  "39464",
+  "11980",
+  "11971",
+  "41099",
+  "41102",
+  "11973",
+  "39455",
+  "41084",
+  "11950",
+  "41111",
+  "41109",
+  "526",
+  "253",
+  "45243",
   // Bullion
-  "178906", "39489", "3361", "532", "173685", "166679",
+  "178906",
+  "39489",
+  "3361",
+  "532",
+  "173685",
+  "166679",
 ]);
 
 // In aspect merging logic:
@@ -496,19 +544,24 @@ if (COIN_FIXED_VALUES_ALLOWED_IDS.has(categoryId)) {
 The system dynamically detects category type from the stored breadcrumb path:
 
 ```typescript
-async function detectCategoryTree(categoryId: string, supabase: any): Promise<string> {
+async function detectCategoryTree(
+  categoryId: string,
+  supabase: any,
+): Promise<string> {
   const { data: mapping } = await supabase
     .from("category_mappings")
     .select("breadcrumb, category_name")
     .eq("ebay_category_id", categoryId)
     .maybeSingle();
-  
+
   const breadcrumb = (mapping?.breadcrumb || "").toLowerCase();
-  
+
   if (breadcrumb.includes("bullion")) return "bullion";
-  if (breadcrumb.includes("coins:") || breadcrumb.includes("coins >")) return "coin";
+  if (breadcrumb.includes("coins:") || breadcrumb.includes("coins >"))
+    return "coin";
   if (breadcrumb.includes("trading cards")) return "trading_card";
-  if (breadcrumb.includes("collectibles") || breadcrumb.includes("funko")) return "collectible";
+  if (breadcrumb.includes("collectibles") || breadcrumb.includes("funko"))
+    return "collectible";
   return "other";
 }
 ```
@@ -525,21 +578,25 @@ When no candidate passes the confidence threshold, the system returns a "present
 
 ```typescript
 if (!winner) {
-  return new Response(JSON.stringify({
-    found: false,
-    message: "No category passed confidence threshold — present top options to user",
-    topCandidates: allCandidates.slice(0, 3).map(c => ({
-      categoryId: c.categoryId,
-      categoryName: c.categoryName,
-      score: c.effectiveScore,
-    })),
-  }));
+  return new Response(
+    JSON.stringify({
+      found: false,
+      message:
+        "No category passed confidence threshold — present top options to user",
+      topCandidates: allCandidates.slice(0, 3).map((c) => ({
+        categoryId: c.categoryId,
+        categoryName: c.categoryName,
+        score: c.effectiveScore,
+      })),
+    }),
+  );
 }
 ```
 
 ### Audit Trail
 
 Every lookup is logged to `lookup_decisions` with:
+
 - `request_id`: Unique identifier for the request
 - `query_text`: Original search query
 - `candidate_source`: Source tier (db_exact, ebay_api, db_fuzzy, gemini)
@@ -555,16 +612,17 @@ Every lookup is logged to `lookup_decisions` with:
 
 The `category-hygiene-cron` function runs weekly to maintain database health:
 
-| Task | Description |
-|------|-------------|
+| Task              | Description                                         |
+| ----------------- | --------------------------------------------------- |
 | **Deduplication** | Remove duplicate mappings by `item_type_normalized` |
-| **Score Decay** | Reduce effective_score for stale mappings |
-| **Expiration** | Move old quarantine entries to rejected |
-| **Cleanup** | Remove orphaned entries with NULL category_id |
+| **Score Decay**   | Reduce effective_score for stale mappings           |
+| **Expiration**    | Move old quarantine entries to rejected             |
+| **Cleanup**       | Remove orphaned entries with NULL category_id       |
 
 ### Hygiene Log
 
 Each run is logged to `category_hygiene_log`:
+
 ```sql
 CREATE TABLE category_hygiene_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -580,42 +638,42 @@ CREATE TABLE category_hygiene_log (
 
 ## Constants Reference
 
-| Constant | Value | Purpose |
-|----------|-------|---------|
-| `FUZZY_MIN_SIMILARITY` | 0.65 | Minimum similarity ratio for fuzzy matches |
-| `FUZZY_MIN_TOKEN_OVERLAP` | 2 | Minimum meaningful tokens for fuzzy gate |
-| `AUTO_PERSIST_MIN_CONFIDENCE` | 85 | Minimum confidence for auto-persist |
-| `DETERMINISTIC_LOCK_THRESHOLD` | 88 | eBay score above = locked category |
+| Constant                       | Value | Purpose                                    |
+| ------------------------------ | ----- | ------------------------------------------ |
+| `FUZZY_MIN_SIMILARITY`         | 0.65  | Minimum similarity ratio for fuzzy matches |
+| `FUZZY_MIN_TOKEN_OVERLAP`      | 2     | Minimum meaningful tokens for fuzzy gate   |
+| `AUTO_PERSIST_MIN_CONFIDENCE`  | 85    | Minimum confidence for auto-persist        |
+| `DETERMINISTIC_LOCK_THRESHOLD` | 88    | eBay score above = locked category         |
 
 ---
 
 ## Deficiency Resolution Summary
 
-| # | Deficiency | Resolution |
-|---|------------|------------|
-| 0 | No audit trail for lookup decisions | `lookup_decisions` table logs every candidate |
-| 1 | DB fuzzy overriding eBay | Token overlap gates + generic term penalties |
-| 2 | Auto-persist poisoning DB | Three-gate system (confidence, leaf, status) |
-| 3 | LLM overriding deterministic results | Deterministic lock at score ≥ 88 |
-| 4 | Leaf validation too late | Pre-selection leaf verification via eBay API |
-| 5 | Coin defaults leaking to non-coins | `COIN_FIXED_VALUES_ALLOWED_IDS` allowlist |
-| 6 | Weak item_type uniqueness | Deep normalization with stopwords + sorting |
-| 7 | Cache key missing context | Composite key: category_id + marketplace_id + tree_id |
-| 8 | No source weighting/decay | Effective score formula with weights + decay |
-| 9 | No operational guardrails | Circuit breaker + audit logging + hygiene cron |
+| #   | Deficiency                           | Resolution                                            |
+| --- | ------------------------------------ | ----------------------------------------------------- |
+| 0   | No audit trail for lookup decisions  | `lookup_decisions` table logs every candidate         |
+| 1   | DB fuzzy overriding eBay             | Token overlap gates + generic term penalties          |
+| 2   | Auto-persist poisoning DB            | Three-gate system (confidence, leaf, status)          |
+| 3   | LLM overriding deterministic results | Deterministic lock at score ≥ 88                      |
+| 4   | Leaf validation too late             | Pre-selection leaf verification via eBay API          |
+| 5   | Coin defaults leaking to non-coins   | `COIN_FIXED_VALUES_ALLOWED_IDS` allowlist             |
+| 6   | Weak item_type uniqueness            | Deep normalization with stopwords + sorting           |
+| 7   | Cache key missing context            | Composite key: category_id + marketplace_id + tree_id |
+| 8   | No source weighting/decay            | Effective score formula with weights + decay          |
+| 9   | No operational guardrails            | Circuit breaker + audit logging + hygiene cron        |
 
 ---
 
 ## Appendix: Key File Locations
 
-| File | Purpose |
-|------|---------|
-| `supabase/functions/category-lookup/index.ts` | Core lookup service with 4-tier ranking |
-| `supabase/functions/analyze-item/index.ts` | AI listing generator with pre-lookup |
-| `supabase/functions/ebay-publish/index.ts` | Publication service with promote/demote |
-| `supabase/functions/category-hygiene-cron/index.ts` | Weekly maintenance job |
-| `supabase/migrations/20260330000000_category_system_hardening.sql` | Schema changes for deficiencies |
+| File                                                               | Purpose                                 |
+| ------------------------------------------------------------------ | --------------------------------------- |
+| `supabase/functions/category-lookup/index.ts`                      | Core lookup service with 4-tier ranking |
+| `supabase/functions/analyze-item/index.ts`                         | AI listing generator with pre-lookup    |
+| `supabase/functions/ebay-publish/index.ts`                         | Publication service with promote/demote |
+| `supabase/functions/category-hygiene-cron/index.ts`                | Weekly maintenance job                  |
+| `supabase/migrations/20260330000000_category_system_hardening.sql` | Schema changes for deficiencies         |
 
 ---
 
-*Document generated for team review. Last updated: March 31, 2026*
+_Document generated for team review. Last updated: March 31, 2026_

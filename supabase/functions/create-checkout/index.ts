@@ -32,9 +32,10 @@ serve(async (req) => {
     if (!authHeader) throw new Error("No authorization header");
     const token = authHeader.replace("Bearer ", "");
 
-    const { data: { user }, error: userError } = await supabase.auth.getUser(
-      token,
-    );
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser(token);
     if (userError || !user?.email) throw new Error("User not authenticated");
 
     const body = await req.json().catch(() => ({}));
@@ -84,7 +85,8 @@ serve(async (req) => {
     }
 
     // Use a hardcoded app URL to prevent open-redirect via a crafted Origin header
-    const appUrl = Deno.env.get("APP_URL") ?? "https://listing-assistant-pro.vercel.app";
+    const appUrl =
+      Deno.env.get("APP_URL") ?? "https://listing-assistant-pro.vercel.app";
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       // client_reference_id lets the webhook reliably identify the user

@@ -44,7 +44,7 @@ export default function AppShell({ children, mobilePb = 80 }: AppShellProps) {
             flex: 1,
             minWidth: 0,
             overflowX: "hidden",
-            background: "hsl(210 14% 96%)",  /* subtle off-white page bg */
+            background: "hsl(210 14% 96%)" /* subtle off-white page bg */,
           }}
         >
           {children}

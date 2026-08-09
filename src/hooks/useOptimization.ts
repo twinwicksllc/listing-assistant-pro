@@ -67,7 +67,8 @@ function toHistoryEntry(row: OptHistoryRow): OptimizationHistoryEntry {
     userId: row.user_id,
     listingId: row.listing_id,
     listingTitle: row.listing_title,
-    optimizationType: row.optimization_type as OptimizationHistoryEntry["optimizationType"],
+    optimizationType:
+      row.optimization_type as OptimizationHistoryEntry["optimizationType"],
     oldValue: row.old_value,
     newValue: row.new_value,
     reasoning: row.reasoning,
@@ -98,7 +99,7 @@ export function useRepriceRules() {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setRules((data as RepriceRuleRow[] ?? []).map(toRule));
+      setRules(((data as RepriceRuleRow[]) ?? []).map(toRule));
     } catch (err) {
       console.error("[useRepriceRules] fetch error:", err);
       toast({ title: "Failed to load reprice rules", variant: "destructive" });
@@ -129,7 +130,10 @@ export function useRepriceRules() {
         if (error) throw error;
         const newRule = toRule(data as RepriceRuleRow);
         setRules((prev) => [newRule, ...prev]);
-        toast({ title: "Rule created", description: `"${input.ruleName}" is ready` });
+        toast({
+          title: "Rule created",
+          description: `"${input.ruleName}" is ready`,
+        });
         return newRule;
       } catch (err) {
         console.error("[useRepriceRules] add error:", err);
@@ -137,20 +141,30 @@ export function useRepriceRules() {
         return null;
       }
     },
-    [user, toast]
+    [user, toast],
   );
 
   const updateRule = useCallback(
-    async (ruleId: string, updates: Partial<RepriceRuleInput>): Promise<boolean> => {
+    async (
+      ruleId: string,
+      updates: Partial<RepriceRuleInput>,
+    ): Promise<boolean> => {
       try {
         const dbUpdates: Record<string, unknown> = {};
-        if (updates.ruleName !== undefined) dbUpdates.rule_name = updates.ruleName;
-        if (updates.ruleType !== undefined) dbUpdates.rule_type = updates.ruleType;
-        if (updates.adjustmentPct !== undefined) dbUpdates.adjustment_pct = updates.adjustmentPct;
-        if (updates.floorPrice !== undefined) dbUpdates.floor_price = updates.floorPrice;
-        if (updates.ceilingPrice !== undefined) dbUpdates.ceiling_price = updates.ceilingPrice;
-        if (updates.categoryFilter !== undefined) dbUpdates.category_filter = updates.categoryFilter;
-        if (updates.isEnabled !== undefined) dbUpdates.is_enabled = updates.isEnabled;
+        if (updates.ruleName !== undefined)
+          dbUpdates.rule_name = updates.ruleName;
+        if (updates.ruleType !== undefined)
+          dbUpdates.rule_type = updates.ruleType;
+        if (updates.adjustmentPct !== undefined)
+          dbUpdates.adjustment_pct = updates.adjustmentPct;
+        if (updates.floorPrice !== undefined)
+          dbUpdates.floor_price = updates.floorPrice;
+        if (updates.ceilingPrice !== undefined)
+          dbUpdates.ceiling_price = updates.ceilingPrice;
+        if (updates.categoryFilter !== undefined)
+          dbUpdates.category_filter = updates.categoryFilter;
+        if (updates.isEnabled !== undefined)
+          dbUpdates.is_enabled = updates.isEnabled;
 
         const { data, error } = await supabase
           .from("reprice_rules")
@@ -170,13 +184,16 @@ export function useRepriceRules() {
         return false;
       }
     },
-    [toast]
+    [toast],
   );
 
   const deleteRule = useCallback(
     async (ruleId: string): Promise<boolean> => {
       try {
-        const { error } = await supabase.from("reprice_rules").delete().eq("id", ruleId);
+        const { error } = await supabase
+          .from("reprice_rules")
+          .delete()
+          .eq("id", ruleId);
         if (error) throw error;
         setRules((prev) => prev.filter((r) => r.id !== ruleId));
         toast({ title: "Rule deleted" });
@@ -187,17 +204,25 @@ export function useRepriceRules() {
         return false;
       }
     },
-    [toast]
+    [toast],
   );
 
   const toggleRule = useCallback(
     async (ruleId: string, isEnabled: boolean): Promise<boolean> => {
       return updateRule(ruleId, { isEnabled });
     },
-    [updateRule]
+    [updateRule],
   );
 
-  return { rules, loading, fetchRules, addRule, updateRule, deleteRule, toggleRule };
+  return {
+    rules,
+    loading,
+    fetchRules,
+    addRule,
+    updateRule,
+    deleteRule,
+    toggleRule,
+  };
 }
 
 // ================================================================
@@ -221,22 +246,29 @@ export function useOptimizeListing() {
     }): Promise<OptimizeListingResult | null> => {
       setAnalyzing(true);
       try {
-        const { data, error } = await supabase.functions.invoke("optimize-listing", {
-          body: params,
-        });
+        const { data, error } = await supabase.functions.invoke(
+          "optimize-listing",
+          {
+            body: params,
+          },
+        );
         if (error) throw error;
         if (data?.error) throw new Error(data.error);
         return data as OptimizeListingResult;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("[useOptimizeListing] analyze error:", msg);
-        toast({ title: "Analysis failed", description: msg, variant: "destructive" });
+        toast({
+          title: "Analysis failed",
+          description: msg,
+          variant: "destructive",
+        });
         return null;
       } finally {
         setAnalyzing(false);
       }
     },
-    [toast]
+    [toast],
   );
 
   const applyPriceChange = useCallback(
@@ -254,17 +286,20 @@ export function useOptimizeListing() {
       setApplying(true);
       try {
         // Apply price via ebay-reprice
-        const { data, error } = await supabase.functions.invoke("ebay-reprice", {
-          body: {
-            action: "single_update",
-            offerId: params.offerId,
-            sku: params.sku,
-            listingId: params.listingId,
-            newPrice: params.newPrice,
-            userToken: params.userToken,
-            userId: params.userId,
+        const { data, error } = await supabase.functions.invoke(
+          "ebay-reprice",
+          {
+            body: {
+              action: "single_update",
+              offerId: params.offerId,
+              sku: params.sku,
+              listingId: params.listingId,
+              newPrice: params.newPrice,
+              userToken: params.userToken,
+              userId: params.userId,
+            },
           },
-        });
+        );
         if (error) throw error;
         if (data?.error) throw new Error(data.error);
         if (!data?.success) throw new Error("Reprice returned success=false");
@@ -290,13 +325,17 @@ export function useOptimizeListing() {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("[useOptimizeListing] apply error:", msg);
-        toast({ title: "Failed to apply price change", description: msg, variant: "destructive" });
+        toast({
+          title: "Failed to apply price change",
+          description: msg,
+          variant: "destructive",
+        });
         return false;
       } finally {
         setApplying(false);
       }
     },
-    [toast]
+    [toast],
   );
 
   const dismissSuggestion = useCallback(
@@ -319,7 +358,7 @@ export function useOptimizeListing() {
         result: "dismissed",
       });
     },
-    []
+    [],
   );
 
   const applyContentChange = useCallback(
@@ -349,22 +388,26 @@ export function useOptimizeListing() {
           return false;
         }
 
-        const { data, error } = await supabase.functions.invoke("ebay-reprice", {
-          body: {
-            action: "update_content",
-            offerId: params.offerId,
-            sku: params.sku,
-            listingId: params.listingId,
-            userToken: params.userToken,
-            userId: params.userId,
-            newTitle: titleChanged ? trimmedTitle : undefined,
-            newDescription: descChanged ? trimmedDescription : undefined,
+        const { data, error } = await supabase.functions.invoke(
+          "ebay-reprice",
+          {
+            body: {
+              action: "update_content",
+              offerId: params.offerId,
+              sku: params.sku,
+              listingId: params.listingId,
+              userToken: params.userToken,
+              userId: params.userId,
+              newTitle: titleChanged ? trimmedTitle : undefined,
+              newDescription: descChanged ? trimmedDescription : undefined,
+            },
           },
-        });
+        );
 
         if (error) throw error;
         if (data?.error) throw new Error(data.error);
-        if (!data?.success) throw new Error(data?.error || "Update returned success=false");
+        if (!data?.success)
+          throw new Error(data?.error || "Update returned success=false");
 
         if (titleChanged) {
           await supabase.from("optimization_history").insert({
@@ -394,12 +437,19 @@ export function useOptimizeListing() {
           });
         }
 
-        toast({ title: "Listing content updated", description: "Title/description changes were sent to eBay." });
+        toast({
+          title: "Listing content updated",
+          description: "Title/description changes were sent to eBay.",
+        });
         return true;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("[useOptimizeListing] applyContentChange error:", msg);
-        toast({ title: "Failed to update listing content", description: msg, variant: "destructive" });
+        toast({
+          title: "Failed to update listing content",
+          description: msg,
+          variant: "destructive",
+        });
         return false;
       } finally {
         setApplyingContent(false);
@@ -441,7 +491,7 @@ export function useOptimizationHistory() {
           .limit(limit);
 
         if (error) throw error;
-        setHistory((data as OptHistoryRow[] ?? []).map(toHistoryEntry));
+        setHistory(((data as OptHistoryRow[]) ?? []).map(toHistoryEntry));
       } catch (err) {
         console.error("[useOptimizationHistory] fetch error:", err);
         toast({ title: "Failed to load history", variant: "destructive" });
@@ -449,7 +499,7 @@ export function useOptimizationHistory() {
         setLoading(false);
       }
     },
-    [user, toast]
+    [user, toast],
   );
 
   return { history, loading, fetchHistory };
@@ -470,9 +520,12 @@ export function useAutoReprice() {
     }): Promise<RepriceRunResponse | null> => {
       setRunning(true);
       try {
-        const { data, error } = await supabase.functions.invoke("auto-reprice-cron", {
-          body: params,
-        });
+        const { data, error } = await supabase.functions.invoke(
+          "auto-reprice-cron",
+          {
+            body: params,
+          },
+        );
         if (error) throw error;
         if (data?.error) throw new Error(data.error);
 
@@ -485,13 +538,17 @@ export function useAutoReprice() {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("[useAutoReprice] error:", msg);
-        toast({ title: "Reprice failed", description: msg, variant: "destructive" });
+        toast({
+          title: "Reprice failed",
+          description: msg,
+          variant: "destructive",
+        });
         return null;
       } finally {
         setRunning(false);
       }
     },
-    [toast]
+    [toast],
   );
 
   return { runReprice, running };

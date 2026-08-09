@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+. "$(dirname "$0")/_/husky.sh"
+
+echo "Running pre-commit: format check and lint"
+npm run format:check
+npm run lint
+
+if [ $? -ne 0 ]; then
+  echo "Pre-commit checks failed. Please run 'npm run format' and fix lint issues."
+  exit 1
+fi

@@ -1,6 +1,19 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Settings, User, CreditCard, Zap, Loader2, Check, ExternalLink, AlertCircle, Shield, Crown, Store } from "lucide-react";
+import {
+  ArrowLeft,
+  Settings,
+  User,
+  CreditCard,
+  Zap,
+  Loader2,
+  Check,
+  ExternalLink,
+  AlertCircle,
+  Shield,
+  Crown,
+  Store,
+} from "lucide-react";
 import { useAuth, PLANS } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -16,18 +29,35 @@ export default function SettingsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const {
-    currentPlan, isStarter, isPro, isShop, isPaid, subscription, usage,
-    refreshSubscription, currentPlanLimits, isOwner, user, isAdmin, planFeatures,
+    currentPlan,
+    isStarter,
+    isPro,
+    isShop,
+    isPaid,
+    subscription,
+    usage,
+    refreshSubscription,
+    currentPlanLimits,
+    isOwner,
+    user,
+    isAdmin,
+    planFeatures,
     isUnlimited,
   } = useAuth();
   const paramTab = searchParams.get("tab") as SettingsTab | null;
-  const initialTab = (paramTab && ["profile", "billing", "integrations"].includes(paramTab) ? paramTab : "profile") as SettingsTab;
+  const initialTab = (
+    paramTab && ["profile", "billing", "integrations"].includes(paramTab)
+      ? paramTab
+      : "profile"
+  ) as SettingsTab;
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [connectingEbay, setConnectingEbay] = useState(false);
   // Start with localStorage as quick initial check; then verify server-side token on mount
-  const [ebayConnected, setEbayConnected] = useState(!!localStorage.getItem(EBAY_TOKEN_KEY));
+  const [ebayConnected, setEbayConnected] = useState(
+    !!localStorage.getItem(EBAY_TOKEN_KEY),
+  );
   const [showProfileModal, setShowProfileModal] = useState(false);
 
   // On mount, verify eBay connection status using server-side stored token
@@ -57,17 +87,23 @@ export default function SettingsPage() {
       setEbayConnected(!!localStorage.getItem(EBAY_TOKEN_KEY));
     };
     checkConnection();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [user?.id]);
 
   const handleCheckout = async (planKey: "starter" | "pro" | "shop") => {
     setCheckoutLoading(planKey);
     try {
       const plan = PLANS[planKey];
-      if (!("priceId" in plan)) throw new Error("No price configured for this plan");
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { priceId: plan.priceId },
-      });
+      if (!("priceId" in plan))
+        throw new Error("No price configured for this plan");
+      const { data, error } = await supabase.functions.invoke(
+        "create-checkout",
+        {
+          body: { priceId: plan.priceId },
+        },
+      );
       if (error) throw error;
       if (data?.url) {
         window.open(data.url, "_blank");
@@ -82,7 +118,8 @@ export default function SettingsPage() {
   const handleManage = async () => {
     setPortalLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("customer-portal");
+      const { data, error } =
+        await supabase.functions.invoke("customer-portal");
       if (error) throw error;
       if (data?.url) {
         window.open(data.url, "_blank");
@@ -97,12 +134,17 @@ export default function SettingsPage() {
   const handleConnectEbay = async () => {
     setConnectingEbay(true);
     try {
-      const { data, error: fnError } = await supabase.functions.invoke("ebay-publish", {
-        body: { action: "get_auth_url" },
-      });
+      const { data, error: fnError } = await supabase.functions.invoke(
+        "ebay-publish",
+        {
+          body: { action: "get_auth_url" },
+        },
+      );
 
       if (fnError || data?.error) {
-        throw new Error(fnError?.message || data?.error || "Failed to get eBay auth URL");
+        throw new Error(
+          fnError?.message || data?.error || "Failed to get eBay auth URL",
+        );
       }
 
       const authUrl = data?.authUrl;
@@ -135,10 +177,16 @@ export default function SettingsPage() {
           })
           .eq("id", user.id);
         if (error) {
-          console.warn("handleDisconnectEbay: failed to clear server-side token:", error.message);
+          console.warn(
+            "handleDisconnectEbay: failed to clear server-side token:",
+            error.message,
+          );
         }
       } catch (err) {
-        console.warn("handleDisconnectEbay: error clearing server-side token:", err);
+        console.warn(
+          "handleDisconnectEbay: error clearing server-side token:",
+          err,
+        );
       }
     }
 
@@ -148,16 +196,22 @@ export default function SettingsPage() {
   // Build current plan display string
   const planDisplayName = (() => {
     switch (currentPlan) {
-      case "shop": return "Shop - $99/month";
-      case "pro": return "Pro - $49/month";
-      case "starter": return "Starter - $19/month";
-      default: return "Free";
+      case "shop":
+        return "Shop - $99/month";
+      case "pro":
+        return "Pro - $49/month";
+      case "starter":
+        return "Starter - $19/month";
+      default:
+        return "Free";
     }
   })();
 
   const tabs = [
     { id: "profile" as const, label: "Profile", icon: User },
-    ...(isOwner ? [{ id: "billing" as const, label: "Billing", icon: CreditCard }] : []),
+    ...(isOwner
+      ? [{ id: "billing" as const, label: "Billing", icon: CreditCard }]
+      : []),
     { id: "integrations" as const, label: "Integrations", icon: Zap },
   ];
 
@@ -213,7 +267,9 @@ export default function SettingsPage() {
           {activeTab === "profile" && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-xl font-bold text-foreground mb-4">Profile Settings</h2>
+                <h2 className="text-xl font-bold text-foreground mb-4">
+                  Profile Settings
+                </h2>
                 <p className="text-sm text-muted-foreground mb-4">
                   Manage your account information and preferences.
                 </p>
@@ -223,8 +279,12 @@ export default function SettingsPage() {
                 onClick={() => setShowProfileModal(true)}
                 className="px-4 py-3 rounded-xl border border-border bg-card hover:bg-secondary transition-colors text-left"
               >
-                <p className="text-sm font-medium text-foreground">Edit Profile</p>
-                <p className="text-xs text-muted-foreground mt-1">Update your name, email, and display preferences</p>
+                <p className="text-sm font-medium text-foreground">
+                  Edit Profile
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Update your name, email, and display preferences
+                </p>
               </button>
 
               {isAdmin && (
@@ -234,17 +294,25 @@ export default function SettingsPage() {
                 >
                   <div className="flex items-center gap-2">
                     <Shield className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                    <p className="text-sm font-medium text-foreground">Admin Dashboard</p>
+                    <p className="text-sm font-medium text-foreground">
+                      Admin Dashboard
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">Manage system and user settings</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Manage system and user settings
+                  </p>
                 </button>
               )}
 
               <div className="border-t border-border pt-6">
                 <h3 className="font-semibold text-foreground mb-3">Security</h3>
                 <button className="px-4 py-3 rounded-xl border border-border bg-card hover:bg-secondary transition-colors text-left">
-                  <p className="text-sm font-medium text-foreground">Change Password</p>
-                  <p className="text-xs text-muted-foreground mt-1">Update your password regularly for security</p>
+                  <p className="text-sm font-medium text-foreground">
+                    Change Password
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Update your password regularly for security
+                  </p>
                 </button>
               </div>
             </div>
@@ -254,16 +322,24 @@ export default function SettingsPage() {
           {activeTab === "billing" && isOwner && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-xl font-bold text-foreground mb-2">Billing & Subscription</h2>
-                <p className="text-sm text-muted-foreground">Manage your subscription and billing information.</p>
+                <h2 className="text-xl font-bold text-foreground mb-2">
+                  Billing & Subscription
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Manage your subscription and billing information.
+                </p>
               </div>
 
               {/* Current Plan */}
               <div className="bg-card border border-border rounded-xl p-6">
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <h3 className="font-semibold text-foreground">Current Plan</h3>
-                    <p className="text-sm text-muted-foreground mt-1">{planDisplayName}</p>
+                    <h3 className="font-semibold text-foreground">
+                      Current Plan
+                    </h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {planDisplayName}
+                    </p>
                   </div>
                   {isPaid && (
                     <span className="px-3 py-1 rounded-full bg-green-500/20 text-green-600 text-xs font-medium">
@@ -278,12 +354,20 @@ export default function SettingsPage() {
                   <>
                     <div className="space-y-2 text-sm mb-4">
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">AI Analysis</span>
-                        <span className="font-medium">{usage.aiAnalysis} / {currentPlanLimits.analysisLimit}</span>
+                        <span className="text-muted-foreground">
+                          AI Analysis
+                        </span>
+                        <span className="font-medium">
+                          {usage.aiAnalysis} / {currentPlanLimits.analysisLimit}
+                        </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">eBay Publishes</span>
-                        <span className="font-medium">{usage.ebayPublish} / {currentPlanLimits.publishLimit}</span>
+                        <span className="text-muted-foreground">
+                          eBay Publishes
+                        </span>
+                        <span className="font-medium">
+                          {usage.ebayPublish} / {currentPlanLimits.publishLimit}
+                        </span>
                       </div>
                     </div>
 
@@ -303,7 +387,9 @@ export default function SettingsPage() {
               {/* Upgrade Options */}
               {!isShop && (
                 <div className="space-y-4">
-                  <h3 className="font-semibold text-foreground">Upgrade Your Plan</h3>
+                  <h3 className="font-semibold text-foreground">
+                    Upgrade Your Plan
+                  </h3>
 
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {/* Show plans higher than current */}
@@ -312,7 +398,10 @@ export default function SettingsPage() {
                         icon={Crown}
                         name="Starter"
                         price="$19/mo"
-                        features={["25 listings / month", "Basic AI enhancement"]}
+                        features={[
+                          "25 listings / month",
+                          "Basic AI enhancement",
+                        ]}
                         onUpgrade={() => handleCheckout("starter")}
                         loading={checkoutLoading === "starter"}
                         disabled={checkoutLoading !== null}
@@ -323,7 +412,11 @@ export default function SettingsPage() {
                         icon={Zap}
                         name="Pro"
                         price="$49/mo"
-                        features={["200 listings / month", "Voice notes + melt protection", "Listing analytics"]}
+                        features={[
+                          "200 listings / month",
+                          "Voice notes + melt protection",
+                          "Listing analytics",
+                        ]}
                         onUpgrade={() => handleCheckout("pro")}
                         loading={checkoutLoading === "pro"}
                         disabled={checkoutLoading !== null}
@@ -335,7 +428,11 @@ export default function SettingsPage() {
                         icon={Store}
                         name="Shop"
                         price="$99/mo"
-                        features={["~1,200 listings / month", "Everything in Pro", "Team / multi-user org"]}
+                        features={[
+                          "~1,200 listings / month",
+                          "Everything in Pro",
+                          "Team / multi-user org",
+                        ]}
                         onUpgrade={() => handleCheckout("shop")}
                         loading={checkoutLoading === "shop"}
                         disabled={checkoutLoading !== null}
@@ -351,8 +448,13 @@ export default function SettingsPage() {
           {activeTab === "integrations" && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-xl font-bold text-foreground mb-2">Integrations</h2>
-                <p className="text-sm text-muted-foreground">Connect third-party platforms to expand your selling capabilities.</p>
+                <h2 className="text-xl font-bold text-foreground mb-2">
+                  Integrations
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Connect third-party platforms to expand your selling
+                  capabilities.
+                </p>
               </div>
 
               {/* eBay Integration */}
@@ -361,7 +463,9 @@ export default function SettingsPage() {
                   <div>
                     <h3 className="font-semibold text-foreground flex items-center gap-2">
                       eBay Integration
-                      {ebayConnected && <span className="inline-block w-2 h-2 bg-green-500 rounded-full" />}
+                      {ebayConnected && (
+                        <span className="inline-block w-2 h-2 bg-green-500 rounded-full" />
+                      )}
                     </h3>
                     <p className="text-sm text-muted-foreground mt-1">
                       {ebayConnected
@@ -379,7 +483,8 @@ export default function SettingsPage() {
                 {!ebayConnected ? (
                   <div className="space-y-3">
                     <p className="text-sm text-muted-foreground">
-                      Authorize Sovereign Listing Suite to access your eBay account. You can revoke access at any time.
+                      Authorize Sovereign Listing Suite to access your eBay
+                      account. You can revoke access at any time.
                     </p>
                     <button
                       onClick={handleConnectEbay}
@@ -404,8 +509,12 @@ export default function SettingsPage() {
                     <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3 flex items-start gap-3">
                       <Check className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-sm font-medium text-green-700">Connection Active</p>
-                        <p className="text-xs text-green-600 mt-0.5">Your eBay account is ready to use</p>
+                        <p className="text-sm font-medium text-green-700">
+                          Connection Active
+                        </p>
+                        <p className="text-xs text-green-600 mt-0.5">
+                          Your eBay account is ready to use
+                        </p>
                       </div>
                     </div>
                     <button
@@ -420,14 +529,22 @@ export default function SettingsPage() {
 
               {/* Future Integrations */}
               <div className="bg-card border border-border border-dashed rounded-xl p-6 opacity-50">
-                <h3 className="font-semibold text-foreground mb-2">Coming Soon</h3>
+                <h3 className="font-semibold text-foreground mb-2">
+                  Coming Soon
+                </h3>
                 <p className="text-sm text-muted-foreground mb-4">
                   We're working on integrations with other platforms.
                 </p>
                 <div className="flex gap-2">
-                  <div className="px-3 py-1.5 rounded-lg bg-secondary text-xs font-medium text-muted-foreground">Amazon</div>
-                  <div className="px-3 py-1.5 rounded-lg bg-secondary text-xs font-medium text-muted-foreground">Shopify</div>
-                  <div className="px-3 py-1.5 rounded-lg bg-secondary text-xs font-medium text-muted-foreground">More...</div>
+                  <div className="px-3 py-1.5 rounded-lg bg-secondary text-xs font-medium text-muted-foreground">
+                    Amazon
+                  </div>
+                  <div className="px-3 py-1.5 rounded-lg bg-secondary text-xs font-medium text-muted-foreground">
+                    Shopify
+                  </div>
+                  <div className="px-3 py-1.5 rounded-lg bg-secondary text-xs font-medium text-muted-foreground">
+                    More...
+                  </div>
                 </div>
               </div>
             </div>
@@ -436,7 +553,10 @@ export default function SettingsPage() {
       </main>
 
       <BottomNav />
-      <ProfileModal open={showProfileModal} onClose={() => setShowProfileModal(false)} />
+      <ProfileModal
+        open={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+      />
     </div>
   );
 }
@@ -444,7 +564,14 @@ export default function SettingsPage() {
 // ─── Upgrade Card Sub-component ────────────────────────────────────────────
 
 function UpgradeCard({
-  icon: Icon, name, price, features, onUpgrade, loading, disabled, recommended,
+  icon: Icon,
+  name,
+  price,
+  features,
+  onUpgrade,
+  loading,
+  disabled,
+  recommended,
 }: {
   icon: React.ElementType;
   name: string;
@@ -456,9 +583,11 @@ function UpgradeCard({
   recommended?: boolean;
 }) {
   return (
-    <div className={`bg-card border rounded-xl p-6 hover:border-primary/50 transition-colors ${
-      recommended ? "ring-1 ring-primary/20 relative" : "border-border"
-    }`}>
+    <div
+      className={`bg-card border rounded-xl p-6 hover:border-primary/50 transition-colors ${
+        recommended ? "ring-1 ring-primary/20 relative" : "border-border"
+      }`}
+    >
       {recommended && (
         <span className="absolute top-0 right-0 bg-primary text-primary-foreground text-xs font-semibold px-3 py-1 rounded-bl-lg">
           RECOMMENDED

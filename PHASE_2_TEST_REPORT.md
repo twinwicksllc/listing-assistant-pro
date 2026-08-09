@@ -9,6 +9,7 @@
 ### ✅ Code Validation Tests: 14/14 PASSED
 
 #### Test 1: analyze-item/index.ts Code Changes
+
 - ✅ `computeNextResetAt()` helper function found (lines 24-39)
 - ✅ eBay account gate logic found (lines 128-137)
 - ✅ Per-org rolling-window quota logic found (lines 139-209)
@@ -17,16 +18,19 @@
 - ✅ `_meta` object returned in response — lines 832-837
 
 #### Test 2: ebay-publish/index.ts Code Changes
+
 - ✅ Identity API call logic found (lines 1169-1240)
 - ✅ One-account enforcement rule found (line 1210-1217)
 - ✅ eBay username storage logic found (lines 1227)
 - ✅ eBay account type storage logic found (lines 1228)
 
 #### Test 3: Function Accessibility
+
 - ⏸️ Endpoint tests skipped (requires SUPABASE_URL/SUPABASE_ANON_KEY)
   - **To enable:** `export SUPABASE_URL=... SUPABASE_ANON_KEY=...`
 
 #### Test 4: Compilation & Imports
+
 - ✅ analyze-item has required imports
 - ✅ ebay-publish has required imports
 
@@ -39,6 +43,7 @@
 **File Location:** [supabase/functions/analyze-item/index.ts](supabase/functions/analyze-item/index.ts)
 
 #### 1. computeNextResetAt() Helper (Lines 24-39)
+
 ```typescript
 function computeNextResetAt(resetDay: number | null): string | null {
   if (!resetDay) return null;
@@ -55,13 +60,19 @@ function computeNextResetAt(resetDay: number | null): string | null {
   const nextYear = nextMonth > 11 ? year + 1 : year;
   const nm = nextMonth % 12;
   const daysInNextMonth = new Date(nextYear, nm + 1, 0).getDate();
-  return new Date(nextYear, nm, Math.min(resetDay, daysInNextMonth)).toISOString();
+  return new Date(
+    nextYear,
+    nm,
+    Math.min(resetDay, daysInNextMonth),
+  ).toISOString();
 }
 ```
+
 **Purpose:** Calculate next reset date for Starter tier, handling day-of-month edge cases (e.g., 31st of Feb)  
 **OQ Reference:** OQ-2
 
 #### 2. eBay Account Gate for Starter Users (Lines 128-137)
+
 ```typescript
 if (tier === "starter") {
   const { data: profile } = await svc
@@ -76,17 +87,23 @@ if (tier === "starter") {
         error: "ebay_account_required",
         message: "Connect an eBay account to start generating listings.",
       }),
-      { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 }
 ```
+
 **Purpose:** Prevent Starter users from analyzing items without eBay connection  
 **Error:** HTTP 403 with `ebay_account_required`  
 **OQ Reference:** OQ-1
 
 #### 3. Per-Org Rolling-Window Quota (Lines 139-209)
+
 **Key Implementation Details:**
+
 - Fetches org membership for Starter users: `org_members.org_id`, `organizations.free_tier_reset_day`
 - Computes window start using RPC `get_free_tier_window_start(p_reset_day)` for Starter
 - Uses calendar month for Pro/Unlimited (always starts on day 1)
@@ -102,17 +119,21 @@ if (tier === "starter") {
     "tier": "starter"
   }
   ```
+
 **OQ References:** OQ-2, OQ-4
 
 #### 4. Response Metadata (Lines 822-837)
+
 ```typescript
 const creditsUsed = currentUsageCount + 1;
-const creditsRemaining = tier === "starter"
-  ? Math.max(0, 6 - creditsUsed)
-  : tier === "pro"
-    ? Math.max(0, 50 - creditsUsed)
-    : null;
-const creditsResetAt = tier === "starter" ? computeNextResetAt(orgResetDay) : null;
+const creditsRemaining =
+  tier === "starter"
+    ? Math.max(0, 6 - creditsUsed)
+    : tier === "pro"
+      ? Math.max(0, 50 - creditsUsed)
+      : null;
+const creditsResetAt =
+  tier === "starter" ? computeNextResetAt(orgResetDay) : null;
 
 const finalResponse = {
   ...responsePayload,
@@ -124,7 +145,9 @@ const finalResponse = {
   },
 };
 ```
+
 **Key Facts:**
+
 - `creditsUsed` = current count + 1 (i.e., after this analysis runs)
 - `creditsRemaining` = null for Unlimited, calculated for Starter/Pro
 - `creditsResetAt` = null for Pro/Unlimited, ISO date for Starter
@@ -140,21 +163,24 @@ const finalResponse = {
 
 #### Identity API Call + One-Account Rule (Lines 1169-1240)
 
-**Purpose:** 
+**Purpose:**
+
 1. Fetch eBay username via Identity API (OQ-5)
 2. Enforce one-account rule for non-Unlimited tiers (OQ-3)
 3. Store username + account type in profiles
 
 **Implementation:**
+
 ```typescript
 // Call Identity API to fetch username
 const identityRes = await fetch(
   "https://apiz.ebay.com/commerce/identity/v1/user/",
-  { headers: { Authorization: `Bearer ${tokenData.access_token}` } }
+  { headers: { Authorization: `Bearer ${tokenData.access_token}` } },
 );
 const identity = await identityRes.json();
 const newUsername = identity?.userId ?? identity?.username ?? null;
-const accountType = (identity?.accountType ?? "")?.toLowerCase() ?? "individual";
+const accountType =
+  (identity?.accountType ?? "")?.toLowerCase() ?? "individual";
 
 // Determine subscription tier for enforcement
 let tierForOneAccountCheck: "starter" | "pro" | "unlimited" = "starter";
@@ -173,7 +199,10 @@ if (
       error: "account_already_linked",
       message: `This Listing Assistant account is already linked to eBay user "${existingProfile.ebay_username}". Disconnect it before connecting a new account.`,
     }),
-    { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    {
+      status: 409,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    },
   );
 }
 
@@ -195,6 +224,7 @@ const { error: usernameErr } = await supabase
 ## Testing Checklist Status
 
 ### ✅ Code Level Tests (Completed)
+
 - [x] Verify computeNextResetAt() helper function
 - [x] Verify eBay account gate for Starter
 - [x] Verify per-org rolling-window quota implementation
@@ -207,43 +237,46 @@ const { error: usernameErr } = await supabase
 - [x] Verify ebay_account_type storage
 
 ### ⏳ Integration Tests (Requires Deployment)
+
 - [ ] **Test 1: Tier Detection & eBay Gate**
   - [ ] Starter user without eBay → 403 `ebay_account_required`
   - [ ] Starter user with eBay → Success, `_meta.creditsRemaining` shows 5 (after first analysis)
   - [ ] Pro user → No eBay gate, full response
   - [ ] Admin user → Full access, unlimited
-  **To Test:** Deploy functions, then call with test payloads
+        **To Test:** Deploy functions, then call with test payloads
 
 - [ ] **Test 2: Quota Enforcement**
   - [ ] Starter user hits limit (6) → 429 error with metadata
   - [ ] Pro user hits limit (50) → 429 error
   - [ ] Unlimited → No limits enforced
-  **To Test:** Multiple analysis calls from same org/user
+        **To Test:** Multiple analysis calls from same org/user
 
 - [ ] **Test 3: Identity API & One-Account Rule**
   - [ ] eBay exchange_code → calls Identity API, stores `ebay_username`
   - [ ] Starter tries different eBay account → 409 `account_already_linked`
   - [ ] Unlimited can reconnect → 200 success
-  **To Test:** Test with different eBay credentials
+        **To Test:** Test with different eBay credentials
 
 - [ ] **Test 4: Credit Display & Metadata**
   - [ ] Response includes `_meta.tier`, `creditsUsed`, `creditsRemaining`, `creditsResetAt`
   - [ ] Field allowlist works → Starter sees no pricing/melt/competitors
   - [ ] Pro/Unlimited → Full fields
-  **To Test:** Inspect response JSON structure
+        **To Test:** Inspect response JSON structure
 
 - [ ] **Test 5: Utility Functions**
   - [ ] `get-free-credits` returns credit status
   - [ ] `disconnect-ebay` clears tokens
   - [ ] `computeNextResetAt()` calculates reset correctly
-  **To Test:** Call endpoints with test data
+        **To Test:** Call endpoints with test data
 
 ---
 
 ## Next Steps
 
 ### Immediate (Deploy Phase 2)
+
 1. **Deploy edge functions to Supabase:**
+
    ```bash
    supabase functions deploy analyze-item
    supabase functions deploy ebay-publish
@@ -252,6 +285,7 @@ const { error: usernameErr } = await supabase
    ```
 
 2. **Run integration tests:**
+
    ```bash
    export SUPABASE_URL=your_url SUPABASE_ANON_KEY=your_key
    bash test-phase2.sh
@@ -263,18 +297,21 @@ const { error: usernameErr } = await supabase
    - Monitor for any database constraint violations
 
 ### Short Term (Phase 3: Front-End)
+
 - [ ] Update AnalyzePage to display `_meta.creditsRemaining`
 - [ ] Update BillingPage to show credit status
 - [ ] Add "Connect eBay" CTA for Starter users
 - [ ] Show "Credits exhausted" message
 
 ### Near Term (Phase 3: Database)
+
 - [ ] Verify `usage_tracking.org_id` column exists
 - [ ] Verify `organizations.free_tier_reset_day` column exists
 - [ ] Run `get_free_tier_window_start()` RPC tests
 - [ ] Migrate existing users (set reset_day on orgs)
 
 ### Long Term (Phase 6+)
+
 - [ ] Clear cached eBay tokens to force re-auth with new OAuth scope
 - [ ] Monitor one-account enforcement (support tickets)
 - [ ] Adjust credit limits based on usage patterns
@@ -283,12 +320,12 @@ const { error: usernameErr } = await supabase
 
 ## Files Modified
 
-| File | Lines | Change | OQ |
-|------|-------|--------|-----|
-| [supabase/functions/analyze-item/index.ts](supabase/functions/analyze-item/index.ts) | 24-39 | Add computeNextResetAt() helper | OQ-2 |
-| [supabase/functions/analyze-item/index.ts](supabase/functions/analyze-item/index.ts) | 95-207 | Add eBay gate + per-org quota | OQ-1, OQ-2, OQ-4 |
-| [supabase/functions/analyze-item/index.ts](supabase/functions/analyze-item/index.ts) | 822-837 | Fix creditsUsed calculation + _meta | OQ-10 |
-| [supabase/functions/ebay-publish/index.ts](supabase/functions/ebay-publish/index.ts) | 1169-1240 | Add Identity API + one-account rule | OQ-3, OQ-5 |
+| File                                                                                 | Lines     | Change                              | OQ               |
+| ------------------------------------------------------------------------------------ | --------- | ----------------------------------- | ---------------- |
+| [supabase/functions/analyze-item/index.ts](supabase/functions/analyze-item/index.ts) | 24-39     | Add computeNextResetAt() helper     | OQ-2             |
+| [supabase/functions/analyze-item/index.ts](supabase/functions/analyze-item/index.ts) | 95-207    | Add eBay gate + per-org quota       | OQ-1, OQ-2, OQ-4 |
+| [supabase/functions/analyze-item/index.ts](supabase/functions/analyze-item/index.ts) | 822-837   | Fix creditsUsed calculation + _meta | OQ-10            |
+| [supabase/functions/ebay-publish/index.ts](supabase/functions/ebay-publish/index.ts) | 1169-1240 | Add Identity API + one-account rule | OQ-3, OQ-5       |
 
 ---
 

@@ -11,6 +11,7 @@
 This document describes the complete implementation of eBay Media API v1 video upload functionality integrated with the Sell Inventory API for attaching videos to eBay listings.
 
 ### Key Capabilities
+
 - ✅ **Video Upload**: MP4, MOV, AVI, WebM formats (2-12 seconds, < 500MB)
 - ✅ **Asynchronous Processing**: Poll video status with exponential backoff retry
 - ✅ **Inventory Integration**: Attach processed videos to listings via `product.videoIds`
@@ -26,6 +27,7 @@ This document describes the complete implementation of eBay Media API v1 video u
 The application implements a two-phase OAuth flow that ensures video upload capabilities are properly scoped:
 
 #### Phase 1: Authorization (Frontend → eBay)
+
 ```
 Frontend (Settings Page)
   ↓
@@ -46,12 +48,14 @@ eBay Redirects to Callback with {code}
 ```
 
 **Critical Configuration:**
+
 - **File:** `supabase/functions/ebay-publish/constants.ts`
 - **Variable:** `EBAY_OAUTH_SCOPES` (array of scope URLs)
 - **Key Requirement:** `sell.inventory` scope is pre-approved and covers BOTH inventory creation AND Media API (video uploads)
 - **Note:** According to eBay's official documentation, `sell.inventory` grants access to all Sell Inventory API endpoints AND all Commerce Media API endpoints. No separate scope registration needed.
 
 #### Phase 2: Token Exchange & Refresh
+
 Both `handleExchangeCode()` and `handleRefreshToken()` include scopes in their requests:
 
 ```typescript
@@ -84,6 +88,7 @@ body: new URLSearchParams({
 ### 1. Video Upload Pipeline
 
 #### Step A: Create Video Entity
+
 **Purpose:** Allocate a `videoId` on eBay's Media API and register metadata.
 
 ```typescript
@@ -109,6 +114,7 @@ Body (optional): { "videoId": "..." }
 **Implementation:** `handleUploadVideo()` lines 120–200
 
 #### Step B: Upload Binary Payload
+
 **Purpose:** Stream the video file to eBay for processing.
 
 ```typescript
@@ -127,6 +133,7 @@ Response (204 No Content): Success
 **Implementation:** `handleUploadVideo()` lines 200–230
 
 #### Step C: Check Processing Status
+
 **Purpose:** Poll video status until processing completes (LIVE or FAILED).
 
 ```typescript
@@ -144,6 +151,7 @@ Response (200 OK): {
 ```
 
 **Implementation:**
+
 - **Simple Poll:** `handleGetVideoStatus()` lines 330–396 (single-attempt check)
 - **Retry Poll:** `handlePollVideoStatusUntilLive()` lines 440–520 (exponential backoff, 120 max attempts)
 
@@ -152,14 +160,15 @@ Response (200 OK): {
 The implementation includes two polling strategies:
 
 #### Strategy 1: Single-Attempt Status Check (Simple)
+
 ```typescript
 // Frontend usage:
-const result = await fetch('/api/ebay-publish', {
-  method: 'POST',
+const result = await fetch("/api/ebay-publish", {
+  method: "POST",
   body: JSON.stringify({
-    action: 'get_video_status',
-    userToken: '...',
-    videoId: 'VIDEO_ID_FROM_UPLOAD',
+    action: "get_video_status",
+    userToken: "...",
+    videoId: "VIDEO_ID_FROM_UPLOAD",
   }),
 });
 ```
@@ -167,6 +176,7 @@ const result = await fetch('/api/ebay-publish', {
 **Use Case:** Check status occasionally (user clicks "Check Status" button)
 
 #### Strategy 2: Exponential Backoff Polling (Recommended)
+
 ```typescript
 // Frontend usage:
 const result = await fetch('/api/ebay-publish', {
@@ -191,12 +201,14 @@ const result = await fetch('/api/ebay-publish', {
 ```
 
 **Features:**
+
 - Starts with 2-second delays, exponentially increases up to 10 seconds
 - Retries on transient errors (500, 502, 503, 504, 429)
 - Succeeds when status becomes LIVE or FAILED
 - Throws error if max attempts exhausted
 
 **Retry Schedule (Default):**
+
 ```
 Attempt 1:  Immediate
 Attempt 2:  ~2,000ms  (2.00s × 1.5^0)
@@ -247,6 +259,7 @@ const inventoryResp = await fetchWithTimeout(
 ```
 
 ### Validation Rules
+
 1. **Video must be LIVE** before attaching to inventory
    - Incomplete (PENDING, PROCESSING): Upload fails or video not available
    - Failed (FAILED, BLOCKED): Listing publication fails
@@ -263,11 +276,13 @@ const inventoryResp = await fetchWithTimeout(
 ### OAuth Scope Errors (401/403)
 
 **Symptom:** Video upload returns HTTP 403
+
 ```
 "eBay video create failed (403): ...unauthorized..."
 ```
 
 **Causes:**
+
 1. ❌ Token expired (not refreshed within 5-minute buffer)
 2. ❌ eBay app is in Sandbox mode (must be Production)
 3. ❌ Account not authorized for video uploads
@@ -276,6 +291,7 @@ const inventoryResp = await fetchWithTimeout(
 **Resolution Steps:**
 
 **Step 1: Verify Token Includes sell.inventory Scope**
+
 ```
 1. Go to app Settings → eBay Account
 2. Disconnect eBay account
@@ -285,6 +301,7 @@ const inventoryResp = await fetchWithTimeout(
 ```
 
 **Step 2: Verify Application Mode**
+
 ```
 1. Go to https://developer.ebay.com/my/keys
 2. Select your application
@@ -294,6 +311,7 @@ const inventoryResp = await fetchWithTimeout(
 ```
 
 **Step 3: Check Token Expiration**
+
 ```
 1. Server logs show token expiration: check ebay_token_expires_at in profiles table
 2. If token expired, proactive refresh should have triggered (5 min before expiry)
@@ -303,11 +321,13 @@ const inventoryResp = await fetchWithTimeout(
 ### Video Upload Errors (400)
 
 **Symptom:** Upload returns HTTP 400
+
 ```
 "eBay video create failed (400): ..."
 ```
 
 **Causes:**
+
 - ❌ Unsupported video format (not MP4, MOV, AVI, WebM)
 - ❌ Video duration invalid (not 2-12 seconds)
 - ❌ File size too large (> 500MB)
@@ -315,19 +335,21 @@ const inventoryResp = await fetchWithTimeout(
 - ❌ Token missing `sell.inventory` scope
 
 **Validation (Client-Side):**
+
 ```typescript
 // From constants.ts
-MAX_VIDEO_DURATION_SEC = 12
-MIN_VIDEO_DURATION_SEC = 2
+MAX_VIDEO_DURATION_SEC = 12;
+MIN_VIDEO_DURATION_SEC = 2;
 ALLOWED_VIDEO_CONTENT_TYPES = [
   "video/mp4",
   "video/quicktime",
   "video/x-msvideo",
-  "video/webm"
-]
+  "video/webm",
+];
 ```
 
 **Debugging:**
+
 1. Check browser console for actual video duration: `console.log(videoFile.duration)`
 2. Verify file size: `console.log(videoFile.size / 1024 / 1024 + " MB")`
 3. Check MIME type: `console.log(videoFile.type)`
@@ -336,16 +358,19 @@ ALLOWED_VIDEO_CONTENT_TYPES = [
 ### Video Processing Timeout (PROCESSING → LIVE exceeded)
 
 **Symptom:** Poll reaches max attempts (120) while video still in PROCESSING
+
 ```
 "Video processing timeout after 120 attempts (6000000ms): status=PROCESSING"
 ```
 
 **Causes:**
+
 - ❌ eBay Media API overloaded
 - ❌ Video file corrupted or unusual format
 - ❌ eBay backend issue (rare)
 
 **Resolution:**
+
 1. Wait 1-2 minutes and retry polling
 2. Check Media API status: https://status.ebay.com
 3. Try re-uploading (get new videoId)
@@ -354,16 +379,19 @@ ALLOWED_VIDEO_CONTENT_TYPES = [
 ### Inventory Item Creation Fails (Video State Mismatch)
 
 **Symptom:** PUT /inventory_item returns 400
+
 ```
 "Failed to create inventory item: 400 - {...error details...}"
 ```
 
 **Common Causes:**
+
 - ❌ Video status is not LIVE (still PROCESSING or FAILED)
 - ❌ Video is in BLOCKED state (eBay rejected for policy reasons)
 - ❌ Category doesn't support video listings
 
 **Prevention:**
+
 1. Always poll video to LIVE before creating inventory item
 2. Check video response `statusMessage` for eBay feedback
 3. Verify listing category supports video
@@ -423,6 +451,7 @@ Use this checklist to verify the implementation is working correctly:
 ### ✅ Testing Scenarios
 
 **Scenario 1: Basic Upload & Poll**
+
 ```
 1. Open Analyze page
 2. Upload video (2-12 seconds, MP4)
@@ -433,6 +462,7 @@ Expected: Video attached and playable
 ```
 
 **Scenario 2: Concurrent Videos**
+
 ```
 1. Upload Video A
 2. Immediately upload Video B (without waiting for A)
@@ -441,6 +471,7 @@ Expected: Both reach LIVE independently
 ```
 
 **Scenario 3: Failed Processing**
+
 ```
 1. Upload corrupted/unusual video
 2. Poll status
@@ -448,6 +479,7 @@ Expected: Reaches FAILED status, clear error in statusMessage
 ```
 
 **Scenario 4: OAuth Token Refresh**
+
 ```
 1. Connect eBay account
 2. Wait 5 minutes (triggers proactive refresh)
@@ -461,41 +493,42 @@ Expected: Video uploads succeed with refreshed token
 
 ### Environment Variables
 
-| Variable | Value | Required |
-|----------|-------|----------|
-| `EBAY_CLIENT_ID` | Your eBay app Client ID | ✅ Yes |
-| `EBAY_CLIENT_SECRET` | Your eBay app Client Secret | ✅ Yes |
-| `EBAY_ENVIRONMENT` | "production" or "sandbox" | ✅ Yes (default: "production") |
-| `EBAY_RUNAME` | OAuth redirect URI | ✅ Yes |
-| `SUPABASE_URL` | Supabase project URL | ✅ Yes |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service key | ✅ Yes |
+| Variable                    | Value                       | Required                       |
+| --------------------------- | --------------------------- | ------------------------------ |
+| `EBAY_CLIENT_ID`            | Your eBay app Client ID     | ✅ Yes                         |
+| `EBAY_CLIENT_SECRET`        | Your eBay app Client Secret | ✅ Yes                         |
+| `EBAY_ENVIRONMENT`          | "production" or "sandbox"   | ✅ Yes (default: "production") |
+| `EBAY_RUNAME`               | OAuth redirect URI          | ✅ Yes                         |
+| `SUPABASE_URL`              | Supabase project URL        | ✅ Yes                         |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service key        | ✅ Yes                         |
 
 ### API Constants
 
 ```typescript
 // From constants.ts
-export const MAX_VIDEO_DURATION_SEC = 12
-export const MIN_VIDEO_DURATION_SEC = 2
+export const MAX_VIDEO_DURATION_SEC = 12;
+export const MIN_VIDEO_DURATION_SEC = 2;
 export const ALLOWED_VIDEO_CONTENT_TYPES = [
   "video/mp4",
   "video/quicktime",
   "video/x-msvideo",
   "video/webm",
-]
-export const EBAY_MARKETPLACE_ID = "EBAY_US"
-export const CONTENT_LANGUAGE = "en-US"
-export const REFRESH_BUFFER_MS = 5 * 60 * 1000  // Proactive refresh at 5 min before expiry
+];
+export const EBAY_MARKETPLACE_ID = "EBAY_US";
+export const CONTENT_LANGUAGE = "en-US";
+export const REFRESH_BUFFER_MS = 5 * 60 * 1000; // Proactive refresh at 5 min before expiry
 ```
 
 ### Media API Endpoints
 
-| Operation | Method | Endpoint |
-|-----------|--------|----------|
-| Create Video | POST | `/commerce/media/v1/video` |
-| Upload Binary | POST | `/commerce/media/v1/video/{videoId}/upload` |
-| Get Status | GET | `/commerce/media/v1/video/{videoId}` |
+| Operation     | Method | Endpoint                                    |
+| ------------- | ------ | ------------------------------------------- |
+| Create Video  | POST   | `/commerce/media/v1/video`                  |
+| Upload Binary | POST   | `/commerce/media/v1/video/{videoId}/upload` |
+| Get Status    | GET    | `/commerce/media/v1/video/{videoId}`        |
 
 **Base URLs:**
+
 - Production: `https://api.ebay.com` or `https://apim.ebay.com`
 - Sandbox: `https://api.sandbox.ebay.com` or `https://apim.sandbox.ebay.com`
 
@@ -506,6 +539,7 @@ export const REFRESH_BUFFER_MS = 5 * 60 * 1000  // Proactive refresh at 5 min be
 ### Key Log Entries
 
 **Successful Video Upload:**
+
 ```
 upload_video: calling eBay video create { ... }
 upload_video: create succeeded { requestUrl, environment, videoIdSource }
@@ -514,6 +548,7 @@ upload_video: bytes uploaded for videoId=..., httpStatus=204
 ```
 
 **Video Status Polling:**
+
 ```
 get_video_status: videoId=... status=PROCESSING rawStatus=PROCESSING
 // After retry:
@@ -522,6 +557,7 @@ pollVideoStatus: videoId=... attempt=15/120 status=LIVE elapsed=45000ms
 ```
 
 **OAuth Errors:**
+
 ```
 upload_video: token environment mismatch { tokenEnvDetected, ebayEnv }
 // Or:
@@ -544,6 +580,7 @@ upload_video: eBay video create failed (403): {...}
 ## Next Steps & Future Enhancements
 
 ### Phase 2: Advanced Features
+
 - [ ] **Batch Video Uploads:** Upload multiple videos in sequence/parallel
 - [ ] **Video Analytics:** Track upload success rates, processing times
 - [ ] **Automatic Retry:** Client-side auto-retry on transient failures
@@ -551,6 +588,7 @@ upload_video: eBay video create failed (403): {...}
 - [ ] **Multiple Videos per Listing:** Support videoIds array with 2+ videos
 
 ### Phase 3: Commerce Media v2 API
+
 - Once eBay releases v2 of Commerce Media API, update endpoints and features
 - v2 may include: higher bitrate, longer duration, additional formats
 
@@ -568,6 +606,7 @@ upload_video: eBay video create failed (403): {...}
 **Action:** Check listing's YouTube embed settings, verify category supports video
 
 **Contact eBay Developer Support:**
+
 - Portal: https://developer.ebay.com/support
 - Email: Subject line include "Media API", "commerce.media", or "video upload"
 - Include: Client ID, videoId, timestamp, exact error message
@@ -576,9 +615,9 @@ upload_video: eBay video create failed (403): {...}
 
 ## Revision History
 
-| Date | Version | Changes |
-|------|---------|---------|
-| 2026-08-09 | 1.0 | Initial implementation with video upload, polling retry, and inventory integration |
+| Date       | Version | Changes                                                                            |
+| ---------- | ------- | ---------------------------------------------------------------------------------- |
+| 2026-08-09 | 1.0     | Initial implementation with video upload, polling retry, and inventory integration |
 
 ---
 

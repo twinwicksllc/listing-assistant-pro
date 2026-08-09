@@ -37,15 +37,20 @@ const UsageSummaryCard: React.FC<UsageSummaryCardProps> = ({
           <div className="v2-usage-card-title">{metric.label}</div>
           <div className="v2-usage-card-value">
             {metric.used.toLocaleString()}
-            {metric.unit && <span className="text-base font-normal ml-1">{metric.unit}</span>}
+            {metric.unit && (
+              <span className="text-base font-normal ml-1">{metric.unit}</span>
+            )}
           </div>
           <div className="v2-usage-card-limit">
-            of {metric.limit.toLocaleString()}{metric.unit && ` ${metric.unit}`} {planName && `(${planName})`}
+            of {metric.limit.toLocaleString()}
+            {metric.unit && ` ${metric.unit}`} {planName && `(${planName})`}
           </div>
           <div className="v2-usage-bar">
             <div
               className="v2-usage-bar-fill"
-              style={{ width: `${getUsagePercentage(metric.used, metric.limit)}%` }}
+              style={{
+                width: `${getUsagePercentage(metric.used, metric.limit)}%`,
+              }}
             />
           </div>
         </div>

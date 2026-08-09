@@ -1,4 +1,5 @@
 # Agentic Gemini Implementation Plan
+
 **Feature Branch:** `feature/agentic-gemini`  
 **Status:** Implementation in progress
 
@@ -10,22 +11,24 @@ This document describes the "Agentic Interfacing" upgrade to the listing analysi
 
 Three enhancements are shipped together:
 
-| # | Enhancement | Gemini Capability Used |
-|---|---|---|
-| 1 | Real-Time Category & Comp Grounding | `google_search` built-in tool |
-| 2 | Agentic Vision for Item Inspection | `code_execution` built-in tool (Think-Act-Observe) |
-| 3 | Hybrid API Strategy | Gemini grounding + eBay Taxonomy API cross-validation |
+| #   | Enhancement                         | Gemini Capability Used                                |
+| --- | ----------------------------------- | ----------------------------------------------------- |
+| 1   | Real-Time Category & Comp Grounding | `google_search` built-in tool                         |
+| 2   | Agentic Vision for Item Inspection  | `code_execution` built-in tool (Think-Act-Observe)    |
+| 3   | Hybrid API Strategy                 | Gemini grounding + eBay Taxonomy API cross-validation |
 
 ---
 
 ## Key Architecture Decision: Native API vs OpenAI-Compat Shim
 
 The current codebase uses the OpenAI-compatibility endpoint:
+
 ```
 POST https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
 ```
 
 **This endpoint does NOT support native Gemini tools** (grounding, code execution). Those features require the native `generateContent` endpoint:
+
 ```
 POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent
 ```
@@ -33,6 +36,7 @@ POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateCon
 **Strategy:** We introduce a **new Pre-Pass 0** ("Agentic Pre-Pass") that runs BEFORE the existing Pass 1 and Pass 2. This pre-pass uses the native API with grounding + code execution enabled. Its output (grounded category ID, market analysis, and zoom-inspection findings) is fed as context into the existing Pass 1/2 pipeline.
 
 This approach:
+
 - ✅ Preserves all existing logic (no regression risk)
 - ✅ Adds grounding without changing the function-calling schema
 - ✅ Feeds structured output forward to existing prompts
@@ -42,16 +46,17 @@ This approach:
 
 ## Model Selection
 
-| Pass | Current Model | New Model | Why |
-|---|---|---|---|
-| Pre-Pass 0 (NEW) | — | `gemini-2.0-flash` | Native tools (grounding + code_execution), fast, cost-efficient |
-| Pass 1 (identification) | `gemini-2.5-pro` | `gemini-2.0-flash` | Pass 1 is lightweight; Flash is faster |
-| Pass 2 (main listing) | `gemini-2.5-pro` | `gemini-2.5-pro` | Keep Pro for final structured output quality |
-| category-lookup | `gemini-flash-latest` | `gemini-2.0-flash` | Explicit version pinning |
+| Pass                    | Current Model         | New Model          | Why                                                             |
+| ----------------------- | --------------------- | ------------------ | --------------------------------------------------------------- |
+| Pre-Pass 0 (NEW)        | —                     | `gemini-2.0-flash` | Native tools (grounding + code_execution), fast, cost-efficient |
+| Pass 1 (identification) | `gemini-2.5-pro`      | `gemini-2.0-flash` | Pass 1 is lightweight; Flash is faster                          |
+| Pass 2 (main listing)   | `gemini-2.5-pro`      | `gemini-2.5-pro`   | Keep Pro for final structured output quality                    |
+| category-lookup         | `gemini-flash-latest` | `gemini-2.0-flash` | Explicit version pinning                                        |
 
 > **Note on model naming:** The Google Gemini API model identifiers as of 2026:
+>
 > - `gemini-2.0-flash` — Production Flash model with full tool support
-> - `gemini-2.5-pro` — Production Pro model for complex reasoning  
+> - `gemini-2.5-pro` — Production Pro model for complex reasoning
 > - `gemini-flash-latest` — Alias (currently resolves to 2.0 Flash)
 
 ---
@@ -63,6 +68,7 @@ This approach:
 Uses the native `generateContent` API with `tools: [{ googleSearch: {} }]`.
 
 **What it does:**
+
 1. Searches for the current eBay leaf category ID for the identified item
 2. Searches for recently sold prices with qualitative nuances:
    - Coins: mint mark premiums, key dates, error coins, toning value
@@ -71,15 +77,17 @@ Uses the native `generateContent` API with `tools: [{ googleSearch: {} }]`.
    - Trading cards: print runs, error variants, graded vs raw premiums
 
 **Prompt strategy:**
+
 ```
 Search for: "eBay category ID for [itemName] 2026 leaf category"
 Search for: "eBay recently sold [itemName] [qualitative_variant] price 2026"
 ```
 
 **Output added to response:**
+
 ```typescript
-market_analysis: string  // Cites specific search results, mentions premiums/discounts found
-grounded_category_id: string | null  // Category ID found via grounding (if any)
+market_analysis: string; // Cites specific search results, mentions premiums/discounts found
+grounded_category_id: string | null; // Category ID found via grounding (if any)
 ```
 
 ### 0b. Agentic Vision — Code Execution (Enhancement #2)
@@ -93,16 +101,18 @@ Uses `tools: [{ codeExecution: {} }]` with an image cropping instruction.
    - Clothing: size label (collar/side seam), brand tag, visible damage areas
    - Electronics: model number sticker, condition of ports/buttons, serial
    - Trading cards: card number/set symbol, condition of corners/surface
-   
+
 2. **ACT:** Model executes Python code to perform conceptual "zoom" — describes in detail what it would find by examining that region, then states its conclusion with confidence
 
 3. **OBSERVE:** Model reads the execution output and incorporates findings into final identification
 
 **Critical use case (Kennedy Half Dollar example):**
+
 - Without zoom: Model might read "1965" as "1964" or vice versa (90% vs 40% silver — $30+ price difference)
 - With zoom: Model explicitly examines the date region and mint mark "D/S/P/blank" before finalizing metalWeightOz
 
 **Output added to response:**
+
 ```typescript
 agentic_inspection: {
   zoom_regions_examined: string[]  // e.g. ["date digits", "mint mark", "edge"]
@@ -121,6 +131,7 @@ Grounded category ID → eBay Taxonomy API verify → if leaf → use as high-co
 ```
 
 Priority order (highest to lowest):
+
 1. User-provided category lock (unchanged)
 2. **NEW: Grounding-verified leaf category** (score ≥ 85, verified via eBay Taxonomy)
 3. Deterministic DB/eBay lock (score ≥ 92, existing)
@@ -198,11 +209,11 @@ Final Response (EXTENDED)
 
 ## Files Modified
 
-| File | Change Type | Description |
-|---|---|---|
-| `supabase/functions/analyze-item/index.ts` | Major enhancement | Add Pre-Pass 0 (grounding + code execution), inject context into prompts, extend response |
-| `supabase/functions/_helpers/domainPrompts.ts` | Minor | Accept `prePasContext` in `PromptContext`, inject market analysis into pricing blocks |
-| `supabase/functions/category-lookup/index.ts` | Minor | Add `grounded_category_id` as tier-2 in `lookup` action |
+| File                                           | Change Type       | Description                                                                               |
+| ---------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------- |
+| `supabase/functions/analyze-item/index.ts`     | Major enhancement | Add Pre-Pass 0 (grounding + code execution), inject context into prompts, extend response |
+| `supabase/functions/_helpers/domainPrompts.ts` | Minor             | Accept `prePasContext` in `PromptContext`, inject market analysis into pricing blocks     |
+| `supabase/functions/category-lookup/index.ts`  | Minor             | Add `grounded_category_id` as tier-2 in `lookup` action                                   |
 
 ---
 
@@ -232,12 +243,13 @@ interface AnalyzeItemResponse {
   competitorData: CompetitorData | null;
   domain: string;
   _ebayMetadata: EbayMetadata | null;
-  _meta: { tier, creditsUsed, creditsRemaining, creditsResetAt };
+  _meta: { tier; creditsUsed; creditsRemaining; creditsResetAt };
 
   // ── NEW fields (additive, zero breaking change) ───────────
-  market_analysis: string | null;        // Grounded search citations
-  grounded_category_id: string | null;   // Category ID found via Google Search
-  agentic_inspection: {                  // Zoom-inspection findings
+  market_analysis: string | null; // Grounded search citations
+  grounded_category_id: string | null; // Category ID found via Google Search
+  agentic_inspection: {
+    // Zoom-inspection findings
     zoom_regions_examined: string[];
     key_findings: string;
     confidence_boost: string;
@@ -250,32 +262,33 @@ interface AnalyzeItemResponse {
 
 ## Domain-Specific Zoom Targets
 
-| Domain | Primary Zoom Target | Why |
-|---|---|---|
-| `coins_bullion` | Date digits + mint mark | 1964 vs 1965 Kennedy = 90% vs 40% silver ($30+ difference) |
-| `trading_cards` | Card number/set symbol + corners | Parallel variants, PSA vs raw condition |
-| `vintage_clothing` | Size tag + brand tag + seam quality | 2XL vs XXL, authentic vs replica |
-| `electronics` | Model sticker + ports + accessories | Missing charger affects value by $30–$100 |
-| `jewelry` | Hallmark + clasp + gemstone | 14k vs 18k, authentic stones vs synthetic |
-| `general` | Brand/model label + condition areas | Generic identification improvements |
+| Domain             | Primary Zoom Target                 | Why                                                        |
+| ------------------ | ----------------------------------- | ---------------------------------------------------------- |
+| `coins_bullion`    | Date digits + mint mark             | 1964 vs 1965 Kennedy = 90% vs 40% silver ($30+ difference) |
+| `trading_cards`    | Card number/set symbol + corners    | Parallel variants, PSA vs raw condition                    |
+| `vintage_clothing` | Size tag + brand tag + seam quality | 2XL vs XXL, authentic vs replica                           |
+| `electronics`      | Model sticker + ports + accessories | Missing charger affects value by $30–$100                  |
+| `jewelry`          | Hallmark + clasp + gemstone         | 14k vs 18k, authentic stones vs synthetic                  |
+| `general`          | Brand/model label + condition areas | Generic identification improvements                        |
 
 ---
 
 ## Domain-Specific Search Queries
 
-| Domain | Primary Search | Secondary Search |
-|---|---|---|
-| `coins_bullion` | `eBay "1965 Kennedy Half Dollar" recently sold price mint mark` | `"key date" "error" "[itemName]" premium price eBay 2026` |
-| `trading_cards` | `eBay "[card name] [year] [set]" recently sold PSA raw` | `"[card name]" refractor parallel hologram premium value` |
-| `vintage_clothing` | `eBay "[brand] [item type] [size]" recently sold condition` | `"[brand]" "[style]" "rip" OR "snag" OR "flaw" price impact` |
-| `electronics` | `eBay "[model]" recently sold "with charger" vs "no charger"` | `"[model]" accessories "missing" price difference` |
-| `general` | `eBay "[itemName]" recently sold price range 2026` | `"[itemName]" condition premium collectible value` |
+| Domain             | Primary Search                                                  | Secondary Search                                             |
+| ------------------ | --------------------------------------------------------------- | ------------------------------------------------------------ |
+| `coins_bullion`    | `eBay "1965 Kennedy Half Dollar" recently sold price mint mark` | `"key date" "error" "[itemName]" premium price eBay 2026`    |
+| `trading_cards`    | `eBay "[card name] [year] [set]" recently sold PSA raw`         | `"[card name]" refractor parallel hologram premium value`    |
+| `vintage_clothing` | `eBay "[brand] [item type] [size]" recently sold condition`     | `"[brand]" "[style]" "rip" OR "snag" OR "flaw" price impact` |
+| `electronics`      | `eBay "[model]" recently sold "with charger" vs "no charger"`   | `"[model]" accessories "missing" price difference`           |
+| `general`          | `eBay "[itemName]" recently sold price range 2026`              | `"[itemName]" condition premium collectible value`           |
 
 ---
 
 ## Error Handling
 
 All Pre-Pass 0 operations are **non-blocking**:
+
 - If grounding fails → `market_analysis = null`, `grounded_category_id = null`
 - If code execution fails → `agentic_inspection = null`
 - If grounded category fails eBay verify → falls through to existing pipeline

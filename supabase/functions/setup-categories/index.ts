@@ -85,9 +85,13 @@ Deno.serve(async (req) => {
     ];
 
     console.log("Inserting verified mappings...");
-    for (
-      const [coin_type, categoryId, categoryName, source, confidence] of mappings
-    ) {
+    for (const [
+      coin_type,
+      categoryId,
+      categoryName,
+      source,
+      confidence,
+    ] of mappings) {
       try {
         await client.queryArray(
           `INSERT INTO public.category_mappings (coin_type, ebay_category_id, category_name, verification_source, confidence)
@@ -126,15 +130,12 @@ Deno.serve(async (req) => {
       // ignore
     }
 
-    return new Response(
-      JSON.stringify({ error: String(error) }),
-      {
-        status: 500,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
-        },
+    return new Response(JSON.stringify({ error: String(error) }), {
+      status: 500,
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
       },
-    );
+    });
   }
 });

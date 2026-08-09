@@ -18,17 +18,26 @@ export async function runMarketAgent(
   const { invocationId, identification } = context;
   const itemName = identification?.itemName || "item";
 
-  console.log(`[${invocationId}] MarketAgent: Grounding market data for ${itemName}`);
+  console.log(
+    `[${invocationId}] MarketAgent: Grounding market data for ${itemName}`,
+  );
 
   // --- RAG: Augmented Context from Sales History ---
   let ragContext = "";
   try {
     // Use pre-computed embedding from controller if available; fall back to generating one
-    const embedding = context.queryEmbedding ?? await getEmbedding(apiKey, itemName);
-    const results = await findSimilarContext(supabase, embedding, "sales_history");
+    const embedding =
+      context.queryEmbedding ?? (await getEmbedding(apiKey, itemName));
+    const results = await findSimilarContext(
+      supabase,
+      embedding,
+      "sales_history",
+    );
     ragContext = formatRagResults(results);
     if (ragContext) {
-      console.log(`[${invocationId}] MarketAgent: Injected ${results.length} sales history references.`);
+      console.log(
+        `[${invocationId}] MarketAgent: Injected ${results.length} sales history references.`,
+      );
     }
   } catch (ragErr) {
     console.warn(`[${invocationId}] MarketAgent RAG failed:`, ragErr);
@@ -41,10 +50,10 @@ Item: ${itemName}
 Domain: ${domainDef.domain}
 
 ${
-    ragContext
-      ? `### INTERNAL SALES HISTORY:\nThe following items from our internal sales history are similar to this item:\n${ragContext}\n`
-      : ""
-  }
+  ragContext
+    ? `### INTERNAL SALES HISTORY:\nThe following items from our internal sales history are similar to this item:\n${ragContext}\n`
+    : ""
+}
 
 ### TASKS:
 1. Find the most accurate 2026 eBay Leaf Category ID for this item.
@@ -66,9 +75,11 @@ Return your report in JSON format:
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{
-            parts: [{ text: prompt }],
-          }],
+          contents: [
+            {
+              parts: [{ text: prompt }],
+            },
+          ],
           tools: [{ googleSearch: {} }],
         }),
       },
@@ -79,18 +90,25 @@ Return your report in JSON format:
 
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
     // Strip markdown code fences (```json...``` or ```...```) that Gemini sometimes adds around JSON
-    const cleanText = text.replace(/^```(?:json)?\s*/m, "").replace(/\s*```\s*$/m, "");
+    const cleanText = text
+      .replace(/^```(?:json)?\s*/m, "")
+      .replace(/\s*```\s*$/m, "");
     const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
 
     if (jsonMatch) {
       try {
         const parsed = JSON.parse(jsonMatch[0]);
         return {
-          marketAnalysis: parsed.marketAnalysis || "Search completed with no detailed analysis.",
+          marketAnalysis:
+            parsed.marketAnalysis ||
+            "Search completed with no detailed analysis.",
           groundedCategoryId: parsed.groundedCategoryId || null,
         };
       } catch (pErr) {
-        console.warn(`[${invocationId}] MarketAgent: Failed to parse JSON response:`, pErr);
+        console.warn(
+          `[${invocationId}] MarketAgent: Failed to parse JSON response:`,
+          pErr,
+        );
       }
     }
 

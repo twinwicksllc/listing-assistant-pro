@@ -15,12 +15,12 @@
 
 ## 🔐 OAuth Scope Requirements
 
-| Scope | Required | Purpose |
-|-------|----------|---------|
-| `https://api.ebay.com/oauth/api_scope` | ✅ YES | Base authentication |
-| `https://api.ebay.com/oauth/api_scope/sell.inventory` | ✅ YES | **Covers BOTH:** Create/update listings AND video uploads (Media API) |
-| `https://api.ebay.com/oauth/api_scope/sell.account` | ✅ YES | Account access |
-| `https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly` | ⚠️ OPTIONAL | Fulfillment data |
+| Scope                                                            | Required    | Purpose                                                               |
+| ---------------------------------------------------------------- | ----------- | --------------------------------------------------------------------- |
+| `https://api.ebay.com/oauth/api_scope`                           | ✅ YES      | Base authentication                                                   |
+| `https://api.ebay.com/oauth/api_scope/sell.inventory`            | ✅ YES      | **Covers BOTH:** Create/update listings AND video uploads (Media API) |
+| `https://api.ebay.com/oauth/api_scope/sell.account`              | ✅ YES      | Account access                                                        |
+| `https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly` | ⚠️ OPTIONAL | Fulfillment data                                                      |
 
 **Key Fact:** `sell.inventory` scope grants access to BOTH Sell Inventory API AND Commerce Media API (video uploads). No separate scope needed.
 
@@ -28,12 +28,12 @@
 
 ## 🎬 Supported Video Formats
 
-| Format | MIME Type | Status |
-|--------|-----------|--------|
-| MP4 | video/mp4 | ✅ Recommended |
-| MOV | video/quicktime | ✅ Supported |
-| AVI | video/x-msvideo | ✅ Supported |
-| WebM | video/webm | ✅ Supported |
+| Format | MIME Type       | Status         |
+| ------ | --------------- | -------------- |
+| MP4    | video/mp4       | ✅ Recommended |
+| MOV    | video/quicktime | ✅ Supported   |
+| AVI    | video/x-msvideo | ✅ Supported   |
+| WebM   | video/webm      | ✅ Supported   |
 
 **Duration:** 2–12 seconds  
 **Max Size:** 500MB
@@ -48,13 +48,13 @@ PENDING ──upload bytes──→ PROCESSING ──eBay processes──→ LIV
                                            └─policy violation─→ BLOCKED
 ```
 
-| Status | Meaning | Action |
-|--------|---------|--------|
-| PENDING | Uploaded, waiting to process | Poll to check progress |
-| PROCESSING | eBay is validating/encoding | Continue polling |
-| LIVE | Ready to attach to listings | Proceed with inventory creation |
-| FAILED | Validation failed | Check statusMessage for details |
-| BLOCKED | Policy violation detected | Re-upload with different content |
+| Status     | Meaning                      | Action                           |
+| ---------- | ---------------------------- | -------------------------------- |
+| PENDING    | Uploaded, waiting to process | Poll to check progress           |
+| PROCESSING | eBay is validating/encoding  | Continue polling                 |
+| LIVE       | Ready to attach to listings  | Proceed with inventory creation  |
+| FAILED     | Validation failed            | Check statusMessage for details  |
+| BLOCKED    | Policy violation detected    | Re-upload with different content |
 
 **Typical timeline:** PENDING → PROCESSING → LIVE in 2-5 minutes
 
@@ -63,6 +63,7 @@ PENDING ──upload bytes──→ PROCESSING ──eBay processes──→ LIV
 ## 📝 Edge Function Actions
 
 ### upload_video
+
 ```json
 {
   "action": "upload_video",
@@ -74,9 +75,11 @@ PENDING ──upload bytes──→ PROCESSING ──eBay processes──→ LIV
   "fileSize": 5242880
 }
 ```
+
 **Returns:** `{ videoId, status: "PENDING" }`
 
 ### get_video_status (Single Check)
+
 ```json
 {
   "action": "get_video_status",
@@ -84,9 +87,11 @@ PENDING ──upload bytes──→ PROCESSING ──eBay processes──→ LIV
   "videoId": "video ID from upload"
 }
 ```
+
 **Returns:** `{ videoId, status, statusMessage }`
 
 ### poll_video_status_until_live (Retry with Backoff)
+
 ```json
 {
   "action": "poll_video_status_until_live",
@@ -95,9 +100,11 @@ PENDING ──upload bytes──→ PROCESSING ──eBay processes──→ LIV
   "maxWaitMs": 300000
 }
 ```
+
 **Returns:** `{ success, videoId, status, attempts, processingTimeMs }`
 
 ### create_draft (Attach Video)
+
 ```json
 {
   "action": "create_draft",
@@ -107,19 +114,20 @@ PENDING ──upload bytes──→ PROCESSING ──eBay processes──→ LIV
   ...other listing fields...
 }
 ```
+
 **Returns:** Listing created with video attached
 
 ---
 
 ## ⚠️ Common Errors & Fixes
 
-| Error | Status | Root Cause | Fix |
-|-------|--------|-----------|-----|
-| `invalid_scope` | 400 | Scope not registered with eBay | Register at Developer Portal |
-| `unauthorized` | 401 | Token expired or missing | Reconnect eBay account |
-| `access_denied` | 403 | Account lacks permissions | Verify eBay app is in Production |
-| `PROCESSING timeout` | Timeout | Video stuck in processing | Retry after 2-5 min or re-upload |
-| `Video not LIVE` | 400 | Video still processing when attaching | Wait for LIVE status before creating listing |
+| Error                | Status  | Root Cause                            | Fix                                          |
+| -------------------- | ------- | ------------------------------------- | -------------------------------------------- |
+| `invalid_scope`      | 400     | Scope not registered with eBay        | Register at Developer Portal                 |
+| `unauthorized`       | 401     | Token expired or missing              | Reconnect eBay account                       |
+| `access_denied`      | 403     | Account lacks permissions             | Verify eBay app is in Production             |
+| `PROCESSING timeout` | Timeout | Video stuck in processing             | Retry after 2-5 min or re-upload             |
+| `Video not LIVE`     | 400     | Video still processing when attaching | Wait for LIVE status before creating listing |
 
 ---
 
@@ -138,15 +146,15 @@ PENDING ──upload bytes──→ PROCESSING ──eBay processes──→ LIV
 
 ## 📱 File Locations
 
-| File | Purpose |
-|------|---------|
-| `supabase/functions/ebay-publish/constants.ts` | OAuth scopes, video constants |
-| `supabase/functions/ebay-publish/auth.ts` | Token exchange, refresh, retrieval |
-| `supabase/functions/ebay-publish/video.ts` | Video upload, polling, retry logic |
-| `supabase/functions/ebay-publish/publish-create-draft.ts` | Inventory creation with videoIds |
-| `src/components/VideoUploadInput.tsx` | Frontend upload UI |
-| `src/components/analyze/PolicyAndVideo.tsx` | Analyze page video integration |
-| `EBAY_MEDIA_API_IMPLEMENTATION.md` | Full implementation guide |
+| File                                                      | Purpose                            |
+| --------------------------------------------------------- | ---------------------------------- |
+| `supabase/functions/ebay-publish/constants.ts`            | OAuth scopes, video constants      |
+| `supabase/functions/ebay-publish/auth.ts`                 | Token exchange, refresh, retrieval |
+| `supabase/functions/ebay-publish/video.ts`                | Video upload, polling, retry logic |
+| `supabase/functions/ebay-publish/publish-create-draft.ts` | Inventory creation with videoIds   |
+| `src/components/VideoUploadInput.tsx`                     | Frontend upload UI                 |
+| `src/components/analyze/PolicyAndVideo.tsx`               | Analyze page video integration     |
+| `EBAY_MEDIA_API_IMPLEMENTATION.md`                        | Full implementation guide          |
 
 ---
 

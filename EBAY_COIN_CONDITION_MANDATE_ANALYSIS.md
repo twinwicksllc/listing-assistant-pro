@@ -2,13 +2,15 @@
 
 **Effective Date:** Early June 2026  
 **Enforcement Scope:** API listings only (no breaches yet, early warning period)  
-**Affected Categories:** 
+**Affected Categories:**
+
 - 253 (Coins: US)
-- 256 (Coins: World) 
+- 256 (Coins: World)
 - 3377 (Coins: Canada)
 - 4733 (Coins: Ancient)
 - 18466 (Coins: Medieval)
-+ all leaf categories beneath them
+
+* all leaf categories beneath them
 
 ---
 
@@ -17,6 +19,7 @@
 ### What's Already Working
 
 #### ✅ **Type Definitions** ([src/types/listing.ts](src/types/listing.ts#L24))
+
 - `CoinConditionDetail` type fully defined with two branches:
   - **Graded coins**: `{ type: "graded"; gradingCompany; grade; certificationNumber? }`
   - **Raw coins**: `{ type: "raw"; rawCondition: "Uncirculated" | "Extremely Fine to About Uncirculated" | "Fine to Very Fine" | "Below Fine" }`
@@ -24,6 +27,7 @@
 - Coin category detection: Hardcoded sets + breadcrumb-based detection
 
 #### ✅ **Frontend UI** ([src/components/analyze/ListingFields.tsx](src/components/analyze/ListingFields.tsx#L374))
+
 - Conditional "Coin Condition Details" section appears only for coin categories
 - Two-button toggle: "Graded coin" / "Raw coin"
 - Graded path: Dropdown for grading company (PCGS, NGC, ANACS, ICG, CAC, ICCS) + grade string input + optional cert number
@@ -31,12 +35,14 @@
 - Validation indicator shows "Required" badge when incomplete
 
 #### ✅ **Coin Descriptor Fetching** ([supabase/functions/ebay-publish/index.ts#L2309](supabase/functions/ebay-publish/index.ts#L2309))
+
 - `fetchCoinConditionDescriptors()` calls eBay's Metadata API to get numeric descriptor IDs
 - In-memory cache per invocation
 - Handles both graded and raw coin flows
 - Maps user-friendly values → eBay numeric IDs
 
 #### ✅ **Descriptor Building** ([supabase/functions/ebay-publish/index.ts#L2461](supabase/functions/ebay-publish/index.ts#L2461))
+
 - `buildCoinConditionDescriptors()` constructs the final payload:
   - **Graded**: Maps company name + grade parts (letter, number, suffix) to descriptor IDs
   - **Raw**: Maps standardized condition tier to descriptor ID
@@ -44,6 +50,7 @@
 - Descriptor array added to `inventoryBody.conditionDescriptors` before eBay API call
 
 #### ✅ **Storage & Persistence** ([src/hooks/useDrafts.ts](src/hooks/useDrafts.ts#L65))
+
 - Coin condition detail persisted in `item_specifics._coinConditionDetail`
 - Loaded back from DB on draft restoration
 
@@ -52,17 +59,37 @@
 ## 2. Gaps & Compliance Risks ⚠️
 
 ### Gap 1: Hardcoded Coin Category IDs Are Incomplete
+
 **Location:** [supabase/functions/ebay-publish/index.ts#L301](supabase/functions/ebay-publish/index.ts#L301)
 
 ```typescript
 const HARDCODED_COIN_CATEGORY_IDS = new Set([
-  "11981", "39464", "11980", "11971", "41099", "41102", "11973", "39455", 
-  "41084", "11950", "41111", "166679", "41109", "526", "253", "45243", 
-  "39471", "39472", "39473", "39474", "39475",
+  "11981",
+  "39464",
+  "11980",
+  "11971",
+  "41099",
+  "41102",
+  "11973",
+  "39455",
+  "41084",
+  "11950",
+  "41111",
+  "166679",
+  "41109",
+  "526",
+  "253",
+  "45243",
+  "39471",
+  "39472",
+  "39473",
+  "39474",
+  "39475",
 ]);
 ```
 
-**Issue:** 
+**Issue:**
+
 - The five mandate parent categories (253, 256, 3377, 4733, 18466) are partially present, but:
   - 256 (World Coins) **not in set**
   - 3377 (Canada Coins) **not in set**
@@ -75,9 +102,11 @@ const HARDCODED_COIN_CATEGORY_IDS = new Set([
 ---
 
 ### Gap 2: No Validation Schema for `CoinConditionDetail`
+
 **Location:** [src/types/listing-form.ts](src/types/listing-form.ts)
 
 **Issue:**
+
 - The Zod schema `listingFormSchema` does **not** validate `coinConditionDetail`
 - No superRefine logic to enforce:
   - If `coinConditionDetailRequired === true` → detail must be complete
@@ -85,6 +114,7 @@ const HARDCODED_COIN_CATEGORY_IDS = new Set([
   - If raw → `rawCondition` is selected
 
 **Impact:**
+
 - Users can submit listings with empty coin condition fields
 - The publish function logs a warning but proceeds (graceful degradation)
 - Potential eBay rejection at submission time
@@ -92,6 +122,7 @@ const HARDCODED_COIN_CATEGORY_IDS = new Set([
 ---
 
 ### Gap 3: Missing Category Detection for New Mandate Categories
+
 **Location:** [src/types/listing.ts#L290](src/types/listing.ts#L290)
 
 ```typescript
@@ -101,14 +132,18 @@ function isCoinConditionDetailRequired(
   breadcrumb: string | undefined,
 ): boolean {
   return Boolean(
-    (categoryId && COIN_CATEGORY_IDS.has(categoryId))
-      || domain === "coins_bullion"
-      || (breadcrumb && /coins?:\s*(us|world|canada|ancient|medieval)|coins?\s*&\s*paper money/i.test(breadcrumb)),
+    (categoryId && COIN_CATEGORY_IDS.has(categoryId)) ||
+    domain === "coins_bullion" ||
+    (breadcrumb &&
+      /coins?:\s*(us|world|canada|ancient|medieval)|coins?\s*&\s*paper money/i.test(
+        breadcrumb,
+      )),
   );
 }
 ```
 
 **Issue:**
+
 - The regex pattern checks for breadcrumb matches, which is good
 - But `COIN_CATEGORY_IDS` hardcoded set is missing 256, 3377, 4733, 18466
 - If breadcrumb lookup fails → fallback set is incomplete
@@ -116,9 +151,11 @@ function isCoinConditionDetailRequired(
 ---
 
 ### Gap 4: No User Confirmation Flow for Auto-Suggested Conditions
+
 **Location:** Frontend (analyze page)
 
 **Issue:**
+
 - The code supports eBay's auto-assignment of condition (eBay can suggest a default)
 - But there's **no helper function** to:
   1. Detect when eBay suggests a condition
@@ -126,16 +163,23 @@ function isCoinConditionDetailRequired(
   3. Allow override before publishing
 
 **Current state:**
+
 - If eBay returns a default condition → we blindly use it
 - No user visibility or approval gate
 
 ---
 
 ### Gap 5: No Mandatory Field Validation at Publish Time
+
 **Location:** [supabase/functions/ebay-publish/index.ts#L3916](supabase/functions/ebay-publish/index.ts#L3916)
 
 ```typescript
-if (coinConditionDetailRaw && isCoinDescriptorCategory && clientId && clientSecret) {
+if (
+  coinConditionDetailRaw &&
+  isCoinDescriptorCategory &&
+  clientId &&
+  clientSecret
+) {
   // Build descriptors...
 } else if (coinConditionDetailRaw && categoryTreeType === "coin") {
   console.log(`create_draft: coinConditionDetail present but skipping...`);
@@ -143,6 +187,7 @@ if (coinConditionDetailRaw && isCoinDescriptorCategory && clientId && clientSecr
 ```
 
 **Issue:**
+
 - If coin category is detected but `coinConditionDetailRaw === null` → **no error**
 - Logging only; proceeds to publish
 - Should throw an explicit error instead
@@ -158,21 +203,42 @@ if (coinConditionDetailRaw && isCoinDescriptorCategory && clientId && clientSecr
 ```typescript
 /** Coin category IDs required by eBay June 2026 mandate */
 const COIN_CONDITION_DESCRIPTOR_PARENT_IDS = new Set([
-  "253",   // Coins: US
-  "256",   // Coins: World ← MISSING
-  "3377",  // Coins: Canada ← MISSING
-  "4733",  // Coins: Ancient ← MISSING
+  "253", // Coins: US
+  "256", // Coins: World ← MISSING
+  "3377", // Coins: Canada ← MISSING
+  "4733", // Coins: Ancient ← MISSING
   "18466", // Coins: Medieval ← MISSING
 ]);
 
 /** All coin-related categories (parent + leaf) for category tree detection */
 const HARDCODED_COIN_CATEGORY_IDS = new Set([
   // Mandate parents
-  "253", "256", "3377", "4733", "18466",
+  "253",
+  "256",
+  "3377",
+  "4733",
+  "18466",
   // Existing leaf categories
-  "11981", "39464", "11980", "11971", "41099", "41102", "11973", "39455",
-  "41084", "11950", "41111", "166679", "41109", "526", "45243",
-  "39471", "39472", "39473", "39474", "39475",
+  "11981",
+  "39464",
+  "11980",
+  "11971",
+  "41099",
+  "41102",
+  "11973",
+  "39455",
+  "41084",
+  "11950",
+  "41111",
+  "166679",
+  "41109",
+  "526",
+  "45243",
+  "39471",
+  "39472",
+  "39473",
+  "39474",
+  "39475",
 ]);
 ```
 
@@ -180,10 +246,31 @@ const HARDCODED_COIN_CATEGORY_IDS = new Set([
 
 ```typescript
 const COIN_CATEGORY_IDS = new Set([
-  "253", "256", "3377", "4733", "18466",  // Mandate parents
-  "11981", "39464", "11980", "11971", "41099", "41102", "11973", "39455",
-  "41084", "11950", "41111", "166679", "41109", "526", "45243",
-  "39471", "39472", "39473", "39474", "39475",
+  "253",
+  "256",
+  "3377",
+  "4733",
+  "18466", // Mandate parents
+  "11981",
+  "39464",
+  "11980",
+  "11971",
+  "41099",
+  "41102",
+  "11973",
+  "39455",
+  "41084",
+  "11950",
+  "41111",
+  "166679",
+  "41109",
+  "526",
+  "45243",
+  "39471",
+  "39472",
+  "39473",
+  "39474",
+  "39475",
 ]);
 ```
 
@@ -197,31 +284,44 @@ Add to the schema after policy validation:
 
 ```typescript
 import type { CoinConditionDetail } from "./listing";
-import { isCoinConditionDetailRequired, isCoinConditionDetailComplete } from "./listing";
+import {
+  isCoinConditionDetailRequired,
+  isCoinConditionDetailComplete,
+} from "./listing";
 
 export const listingFormSchema = z
   .object({
     // ... existing fields ...
-    ebayCategoryId: z.string().min(1, "eBay category is required (generate listing to set)"),
+    ebayCategoryId: z
+      .string()
+      .min(1, "eBay category is required (generate listing to set)"),
     // Add coin condition field to schema
-    coinConditionDetail: z.custom<CoinConditionDetail | null | undefined>().optional(),
+    coinConditionDetail: z
+      .custom<CoinConditionDetail | null | undefined>()
+      .optional(),
     coinConditionDetailRequired: z.boolean().optional(),
   })
   .superRefine((data, ctx) => {
     // ... existing validation ...
-    
+
     // Coin condition requirement validation
-    if (data.coinConditionDetailRequired && !isCoinConditionDetailComplete(data.coinConditionDetail)) {
+    if (
+      data.coinConditionDetailRequired &&
+      !isCoinConditionDetailComplete(data.coinConditionDetail)
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["coinConditionDetail"],
-        message: "Coin condition details are required for this category before publishing",
+        message:
+          "Coin condition details are required for this category before publishing",
       });
     }
   });
 
 // Add type export
-export type ListingFormDataWithCoinCondition = z.infer<typeof listingFormSchema>;
+export type ListingFormDataWithCoinCondition = z.infer<
+  typeof listingFormSchema
+>;
 ```
 
 ---
@@ -245,7 +345,7 @@ export interface EbayCoinConditionSuggestion {
 
 /**
  * Parse eBay's automatic condition suggestion from metadata API response.
- * 
+ *
  * eBay may suggest a default condition in the Metadata API response.
  * This function extracts and normalizes it into our CoinConditionDetail format.
  *
@@ -265,7 +365,11 @@ export function parseEbayCoinConditionSuggestion(
   // 3. { defaultConditionId: 1000, description: "New" }
 
   try {
-    if (ebaySuggestion.type === "graded" && ebaySuggestion.grader && ebaySuggestion.grade) {
+    if (
+      ebaySuggestion.type === "graded" &&
+      ebaySuggestion.grader &&
+      ebaySuggestion.grade
+    ) {
       return {
         suggested: {
           type: "graded",
@@ -292,7 +396,8 @@ export function parseEbayCoinConditionSuggestion(
             rawCondition: ebaySuggestion.value as any,
           },
           confidence: ebaySuggestion.confidence ?? "medium",
-          rationale: ebaySuggestion.rationale ?? "Automatically detected by eBay",
+          rationale:
+            ebaySuggestion.rationale ?? "Automatically detected by eBay",
         };
       }
     }
@@ -308,7 +413,9 @@ export function parseEbayCoinConditionSuggestion(
  */
 export function describeCoinCondition(detail: CoinConditionDetail): string {
   if (detail.type === "graded") {
-    const cert = detail.certificationNumber ? ` (Cert: ${detail.certificationNumber})` : "";
+    const cert = detail.certificationNumber
+      ? ` (Cert: ${detail.certificationNumber})`
+      : "";
     return `${detail.gradingCompany} ${detail.grade}${cert}`;
   } else {
     return `Raw: ${detail.rawCondition}`;
@@ -319,7 +426,9 @@ export function describeCoinCondition(detail: CoinConditionDetail): string {
  * Suggest a default condition based on common patterns.
  * Useful as a fallback when eBay doesn't provide a suggestion.
  */
-export function suggestDefaultCoinCondition(itemTitle: string): CoinConditionDetail | null {
+export function suggestDefaultCoinCondition(
+  itemTitle: string,
+): CoinConditionDetail | null {
   const title = itemTitle.toLowerCase();
 
   // Pattern: detect "proof" or "proof set"
@@ -341,7 +450,9 @@ export function suggestDefaultCoinCondition(itemTitle: string): CoinConditionDet
   for (const { pattern, company } of graders) {
     if (pattern.test(title)) {
       // Try to extract grade from title (e.g., "MS 65", "PR 70")
-      const gradeMatch = title.match(/\b(MS|PR|AU|XF|VF|F|VG|G)\s*(\d{1,2})\b/i);
+      const gradeMatch = title.match(
+        /\b(MS|PR|AU|XF|VF|F|VG|G)\s*(\d{1,2})\b/i,
+      );
       if (gradeMatch) {
         return {
           type: "graded",
@@ -375,9 +486,7 @@ const rawItemSpecifics = (
   itemSpecifics && typeof itemSpecifics === "object" ? itemSpecifics : {}
 ) as Record<string, unknown>;
 const coinConditionDetailRaw = rawItemSpecifics._coinConditionDetail as
-  | CoinConditionDetail
-  | null
-  | undefined;
+  CoinConditionDetail | null | undefined;
 
 // Check if this category is a coin category requiring descriptors
 const isCoinDescriptorCategory = categoryTreeType === "coin";
@@ -386,11 +495,16 @@ const isCoinDescriptorCategory = categoryTreeType === "coin";
 if (isCoinDescriptorCategory && !coinConditionDetailRaw) {
   throw new Error(
     `Coin listings in category ${finalCategoryId} require detailed condition information. ` +
-    `Please specify either a certified grade (PCGS, NGC, etc.) or a raw condition tier before publishing.`
+      `Please specify either a certified grade (PCGS, NGC, etc.) or a raw condition tier before publishing.`,
   );
 }
 
-if (coinConditionDetailRaw && isCoinDescriptorCategory && clientId && clientSecret) {
+if (
+  coinConditionDetailRaw &&
+  isCoinDescriptorCategory &&
+  clientId &&
+  clientSecret
+) {
   try {
     console.log(
       `create_draft: fetching coin condition descriptors for category ${finalCategoryId}, type=${coinConditionDetailRaw.type}`,
@@ -416,13 +530,13 @@ if (coinConditionDetailRaw && isCoinDescriptorCategory && clientId && clientSecr
         // FAIL: Could not map user values to descriptor IDs
         throw new Error(
           `Could not map condition "${coinConditionDetailRaw.type === "graded" ? "graded" : coinConditionDetailRaw.rawCondition}" ` +
-          `to eBay descriptor values for category ${finalCategoryId}. Please verify the condition is valid.`
+            `to eBay descriptor values for category ${finalCategoryId}. Please verify the condition is valid.`,
         );
       }
     } else {
       throw new Error(
         `Unable to retrieve condition descriptors from eBay for category ${finalCategoryId}. ` +
-        `Please try again or contact support.`
+          `Please try again or contact support.`,
       );
     }
   } catch (cdErr) {
@@ -523,14 +637,14 @@ Ensure the dynamic category mapping includes 256, 3377, 4733, 18466 in breadcrum
 
 ## 4. Implementation Priority & Rollout
 
-| Priority | Action | Effort | Impact | Target Date |
-|----------|--------|--------|--------|------------|
-| **CRITICAL** | Update hardcoded category sets (Action 1) | 15 min | Unblocks descriptor detection for 256, 3377, 4733, 18466 | **ASAP** |
-| **CRITICAL** | Add publish-time validation (Action 4) | 20 min | Prevents silent failures; catches missing conditions early | **This week** |
-| **HIGH** | Add Zod schema validation (Action 2) | 20 min | Catches empty conditions at form submission, not at publish | **This week** |
-| **HIGH** | Create coin condition helper (Action 3) | 45 min | Enables user confirmation flow and default suggestions | **Next sprint** |
-| **MEDIUM** | Add UI confirmation component (Action 5) | 30 min | Improves UX for suggested conditions | **Next sprint** |
-| **MEDIUM** | Update category lookup (Action 6) | 15 min | Ensures dynamic categories are recognized | **This week** |
+| Priority     | Action                                    | Effort | Impact                                                      | Target Date     |
+| ------------ | ----------------------------------------- | ------ | ----------------------------------------------------------- | --------------- |
+| **CRITICAL** | Update hardcoded category sets (Action 1) | 15 min | Unblocks descriptor detection for 256, 3377, 4733, 18466    | **ASAP**        |
+| **CRITICAL** | Add publish-time validation (Action 4)    | 20 min | Prevents silent failures; catches missing conditions early  | **This week**   |
+| **HIGH**     | Add Zod schema validation (Action 2)      | 20 min | Catches empty conditions at form submission, not at publish | **This week**   |
+| **HIGH**     | Create coin condition helper (Action 3)   | 45 min | Enables user confirmation flow and default suggestions      | **Next sprint** |
+| **MEDIUM**   | Add UI confirmation component (Action 5)  | 30 min | Improves UX for suggested conditions                        | **Next sprint** |
+| **MEDIUM**   | Update category lookup (Action 6)         | 15 min | Ensures dynamic categories are recognized                   | **This week**   |
 
 ---
 
@@ -549,12 +663,14 @@ Ensure the dynamic category mapping includes 256, 3377, 4733, 18466 in breadcrum
 ## 6. eBay Compliance Notes
 
 **What eBay expects:**
+
 - All coin listings in the five mandate categories must include structured `conditionDescriptors` in the Inventory API payload
 - Descriptors map user condition (graded/raw) → numeric descriptor IDs fetched from Metadata API
 - Missing `conditionDescriptors` = warning 25126 (advisory, not blocking early June)
 - Come mid-June, non-compliance may escalate to rejection
 
 **Our current resilience:**
+
 - If descriptor fetch fails → log warning, include `conditionDescriptors` array (empty), let eBay decide
 - If mapping fails → log error, include what we can
 - **Improvement:** Make it a hard stop instead (proposed Action 4)
@@ -564,9 +680,10 @@ Ensure the dynamic category mapping includes 256, 3377, 4733, 18466 in breadcrum
 ## 7. Long-Term Tracking
 
 Once implemented, add a Supabase function to periodically validate:
+
 ```sql
 SELECT count(*) as coin_listings_without_condition
-FROM listings 
+FROM listings
 WHERE ebay_category_id IN ('253', '256', '3377', '4733', '18466')
   AND (item_specifics->>'_coinConditionDetail' IS NULL OR item_specifics->>'_coinConditionDetail' = 'null')
   AND status = 'published';

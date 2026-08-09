@@ -24,6 +24,7 @@ supabase db pull  # or let it auto-apply on start
 ```
 
 The migration `20260329024428_create_test_items_table.sql` will:
+
 - Create `public.test_items` table with same schema as `drafts`
 - Pre-populate with 60 realistic test items:
   - **Coins & Bullion** (16 items): Kennedy halves, gold eagles, sovereigns, international coins
@@ -80,7 +81,7 @@ import { getTestItemByDomain } from "../_test-helpers/test-db.ts";
 
 Deno.test("analyze-item: coins domain", async () => {
   const item = await getTestItemByDomain("coins_bullion");
-  
+
   const result = await callAnalyzeItem({
     voiceNote: item.title + " " + item.description,
     images: item.image_urls || [],
@@ -140,9 +141,9 @@ image_urls TEXT[]        -- Array of image URLs
   "domain": "coins_bullion",
   "title": "US Silver Quarter 1964 Kennedy",
   "description": "1964 Kennedy silver half dollar, 90% silver content, excellent condition",
-  "price_min": 45.00,
-  "price_max": 65.00,
-  "listing_price": 55.00,
+  "price_min": 45.0,
+  "price_max": 65.0,
+  "listing_price": 55.0,
   "ebay_category_id": "2536",
   "item_specifics": {
     "Year": "1964",
@@ -152,7 +153,7 @@ image_urls TEXT[]        -- Array of image URLs
   "condition": "Excellent",
   "metal_type": "silver",
   "metal_weight_oz": 0.3617,
-  "cogs": 18.50
+  "cogs": 18.5
 }
 ```
 
@@ -182,10 +183,10 @@ supabase functions deploy --use-api
    Deno.test("my-function: does X", async () => {
      // arrange
      const item = await getTestItemByDomain("coins_bullion");
-     
+
      // act
      const result = await callMyFunction(item);
-     
+
      // assert
      assert(result.success);
    });
@@ -203,6 +204,7 @@ Run with: `bun run test`
 ### Tests fail locally but pass in CI
 
 Common causes:
+
 - Supabase not fully started (wait 45 seconds)
 - Different .env setup — verify `SUPABASE_URL` and keys
 - Functions not deployed: run `supabase functions serve`
@@ -229,6 +231,7 @@ Common causes:
 ## Questions?
 
 See:
+
 - Test helper: `supabase/functions/_test-helpers/test-db.ts`
 - Example tests: `supabase/functions/analyze-item/test.ts`
 - CI config: `.github/workflows/test.yml`

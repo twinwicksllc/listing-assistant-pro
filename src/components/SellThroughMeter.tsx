@@ -70,16 +70,29 @@ export default function SellThroughMeter({
         </svg>
         {/* Center text */}
         <div className="absolute inset-0 flex flex-col items-center justify-center rotate-0">
-          <span className={cn("font-bold leading-none", textSizeMap[size], colorClass)}>
+          <span
+            className={cn(
+              "font-bold leading-none",
+              textSizeMap[size],
+              colorClass,
+            )}
+          >
             {clampedRate.toFixed(0)}%
           </span>
-          <span className={cn("text-muted-foreground leading-none mt-0.5", labelSizeMap[size])}>
+          <span
+            className={cn(
+              "text-muted-foreground leading-none mt-0.5",
+              labelSizeMap[size],
+            )}
+          >
             STR
           </span>
         </div>
       </div>
       {showLabel && (
-        <span className={cn("font-medium", labelSizeMap[size], colorClass)}>{label}</span>
+        <span className={cn("font-medium", labelSizeMap[size], colorClass)}>
+          {label}
+        </span>
       )}
     </div>
   );

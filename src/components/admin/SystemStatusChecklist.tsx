@@ -1,4 +1,11 @@
-import { CheckCircle2, XCircle, Activity, CreditCard, Zap, Cpu } from "lucide-react";
+import {
+  CheckCircle2,
+  XCircle,
+  Activity,
+  CreditCard,
+  Zap,
+  Cpu,
+} from "lucide-react";
 import { formatTokensInMillions } from "./types";
 import type { SystemData } from "./types";
 
@@ -44,9 +51,15 @@ export function SystemStatusChecklist({ data }: SystemStatusChecklistProps) {
                   : "bg-yellow-500/15 text-yellow-600"
               }`}
             >
-              {data.stripe.mode === "live" ? "LIVE" : data.stripe.mode === "test" ? "TEST" : "?"}
+              {data.stripe.mode === "live"
+                ? "LIVE"
+                : data.stripe.mode === "test"
+                  ? "TEST"
+                  : "?"}
             </span>
-            <StatusIcon ok={!data.stripe.error && data.stripe.mode !== "unknown"} />
+            <StatusIcon
+              ok={!data.stripe.error && data.stripe.mode !== "unknown"}
+            />
           </div>
         </div>
 
@@ -71,7 +84,8 @@ export function SystemStatusChecklist({ data }: SystemStatusChecklistProps) {
             <div>
               <p className="text-sm font-medium text-foreground">Gemini AI</p>
               <p className="text-xs text-muted-foreground">
-                {data.gemini.totalCalls} calls · {formatTokensInMillions(data.gemini.totalTokens ?? 0)} tokens ·
+                {data.gemini.totalCalls} calls ·{" "}
+                {formatTokensInMillions(data.gemini.totalTokens ?? 0)} tokens ·
                 ${(data.gemini.estimatedCost ?? 0).toFixed(4)} (30d)
               </p>
             </div>
@@ -84,9 +98,12 @@ export function SystemStatusChecklist({ data }: SystemStatusChecklistProps) {
           <div className="flex items-center gap-3">
             <Zap className="w-4 h-4 text-muted-foreground" />
             <div>
-              <p className="text-sm font-medium text-foreground">OpenAI (GPT-4o)</p>
+              <p className="text-sm font-medium text-foreground">
+                OpenAI (GPT-4o)
+              </p>
               <p className="text-xs text-muted-foreground">
-                {data.openai?.totalCalls ?? 0} calls · {formatTokensInMillions(data.openai?.totalTokens ?? 0)} tokens ·
+                {data.openai?.totalCalls ?? 0} calls ·{" "}
+                {formatTokensInMillions(data.openai?.totalTokens ?? 0)} tokens ·
                 ${(data.openai?.estimatedCost ?? 0).toFixed(4)} (30d)
               </p>
             </div>

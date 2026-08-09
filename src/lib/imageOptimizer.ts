@@ -44,7 +44,7 @@ function getPixelData(img: HTMLImageElement) {
 function detectSubjectBounds(
   data: Uint8ClampedArray,
   width: number,
-  height: number
+  height: number,
 ): { x: number; y: number; w: number; h: number } {
   // Sample corner pixels to estimate the background color
   const corners = [
@@ -54,7 +54,9 @@ function detectSubjectBounds(
     ((height - 1) * width + (width - 1)) * 4, // bottom-right
   ];
 
-  let bgR = 0, bgG = 0, bgB = 0;
+  let bgR = 0,
+    bgG = 0,
+    bgB = 0;
   for (const idx of corners) {
     bgR += data[idx];
     bgG += data[idx + 1];
@@ -73,37 +75,48 @@ function detectSubjectBounds(
     return Math.sqrt(dr * dr + dg * dg + db * db) < threshold;
   };
 
-  let top = 0, bottom = height - 1, left = 0, right = width - 1;
+  let top = 0,
+    bottom = height - 1,
+    left = 0,
+    right = width - 1;
 
   // Scan from top
-  outer_top:
-  for (let y = 0; y < height; y++) {
+  outer_top: for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      if (!isBackground(( y * width + x) * 4)) { top = y; break outer_top; }
+      if (!isBackground((y * width + x) * 4)) {
+        top = y;
+        break outer_top;
+      }
     }
   }
 
   // Scan from bottom
-  outer_bottom:
-  for (let y = height - 1; y >= top; y--) {
+  outer_bottom: for (let y = height - 1; y >= top; y--) {
     for (let x = 0; x < width; x++) {
-      if (!isBackground((y * width + x) * 4)) { bottom = y; break outer_bottom; }
+      if (!isBackground((y * width + x) * 4)) {
+        bottom = y;
+        break outer_bottom;
+      }
     }
   }
 
   // Scan from left
-  outer_left:
-  for (let x = 0; x < width; x++) {
+  outer_left: for (let x = 0; x < width; x++) {
     for (let y = top; y <= bottom; y++) {
-      if (!isBackground((y * width + x) * 4)) { left = x; break outer_left; }
+      if (!isBackground((y * width + x) * 4)) {
+        left = x;
+        break outer_left;
+      }
     }
   }
 
   // Scan from right
-  outer_right:
-  for (let x = width - 1; x >= left; x--) {
+  outer_right: for (let x = width - 1; x >= left; x--) {
     for (let y = top; y <= bottom; y++) {
-      if (!isBackground((y * width + x) * 4)) { right = x; break outer_right; }
+      if (!isBackground((y * width + x) * 4)) {
+        right = x;
+        break outer_right;
+      }
     }
   }
 
@@ -111,8 +124,8 @@ function detectSubjectBounds(
   // This preserves slab label edges that would otherwise be cropped off
   const cropW = right - left + 1;
   const cropH = bottom - top + 1;
-  const marginX = Math.round(cropW * 0.20);
-  const marginY = Math.round(cropH * 0.20);
+  const marginX = Math.round(cropW * 0.2);
+  const marginY = Math.round(cropH * 0.2);
 
   return {
     x: Math.max(0, left - marginX),
@@ -125,11 +138,13 @@ function detectSubjectBounds(
 /** Compute mean brightness of image data (0–255) */
 function computeStats(data: Uint8ClampedArray) {
   let totalBrightness = 0;
-  let minB = 255, maxB = 0;
+  let minB = 255,
+    maxB = 0;
   const pixelCount = data.length / 4;
 
   for (let i = 0; i < data.length; i += 4) {
-    const brightness = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    const brightness =
+      0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
     totalBrightness += brightness;
     if (brightness < minB) minB = brightness;
     if (brightness > maxB) maxB = brightness;
@@ -160,7 +175,8 @@ export async function optimizeImage(dataUrl: string): Promise<string> {
   // If crop is less than 10% of the image, skip cropping (already well-framed)
   const cropArea = bounds.w * bounds.h;
   const fullArea = width * height;
-  const shouldCrop = cropArea < fullArea * 0.9 && bounds.w > 50 && bounds.h > 50;
+  const shouldCrop =
+    cropArea < fullArea * 0.9 && bounds.w > 50 && bounds.h > 50;
 
   const sx = shouldCrop ? bounds.x : 0;
   const sy = shouldCrop ? bounds.y : 0;
@@ -193,14 +209,15 @@ export async function optimizeImage(dataUrl: string): Promise<string> {
 
   // Apply per-pixel brightness adjustment and mild contrast stretch
   const contrastRange = stats.maxBrightness - stats.minBrightness;
-  const contrastFactor = contrastRange > 20 ? Math.min(220 / contrastRange, 1.5) : 1;
+  const contrastFactor =
+    contrastRange > 20 ? Math.min(220 / contrastRange, 1.5) : 1;
 
   const pixels = croppedData.data;
   for (let i = 0; i < pixels.length; i += 4) {
     for (let c = 0; c < 3; c++) {
       let val = pixels[i + c];
       // Contrast stretch around mid-point
-      val = ((val - 128) * contrastFactor) + 128;
+      val = (val - 128) * contrastFactor + 128;
       // Brightness shift
       val += brightnessDelta * 0.5; // apply half to avoid over-correction
       pixels[i + c] = Math.max(0, Math.min(255, Math.round(val)));
@@ -218,7 +235,7 @@ export async function optimizeImage(dataUrl: string): Promise<string> {
  */
 export async function optimizeImages(
   dataUrls: string[],
-  onProgress?: (completed: number, total: number) => void
+  onProgress?: (completed: number, total: number) => void,
 ): Promise<string[]> {
   const results: string[] = [];
   for (let i = 0; i < dataUrls.length; i++) {

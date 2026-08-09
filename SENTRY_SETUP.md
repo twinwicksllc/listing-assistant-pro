@@ -5,6 +5,7 @@ This document explains how to set up Sentry for real-time error monitoring in pr
 ## What is Sentry?
 
 Sentry is an error tracking platform that captures exceptions from your application and provides:
+
 - **Real-time alerts** when errors occur
 - **Error context** (stack traces, user info, browser environment)
 - **Trend tracking** (error frequency, affected users)
@@ -23,6 +24,7 @@ Sentry is an error tracking platform that captures exceptions from your applicat
    - **Project name**: `listing-assistant-pro`
 
 You'll get a **DSN** that looks like:
+
 ```
 https://xxxxx@oxxxxx.ingest.sentry.io/yyyy
 ```
@@ -30,12 +32,14 @@ https://xxxxx@oxxxxx.ingest.sentry.io/yyyy
 ### 2. Add DSN to Environment Variables
 
 **For local development:**
+
 ```bash
 # Create/update .env.local
 echo "SENTRY_DSN=https://xxxxx@oxxxxx.ingest.sentry.io/yyyy" >> .env.local
 ```
 
 **For production (Supabase):**
+
 1. Go to Supabase dashboard → Settings → Environment variables
 2. Add new variable:
    - **Name**: `SENTRY_DSN`
@@ -47,16 +51,19 @@ echo "SENTRY_DSN=https://xxxxx@oxxxxx.ingest.sentry.io/yyyy" >> .env.local
 ### 3. Verify Setup
 
 The Sentry integration is already in place for these functions:
+
 - `analyze-item`
 - `ebay-publish`
 - `ebay-pricing`
 
 Each function will:
+
 1. Call `initSentry()` on startup ✅
 2. Capture errors in the main `catch` block ✅
 3. Include context (function name, user ID, action type) ✅
 
 To test:
+
 ```bash
 # Generate a test error (optional)
 # Call a function with invalid data and check Sentry dashboard
@@ -75,6 +82,7 @@ To test:
 ### 5. Set Up Alerts (Optional)
 
 In Sentry dashboard → Alerts:
+
 1. Create alert rule:
    - **Filter**: `issue.title:* (all errors)`
    - **Actions**: `Send to Slack` or `Send email`
@@ -87,6 +95,7 @@ Example: Alert when more than 5 errors occur in 1 minute.
 ## Free Tier Limits
 
 Sentry's free plan includes:
+
 - **100,000 events/month** free (plenty for early-stage apps)
 - **90-day data retention**
 - **Up to 3 team members**
@@ -123,7 +132,8 @@ This gives you **complete visibility** into what broke and why.
 
 ### Errors not appearing in Sentry?
 
-1. **Verify DSN is set**: 
+1. **Verify DSN is set**:
+
    ```bash
    # Check environment variables
    supabase secrets list
@@ -144,6 +154,7 @@ This gives you **complete visibility** into what broke and why.
 ### Too many errors?
 
 If you're seeing spam errors:
+
 1. Go to Sentry dashboard → Alerts
 2. Create filter to ignore certain patterns
 3. Or fix the bug and redeploy
@@ -152,11 +163,11 @@ If you're seeing spam errors:
 
 ## Cost Summary
 
-| Scenario | Cost |
-|----------|------|
-| <100k errors/month | Free |
-| 100-500k errors/month | $29-99/month |
-| 500k+ errors/month | Contact sales |
+| Scenario              | Cost          |
+| --------------------- | ------------- |
+| <100k errors/month    | Free          |
+| 100-500k errors/month | $29-99/month  |
+| 500k+ errors/month    | Contact sales |
 
 For a production app with good error handling, you'll likely stay in the **free tier** (or low Pro tier).
 

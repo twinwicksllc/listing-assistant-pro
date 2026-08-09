@@ -1,5 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from './types';
+import { createClient } from "@supabase/supabase-js";
+import type { Database } from "./types";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -12,26 +12,30 @@ const SUPABASE_PUBLISHABLE_KEY =
 
 // Temporary: verify env vars are defined at init time (scrubs middle chars)
 const scrub = (s: string | undefined) =>
-  s ? `${s.slice(0, 8)}...${s.slice(-4)}` : 'UNDEFINED';
+  s ? `${s.slice(0, 8)}...${s.slice(-4)}` : "UNDEFINED";
 
 // Only log debug info in development mode
 if (import.meta.env.DEV) {
-  console.log('[supabase] URL:', scrub(SUPABASE_URL));
-  console.log('[supabase] KEY:', scrub(SUPABASE_PUBLISHABLE_KEY));
+  console.log("[supabase] URL:", scrub(SUPABASE_URL));
+  console.log("[supabase] KEY:", scrub(SUPABASE_PUBLISHABLE_KEY));
 }
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-  auth: {
-    storage: localStorage,
-    // Unique storage key prevents PKCE verifier collision with crm.rankedceo.com
-    // which shares the same Supabase project
-    storageKey: 'sb-lister-auth-token',
-    persistSession: true,
-    detectSessionInUrl: true,
-    autoRefreshToken: true,
-    flowType: 'pkce',
-  }
-});
+export const supabase = createClient<Database>(
+  SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY,
+  {
+    auth: {
+      storage: localStorage,
+      // Unique storage key prevents PKCE verifier collision with crm.rankedceo.com
+      // which shares the same Supabase project
+      storageKey: "sb-lister-auth-token",
+      persistSession: true,
+      detectSessionInUrl: true,
+      autoRefreshToken: true,
+      flowType: "pkce",
+    },
+  },
+);

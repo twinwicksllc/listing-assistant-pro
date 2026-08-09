@@ -175,6 +175,7 @@ The listing creation system orchestrates multiple components to provide an intel
 ## Data Flow
 
 ### Phase 1: User Input Collection
+
 ```
 User Input
   → Title (from AI or manual)
@@ -185,6 +186,7 @@ User Input
 ```
 
 ### Phase 2: Category Discovery
+
 ```
 Description Text
   → getCategorySuggestions(desc, token)
@@ -195,6 +197,7 @@ Description Text
 ```
 
 ### Phase 3: Requirements Fetch
+
 ```
 Category ID
   → getRequiredAspects(categoryId, token)
@@ -205,6 +208,7 @@ Category ID
 ```
 
 ### Phase 4: Aspect Collection
+
 ```
 User Input + AI Data
   → Build providedAspects object
@@ -213,6 +217,7 @@ User Input + AI Data
 ```
 
 ### Phase 5: Validation
+
 ```
 providedAspects + Requirements
   → validateAspects(categoryId, provided, token)
@@ -223,6 +228,7 @@ providedAspects + Requirements
 ```
 
 ### Phase 6: Form Validation
+
 ```
 All Form Fields
   → React Hook Form + Zod Schema
@@ -234,6 +240,7 @@ All Form Fields
 ```
 
 ### Phase 7: Publish
+
 ```
 All validated data
   → Edge Function (ebay-publish)
@@ -301,6 +308,7 @@ AnalyzePage.tsx (Main Form Container)
 ## Type-Safe Data Structures
 
 ### From ebayTaxonomy.ts
+
 ```typescript
 // Input
 interface CategorySuggestion {
@@ -341,20 +349,13 @@ const EBAY_CATEGORIES = {
 ```
 
 ### From listing-form.ts
+
 ```typescript
 const listingFormSchema = z.object({
-  title: z
-    .string()
-    .min(1, "Required")
-    .max(80, "Max 80 chars"),
-  description: z
-    .string()
-    .min(10, "Min 10 chars"),
+  title: z.string().min(1, "Required").max(80, "Max 80 chars"),
+  description: z.string().min(10, "Min 10 chars"),
   listingFormat: z.enum(["FIXED_PRICE", "AUCTION"]),
-  listingPrice: z
-    .string()
-    .optional()
-    .refine(/* conditional validation */),
+  listingPrice: z.string().optional().refine(/* conditional validation */),
   // ... etc
 });
 
@@ -362,6 +363,7 @@ type ListingFormData = z.infer<typeof listingFormSchema>;
 ```
 
 ### From useEbayPolicies.ts
+
 ```typescript
 interface SelectedPolicies {
   fulfillmentPolicyId: string;
@@ -381,6 +383,7 @@ interface UseEbayPoliciesReturn {
 ## Caching Strategy
 
 ### Category Suggestions
+
 ```
 Key: ebay_category_{hashOfDescription}
 TTL: 24 hours
@@ -389,6 +392,7 @@ Miss rate: Low (descriptions are often similar for same items)
 ```
 
 ### Aspect Requirements
+
 ```
 Key: ebay_aspects_{categoryId}
 TTL: 7 days
@@ -397,6 +401,7 @@ Miss rate: Very low (categories are reused often)
 ```
 
 ### Business Policies
+
 ```
 Key: ebay_policies_{policyType}
 TTL: 24 hours
@@ -405,6 +410,7 @@ Miss rate: Moderate (policies change infrequently)
 ```
 
 ### eBay OAuth Token
+
 ```
 Storage: localStorage
 Key: ebay-user-token
@@ -437,21 +443,25 @@ User attempts to publish
 ## Performance Optimizations
 
 ### Caching Layer
+
 - Eliminates ~95% of API calls for category discovery
 - Eliminates ~99% of API calls for aspect requirements
 - Reduces response time from 200-500ms to <5ms
 
 ### Parallel Operations
+
 - `useEbayPolicies()` fetches 3 policies in parallel
 - `ebayTaxonomy` can fetch multiple category suggestions in one request
 - Form validation runs synchronously (instant feedback)
 
 ### Conditional Rendering
+
 - Category discovery UI only shows after AI generation
 - Aspect fields only render after category selected
 - Policy selector always visible but validation on submit
 
 ### Smart Defaults
+
 - Auto-select first category suggestion (most relevant)
 - Pre-populate aspect fields with AI-identified values
 - Pre-select first policy option if available
@@ -459,22 +469,26 @@ User attempts to publish
 ## Security Considerations
 
 ### Token Management
+
 - OAuth token stored in localStorage (same as existing pattern)
 - Never exposed in URLs or logs
 - Validated on every API call
 - Automatic cleanup on logout
 
 ### API Rate Limiting
+
 - eBay enforces rate limits (typically 10,000 calls/hour per app)
 - Module handles 429 responses gracefully
 - Suggest retry to user rather than auto-retry
 
 ### Input Validation
+
 - All user input validated against Zod schema
 - Aspect values validated against eBay-provided allowedValues
 - Category ID validated to exist in category tree
 
 ### CORS/CORS Proxy
+
 - eBay APIs called from Edge Function (not frontend)
 - No CORS issues due to backend proxy
 - Keeps tokens server-side (more secure)
@@ -497,6 +511,7 @@ User attempts to publish
 ---
 
 **See Also:**
+
 - [EBAY_TAXONOMY_INTEGRATION.md](./EBAY_TAXONOMY_INTEGRATION.md) — Step-by-step integration guide
 - [EBAY_TAXONOMY_TESTING.md](./EBAY_TAXONOMY_TESTING.md) — Testing and debugging guide
 - [src/lib/ebayTaxonomy.ts](./src/lib/ebayTaxonomy.ts) — Implementation code

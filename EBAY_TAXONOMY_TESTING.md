@@ -8,18 +8,18 @@ You can test the taxonomy module directly in the browser console or in a test fi
 
 ```javascript
 // 1. Import the module
-import { 
-  getCategorySuggestions, 
-  getRequiredAspects, 
+import {
+  getCategorySuggestions,
+  getRequiredAspects,
   validateAspects,
-  clearCache 
-} from './src/lib/ebayTaxonomy.ts';
+  clearCache,
+} from "./src/lib/ebayTaxonomy.ts";
 
 // 2. Get your eBay OAuth token from localStorage
-const token = localStorage.getItem('ebay-user-token');
+const token = localStorage.getItem("ebay-user-token");
 
 // 3. Test category discovery
-const suggestions = await getCategorySuggestions('1921 Morgan Dollar', token);
+const suggestions = await getCategorySuggestions("1921 Morgan Dollar", token);
 console.log("Categories:", suggestions);
 // Output:
 // [
@@ -38,12 +38,12 @@ console.log("Recommended aspects:", aspects.recommended);
 const validation = await validateAspects(
   categoryId,
   {
-    "Denomination": ["Dollar"],
-    "Composition": ["Silver"],
-    "Grade": ["MS 65"],
-    "Year": ["1921"],
+    Denomination: ["Dollar"],
+    Composition: ["Silver"],
+    Grade: ["MS 65"],
+    Year: ["1921"],
   },
-  token
+  token,
 );
 console.log("Validation result:", validation);
 // Output:
@@ -84,33 +84,38 @@ console.log("Cache cleared");
 // Authorization header should be: Bearer YOUR_TOKEN_HERE
 
 // Quick validation:
-fetch('https://api.ebay.com/commerce/taxonomy/v1/category_tree/0/get_category_suggestions?q=silver', {
-  headers: {
-    'Authorization': `Bearer ${localStorage.getItem('ebay-user-token')}`,
-    'Content-Type': 'application/json'
-  }
-}).then(r => r.json()).then(console.log)
+fetch(
+  "https://api.ebay.com/commerce/taxonomy/v1/category_tree/0/get_category_suggestions?q=silver",
+  {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("ebay-user-token")}`,
+      "Content-Type": "application/json",
+    },
+  },
+)
+  .then((r) => r.json())
+  .then(console.log);
 ```
 
 ### 3. Common Test Queries
 
 ```javascript
-const token = localStorage.getItem('ebay-user-token');
+const token = localStorage.getItem("ebay-user-token");
 
 // Test 1: Generic coin (should return multiple results)
-await getCategorySuggestions('1921 Morgan Dollar', token);
+await getCategorySuggestions("1921 Morgan Dollar", token);
 
 // Test 2: Specific bullion (should return bullion categories)
-await getCategorySuggestions('1 ounce silver bar', token);
+await getCategorySuggestions("1 ounce silver bar", token);
 
 // Test 3: Gold (should return gold-specific categories)
-await getCategorySuggestions('gold bullion coin', token);
+await getCategorySuggestions("gold bullion coin", token);
 
 // Test 4: Rare coin (should verify categorization)
-await getCategorySuggestions('rare ancient Roman coin', token);
+await getCategorySuggestions("rare ancient Roman coin", token);
 
 // Test 5: Mixed precious metals
-await getCategorySuggestions('silver and gold combo', token);
+await getCategorySuggestions("silver and gold combo", token);
 ```
 
 ## Expected API Responses
@@ -203,17 +208,24 @@ await getCategorySuggestions('silver and gold combo', token);
 
 ```javascript
 // Check what's cached
-JSON.parse(localStorage.getItem('ebay_category_11116_silver'));
-JSON.parse(localStorage.getItem('ebay_aspects_11116'));
+JSON.parse(localStorage.getItem("ebay_category_11116_silver"));
+JSON.parse(localStorage.getItem("ebay_aspects_11116"));
 
 // View all cache entries
-Object.keys(localStorage).filter(k => k.startsWith('ebay_')).forEach(k => {
-  const data = JSON.parse(localStorage.getItem(k));
-  console.log(k, 'age:', (Date.now() - data.timestamp) / 1000 / 60, 'minutes');
-});
+Object.keys(localStorage)
+  .filter((k) => k.startsWith("ebay_"))
+  .forEach((k) => {
+    const data = JSON.parse(localStorage.getItem(k));
+    console.log(
+      k,
+      "age:",
+      (Date.now() - data.timestamp) / 1000 / 60,
+      "minutes",
+    );
+  });
 
 // Clear specific cache
-localStorage.removeItem('ebay_category_11116_silver');
+localStorage.removeItem("ebay_category_11116_silver");
 
 // Clear all eBay cache
 clearCache();
@@ -222,11 +234,11 @@ clearCache();
 ### 3. Test Error Scenarios
 
 ```javascript
-const token = localStorage.getItem('ebay-user-token');
+const token = localStorage.getItem("ebay-user-token");
 
 // Test invalid token
 try {
-  await getCategorySuggestions('silver', 'invalid_token');
+  await getCategorySuggestions("silver", "invalid_token");
 } catch (error) {
   console.log("Expected error:", error.message);
   // "Invalid or expired OAuth token. Please reconnect your eBay account."
@@ -237,7 +249,7 @@ for (let i = 0; i < 20; i++) {
   try {
     await getCategorySuggestions(`query${i}`, token);
   } catch (error) {
-    if (error.message.includes('Rate limited')) {
+    if (error.message.includes("Rate limited")) {
       console.log("Hit rate limit at request", i);
       break;
     }
@@ -246,7 +258,7 @@ for (let i = 0; i < 20; i++) {
 
 // Test invalid category
 try {
-  await getRequiredAspects('9999999', token);
+  await getRequiredAspects("9999999", token);
 } catch (error) {
   console.log("InvalidCategory:", error.message);
   // "Resource not found (404). Invalid category ID or endpoint."
@@ -274,14 +286,14 @@ Cache hit rate after usage:
 ### Load Time Test
 
 ```javascript
-console.time('category-discovery');
-const cats = await getCategorySuggestions('silver bar', token);
-console.timeEnd('category-discovery');
+console.time("category-discovery");
+const cats = await getCategorySuggestions("silver bar", token);
+console.timeEnd("category-discovery");
 // Output: category-discovery: 234.56ms (varies by network)
 
-console.time('validation');
+console.time("validation");
 const validation = await validateAspects(categoryId, provided, token);
-console.timeEnd('validation');
+console.timeEnd("validation");
 // Output: validation: 156.78ms (varies by network)
 ```
 
@@ -305,35 +317,41 @@ Before deploying the integration:
 ## Common Issues
 
 ### "Invalid or expired OAuth token"
+
 ✅ Solution: User needs to reconnect eBay account via "Connect eBay" button
 
 ### Empty category suggestions
+
 ✅ Solution: Try more specific description (e.g., "1921 silver Morgan dollar" instead of "coin")
 
 ### Missing aspects for category
+
 ✅ Solution: Check eBay category is valid. Try category ID directly from EBAY_CATEGORIES constant
 
 ### Cache not clearing
+
 ✅ Solution: Use `clearCache()` function or manually delete localStorage entries starting with `ebay_`
 
 ### Rate limit errors
+
 ✅ Solution: Implement exponential backoff. Limit queries to 1 per second per user
 
 ### "TypeError: Cannot read property 'toString' of undefined"
+
 ✅ Solution: Ensure all aspect values are strings, not undefined. Check provided aspects structure
 
 ---
 
 ## Module Statistics
 
-| Metric | Value |
-|--------|-------|
-| Lines of Code | 590+ |
-| Exported Functions | 7 |
-| Exported Types | 6 |
-| Error Scenarios Handled | 8 |
-| Cache Levels | 2 (categories + aspects) |
-| Unit Test Cases Needed | ~15 |
+| Metric                  | Value                    |
+| ----------------------- | ------------------------ |
+| Lines of Code           | 590+                     |
+| Exported Functions      | 7                        |
+| Exported Types          | 6                        |
+| Error Scenarios Handled | 8                        |
+| Cache Levels            | 2 (categories + aspects) |
+| Unit Test Cases Needed  | ~15                      |
 
 ---
 

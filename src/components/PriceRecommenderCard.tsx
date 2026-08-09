@@ -1,13 +1,28 @@
 import { useState, useEffect } from "react";
 import {
-  TrendingUp, DollarSign, Loader2, ExternalLink, Shield,
-  ChevronDown, ChevronUp, CheckCircle2, RefreshCw,
+  TrendingUp,
+  DollarSign,
+  Loader2,
+  ExternalLink,
+  Shield,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle2,
+  RefreshCw,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import PriceStrategyBadge from "@/components/PriceStrategyBadge";
 import PriceHistogram from "@/components/PriceHistogram";
-import { buildPriceRecommendation, confidenceColor, confidenceBg, confidenceLabel } from "@/lib/priceRecommender";
-import type { PriceRecommendation, PriceSuggestion } from "@/types/price-recommender";
+import {
+  buildPriceRecommendation,
+  confidenceColor,
+  confidenceBg,
+  confidenceLabel,
+} from "@/lib/priceRecommender";
+import type {
+  PriceRecommendation,
+  PriceSuggestion,
+} from "@/types/price-recommender";
 import type { PriceRecommenderProps } from "@/types/price-recommender";
 
 export default function PriceRecommenderCard({
@@ -23,8 +38,10 @@ export default function PriceRecommenderCard({
   compact = false,
 }: PriceRecommenderProps) {
   const [loading, setLoading] = useState(false);
-  const [recommendation, setRecommendation] = useState<PriceRecommendation | null>(null);
-  const [selectedSuggestion, setSelectedSuggestion] = useState<PriceSuggestion | null>(null);
+  const [recommendation, setRecommendation] =
+    useState<PriceRecommendation | null>(null);
+  const [selectedSuggestion, setSelectedSuggestion] =
+    useState<PriceSuggestion | null>(null);
   const [appliedPrice, setAppliedPrice] = useState<number | null>(null);
   const [showComps, setShowComps] = useState(false);
   const [histogram, setHistogram] = useState<any[]>([]);
@@ -36,9 +53,12 @@ export default function PriceRecommenderCard({
     setLoading(true);
     setError(null);
     try {
-      const { data, error: fnError } = await supabase.functions.invoke("ebay-pricing", {
-        body: { query: searchQuery },
-      });
+      const { data, error: fnError } = await supabase.functions.invoke(
+        "ebay-pricing",
+        {
+          body: { query: searchQuery },
+        },
+      );
       if (fnError) throw new Error(fnError.message);
       if (data?.error) throw new Error(data.error);
 
@@ -47,7 +67,7 @@ export default function PriceRecommenderCard({
         condition,
         priceMin,
         priceMax,
-        meltValue ?? undefined
+        meltValue ?? undefined,
       );
       setRecommendation(rec);
       setSelectedSuggestion(rec.recommended);
@@ -55,7 +75,13 @@ export default function PriceRecommenderCard({
     } catch (err: unknown) {
       console.error("PriceRecommender fetch error:", err);
       // Fallback: build recommendation from AI estimates
-      const fallback = buildPriceRecommendation([], condition, priceMin, priceMax, meltValue ?? undefined);
+      const fallback = buildPriceRecommendation(
+        [],
+        condition,
+        priceMin,
+        priceMax,
+        meltValue ?? undefined,
+      );
       setRecommendation(fallback);
       setSelectedSuggestion(fallback.recommended);
       setError("eBay lookup failed — showing AI-based estimates");
@@ -89,9 +115,13 @@ export default function PriceRecommenderCard({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <TrendingUp className="w-3.5 h-3.5 text-primary" />
-            <span className="text-xs font-semibold text-foreground">Price Advisor</span>
+            <span className="text-xs font-semibold text-foreground">
+              Price Advisor
+            </span>
           </div>
-          {loading && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
+          {loading && (
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+          )}
         </div>
 
         {recommendation && !loading && (
@@ -146,7 +176,9 @@ export default function PriceRecommenderCard({
         )}
 
         {!recommendation && !loading && (
-          <p className="text-xs text-muted-foreground">Enter a title to get price suggestions</p>
+          <p className="text-xs text-muted-foreground">
+            Enter a title to get price suggestions
+          </p>
         )}
       </div>
     );
@@ -161,17 +193,21 @@ export default function PriceRecommenderCard({
           <TrendingUp className="w-4 h-4 text-primary" />
         </div>
         <div className="flex-1">
-          <h3 className="font-semibold text-sm text-foreground">Smart Price Recommender</h3>
+          <h3 className="font-semibold text-sm text-foreground">
+            Smart Price Recommender
+          </h3>
           <p className="text-xs text-muted-foreground">
             {loading
               ? "Searching eBay comparable listings..."
               : recommendation
-              ? recommendation.confidenceReason
-              : "AI-powered pricing strategy"}
+                ? recommendation.confidenceReason
+                : "AI-powered pricing strategy"}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {loading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+          {loading && (
+            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+          )}
           {!loading && recommendation && (
             <button
               onClick={handleRefresh}
@@ -203,9 +239,15 @@ export default function PriceRecommenderCard({
       {recommendation && !loading && (
         <>
           {/* Confidence badge */}
-          <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium ${confidenceBg(recommendation.confidence)}`}>
+          <div
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium ${confidenceBg(recommendation.confidence)}`}
+          >
             <span className={confidenceColor(recommendation.confidence)}>
-              {recommendation.confidence === "high" ? "✓" : recommendation.confidence === "medium" ? "~" : "!"}
+              {recommendation.confidence === "high"
+                ? "✓"
+                : recommendation.confidence === "medium"
+                  ? "~"
+                  : "!"}
             </span>
             <span className={confidenceColor(recommendation.confidence)}>
               {confidenceLabel(recommendation.confidence)}
@@ -218,16 +260,28 @@ export default function PriceRecommenderCard({
           {/* Market stats row */}
           <div className="grid grid-cols-3 gap-2 bg-secondary/50 rounded-lg p-3">
             <div className="text-center">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Low</p>
-              <p className="text-base font-bold text-foreground">${recommendation.marketLow.toFixed(2)}</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                Low
+              </p>
+              <p className="text-base font-bold text-foreground">
+                ${recommendation.marketLow.toFixed(2)}
+              </p>
             </div>
             <div className="text-center border-x border-border">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Median</p>
-              <p className="text-base font-bold text-primary">${recommendation.marketMedian.toFixed(2)}</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                Median
+              </p>
+              <p className="text-base font-bold text-primary">
+                ${recommendation.marketMedian.toFixed(2)}
+              </p>
             </div>
             <div className="text-center">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">High</p>
-              <p className="text-base font-bold text-foreground">${recommendation.marketHigh.toFixed(2)}</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                High
+              </p>
+              <p className="text-base font-bold text-foreground">
+                ${recommendation.marketHigh.toFixed(2)}
+              </p>
             </div>
           </div>
 
@@ -242,7 +296,9 @@ export default function PriceRecommenderCard({
           {/* Condition note */}
           {recommendation.conditionMultiplier < 1.0 && (
             <div className="bg-muted/50 rounded-lg px-3 py-2 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">Condition Adjustment: </span>
+              <span className="font-medium text-foreground">
+                Condition Adjustment:{" "}
+              </span>
               {recommendation.conditionNote}
             </div>
           )}
@@ -253,25 +309,41 @@ export default function PriceRecommenderCard({
               <Shield className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="text-xs text-amber-800 dark:text-amber-200">
-                  <span className="font-semibold">Melt floor: ${recommendation.meltFloor.toFixed(2)}</span>
-                  {" "}— Don't list below this to avoid selling at a loss
+                  <span className="font-semibold">
+                    Melt floor: ${recommendation.meltFloor.toFixed(2)}
+                  </span>{" "}
+                  — Don't list below this to avoid selling at a loss
                 </p>
-                {spotPrices && metalWeightOz > 0 && metalType && metalType !== "none" && (() => {
-                  const spotPrice =
-                    metalType === "gold" ? spotPrices.gold :
-                    metalType === "silver" ? spotPrices.silver :
-                    metalType === "platinum" ? spotPrices.platinum : 0;
-                  const metalLabel =
-                    metalType === "gold" ? "Gold" :
-                    metalType === "silver" ? "Silver" :
-                    metalType === "platinum" ? "Platinum" : "";
-                  if (!spotPrice) return null;
-                  return (
-                    <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-0.5 font-mono">
-                      {metalLabel} @ ${spotPrice.toFixed(2)}/oz × {metalWeightOz} oz = ${(spotPrice * metalWeightOz).toFixed(2)} melt
-                    </p>
-                  );
-                })()}
+                {spotPrices &&
+                  metalWeightOz > 0 &&
+                  metalType &&
+                  metalType !== "none" &&
+                  (() => {
+                    const spotPrice =
+                      metalType === "gold"
+                        ? spotPrices.gold
+                        : metalType === "silver"
+                          ? spotPrices.silver
+                          : metalType === "platinum"
+                            ? spotPrices.platinum
+                            : 0;
+                    const metalLabel =
+                      metalType === "gold"
+                        ? "Gold"
+                        : metalType === "silver"
+                          ? "Silver"
+                          : metalType === "platinum"
+                            ? "Platinum"
+                            : "";
+                    if (!spotPrice) return null;
+                    return (
+                      <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-0.5 font-mono">
+                        {metalLabel} @ ${spotPrice.toFixed(2)}/oz ×{" "}
+                        {metalWeightOz} oz = $
+                        {(spotPrice * metalWeightOz).toFixed(2)} melt
+                      </p>
+                    );
+                  })()}
               </div>
             </div>
           )}
@@ -295,36 +367,52 @@ export default function PriceRecommenderCard({
                     }`}
                   >
                     {/* Strategy icon */}
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${isSelected ? s.badgeBg : "bg-muted"}`}>
+                    <div
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${isSelected ? s.badgeBg : "bg-muted"}`}
+                    >
                       <span className="text-sm">
-                        {s.strategy === "undercut" ? "⚡" :
-                         s.strategy === "match" ? "⚖️" :
-                         s.strategy === "premium" ? "💎" : "🛡️"}
+                        {s.strategy === "undercut"
+                          ? "⚡"
+                          : s.strategy === "match"
+                            ? "⚖️"
+                            : s.strategy === "premium"
+                              ? "💎"
+                              : "🛡️"}
                       </span>
                     </div>
 
                     {/* Label + description */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className={`text-sm font-semibold ${isSelected ? s.badgeColor : "text-foreground"}`}>
+                        <span
+                          className={`text-sm font-semibold ${isSelected ? s.badgeColor : "text-foreground"}`}
+                        >
                           {s.label}
                         </span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${s.badgeBg} ${s.badgeColor}`}>
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${s.badgeBg} ${s.badgeColor}`}
+                        >
                           {s.badge}
                         </span>
                       </div>
-                      <p className="text-xs text-muted-foreground truncate">{s.description}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {s.description}
+                      </p>
                     </div>
 
                     {/* Price */}
                     <div className="text-right flex-shrink-0">
-                      <p className={`text-lg font-bold ${isSelected ? s.badgeColor : "text-foreground"}`}>
+                      <p
+                        className={`text-lg font-bold ${isSelected ? s.badgeColor : "text-foreground"}`}
+                      >
                         ${s.price.toFixed(2)}
                       </p>
                     </div>
 
                     {isSelected && (
-                      <CheckCircle2 className={`w-4 h-4 flex-shrink-0 ${s.badgeColor}`} />
+                      <CheckCircle2
+                        className={`w-4 h-4 flex-shrink-0 ${s.badgeColor}`}
+                      />
                     )}
                   </button>
                 );
@@ -364,8 +452,14 @@ export default function PriceRecommenderCard({
                 onClick={() => setShowComps(!showComps)}
                 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors w-full"
               >
-                {showComps ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                {showComps ? "Hide" : "Show"} {recommendation.soldItems.length} comparable listing{recommendation.soldItems.length !== 1 ? "s" : ""}
+                {showComps ? (
+                  <ChevronUp className="w-3.5 h-3.5" />
+                ) : (
+                  <ChevronDown className="w-3.5 h-3.5" />
+                )}
+                {showComps ? "Hide" : "Show"} {recommendation.soldItems.length}{" "}
+                comparable listing
+                {recommendation.soldItems.length !== 1 ? "s" : ""}
               </button>
 
               {showComps && (
@@ -383,8 +477,12 @@ export default function PriceRecommenderCard({
                         />
                       )}
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-foreground truncate">{item.title}</p>
-                        <p className="text-[10px] text-muted-foreground">{item.condition}</p>
+                        <p className="text-xs text-foreground truncate">
+                          {item.title}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {item.condition}
+                        </p>
                       </div>
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         <span className="text-sm font-semibold text-foreground">

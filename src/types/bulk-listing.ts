@@ -25,13 +25,13 @@ export interface BulkRow {
 // ─── Validation ────────────────────────────────────────────────────────────────
 
 export type BulkRowStatus =
-  | "pending"       // not yet validated
-  | "valid"         // passed validation, ready to generate/publish
-  | "generating"    // AI description in progress
-  | "ready"         // description generated, ready to publish
-  | "publishing"    // being sent to eBay right now
-  | "published"     // successfully live on eBay
-  | "error";        // failed with an error
+  | "pending" // not yet validated
+  | "valid" // passed validation, ready to generate/publish
+  | "generating" // AI description in progress
+  | "ready" // description generated, ready to publish
+  | "publishing" // being sent to eBay right now
+  | "published" // successfully live on eBay
+  | "error"; // failed with an error
 
 export interface BulkValidationIssue {
   field: string;
@@ -76,17 +76,18 @@ export type BulkFieldName =
   | "returnPolicyId"
   | "cogs"
   | "consignor"
-  | "itemSpecific";   // special: prefix "Item_Specific_X" maps to itemSpecifics[X]
+  | "itemSpecific"; // special: prefix "Item_Specific_X" maps to itemSpecifics[X]
 
 export interface ColumnMapping {
-  csvHeader: string;        // original column name from the uploaded file
+  csvHeader: string; // original column name from the uploaded file
   mappedTo: BulkFieldName | "skip" | null;
   itemSpecificKey?: string; // set when mappedTo === "itemSpecific"
 }
 
 // ─── Templates ─────────────────────────────────────────────────────────────────
 
-export type BulkTemplateId = "coins" | "electronics" | "clothing" | "books" | "generic";
+export type BulkTemplateId =
+  "coins" | "electronics" | "clothing" | "books" | "generic";
 
 export interface BulkTemplate {
   id: BulkTemplateId;

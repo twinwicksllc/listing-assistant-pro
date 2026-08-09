@@ -5,12 +5,14 @@
 This document describes the new self-learning category identification system that replaces hardcoded category IDs and aspect rules with eBay's Taxonomy API.
 
 ### Problem (Before)
+
 - **50+ hardcoded category IDs** baked into the Gemini AI prompt (`analyze-item`)
 - **30+ hardcoded aspect rule entries** (`CATEGORY_ASPECT_RULES`) in `ebay-publish`
 - **Hardcoded condition normalization** sets (`COIN_CATEGORY_IDS`, `TRADING_CARD_CATEGORY_IDS`, etc.)
 - Every new item type required a code change and redeployment
 
 ### Solution (After)
+
 - **eBay's `getCategorySuggestions` API** dynamically finds the correct leaf category for any item
 - **eBay's `getItemAspectsForCategory` API** dynamically fetches required/recommended aspects per category
 - Results are **cached in the database** for instant future lookups (self-learning)
@@ -46,30 +48,33 @@ User scans item --> analyze-item
 ## Database Tables
 
 ### `category_mappings` (enhanced)
+
 Existing table -- now also stores breadcrumb paths from eBay's taxonomy.
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `coin_type` | TEXT (PK) | Legacy key |
-| `item_type` | TEXT (unique) | Normalized item description |
-| `ebay_category_id` | TEXT | eBay leaf category ID |
-| `category_name` | TEXT | Short name |
-| **`breadcrumb`** | TEXT | **NEW** -- Full path, e.g. "Coins & Paper Money > Coins: US > Dollars > Morgan (1878-1921)" |
-| `confidence` | INT | 0-100 |
-| `verification_source` | TEXT | "user_verified", "ebay_api", "gemini_ai", "ai_auto" |
+| Column                | Type          | Description                                                                                 |
+| --------------------- | ------------- | ------------------------------------------------------------------------------------------- |
+| `coin_type`           | TEXT (PK)     | Legacy key                                                                                  |
+| `item_type`           | TEXT (unique) | Normalized item description                                                                 |
+| `ebay_category_id`    | TEXT          | eBay leaf category ID                                                                       |
+| `category_name`       | TEXT          | Short name                                                                                  |
+| **`breadcrumb`**      | TEXT          | **NEW** -- Full path, e.g. "Coins & Paper Money > Coins: US > Dollars > Morgan (1878-1921)" |
+| `confidence`          | INT           | 0-100                                                                                       |
+| `verification_source` | TEXT          | "user_verified", "ebay_api", "gemini_ai", "ai_auto"                                         |
 
 ### `category_aspects_cache` (new)
+
 Caches eBay's `getItemAspectsForCategory` API responses per category.
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `category_id` | TEXT (PK) | eBay leaf category ID |
-| `category_name` | TEXT | Human-readable name |
-| `aspects` | JSONB | Array of aspect objects (see below) |
-| `fetched_at` | TIMESTAMPTZ | When fetched from eBay |
-| `expires_at` | TIMESTAMPTZ | Cache expiry (default: 7 days) |
+| Column          | Type        | Description                         |
+| --------------- | ----------- | ----------------------------------- |
+| `category_id`   | TEXT (PK)   | eBay leaf category ID               |
+| `category_name` | TEXT        | Human-readable name                 |
+| `aspects`       | JSONB       | Array of aspect objects (see below) |
+| `fetched_at`    | TIMESTAMPTZ | When fetched from eBay              |
+| `expires_at`    | TIMESTAMPTZ | Cache expiry (default: 7 days)      |
 
 **Aspect object format:**
+
 ```json
 {
   "name": "Certification",
@@ -106,14 +111,18 @@ Caches eBay's `getItemAspectsForCategory` API responses per category.
 // Calls eBay's getCategorySuggestions endpoint
 // Takes free-text query, returns ranked leaf category suggestions
 async function fetchCategorySuggestions(
-  query: string, appToken: string, base: string
-): Promise<CategorySuggestion[]>
+  query: string,
+  appToken: string,
+  base: string,
+): Promise<CategorySuggestion[]>;
 
 // Calls eBay's getItemAspectsForCategory endpoint
 // Returns all aspect metadata for a leaf category
 async function fetchItemAspects(
-  categoryId: string, appToken: string, base: string
-): Promise<AspectInfo[]>
+  categoryId: string,
+  appToken: string,
+  base: string,
+): Promise<AspectInfo[]>;
 ```
 
 ---
@@ -121,6 +130,7 @@ async function fetchItemAspects(
 ### 2. `analyze-item/index.ts` — AI Prompt Changes
 
 **Before:** System prompt contained a massive hardcoded CATEGORY ROUTING section with 50+ category IDs:
+
 ```
 ### CATEGORY ROUTING -- ALL ITEM TYPES
 - Beanie Babies / Ty Plush: **19203**
@@ -130,6 +140,7 @@ async function fetchItemAspects(
 ```
 
 **After:** System prompt uses dynamic suggestions injected at runtime:
+
 ```
 ### CATEGORY SELECTION
 You MUST select the correct eBay **leaf** category ID for every item.
@@ -146,6 +157,7 @@ Use these resources in order:
 ```
 
 **Pre-lookup flow:**
+
 1. DB fuzzy search using voice note keywords (same as before, now includes breadcrumb)
 2. **NEW:** Calls `category-lookup` `suggest` action with voice note text
 3. Both results injected into `${categoryHints}` in the system prompt
@@ -160,21 +172,24 @@ Use these resources in order:
 // Fetches aspect rules from cache or eBay API
 // Returns AspectRule compatible with existing buildAndNormalizeAspects()
 async function fetchDynamicAspectRule(
-  categoryId: string, supabase: any
-): Promise<AspectRule | null>
+  categoryId: string,
+  supabase: any,
+): Promise<AspectRule | null>;
 
 // Converts eBay API format to our internal AspectRule format
-function convertEbayAspectsToRule(aspects: any[]): AspectRule
+function convertEbayAspectsToRule(aspects: any[]): AspectRule;
 
 // Detects category tree type from breadcrumb (async, DB-based)
 async function detectCategoryTree(
-  categoryId: string, supabase: any
-): Promise<CategoryTreeType>
+  categoryId: string,
+  supabase: any,
+): Promise<CategoryTreeType>;
 
 // Sync fallback using hardcoded ID sets + item type hints
 function detectCategoryTreeSync(
-  categoryId: string, itemType: string | undefined
-): CategoryTreeType
+  categoryId: string,
+  itemType: string | undefined,
+): CategoryTreeType;
 ```
 
 **Aspect building flow (in `create_draft` handler):**
@@ -198,7 +213,8 @@ function detectCategoryTreeSync(
 **Condition normalization now uses `CategoryTreeType`:**
 
 ```typescript
-type CategoryTreeType = "coin" | "bullion" | "trading_card" | "collectible" | "other";
+type CategoryTreeType =
+  "coin" | "bullion" | "trading_card" | "collectible" | "other";
 
 // detectCategoryTreeSync uses:
 // 1. Hardcoded ID sets (HARDCODED_COIN_CATEGORY_IDS, etc.) — same sets as before
@@ -213,9 +229,10 @@ This replaces the old separate `COIN_CATEGORY_IDS`, `BULLION_CATEGORY_IDS`, `TRA
 ### 4. `_helpers/suggestedCategories.ts` — Dynamic Breadcrumbs
 
 **New helper function:**
+
 ```typescript
 // Looks up breadcrumb: DB first (has dynamic breadcrumbs), hardcoded map as fallback
-async function lookupBreadcrumb(cid: string, svc: any): Promise<string | null>
+async function lookupBreadcrumb(cid: string, svc: any): Promise<string | null>;
 ```
 
 The massive `EBAY_CATEGORY_BREADCRUMBS` hardcoded map (100+ entries) is kept as fallback but is no longer the primary source. The DB `category_mappings.breadcrumb` column (populated by `getCategorySuggestions`) is checked first.

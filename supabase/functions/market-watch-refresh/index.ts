@@ -20,9 +20,10 @@ async function getEbayAppToken(): Promise<string> {
 
   const credentials = btoa(`${clientId}:${clientSecret}`);
   const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-  const tokenUrl = ebayEnv === "production"
-    ? "https://api.ebay.com/identity/v1/oauth2/token"
-    : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
+  const tokenUrl =
+    ebayEnv === "production"
+      ? "https://api.ebay.com/identity/v1/oauth2/token"
+      : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
 
   const resp = await fetch(tokenUrl, {
     method: "POST",
@@ -62,7 +63,10 @@ async function browseSearch(params: {
 }): Promise<{ prices: number[]; count: number; total: number }> {
   const { query, token, ebayEnv, categoryId, limit = 50 } = params;
 
-  const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
+  const apiBase =
+    ebayEnv === "production"
+      ? "https://api.ebay.com"
+      : "https://api.sandbox.ebay.com";
 
   const searchParams = new URLSearchParams({
     q: query,
@@ -108,7 +112,9 @@ async function browseSearch(params: {
     try {
       const price = parseFloat(item?.price?.value ?? "0");
       if (!isNaN(price) && price > 0) prices.push(price);
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
 
   return { prices, count: prices.length, total };
@@ -145,7 +151,7 @@ async function scrapeEbaySoldData(
       method: "GET",
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; ListingAssistant/1.0)",
-        "Accept": "text/plain",
+        Accept: "text/plain",
       },
       signal: AbortSignal.timeout(20000),
     });
@@ -176,12 +182,16 @@ async function scrapeEbaySoldData(
   const allListingsMatch = content.match(
     /All Listings \(([\d,]+)\)\s+Filter Applied/,
   );
-  let soldCount = allListingsMatch ? parseInt(allListingsMatch[1].replace(/,/g, ""), 10) : 0;
+  let soldCount = allListingsMatch
+    ? parseInt(allListingsMatch[1].replace(/,/g, ""), 10)
+    : 0;
 
   // Fallback: "X results for"
   if (!soldCount) {
     const resultsMatch = content.match(/([\d,]+)\+?\s+results?\s+for/i);
-    soldCount = resultsMatch ? parseInt(resultsMatch[1].replace(/,/g, ""), 10) : 0;
+    soldCount = resultsMatch
+      ? parseInt(resultsMatch[1].replace(/,/g, ""), 10)
+      : 0;
   }
 
   // Extract price range buckets from filter sidebar
@@ -199,12 +209,12 @@ async function scrapeEbaySoldData(
     const highThreshold = parseFloat(overMatch[1].replace(/,/g, ""));
     minSoldPrice = Math.round(lowThreshold * 0.5 * 100) / 100;
     maxSoldPrice = Math.round(highThreshold * 1.5 * 100) / 100;
-    avgSoldPrice = Math.round((lowThreshold + highThreshold) / 2 * 100) / 100;
+    avgSoldPrice = Math.round(((lowThreshold + highThreshold) / 2) * 100) / 100;
     medianSoldPrice = avgSoldPrice;
   } else if (rangeMatch) {
     const rLow = parseFloat(rangeMatch[1].replace(/,/g, ""));
     const rHigh = parseFloat(rangeMatch[2].replace(/,/g, ""));
-    avgSoldPrice = Math.round((rLow + rHigh) / 2 * 100) / 100;
+    avgSoldPrice = Math.round(((rLow + rHigh) / 2) * 100) / 100;
     medianSoldPrice = avgSoldPrice;
     minSoldPrice = Math.round(rLow * 0.7 * 100) / 100;
     maxSoldPrice = Math.round(rHigh * 1.3 * 100) / 100;
@@ -243,7 +253,9 @@ function median(nums: number[]): number {
   if (nums.length === 0) return 0;
   const sorted = [...nums].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  return sorted.length % 2 !== 0
+    ? sorted[mid]
+    : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 function round2(n: number): number {
@@ -314,7 +326,8 @@ serve(async (req) => {
 
     const soldCount = soldData.soldCount;
     // Use Browse API `total` for the real active count (not just the 50 fetched)
-    const activeCount = activeResult.total > 0 ? activeResult.total : activeResult.count;
+    const activeCount =
+      activeResult.total > 0 ? activeResult.total : activeResult.count;
     const total = soldCount + activeCount;
 
     // Sell-through rate: sold / (sold + active)
@@ -385,12 +398,9 @@ serve(async (req) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[market-watch-refresh] Error:", msg);
-    return new Response(
-      JSON.stringify({ error: msg }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });

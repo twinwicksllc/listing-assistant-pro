@@ -29,7 +29,12 @@ const FIELD_LABELS: Record<BulkFieldName | "skip", string> = {
   skip: "— Skip this column —",
 };
 
-const REQUIRED_FIELDS: BulkFieldName[] = ["title", "condition", "price", "categoryId"];
+const REQUIRED_FIELDS: BulkFieldName[] = [
+  "title",
+  "condition",
+  "price",
+  "categoryId",
+];
 
 interface BulkColumnMapperProps {
   headers: string[];
@@ -44,18 +49,29 @@ export default function BulkColumnMapper({
   mappings,
   onMappingsChange,
 }: BulkColumnMapperProps) {
-  const updateMapping = (index: number, mappedTo: BulkFieldName | "skip" | null, itemSpecificKey?: string) => {
+  const updateMapping = (
+    index: number,
+    mappedTo: BulkFieldName | "skip" | null,
+    itemSpecificKey?: string,
+  ) => {
     const next = mappings.map((m, i) =>
       i === index
-        ? { ...m, mappedTo, itemSpecificKey: mappedTo === "itemSpecific" ? (itemSpecificKey ?? m.itemSpecificKey) : undefined }
-        : m
+        ? {
+            ...m,
+            mappedTo,
+            itemSpecificKey:
+              mappedTo === "itemSpecific"
+                ? (itemSpecificKey ?? m.itemSpecificKey)
+                : undefined,
+          }
+        : m,
     );
     onMappingsChange(next);
   };
 
   const updateItemSpecificKey = (index: number, key: string) => {
     const next = mappings.map((m, i) =>
-      i === index ? { ...m, itemSpecificKey: key } : m
+      i === index ? { ...m, itemSpecificKey: key } : m,
     );
     onMappingsChange(next);
   };
@@ -67,12 +83,29 @@ export default function BulkColumnMapper({
 
   const allOptions: (BulkFieldName | "skip")[] = [
     "skip",
-    "title", "description", "condition", "price", "quantity", "categoryId",
-    "format", "auctionStartPrice", "buyItNowPrice",
-    "imageUrl1", "imageUrl2", "imageUrl3", "imageUrl4",
-    "imageUrl5", "imageUrl6", "imageUrl7", "imageUrl8",
-    "fulfillmentPolicyId", "paymentPolicyId", "returnPolicyId",
-    "cogs", "consignor", "itemSpecific",
+    "title",
+    "description",
+    "condition",
+    "price",
+    "quantity",
+    "categoryId",
+    "format",
+    "auctionStartPrice",
+    "buyItNowPrice",
+    "imageUrl1",
+    "imageUrl2",
+    "imageUrl3",
+    "imageUrl4",
+    "imageUrl5",
+    "imageUrl6",
+    "imageUrl7",
+    "imageUrl8",
+    "fulfillmentPolicyId",
+    "paymentPolicyId",
+    "returnPolicyId",
+    "cogs",
+    "consignor",
+    "itemSpecific",
   ];
 
   return (
@@ -90,7 +123,11 @@ export default function BulkColumnMapper({
                   : "bg-red-50 border-red-200 text-red-700 dark:bg-red-950 dark:border-red-800 dark:text-red-300"
               }`}
             >
-              {mapped ? <CheckCircle className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+              {mapped ? (
+                <CheckCircle className="w-3 h-3" />
+              ) : (
+                <AlertCircle className="w-3 h-3" />
+              )}
               {FIELD_LABELS[f]}
             </div>
           );
@@ -99,8 +136,8 @@ export default function BulkColumnMapper({
 
       {!allRequiredMapped && (
         <p className="text-xs text-red-600 dark:text-red-400">
-          ⚠️ Please map all required fields before continuing.
-          Missing: {missingRequired.map((f) => FIELD_LABELS[f]).join(", ")}
+          ⚠️ Please map all required fields before continuing. Missing:{" "}
+          {missingRequired.map((f) => FIELD_LABELS[f]).join(", ")}
         </p>
       )}
 
@@ -123,13 +160,18 @@ export default function BulkColumnMapper({
           <tbody className="divide-y divide-border">
             {mappings.map((mapping, idx) => {
               const preview = previewRows[0]?.[mapping.csvHeader] ?? "";
-              const isRequired = REQUIRED_FIELDS.includes(mapping.mappedTo as BulkFieldName);
+              const isRequired = REQUIRED_FIELDS.includes(
+                mapping.mappedTo as BulkFieldName,
+              );
               const isMissing =
                 isRequired &&
                 (!mapping.mappedTo || mapping.mappedTo === "skip");
 
               return (
-                <tr key={mapping.csvHeader} className={`${isMissing ? "bg-red-50/30 dark:bg-red-950/20" : ""}`}>
+                <tr
+                  key={mapping.csvHeader}
+                  className={`${isMissing ? "bg-red-50/30 dark:bg-red-950/20" : ""}`}
+                >
                   <td className="px-3 py-2 font-medium text-foreground">
                     {mapping.csvHeader}
                   </td>
@@ -137,7 +179,10 @@ export default function BulkColumnMapper({
                     <select
                       value={mapping.mappedTo ?? "skip"}
                       onChange={(e) =>
-                        updateMapping(idx, e.target.value as BulkFieldName | "skip")
+                        updateMapping(
+                          idx,
+                          e.target.value as BulkFieldName | "skip",
+                        )
                       }
                       className="w-full bg-card border border-border rounded-lg px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                     >
@@ -152,13 +197,17 @@ export default function BulkColumnMapper({
                         type="text"
                         placeholder="Specific key name (e.g. Brand)"
                         value={mapping.itemSpecificKey ?? ""}
-                        onChange={(e) => updateItemSpecificKey(idx, e.target.value)}
+                        onChange={(e) =>
+                          updateItemSpecificKey(idx, e.target.value)
+                        }
                         className="w-full bg-card border border-border rounded-lg px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                     )}
                   </td>
                   <td className="px-3 py-2 text-muted-foreground truncate max-w-[160px]">
-                    {preview || <span className="italic opacity-40">empty</span>}
+                    {preview || (
+                      <span className="italic opacity-40">empty</span>
+                    )}
                   </td>
                 </tr>
               );
@@ -168,7 +217,8 @@ export default function BulkColumnMapper({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Tip: Columns set to "Skip" will be ignored. Item Specific columns let you map your own custom attributes.
+        Tip: Columns set to "Skip" will be ignored. Item Specific columns let
+        you map your own custom attributes.
       </p>
     </div>
   );

@@ -19,11 +19,13 @@ interface UseAnalyzeCategoryAspectsParams {
   /** Current item specifics — used to preserve values the user has already entered */
   itemSpecifics: ItemSpecifics;
   setItemSpecifics: (updater: (prev: ItemSpecifics) => ItemSpecifics) => void;
-  setEbayMetadata: (meta: {
-    requiredAspects: string[];
-    suggestedAspects: string[];
-    allowedConditions: string[];
-  } | null) => void;
+  setEbayMetadata: (
+    meta: {
+      requiredAspects: string[];
+      suggestedAspects: string[];
+      allowedConditions: string[];
+    } | null,
+  ) => void;
   /** Previous metadata (to preserve allowedConditions when we only update aspects) */
   currentEbayMetadata: {
     requiredAspects: string[];
@@ -65,9 +67,12 @@ export function useAnalyzeCategoryAspects({
 
     const fetchAndSeed = async () => {
       try {
-        const { data, error } = await supabase.functions.invoke("category-lookup", {
-          body: { action: "aspects", categoryId: ebayCategoryId },
-        });
+        const { data, error } = await supabase.functions.invoke(
+          "category-lookup",
+          {
+            body: { action: "aspects", categoryId: ebayCategoryId },
+          },
+        );
 
         if (error || !data?.aspects?.length) {
           console.warn(

@@ -75,9 +75,10 @@ async function getEbayAppToken(): Promise<string> {
 
   const credentials = btoa(`${clientId}:${clientSecret}`);
   const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-  const tokenUrl = ebayEnv === "production"
-    ? "https://api.ebay.com/identity/v1/oauth2/token"
-    : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
+  const tokenUrl =
+    ebayEnv === "production"
+      ? "https://api.ebay.com/identity/v1/oauth2/token"
+      : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
 
   const resp = await fetch(tokenUrl, {
     method: "POST",
@@ -138,11 +139,8 @@ async function fetchMarketData(
 
       if (competitorData && !competitorData.error && !competitorData.noData) {
         const activeCount = Number(competitorData.competitorCount ?? 0);
-        const competitionLevel: MarketData["competitionLevel"] = activeCount > 25
-          ? "high"
-          : activeCount > 8
-          ? "medium"
-          : "low";
+        const competitionLevel: MarketData["competitionLevel"] =
+          activeCount > 25 ? "high" : activeCount > 8 ? "medium" : "low";
 
         return {
           soldCount: 0,
@@ -263,11 +261,14 @@ function buildPriceSuggestion(
       reasoning: `Your price ($${currentPrice.toFixed(2)}) is ${pctDiff.toFixed(0)}% above the ${
         avgSoldPrice ? "avg sold" : "avg active"
       } price ($${target.toFixed(2)}). Lowering to $${suggested.toFixed(2)} should ${strBoost} improve sell speed.${
-        competitionLevel === "high" ? " High competition makes pricing competitively critical." : ""
+        competitionLevel === "high"
+          ? " High competition makes pricing competitively critical."
+          : ""
       }`,
       direction: "lower",
       confidence: absPctDiff > 20 ? "high" : "medium",
-      estimatedImpact: absPctDiff > 20 ? "+30–50% sell-through" : "+10–20% sell-through",
+      estimatedImpact:
+        absPctDiff > 20 ? "+30–50% sell-through" : "+10–20% sell-through",
     };
   }
 
@@ -277,9 +278,9 @@ function buildPriceSuggestion(
     suggestedPrice: suggested,
     reasoning: `Your price ($${currentPrice.toFixed(2)}) is ${Math.abs(pctDiff).toFixed(0)}% below the ${
       avgSoldPrice ? "avg sold" : "avg active"
-    } price ($${target.toFixed(2)}). You may be leaving money on the table. Consider raising to $${
-      suggested.toFixed(2)
-    }.${market.demandSignal === "strong" ? " Strong demand supports a higher price." : ""}`,
+    } price ($${target.toFixed(2)}). You may be leaving money on the table. Consider raising to $${suggested.toFixed(
+      2,
+    )}.${market.demandSignal === "strong" ? " Strong demand supports a higher price." : ""}`,
     direction: "raise",
     confidence: absPctDiff > 20 ? "high" : "medium",
     estimatedImpact: `+$${(suggested - currentPrice).toFixed(2)} per sale`,
@@ -316,8 +317,9 @@ function buildTitleSuggestion(
   }
 
   // Check for excessive punctuation/symbols
-  const symbolCount = (title.match(new RegExp("[!@#$%^&*()_+=\\[\\]{};':\"\\\\|,.<>?]", "g")) || [])
-    .length;
+  const symbolCount = (
+    title.match(new RegExp("[!@#$%^&*()_+=\\[\\]{};':\"\\\\|,.<>?]", "g")) || []
+  ).length;
   if (symbolCount > 3) {
     issues.push(
       "Too many special characters — keep punctuation minimal for better readability",
@@ -335,12 +337,14 @@ function buildTitleSuggestion(
     "wow",
     "look",
   ];
-  const foundFillers = fillerWords.filter((w) => title.toLowerCase().includes(w));
+  const foundFillers = fillerWords.filter((w) =>
+    title.toLowerCase().includes(w),
+  );
   if (foundFillers.length > 0) {
     issues.push(
-      `Vague filler words detected ("${
-        foundFillers.join('", "')
-      }"): replace with specific attributes (year, grade, mint mark, color, size, etc.)`,
+      `Vague filler words detected ("${foundFillers.join(
+        '", "',
+      )}"): replace with specific attributes (year, grade, mint mark, color, size, etc.)`,
     );
   }
 
@@ -374,15 +378,15 @@ function buildTitleSuggestion(
     }
     suggestedTitle = improved !== title ? improved : null;
   } else {
-    reasoning =
-      `Multiple optimizations needed: ${issues.length} issues detected. Address these to improve search ranking.`;
+    reasoning = `Multiple optimizations needed: ${issues.length} issues detected. Address these to improve search ranking.`;
   }
 
   return {
     suggestedTitle,
     reasoning,
     issuesFound: issues,
-    confidence: issues.length === 0 ? "high" : issues.length <= 2 ? "medium" : "low",
+    confidence:
+      issues.length === 0 ? "high" : issues.length <= 2 ? "medium" : "low",
   };
 }
 
@@ -398,7 +402,8 @@ async function buildDescriptionSuggestion(
   if (!currentDesc || currentDesc.length < 50) {
     return {
       suggestedDescription: null,
-      reasoning: "No description to optimize. Add more detail to build buyer trust and improve search ranking.",
+      reasoning:
+        "No description to optimize. Add more detail to build buyer trust and improve search ranking.",
       issuesFound: [],
       confidence: "low",
     };
@@ -407,7 +412,9 @@ async function buildDescriptionSuggestion(
   const issues: string[] = [];
 
   if (currentDesc.includes("<div") && currentDesc.includes("style=")) {
-    issues.push("Description contains heavy HTML styling — many mobile buyers prefer clean, fast-loading text");
+    issues.push(
+      "Description contains heavy HTML styling — many mobile buyers prefer clean, fast-loading text",
+    );
   }
 
   // Check for "wall of text" (long paragraphs without line breaks or bullets)
@@ -443,8 +450,7 @@ async function buildDescriptionSuggestion(
     if (!geminiKey) throw new Error("GEMINI_API_KEY not set");
 
     // Call Gemini to optimize the description
-    const prompt =
-      `You are an eBay listing expert. Re-write the following item description to be professional, compelling, and easy to read. 
+    const prompt = `You are an eBay listing expert. Re-write the following item description to be professional, compelling, and easy to read. 
 IMPORTANT RULES:
 1. Use bullet points for key features and what is included.
 2. Break up long paragraphs into short, 1-2 sentence sections.
@@ -470,8 +476,8 @@ Respond ONLY with the optimized description text.`;
 
     if (resp.ok) {
       const data = await resp.json();
-      suggestedDescription = data.candidates?.[0]?.content?.parts?.[0]?.text ||
-        null;
+      suggestedDescription =
+        data.candidates?.[0]?.content?.parts?.[0]?.text || null;
       if (suggestedDescription) {
         reasoning =
           "AI has restructured your description with better visual hierarchy, bullet points, and clear sections.";
@@ -610,7 +616,10 @@ serve(async (req) => {
 
     // Build suggestions
     const priceSuggestion = buildPriceSuggestion(listing, effectiveMarket);
-    const titleSuggestion = buildTitleSuggestion(listing.title, effectiveMarket);
+    const titleSuggestion = buildTitleSuggestion(
+      listing.title,
+      effectiveMarket,
+    );
     const descriptionSuggestion = await buildDescriptionSuggestion(listing);
     const opportunityScore = calcOpportunityScore(
       listing,
@@ -625,9 +634,9 @@ serve(async (req) => {
     );
 
     console.log(
-      `[optimize-listing] Done: score=${opportunityScore}, flags=[${
-        flags.join(",")
-      }], priceDir=${priceSuggestion.direction}`,
+      `[optimize-listing] Done: score=${opportunityScore}, flags=[${flags.join(
+        ",",
+      )}], priceDir=${priceSuggestion.direction}`,
     );
 
     return new Response(
@@ -646,12 +655,9 @@ serve(async (req) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[optimize-listing] Error:", msg);
-    return new Response(
-      JSON.stringify({ error: msg }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });

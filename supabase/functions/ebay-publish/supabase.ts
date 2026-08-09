@@ -25,7 +25,9 @@ export async function assertCallerOwnsUser(
   supabaseServiceKey: string,
 ): Promise<void> {
   const authHeader = req.headers.get("Authorization");
-  const jwt = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+  const jwt = authHeader?.startsWith("Bearer ")
+    ? authHeader.slice(7).trim()
+    : null;
   if (!jwt) {
     throw new Error(
       "Unauthorized: missing Authorization header for token action.",
@@ -33,7 +35,10 @@ export async function assertCallerOwnsUser(
   }
   // Validate the JWT using the service-role client (verifies against project JWT secret).
   const sc = createClient(supabaseUrl, supabaseServiceKey);
-  const { data: { user }, error: authErr } = await sc.auth.getUser(jwt);
+  const {
+    data: { user },
+    error: authErr,
+  } = await sc.auth.getUser(jwt);
   if (authErr || !user) {
     throw new Error("Unauthorized: invalid or expired session token.");
   }

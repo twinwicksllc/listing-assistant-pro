@@ -21,14 +21,10 @@ export default function CogsInput({
 }: CogsInputProps) {
   const isCoinsBullion = domain === "coins_bullion";
   const ebayFee =
-    isCoinsBullion && listingPrice > 0
-      ? listingPrice * EBAY_COINS_FEE_RATE
-      : 0;
+    isCoinsBullion && listingPrice > 0 ? listingPrice * EBAY_COINS_FEE_RATE : 0;
 
   const estProfit =
-    cogs != null && listingPrice > 0
-      ? listingPrice - cogs - ebayFee
-      : null;
+    cogs != null && listingPrice > 0 ? listingPrice - cogs - ebayFee : null;
   const margin =
     estProfit != null && listingPrice > 0
       ? (estProfit / listingPrice) * 100
@@ -38,17 +34,17 @@ export default function CogsInput({
     estProfit == null
       ? "text-muted-foreground"
       : estProfit >= 0
-      ? "text-emerald-600 dark:text-emerald-400"
-      : "text-red-500 dark:text-red-400";
+        ? "text-emerald-600 dark:text-emerald-400"
+        : "text-red-500 dark:text-red-400";
 
   const marginColor =
     margin == null
       ? "text-muted-foreground"
       : margin >= 40
-      ? "text-emerald-600 dark:text-emerald-400"
-      : margin >= 20
-      ? "text-amber-600 dark:text-amber-400"
-      : "text-red-500 dark:text-red-400";
+        ? "text-emerald-600 dark:text-emerald-400"
+        : margin >= 20
+          ? "text-amber-600 dark:text-amber-400"
+          : "text-red-500 dark:text-red-400";
 
   return (
     <div className={`space-y-1.5 ${className}`}>
@@ -58,7 +54,9 @@ export default function CogsInput({
         <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
           Item Cost (COGS)
         </label>
-        <span className="text-[10px] text-muted-foreground/60 ml-auto">Optional</span>
+        <span className="text-[10px] text-muted-foreground/60 ml-auto">
+          Optional
+        </span>
       </div>
 
       {disabled ? (
@@ -133,11 +131,16 @@ export default function CogsInput({
           )}
 
           {/* Warning if cost exceeds listing price after fees */}
-          {cogs != null && listingPrice > 0 && estProfit != null && estProfit < 0 && cogs <= listingPrice && isCoinsBullion && (
-            <p className="text-[11px] text-red-500 px-1">
-              ⚠ Loss after 13% eBay fee — consider raising your price.
-            </p>
-          )}
+          {cogs != null &&
+            listingPrice > 0 &&
+            estProfit != null &&
+            estProfit < 0 &&
+            cogs <= listingPrice &&
+            isCoinsBullion && (
+              <p className="text-[11px] text-red-500 px-1">
+                ⚠ Loss after 13% eBay fee — consider raising your price.
+              </p>
+            )}
           {cogs != null && listingPrice > 0 && cogs > listingPrice && (
             <p className="text-[11px] text-red-500 px-1">
               ⚠ Cost exceeds listing price — you would lose money on this sale.

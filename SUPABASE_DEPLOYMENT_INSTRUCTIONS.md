@@ -12,10 +12,10 @@
 
 ### New Functions (for Bulk Listing Feature)
 
-| Function | Purpose | File |
-|----------|---------|------|
-| `bulk-generate-descriptions` | Generate AI descriptions per row using GPT-4o-mini | `supabase/functions/bulk-generate-descriptions/index.ts` |
-| `bulk-publish` | Batch publish listings to eBay (Inventory → Offer → Publish) | `supabase/functions/bulk-publish/index.ts` |
+| Function                     | Purpose                                                      | File                                                     |
+| ---------------------------- | ------------------------------------------------------------ | -------------------------------------------------------- |
+| `bulk-generate-descriptions` | Generate AI descriptions per row using GPT-4o-mini           | `supabase/functions/bulk-generate-descriptions/index.ts` |
+| `bulk-publish`               | Batch publish listings to eBay (Inventory → Offer → Publish) | `supabase/functions/bulk-publish/index.ts`               |
 
 ---
 
@@ -90,6 +90,7 @@ curl -X POST 'https://wcednzaxmxwfiijzmjmx.supabase.co/functions/v1/bulk-generat
 ```
 
 Expected response:
+
 ```json
 {
   "results": [
@@ -115,6 +116,7 @@ curl -X POST 'https://wcednzaxmxwfiijzmjmx.supabase.co/functions/v1/bulk-publish
 ```
 
 Expected response (dry-run):
+
 ```json
 {
   "published": 0,
@@ -131,11 +133,13 @@ Expected response (dry-run):
 ## Environment Variables (if needed)
 
 Both functions use the following Supabase environment variables automatically:
+
 - `SUPABASE_URL` (auto-injected)
 - `SUPABASE_SERVICE_ROLE_KEY` (auto-injected)
 - `NEW_OPENAI_API_KEY` (already configured for existing `analyze-item` function)
 
 Optional for static-egress OpenAI proxy routing:
+
 - `OPENAI_PROXY_URL` (e.g. `https://<proxy-domain>/v1/chat/completions`)
 - `OPENAI_PROXY_AUTH_TOKEN` (shared secret header sent as `X-Proxy-Auth`)
 
@@ -158,6 +162,7 @@ No additional env vars required for the new functions.
 ## Existing Functions (for reference)
 
 All other functions are already deployed and should not need redeployment:
+
 - `analyze-item` ✅
 - `ebay-publish` ✅
 - `ebay-policies` ✅

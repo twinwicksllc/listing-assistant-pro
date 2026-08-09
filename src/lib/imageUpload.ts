@@ -70,7 +70,7 @@ function dataUrlToBlob(dataUrl: string): Blob {
  */
 export async function uploadListingImage(
   dataUrl: string,
-  userId: string
+  userId: string,
 ): Promise<string> {
   // If it's already a remote URL (not a data URL), return as-is
   if (!dataUrl.startsWith("data:")) {
@@ -116,7 +116,7 @@ export async function uploadListingImage(
  */
 export async function uploadListingImages(
   dataUrls: string[],
-  userId: string
+  userId: string,
 ): Promise<string[]> {
   return Promise.all(dataUrls.map((url) => uploadListingImage(url, userId)));
 }

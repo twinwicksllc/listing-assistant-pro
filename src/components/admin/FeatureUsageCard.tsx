@@ -15,16 +15,23 @@ export function FeatureUsageCard({ featureUsage }: FeatureUsageCardProps) {
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       <div className="px-4 py-3 border-b border-border">
-        <h2 className="text-sm font-semibold text-foreground">Feature Usage (30 Days)</h2>
+        <h2 className="text-sm font-semibold text-foreground">
+          Feature Usage (30 Days)
+        </h2>
       </div>
       <div className="divide-y divide-border">
         {items.map((item) => (
-          <div key={item.label} className="px-4 py-3 flex items-center justify-between">
+          <div
+            key={item.label}
+            className="px-4 py-3 flex items-center justify-between"
+          >
             <span className="text-sm text-foreground flex items-center gap-2">
               <span>{item.icon}</span>
               {item.label}
             </span>
-            <span className="text-sm font-bold text-foreground">{item.count}</span>
+            <span className="text-sm font-bold text-foreground">
+              {item.count}
+            </span>
           </div>
         ))}
       </div>

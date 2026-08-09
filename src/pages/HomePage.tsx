@@ -1,4 +1,18 @@
-import { Camera, Upload, Sparkles, X, ArrowRight, ImagePlus, Mic, MicOff, Loader2, LogOut, Wand2, HelpCircle, Layers } from "lucide-react";
+import {
+  Camera,
+  Upload,
+  Sparkles,
+  X,
+  ArrowRight,
+  ImagePlus,
+  Mic,
+  MicOff,
+  Loader2,
+  LogOut,
+  Wand2,
+  HelpCircle,
+  Layers,
+} from "lucide-react";
 import teckstartLogo from "@/assets/teckstart-logo.png";
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -10,9 +24,19 @@ import { useAuth } from "@/contexts/AuthContext";
 import { optimizeImages } from "@/lib/imageOptimizer";
 import WelcomeTour, { type TourStep } from "@/components/WelcomeTour";
 
-
-const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/gif", "video/mp4", "video/quicktime", "video/webm"];
-const ACCEPT_STRING = "image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif,video/mp4,video/quicktime,video/webm";
+const ACCEPTED_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+  "image/gif",
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+];
+const ACCEPT_STRING =
+  "image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif,video/mp4,video/quicktime,video/webm";
 const MAX_FILE_SIZE_MB = 20;
 const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
 const MAX_RECORDING_SEC = 10;
@@ -23,25 +47,29 @@ const TOUR_STEPS: TourStep[] = [
   {
     target: "capture-button",
     title: "📸 Capture Items",
-    description: "Tap here to take photos or upload images of items you want to list on eBay. You can add multiple photos at once.",
+    description:
+      "Tap here to take photos or upload images of items you want to list on eBay. You can add multiple photos at once.",
     placement: "bottom",
   },
   {
     target: "image-optimizer",
     title: "✨ Auto Optimizer",
-    description: "Photos are automatically optimized when added—backgrounds are auto-cropped, items centered, and brightness normalized for professional listings.",
+    description:
+      "Photos are automatically optimized when added—backgrounds are auto-cropped, items centered, and brightness normalized for professional listings.",
     placement: "top",
   },
   {
     target: "analyze-tab",
     title: "🔍 Drafts & Analysis",
-    description: "After processing, your AI-generated listings appear in Drafts. Review titles, descriptions, and pricing before publishing to eBay.",
+    description:
+      "After processing, your AI-generated listings appear in Drafts. Review titles, descriptions, and pricing before publishing to eBay.",
     placement: "top",
   },
   {
     target: "help-button",
     title: "💡 Need Help?",
-    description: "You can replay this tour anytime by tapping the help icon in the header. Happy listing!",
+    description:
+      "You can replay this tour anytime by tapping the help icon in the header. Happy listing!",
     placement: "bottom",
   },
 ];
@@ -56,10 +84,12 @@ export default function HomePage() {
   const [stagedImages, setStagedImages] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
-  const [optimizeProgress, setOptimizeProgress] = useState({ done: 0, total: 0 });
+  const [optimizeProgress, setOptimizeProgress] = useState({
+    done: 0,
+    total: 0,
+  });
   const [imagesOptimized, setImagesOptimized] = useState(false);
   const [showTour, setShowTour] = useState(false);
-  
 
   // Voice note state
   const [recording, setRecording] = useState(false);
@@ -69,7 +99,9 @@ export default function HomePage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const autoOptimizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoOptimizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!localStorage.getItem(TOUR_KEY)) {
@@ -94,14 +126,19 @@ export default function HomePage() {
       setOptimizing(true);
       setOptimizeProgress({ done: 0, total: stagedSnapshot.length });
       try {
-        const optimized = await optimizeImages(stagedSnapshot, (done, total) => {
-          setOptimizeProgress({ done, total });
-        });
+        const optimized = await optimizeImages(
+          stagedSnapshot,
+          (done, total) => {
+            setOptimizeProgress({ done, total });
+          },
+        );
         // Protect against stale async overwrite: if user added/removed photos
         // while optimization was running, do not discard those changes.
         let hasAdditionalImages = false;
         setStagedImages((prev) => {
-          const snapshotStillPrefix = stagedSnapshot.every((img, i) => prev[i] === img);
+          const snapshotStillPrefix = stagedSnapshot.every(
+            (img, i) => prev[i] === img,
+          );
           if (!snapshotStillPrefix) {
             return prev;
           }
@@ -131,46 +168,58 @@ export default function HomePage() {
     localStorage.setItem(TOUR_KEY, "true");
   };
 
-  const openVideoFlow = useCallback((selectedVideoFile?: File) => {
-    navigate("/analyze", {
-      state: {
-        imageUrls: [],
-        voiceNote,
-        videoOnly: true,
-        selectedVideoFile,
-      },
-    });
-  }, [navigate, voiceNote]);
+  const openVideoFlow = useCallback(
+    (selectedVideoFile?: File) => {
+      navigate("/analyze", {
+        state: {
+          imageUrls: [],
+          voiceNote,
+          videoOnly: true,
+          selectedVideoFile,
+        },
+      });
+    },
+    [navigate, voiceNote],
+  );
 
-  const validateAndStageFiles = useCallback((files: FileList | File[] | null) => {
-    if (!files) return;
-    const fileArr = Array.from(files);
+  const validateAndStageFiles = useCallback(
+    (files: FileList | File[] | null) => {
+      if (!files) return;
+      const fileArr = Array.from(files);
 
-    fileArr.forEach((file) => {
-      if (file.type.startsWith("video/")) {
-        toast.info("Video uploads use the Analyze video flow. Opening video upload...");
-        openVideoFlow(file);
-        return;
-      }
+      fileArr.forEach((file) => {
+        if (file.type.startsWith("video/")) {
+          toast.info(
+            "Video uploads use the Analyze video flow. Opening video upload...",
+          );
+          openVideoFlow(file);
+          return;
+        }
 
-      if (!ACCEPTED_TYPES.includes(file.type)) {
-        toast.error(`"${file.name}" is not a supported format (JPG, PNG, WebP, GIF, MP4, MOV, WebM)`);
-        return;
-      }
-      if (file.size > MAX_FILE_SIZE) {
-        toast.error(`"${file.name}" exceeds ${MAX_FILE_SIZE_MB}MB limit (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
-        return;
-      }
+        if (!ACCEPTED_TYPES.includes(file.type)) {
+          toast.error(
+            `"${file.name}" is not a supported format (JPG, PNG, WebP, GIF, MP4, MOV, WebM)`,
+          );
+          return;
+        }
+        if (file.size > MAX_FILE_SIZE) {
+          toast.error(
+            `"${file.name}" exceeds ${MAX_FILE_SIZE_MB}MB limit (${(file.size / 1024 / 1024).toFixed(1)}MB)`,
+          );
+          return;
+        }
 
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const url = e.target?.result as string;
-        setStagedImages((prev) => [...prev, url]);
-        setImagesOptimized(false);
-      };
-      reader.readAsDataURL(file);
-    });
-  }, [openVideoFlow]);
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const url = e.target?.result as string;
+          setStagedImages((prev) => [...prev, url]);
+          setImagesOptimized(false);
+        };
+        reader.readAsDataURL(file);
+      });
+    },
+    [openVideoFlow],
+  );
 
   const removeImage = (index: number) => {
     setStagedImages((prev) => prev.filter((_, i) => i !== index));
@@ -187,7 +236,9 @@ export default function HomePage() {
       });
       setStagedImages(optimized);
       setImagesOptimized(true);
-      toast.success(`${optimized.length} photo${optimized.length !== 1 ? "s" : ""} optimized!`);
+      toast.success(
+        `${optimized.length} photo${optimized.length !== 1 ? "s" : ""} optimized!`,
+      );
       await recordUsage("optimize");
     } catch (err) {
       console.error("Optimize error:", err);
@@ -211,8 +262,6 @@ export default function HomePage() {
     }
   };
 
-  
-
   const handleGalleryUpload = () => {
     galleryInputRef.current?.click();
   };
@@ -228,7 +277,10 @@ export default function HomePage() {
 
   // --- Voice recording ---
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state !== "inactive"
+    ) {
       mediaRecorderRef.current.stop();
     }
     if (timerRef.current) {
@@ -242,7 +294,9 @@ export default function HomePage() {
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: "audio/webm;codecs=opus",
+      });
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
@@ -263,15 +317,23 @@ export default function HomePage() {
             reader.readAsDataURL(blob);
           });
 
-          const { data, error } = await supabase.functions.invoke("transcribe-voice", {
-            body: { audioBase64: base64 },
-          });
+          const { data, error } = await supabase.functions.invoke(
+            "transcribe-voice",
+            {
+              body: { audioBase64: base64 },
+            },
+          );
 
-          if (error || data?.error) throw new Error(data?.error || error?.message || "Transcription failed");
+          if (error || data?.error)
+            throw new Error(
+              data?.error || error?.message || "Transcription failed",
+            );
 
           const transcript = data.transcript || "";
           if (transcript) {
-            setVoiceNote((prev) => (prev ? `${prev} ${transcript}` : transcript));
+            setVoiceNote((prev) =>
+              prev ? `${prev} ${transcript}` : transcript,
+            );
             toast.success("Voice note transcribed!");
           } else {
             toast.error("Couldn't detect any speech. Try again.");
@@ -298,7 +360,9 @@ export default function HomePage() {
         }
       }, 1000);
     } catch {
-      toast.error("Microphone access denied. Please enable it in your browser settings.");
+      toast.error(
+        "Microphone access denied. Please enable it in your browser settings.",
+      );
     }
   }, [stopRecording]);
 
@@ -313,21 +377,32 @@ export default function HomePage() {
     setDragging(false);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragging(false);
-    validateAndStageFiles(e.dataTransfer.files);
-  }, [validateAndStageFiles]);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragging(false);
+      validateAndStageFiles(e.dataTransfer.files);
+    },
+    [validateAndStageFiles],
+  );
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
       <header className="px-5 pt-12 pb-4 md:px-8 lg:px-12">
         <div className="max-w-3xl mx-auto flex items-center gap-2">
-          <img src={teckstartLogo} alt="Sovereign Listing Suite" className="h-12 w-auto" />
+          <img
+            src={teckstartLogo}
+            alt="Sovereign Listing Suite"
+            className="h-12 w-auto"
+          />
           <div className="flex-1">
-            <h1 className="text-lg font-bold text-foreground">Sovereign Listing Suite</h1>
-            <p className="text-xs text-muted-foreground">AI-powered eBay listings</p>
+            <h1 className="text-lg font-bold text-foreground">
+              Sovereign Listing Suite
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              AI-powered eBay listings
+            </p>
           </div>
           <button
             onClick={() => setShowTour(true)}
@@ -380,7 +455,9 @@ export default function HomePage() {
                     : "Upload images or drag & drop to generate your eBay listing"}
                 </p>
                 <p className="text-muted-foreground/60 text-xs">
-                  Photos: JPG, PNG, WebP, GIF up to {MAX_FILE_SIZE_MB}MB each. Video (max {MAX_RECORDING_SEC}s) can be recorded or uploaded in the next step.
+                  Photos: JPG, PNG, WebP, GIF up to {MAX_FILE_SIZE_MB}MB each.
+                  Video (max {MAX_RECORDING_SEC}s) can be recorded or uploaded
+                  in the next step.
                 </p>
               </div>
 
@@ -439,8 +516,15 @@ export default function HomePage() {
               {/* Photo grid */}
               <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 md:gap-3">
                 {stagedImages.map((url, i) => (
-                  <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-border bg-secondary group">
-                    <img src={url} alt={`Item photo ${i + 1}`} className="w-full h-full object-cover" />
+                  <div
+                    key={i}
+                    className="relative aspect-square rounded-lg overflow-hidden border border-border bg-secondary group"
+                  >
+                    <img
+                      src={url}
+                      alt={`Item photo ${i + 1}`}
+                      className="w-full h-full object-cover"
+                    />
                     <button
                       onClick={() => removeImage(i)}
                       className="absolute top-1 right-1 w-6 h-6 rounded-full bg-background/80 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
@@ -460,17 +544,26 @@ export default function HomePage() {
                   onClick={handleCapture}
                   className="aspect-square rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center gap-1 text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors"
                 >
-                  {isMobile ? <Camera className="w-5 h-5" /> : <Upload className="w-5 h-5" />}
+                  {isMobile ? (
+                    <Camera className="w-5 h-5" />
+                  ) : (
+                    <Upload className="w-5 h-5" />
+                  )}
                   <span className="text-[10px] font-medium">Add</span>
                 </button>
               </div>
 
               {/* Image Optimizer */}
-              <div data-tour="image-optimizer" className="bg-card border border-border rounded-xl p-3 space-y-2">
+              <div
+                data-tour="image-optimizer"
+                className="bg-card border border-border rounded-xl p-3 space-y-2"
+              >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-primary" />
-                    <span className="text-xs font-medium text-foreground">Auto-Optimizer</span>
+                    <span className="text-xs font-medium text-foreground">
+                      Auto-Optimizer
+                    </span>
                   </div>
                   {imagesOptimized && (
                     <span className="text-[10px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full">
@@ -495,71 +588,82 @@ export default function HomePage() {
 
               {/* Voice Note Section */}
               {planFeatures.hasVoiceNotes ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-1.5">
-                  <Mic className="w-3.5 h-3.5 text-primary" />
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Voice Note</label>
-                  <span className="text-[10px] text-muted-foreground/60 ml-auto">Optional · {MAX_RECORDING_SEC}s max</span>
-                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <Mic className="w-3.5 h-3.5 text-primary" />
+                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Voice Note
+                    </label>
+                    <span className="text-[10px] text-muted-foreground/60 ml-auto">
+                      Optional · {MAX_RECORDING_SEC}s max
+                    </span>
+                  </div>
 
-                <div className="flex gap-2">
-                  <button
-                    onClick={recording ? stopRecording : startRecording}
-                    disabled={transcribing}
-                    className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                      recording
-                        ? "bg-destructive text-destructive-foreground animate-pulse"
-                        : "bg-secondary text-foreground hover:bg-secondary/80"
-                    } disabled:opacity-60`}
-                  >
-                    {transcribing ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Transcribing...
-                      </>
-                    ) : recording ? (
-                      <>
-                        <MicOff className="w-4 h-4" />
-                        Stop ({MAX_RECORDING_SEC - recordingTime}s)
-                      </>
-                    ) : (
-                      <>
-                        <Mic className="w-4 h-4" />
-                        Record Note
-                      </>
-                    )}
-                  </button>
-
-                  {voiceNote && !recording && !transcribing && (
+                  <div className="flex gap-2">
                     <button
-                      onClick={() => setVoiceNote("")}
-                      className="px-3 py-2.5 rounded-lg text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
+                      onClick={recording ? stopRecording : startRecording}
+                      disabled={transcribing}
+                      className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                        recording
+                          ? "bg-destructive text-destructive-foreground animate-pulse"
+                          : "bg-secondary text-foreground hover:bg-secondary/80"
+                      } disabled:opacity-60`}
                     >
-                      Clear
+                      {transcribing ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Transcribing...
+                        </>
+                      ) : recording ? (
+                        <>
+                          <MicOff className="w-4 h-4" />
+                          Stop ({MAX_RECORDING_SEC - recordingTime}s)
+                        </>
+                      ) : (
+                        <>
+                          <Mic className="w-4 h-4" />
+                          Record Note
+                        </>
+                      )}
                     </button>
+
+                    {voiceNote && !recording && !transcribing && (
+                      <button
+                        onClick={() => setVoiceNote("")}
+                        className="px-3 py-2.5 rounded-lg text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+
+                  {voiceNote && (
+                    <div className="bg-card border border-border rounded-lg px-3 py-2.5">
+                      <p className="text-xs text-muted-foreground mb-1 font-medium">
+                        Transcription:
+                      </p>
+                      <textarea
+                        value={voiceNote}
+                        onChange={(e) => setVoiceNote(e.target.value)}
+                        rows={2}
+                        className="w-full text-sm text-foreground bg-transparent border-none focus:outline-none resize-none"
+                      />
+                    </div>
                   )}
                 </div>
-
-                {voiceNote && (
-                  <div className="bg-card border border-border rounded-lg px-3 py-2.5">
-                    <p className="text-xs text-muted-foreground mb-1 font-medium">Transcription:</p>
-                    <textarea
-                      value={voiceNote}
-                      onChange={(e) => setVoiceNote(e.target.value)}
-                      rows={2}
-                      className="w-full text-sm text-foreground bg-transparent border-none focus:outline-none resize-none"
-                    />
-                  </div>
-                )}
-              </div>
               ) : (
-              <div className="bg-muted/50 border border-border rounded-lg px-4 py-3 flex items-center gap-3">
-                <Mic className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Voice Notes</p>
-                  <p className="text-[10px] text-muted-foreground/70">Upgrade to Pro ($49/mo) to add voice notes to your listings.</p>
+                <div className="bg-muted/50 border border-border rounded-lg px-4 py-3 flex items-center gap-3">
+                  <Mic className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Voice Notes
+                    </p>
+                    <p className="text-[10px] text-muted-foreground/70">
+                      Upgrade to Pro ($49/mo) to add voice notes to your
+                      listings.
+                    </p>
+                  </div>
                 </div>
-              </div>
               )}
 
               {/* Process button */}
@@ -609,17 +713,21 @@ export default function HomePage() {
         onChange={(e) => {
           const file = e.target.files?.[0];
           if (file) {
-            toast.info("Video-first flow opened. Upload your video in Analyze.");
+            toast.info(
+              "Video-first flow opened. Upload your video in Analyze.",
+            );
             openVideoFlow(file);
           }
           e.target.value = "";
         }}
       />
 
-      
-
       <BottomNav />
-      <WelcomeTour steps={TOUR_STEPS} active={showTour} onFinish={handleTourFinish} />
+      <WelcomeTour
+        steps={TOUR_STEPS}
+        active={showTour}
+        onFinish={handleTourFinish}
+      />
     </div>
   );
 }

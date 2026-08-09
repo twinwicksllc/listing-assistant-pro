@@ -33,7 +33,10 @@ describe("US quarter coin-condition selector", () => {
   it("has a breadcrumb for every US quarter leaf (so the breadcrumb fallback also works)", () => {
     for (const [id, label] of QUARTER_LEAVES) {
       const bc = getEbayCategoryBreadcrumb(id);
-      expect(bc, `category ${id} (${label}) should have a breadcrumb`).toBeTruthy();
+      expect(
+        bc,
+        `category ${id} (${label}) should have a breadcrumb`,
+      ).toBeTruthy();
       expect(bc!.toLowerCase()).toContain("quarter");
     }
   });

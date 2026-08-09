@@ -1,11 +1,13 @@
 # Feature #6: Auto-Optimization Plan
 
 ## Overview
+
 Auto-Optimization automatically analyzes a seller's active eBay listings and suggests (or applies) improvements to pricing, titles, and listing quality to maximize sell-through rate and revenue. It combines the user's own listing data with market research data (from Feature #5) to generate actionable insights.
 
 ---
 
 ## Core Value Proposition
+
 - **Save time**: Instead of manually checking each listing against market data, the system surfaces the most impactful changes automatically
 - **Data-driven pricing**: Reprice based on real sold data (STR, avg sold price) not just gut feel
 - **Title optimization**: Improve search visibility with better keywords
@@ -16,15 +18,18 @@ Auto-Optimization automatically analyzes a seller's active eBay listings and sug
 ## Feature Components
 
 ### 6A: Optimization Queue (Dashboard Widget)
+
 A new dashboard widget showing listings ranked by "optimization opportunity score."
 
 **Data inputs:**
+
 - User's active listings (from existing `ebay-listings` function)
 - Market data per listing (from `keyword-research` function, run on listing title)
 - Days active (from listing start date)
 - Current price vs avg sold price
 
 **Opportunity Score formula:**
+
 ```
 score = (price_gap_pct * 0.4) + (days_stale_pct * 0.3) + (str_gap_pct * 0.3)
 
@@ -35,6 +40,7 @@ where:
 ```
 
 **UI:**
+
 - Card showing top 5 listings needing attention
 - Each card shows: thumbnail, title, current price, suggested price, days active, STR
 - "Optimize" button per listing → opens Optimization Modal
@@ -43,14 +49,17 @@ where:
 ---
 
 ### 6B: Optimization Modal (Per-Listing)
+
 Opens when user clicks "Optimize" on any listing. Shows a side-by-side comparison.
 
 **Tabs:**
+
 1. **Pricing** - Current vs suggested price with market context
 2. **Title** - Current title vs AI-suggested title with keyword improvements
 3. **Description** - Current description quality score + suggestions
 
 **Pricing Tab:**
+
 - Shows: current price, avg sold price (from Jina), competition level, STR
 - Recommends: price adjustment with reasoning
   - "Price is 23% above market average — reduce to $XX to improve sell speed"
@@ -58,21 +67,25 @@ Opens when user clicks "Optimize" on any listing. Shows a side-by-side compariso
 - User can accept, edit, or dismiss
 
 **Title Tab:**
+
 - Analyzes current title for missing keywords
 - Uses `analyze-item` function output + market search terms
 - Suggests improved title respecting eBay's 80-char limit
 - Shows character count
 
 **One-Click Apply:**
+
 - Calls `ebay-reprice` function (already exists!) for price changes
 - For title/description changes: calls eBay Inventory API `PUT /sell/inventory/v1/inventory_item/{sku}`
 
 ---
 
 ### 6C: Auto-Reprice Rules Engine
+
 A rules-based auto-repricing system the user can configure.
 
 **Rule types:**
+
 1. **Match lowest** - Price at the lowest active competitor price
 2. **Beat lowest by X%** - Price X% below lowest competitor
 3. **Match average** - Price at the average sold price
@@ -80,12 +93,14 @@ A rules-based auto-repricing system the user can configure.
 5. **Ceiling protection** - Never go above $X
 
 **Rule configuration UI:**
+
 - Per-category rules (e.g., silver coins: match avg sold)
 - Global fallback rule
 - Enable/disable toggle
 - Dry-run mode: "Show what would change without applying"
 
 **Execution:**
+
 - Manually triggered ("Run Reprice Rules")
 - Or scheduled via cron (new `auto-reprice-cron` edge function)
 - Results in an "Optimization History" log
@@ -93,13 +108,16 @@ A rules-based auto-repricing system the user can configure.
 ---
 
 ### 6D: Stale Listing Detector
+
 Flags listings that have been active too long and suggests actions.
 
 **Thresholds (configurable):**
+
 - Warning: 30+ days active, no views increase
 - Critical: 60+ days active
 
 **Suggested actions per stale listing:**
+
 1. Reduce price by 10-15%
 2. Add to Promoted Listings
 3. Relist with new photos/title
@@ -110,9 +128,11 @@ Flags listings that have been active too long and suggests actions.
 ---
 
 ### 6E: Optimization History Log
+
 Tracks all changes made through Auto-Optimization.
 
 **Database table: `optimization_history`**
+
 ```sql
 id uuid
 user_id uuid
@@ -133,6 +153,7 @@ result text ('accepted' | 'dismissed' | 'pending')
 ## Database Changes Needed
 
 ### New table: `optimization_history`
+
 ```sql
 CREATE TABLE optimization_history (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -156,6 +177,7 @@ CREATE POLICY "Users can manage own optimization history"
 ```
 
 ### New table: `reprice_rules`
+
 ```sql
 CREATE TABLE reprice_rules (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -180,7 +202,9 @@ CREATE POLICY "Users can manage own reprice rules"
 ## New Edge Functions
 
 ### `auto-reprice-cron/index.ts`
+
 Scheduled function that applies reprice rules automatically.
+
 - Fetches user's active listings
 - For each listing, fetches market data (keyword-research)
 - Applies matching reprice rules
@@ -188,7 +212,9 @@ Scheduled function that applies reprice rules automatically.
 - Logs results to `optimization_history`
 
 ### `optimize-listing/index.ts`
+
 On-demand optimization analysis for a single listing.
+
 - Input: `{ listingId, userId }`
 - Fetches listing details from eBay
 - Runs keyword-research for market data
@@ -200,23 +226,27 @@ On-demand optimization analysis for a single listing.
 ## New Frontend Components
 
 ### `OptimizationQueueWidget.tsx`
+
 - Dashboard widget showing top optimization opportunities
 - Sorted by opportunity score (highest first)
 - Quick-action buttons
 
 ### `OptimizationModal.tsx`
+
 - Full-screen modal for per-listing optimization
 - Tabbed interface: Pricing | Title | Description
 - Accept/Dismiss per suggestion
 - "Apply All" button
 
 ### `RepriceRulesPage.tsx`
+
 - Configure auto-reprice rules
 - Per-category settings
 - Dry-run mode toggle
 - Run history
 
 ### `OptimizationHistoryTable.tsx`
+
 - Paginated history of all optimizations
 - Filter by type/date/listing
 - Undo capability (within 24h, via eBay API revert)
@@ -224,6 +254,7 @@ On-demand optimization analysis for a single listing.
 ---
 
 ## New Hook: `useOptimization.ts`
+
 ```typescript
 // Fetches optimization queue for current user's listings
 useOptimizationQueue() → { items: OptimizationItem[], isLoading, refetch }
@@ -238,6 +269,7 @@ useRepriceRules() → { rules, addRule, updateRule, deleteRule, runDryRun, runRu
 ---
 
 ## New Types: `optimization.ts`
+
 ```typescript
 interface OptimizationItem {
   listingId: string;
@@ -248,7 +280,7 @@ interface OptimizationItem {
   sellThroughRate: number;
   competitionLevel: "low" | "medium" | "high";
   daysActive: number;
-  opportunityScore: number;  // 0-100
+  opportunityScore: number; // 0-100
   flags: ("stale" | "overpriced" | "underpriced" | "poor_title")[];
 }
 
@@ -258,7 +290,7 @@ interface OptimizationSuggestion {
   suggestedValue: string;
   reasoning: string;
   confidence: "low" | "medium" | "high";
-  estimatedImpact: string;  // e.g. "+15% sell-through"
+  estimatedImpact: string; // e.g. "+15% sell-through"
 }
 
 interface RepriceRule {
@@ -300,11 +332,13 @@ interface RepriceRule {
 ---
 
 ## Estimated Complexity: Medium-High
+
 - ~8-10 new components/pages
 - ~2 new edge functions
 - ~2 new DB tables
 - Leverages existing: `ebay-reprice`, `analyze-item`, `keyword-research`, `ebay-listings`
 
 ## Key Risk: eBay API Rate Limits
+
 - Running keyword-research (Jina scrape) for every listing could be slow/rate-limited
 - Mitigation: Only analyze top 20 listings by opportunity score at a time, cache results 4h

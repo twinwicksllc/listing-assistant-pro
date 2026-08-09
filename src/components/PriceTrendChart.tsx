@@ -36,10 +36,15 @@ function formatPrice(value: number): string {
   return `$${value.toFixed(2)}`;
 }
 
-export default function PriceTrendChart({ history, className }: PriceTrendChartProps) {
+export default function PriceTrendChart({
+  history,
+  className,
+}: PriceTrendChartProps) {
   if (history.length === 0) {
     return (
-      <div className={`flex items-center justify-center h-40 text-muted-foreground text-sm ${className ?? ""}`}>
+      <div
+        className={`flex items-center justify-center h-40 text-muted-foreground text-sm ${className ?? ""}`}
+      >
         No price history yet. Refresh the watch to start tracking.
       </div>
     );
@@ -56,7 +61,10 @@ export default function PriceTrendChart({ history, className }: PriceTrendChartP
   return (
     <div className={className}>
       <ResponsiveContainer width="100%" height={200}>
-        <LineChart data={data} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+        <LineChart
+          data={data}
+          margin={{ top: 4, right: 12, left: 0, bottom: 4 }}
+        >
           <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
           <XAxis
             dataKey="date"

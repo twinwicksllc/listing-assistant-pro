@@ -4,7 +4,8 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
   "Access-Control-Max-Age": "86400",
 };
 
@@ -44,7 +45,10 @@ function makeMockFrameDataUrl(label: string): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
-function decodeDataUrl(dataUrl: string): { bytes: Uint8Array; mimeType: string } {
+function decodeDataUrl(dataUrl: string): {
+  bytes: Uint8Array;
+  mimeType: string;
+} {
   const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) {
     throw new Error("Invalid frame data URL format.");
@@ -82,16 +86,24 @@ serve(async (req: Request) => {
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: "Authentication required" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
-    const { data: ud } = await svc.auth.getUser(authHeader.replace("Bearer ", ""));
+    const { data: ud } = await svc.auth.getUser(
+      authHeader.replace("Bearer ", ""),
+    );
     const userId = ud?.user?.id;
     if (!userId) {
       return new Response(
         JSON.stringify({ error: "Authentication required" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -100,16 +112,22 @@ serve(async (req: Request) => {
     const maxFrames = Math.max(1, Math.min(12, body.maxFrames ?? 6));
     const strategy = body.strategy ?? "scene_change";
     const telemetry = body.telemetry ?? {};
-    const incomingFrames = Array.isArray(body.frames) ? body.frames.slice(0, maxFrames) : [];
+    const incomingFrames = Array.isArray(body.frames)
+      ? body.frames.slice(0, maxFrames)
+      : [];
 
     if (!videoUrl && incomingFrames.length === 0) {
       return new Response(
         JSON.stringify({ error: "videoUrl or frames payload is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
-    let frames: Array<{ url: string; timestampSec: number; score: number }> = [];
+    let frames: Array<{ url: string; timestampSec: number; score: number }> =
+      [];
     let mocked = false;
 
     if (incomingFrames.length > 0) {
@@ -129,10 +147,14 @@ serve(async (req: Request) => {
           });
 
         if (uploadError) {
-          throw new Error(`Failed to store extracted frame ${idx + 1}: ${uploadError.message}`);
+          throw new Error(
+            `Failed to store extracted frame ${idx + 1}: ${uploadError.message}`,
+          );
         }
 
-        const { data: publicData } = svc.storage.from("listing-images").getPublicUrl(path);
+        const { data: publicData } = svc.storage
+          .from("listing-images")
+          .getPublicUrl(path);
         frames.push({
           url: publicData.publicUrl,
           timestampSec: Number(frame.timestampSec ?? idx),
@@ -173,20 +195,29 @@ serve(async (req: Request) => {
           extractionMode: mocked ? "mock_fallback" : "client_persisted",
           userId,
           durationSec: 8.4,
-          framesExamined: incomingFrames.length > 0 ? incomingFrames.length : 24,
+          framesExamined:
+            incomingFrames.length > 0 ? incomingFrames.length : 24,
           framesSelected: frames.length,
           message: mocked
             ? "Debug mock response only (no production fallback frames)."
             : "Frames persisted to Supabase storage.",
         },
       }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   } catch (err) {
     console.error("video-frame-extract error:", err);
     return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : "Unexpected error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      JSON.stringify({
+        error: err instanceof Error ? err.message : "Unexpected error",
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 });

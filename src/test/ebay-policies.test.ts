@@ -287,7 +287,7 @@ export const testScenario_ManualRefresh = () => {
   // Set cached data
   storage.setItem(
     "ebay-business-policies",
-    JSON.stringify({ data: MOCK_BUSINESS_POLICIES, timestamp: Date.now() })
+    JSON.stringify({ data: MOCK_BUSINESS_POLICIES, timestamp: Date.now() }),
   );
   console.assert(storage.getItem("ebay-business-policies") !== null);
 
@@ -311,11 +311,11 @@ export const testScenario_InvalidToken = () => {
 
   console.assert(
     error.type === "INVALID_TOKEN",
-    "Error type should be INVALID_TOKEN"
+    "Error type should be INVALID_TOKEN",
   );
   console.assert(
     error.message.includes("reconnect"),
-    "Error message should prompt reconnection"
+    "Error message should prompt reconnection",
   );
 
   return { success: true, error };
@@ -332,7 +332,7 @@ export const testScenario_NoPolicies = () => {
     return: [],
   };
 
-  const hasPolicies = 
+  const hasPolicies =
     emptyPolicies.fulfillment.length > 0 &&
     emptyPolicies.payment.length > 0 &&
     emptyPolicies.return.length > 0;
@@ -361,7 +361,7 @@ export const testScenario_SelectPolicies = () => {
 
   console.assert(
     newSelected.fulfillmentPolicyId === "mock-fulfill-002",
-    "Selection should update"
+    "Selection should update",
   );
 
   // User selects payment policy
@@ -372,7 +372,7 @@ export const testScenario_SelectPolicies = () => {
 
   console.assert(
     newSelected.returnPolicyId === "mock-return-004",
-    "All selections should be captured"
+    "All selections should be captured",
   );
 
   return { success: true, selected: newSelected };
@@ -396,9 +396,7 @@ export function runAllTests() {
   tests.forEach(({ name, fn }) => {
     try {
       const result = fn();
-      console.log(
-        `✓ ${name}: ${result.success ? "PASS" : "FAIL"}`
-      );
+      console.log(`✓ ${name}: ${result.success ? "PASS" : "FAIL"}`);
     } catch (error) {
       console.error(`✗ ${name}: ${error}`);
     }

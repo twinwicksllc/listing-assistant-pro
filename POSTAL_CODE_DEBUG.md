@@ -4,13 +4,14 @@
 
 1. Go to https://supabase.com/dashboard
 2. Select **listing-assistant-pro** project
-3. Go to **Database** → **profiles** table  
+3. Go to **Database** → **profiles** table
 4. Find YOUR user row
 5. Check these columns:
    - `postal_code`: Should show your ZIP code (e.g., "60046")
    - `city`: Should show your city (e.g., "Chicago")
 
 **If BOTH columns are empty/NULL:**
+
 - Go back to app Settings → Edit Profile
 - Enter City: Chicago (or your city)
 - Enter ZIP: Your zip code
@@ -19,6 +20,7 @@
 - Then go back to Supabase and refresh the table — the values should appear
 
 **If postal_code has a value but city is empty:**
+
 - The city column might not exist in your database yet
 - Proceed to Step 2
 
@@ -27,6 +29,7 @@
 ## Step 2: Add City Column (if missing)
 
 In Supabase dashboard:
+
 1. Click **SQL Editor** (left sidebar)
 2. Copy & paste this query:
 
@@ -45,7 +48,7 @@ ALTER TABLE public.profiles
 eBay's "default-location" might be cached with old NYC address. To force an update:
 
 1. Go to eBay Seller Hub
-2. Navigate to **Account** → **Shipping locations**  
+2. Navigate to **Account** → **Shipping locations**
 3. Delete your "Default Seller Location" entry (if it exists)
 4. Return to Teckstart and publish a new listing — it will recreate the location with your correct city/zip
 
@@ -67,6 +70,7 @@ eBay's "default-location" might be cached with old NYC address. To force an upda
 ## If Still Not Working
 
 Please share:
+
 1. Screenshot of your profile postal_code/city values in Supabase
 2. Browser console logs when publishing (F12 → Console, look for "create_draft:" entries)
 3. Your Seller Hub Shipping Locations list

@@ -27,13 +27,16 @@ function resolveDomainFallbackCategory(
 ): { categoryId: string; categoryName: string; breadcrumb: string } | null {
   if (identification.domain !== "coins_bullion") return null;
 
-  const combined = `${identification.itemName ?? ""} ${(identification.keywords ?? []).join(" ")}`.toLowerCase();
+  const combined =
+    `${identification.itemName ?? ""} ${(identification.keywords ?? []).join(" ")}`.toLowerCase();
   let metal = identification.metalType ?? "none";
 
   if (metal === "none" || !metal) {
     if (/\bamerican\s+silver\s+eagles?\b|\base\b|\bsilver\b/.test(combined)) {
       metal = "silver";
-    } else if (/\bamerican\s+gold\s+eagles?\b|\bgold\b|\bbuffalo\b/.test(combined)) {
+    } else if (
+      /\bamerican\s+gold\s+eagles?\b|\bgold\b|\bbuffalo\b/.test(combined)
+    ) {
       metal = "gold";
     } else if (/\bplatinum\b/.test(combined)) {
       metal = "platinum";
@@ -71,7 +74,8 @@ function resolveDomainFallbackCategory(
       return {
         categoryId: "41111",
         categoryName: "American Silver Eagles",
-        breadcrumb: "Coins & Paper Money > Coins: US > Silver > American Silver Eagles",
+        breadcrumb:
+          "Coins & Paper Money > Coins: US > Silver > American Silver Eagles",
       };
     }
     if (/\bbar\b|\bingot\b|\bround\b/.test(combined)) {
@@ -81,7 +85,11 @@ function resolveDomainFallbackCategory(
         breadcrumb: "Coins & Paper Money > Bullion > Silver > Bars & Rounds",
       };
     }
-    if (/morgan|peace|walking liberty|franklin|kennedy|barber|seated|bust/.test(combined)) {
+    if (
+      /morgan|peace|walking liberty|franklin|kennedy|barber|seated|bust/.test(
+        combined,
+      )
+    ) {
       return {
         categoryId: "39465",
         categoryName: "US Silver Dollars",
@@ -96,7 +104,11 @@ function resolveDomainFallbackCategory(
   }
 
   // Domain is coins_bullion but metal unknown — safest general coin fallback
-  return { categoryId: "45243", categoryName: "World Coins", breadcrumb: "Coins & Paper Money > Coins: World" };
+  return {
+    categoryId: "45243",
+    categoryName: "World Coins",
+    breadcrumb: "Coins & Paper Money > Coins: World",
+  };
 }
 
 describe("resolveDomainFallbackCategory", () => {

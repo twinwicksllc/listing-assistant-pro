@@ -16,7 +16,9 @@ export async function runAgenticVisualAgent(
   supabase: ReturnType<typeof createClient<any>>,
 ): Promise<VisualInspectionResult> {
   const { invocationId, imageList } = context;
-  console.log(`[${invocationId}] VisualAgent: Running precision inspection for ${domainDef.domain}`);
+  console.log(
+    `[${invocationId}] VisualAgent: Running precision inspection for ${domainDef.domain}`,
+  );
 
   // --- RAG: Augmented Context from Domain-Specific Knowledge Base ---
   // Generalized lookup (see DOMAIN_RAG_CATEGORIES in registry.ts) - not hardcoded
@@ -28,8 +30,12 @@ export async function runAgenticVisualAgent(
   if (ragCategories.length > 0) {
     try {
       // Use pre-computed embedding from controller if available; fall back to generating one
-      const embedding = context.queryEmbedding ??
-        await getEmbedding(apiKey, context.identification?.itemName || domainDef.domain);
+      const embedding =
+        context.queryEmbedding ??
+        (await getEmbedding(
+          apiKey,
+          context.identification?.itemName || domainDef.domain,
+        ));
       for (const category of ragCategories) {
         const results = await findSimilarContext(supabase, embedding, category);
         if (results.length > 0) {
@@ -57,18 +63,19 @@ export async function runAgenticVisualAgent(
     };
   });
 
-  const zoomTargets = domainDef.visionGoals.map((g) => `- **${g.region}**: ${g.rationale}`).join("\n");
+  const zoomTargets = domainDef.visionGoals
+    .map((g) => `- **${g.region}**: ${g.rationale}`)
+    .join("\n");
 
-  const prompt =
-    `You are an expert precision vision agent. Your task is to perform a detailed visual inspection of the item in the images.
+  const prompt = `You are an expert precision vision agent. Your task is to perform a detailed visual inspection of the item in the images.
 Domain: ${domainDef.domain}
 Item Identification: ${context.identification?.itemName}
 
 ${
-      ragContext
-        ? `### VERIFIED REFERENCE STANDARDS:\nUse these verified domain standards to guide your inspection:\n${ragContext}\n`
-        : ""
-    }
+  ragContext
+    ? `### VERIFIED REFERENCE STANDARDS:\nUse these verified domain standards to guide your inspection:\n${ragContext}\n`
+    : ""
+}
 
 ### PRECISION INSPECTION GOALS:
 ${zoomTargets}
@@ -96,7 +103,10 @@ You must return your findings in JSON format:
 
   // Use the stronger model for coins_bullion — precision slab label reading demands it.
   // For other domains, gemini-2.0-flash is fast and sufficient.
-  const visualModel = domainDef.domain === "coins_bullion" ? "gemini-3.1-pro-preview" : "gemini-2.0-flash";
+  const visualModel =
+    domainDef.domain === "coins_bullion"
+      ? "gemini-3.1-pro-preview"
+      : "gemini-2.0-flash";
 
   try {
     const response = await fetch(
@@ -105,12 +115,11 @@ You must return your findings in JSON format:
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{
-            parts: [
-              ...visionImages,
-              { text: prompt },
-            ],
-          }],
+          contents: [
+            {
+              parts: [...visionImages, { text: prompt }],
+            },
+          ],
           tools: [{ codeExecution: {} }],
         }),
       },
@@ -121,22 +130,29 @@ You must return your findings in JSON format:
 
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
     // Strip markdown code fences (```json...``` or ```...```) that Gemini sometimes adds around JSON
-    const cleanText = text.replace(/^```(?:json)?\s*/m, "").replace(/\s*```\s*$/m, "");
+    const cleanText = text
+      .replace(/^```(?:json)?\s*/m, "")
+      .replace(/\s*```\s*$/m, "");
     const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
 
     if (jsonMatch) {
       try {
         const parsed = JSON.parse(jsonMatch[0]);
-        const capturedAttributes = parsed?.capturedAttributes &&
-            typeof parsed.capturedAttributes === "object"
-          ? Object.fromEntries(
-            Object.entries(parsed.capturedAttributes as Record<string, unknown>)
-              .filter((entry): entry is [string, string] =>
-                typeof entry[0] === "string" && typeof entry[1] === "string"
+        const capturedAttributes =
+          parsed?.capturedAttributes &&
+          typeof parsed.capturedAttributes === "object"
+            ? Object.fromEntries(
+                Object.entries(
+                  parsed.capturedAttributes as Record<string, unknown>,
+                )
+                  .filter(
+                    (entry): entry is [string, string] =>
+                      typeof entry[0] === "string" &&
+                      typeof entry[1] === "string",
+                  )
+                  .map(([k, v]) => [k.trim(), v.trim()]),
               )
-              .map(([k, v]) => [k.trim(), v.trim()]),
-          )
-          : undefined;
+            : undefined;
         return {
           zoomRegionsExamined: parsed.zoomRegionsExamined || [],
           keyFindings: parsed.keyFindings || "Incomplete findings provided.",
@@ -145,7 +161,10 @@ You must return your findings in JSON format:
           capturedAttributes,
         };
       } catch (pErr) {
-        console.warn(`[${invocationId}] VisualAgent: Failed to parse JSON response:`, pErr);
+        console.warn(
+          `[${invocationId}] VisualAgent: Failed to parse JSON response:`,
+          pErr,
+        );
       }
     }
 

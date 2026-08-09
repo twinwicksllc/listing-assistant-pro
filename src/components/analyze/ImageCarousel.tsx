@@ -64,7 +64,11 @@ export function ImageCarousel({
                 i === activePhoto ? "border-primary" : "border-border"
               }`}
             >
-              <img src={url} alt={`Thumb ${i + 1}`} className="w-full h-full object-cover" />
+              <img
+                src={url}
+                alt={`Thumb ${i + 1}`}
+                className="w-full h-full object-cover"
+              />
             </button>
           ))}
         </div>

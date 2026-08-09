@@ -1,7 +1,9 @@
 # Listing Management & Analytics Architecture
+
 **Last Updated:** March 29, 2026
 
 ## Overview
+
 This document maps the listing management and analytics functions and how they integrate with the core app. These functions handle post-publishing operations: tracking performance, optimizing prices, managing inventory, and providing business intelligence.
 
 ---
@@ -9,17 +11,20 @@ This document maps the listing management and analytics functions and how they i
 ## Part 1: Core Management Functions
 
 ### 1. **ebay-listings** (Edge Function)
+
 **Purpose:** Fetch all active eBay listings with multi-window analytics  
 **Invoked By:** Dashboard, Analytics pages, Cron jobs, Other functions  
-**Type:** Lightweight HTTP GET  
+**Type:** Lightweight HTTP GET
 
 #### Inputs
+
 ```typescript
 // Query params or Bearer token (user's eBay token via x-supabase-auth-token)
 // No body needed - fetches all active listings for authenticated user
 ```
 
 #### Outputs
+
 ```typescript
 {
   listings: [
@@ -30,14 +35,14 @@ This document maps the listing management and analytics functions and how they i
       title: string;
       price: number;
       categoryId?: string;
-      
+
       // Multi-window analytics (7d / 30d / 90d)
       analytics: {
         "7d": { views, impressions, ctr, conversionRate, transactions };
         "30d": { ... };
         "90d": { ... };
       }
-      
+
       // Derived metrics
       trend: "hot" | "stable" | "stale";
       lastUpdated: timestamp;
@@ -47,6 +52,7 @@ This document maps the listing management and analytics functions and how they i
 ```
 
 #### How It Works
+
 1. Calls eBay Inventory API → `GET /listing` for active offers (Inventory listings)
 2. Calls eBay Analytics API → `GET /sell/analytics/v1/traffic_report` for each window (7d, 30d, 90d)
 3. Calculates trend based on view velocity
@@ -54,6 +60,7 @@ This document maps the listing management and analytics functions and how they i
 5. **Caching:** eBay responses cached 15-30 min per user to reduce API calls
 
 #### Key Dependencies
+
 - eBay user access token
 - Inventory API (for active listings)
 - Analytics API (for performance metrics)
@@ -61,11 +68,13 @@ This document maps the listing management and analytics functions and how they i
 ---
 
 ### 2. **ebay-reprice** (Edge Function)
+
 **Purpose:** Update prices on eBay listings (single or bulk)  
 **Invoked By:** UI, auto-reprice-cron, optimize-listing  
-**Type:** HTTP POST  
+**Type:** HTTP POST
 
 #### Inputs
+
 ```typescript
 // Action 1: Single Update
 {
@@ -87,6 +96,7 @@ This document maps the listing management and analytics functions and how they i
 ```
 
 #### Outputs
+
 ```typescript
 // Single Update Response
 {
@@ -105,6 +115,7 @@ This document maps the listing management and analytics functions and how they i
 ```
 
 #### How It Works
+
 1. **Inventory API Listings** (with offerId + sku):
    - Calls eBay `POST /inventory/v1/offer/{offerId}/update_price_quantity`
    - Batches up to 25 items per call
@@ -121,6 +132,7 @@ This document maps the listing management and analytics functions and how they i
    - Logs all updates to `ebay_reprice_log` table
 
 #### Key Dependencies
+
 - eBay user access token
 - Inventory API **OR** Trading API (auto-detect via offerId)
 - SKU or ListingId present
@@ -128,12 +140,14 @@ This document maps the listing management and analytics functions and how they i
 ---
 
 ### 3. **auto-reprice-cron** (Edge Function - Scheduled)
+
 **Purpose:** Automatically apply reprice rules to user listings  
 **Scheduled:** Daily (configurable)  
 **Invoked By:** Supabase Cron  
-**Type:** Background job  
+**Type:** Background job
 
 #### Inputs (if manual trigger)
+
 ```typescript
 {
   userId?: string;          // If provided, process only this user
@@ -143,6 +157,7 @@ This document maps the listing management and analytics functions and how they i
 ```
 
 #### Outputs
+
 ```typescript
 {
   success: boolean;
@@ -164,7 +179,9 @@ This document maps the listing management and analytics functions and how they i
 ```
 
 #### How It Works
+
 **CRON Flow:**
+
 1. Queries `reprice_rules` table for all users with `is_enabled=true`
 2. For each user:
    - Fetches active listings via **ebay-listings**
@@ -180,13 +197,14 @@ This document maps the listing management and analytics functions and how they i
      - Logs to `optimization_history` table
 
 **Rule Matching Logic:**
+
 ```
 FOR each rule in enabled_rules:
   IF rule.category_filter AND listing.categoryId != rule.category_filter:
     SKIP
-  
+
   market_data = fetch_keyword_research(listing.title);
-  
+
   IF rule.rule_type == "match_lowest":
     new_price = market_data.minActivePrice ?? market_data.avgActivePrice
   ELSE IF rule.rule_type == "beat_lowest":
@@ -195,15 +213,16 @@ FOR each rule in enabled_rules:
     new_price = market_data.avgActivePrice ?? market_data.avgSoldPrice
   ELSE IF rule.rule_type == "match_sold_avg":
     new_price = market_data.avgSoldPrice ?? market_data.avgActivePrice
-  
+
   // Apply floor/ceiling
   new_price = clamp(new_price, rule.floor_price, rule.ceiling_price)
-  
+
   IF new_price != listing.price:
     apply_reprice_update(listing, new_price)
 ```
 
 **DB Schema - reprice_rules:**
+
 ```sql
 CREATE TABLE reprice_rules (
   id uuid PRIMARY KEY,
@@ -235,12 +254,14 @@ CREATE TABLE optimization_history (
 ```
 
 #### Rate Limits & Safety
+
 - Processes max 20 listings per user per run (to avoid API throttling)
 - Throttles market data fetches (keyword-research has 4h cache)
 - Dry run mode available for testing
 - All changes logged to `optimization_history`
 
 #### Key Dependencies
+
 - **ebay-listings** (fetch active listings)
 - **keyword-research** (fetch market data)
 - **ebay-reprice** (apply price updates)
@@ -250,11 +271,13 @@ CREATE TABLE optimization_history (
 ---
 
 ### 4. **optimize-listing** (Edge Function)
+
 **Purpose:** On-demand analysis & optimization suggestions for single listing  
 **Invoked By:** UI (Optimize button), Manual trigger  
-**Type:** HTTP POST  
+**Type:** HTTP POST
 
 #### Inputs
+
 ```typescript
 {
   listingId: string;
@@ -267,6 +290,7 @@ CREATE TABLE optimization_history (
 ```
 
 #### Outputs
+
 ```typescript
 {
   listingId: string;
@@ -278,7 +302,7 @@ CREATE TABLE optimization_history (
       message: string;
     }
   ];
-  
+
   priceSuggestion: {
     suggestedPrice: number | null;
     reasoning: string;
@@ -286,22 +310,23 @@ CREATE TABLE optimization_history (
     confidence: "high" | "medium" | "low";
     estimatedImpact: "High sales lift" | "10-15% boost" | "unknown";
   };
-  
+
   titleSuggestion?: {
     suggestedTitle: string;
     reasoning: string;
     keywordsCovered: string[];
   };
-  
+
   relatedCompetitors?: [
     { title, price, url, condition }
   ];
-  
+
   nextSteps: string[];
 }
 ```
 
 #### How It Works
+
 1. **Fetch Market Data:**
    - Calls **keyword-research** with listing title
    - Gets active prices, sold prices, competitor analysis
@@ -318,6 +343,7 @@ CREATE TABLE optimization_history (
    - Can suggest improved title (if AI enhancement enabled)
 
 4. **Opportunity Scoring:**
+
    ```
    score = 0
    IF price_outlier: score += 25
@@ -330,6 +356,7 @@ CREATE TABLE optimization_history (
 5. **Logs to optimization_history** with `optimization_type='optimization_suggestion'`
 
 #### Key Dependencies
+
 - **keyword-research** (market data)
 - **ebay-competitor-search** (optional: competitor details)
 - Gemini AI (optional: title/description enhancement)
@@ -337,12 +364,14 @@ CREATE TABLE optimization_history (
 ---
 
 ### 5. **keyword-research** (Edge Function)
+
 **Purpose:** Analyze market demand & competition for a keyword/title  
 **Invoked By:** optimize-listing, auto-reprice-cron, market-watch-refresh, UI  
 **Type:** HTTP POST  
-**Cache:** 4h per query  
+**Cache:** 4h per query
 
 #### Inputs
+
 ```typescript
 {
   query: string;          // search keyword or listing title
@@ -351,6 +380,7 @@ CREATE TABLE optimization_history (
 ```
 
 #### Outputs
+
 ```typescript
 {
   query: string;
@@ -387,9 +417,10 @@ CREATE TABLE optimization_history (
 ```
 
 #### How It Works
+
 1. Check Redis cache for this query (4h TTL)
    - If hit, return cached result
-   
+
 2. Call eBay Browse API:
    - `GET /buy/browse/v1/item_summary/search`
    - Filters: active listings only
@@ -408,6 +439,7 @@ CREATE TABLE optimization_history (
 5. **Cache in Redis** with 4h TTL
 
 **DB Schema - keyword_cache:**
+
 ```sql
 CREATE TABLE keyword_cache (
   id uuid PRIMARY KEY,
@@ -424,11 +456,13 @@ CREATE TABLE keyword_cache (
 ```
 
 #### eBay API Limits
+
 - Browse API: ~5,000 calls/day per app
 - Each keyword-research call = 2 Browse API calls (active + sold)
 - **Mitigation:** 4h cache prevents duplicate queries
 
 #### Key Dependencies
+
 - eBay Browse API
 - eBay Finding API (or Analytics API)
 - eBay app token (client credentials flow)
@@ -438,11 +472,13 @@ CREATE TABLE keyword_cache (
 ## Part 2: Analytics & Reporting Functions
 
 ### 6. **cogs-report** (Edge Function)
+
 **Purpose:** Generate Cost of Goods Sold report for sold items  
 **Invoked By:** Analytics page, Profit Report page  
-**Type:** HTTP POST  
+**Type:** HTTP POST
 
 #### Inputs
+
 ```typescript
 {
   userToken: string;  // eBay user token
@@ -452,6 +488,7 @@ CREATE TABLE keyword_cache (
 ```
 
 #### Outputs
+
 ```typescript
 {
   period: { start, end };
@@ -478,6 +515,7 @@ CREATE TABLE keyword_cache (
 ```
 
 #### How It Works
+
 1. Authenticates user and determines user ID
 2. Queries eBay Fulfillment API → `GET /order/v2/orders` for sold orders
    - Filters by date range (startDate..endDate)
@@ -493,6 +531,7 @@ CREATE TABLE keyword_cache (
 5. Returns summary + per-listing breakdown
 
 **DB Schema - listing_cogs:**
+
 ```sql
 CREATE TABLE listing_cogs (
   id uuid PRIMARY KEY,
@@ -513,6 +552,7 @@ CREATE TABLE profiles (
 ```
 
 #### Key Dependencies
+
 - eBay user token
 - Fulfillment API
 - `listing_cogs` table
@@ -521,19 +561,22 @@ CREATE TABLE profiles (
 ---
 
 ### 7. **market-watch-refresh** (Edge Function)
+
 **Purpose:** Update market watch snapshot for tracked keywords/categories  
 **Invoked By:** User manual trigger, market-watch-cron  
-**Type:** HTTP POST  
+**Type:** HTTP POST
 
 #### Inputs
+
 ```typescript
 {
-  watchId: string;   // ID from market_watches table
+  watchId: string; // ID from market_watches table
   userId: string;
 }
 ```
 
 #### Outputs
+
 ```typescript
 {
   watchId: string;
@@ -542,16 +585,19 @@ CREATE TABLE profiles (
   snapshot: {
     activeCount: number;
     avgPrice: number;
-    prices: { min, max, avg };
-    sold: { count, avgPrice };
-  };
-  history: [
-    { date, avgPrice, activeCount, trend }
-  ];
+    prices: {
+      (min, max, avg);
+    }
+    sold: {
+      (count, avgPrice);
+    }
+  }
+  history: [{ date, avgPrice, activeCount, trend }];
 }
 ```
 
 #### How It Works
+
 1. Fetches watch config from `market_watches` table
    - Contains: user's saved search query, category filter, alert thresholds
 
@@ -566,6 +612,7 @@ CREATE TABLE profiles (
    - Sends email/in-app alert
 
 **DB Schema - market_watches:**
+
 ```sql
 CREATE TABLE market_watches (
   id uuid PRIMARY KEY,
@@ -606,6 +653,7 @@ CREATE TABLE market_notifications (
 ```
 
 #### Key Dependencies
+
 - **keyword-research** (fetch market data)
 - `market_watches` table
 - `market_price_history` table
@@ -613,12 +661,14 @@ CREATE TABLE market_notifications (
 ---
 
 ### 8. **market-watch-cron** (Scheduled Cron Job)
+
 **Purpose:** Refresh all user market watches daily  
 **Scheduled:** Daily (~2am UTC)  
 **Invoked By:** Supabase Cron  
-**Type:** Background job  
+**Type:** Background job
 
 #### How It Works
+
 1. Reads all rows from `market_watches` where `last_refreshed < now() - 24h`
 2. For each watch:
    - Calls **market-watch-refresh**
@@ -630,11 +680,13 @@ CREATE TABLE market_notifications (
 ## Part 3: Billing & Portal Functions
 
 ### 9. **customer-portal** (Edge Function)
+
 **Purpose:** Create Stripe billing portal link  
 **Invoked By:** Account settings, Billing page  
-**Type:** HTTP POST  
+**Type:** HTTP POST
 
 #### Inputs
+
 ```typescript
 {
   // Authenticated user via Bearer token
@@ -642,14 +694,16 @@ CREATE TABLE market_notifications (
 ```
 
 #### Outputs
+
 ```typescript
 {
-  portalUrl: string;  // Stripe-hosted billing portal URL
+  portalUrl: string; // Stripe-hosted billing portal URL
   expiresAt: timestamp;
 }
 ```
 
 #### How It Works
+
 1. Authenticates user via JWT token
 2. Looks up `stripe_customer_id` from profiles table
    - Falls back to email search in Stripe if not cached
@@ -663,6 +717,7 @@ CREATE TABLE market_notifications (
 4. Returns portal URL
 
 #### Key Dependencies
+
 - Stripe API
 - User authentication
 - `profiles.stripe_customer_id` (cache)
@@ -716,7 +771,7 @@ CREATE TABLE market_notifications (
     │   • Get Analytics Data                       │
     │   • Get Sold Orders (Fulfillment)           │
     └────────────────────────────────────────────────┘
-    
+
 ┌─────────────────────────────────────────────────────┐
 │              BACKGROUND CRON JOBS                   │
 │  • auto-reprice-cron (daily)                       │
@@ -891,9 +946,10 @@ CREATE TABLE competitor_prices (
 ### Scenario 1: User Enables Auto-Reprice
 
 1. **User Action:** Navigates to Repricing Rules page, creates rule:
+
    ```
    "Electronics" category
-   Rule Type: "Beat Lowest" 
+   Rule Type: "Beat Lowest"
    Adjustment: 5%
    Floor: $10
    Ceiling: $500
@@ -922,6 +978,7 @@ CREATE TABLE competitor_prices (
 1. **User Action:** Clicks "Optimize" button on a listing
 
 2. **UI Action:** Calls `POST /functions/v1/optimize-listing`
+
    ```json
    {
      "listingId": "335577822",
@@ -947,7 +1004,11 @@ CREATE TABLE competitor_prices (
          "confidence": "high"
        },
        "flags": [
-         { "type": "price", "severity": "high", "message": "Overpriced vs market" }
+         {
+           "type": "price",
+           "severity": "high",
+           "message": "Overpriced vs market"
+         }
        ]
      }
      ```
@@ -961,6 +1022,7 @@ CREATE TABLE competitor_prices (
 ### Scenario 3: Daily Cron Jobs
 
 **Schedule (Supabase Cron):**
+
 ```
 auto-reprice-cron:       0 2 * * * (daily 2am UTC)
 market-watch-cron:       0 3 * * * (daily 3am UTC)
@@ -968,6 +1030,7 @@ competitor-prices-cron:  0 4 * * * (daily 4am UTC)
 ```
 
 **Each job independently:**
+
 - Fetches all active users/watches
 - Calls leaf functions in parallel (with throttling)
 - Logs results
@@ -979,13 +1042,13 @@ competitor-prices-cron:  0 4 * * * (daily 4am UTC)
 
 ### eBay API Rate Limits
 
-| API | Limit | Usage |
-|-----|-------|-------|
-| Browse API | ~5,000/day | keyword-research (2 calls per query) |
-| Analytics API | ~5,000/day | ebay-listings (1-3 calls per user) |
-| Inventory API | ~500/day bulk ops | ebay-reprice (batches of 25) |
-| Trading API | ~5,000/day | ReviseFixedPriceItem (legacy listings) |
-| Fulfillment API | ~1,000/day | cogs-report (order fetches) |
+| API             | Limit             | Usage                                  |
+| --------------- | ----------------- | -------------------------------------- |
+| Browse API      | ~5,000/day        | keyword-research (2 calls per query)   |
+| Analytics API   | ~5,000/day        | ebay-listings (1-3 calls per user)     |
+| Inventory API   | ~500/day bulk ops | ebay-reprice (batches of 25)           |
+| Trading API     | ~5,000/day        | ReviseFixedPriceItem (legacy listings) |
+| Fulfillment API | ~1,000/day        | cogs-report (order fetches)            |
 
 ### Optimization Strategies
 
@@ -1033,7 +1096,7 @@ curl -X GET https://listing-assistant-pro.supabase.co/functions/v1/ebay-listings
   -H "Authorization: Bearer $SERVICE_KEY" \
   -H "x-supabase-auth-token: $EBAY_USER_TOKEN"
 
-# Test keyword-research  
+# Test keyword-research
 curl -X POST https://listing-assistant-pro.supabase.co/functions/v1/keyword-research \
   -H "Authorization: Bearer $SERVICE_KEY" \
   -H "Content-Type: application/json" \
@@ -1120,6 +1183,7 @@ curl -X POST https://listing-assistant-pro.supabase.co/functions/v1/ebay-reprice
 ---
 
 **Next Steps:**
+
 - Implement UI pages for Reprice Rules management
 - Build Optimization History dashboard
 - Add Market Watch pages

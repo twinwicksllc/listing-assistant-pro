@@ -16,7 +16,10 @@ serve(async (req) => {
     if (!userToken) throw new Error("No eBay user token provided");
 
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-    const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
+    const apiBase =
+      ebayEnv === "production"
+        ? "https://api.ebay.com"
+        : "https://api.sandbox.ebay.com";
 
     const authHeaders = {
       Authorization: `Bearer ${userToken}`,
@@ -56,19 +59,15 @@ serve(async (req) => {
       fetchPolicies("return"),
     ]);
 
-    return new Response(
-      JSON.stringify({ fulfillment, payment, returns }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return new Response(JSON.stringify({ fulfillment, payment, returns }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     console.error("ebay-policies error:", msg);
-    return new Response(
-      JSON.stringify({ error: msg }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });

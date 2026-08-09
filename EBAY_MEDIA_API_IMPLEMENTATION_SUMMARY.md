@@ -11,6 +11,7 @@
 Implemented comprehensive eBay Media API v1 video upload support with robust error handling, retry logic, and integration with the Sell Inventory API. The implementation enables users to upload product videos (MP4, MOV, AVI, WebM) to eBay listings with proper OAuth scoping, asynchronous processing polling, and full inventory attachment workflow.
 
 ### Key Achievements
+
 - ✅ **OAuth Scope Verification:** Confirmed `sell.inventory` scope is active and properly included in all token flows
 - ✅ **Video Upload Pipeline:** Enhanced with better error messages clarifying `commerce.media` scope requirement
 - ✅ **Status Polling:** Added new `poll_video_status_until_live` action with exponential backoff retry logic (120 attempts, ~60 min timeout)
@@ -24,9 +25,11 @@ Implemented comprehensive eBay Media API v1 video upload support with robust err
 ## Changes Made
 
 ### 1. Enhanced Video Polling with Retry Logic
+
 **File:** `supabase/functions/ebay-publish/video.ts`
 
 **Added:**
+
 - `isRetryableStatusCode(status)` function to detect transient errors (500, 502, 503, 504, 429)
 - `VideoPollingOptions` interface for configurable polling parameters
 - `pollVideoStatusWithRetry()` function with exponential backoff retry strategy
@@ -36,29 +39,34 @@ Implemented comprehensive eBay Media API v1 video upload support with robust err
   - Automatically stops when video reaches LIVE or FAILED status
 
 **Enhanced:**
+
 - Error messages for 401/403 with explicit scope registration guidance
 - Error messages for 400 with format/duration/size validation hints
 - Added 422 status handling for unprocessable entity errors
 
 ### 2. New Edge Function Action
+
 **File:** `supabase/functions/ebay-publish/index.ts`
 
 **Added:**
+
 - Import of `handlePollVideoStatusUntilLive` function
 - New action handler: `poll_video_status_until_live`
 - Added to `requiresEbayCredentials` exception list (doesn't require clientSecret)
 
 **Request Format:**
+
 ```json
 {
   "action": "poll_video_status_until_live",
   "userToken": "eBay access token",
   "videoId": "video ID from upload response",
-  "maxWaitMs": 300000  // Optional: 5 minutes default
+  "maxWaitMs": 300000 // Optional: 5 minutes default
 }
 ```
 
 **Response Format:**
+
 ```json
 {
   "success": true,
@@ -71,24 +79,30 @@ Implemented comprehensive eBay Media API v1 video upload support with robust err
 ```
 
 ### 3. Video Status Polling Handler
+
 **File:** `supabase/functions/ebay-publish/video.ts`
 
 **Added:**
+
 - `handlePollVideoStatusUntilLive()` function
 - Retry logic with exponential backoff
 - Enhanced logging at each attempt
 - Error messages with diagnostic information
 
 ### 4. Improved Error Diagnostics
+
 **File:** `supabase/functions/ebay-publish/video.ts`
 
 **Enhanced:**
+
 - `handleGetVideoStatus()` now includes full response body in debug output
 - Logs FAILED video state with statusMessage for policy issues
 - Error responses now include raw eBay response for debugging
 
 ### 5. Comprehensive Documentation
+
 **Files Created:**
+
 1. `EBAY_MEDIA_API_IMPLEMENTATION.md` (2000+ lines)
    - Complete architecture overview
    - OAuth scope configuration details
@@ -114,19 +128,21 @@ Implemented comprehensive eBay Media API v1 video upload support with robust err
 ## OAuth Scope Status
 
 ### Current Configuration
+
 **File:** `supabase/functions/ebay-publish/constants.ts`
 
 ```typescript
 export const EBAY_OAUTH_SCOPES = [
-  "https://api.ebay.com/oauth/api_scope",                                    // ✅ Base
-  "https://api.ebay.com/oauth/api_scope/sell.inventory",                     // ✅ ACTIVE
-  "https://api.ebay.com/oauth/api_scope/sell.account",                       // ✅ ACTIVE
-  "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",          // ✅ ACTIVE
+  "https://api.ebay.com/oauth/api_scope", // ✅ Base
+  "https://api.ebay.com/oauth/api_scope/sell.inventory", // ✅ ACTIVE
+  "https://api.ebay.com/oauth/api_scope/sell.account", // ✅ ACTIVE
+  "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly", // ✅ ACTIVE
   // "https://api.ebay.com/oauth/api_scope/commerce.media",                   // ⏳ PENDING REGISTRATION
 ];
 ```
 
 ### Scope Flow
+
 All three token endpoints include scopes in their requests:
 
 1. **`handleGetAuthUrl()`** (line ~35)
@@ -146,6 +162,7 @@ All three token endpoints include scopes in their requests:
    - Includes all scopes in refresh request
 
 ### Video Upload Scope Status
+
 - ✅ `sell.inventory` scope is ACTIVE (covers both inventory + video)
 - ✅ Video uploads are ENABLED through sell.inventory
 - ✅ Ready for production use
@@ -157,6 +174,7 @@ All three token endpoints include scopes in their requests:
 ## Video Upload Workflow
 
 ### Current State (sell.inventory Scope Active)
+
 ```
 1. User connects eBay account (sell.inventory scope granted)
 2. User selects video on Analyze page (2-12s, MP4/MOV/AVI/WebM)
@@ -167,6 +185,7 @@ All three token endpoints include scopes in their requests:
 ```
 
 ### OAuth Scope Coverage
+
 - ✅ `sell.inventory` grants access to BOTH Inventory API + Media API
 - ✅ No additional scope registration needed
 - ✅ Users automatically have video upload capability when connected
@@ -176,17 +195,19 @@ All three token endpoints include scopes in their requests:
 ## Testing & Verification
 
 ### Build Status
+
 ✅ **Frontend Build:** Passed (23.25s, 96 precache entries)
 ✅ **Deno Type Check:** video.ts passed
 ✅ **Deno Type Check:** index.ts passed
 ✅ **No Breaking Changes:** Existing video.ts functions unchanged
 
 ### Testing Checklist
+
 - [x] **OAuth Scope Configuration:** `sell.inventory` includes Media API access
-  
+
 - [ ] **Integration Test 1:** OAuth reconnect with sell.inventory scope
   - Expected: User connects successfully, gets access to both inventory + video
-  
+
 - [ ] **Integration Test 2:** Video upload
   - Expected: Upload succeeds, returns videoId in PENDING status
 
@@ -209,6 +230,7 @@ All three token endpoints include scopes in their requests:
   - Expected: Video reaches FAILED state after upload
 
 ### Manual Testing (User-Facing)
+
 1. Go to app Settings → eBay Account → Disconnect
 2. Clear browser localStorage
 3. Go to Settings → Reconnect eBay (triggers fresh OAuth)
@@ -221,12 +243,14 @@ All three token endpoints include scopes in their requests:
 ## Compatibility & Dependencies
 
 ### No New Dependencies Added
+
 - Uses existing `fetchWithTimeout()` utility
 - Uses existing `corsHeaders` from constants
 - Uses existing Deno runtime features
 - Backwards compatible with existing code
 
 ### Backward Compatibility
+
 ✅ All changes are **additive** — no existing functions modified
 ✅ New polling action is optional — single-check still available
 ✅ Existing video handlers work unchanged
@@ -236,6 +260,7 @@ All three token endpoints include scopes in their requests:
 ## Configuration Requirements
 
 ### Minimal (Current State)
+
 - ✅ `EBAY_CLIENT_ID` env var
 - ✅ `EBAY_CLIENT_SECRET` env var
 - ✅ `EBAY_RUNAME` env var
@@ -243,6 +268,7 @@ All three token endpoints include scopes in their requests:
 - ✅ Supabase credentials
 
 ### For Video Upload (Ready Now!)
+
 - ✅ All configuration complete
 - ✅ `sell.inventory` scope auto-includes Media API access
 - ✅ eBay app in Production mode
@@ -253,23 +279,27 @@ All three token endpoints include scopes in their requests:
 ## Next Steps & Recommendations
 
 ### Immediate (Ready Now)
+
 1. **Test OAuth reconnect:** Verify `sell.inventory` scope works in Settings
 2. **Test video upload:** Upload video on Analyze page (should work now!)
 3. **Verify end-to-end:** Poll status → create listing → see video on eBay
 4. **Set up monitoring:** Track upload success rates & processing times
 
 ### Short Term (1-2 Weeks)
+
 1. **Optimize polling parameters:** Adjust intervals based on observed processing times
 2. **Add error analytics:** Track upload failures and their causes
 3. **Implement retry UI:** Let users retry failed uploads easily
 
 ### Medium Term (1-2 Months)
+
 1. **Add batch uploads:** Support multiple videos per session
 2. **Implement video analytics:** Track video views/engagement from eBay
 3. **Add video thumbnail selection:** Let users choose frame as preview
 4. **Support multiple videos per listing:** eBay API supports multiple
 
 ### Long Term (Q4 2026+)
+
 1. **Upgrade to Commerce Media v2:** When eBay releases it
 2. **Support higher bitrates:** Once v2 is available
 3. **Add video metadata:** Title, description, captions management
@@ -310,12 +340,12 @@ Workspace Documentation
 
 ## Files Modified Summary
 
-| File | Changes | Impact |
-|------|---------|--------|
+| File                                       | Changes    | Impact                                           |
+| ------------------------------------------ | ---------- | ------------------------------------------------ |
 | `supabase/functions/ebay-publish/video.ts` | +150 lines | Retry logic, better errors, new polling function |
-| `supabase/functions/ebay-publish/index.ts` | +5 lines | New action handler + imports |
-| `EBAY_MEDIA_API_IMPLEMENTATION.md` | NEW | 2000+ line comprehensive guide |
-| `EBAY_MEDIA_API_QUICK_REFERENCE.md` | NEW | 250+ line quick reference |
+| `supabase/functions/ebay-publish/index.ts` | +5 lines   | New action handler + imports                     |
+| `EBAY_MEDIA_API_IMPLEMENTATION.md`         | NEW        | 2000+ line comprehensive guide                   |
+| `EBAY_MEDIA_API_QUICK_REFERENCE.md`        | NEW        | 250+ line quick reference                        |
 
 **Total Changes:** ~2,400 lines added, 0 lines removed (all additive)
 
@@ -324,6 +354,7 @@ Workspace Documentation
 ## Verification Artifacts
 
 ### Build Output
+
 ```
 ✓ built in 23.25s
 PWA v1.3.0 mode generateSW
@@ -331,6 +362,7 @@ precache 96 entries (2399.96 KiB)
 ```
 
 ### Type Checking
+
 ```
 Check supabase/functions/ebay-publish/video.ts
 [No errors]
@@ -340,6 +372,7 @@ Check supabase/functions/ebay-publish/index.ts
 ```
 
 ### Code Review Points
+
 - ✅ No console.log without meaningful content
 - ✅ Error messages guide users to solutions
 - ✅ Retry logic includes exponential backoff
@@ -368,14 +401,17 @@ Check supabase/functions/ebay-publish/index.ts
 ## Support & Questions
 
 **For Implementation Questions:**
+
 - Review `EBAY_MEDIA_API_IMPLEMENTATION.md` § Error Handling
 - Check logs in Supabase Dashboard → Functions → ebay-publish
 
 **For eBay API Questions:**
+
 - Visit https://developer.ebay.com/support
 - Reference Commerce Media API docs: https://developer.ebay.com/api-docs/commerce/media
 
 **For Scope Registration Help:**
+
 - Visit https://developer.ebay.com/my/keys
 - Select application → Manage Scopes
 - Search "commerce.media" and request

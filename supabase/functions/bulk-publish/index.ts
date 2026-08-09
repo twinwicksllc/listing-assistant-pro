@@ -77,41 +77,43 @@ const LEGACY_CONDITION_MAP: Record<string, string> = {
   PRE_OWNED_GOOD: "USED_EXCELLENT",
   PRE_OWNED_FAIR: "USED_GOOD",
   PRE_OWNED_POOR: "USED_ACCEPTABLE",
-  "New": "NEW",
+  New: "NEW",
   "New other (see details)": "NEW_OTHER",
   "New with defects": "NEW_WITH_DEFECTS",
   "Certified refurbished": "CERTIFIED_REFURBISHED",
   "Seller refurbished": "SELLER_REFURBISHED",
   "Like New": "LIKE_NEW",
-  "Used": "USED_EXCELLENT",
+  Used: "USED_EXCELLENT",
   "Very Good": "USED_VERY_GOOD",
-  "Good": "USED_GOOD",
-  "Acceptable": "USED_ACCEPTABLE",
+  Good: "USED_GOOD",
+  Acceptable: "USED_ACCEPTABLE",
   "For parts or not working": "FOR_PARTS_OR_NOT_WORKING",
   "Digital Good": "DIGITAL_GOOD",
   "Certified pre-owned": "CERTIFIED_PRE_OWNED",
-  "Remanufactured": "REMANUFACTURED",
-  "Retread": "RETREAD",
-  "Damaged": "DAMAGED",
+  Remanufactured: "REMANUFACTURED",
+  Retread: "RETREAD",
+  Damaged: "DAMAGED",
 };
 
-function normalizeConditionDescriptorToEnum(value: string | undefined | null): string {
+function normalizeConditionDescriptorToEnum(
+  value: string | undefined | null,
+): string {
   const raw = String(value ?? "").trim();
   if (!raw) return "";
 
   const lowered = raw.toLowerCase();
   const aliases: Record<string, string> = {
     "brand new": "NEW",
-    "new": "NEW",
+    new: "NEW",
     "new other (see details)": "NEW_OTHER",
     "new-open box": "NEW_OTHER",
     "new open box": "NEW_OTHER",
     "open box": "LIKE_NEW",
     "like new": "LIKE_NEW",
-    "used": "USED_EXCELLENT",
+    used: "USED_EXCELLENT",
     "very good": "USED_VERY_GOOD",
-    "good": "USED_GOOD",
-    "acceptable": "USED_ACCEPTABLE",
+    good: "USED_GOOD",
+    acceptable: "USED_ACCEPTABLE",
     "for parts or not working": "FOR_PARTS_OR_NOT_WORKING",
     "certified refurbished": "CERTIFIED_REFURBISHED",
     "excellent refurbished": "EXCELLENT_REFURBISHED",
@@ -123,12 +125,18 @@ function normalizeConditionDescriptorToEnum(value: string | undefined | null): s
     "pre-owned poor": "PRE_OWNED_POOR",
     "digital good": "DIGITAL_GOOD",
     "certified pre-owned": "CERTIFIED_PRE_OWNED",
-    "remanufactured": "REMANUFACTURED",
-    "retread": "RETREAD",
-    "damaged": "DAMAGED",
+    remanufactured: "REMANUFACTURED",
+    retread: "RETREAD",
+    damaged: "DAMAGED",
   };
 
-  return aliases[lowered] ?? raw.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "");
+  return (
+    aliases[lowered] ??
+    raw
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "_")
+      .replace(/^_|_$/g, "")
+  );
 }
 
 async function fetchDynamicCategoryConditions(
@@ -144,7 +152,7 @@ async function fetchDynamicCategoryConditions(
       {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${supabaseServiceKey}`,
+          Authorization: `Bearer ${supabaseServiceKey}`,
           "Content-Type": "application/json",
         },
         timeout: 10000,
@@ -155,13 +163,20 @@ async function fetchDynamicCategoryConditions(
     const data = await resp.json();
     return Array.isArray(data?.conditions)
       ? data.conditions
-        .map((condition: any) => ({
-          conditionId: Number(condition.conditionId),
-          conditionDescription: String(condition.conditionDescription ?? "").trim(),
-        }))
-        .filter((condition: { conditionId: number; conditionDescription: string }) =>
-          Number.isFinite(condition.conditionId) && condition.conditionDescription
-        )
+          .map((condition: any) => ({
+            conditionId: Number(condition.conditionId),
+            conditionDescription: String(
+              condition.conditionDescription ?? "",
+            ).trim(),
+          }))
+          .filter(
+            (condition: {
+              conditionId: number;
+              conditionDescription: string;
+            }) =>
+              Number.isFinite(condition.conditionId) &&
+              condition.conditionDescription,
+          )
       : [];
   } catch {
     return [];
@@ -171,7 +186,11 @@ async function fetchDynamicCategoryConditions(
 async function resolveConditionForCategory(
   rawCondition: string,
   categoryId: string,
-): Promise<{ conditionEnum: string; conditionId: number; conditionDescription: string }> {
+): Promise<{
+  conditionEnum: string;
+  conditionId: number;
+  conditionDescription: string;
+}> {
   const normalized = LEGACY_CONDITION_MAP[rawCondition] ?? rawCondition;
   let conditionEnum = normalized;
   let conditionId = CONDITION_ID_MAP[conditionEnum];
@@ -182,17 +201,27 @@ async function resolveConditionForCategory(
 
   if (
     (!conditionId ||
-      ["DIGITAL_GOOD", "CERTIFIED_PRE_OWNED", "REMANUFACTURED", "RETREAD", "DAMAGED"].includes(conditionEnum)) &&
+      [
+        "DIGITAL_GOOD",
+        "CERTIFIED_PRE_OWNED",
+        "REMANUFACTURED",
+        "RETREAD",
+        "DAMAGED",
+      ].includes(conditionEnum)) &&
     categoryId
   ) {
     const dynamicConditions = await fetchDynamicCategoryConditions(categoryId);
-    const match = dynamicConditions.find((candidate) =>
-      normalizeConditionDescriptorToEnum(candidate.conditionDescription) === conditionEnum
+    const match = dynamicConditions.find(
+      (candidate) =>
+        normalizeConditionDescriptorToEnum(candidate.conditionDescription) ===
+        conditionEnum,
     );
     if (match) {
       conditionId = match.conditionId;
       conditionDescription = match.conditionDescription;
-      conditionEnum = normalizeConditionDescriptorToEnum(match.conditionDescription) || conditionEnum;
+      conditionEnum =
+        normalizeConditionDescriptorToEnum(match.conditionDescription) ||
+        conditionEnum;
     }
   }
 
@@ -258,15 +287,16 @@ serve(async (req: Request) => {
     // Determine tier
     const ADMIN_EMAILS = ["twinwicksllc@gmail.com"];
     const isAdmin = userEmail ? ADMIN_EMAILS.includes(userEmail) : false;
-    let tier: "starter" | "pro" | "unlimited" | "admin" = isAdmin ? "admin" : "starter";
+    let tier: "starter" | "pro" | "unlimited" | "admin" = isAdmin
+      ? "admin"
+      : "starter";
 
     if (!isAdmin) {
       const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
       if (STRIPE_SECRET_KEY && userEmail) {
         try {
-          const { default: Stripe } = await import(
-            "https://esm.sh/stripe@18.5.0"
-          );
+          const { default: Stripe } =
+            await import("https://esm.sh/stripe@18.5.0");
           const stripe = new Stripe(STRIPE_SECRET_KEY, {
             apiVersion: "2025-08-27.basil",
           });
@@ -293,7 +323,11 @@ serve(async (req: Request) => {
     }
 
     const body = await req.json();
-    const { userToken, rows, dryRun = false } = body as {
+    const {
+      userToken,
+      rows,
+      dryRun = false,
+    } = body as {
       userToken: string;
       rows: BulkRowInput[];
       dryRun?: boolean;
@@ -342,7 +376,10 @@ serve(async (req: Request) => {
     }
 
     const ebayEnv = Deno.env.get("EBAY_ENV") || "production";
-    const apiBase = ebayEnv === "sandbox" ? "https://api.sandbox.ebay.com" : "https://api.ebay.com";
+    const apiBase =
+      ebayEnv === "sandbox"
+        ? "https://api.sandbox.ebay.com"
+        : "https://api.ebay.com";
 
     const authHeaders = {
       Authorization: `Bearer ${userToken}`,
@@ -362,7 +399,9 @@ serve(async (req: Request) => {
         .single();
       if (profile?.postal_code) postalCode = profile.postal_code;
       if (profile?.city) city = profile.city;
-    } catch (_) { /* non-fatal */ }
+    } catch (_) {
+      /* non-fatal */
+    }
 
     // Ensure inventory location exists once (shared across all rows)
     const merchantLocationKey = `BULK-${userId.slice(0, 8).toUpperCase()}`;
@@ -419,7 +458,9 @@ serve(async (req: Request) => {
           return null;
         }
         const policies = data[`${policyType}Policies`] || [];
-        return Array.isArray(policies) && policies.length > 0 ? policies[0][`${policyType}PolicyId`] || null : null;
+        return Array.isArray(policies) && policies.length > 0
+          ? policies[0][`${policyType}PolicyId`] || null
+          : null;
       } catch {
         return null;
       }
@@ -457,19 +498,21 @@ serve(async (req: Request) => {
         const conditionId = resolvedCondition.conditionId;
 
         // Build inventory item
-        const imageUrls = (row.imageUrls ?? []).filter((u) => u?.startsWith("http")).slice(0, 8);
+        const imageUrls = (row.imageUrls ?? [])
+          .filter((u) => u?.startsWith("http"))
+          .slice(0, 8);
         const inventoryBody: Record<string, unknown> = {
           product: {
             title: row.title.slice(0, 80),
             ...(imageUrls.length > 0 ? { imageUrls } : {}),
             ...(row.itemSpecifics && Object.keys(row.itemSpecifics).length > 0
               ? {
-                aspects: Object.fromEntries(
-                  Object.entries(row.itemSpecifics)
-                    .filter(([, v]) => v)
-                    .map(([k, v]) => [k, [v]]),
-                ),
-              }
+                  aspects: Object.fromEntries(
+                    Object.entries(row.itemSpecifics)
+                      .filter(([, v]) => v)
+                      .map(([k, v]) => [k, [v]]),
+                  ),
+                }
               : {}),
           },
           condition: conditionEnum,
@@ -497,8 +540,8 @@ serve(async (req: Request) => {
         }
 
         // Step 2: Build offer
-        const fulfillmentPolicyId = row.fulfillmentPolicyId ||
-          defaultFulfillment;
+        const fulfillmentPolicyId =
+          row.fulfillmentPolicyId || defaultFulfillment;
         const returnPolicyId = row.returnPolicyId || defaultReturn;
 
         if (!fulfillmentPolicyId) {
@@ -513,33 +556,36 @@ serve(async (req: Request) => {
           format: row.format,
           categoryId: row.categoryId,
           listingDescription: row.description || row.title,
-          pricingSummary: row.format === "AUCTION"
-            ? {
-              auctionStartPrice: {
-                value: String((row.auctionStartPrice ?? 0.99).toFixed(2)),
-                currency: "USD",
-              },
-              ...(row.buyItNowPrice
-                ? {
-                  auctionReservePrice: {
-                    value: String(row.buyItNowPrice.toFixed(2)),
+          pricingSummary:
+            row.format === "AUCTION"
+              ? {
+                  auctionStartPrice: {
+                    value: String((row.auctionStartPrice ?? 0.99).toFixed(2)),
                     currency: "USD",
                   },
+                  ...(row.buyItNowPrice
+                    ? {
+                        auctionReservePrice: {
+                          value: String(row.buyItNowPrice.toFixed(2)),
+                          currency: "USD",
+                        },
+                      }
+                    : {}),
                 }
-                : {}),
-            }
-            : {
-              price: {
-                value: String((row.price || 0.99).toFixed(2)),
-                currency: "USD",
-              },
-            },
+              : {
+                  price: {
+                    value: String((row.price || 0.99).toFixed(2)),
+                    currency: "USD",
+                  },
+                },
           quantityLimitPerBuyer: 10,
           includeCatalogProductDetails: false,
           listingPolicies: {
             fulfillmentPolicyId,
             ...(returnPolicyId ? { returnPolicyId } : {}),
-            ...(row.paymentPolicyId ? { paymentPolicyId: row.paymentPolicyId } : {}),
+            ...(row.paymentPolicyId
+              ? { paymentPolicyId: row.paymentPolicyId }
+              : {}),
           },
           merchantLocationKey,
           conditionId,

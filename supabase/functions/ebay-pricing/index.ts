@@ -24,11 +24,10 @@ interface SoldItem {
 // scraper, especially for niche/coin queries like "1909-S VDB".
 // Returns [] on any failure so the caller can fall back to Jina.
 // ----------------------------------------------------------------
-async function fetchViaCompetitorSearch(
-  query: string,
-): Promise<SoldItem[]> {
+async function fetchViaCompetitorSearch(query: string): Promise<SoldItem[]> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
+  const serviceKey =
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
     Deno.env.get("SUPABASE_ANON_KEY");
 
   if (!supabaseUrl || !serviceKey) {
@@ -45,8 +44,8 @@ async function fetchViaCompetitorSearch(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${serviceKey}`,
-          "apikey": serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+          apikey: serviceKey,
         },
         body: JSON.stringify({ title: query }),
         signal: AbortSignal.timeout(20000),
@@ -61,7 +60,11 @@ async function fetchViaCompetitorSearch(
     }
 
     const data = await resp.json();
-    if (data?.noData || !Array.isArray(data?.items) || data.items.length === 0) {
+    if (
+      data?.noData ||
+      !Array.isArray(data?.items) ||
+      data.items.length === 0
+    ) {
       console.log(
         `[ebay-pricing] competitor-search returned no items — falling back to Jina`,
       );
@@ -70,7 +73,10 @@ async function fetchViaCompetitorSearch(
 
     const mapped: SoldItem[] = data.items
       .map((it: any): SoldItem | null => {
-        const price = typeof it?.price === "number" ? it.price : parseFloat(String(it?.price ?? "0"));
+        const price =
+          typeof it?.price === "number"
+            ? it.price
+            : parseFloat(String(it?.price ?? "0"));
         if (!isFinite(price) || price <= 0) return null;
         return {
           title: String(it?.title ?? query),
@@ -116,7 +122,7 @@ async function scrapeEbaySoldListings(query: string): Promise<SoldItem[]> {
 
   const resp = await fetch(jinaUrl, {
     headers: {
-      "Accept": "text/plain,text/markdown,*/*",
+      Accept: "text/plain,text/markdown,*/*",
       "User-Agent": "Mozilla/5.0 (compatible; ListingAssistantBot/1.0)",
     },
     signal: AbortSignal.timeout(20000),
@@ -195,12 +201,14 @@ function parseSoldItemsFromMarkdown(
     let condition = "Pre-Owned";
     const blockLower = block.toLowerCase();
     if (
-      blockLower.includes("new in") || blockLower.includes("brand new") ||
+      blockLower.includes("new in") ||
+      blockLower.includes("brand new") ||
       blockLower.includes("sealed")
     ) {
       condition = "New";
     } else if (
-      blockLower.includes("uncirculated") || blockLower.includes("ms-") ||
+      blockLower.includes("uncirculated") ||
+      blockLower.includes("ms-") ||
       blockLower.includes(" ms ")
     ) {
       condition = "Uncirculated";
@@ -328,9 +336,9 @@ function filterOutliers(items: SoldItem[]): SoldItem[] {
   const filtered = items.filter((i) => i.price >= lo && i.price <= hi);
   if (filtered.length >= 3) {
     console.log(
-      `[ebay-pricing] Outlier filter: ${items.length} → ${filtered.length} items (fence $${lo.toFixed(2)}–$${
-        hi.toFixed(2)
-      })`,
+      `[ebay-pricing] Outlier filter: ${items.length} → ${filtered.length} items (fence $${lo.toFixed(2)}–$${hi.toFixed(
+        2,
+      )})`,
     );
     return filtered;
   }
@@ -344,7 +352,9 @@ function median(nums: number[]): number {
   if (nums.length === 0) return 0;
   const sorted = [...nums].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  return sorted.length % 2 !== 0
+    ? sorted[mid]
+    : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 // ----------------------------------------------------------------
@@ -376,7 +386,8 @@ serve(async (req) => {
     // Primary path: official eBay Browse API via ebay-competitor-search.
     // Higher recall + Gemini-optimised query. Falls through to Jina on empty.
     let soldItems: SoldItem[] = await fetchViaCompetitorSearch(query);
-    let source: "browse_api" | "jina" = soldItems.length > 0 ? "browse_api" : "jina";
+    const source: "browse_api" | "jina" =
+      soldItems.length > 0 ? "browse_api" : "jina";
 
     if (soldItems.length === 0) {
       // Fallback: scrape sold listings via Jina
@@ -409,19 +420,26 @@ serve(async (req) => {
     soldItems = filterOutliers(soldItems);
 
     const prices = soldItems.map((i) => i.price).sort((a, b) => a - b);
-    const averagePrice = prices.length > 0
-      ? parseFloat(
-        (prices.reduce((a, b) => a + b, 0) / prices.length).toFixed(2),
-      )
-      : 0;
+    const averagePrice =
+      prices.length > 0
+        ? parseFloat(
+            (prices.reduce((a, b) => a + b, 0) / prices.length).toFixed(2),
+          )
+        : 0;
 
     const lowPrice = prices.length > 0 ? Math.min(...prices) : 0;
     const highPrice = prices.length > 0 ? Math.max(...prices) : 0;
     const medianPrice = parseFloat(median(prices).toFixed(2));
 
     // Percentile stats (p25, p75) for IQR-based pricing
-    const p25 = prices.length > 0 ? prices[Math.max(0, Math.ceil(0.25 * prices.length) - 1)] : 0;
-    const p75 = prices.length > 0 ? prices[Math.max(0, Math.ceil(0.75 * prices.length) - 1)] : 0;
+    const p25 =
+      prices.length > 0
+        ? prices[Math.max(0, Math.ceil(0.25 * prices.length) - 1)]
+        : 0;
+    const p75 =
+      prices.length > 0
+        ? prices[Math.max(0, Math.ceil(0.75 * prices.length) - 1)]
+        : 0;
 
     // Price histogram buckets (5 buckets for mini chart)
     const histogram: {
@@ -435,7 +453,9 @@ serve(async (req) => {
       for (let i = 0; i < 5; i++) {
         const bucketMin = lowPrice + i * bucketSize;
         const bucketMax = bucketMin + bucketSize;
-        const count = prices.filter((p) => p >= bucketMin && (i === 4 ? p <= bucketMax : p < bucketMax)).length;
+        const count = prices.filter(
+          (p) => p >= bucketMin && (i === 4 ? p <= bucketMax : p < bucketMax),
+        ).length;
         histogram.push({
           bucket: `$${bucketMin.toFixed(0)}–$${bucketMax.toFixed(0)}`,
           count,

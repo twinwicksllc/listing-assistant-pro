@@ -15,14 +15,37 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  Eye, DollarSign, RefreshCw, ExternalLink,
-  AlertCircle, Loader2, X, Search,
-  SlidersHorizontal, Heart, ShoppingCart,
-  Flame, TrendingDown, Minus, Package,
-  Hash, Tag, Clock, LayoutDashboard,
-  CheckSquare, Square, MousePointerClick,
-  TrendingUp, Receipt, Truck, RotateCcw, Zap,
-  Store, ShieldAlert, BadgeCheck, CircleDollarSign,
+  Eye,
+  DollarSign,
+  RefreshCw,
+  ExternalLink,
+  AlertCircle,
+  Loader2,
+  X,
+  Search,
+  SlidersHorizontal,
+  Heart,
+  ShoppingCart,
+  Flame,
+  TrendingDown,
+  Minus,
+  Package,
+  Hash,
+  Tag,
+  Clock,
+  LayoutDashboard,
+  CheckSquare,
+  Square,
+  MousePointerClick,
+  TrendingUp,
+  Receipt,
+  Truck,
+  RotateCcw,
+  Zap,
+  Store,
+  ShieldAlert,
+  BadgeCheck,
+  CircleDollarSign,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDrafts } from "@/hooks/useDrafts";
@@ -35,7 +58,9 @@ import { CompetitorPriceCard } from "@/components/CompetitorPriceCard";
 import ProfitBadge from "@/components/ProfitBadge";
 import { PricingInsightsTable } from "@/components/PricingInsightsTable";
 import { RepriceManagerPanel } from "@/components/RepriceManagerPanel";
-import ListingDetailModal, { ListingDetailData } from "@/v2/components/ListingDetailModal";
+import ListingDetailModal, {
+  ListingDetailData,
+} from "@/v2/components/ListingDetailModal";
 import OptimizationModal from "@/components/OptimizationModal";
 
 // ─── Constants ────────────────────────────────────────────────────────
@@ -94,7 +119,16 @@ interface EbayListing {
   competitor?: CompetitorPriceSnapshot | null;
 }
 
-type SortField = "title" | "price" | "views" | "impressions" | "watchCount" | "transactions" | "trend" | "listingDate" | "status";
+type SortField =
+  | "title"
+  | "price"
+  | "views"
+  | "impressions"
+  | "watchCount"
+  | "transactions"
+  | "trend"
+  | "listingDate"
+  | "status";
 type SortDir = "asc" | "desc";
 type TrendLabel = "hot" | "stable" | "stale" | "new";
 type ViewMode = "cards" | "pricing";
@@ -115,9 +149,17 @@ interface FinancialWindow {
 }
 
 const emptyFin = (): FinancialWindow => ({
-  orders: 0, revenue: 0, shippingCollected: 0, ebayFees: 0,
-  shippingLabels: 0, refunds: 0, nonSaleCharges: 0, disputes: 0,
-  credits: 0, cogsTotal: 0, netProfit: 0,
+  orders: 0,
+  revenue: 0,
+  shippingCollected: 0,
+  ebayFees: 0,
+  shippingLabels: 0,
+  refunds: 0,
+  nonSaleCharges: 0,
+  disputes: 0,
+  credits: 0,
+  cogsTotal: 0,
+  netProfit: 0,
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────
@@ -127,7 +169,9 @@ function trendScore(l: EbayListing): number {
 }
 
 function getTrend(l: EbayListing): TrendLabel {
-  const p7 = l.views7d / 7, p30 = l.views30d / 30, p90 = l.views90d / 90;
+  const p7 = l.views7d / 7,
+    p30 = l.views30d / 30,
+    p90 = l.views90d / 90;
   if (l.views90d === 0 && l.views30d === 0 && l.views7d === 0) return "new";
   if (p30 > 0 && p7 >= p30 * 1.4) return "hot";
   if (p30 > 0 && p7 <= p30 * 0.6) return "stale";
@@ -162,7 +206,8 @@ function listingKey(l: EbayListing) {
 // ─── Styles ──────────────────────────────────────────────────────────
 
 const BRAND = COLORS.brand;
-const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+const FONT =
+  "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
 const pageStyle: React.CSSProperties = {
   minHeight: "100vh",
@@ -272,12 +317,13 @@ const trendBadgeStyle = (trend: TrendLabel): React.CSSProperties => ({
   borderRadius: 6,
   fontSize: "0.6875rem",
   fontWeight: 700,
-  background: trend === "hot"    ? "rgba(249,115,22,0.1)"
-             : trend === "stale"  ? "rgba(0,118,182,0.1)"
-             : "rgba(110,117,128,0.1)",
-  color:  trend === "hot"    ? "#ea580c"
-        : trend === "stale"  ? BRAND
-        : "#6E7580",
+  background:
+    trend === "hot"
+      ? "rgba(249,115,22,0.1)"
+      : trend === "stale"
+        ? "rgba(0,118,182,0.1)"
+        : "rgba(110,117,128,0.1)",
+  color: trend === "hot" ? "#ea580c" : trend === "stale" ? BRAND : "#6E7580",
 });
 
 const statusBadge = (status: string): React.CSSProperties => ({
@@ -286,7 +332,8 @@ const statusBadge = (status: string): React.CSSProperties => ({
   borderRadius: 6,
   fontSize: "0.6875rem",
   fontWeight: 700,
-  background: status === "Active" ? "rgba(34,197,94,0.12)" : "rgba(251,191,36,0.12)",
+  background:
+    status === "Active" ? "rgba(34,197,94,0.12)" : "rgba(251,191,36,0.12)",
   color: status === "Active" ? "#16a34a" : "#d97706",
 });
 
@@ -329,8 +376,8 @@ function TrendBadge({ listing }: { listing: EbayListing }) {
   if (trend === "new") return null;
   return (
     <span style={trendBadgeStyle(trend)}>
-      {trend === "hot"    && <Flame size={10} />}
-      {trend === "stale"  && <TrendingDown size={10} />}
+      {trend === "hot" && <Flame size={10} />}
+      {trend === "stale" && <TrendingDown size={10} />}
       {trend === "stable" && <Minus size={10} />}
       {trend === "hot" ? "Hot" : trend === "stale" ? "Stale" : "Stable"}
     </span>
@@ -344,48 +391,58 @@ export default function DashboardPage2() {
   const navigate = useNavigate();
   const { drafts } = useDrafts();
 
-  const [listings,    setListings]    = useState<EbayListing[]>([]);
-  const [loading,     setLoading]     = useState(true);
+  const [listings, setListings] = useState<EbayListing[]>([]);
+  const [loading, setLoading] = useState(true);
   const [ebayAccount, setEbayAccount] = useState<any>(null);
-  const [ebayToken,   setEbayToken]   = useState<string | null>(null);
-  const [needsAuth,   setNeedsAuth]   = useState(false);
+  const [ebayToken, setEbayToken] = useState<string | null>(null);
+  const [needsAuth, setNeedsAuth] = useState(false);
   const [setupDismissed, setSetupDismissed] = useState(false);
-  const [viewMode,    setViewMode]    = useState<ViewMode>("cards");
+  const [viewMode, setViewMode] = useState<ViewMode>("cards");
 
   // Financial / P&L state
-  const [fin7,  setFin7]  = useState<FinancialWindow>(emptyFin());
+  const [fin7, setFin7] = useState<FinancialWindow>(emptyFin());
   const [fin30, setFin30] = useState<FinancialWindow>(emptyFin());
   const [fin90, setFin90] = useState<FinancialWindow>(emptyFin());
   const [profitWindow, setProfitWindow] = useState<ProfitWindow>("30d");
-  const [orderCount7d,  setOrderCount7d]  = useState(0);
+  const [orderCount7d, setOrderCount7d] = useState(0);
   const [orderCount30d, setOrderCount30d] = useState(0);
   const [orderCount90d, setOrderCount90d] = useState(0);
 
   // Search & filters
-  const [searchQuery,  setSearchQuery]  = useState("");
-  const [showFilters,  setShowFilters]  = useState(false);
-  const [filterStatus, setFilterStatus] = useState<"all" | "active" | "inactive">("all");
-  const [filterMin,    setFilterMin]    = useState("");
-  const [filterMax,    setFilterMax]    = useState("");
-  const [sortField,    setSortField]    = useState<SortField>("listingDate");
-  const [sortDir,      setSortDir]      = useState<SortDir>("desc");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<
+    "all" | "active" | "inactive"
+  >("all");
+  const [filterMin, setFilterMin] = useState("");
+  const [filterMax, setFilterMax] = useState("");
+  const [sortField, setSortField] = useState<SortField>("listingDate");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   // Detail modal
-  const [detailListing, setDetailListing] = useState<ListingDetailData | null>(null);
+  const [detailListing, setDetailListing] = useState<ListingDetailData | null>(
+    null,
+  );
   const [optimizeListing, setOptimizeListing] = useState<any | null>(null);
 
   // Bulk select
-  const [selectedIds,   setSelectedIds]   = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Bulk refresh cooldown
-  const [bulkRefreshCooldownUntil, setBulkRefreshCooldownUntil] = useState<string | null>(() => {
+  const [bulkRefreshCooldownUntil, setBulkRefreshCooldownUntil] = useState<
+    string | null
+  >(() => {
     try {
       const s = localStorage.getItem(BULK_REFRESH_COOLDOWN_KEY);
       if (s && new Date(s) > new Date()) return s;
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return null;
   });
-  const [lastBulkRefreshAt, setLastBulkRefreshAt] = useState<string | null>(null);
+  const [lastBulkRefreshAt, setLastBulkRefreshAt] = useState<string | null>(
+    null,
+  );
 
   // ─── Fetch listings ───────────────────────────────────────────────
 
@@ -404,27 +461,41 @@ export default function DashboardPage2() {
         }
         if (td?.isExpired) {
           localStorage.removeItem(EBAY_TOKEN_KEY);
-          setNeedsAuth(true); setEbayAccount(null); setListings([]);
+          setNeedsAuth(true);
+          setEbayAccount(null);
+          setListings([]);
           toast.error("eBay session expired. Please reconnect in Settings.");
           return;
         }
-      } catch { /* fall through */ }
+      } catch {
+        /* fall through */
+      }
     }
     if (!token) token = localStorage.getItem(EBAY_TOKEN_KEY);
     if (token) setEbayToken(token);
-    if (!token) { setNeedsAuth(true); setEbayAccount(null); setListings([]); setLoading(false); return; }
+    if (!token) {
+      setNeedsAuth(true);
+      setEbayAccount(null);
+      setListings([]);
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     try {
       // Step 2: fetch listings + account in parallel
       const [listRes, userRes] = await Promise.all([
-        supabase.functions.invoke("ebay-listings", { body: { userToken: token } }),
-        supabase.functions.invoke("ebay-user",     { body: { userToken: token } }),
+        supabase.functions.invoke("ebay-listings", {
+          body: { userToken: token },
+        }),
+        supabase.functions.invoke("ebay-user", { body: { userToken: token } }),
       ]);
 
       if (listRes.error || listRes.data?.needsAuth) {
         localStorage.removeItem(EBAY_TOKEN_KEY);
-        setNeedsAuth(true); setListings([]); setEbayAccount(null);
+        setNeedsAuth(true);
+        setListings([]);
+        setEbayAccount(null);
         toast.error("eBay connection expired. Please reconnect in Settings.");
         return;
       }
@@ -436,24 +507,40 @@ export default function DashboardPage2() {
       const rawListings: EbayListing[] = listRes.data?.listings ?? [];
 
       // Step 3: capture order counts + financial data from Fulfillment API
-      if (typeof listRes.data?.orderCount30d === "number") setOrderCount30d(listRes.data.orderCount30d);
-      if (typeof listRes.data?.orderCount7d  === "number") setOrderCount7d(listRes.data.orderCount7d);
-      if (typeof listRes.data?.orderCount90d === "number") setOrderCount90d(listRes.data.orderCount90d);
-      if (listRes.data?.financial?.w7)  setFin7(listRes.data.financial.w7);
+      if (typeof listRes.data?.orderCount30d === "number")
+        setOrderCount30d(listRes.data.orderCount30d);
+      if (typeof listRes.data?.orderCount7d === "number")
+        setOrderCount7d(listRes.data.orderCount7d);
+      if (typeof listRes.data?.orderCount90d === "number")
+        setOrderCount90d(listRes.data.orderCount90d);
+      if (listRes.data?.financial?.w7) setFin7(listRes.data.financial.w7);
       if (listRes.data?.financial?.w30) setFin30(listRes.data.financial.w30);
       if (listRes.data?.financial?.w90) setFin90(listRes.data.financial.w90);
 
       // Step 4: match COGS from DB to sold orders and apply to financial windows
       if (user?.id && listRes.data?.financial) {
         try {
-          const soldOrders: Array<{ sku: string | null; listingId: string | null; soldAt: string }> =
-            listRes.data.financial.soldOrders ?? [];
+          const soldOrders: Array<{
+            sku: string | null;
+            listingId: string | null;
+            soldAt: string;
+          }> = listRes.data.financial.soldOrders ?? [];
           if (soldOrders.length > 0) {
-            const skus       = soldOrders.map(o => o.sku).filter(Boolean) as string[];
-            const listingIds = soldOrders.map(o => o.listingId).filter(Boolean) as string[];
+            const skus = soldOrders
+              .map((o) => o.sku)
+              .filter(Boolean) as string[];
+            const listingIds = soldOrders
+              .map((o) => o.listingId)
+              .filter(Boolean) as string[];
             const orParts: string[] = [];
-            if (skus.length > 0)       orParts.push(`ebay_sku.in.(${skus.map(s => `"${s}"`).join(",")})`);
-            if (listingIds.length > 0) orParts.push(`ebay_listing_id.in.(${listingIds.map(id => `"${id}"`).join(",")})`);
+            if (skus.length > 0)
+              orParts.push(
+                `ebay_sku.in.(${skus.map((s) => `"${s}"`).join(",")})`,
+              );
+            if (listingIds.length > 0)
+              orParts.push(
+                `ebay_listing_id.in.(${listingIds.map((id) => `"${id}"`).join(",")})`,
+              );
             const { data: cogsRows } = await supabase
               .from("listing_cogs")
               .select("ebay_sku, ebay_listing_id, cogs")
@@ -461,60 +548,89 @@ export default function DashboardPage2() {
               .or(orParts.join(","));
             const cogsMap: Record<string, number> = {};
             for (const row of cogsRows ?? []) {
-              if (row.ebay_sku)        cogsMap[row.ebay_sku]        = Number(row.cogs);
-              if (row.ebay_listing_id) cogsMap[row.ebay_listing_id] = Number(row.cogs);
+              if (row.ebay_sku) cogsMap[row.ebay_sku] = Number(row.cogs);
+              if (row.ebay_listing_id)
+                cogsMap[row.ebay_listing_id] = Number(row.cogs);
             }
             const now = Date.now();
-            const ms7 = 7*86400000, ms30 = 30*86400000, ms90 = 90*86400000;
-            let cogs7 = 0, cogs30 = 0, cogs90 = 0;
+            const ms7 = 7 * 86400000,
+              ms30 = 30 * 86400000,
+              ms90 = 90 * 86400000;
+            let cogs7 = 0,
+              cogs30 = 0,
+              cogs90 = 0;
             for (const order of soldOrders) {
-              const cv = (order.sku ? cogsMap[order.sku] : 0) || (order.listingId ? cogsMap[order.listingId] : 0) || 0;
+              const cv =
+                (order.sku ? cogsMap[order.sku] : 0) ||
+                (order.listingId ? cogsMap[order.listingId] : 0) ||
+                0;
               if (cv === 0) continue;
               const age = now - new Date(order.soldAt).getTime();
               if (age <= ms90) cogs90 += cv;
               if (age <= ms30) cogs30 += cv;
-              if (age <= ms7)  cogs7  += cv;
+              if (age <= ms7) cogs7 += cv;
             }
-            setFin7(prev  => ({ ...prev, cogsTotal: cogs7,  netProfit: prev.netProfit - cogs7  }));
-            setFin30(prev => ({ ...prev, cogsTotal: cogs30, netProfit: prev.netProfit - cogs30 }));
-            setFin90(prev => ({ ...prev, cogsTotal: cogs90, netProfit: prev.netProfit - cogs90 }));
+            setFin7((prev) => ({
+              ...prev,
+              cogsTotal: cogs7,
+              netProfit: prev.netProfit - cogs7,
+            }));
+            setFin30((prev) => ({
+              ...prev,
+              cogsTotal: cogs30,
+              netProfit: prev.netProfit - cogs30,
+            }));
+            setFin90((prev) => ({
+              ...prev,
+              cogsTotal: cogs90,
+              netProfit: prev.netProfit - cogs90,
+            }));
           }
-        } catch (cogsErr) { console.warn("COGS lookup non-fatal:", cogsErr); }
+        } catch (cogsErr) {
+          console.warn("COGS lookup non-fatal:", cogsErr);
+        }
       }
 
       // Step 5: fetch competitor prices from DB
       const competitorMap: Record<string, CompetitorPriceSnapshot> = {};
       if (user?.id && rawListings.length > 0) {
         try {
-          const ids = rawListings.map(l => l.listingId).filter(Boolean) as string[];
+          const ids = rawListings
+            .map((l) => l.listingId)
+            .filter(Boolean) as string[];
           if (ids.length > 0) {
             const { data: cpData } = await supabase
               .from("competitor_prices")
-              .select("ebay_listing_id, avg_price, min_price, max_price, median_price, price_delta, competitor_count, price_distribution, fetched_at, expires_at, gemini_search_query, search_query")
+              .select(
+                "ebay_listing_id, avg_price, min_price, max_price, median_price, price_delta, competitor_count, price_distribution, fetched_at, expires_at, gemini_search_query, search_query",
+              )
               .eq("user_id", user.id)
               .in("ebay_listing_id", ids)
               .order("fetched_at", { ascending: false });
             for (const row of cpData ?? []) {
               if (!competitorMap[row.ebay_listing_id]) {
                 competitorMap[row.ebay_listing_id] = {
-                  avgPrice:          row.avg_price,
-                  minPrice:          row.min_price,
-                  maxPrice:          row.max_price,
-                  medianPrice:       row.median_price,
-                  priceDelta:        row.price_delta,
-                  competitorCount:   row.competitor_count,
+                  avgPrice: row.avg_price,
+                  minPrice: row.min_price,
+                  maxPrice: row.max_price,
+                  medianPrice: row.median_price,
+                  priceDelta: row.price_delta,
+                  competitorCount: row.competitor_count,
                   priceDistribution: row.price_distribution ?? [],
-                  fetchedAt:         row.fetched_at,
-                  cacheExpiresAt:    row.expires_at ?? null,
-                  searchQuery:       row.gemini_search_query ?? row.search_query ?? null,
+                  fetchedAt: row.fetched_at,
+                  cacheExpiresAt: row.expires_at ?? null,
+                  searchQuery:
+                    row.gemini_search_query ?? row.search_query ?? null,
                 };
               }
             }
           }
-        } catch (cpErr) { console.warn("Competitor prices non-fatal:", cpErr); }
+        } catch (cpErr) {
+          console.warn("Competitor prices non-fatal:", cpErr);
+        }
       }
 
-      const enriched = rawListings.map(l => ({
+      const enriched = rawListings.map((l) => ({
         ...l,
         competitor: l.listingId ? (competitorMap[l.listingId] ?? null) : null,
       }));
@@ -522,7 +638,10 @@ export default function DashboardPage2() {
       setListings(enriched);
       setNeedsAuth(false);
       if (userRes.data?.username) {
-        setEbayAccount({ username: userRes.data.username, businessName: userRes.data.businessName || "" });
+        setEbayAccount({
+          username: userRes.data.username,
+          businessName: userRes.data.businessName || "",
+        });
       }
       toast.success(`Refreshed! ${enriched.length} listings loaded`);
     } catch (e: any) {
@@ -533,7 +652,9 @@ export default function DashboardPage2() {
     }
   }, [user?.id]);
 
-  useEffect(() => { fetchListings(); }, [fetchListings]);
+  useEffect(() => {
+    fetchListings();
+  }, [fetchListings]);
 
   // ─── Filter + sort ────────────────────────────────────────────────
 
@@ -541,38 +662,64 @@ export default function DashboardPage2() {
     let r = listings;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      r = r.filter(l => l.title.toLowerCase().includes(q) || l.sku.toLowerCase().includes(q) || l.listingId?.toLowerCase().includes(q));
+      r = r.filter(
+        (l) =>
+          l.title.toLowerCase().includes(q) ||
+          l.sku.toLowerCase().includes(q) ||
+          l.listingId?.toLowerCase().includes(q),
+      );
     }
     if (filterStatus !== "all") {
-      r = r.filter(l => filterStatus === "active" ? statusLabel(l.status) === "Active" : statusLabel(l.status) === "Draft");
+      r = r.filter((l) =>
+        filterStatus === "active"
+          ? statusLabel(l.status) === "Active"
+          : statusLabel(l.status) === "Draft",
+      );
     }
-    if (filterMin) r = r.filter(l => l.price >= parseFloat(filterMin));
-    if (filterMax) r = r.filter(l => l.price <= parseFloat(filterMax));
+    if (filterMin) r = r.filter((l) => l.price >= parseFloat(filterMin));
+    if (filterMax) r = r.filter((l) => l.price <= parseFloat(filterMax));
     r = [...r].sort((a, b) => {
-      let aVal: any = sortField === "trend" ? trendScore(a) : (a as any)[sortField];
-      let bVal: any = sortField === "trend" ? trendScore(b) : (b as any)[sortField];
+      let aVal: any =
+        sortField === "trend" ? trendScore(a) : (a as any)[sortField];
+      let bVal: any =
+        sortField === "trend" ? trendScore(b) : (b as any)[sortField];
       if (aVal == null) aVal = -Infinity;
       if (bVal == null) bVal = -Infinity;
-      const cmp = typeof aVal === "string" ? aVal.localeCompare(bVal) : aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      const cmp =
+        typeof aVal === "string"
+          ? aVal.localeCompare(bVal)
+          : aVal < bVal
+            ? -1
+            : aVal > bVal
+              ? 1
+              : 0;
       return sortDir === "asc" ? cmp : -cmp;
     });
     return r;
-  }, [listings, searchQuery, filterStatus, filterMin, filterMax, sortField, sortDir]);
+  }, [
+    listings,
+    searchQuery,
+    filterStatus,
+    filterMin,
+    filterMax,
+    sortField,
+    sortDir,
+  ]);
 
   // ─── Metrics ─────────────────────────────────────────────────────
 
   const metrics = useMemo(() => {
-    const active = listings.filter(l => statusLabel(l.status) === "Active");
+    const active = listings.filter((l) => statusLabel(l.status) === "Active");
     return {
-      total:      listings.length,
-      active:     active.length,
-      liveValue:  active.reduce((s, l) => s + l.price * (l.quantity || 1), 0),
+      total: listings.length,
+      active: active.length,
+      liveValue: active.reduce((s, l) => s + l.price * (l.quantity || 1), 0),
       draftValue: drafts.reduce((s, d) => s + (d.price || 0), 0),
-      views7d:    active.reduce((s, l) => s + (l.views7d  || 0), 0),
-      views30d:   active.reduce((s, l) => s + (l.views30d || 0), 0),
-      views90d:   active.reduce((s, l) => s + (l.views90d || 0), 0),
-      watchers:   active.reduce((s, l) => s + (l.watchCount || 0), 0),
-      sales:      active.reduce((s, l) => s + (l.transactions || 0), 0),
+      views7d: active.reduce((s, l) => s + (l.views7d || 0), 0),
+      views30d: active.reduce((s, l) => s + (l.views30d || 0), 0),
+      views90d: active.reduce((s, l) => s + (l.views90d || 0), 0),
+      watchers: active.reduce((s, l) => s + (l.watchCount || 0), 0),
+      sales: active.reduce((s, l) => s + (l.transactions || 0), 0),
     };
   }, [listings, drafts]);
 
@@ -581,88 +728,181 @@ export default function DashboardPage2() {
   const handleRefreshCompetitor = async (listingId: string) => {
     if (!user?.id) return;
     try {
-      const { data, error } = await supabase.functions.invoke("ebay-competitor-search", {
-        body: {
-          userId:     user.id,
-          listingId,
-          title:      listings.find(l => l.listingId === listingId)?.title,
-          categoryId: listings.find(l => l.listingId === listingId)?.categoryId,
-          yourPrice:  listings.find(l => l.listingId === listingId)?.price,
+      const { data, error } = await supabase.functions.invoke(
+        "ebay-competitor-search",
+        {
+          body: {
+            userId: user.id,
+            listingId,
+            title: listings.find((l) => l.listingId === listingId)?.title,
+            categoryId: listings.find((l) => l.listingId === listingId)
+              ?.categoryId,
+            yourPrice: listings.find((l) => l.listingId === listingId)?.price,
+          },
         },
-      });
-      if (error || data?.error) { toast.error("Could not retrieve competitor prices. Please try again."); return; }
-      if (data?.stale && data?.warning) toast.info(data.warning, { duration: 6000 });
-      setListings(prev => prev.map(l => l.listingId !== listingId ? l : {
-        ...l,
-        competitor: {
-          avgPrice: data.avgPrice, minPrice: data.minPrice, maxPrice: data.maxPrice,
-          medianPrice: data.medianPrice, competitorCount: data.competitorCount,
-          priceDelta: data.priceDelta, priceDistribution: data.priceDistribution ?? [],
-          fetchedAt: new Date().toISOString(), cacheExpiresAt: data.cacheExpiresAt ?? null,
-          searchQuery: data.geminiSearchQuery ?? data.searchQuery ?? null,
-        },
-      }));
+      );
+      if (error || data?.error) {
+        toast.error("Could not retrieve competitor prices. Please try again.");
+        return;
+      }
+      if (data?.stale && data?.warning)
+        toast.info(data.warning, { duration: 6000 });
+      setListings((prev) =>
+        prev.map((l) =>
+          l.listingId !== listingId
+            ? l
+            : {
+                ...l,
+                competitor: {
+                  avgPrice: data.avgPrice,
+                  minPrice: data.minPrice,
+                  maxPrice: data.maxPrice,
+                  medianPrice: data.medianPrice,
+                  competitorCount: data.competitorCount,
+                  priceDelta: data.priceDelta,
+                  priceDistribution: data.priceDistribution ?? [],
+                  fetchedAt: new Date().toISOString(),
+                  cacheExpiresAt: data.cacheExpiresAt ?? null,
+                  searchQuery:
+                    data.geminiSearchQuery ?? data.searchQuery ?? null,
+                },
+              },
+        ),
+      );
       if (!data?.fromCache) toast.success("Competitor prices updated");
-    } catch { toast.error("Failed to refresh competitor prices"); }
+    } catch {
+      toast.error("Failed to refresh competitor prices");
+    }
   };
 
   const handleRefreshAll = async () => {
     if (!user?.id) return;
-    if (bulkRefreshCooldownUntil && new Date(bulkRefreshCooldownUntil) > new Date()) {
+    if (
+      bulkRefreshCooldownUntil &&
+      new Date(bulkRefreshCooldownUntil) > new Date()
+    ) {
       const diff = new Date(bulkRefreshCooldownUntil).getTime() - Date.now();
       const h = Math.floor(diff / 3600000);
       const m = Math.ceil((diff % 3600000) / 60000);
-      toast.info(`Bulk refresh available in ${h > 0 ? `${h}h ` : ""}${m}m`, { duration: 4000 });
+      toast.info(`Bulk refresh available in ${h > 0 ? `${h}h ` : ""}${m}m`, {
+        duration: 4000,
+      });
       return;
     }
-    const stale = listings.filter(l => {
+    const stale = listings.filter((l) => {
       if (!l.listingId) return false;
       if (!l.competitor?.fetchedAt) return true;
-      return Date.now() - new Date(l.competitor.fetchedAt).getTime() >= 30 * 60 * 1000;
+      return (
+        Date.now() - new Date(l.competitor.fetchedAt).getTime() >=
+        30 * 60 * 1000
+      );
     });
-    if (stale.length === 0) { toast.info("All listings have fresh data — nothing to refresh."); return; }
+    if (stale.length === 0) {
+      toast.info("All listings have fresh data — nothing to refresh.");
+      return;
+    }
     const until = new Date(Date.now() + BULK_REFRESH_COOLDOWN_MS).toISOString();
     setBulkRefreshCooldownUntil(until);
     setLastBulkRefreshAt(new Date().toISOString());
-    try { localStorage.setItem(BULK_REFRESH_COOLDOWN_KEY, until); } catch { /* ignore */ }
-    toast.info(`Refreshing ${stale.length} listing${stale.length !== 1 ? "s" : ""}…`, { duration: 3000 });
-    let updated = 0, failed = 0;
+    try {
+      localStorage.setItem(BULK_REFRESH_COOLDOWN_KEY, until);
+    } catch {
+      /* ignore */
+    }
+    toast.info(
+      `Refreshing ${stale.length} listing${stale.length !== 1 ? "s" : ""}…`,
+      { duration: 3000 },
+    );
+    let updated = 0,
+      failed = 0;
     for (const listing of stale) {
       if (!listing.listingId) continue;
       try {
-        const { data, error } = await supabase.functions.invoke("ebay-competitor-search", {
-          body: { userId: user.id, listingId: listing.listingId, title: listing.title, categoryId: listing.categoryId, yourPrice: listing.price },
-        });
-        if (!error && data && !data.error) {
-          setListings(prev => prev.map(l => l.listingId !== listing.listingId ? l : {
-            ...l,
-            competitor: {
-              avgPrice: data.avgPrice, minPrice: data.minPrice, maxPrice: data.maxPrice,
-              medianPrice: data.medianPrice, competitorCount: data.competitorCount,
-              priceDelta: data.priceDelta, priceDistribution: data.priceDistribution ?? [],
-              fetchedAt: new Date().toISOString(), cacheExpiresAt: data.cacheExpiresAt ?? null,
-              searchQuery: data.geminiSearchQuery ?? data.searchQuery ?? null,
+        const { data, error } = await supabase.functions.invoke(
+          "ebay-competitor-search",
+          {
+            body: {
+              userId: user.id,
+              listingId: listing.listingId,
+              title: listing.title,
+              categoryId: listing.categoryId,
+              yourPrice: listing.price,
             },
-          }));
+          },
+        );
+        if (!error && data && !data.error) {
+          setListings((prev) =>
+            prev.map((l) =>
+              l.listingId !== listing.listingId
+                ? l
+                : {
+                    ...l,
+                    competitor: {
+                      avgPrice: data.avgPrice,
+                      minPrice: data.minPrice,
+                      maxPrice: data.maxPrice,
+                      medianPrice: data.medianPrice,
+                      competitorCount: data.competitorCount,
+                      priceDelta: data.priceDelta,
+                      priceDistribution: data.priceDistribution ?? [],
+                      fetchedAt: new Date().toISOString(),
+                      cacheExpiresAt: data.cacheExpiresAt ?? null,
+                      searchQuery:
+                        data.geminiSearchQuery ?? data.searchQuery ?? null,
+                    },
+                  },
+            ),
+          );
           updated++;
-        } else { failed++; }
-      } catch { failed++; }
-      await new Promise(r => setTimeout(r, 400));
+        } else {
+          failed++;
+        }
+      } catch {
+        failed++;
+      }
+      await new Promise((r) => setTimeout(r, 400));
     }
-    if (failed === 0) toast.success(`All ${updated} listing${updated !== 1 ? "s" : ""} updated!`);
+    if (failed === 0)
+      toast.success(
+        `All ${updated} listing${updated !== 1 ? "s" : ""} updated!`,
+      );
     else toast.warning(`Updated ${updated}, failed ${failed}.`);
   };
 
-  const handleApplyPrice = async (listingId: string, offerId: string | null, sku: string, newPrice: number, currency: string) => {
-    if (!ebayToken || !user?.id) { toast.error("Not connected to eBay"); return; }
+  const handleApplyPrice = async (
+    listingId: string,
+    offerId: string | null,
+    sku: string,
+    newPrice: number,
+    currency: string,
+  ) => {
+    if (!ebayToken || !user?.id) {
+      toast.error("Not connected to eBay");
+      return;
+    }
     const { data, error } = await supabase.functions.invoke("ebay-reprice", {
-      body: { action: "single_update", userToken: ebayToken, userId: user.id, offerId, sku, listingId, newPrice, currency },
+      body: {
+        action: "single_update",
+        userToken: ebayToken,
+        userId: user.id,
+        offerId,
+        sku,
+        listingId,
+        newPrice,
+        currency,
+      },
     });
     if (error || !data?.success) {
-      toast.error(`Could not apply price: ${data?.error || error?.message || "Unknown error"}`);
+      toast.error(
+        `Could not apply price: ${data?.error || error?.message || "Unknown error"}`,
+      );
       throw new Error(data?.error || error?.message || "reprice failed");
     }
-    setListings(prev => prev.map(l => l.listingId === listingId ? { ...l, price: newPrice } : l));
+    setListings((prev) =>
+      prev.map((l) =>
+        l.listingId === listingId ? { ...l, price: newPrice } : l,
+      ),
+    );
     toast.success(`Price updated to $${newPrice.toFixed(2)} on eBay`);
   };
 
@@ -670,9 +910,13 @@ export default function DashboardPage2() {
 
   const toggleSelect = (l: EbayListing) => {
     const k = listingKey(l);
-    setSelectedIds(prev => {
+    setSelectedIds((prev) => {
       const n = new Set(prev);
-      if (n.has(k)) { n.delete(k); } else { n.add(k); }
+      if (n.has(k)) {
+        n.delete(k);
+      } else {
+        n.add(k);
+      }
       return n;
     });
   };
@@ -685,7 +929,8 @@ export default function DashboardPage2() {
     }
   };
 
-  const hasActiveFilters = filterStatus !== "all" || !!filterMin || !!filterMax || !!searchQuery;
+  const hasActiveFilters =
+    filterStatus !== "all" || !!filterMin || !!filterMax || !!searchQuery;
 
   // ─── Render ───────────────────────────────────────────────────────
 
@@ -693,14 +938,34 @@ export default function DashboardPage2() {
     <AppShell>
       <div style={pageStyle}>
         <div style={contentStyle}>
-
           {/* ── Page Header ─────────────────────────────────────────── */}
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "1.5rem" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              marginBottom: "1.5rem",
+            }}
+          >
             <div>
-              <h1 style={{ fontSize: "1.75rem", fontWeight: 800, color: "#141820", margin: 0, letterSpacing: "-0.03em" }}>
+              <h1
+                style={{
+                  fontSize: "1.75rem",
+                  fontWeight: 800,
+                  color: "#141820",
+                  margin: 0,
+                  letterSpacing: "-0.03em",
+                }}
+              >
                 Dashboard
               </h1>
-              <p style={{ fontSize: "0.9375rem", color: "#6E7580", marginTop: "0.25rem" }}>
+              <p
+                style={{
+                  fontSize: "0.9375rem",
+                  color: "#6E7580",
+                  marginTop: "0.25rem",
+                }}
+              >
                 {ebayAccount
                   ? `Connected as ${ebayAccount.businessName || ebayAccount.username}`
                   : "eBay performance overview"}
@@ -710,35 +975,90 @@ export default function DashboardPage2() {
               onClick={fetchListings}
               disabled={loading}
               style={{
-                display: "inline-flex", alignItems: "center", gap: "0.5rem",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.5rem",
                 padding: "0.625rem 1.125rem",
-                background: "#ffffff", border: `1px solid ${COLORS.border}`,
-                borderRadius: 10, fontSize: "0.875rem", fontWeight: 600,
-                color: "#141820", cursor: loading ? "not-allowed" : "pointer",
+                background: "#ffffff",
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: 10,
+                fontSize: "0.875rem",
+                fontWeight: 600,
+                color: "#141820",
+                cursor: loading ? "not-allowed" : "pointer",
                 opacity: loading ? 0.5 : 1,
                 boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
                 transition: "all 0.15s",
               }}
             >
-              <RefreshCw size={14} style={{ animation: loading ? "spin 1s linear infinite" : "none" }} />
+              <RefreshCw
+                size={14}
+                style={{
+                  animation: loading ? "spin 1s linear infinite" : "none",
+                }}
+              />
               Refresh
             </button>
           </div>
 
           {/* ── eBay not connected ───────────────────────────────────── */}
           {needsAuth && !setupDismissed && (
-            <div style={{ ...sectionCard, background: "rgba(251,146,60,0.04)", borderTop: "3px solid #fb923c", display: "flex", gap: "1rem", padding: "1rem 1.25rem" }}>
-              <AlertCircle size={20} style={{ color: "#f97316", flexShrink: 0, marginTop: 2 }} />
+            <div
+              style={{
+                ...sectionCard,
+                background: "rgba(251,146,60,0.04)",
+                borderTop: "3px solid #fb923c",
+                display: "flex",
+                gap: "1rem",
+                padding: "1rem 1.25rem",
+              }}
+            >
+              <AlertCircle
+                size={20}
+                style={{ color: "#f97316", flexShrink: 0, marginTop: 2 }}
+              />
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: "0.9375rem", fontWeight: 600, color: "#141820" }}>eBay not connected</div>
-                <div style={{ fontSize: "0.8125rem", color: "#6E7580", marginTop: "0.25rem" }}>
+                <div
+                  style={{
+                    fontSize: "0.9375rem",
+                    fontWeight: 600,
+                    color: "#141820",
+                  }}
+                >
+                  eBay not connected
+                </div>
+                <div
+                  style={{
+                    fontSize: "0.8125rem",
+                    color: "#6E7580",
+                    marginTop: "0.25rem",
+                  }}
+                >
                   Connect your eBay account in Settings to see listings.{" "}
-                  <button onClick={() => navigate("/settings?tab=integrations")} style={{ color: BRAND, fontWeight: 600, cursor: "pointer", border: "none", background: "none" }}>
+                  <button
+                    onClick={() => navigate("/settings?tab=integrations")}
+                    style={{
+                      color: BRAND,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      border: "none",
+                      background: "none",
+                    }}
+                  >
                     Go to Integrations →
                   </button>
                 </div>
               </div>
-              <button onClick={() => setSetupDismissed(true)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6E7580", flexShrink: 0 }}>
+              <button
+                onClick={() => setSetupDismissed(true)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "#6E7580",
+                  flexShrink: 0,
+                }}
+              >
                 <X size={16} />
               </button>
             </div>
@@ -747,55 +1067,130 @@ export default function DashboardPage2() {
           {/* ── Summary Stats ─────────────────────────────────────────── */}
           <div style={statGrid}>
             <div style={statCard}>
-              <div style={statLabel}><DollarSign size={12} /> Total Inventory</div>
-              <div style={statValue}>${(metrics.liveValue + metrics.draftValue).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-              <div style={statSub}>Live: ${metrics.liveValue.toFixed(0)} • Drafts: ${metrics.draftValue.toFixed(0)}</div>
+              <div style={statLabel}>
+                <DollarSign size={12} /> Total Inventory
+              </div>
+              <div style={statValue}>
+                $
+                {(metrics.liveValue + metrics.draftValue).toLocaleString(
+                  undefined,
+                  { maximumFractionDigits: 0 },
+                )}
+              </div>
+              <div style={statSub}>
+                Live: ${metrics.liveValue.toFixed(0)} • Drafts: $
+                {metrics.draftValue.toFixed(0)}
+              </div>
             </div>
 
             {planFeatures.hasListingAnalytics ? (
               <div style={statCard}>
-                <div style={statLabel} title="Total View Item page clicks across all active listings (not impressions)"><Eye size={12} /> Views (30d)</div>
+                <div
+                  style={statLabel}
+                  title="Total View Item page clicks across all active listings (not impressions)"
+                >
+                  <Eye size={12} /> Views (30d)
+                </div>
                 <div style={statValue}>{metrics.views30d.toLocaleString()}</div>
-                <div style={statSub}>7d: {metrics.views7d.toLocaleString()} • 90d: {metrics.views90d.toLocaleString()}</div>
-                <div style={{ fontSize: "0.65rem", color: "#9BA3AD", marginTop: "0.25rem" }}>Sum across all active listings</div>
+                <div style={statSub}>
+                  7d: {metrics.views7d.toLocaleString()} • 90d:{" "}
+                  {metrics.views90d.toLocaleString()}
+                </div>
+                <div
+                  style={{
+                    fontSize: "0.65rem",
+                    color: "#9BA3AD",
+                    marginTop: "0.25rem",
+                  }}
+                >
+                  Sum across all active listings
+                </div>
               </div>
             ) : (
               <div style={statCard}>
-                <div style={statLabel}><Eye size={12} /> Views</div>
-                <div style={{ fontSize: "0.875rem", color: "#6E7580", marginTop: "0.75rem" }}>Upgrade to Pro for analytics</div>
+                <div style={statLabel}>
+                  <Eye size={12} /> Views
+                </div>
+                <div
+                  style={{
+                    fontSize: "0.875rem",
+                    color: "#6E7580",
+                    marginTop: "0.75rem",
+                  }}
+                >
+                  Upgrade to Pro for analytics
+                </div>
               </div>
             )}
 
             {planFeatures.hasListingAnalytics ? (
               <div style={statCard}>
-                <div style={statLabel}><Heart size={12} /> Total Watchers</div>
+                <div style={statLabel}>
+                  <Heart size={12} /> Total Watchers
+                </div>
                 <div style={statValue}>{metrics.watchers.toLocaleString()}</div>
                 <div style={statSub}>Across all listings</div>
               </div>
             ) : (
               <div style={statCard}>
-                <div style={statLabel}><Heart size={12} /> Watchers</div>
-                <div style={{ fontSize: "0.875rem", color: "#6E7580", marginTop: "0.75rem" }}>Upgrade to Pro</div>
+                <div style={statLabel}>
+                  <Heart size={12} /> Watchers
+                </div>
+                <div
+                  style={{
+                    fontSize: "0.875rem",
+                    color: "#6E7580",
+                    marginTop: "0.75rem",
+                  }}
+                >
+                  Upgrade to Pro
+                </div>
               </div>
             )}
 
             <div style={statCard}>
-              <div style={statLabel}><ShoppingCart size={12} /> Sales (30d)</div>
+              <div style={statLabel}>
+                <ShoppingCart size={12} /> Sales (30d)
+              </div>
               <div style={statValue}>{orderCount30d}</div>
-              <div style={statSub}>7d: {orderCount7d} · 90d: {orderCount90d}</div>
+              <div style={statSub}>
+                7d: {orderCount7d} · 90d: {orderCount90d}
+              </div>
             </div>
           </div>
 
           {/* ── P&L / Sales & Profit ───────────────────────────────────────── */}
           {(() => {
-            const finMap: Record<string, typeof fin30> = { "7d": fin7, "30d": fin30, "90d": fin90 };
+            const finMap: Record<string, typeof fin30> = {
+              "7d": fin7,
+              "30d": fin30,
+              "90d": fin90,
+            };
             const fin = finMap[profitWindow];
             const profitColor = fin.netProfit >= 0 ? "#16a34a" : "#dc2626";
-            const profitBg    = fin.netProfit >= 0 ? "rgba(34,197,94,0.08)" : "rgba(220,38,38,0.06)";
-            const usd = (v: number) => v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            const fmt    = (v: number) => (!isFinite(v) || isNaN(v)) ? "—" : v === 0 ? "—" : `${v < 0 ? "-" : ""}$${usd(Math.abs(v))}`;
-            const fmtPos = (v: number) => (!isFinite(v) || isNaN(v)) ? "—" : v === 0 ? "—" : `$${usd(v)}`;
-            const fmtNeg = (v: number) => (!isFinite(v) || isNaN(v)) ? "—" : v === 0 ? "—" : `-$${usd(Math.abs(v))}`;
+            const profitBg =
+              fin.netProfit >= 0
+                ? "rgba(34,197,94,0.08)"
+                : "rgba(220,38,38,0.06)";
+            const usd = (v: number) =>
+              v.toLocaleString("en-US", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              });
+            const fmt = (v: number) =>
+              !isFinite(v) || isNaN(v)
+                ? "—"
+                : v === 0
+                  ? "—"
+                  : `${v < 0 ? "-" : ""}$${usd(Math.abs(v))}`;
+            const fmtPos = (v: number) =>
+              !isFinite(v) || isNaN(v) ? "—" : v === 0 ? "—" : `$${usd(v)}`;
+            const fmtNeg = (v: number) =>
+              !isFinite(v) || isNaN(v)
+                ? "—"
+                : v === 0
+                  ? "—"
+                  : `-$${usd(Math.abs(v))}`;
             const row = (
               icon: React.ReactNode,
               label: string,
@@ -804,30 +1199,69 @@ export default function DashboardPage2() {
               bold = false,
               topBorder = false,
             ) => (
-              <div style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                padding: "0.5rem 0",
-                borderTop: topBorder ? "1px solid #E8EEF5" : undefined,
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#6E7580", fontSize: "0.8125rem", fontWeight: bold ? 700 : 400 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "0.5rem 0",
+                  borderTop: topBorder ? "1px solid #E8EEF5" : undefined,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    color: "#6E7580",
+                    fontSize: "0.8125rem",
+                    fontWeight: bold ? 700 : 400,
+                  }}
+                >
                   {icon}
                   {label}
                 </div>
-                <span style={{ fontSize: bold ? "0.9375rem" : "0.8125rem", fontWeight: bold ? 700 : 500, color }}>{value}</span>
+                <span
+                  style={{
+                    fontSize: bold ? "0.9375rem" : "0.8125rem",
+                    fontWeight: bold ? 700 : 500,
+                    color,
+                  }}
+                >
+                  {value}
+                </span>
               </div>
             );
             return (
               <div style={{ ...sectionCard, marginBottom: "1.25rem" }}>
                 {/* Card header */}
                 <div style={cardHeader}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.625rem",
+                    }}
+                  >
                     <CircleDollarSign size={16} style={{ color: BRAND }} />
-                    <span style={{ fontSize: "0.9375rem", fontWeight: 700, color: "#141820" }}>Sales & Profit</span>
+                    <span
+                      style={{
+                        fontSize: "0.9375rem",
+                        fontWeight: 700,
+                        color: "#141820",
+                      }}
+                    >
+                      Sales & Profit
+                    </span>
                   </div>
                   {/* Window toggle */}
                   <div style={toggleGroup}>
-                    {(["7d","30d","90d"] as ProfitWindow[]).map(w => (
-                      <button key={w} style={toggleBtn(profitWindow === w)} onClick={() => setProfitWindow(w)}>
+                    {(["7d", "30d", "90d"] as ProfitWindow[]).map((w) => (
+                      <button
+                        key={w}
+                        style={toggleBtn(profitWindow === w)}
+                        onClick={() => setProfitWindow(w)}
+                      >
                         {w}
                       </button>
                     ))}
@@ -836,45 +1270,138 @@ export default function DashboardPage2() {
 
                 <div style={cardBody}>
                   {/* Big net profit number */}
-                  <div style={{
-                    display: "flex", alignItems: "center", gap: "1.5rem",
-                    background: profitBg,
-                    borderRadius: 10,
-                    padding: "1rem 1.25rem",
-                    marginBottom: "1rem",
-                  }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "1.5rem",
+                      background: profitBg,
+                      borderRadius: 10,
+                      padding: "1rem 1.25rem",
+                      marginBottom: "1rem",
+                    }}
+                  >
                     <div>
-                      <div style={{ fontSize: "0.6875rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#6E7580", marginBottom: "0.25rem" }}>
+                      <div
+                        style={{
+                          fontSize: "0.6875rem",
+                          fontWeight: 700,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.06em",
+                          color: "#6E7580",
+                          marginBottom: "0.25rem",
+                        }}
+                      >
                         Net Profit ({profitWindow})
                       </div>
-                      <div style={{ fontSize: "2rem", fontWeight: 800, color: profitColor, letterSpacing: "-0.04em", lineHeight: 1 }}>
+                      <div
+                        style={{
+                          fontSize: "2rem",
+                          fontWeight: 800,
+                          color: profitColor,
+                          letterSpacing: "-0.04em",
+                          lineHeight: 1,
+                        }}
+                      >
                         {fmt(fin.netProfit)}
                       </div>
                     </div>
                     <div style={{ marginLeft: "auto", textAlign: "right" }}>
-                      <div style={{ fontSize: "0.6875rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#6E7580", marginBottom: "0.25rem" }}>
+                      <div
+                        style={{
+                          fontSize: "0.6875rem",
+                          fontWeight: 700,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.06em",
+                          color: "#6E7580",
+                          marginBottom: "0.25rem",
+                        }}
+                      >
                         Orders
                       </div>
-                      <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "#141820", letterSpacing: "-0.03em" }}>
-                        {fin.orders || (profitWindow === "7d" ? orderCount7d : profitWindow === "30d" ? orderCount30d : orderCount90d)}
+                      <div
+                        style={{
+                          fontSize: "1.5rem",
+                          fontWeight: 800,
+                          color: "#141820",
+                          letterSpacing: "-0.03em",
+                        }}
+                      >
+                        {fin.orders ||
+                          (profitWindow === "7d"
+                            ? orderCount7d
+                            : profitWindow === "30d"
+                              ? orderCount30d
+                              : orderCount90d)}
                       </div>
                     </div>
                   </div>
 
                   {/* Breakdown rows */}
                   <div style={{ padding: "0 0.25rem" }}>
-                    {row(<TrendingUp size={14} />,    "Revenue",              fmtPos(fin.revenue),          "#16a34a")}
-                    {row(<Truck size={14} />,          "Shipping Collected",   fmtPos(fin.shippingCollected), "#374151")}
-                    {row(<Receipt size={14} />,        "eBay Fees",            fmtNeg(fin.ebayFees),          "#dc2626")}
-                    {row(<Truck size={14} />,          "Shipping Labels",      fmtNeg(fin.shippingLabels),    "#dc2626")}
-                    {row(<RotateCcw size={14} />,      "Refunds",              fmtNeg(fin.refunds),           "#dc2626")}
-                    {fin.nonSaleCharges !== 0 && row(<Store size={14} />,      "Store / Non-sale Fees",  fmtNeg(fin.nonSaleCharges),   "#dc2626")}
-                    {fin.disputes !== 0 && row(<ShieldAlert size={14} />,      "Disputes",                fmtNeg(fin.disputes),         "#dc2626")}
-                    {fin.credits   !== 0 && row(<BadgeCheck size={14} />,      "Credits",                 fmtPos(fin.credits),          "#16a34a")}
-                    {row(<Package size={14} />,        "COGS",                 fmtNeg(fin.cogsTotal),         fin.cogsTotal > 0 ? "#dc2626" : "#9BA3AD")}
+                    {row(
+                      <TrendingUp size={14} />,
+                      "Revenue",
+                      fmtPos(fin.revenue),
+                      "#16a34a",
+                    )}
+                    {row(
+                      <Truck size={14} />,
+                      "Shipping Collected",
+                      fmtPos(fin.shippingCollected),
+                      "#374151",
+                    )}
+                    {row(
+                      <Receipt size={14} />,
+                      "eBay Fees",
+                      fmtNeg(fin.ebayFees),
+                      "#dc2626",
+                    )}
+                    {row(
+                      <Truck size={14} />,
+                      "Shipping Labels",
+                      fmtNeg(fin.shippingLabels),
+                      "#dc2626",
+                    )}
+                    {row(
+                      <RotateCcw size={14} />,
+                      "Refunds",
+                      fmtNeg(fin.refunds),
+                      "#dc2626",
+                    )}
+                    {fin.nonSaleCharges !== 0 &&
+                      row(
+                        <Store size={14} />,
+                        "Store / Non-sale Fees",
+                        fmtNeg(fin.nonSaleCharges),
+                        "#dc2626",
+                      )}
+                    {fin.disputes !== 0 &&
+                      row(
+                        <ShieldAlert size={14} />,
+                        "Disputes",
+                        fmtNeg(fin.disputes),
+                        "#dc2626",
+                      )}
+                    {fin.credits !== 0 &&
+                      row(
+                        <BadgeCheck size={14} />,
+                        "Credits",
+                        fmtPos(fin.credits),
+                        "#16a34a",
+                      )}
+                    {row(
+                      <Package size={14} />,
+                      "COGS",
+                      fmtNeg(fin.cogsTotal),
+                      fin.cogsTotal > 0 ? "#dc2626" : "#9BA3AD",
+                    )}
                     {/* Summary divider row */}
                     {row(
-                      <CircleDollarSign size={14} style={{ color: profitColor }} />,
+                      <CircleDollarSign
+                        size={14}
+                        style={{ color: profitColor }}
+                      />,
                       "Net Profit",
                       fmt(fin.netProfit),
                       profitColor,
@@ -883,11 +1410,22 @@ export default function DashboardPage2() {
                     )}
                   </div>
 
-                  {fin.revenue === 0 && fin.orders === 0 && orderCount30d === 0 && (
-                    <p style={{ fontSize: "0.8125rem", color: "#9BA3AD", textAlign: "center", marginTop: "0.75rem" }}>
-                      No financial data available yet for this window. Data populates from your eBay Seller Hub via the Fulfillment API.
-                    </p>
-                  )}
+                  {fin.revenue === 0 &&
+                    fin.orders === 0 &&
+                    orderCount30d === 0 && (
+                      <p
+                        style={{
+                          fontSize: "0.8125rem",
+                          color: "#9BA3AD",
+                          textAlign: "center",
+                          marginTop: "0.75rem",
+                        }}
+                      >
+                        No financial data available yet for this window. Data
+                        populates from your eBay Seller Hub via the Fulfillment
+                        API.
+                      </p>
+                    )}
                 </div>
               </div>
             );
@@ -895,37 +1433,98 @@ export default function DashboardPage2() {
 
           {/* ── Listings Section ─────────────────────────────────────── */}
           {loading && listings.length === 0 ? (
-            <div style={{ ...sectionCard, padding: "3rem", textAlign: "center", color: "#6E7580" }}>
-              <Loader2 size={28} style={{ margin: "0 auto 0.75rem", display: "block", animation: "spin 1s linear infinite" }} />
+            <div
+              style={{
+                ...sectionCard,
+                padding: "3rem",
+                textAlign: "center",
+                color: "#6E7580",
+              }}
+            >
+              <Loader2
+                size={28}
+                style={{
+                  margin: "0 auto 0.75rem",
+                  display: "block",
+                  animation: "spin 1s linear infinite",
+                }}
+              />
               Loading listings…
             </div>
           ) : listings.length > 0 ? (
             <div style={sectionCard}>
               {/* Header */}
               <div style={cardHeader}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                  <span style={{ fontSize: "0.9375rem", fontWeight: 700, color: "#141820" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.75rem",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: "0.9375rem",
+                      fontWeight: 700,
+                      color: "#141820",
+                    }}
+                  >
                     eBay Listings
                   </span>
-                  <span style={{
-                    fontSize: "0.75rem", fontWeight: 600,
-                    padding: "0.2rem 0.5rem", borderRadius: 12,
-                    background: "rgba(0,118,182,0.08)", color: BRAND,
-                  }}>
-                    {filteredListings.length}{filteredListings.length !== listings.length ? ` / ${listings.length}` : ""}
+                  <span
+                    style={{
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                      padding: "0.2rem 0.5rem",
+                      borderRadius: 12,
+                      background: "rgba(0,118,182,0.08)",
+                      color: BRAND,
+                    }}
+                  >
+                    {filteredListings.length}
+                    {filteredListings.length !== listings.length
+                      ? ` / ${listings.length}`
+                      : ""}
                   </span>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.625rem",
+                  }}
+                >
                   {/* Cards / Pricing toggle */}
                   <div style={toggleGroup}>
-                    <button style={toggleBtn(viewMode === "cards")} onClick={() => setViewMode("cards")}>Cards</button>
-                    <button style={toggleBtn(viewMode === "pricing")} onClick={() => setViewMode("pricing")}>Pricing</button>
+                    <button
+                      style={toggleBtn(viewMode === "cards")}
+                      onClick={() => setViewMode("cards")}
+                    >
+                      Cards
+                    </button>
+                    <button
+                      style={toggleBtn(viewMode === "pricing")}
+                      onClick={() => setViewMode("pricing")}
+                    >
+                      Pricing
+                    </button>
                   </div>
                   {/* Filter toggle */}
-                  <button style={iconBtn(showFilters || hasActiveFilters)} onClick={() => setShowFilters(v => !v)}>
+                  <button
+                    style={iconBtn(showFilters || hasActiveFilters)}
+                    onClick={() => setShowFilters((v) => !v)}
+                  >
                     <SlidersHorizontal size={15} />
                     {hasActiveFilters && (
-                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: BRAND, marginLeft: 2 }} />
+                      <span
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: "50%",
+                          background: BRAND,
+                          marginLeft: 2,
+                        }}
+                      />
                     )}
                   </button>
                 </div>
@@ -934,16 +1533,37 @@ export default function DashboardPage2() {
               <div style={cardBody}>
                 {/* Search */}
                 <div style={{ position: "relative", marginBottom: "0.75rem" }}>
-                  <Search size={14} style={{ position: "absolute", left: "0.625rem", top: "50%", transform: "translateY(-50%)", color: "#9BA3AD" }} />
+                  <Search
+                    size={14}
+                    style={{
+                      position: "absolute",
+                      left: "0.625rem",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      color: "#9BA3AD",
+                    }}
+                  />
                   <input
                     type="text"
                     placeholder="Search title, SKU, listing ID…"
                     value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
+                    onChange={(e) => setSearchQuery(e.target.value)}
                     style={searchInput}
                   />
                   {searchQuery && (
-                    <button onClick={() => setSearchQuery("")} style={{ position: "absolute", right: "0.625rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#9BA3AD" }}>
+                    <button
+                      onClick={() => setSearchQuery("")}
+                      style={{
+                        position: "absolute",
+                        right: "0.625rem",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        color: "#9BA3AD",
+                      }}
+                    >
                       <X size={14} />
                     </button>
                   )}
@@ -951,36 +1571,128 @@ export default function DashboardPage2() {
 
                 {/* Filter panel */}
                 {showFilters && (
-                  <div style={{ background: "rgba(0,118,182,0.03)", border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "0.875rem 1rem", marginBottom: "0.75rem", display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end" }}>
+                  <div
+                    style={{
+                      background: "rgba(0,118,182,0.03)",
+                      border: `1px solid ${COLORS.border}`,
+                      borderRadius: 10,
+                      padding: "0.875rem 1rem",
+                      marginBottom: "0.75rem",
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "0.75rem",
+                      alignItems: "flex-end",
+                    }}
+                  >
                     {/* Status */}
                     <div>
-                      <div style={{ fontSize: "0.6875rem", fontWeight: 700, color: "#6E7580", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.375rem" }}>Status</div>
+                      <div
+                        style={{
+                          fontSize: "0.6875rem",
+                          fontWeight: 700,
+                          color: "#6E7580",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em",
+                          marginBottom: "0.375rem",
+                        }}
+                      >
+                        Status
+                      </div>
                       <div style={toggleGroup}>
-                        {(["all","active","inactive"] as const).map(s => (
-                          <button key={s} style={toggleBtn(filterStatus === s)} onClick={() => setFilterStatus(s)}>
+                        {(["all", "active", "inactive"] as const).map((s) => (
+                          <button
+                            key={s}
+                            style={toggleBtn(filterStatus === s)}
+                            onClick={() => setFilterStatus(s)}
+                          >
                             {s.charAt(0).toUpperCase() + s.slice(1)}
                           </button>
                         ))}
                       </div>
                     </div>
                     {/* Price range */}
-                    <div style={{ display: "flex", alignItems: "flex-end", gap: "0.375rem" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-end",
+                        gap: "0.375rem",
+                      }}
+                    >
                       <div>
-                        <div style={{ fontSize: "0.6875rem", fontWeight: 700, color: "#6E7580", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.375rem" }}>Min $</div>
-                        <input type="number" min="0" placeholder="0" value={filterMin} onChange={e => setFilterMin(e.target.value)} style={{ ...inputStyle, width: 70, padding: "0.375rem 0.5rem" }} />
+                        <div
+                          style={{
+                            fontSize: "0.6875rem",
+                            fontWeight: 700,
+                            color: "#6E7580",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            marginBottom: "0.375rem",
+                          }}
+                        >
+                          Min $
+                        </div>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="0"
+                          value={filterMin}
+                          onChange={(e) => setFilterMin(e.target.value)}
+                          style={{
+                            ...inputStyle,
+                            width: 70,
+                            padding: "0.375rem 0.5rem",
+                          }}
+                        />
                       </div>
-                      <span style={{ color: "#9BA3AD", paddingBottom: "0.375rem" }}>–</span>
+                      <span
+                        style={{ color: "#9BA3AD", paddingBottom: "0.375rem" }}
+                      >
+                        –
+                      </span>
                       <div>
-                        <div style={{ fontSize: "0.6875rem", fontWeight: 700, color: "#6E7580", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.375rem" }}>Max $</div>
-                        <input type="number" min="0" placeholder="∞" value={filterMax} onChange={e => setFilterMax(e.target.value)} style={{ ...inputStyle, width: 70, padding: "0.375rem 0.5rem" }} />
+                        <div
+                          style={{
+                            fontSize: "0.6875rem",
+                            fontWeight: 700,
+                            color: "#6E7580",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            marginBottom: "0.375rem",
+                          }}
+                        >
+                          Max $
+                        </div>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="∞"
+                          value={filterMax}
+                          onChange={(e) => setFilterMax(e.target.value)}
+                          style={{
+                            ...inputStyle,
+                            width: 70,
+                            padding: "0.375rem 0.5rem",
+                          }}
+                        />
                       </div>
                     </div>
                     {/* Sort */}
                     <div>
-                      <div style={{ fontSize: "0.6875rem", fontWeight: 700, color: "#6E7580", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.375rem" }}>Sort by</div>
+                      <div
+                        style={{
+                          fontSize: "0.6875rem",
+                          fontWeight: 700,
+                          color: "#6E7580",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em",
+                          marginBottom: "0.375rem",
+                        }}
+                      >
+                        Sort by
+                      </div>
                       <select
                         value={`${sortField}:${sortDir}`}
-                        onChange={e => {
+                        onChange={(e) => {
                           const [f, d] = e.target.value.split(":");
                           setSortField(f as SortField);
                           setSortDir(d as SortDir);
@@ -998,7 +1710,22 @@ export default function DashboardPage2() {
                       </select>
                     </div>
                     {hasActiveFilters && (
-                      <button onClick={() => { setSearchQuery(""); setFilterStatus("all"); setFilterMin(""); setFilterMax(""); }} style={{ fontSize: "0.8125rem", color: "#6E7580", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+                      <button
+                        onClick={() => {
+                          setSearchQuery("");
+                          setFilterStatus("all");
+                          setFilterMin("");
+                          setFilterMax("");
+                        }}
+                        style={{
+                          fontSize: "0.8125rem",
+                          color: "#6E7580",
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          textDecoration: "underline",
+                        }}
+                      >
                         Clear all
                       </button>
                     )}
@@ -1009,21 +1736,27 @@ export default function DashboardPage2() {
                 {viewMode === "pricing" && (
                   <>
                     <PricingInsightsTable
-                      listings={listings.map(l => ({
-                        listingId:  l.listingId,
-                        offerId:    l.offerId,
-                        sku:        l.sku,
-                        title:      l.title,
-                        price:      l.price,
-                        currency:   l.currency,
-                        ebayUrl:    l.ebayUrl,
+                      listings={listings.map((l) => ({
+                        listingId: l.listingId,
+                        offerId: l.offerId,
+                        sku: l.sku,
+                        title: l.title,
+                        price: l.price,
+                        currency: l.currency,
+                        ebayUrl: l.ebayUrl,
                         competitor: l.competitor,
-                        imageUrl:   l.imageUrl,
+                        imageUrl: l.imageUrl,
                       }))}
                       onRefreshCompetitor={handleRefreshCompetitor}
                       onRefreshAll={handleRefreshAll}
                       onPriceChange={(listingId, newPrice) =>
-                        setListings(prev => prev.map(l => l.listingId === listingId ? { ...l, price: newPrice } : l))
+                        setListings((prev) =>
+                          prev.map((l) =>
+                            l.listingId === listingId
+                              ? { ...l, price: newPrice }
+                              : l,
+                          ),
+                        )
                       }
                       onApplyPrice={handleApplyPrice}
                       userToken={ebayToken}
@@ -1041,27 +1774,71 @@ export default function DashboardPage2() {
                   <>
                     {/* Select all */}
                     {filteredListings.length > 0 && (
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.625rem" }}>
-                        <button onClick={toggleSelectAll} style={{ display: "flex", alignItems: "center", gap: "0.375rem", background: "none", border: "none", cursor: "pointer", fontSize: "0.8125rem", color: "#6E7580" }}>
-                          {selectedIds.size === filteredListings.length && filteredListings.length > 0
-                            ? <CheckSquare size={15} style={{ color: BRAND }} />
-                            : <Square size={15} />}
-                          {selectedIds.size === filteredListings.length && filteredListings.length > 0 ? "Deselect all" : `Select all (${filteredListings.length})`}
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.5rem",
+                          marginBottom: "0.625rem",
+                        }}
+                      >
+                        <button
+                          onClick={toggleSelectAll}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.375rem",
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            fontSize: "0.8125rem",
+                            color: "#6E7580",
+                          }}
+                        >
+                          {selectedIds.size === filteredListings.length &&
+                          filteredListings.length > 0 ? (
+                            <CheckSquare size={15} style={{ color: BRAND }} />
+                          ) : (
+                            <Square size={15} />
+                          )}
+                          {selectedIds.size === filteredListings.length &&
+                          filteredListings.length > 0
+                            ? "Deselect all"
+                            : `Select all (${filteredListings.length})`}
                         </button>
                         {selectedIds.size > 0 && (
-                          <span style={{ fontSize: "0.8125rem", color: "#9BA3AD" }}>· {selectedIds.size} selected</span>
+                          <span
+                            style={{ fontSize: "0.8125rem", color: "#9BA3AD" }}
+                          >
+                            · {selectedIds.size} selected
+                          </span>
                         )}
                       </div>
                     )}
 
                     {/* Listing cards */}
                     {filteredListings.length === 0 ? (
-                      <div style={{ textAlign: "center", padding: "2.5rem", color: "#6E7580" }}>
-                        <Package size={32} style={{ margin: "0 auto 0.75rem", opacity: 0.3, display: "block" }} />
-                        {hasActiveFilters ? "No listings match your filters." : "No listings found on eBay yet."}
+                      <div
+                        style={{
+                          textAlign: "center",
+                          padding: "2.5rem",
+                          color: "#6E7580",
+                        }}
+                      >
+                        <Package
+                          size={32}
+                          style={{
+                            margin: "0 auto 0.75rem",
+                            opacity: 0.3,
+                            display: "block",
+                          }}
+                        />
+                        {hasActiveFilters
+                          ? "No listings match your filters."
+                          : "No listings found on eBay yet."}
                       </div>
                     ) : (
-                      filteredListings.map(listing => {
+                      filteredListings.map((listing) => {
                         const k = listingKey(listing);
                         const selected = selectedIds.has(k);
                         const trend = getTrend(listing);
@@ -1069,48 +1846,99 @@ export default function DashboardPage2() {
                         return (
                           <div key={k} style={listingCardStyle(selected)}>
                             {/* Checkbox */}
-                            <button onClick={() => toggleSelect(listing)} style={{ flexShrink: 0, background: "none", border: "none", cursor: "pointer", color: selected ? BRAND : "#9BA3AD", alignSelf: "flex-start", marginTop: 2 }}>
-                              {selected ? <CheckSquare size={15} style={{ color: BRAND }} /> : <Square size={15} />}
+                            <button
+                              onClick={() => toggleSelect(listing)}
+                              style={{
+                                flexShrink: 0,
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                color: selected ? BRAND : "#9BA3AD",
+                                alignSelf: "flex-start",
+                                marginTop: 2,
+                              }}
+                            >
+                              {selected ? (
+                                <CheckSquare
+                                  size={15}
+                                  style={{ color: BRAND }}
+                                />
+                              ) : (
+                                <Square size={15} />
+                              )}
                             </button>
 
                             {/* Image — click to open detail modal */}
                             <button
-                              onClick={() => setDetailListing({
-                                offerId: listing.offerId,
-                                sku: listing.sku,
-                                title: listing.title,
-                                imageUrl: listing.imageUrl,
-                                price: listing.price,
-                                currency: listing.currency,
-                                status: listing.status,
-                                quantity: listing.quantity,
-                                format: listing.format,
-                                condition: listing.condition,
-                                listingId: listing.listingId,
-                                ebayUrl: listing.ebayUrl,
-                                listingDate: listing.listingDate,
-                                views7d: listing.views7d,
-                                views30d: listing.views30d,
-                                views90d: listing.views90d,
-                                impressions7d: listing.impressions7d,
-                                impressions30d: listing.impressions30d,
-                                impressions90d: listing.impressions90d,
-                                clickThroughRate: listing.clickThroughRate,
-                                salesConversionRate: listing.salesConversionRate,
-                                watchCount: listing.watchCount,
-                                transactions7d: listing.transactions7d,
-                                transactions30d: listing.transactions30d,
-                                transactions90d: listing.transactions90d,
-                                questionCount: listing.questionCount,
-                              })}
-                              style={{ background: "none", border: "none", padding: 0, cursor: "pointer", flexShrink: 0 }}
+                              onClick={() =>
+                                setDetailListing({
+                                  offerId: listing.offerId,
+                                  sku: listing.sku,
+                                  title: listing.title,
+                                  imageUrl: listing.imageUrl,
+                                  price: listing.price,
+                                  currency: listing.currency,
+                                  status: listing.status,
+                                  quantity: listing.quantity,
+                                  format: listing.format,
+                                  condition: listing.condition,
+                                  listingId: listing.listingId,
+                                  ebayUrl: listing.ebayUrl,
+                                  listingDate: listing.listingDate,
+                                  views7d: listing.views7d,
+                                  views30d: listing.views30d,
+                                  views90d: listing.views90d,
+                                  impressions7d: listing.impressions7d,
+                                  impressions30d: listing.impressions30d,
+                                  impressions90d: listing.impressions90d,
+                                  clickThroughRate: listing.clickThroughRate,
+                                  salesConversionRate:
+                                    listing.salesConversionRate,
+                                  watchCount: listing.watchCount,
+                                  transactions7d: listing.transactions7d,
+                                  transactions30d: listing.transactions30d,
+                                  transactions90d: listing.transactions90d,
+                                  questionCount: listing.questionCount,
+                                })
+                              }
+                              style={{
+                                background: "none",
+                                border: "none",
+                                padding: 0,
+                                cursor: "pointer",
+                                flexShrink: 0,
+                              }}
                               title="View listing details & COGS"
                             >
                               {listing.imageUrl ? (
-                                <img src={listing.imageUrl} alt={listing.title} style={{ width: 72, height: 72, borderRadius: 10, objectFit: "cover", display: "block", transition: "opacity 0.15s" }} />
+                                <img
+                                  src={listing.imageUrl}
+                                  alt={listing.title}
+                                  style={{
+                                    width: 72,
+                                    height: 72,
+                                    borderRadius: 10,
+                                    objectFit: "cover",
+                                    display: "block",
+                                    transition: "opacity 0.15s",
+                                  }}
+                                />
                               ) : (
-                                <div style={{ width: 72, height: 72, borderRadius: 10, background: "#EFF2F5", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                  <Package size={24} style={{ color: "#9BA3AD" }} />
+                                <div
+                                  style={{
+                                    width: 72,
+                                    height: 72,
+                                    borderRadius: 10,
+                                    background: "#EFF2F5",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  <Package
+                                    size={24}
+                                    style={{ color: "#9BA3AD" }}
+                                  />
                                 </div>
                               )}
                             </button>
@@ -1118,71 +1946,145 @@ export default function DashboardPage2() {
                             {/* Content */}
                             <div style={{ flex: 1, minWidth: 0 }}>
                               {/* Title row */}
-                              <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.375rem" }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "flex-start",
+                                  gap: "0.5rem",
+                                  flexWrap: "wrap",
+                                  marginBottom: "0.375rem",
+                                }}
+                              >
                                 <button
-                                  onClick={() => setDetailListing({
-                                    offerId: listing.offerId,
-                                    sku: listing.sku,
-                                    title: listing.title,
-                                    imageUrl: listing.imageUrl,
-                                    price: listing.price,
-                                    currency: listing.currency,
-                                    status: listing.status,
-                                    quantity: listing.quantity,
-                                    format: listing.format,
-                                    condition: listing.condition,
-                                    listingId: listing.listingId,
-                                    ebayUrl: listing.ebayUrl,
-                                    listingDate: listing.listingDate,
-                                    views7d: listing.views7d,
-                                    views30d: listing.views30d,
-                                    views90d: listing.views90d,
-                                    impressions7d: listing.impressions7d,
-                                    impressions30d: listing.impressions30d,
-                                    impressions90d: listing.impressions90d,
-                                    clickThroughRate: listing.clickThroughRate,
-                                    salesConversionRate: listing.salesConversionRate,
-                                    watchCount: listing.watchCount,
-                                    transactions7d: listing.transactions7d,
-                                    transactions30d: listing.transactions30d,
-                                    transactions90d: listing.transactions90d,
-                                    questionCount: listing.questionCount,
-                                  })}
-                                  style={{ fontSize: "0.9375rem", fontWeight: 600, color: "#141820", flex: 1, minWidth: 0, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
+                                  onClick={() =>
+                                    setDetailListing({
+                                      offerId: listing.offerId,
+                                      sku: listing.sku,
+                                      title: listing.title,
+                                      imageUrl: listing.imageUrl,
+                                      price: listing.price,
+                                      currency: listing.currency,
+                                      status: listing.status,
+                                      quantity: listing.quantity,
+                                      format: listing.format,
+                                      condition: listing.condition,
+                                      listingId: listing.listingId,
+                                      ebayUrl: listing.ebayUrl,
+                                      listingDate: listing.listingDate,
+                                      views7d: listing.views7d,
+                                      views30d: listing.views30d,
+                                      views90d: listing.views90d,
+                                      impressions7d: listing.impressions7d,
+                                      impressions30d: listing.impressions30d,
+                                      impressions90d: listing.impressions90d,
+                                      clickThroughRate:
+                                        listing.clickThroughRate,
+                                      salesConversionRate:
+                                        listing.salesConversionRate,
+                                      watchCount: listing.watchCount,
+                                      transactions7d: listing.transactions7d,
+                                      transactions30d: listing.transactions30d,
+                                      transactions90d: listing.transactions90d,
+                                      questionCount: listing.questionCount,
+                                    })
+                                  }
+                                  style={{
+                                    fontSize: "0.9375rem",
+                                    fontWeight: 600,
+                                    color: "#141820",
+                                    flex: 1,
+                                    minWidth: 0,
+                                    background: "none",
+                                    border: "none",
+                                    padding: 0,
+                                    cursor: "pointer",
+                                    textAlign: "left",
+                                  }}
                                   title="View listing details & COGS"
                                 >
                                   {listing.title}
                                 </button>
-                                <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", flexShrink: 0, marginLeft: "auto" }}>
-                                  {planFeatures.hasListingAnalytics && <TrendBadge listing={listing} />}
-                                  <span style={statusBadge(slabel)}>{slabel}</span>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    gap: "0.375rem",
+                                    alignItems: "center",
+                                    flexShrink: 0,
+                                    marginLeft: "auto",
+                                  }}
+                                >
+                                  {planFeatures.hasListingAnalytics && (
+                                    <TrendBadge listing={listing} />
+                                  )}
+                                  <span style={statusBadge(slabel)}>
+                                    {slabel}
+                                  </span>
                                 </div>
                               </div>
 
                               {/* Price + eBay link */}
-                              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.375rem" }}>
-                                <span style={{ fontSize: "1rem", fontWeight: 800, color: BRAND }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "0.75rem",
+                                  marginBottom: "0.375rem",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    fontSize: "1rem",
+                                    fontWeight: 800,
+                                    color: BRAND,
+                                  }}
+                                >
                                   ${listing.price.toFixed(2)}
                                 </span>
                                 <button
-                                  onClick={() => setOptimizeListing({
-                                    listingId: listing.listingId,
-                                    offerId: listing.offerId,
-                                    sku: listing.sku,
-                                    title: listing.title,
-                                    currentPrice: listing.price,
-                                    description: listing.description,
-                                    imageUrl: listing.imageUrl,
-                                    categoryId: listing.categoryId,
-                                    listingDate: listing.listingDate,
-                                    ebayUrl: listing.ebayUrl,
-                                  })}
-                                  style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontSize: "0.8125rem", color: BRAND, background: "rgba(0,118,182,0.08)", border: "none", padding: "0.2rem 0.6rem", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}
+                                  onClick={() =>
+                                    setOptimizeListing({
+                                      listingId: listing.listingId,
+                                      offerId: listing.offerId,
+                                      sku: listing.sku,
+                                      title: listing.title,
+                                      currentPrice: listing.price,
+                                      description: listing.description,
+                                      imageUrl: listing.imageUrl,
+                                      categoryId: listing.categoryId,
+                                      listingDate: listing.listingDate,
+                                      ebayUrl: listing.ebayUrl,
+                                    })
+                                  }
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "0.25rem",
+                                    fontSize: "0.8125rem",
+                                    color: BRAND,
+                                    background: "rgba(0,118,182,0.08)",
+                                    border: "none",
+                                    padding: "0.2rem 0.6rem",
+                                    borderRadius: 6,
+                                    cursor: "pointer",
+                                    fontWeight: 600,
+                                  }}
                                 >
                                   <Zap size={12} fill={BRAND} /> Optimize
                                 </button>
                                 {listing.ebayUrl && (
-                                  <a href={listing.ebayUrl} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: "0.2rem", fontSize: "0.8125rem", color: BRAND, textDecoration: "none" }}>
+                                  <a
+                                    href={listing.ebayUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "0.2rem",
+                                      fontSize: "0.8125rem",
+                                      color: BRAND,
+                                      textDecoration: "none",
+                                    }}
+                                  >
                                     <ExternalLink size={12} /> View on eBay
                                   </a>
                                 )}
@@ -1190,46 +2092,95 @@ export default function DashboardPage2() {
 
                               {/* Analytics pills */}
                               {planFeatures.hasListingAnalytics && (
-                                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem", marginBottom: "0.375rem" }}>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    gap: "0.375rem",
+                                    marginBottom: "0.375rem",
+                                  }}
+                                >
                                   {listing.views30d > 0 && (
                                     <span style={pillStyle}>
-                                      <Eye size={10} /> {listing.views30d} views (30d)
+                                      <Eye size={10} /> {listing.views30d} views
+                                      (30d)
                                     </span>
                                   )}
                                   {listing.watchCount > 0 && (
                                     <span style={pillStyle}>
-                                      <Heart size={10} /> {listing.watchCount} watchers
+                                      <Heart size={10} /> {listing.watchCount}{" "}
+                                      watchers
                                     </span>
                                   )}
                                   {listing.transactions30d > 0 && (
                                     <span style={pillStyle}>
-                                      <ShoppingCart size={10} /> {listing.transactions7d}/{listing.transactions30d}/{listing.transactions90d} sales
+                                      <ShoppingCart size={10} />{" "}
+                                      {listing.transactions7d}/
+                                      {listing.transactions30d}/
+                                      {listing.transactions90d} sales
                                     </span>
                                   )}
                                   {listing.clickThroughRate > 0 && (
                                     <span style={pillStyle}>
-                                      <MousePointerClick size={10} /> {fmtPct(listing.clickThroughRate)} CTR
+                                      <MousePointerClick size={10} />{" "}
+                                      {fmtPct(listing.clickThroughRate)} CTR
                                     </span>
                                   )}
                                 </div>
                               )}
 
                               {/* Meta row */}
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", fontSize: "0.75rem", color: "#9BA3AD", marginBottom: "0.5rem" }}>
-                                {listing.sku && listing.sku !== listing.listingId && (
-                                  <span style={{ display: "flex", alignItems: "center", gap: "0.2rem" }}>
-                                    <Hash size={10} /> {listing.sku}
-                                  </span>
-                                )}
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexWrap: "wrap",
+                                  gap: "0.75rem",
+                                  fontSize: "0.75rem",
+                                  color: "#9BA3AD",
+                                  marginBottom: "0.5rem",
+                                }}
+                              >
+                                {listing.sku &&
+                                  listing.sku !== listing.listingId && (
+                                    <span
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "0.2rem",
+                                      }}
+                                    >
+                                      <Hash size={10} /> {listing.sku}
+                                    </span>
+                                  )}
                                 {listing.format && (
-                                  <span style={{ display: "flex", alignItems: "center", gap: "0.2rem" }}>
-                                    <Tag size={10} /> {listing.format === "FIXED_PRICE" ? "BIN" : listing.format === "AUCTION" ? "Auction" : listing.format}
+                                  <span
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "0.2rem",
+                                    }}
+                                  >
+                                    <Tag size={10} />{" "}
+                                    {listing.format === "FIXED_PRICE"
+                                      ? "BIN"
+                                      : listing.format === "AUCTION"
+                                        ? "Auction"
+                                        : listing.format}
                                   </span>
                                 )}
-                                {listing.condition && <span>{listing.condition}</span>}
+                                {listing.condition && (
+                                  <span>{listing.condition}</span>
+                                )}
                                 {listing.listingDate && (
-                                  <span style={{ display: "flex", alignItems: "center", gap: "0.2rem" }}>
-                                    <Clock size={10} /> {daysAgo(listing.listingDate)}
+                                  <span
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "0.2rem",
+                                    }}
+                                  >
+                                    <Clock size={10} />{" "}
+                                    {daysAgo(listing.listingDate)}
                                   </span>
                                 )}
                               </div>
@@ -1242,8 +2193,14 @@ export default function DashboardPage2() {
                                   yourPrice={listing.price}
                                   ebayUrl={listing.ebayUrl}
                                   competitor={listing.competitor}
-                                  onRefreshed={snapshot =>
-                                    setListings(prev => prev.map(l => l.listingId === listing.listingId ? { ...l, competitor: snapshot } : l))
+                                  onRefreshed={(snapshot) =>
+                                    setListings((prev) =>
+                                      prev.map((l) =>
+                                        l.listingId === listing.listingId
+                                          ? { ...l, competitor: snapshot }
+                                          : l,
+                                      ),
+                                    )
                                   }
                                 />
                               )}
@@ -1257,13 +2214,37 @@ export default function DashboardPage2() {
               </div>
             </div>
           ) : !needsAuth ? (
-            <div style={{ ...sectionCard, padding: "3rem", textAlign: "center", color: "#6E7580" }}>
-              <Package size={40} style={{ margin: "0 auto 1rem", display: "block", opacity: 0.25 }} />
-              <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "#141820", marginBottom: "0.25rem" }}>No listings found</p>
-              <p style={{ fontSize: "0.8125rem" }}>Your eBay listings will appear here once connected.</p>
+            <div
+              style={{
+                ...sectionCard,
+                padding: "3rem",
+                textAlign: "center",
+                color: "#6E7580",
+              }}
+            >
+              <Package
+                size={40}
+                style={{
+                  margin: "0 auto 1rem",
+                  display: "block",
+                  opacity: 0.25,
+                }}
+              />
+              <p
+                style={{
+                  fontSize: "0.9375rem",
+                  fontWeight: 600,
+                  color: "#141820",
+                  marginBottom: "0.25rem",
+                }}
+              >
+                No listings found
+              </p>
+              <p style={{ fontSize: "0.8125rem" }}>
+                Your eBay listings will appear here once connected.
+              </p>
             </div>
           ) : null}
-
         </div>
       </div>
 
@@ -1282,7 +2263,11 @@ export default function DashboardPage2() {
         listing={optimizeListing}
         userToken={ebayToken}
         onPriceApplied={(listingId, newPrice) => {
-          setListings(prev => prev.map(l => l.listingId === listingId ? { ...l, price: newPrice } : l));
+          setListings((prev) =>
+            prev.map((l) =>
+              l.listingId === listingId ? { ...l, price: newPrice } : l,
+            ),
+          );
           setOptimizeListing(null);
         }}
       />

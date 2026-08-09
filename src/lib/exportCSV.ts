@@ -19,25 +19,28 @@ function downloadBlob(filename: string, blob: Blob) {
 }
 
 function downloadCSV(filename: string, content: string) {
-  downloadBlob(filename, new Blob([content], { type: "text/csv;charset=utf-8;" }));
+  downloadBlob(
+    filename,
+    new Blob([content], { type: "text/csv;charset=utf-8;" }),
+  );
 }
 
 const EBAY_CONDITION_MAP: Record<string, string> = {
   NEW: "1000",
-  LIKE_NEW: "2750",                   // Like New / Open Box
+  LIKE_NEW: "2750", // Like New / Open Box
   VERY_GOOD: "3000",
   GOOD: "4000",
   ACCEPTABLE: "5000",
-  NEW_OTHER: "1500",                  // New Other (without tags)
-  NEW_WITH_DEFECTS: "1750",           // New with defects
+  NEW_OTHER: "1500", // New Other (without tags)
+  NEW_WITH_DEFECTS: "1750", // New with defects
   CERTIFIED_REFURBISHED: "2000",
   EXCELLENT_REFURBISHED: "2010",
   VERY_GOOD_REFURBISHED: "2020",
   GOOD_REFURBISHED: "2030",
   SELLER_REFURBISHED: "2500",
-  PRE_OWNED_GOOD: "3000",             // replaces USED_EXCELLENT / USED_VERY_GOOD
-  PRE_OWNED_FAIR: "5000",             // replaces USED_GOOD
-  PRE_OWNED_POOR: "6000",             // replaces USED_ACCEPTABLE
+  PRE_OWNED_GOOD: "3000", // replaces USED_EXCELLENT / USED_VERY_GOOD
+  PRE_OWNED_FAIR: "5000", // replaces USED_GOOD
+  PRE_OWNED_POOR: "6000", // replaces USED_ACCEPTABLE
   USED_EXCELLENT: "3000",
   USED_VERY_GOOD: "4000",
   USED_GOOD: "5000",
@@ -89,23 +92,25 @@ export interface ListingData {
   returnPolicyId?: string;
 }
 
-function normalizeConditionDescriptorToEnum(value: string | undefined | null): string {
+function normalizeConditionDescriptorToEnum(
+  value: string | undefined | null,
+): string {
   const raw = String(value ?? "").trim();
   if (!raw) return "";
 
   const lowered = raw.toLowerCase();
   const aliases: Record<string, string> = {
     "brand new": "NEW",
-    "new": "NEW",
+    new: "NEW",
     "new other (see details)": "NEW_OTHER",
     "new-open box": "NEW_OTHER",
     "new open box": "NEW_OTHER",
     "open box": "LIKE_NEW",
     "like new": "LIKE_NEW",
-    "used": "USED_EXCELLENT",
+    used: "USED_EXCELLENT",
     "very good": "USED_VERY_GOOD",
-    "good": "USED_GOOD",
-    "acceptable": "USED_ACCEPTABLE",
+    good: "USED_GOOD",
+    acceptable: "USED_ACCEPTABLE",
     "for parts or not working": "FOR_PARTS_OR_NOT_WORKING",
     "certified refurbished": "CERTIFIED_REFURBISHED",
     "excellent refurbished": "EXCELLENT_REFURBISHED",
@@ -117,12 +122,18 @@ function normalizeConditionDescriptorToEnum(value: string | undefined | null): s
     "pre-owned poor": "PRE_OWNED_POOR",
     "digital good": "DIGITAL_GOOD",
     "certified pre-owned": "CERTIFIED_PRE_OWNED",
-    "remanufactured": "REMANUFACTURED",
-    "retread": "RETREAD",
-    "damaged": "DAMAGED",
+    remanufactured: "REMANUFACTURED",
+    retread: "RETREAD",
+    damaged: "DAMAGED",
   };
 
-  return aliases[lowered] ?? raw.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "");
+  return (
+    aliases[lowered] ??
+    raw
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "_")
+      .replace(/^_|_$/g, "")
+  );
 }
 
 async function resolveEbayConditionId(listing: ListingData): Promise<string> {
@@ -139,8 +150,13 @@ async function resolveEbayConditionId(listing: ListingData): Promise<string> {
       return "3000";
     }
 
-    const match = data.conditions.find((condition: { conditionId?: number | string; conditionDescription?: string }) =>
-      normalizeConditionDescriptorToEnum(condition.conditionDescription) === listing.condition,
+    const match = data.conditions.find(
+      (condition: {
+        conditionId?: number | string;
+        conditionDescription?: string;
+      }) =>
+        normalizeConditionDescriptorToEnum(condition.conditionDescription) ===
+        listing.condition,
     );
 
     return match?.conditionId ? String(match.conditionId) : "3000";
@@ -151,7 +167,9 @@ async function resolveEbayConditionId(listing: ListingData): Promise<string> {
 
 // --- Row builders (shared between CSV and Excel/Sheets) ---
 
-async function buildEbayRows(listing: ListingData): Promise<{ headers: string[]; values: (string | number)[] }> {
+async function buildEbayRows(
+  listing: ListingData,
+): Promise<{ headers: string[]; values: (string | number)[] }> {
   const headers = [
     "*Action(SiteID=US|Country=US|Currency=USD|Version=1193)",
     "*Category",
@@ -163,7 +181,9 @@ async function buildEbayRows(listing: ListingData): Promise<{ headers: string[];
     "PicURL",
   ];
 
-  const specificEntries = Object.entries(listing.itemSpecifics).filter(([, v]) => v && v.trim() !== "");
+  const specificEntries = Object.entries(listing.itemSpecifics).filter(
+    ([, v]) => v && v.trim() !== "",
+  );
   specificEntries.forEach(([key]) => headers.push(`C:${key}`));
 
   // Include selected business policy IDs as supplemental columns
@@ -181,9 +201,9 @@ async function buildEbayRows(listing: ListingData): Promise<{ headers: string[];
     "FixedPrice",
     listing.priceMin,
     // eBay File Exchange supports multiple picture URLs separated by semicolons
-    (listing.imageUrls && listing.imageUrls.length > 0)
+    listing.imageUrls && listing.imageUrls.length > 0
       ? listing.imageUrls.join(";")
-      : (listing.imageUrl || ""),
+      : listing.imageUrl || "",
   ];
   specificEntries.forEach(([, value]) => values.push(value || ""));
 
@@ -194,8 +214,20 @@ async function buildEbayRows(listing: ListingData): Promise<{ headers: string[];
   return { headers, values };
 }
 
-function buildFacebookRows(listing: ListingData): { headers: string[]; values: (string | number)[] } {
-  const headers = ["title", "description", "availability", "condition", "price", "currency", "image_link", "brand"];
+function buildFacebookRows(listing: ListingData): {
+  headers: string[];
+  values: (string | number)[];
+} {
+  const headers = [
+    "title",
+    "description",
+    "availability",
+    "condition",
+    "price",
+    "currency",
+    "image_link",
+    "brand",
+  ];
   const values: (string | number)[] = [
     listing.title,
     listing.description,
@@ -204,8 +236,12 @@ function buildFacebookRows(listing: ListingData): { headers: string[]; values: (
     listing.priceMin,
     "USD",
     // Facebook expects a single image link — use the first provided image
-    (listing.imageUrls && listing.imageUrls.length > 0) ? listing.imageUrls[0] : (listing.imageUrl || ""),
-    listing.itemSpecifics.Brand || listing.itemSpecifics["Coin/Bullion Type"] || "",
+    listing.imageUrls && listing.imageUrls.length > 0
+      ? listing.imageUrls[0]
+      : listing.imageUrl || "",
+    listing.itemSpecifics.Brand ||
+      listing.itemSpecifics["Coin/Bullion Type"] ||
+      "",
   ];
   return { headers, values };
 }
@@ -214,20 +250,34 @@ function buildFacebookRows(listing: ListingData): { headers: string[]; values: (
 
 export async function exportEbayFileExchange(listing: ListingData) {
   const { headers, values } = await buildEbayRows(listing);
-  const csv = headers.map(escapeCSV).join(",") + "\n" + values.map((v) => escapeCSV(String(v))).join(",") + "\n";
+  const csv =
+    headers.map(escapeCSV).join(",") +
+    "\n" +
+    values.map((v) => escapeCSV(String(v))).join(",") +
+    "\n";
   downloadCSV(`ebay-listing-${Date.now()}.csv`, csv);
 }
 
 export function exportFacebookMarketplace(listing: ListingData) {
   const { headers, values } = buildFacebookRows(listing);
-  const csv = headers.map(escapeCSV).join(",") + "\n" + values.map((v) => escapeCSV(String(v))).join(",") + "\n";
+  const csv =
+    headers.map(escapeCSV).join(",") +
+    "\n" +
+    values.map((v) => escapeCSV(String(v))).join(",") +
+    "\n";
   downloadCSV(`facebook-listing-${Date.now()}.csv`, csv);
 }
 
 // --- Excel export (.xlsx) ---
 
-async function buildWorkbook(listing: ListingData, platform: ExportPlatform): Promise<XLSX.WorkBook> {
-  const { headers, values } = platform === "ebay_file_exchange" ? await buildEbayRows(listing) : buildFacebookRows(listing);
+async function buildWorkbook(
+  listing: ListingData,
+  platform: ExportPlatform,
+): Promise<XLSX.WorkBook> {
+  const { headers, values } =
+    platform === "ebay_file_exchange"
+      ? await buildEbayRows(listing)
+      : buildFacebookRows(listing);
   const ws = XLSX.utils.aoa_to_sheet([headers, values]);
 
   // Auto-size columns
@@ -236,12 +286,16 @@ async function buildWorkbook(listing: ListingData, platform: ExportPlatform): Pr
   }));
 
   const wb = XLSX.utils.book_new();
-  const sheetName = platform === "ebay_file_exchange" ? "eBay Listing" : "FB Listing";
+  const sheetName =
+    platform === "ebay_file_exchange" ? "eBay Listing" : "FB Listing";
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
   return wb;
 }
 
-export async function exportExcel(listing: ListingData, platform: ExportPlatform) {
+export async function exportExcel(
+  listing: ListingData,
+  platform: ExportPlatform,
+) {
   const wb = await buildWorkbook(listing, platform);
   const prefix = platform === "ebay_file_exchange" ? "ebay" : "facebook";
   XLSX.writeFile(wb, `${prefix}-listing-${Date.now()}.xlsx`);
@@ -249,10 +303,15 @@ export async function exportExcel(listing: ListingData, platform: ExportPlatform
 
 // --- Google Sheets export (downloads as .xlsx that Google Sheets can open directly) ---
 
-export async function exportGoogleSheets(listing: ListingData, platform: ExportPlatform) {
+export async function exportGoogleSheets(
+  listing: ListingData,
+  platform: ExportPlatform,
+) {
   const wb = await buildWorkbook(listing, platform);
   const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const blob = new Blob([wbout], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
 
   // Build a Google Sheets import URL via the upload redirect trick
   // The most reliable cross-browser approach: download the .xlsx, user opens in Google Sheets
@@ -270,10 +329,15 @@ export async function exportGoogleSheets(listing: ListingData, platform: ExportP
 export type ExportPlatform = "ebay_file_exchange" | "facebook_marketplace";
 export type ExportFormat = "csv" | "excel" | "google_sheets";
 
-export async function exportListing(platform: ExportPlatform, format: ExportFormat, listing: ListingData) {
+export async function exportListing(
+  platform: ExportPlatform,
+  format: ExportFormat,
+  listing: ListingData,
+) {
   switch (format) {
     case "csv":
-      if (platform === "ebay_file_exchange") await exportEbayFileExchange(listing);
+      if (platform === "ebay_file_exchange")
+        await exportEbayFileExchange(listing);
       else exportFacebookMarketplace(listing);
       break;
     case "excel":

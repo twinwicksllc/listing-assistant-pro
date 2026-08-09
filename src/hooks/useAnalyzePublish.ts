@@ -54,27 +54,31 @@ export function useAnalyzePublish({
 }: UseAnalyzePublishParams) {
   const [publishing, setPublishing] = useState(false);
 
-  const fetchStoredTokenData = useCallback(async (targetUserId: string): Promise<StoredTokenData> => {
-    try {
-      const { data } = await supabase.functions.invoke("ebay-publish", {
-        body: { action: "get_stored_token", userId: targetUserId },
-      });
-      return {
-        token: data?.token ?? null,
-        postalCode: data?.postalCode ?? null,
-        city: data?.city ?? null,
-        reconnectRequired: data?.reconnectRequired === true || data?.isExpired === true,
-      };
-    } catch (e) {
-      console.error("useAnalyzePublish: get_stored_token error", e);
-      return {
-        token: null,
-        postalCode: null,
-        city: null,
-        reconnectRequired: false,
-      };
-    }
-  }, []);
+  const fetchStoredTokenData = useCallback(
+    async (targetUserId: string): Promise<StoredTokenData> => {
+      try {
+        const { data } = await supabase.functions.invoke("ebay-publish", {
+          body: { action: "get_stored_token", userId: targetUserId },
+        });
+        return {
+          token: data?.token ?? null,
+          postalCode: data?.postalCode ?? null,
+          city: data?.city ?? null,
+          reconnectRequired:
+            data?.reconnectRequired === true || data?.isExpired === true,
+        };
+      } catch (e) {
+        console.error("useAnalyzePublish: get_stored_token error", e);
+        return {
+          token: null,
+          postalCode: null,
+          city: null,
+          reconnectRequired: false,
+        };
+      }
+    },
+    [],
+  );
 
   const loadPolicyToken = useCallback(async (): Promise<string | null> => {
     if (!userId) return localStorage.getItem("ebay-user-token");
@@ -84,27 +88,37 @@ export function useAnalyzePublish({
 
   const handlePublish = useCallback(async () => {
     if (!canPublish) {
-      toast.error(`Monthly publish limit reached (${publishLimit}). Upgrade for more listings.`);
+      toast.error(
+        `Monthly publish limit reached (${publishLimit}). Upgrade for more listings.`,
+      );
       onRequireBilling();
       return;
     }
 
-    if (ebayMetadata?.requiredAspects && ebayMetadata.requiredAspects.length > 0) {
+    if (
+      ebayMetadata?.requiredAspects &&
+      ebayMetadata.requiredAspects.length > 0
+    ) {
       const missingRequired = ebayMetadata.requiredAspects.filter(
-        (aspect) => !itemSpecifics[aspect] || String(itemSpecifics[aspect]).trim() === "",
+        (aspect) =>
+          !itemSpecifics[aspect] || String(itemSpecifics[aspect]).trim() === "",
       );
       if (missingRequired.length > 0) {
-        toast.error(`Missing required eBay fields: ${missingRequired.join(", ")}`, {
-          description: "Fill in these fields above before publishing.",
-          duration: 6000,
-        });
+        toast.error(
+          `Missing required eBay fields: ${missingRequired.join(", ")}`,
+          {
+            description: "Fill in these fields above before publishing.",
+            duration: 6000,
+          },
+        );
         return;
       }
     }
 
     if (coinConditionDetailRequired && !coinConditionDetailComplete) {
       toast.error("Missing required coin condition details", {
-        description: "eBay now requires structured condition details for coin listings. Re-run analysis or complete the coin condition details before publishing.",
+        description:
+          "eBay now requires structured condition details for coin listings. Re-run analysis or complete the coin condition details before publishing.",
         duration: 8000,
       });
       return;
@@ -132,10 +146,13 @@ export function useAnalyzePublish({
         } else {
           postalCode = tokenData.postalCode;
           city = tokenData.city;
-          console.log("useAnalyzePublish: no token but got location data from database", {
-            postalCode,
-            city,
-          });
+          console.log(
+            "useAnalyzePublish: no token but got location data from database",
+            {
+              postalCode,
+              city,
+            },
+          );
         }
       }
 
@@ -146,13 +163,20 @@ export function useAnalyzePublish({
       if (!ebayToken) {
         if (reconnectRequired) {
           clearCachedEbayTokens();
-          toast.info("Your eBay session needs to be reconnected before publishing.");
+          toast.info(
+            "Your eBay session needs to be reconnected before publishing.",
+          );
         }
-        const { data, error } = await supabase.functions.invoke("ebay-publish", {
-          body: { action: "get_auth_url" },
-        });
+        const { data, error } = await supabase.functions.invoke(
+          "ebay-publish",
+          {
+            body: { action: "get_auth_url" },
+          },
+        );
         if (error || data?.error) {
-          throw new Error(data?.error || error?.message || "Failed to get auth URL");
+          throw new Error(
+            data?.error || error?.message || "Failed to get auth URL",
+          );
         }
 
         localStorage.setItem(
@@ -187,16 +211,19 @@ export function useAnalyzePublish({
 
       if (error || data?.error) {
         const isPublishPolicyError = data?.publishFailed === true;
-        const isTokenExpiry = !isPublishPolicyError && (
-          data?.error?.includes("401 ") ||
-          data?.error === "401" ||
-          (data?.error?.includes("expired") && !data?.error?.includes("code has expired")) ||
-          error?.message?.includes("401")
-        );
+        const isTokenExpiry =
+          !isPublishPolicyError &&
+          (data?.error?.includes("401 ") ||
+            data?.error === "401" ||
+            (data?.error?.includes("expired") &&
+              !data?.error?.includes("code has expired")) ||
+            error?.message?.includes("401"));
 
         if (isTokenExpiry) {
           clearCachedEbayTokens();
-          toast.error("eBay session expired. Please reconnect eBay in Settings.");
+          toast.error(
+            "eBay session expired. Please reconnect eBay in Settings.",
+          );
           return;
         }
 
@@ -205,7 +232,8 @@ export function useAnalyzePublish({
             description: data.error,
             action: {
               label: "Open Seller Hub",
-              onClick: () => window.open("https://www.ebay.com/sh/ovw/policies", "_blank"),
+              onClick: () =>
+                window.open("https://www.ebay.com/sh/ovw/policies", "_blank"),
             },
             duration: 10000,
           });
@@ -245,7 +273,10 @@ export function useAnalyzePublish({
           ? "Affiliate link ready - share it to earn EPN commissions."
           : undefined,
         action: data.affiliateUrl
-          ? { label: "Copy Link", onClick: () => navigator.clipboard.writeText(data.affiliateUrl) }
+          ? {
+              label: "Copy Link",
+              onClick: () => navigator.clipboard.writeText(data.affiliateUrl),
+            }
           : undefined,
         duration: 5000,
       });

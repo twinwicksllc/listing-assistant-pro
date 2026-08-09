@@ -42,9 +42,10 @@ async function getEbayAppToken(): Promise<string> {
 
   const credentials = btoa(`${clientId}:${clientSecret}`);
   const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
-  const tokenUrl = ebayEnv === "production"
-    ? "https://api.ebay.com/identity/v1/oauth2/token"
-    : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
+  const tokenUrl =
+    ebayEnv === "production"
+      ? "https://api.ebay.com/identity/v1/oauth2/token"
+      : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
 
   console.log(`[keyword-research] Fetching OAuth token from ${tokenUrl}`);
 
@@ -85,7 +86,10 @@ async function browseSearch(params: {
 }): Promise<BrowseSearchResult> {
   const { query, token, ebayEnv, categoryId, limit = 50 } = params;
 
-  const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
+  const apiBase =
+    ebayEnv === "production"
+      ? "https://api.ebay.com"
+      : "https://api.sandbox.ebay.com";
 
   const searchParams = new URLSearchParams({
     q: query,
@@ -153,7 +157,9 @@ async function browseSearch(params: {
           });
         }
       }
-    } catch { /* skip malformed */ }
+    } catch {
+      /* skip malformed */
+    }
   }
 
   console.log(
@@ -186,7 +192,7 @@ async function scrapeEbaySoldData(
       method: "GET",
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; ListingAssistant/1.0)",
-        "Accept": "text/plain",
+        Accept: "text/plain",
       },
       signal: AbortSignal.timeout(20000),
     });
@@ -217,12 +223,16 @@ async function scrapeEbaySoldData(
   const allListingsMatch = content.match(
     /All Listings \(([\d,]+)\)\s+Filter Applied/,
   );
-  let soldCount = allListingsMatch ? parseInt(allListingsMatch[1].replace(/,/g, ""), 10) : 0;
+  let soldCount = allListingsMatch
+    ? parseInt(allListingsMatch[1].replace(/,/g, ""), 10)
+    : 0;
 
   // Fallback: "X results for" or "X+ results for"
   if (!soldCount) {
     const resultsMatch = content.match(/([\d,]+)\+?\s+results?\s+for/i);
-    soldCount = resultsMatch ? parseInt(resultsMatch[1].replace(/,/g, ""), 10) : 0;
+    soldCount = resultsMatch
+      ? parseInt(resultsMatch[1].replace(/,/g, ""), 10)
+      : 0;
   }
 
   // Extract price range buckets from the filter sidebar
@@ -243,13 +253,13 @@ async function scrapeEbaySoldData(
     // Estimate: min is ~50% of lower bucket threshold, max is ~150% of upper threshold
     minSoldPrice = Math.round(lowThreshold * 0.5 * 100) / 100;
     maxSoldPrice = Math.round(highThreshold * 1.5 * 100) / 100;
-    avgSoldPrice = Math.round((lowThreshold + highThreshold) / 2 * 100) / 100;
+    avgSoldPrice = Math.round(((lowThreshold + highThreshold) / 2) * 100) / 100;
     medianSoldPrice = avgSoldPrice;
   } else if (rangeMatch) {
     // Only a range bucket visible
     const rLow = parseFloat(rangeMatch[1].replace(/,/g, ""));
     const rHigh = parseFloat(rangeMatch[2].replace(/,/g, ""));
-    avgSoldPrice = Math.round((rLow + rHigh) / 2 * 100) / 100;
+    avgSoldPrice = Math.round(((rLow + rHigh) / 2) * 100) / 100;
     medianSoldPrice = avgSoldPrice;
     minSoldPrice = Math.round(rLow * 0.7 * 100) / 100;
     maxSoldPrice = Math.round(rHigh * 1.3 * 100) / 100;
@@ -289,7 +299,9 @@ function median(nums: number[]): number {
   if (nums.length === 0) return 0;
   const sorted = [...nums].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  return sorted.length % 2 !== 0
+    ? sorted[mid]
+    : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 function percentile(sorted: number[], p: number): number {
@@ -335,10 +347,9 @@ serve(async (req) => {
     const cached = cache.get(cacheKey);
     if (cached && cached.expiresAt > now) {
       console.log(`[keyword-research] Cache hit for "${query}"`);
-      return new Response(
-        JSON.stringify({ ...cached.data, fromCache: true }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ ...cached.data, fromCache: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
@@ -357,7 +368,8 @@ serve(async (req) => {
 
     const soldCount = soldData.soldCount;
     // Use Browse API `total` field for the active count (more accurate than page count)
-    const activeCount = activeResult.total > 0 ? activeResult.total : activeResult.count;
+    const activeCount =
+      activeResult.total > 0 ? activeResult.total : activeResult.count;
     const total = soldCount + activeCount;
 
     // Sell-through rate: sold / (sold + active)
@@ -370,14 +382,19 @@ serve(async (req) => {
 
     // Active price stats from Browse API results
     const activePrices = activeResult.prices.sort((a, b) => a - b);
-    const avgActivePrice = activePrices.length > 0
-      ? round2(activePrices.reduce((s, p) => s + p, 0) / activePrices.length)
-      : null;
+    const avgActivePrice =
+      activePrices.length > 0
+        ? round2(activePrices.reduce((s, p) => s + p, 0) / activePrices.length)
+        : null;
     const minActivePrice = activePrices.length > 0 ? activePrices[0] : null;
-    const maxActivePrice = activePrices.length > 0 ? activePrices[activePrices.length - 1] : null;
-    const medianActivePrice = activePrices.length > 0 ? round2(median(activePrices)) : null;
-    const p25ActivePrice = activePrices.length > 0 ? round2(percentile(activePrices, 25)) : null;
-    const p75ActivePrice = activePrices.length > 0 ? round2(percentile(activePrices, 75)) : null;
+    const maxActivePrice =
+      activePrices.length > 0 ? activePrices[activePrices.length - 1] : null;
+    const medianActivePrice =
+      activePrices.length > 0 ? round2(median(activePrices)) : null;
+    const p25ActivePrice =
+      activePrices.length > 0 ? round2(percentile(activePrices, 25)) : null;
+    const p75ActivePrice =
+      activePrices.length > 0 ? round2(percentile(activePrices, 75)) : null;
 
     // Competition level (based on active count from API total)
     let competitionLevel: "low" | "medium" | "high" = "low";

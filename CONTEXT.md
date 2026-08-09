@@ -16,18 +16,18 @@
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| Frontend | React 18 + Vite + TypeScript + Tailwind CSS |
-| UI Components | shadcn/ui |
-| Backend | Supabase (PostgreSQL + Edge Functions) |
-| Edge Function runtime | Deno (TypeScript) |
-| Auth | Supabase Auth |
-| Payments | Stripe (in progress) |
-| Deployment (frontend) | Vercel |
-| Deployment (functions) | Supabase CLI via GitHub Actions |
-| CI/CD | GitHub Actions (`.github/workflows/`) |
-| Testing | Vitest (unit), Playwright (e2e) |
+| Layer                  | Technology                                  |
+| ---------------------- | ------------------------------------------- |
+| Frontend               | React 18 + Vite + TypeScript + Tailwind CSS |
+| UI Components          | shadcn/ui                                   |
+| Backend                | Supabase (PostgreSQL + Edge Functions)      |
+| Edge Function runtime  | Deno (TypeScript)                           |
+| Auth                   | Supabase Auth                               |
+| Payments               | Stripe (in progress)                        |
+| Deployment (frontend)  | Vercel                                      |
+| Deployment (functions) | Supabase CLI via GitHub Actions             |
+| CI/CD                  | GitHub Actions (`.github/workflows/`)       |
+| Testing                | Vitest (unit), Playwright (e2e)             |
 
 ---
 
@@ -73,23 +73,25 @@ listing-assistant-pro/
 
 This is the most critical and largest file (~5100 lines). Key exports and sections:
 
-| Symbol | Line (approx) | Purpose |
-|--------|---------------|---------|
-| `COIN_FIXED_VALUES_ALLOWED_IDS` | ~344 | Set of category IDs that get hardcoded `fixedValues` (Composition, etc.) |
-| `CATEGORY_ASPECT_RULES` | ~374 | Hardcoded aspect rules per eBay category — `required`, `preferred`, `defaults`, `fixedValues` |
-| `convertEbayAspectsToRule()` | ~110 | Converts dynamic DB/API aspects to rule format; auto-defaults SELECTION_ONLY with 1 value |
-| `isGrainBar()` | ~3669 | Override: forces `finalCategoryId = "3360"` for fractional grain bar listings |
-| `buildAndNormalizeAspects()` | ~3787 | Builds eBay aspects from itemSpecifics + category rule; fills defaults for required aspects |
-| Certification bridge | ~3815 | Derives `Certification` from `_coinConditionDetail` if not set by rule/specifics |
-| `conditionDescriptors` fetch | ~4158 | Fetches coin condition descriptors from eBay; distinguishes API exception vs. 0 results |
+| Symbol                          | Line (approx) | Purpose                                                                                       |
+| ------------------------------- | ------------- | --------------------------------------------------------------------------------------------- |
+| `COIN_FIXED_VALUES_ALLOWED_IDS` | ~344          | Set of category IDs that get hardcoded `fixedValues` (Composition, etc.)                      |
+| `CATEGORY_ASPECT_RULES`         | ~374          | Hardcoded aspect rules per eBay category — `required`, `preferred`, `defaults`, `fixedValues` |
+| `convertEbayAspectsToRule()`    | ~110          | Converts dynamic DB/API aspects to rule format; auto-defaults SELECTION_ONLY with 1 value     |
+| `isGrainBar()`                  | ~3669         | Override: forces `finalCategoryId = "3360"` for fractional grain bar listings                 |
+| `buildAndNormalizeAspects()`    | ~3787         | Builds eBay aspects from itemSpecifics + category rule; fills defaults for required aspects   |
+| Certification bridge            | ~3815         | Derives `Certification` from `_coinConditionDetail` if not set by rule/specifics              |
+| `conditionDescriptors` fetch    | ~4158         | Fetches coin condition descriptors from eBay; distinguishes API exception vs. 0 results       |
 
 ### Category Aspect Rule Design
+
 - Hardcoded rules in `CATEGORY_ASPECT_RULES` are merged with dynamic rules from `category_aspects_cache` DB table
 - Dynamic rules fetched from eBay Taxonomy API are cached in DB
 - `convertEbayAspectsToRule()` cannot auto-default `Certification` (multiple valid values) — must be in hardcoded `defaults` or bridge logic
 - Categories without entries in `CATEGORY_ASPECT_RULES` fall through to `__empty__` (no required, no defaults)
 
 ### eBay Coin Condition Detail
+
 - Stored in `itemSpecifics._coinConditionDetail`
 - Shape: `{ type: "raw" | "graded", graded?: { company: string, grade?: string, certNumber?: string } }`
 - Used by the Certification bridge (type=raw → "Uncertified", type=graded → company name e.g. "PCGS")
@@ -102,10 +104,12 @@ This is the most critical and largest file (~5100 lines). Key exports and sectio
 **Trigger:** Push to `main` with changes in `supabase/functions/**`
 
 **Important:** The `Push Database Migrations` step runs with:
+
 ```yaml
 continue-on-error: true
 timeout-minutes: 2
 ```
+
 This is **intentional** — `supabase db push` requires a direct PostgreSQL connection (`SUPABASE_DB_URL`) which is not available in GitHub Actions (only `SUPABASE_ACCESS_TOKEN` is set). Without this, the step hangs indefinitely at `Initialising login role...`. Schema changes must be applied manually.
 
 ---
@@ -113,17 +117,20 @@ This is **intentional** — `supabase db push` requires a direct PostgreSQL conn
 ## Environment Variables / Secrets
 
 ### Supabase Edge Functions (set in Supabase dashboard)
+
 - `OPENAI_API_KEY` — AI description/analysis generation
 - `EBAY_CLIENT_ID` / `EBAY_CLIENT_SECRET` — eBay API OAuth
 - `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` — Stripe
 - `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` — Supabase access
 
 ### GitHub Actions Secrets
+
 - `SUPABASE_ACCESS_TOKEN` — Supabase CLI auth (function deploy only, not DB push)
 - `SUPABASE_PROJECT_REF` — Project reference ID
 - `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` — Vercel deploy
 
 ### Frontend (Vercel env vars)
+
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 - `VITE_STRIPE_PUBLISHABLE_KEY`
@@ -132,35 +139,35 @@ This is **intentional** — `supabase db push` requires a direct PostgreSQL conn
 
 ## Supabase Database — Key Tables
 
-| Table | Purpose |
-|-------|---------|
-| `listings` | Core listing records with itemSpecifics JSON |
-| `ebay_tokens` | Per-user eBay OAuth tokens |
+| Table                    | Purpose                                        |
+| ------------------------ | ---------------------------------------------- |
+| `listings`               | Core listing records with itemSpecifics JSON   |
+| `ebay_tokens`            | Per-user eBay OAuth tokens                     |
 | `category_aspects_cache` | Cached eBay taxonomy aspect rules per category |
-| `subscriptions` | Stripe subscription state |
-| `users` | Supabase auth users + profile |
+| `subscriptions`          | Stripe subscription state                      |
+| `users`                  | Supabase auth users + profile                  |
 
 ---
 
 ## Stripe Pricing Tiers
 
-| Tier | Monthly | Annual |
-|------|---------|--------|
-| Starter | $19/mo | $190/yr |
-| Pro | $49/mo | $490/yr |
-| Shop | $99/mo | $990/yr |
+| Tier    | Monthly | Annual  |
+| ------- | ------- | ------- |
+| Starter | $19/mo  | $190/yr |
+| Pro     | $49/mo  | $490/yr |
+| Shop    | $99/mo  | $990/yr |
 
 ---
 
 ## eBay Category Quick Reference
 
-| Category ID | Name | Notes |
-|-------------|------|-------|
-| 41109 | Proof Sets | Coin condition descriptors required |
-| 3360 | Silver Bars & Rounds (grain bar) | Set by `isGrainBar()` override; Certification required |
-| 3361 | Silver Bars & Rounds | Standard bullion |
-| 178906 | Gold Bars | `CATEGORY_ASPECT_RULES` entry exists but empty required/defaults |
-| 39489 | Silver Bars | Same as above — watch for future Certification requirement |
+| Category ID | Name                             | Notes                                                            |
+| ----------- | -------------------------------- | ---------------------------------------------------------------- |
+| 41109       | Proof Sets                       | Coin condition descriptors required                              |
+| 3360        | Silver Bars & Rounds (grain bar) | Set by `isGrainBar()` override; Certification required           |
+| 3361        | Silver Bars & Rounds             | Standard bullion                                                 |
+| 178906      | Gold Bars                        | `CATEGORY_ASPECT_RULES` entry exists but empty required/defaults |
+| 39489       | Silver Bars                      | Same as above — watch for future Certification requirement       |
 
 ---
 

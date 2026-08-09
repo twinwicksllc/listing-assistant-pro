@@ -38,7 +38,8 @@ export default function AdminPage() {
     setLoading(true);
     setError("");
     try {
-      const { data: result, error: fnErr } = await supabase.functions.invoke("system-status");
+      const { data: result, error: fnErr } =
+        await supabase.functions.invoke("system-status");
       if (fnErr) throw new Error(fnErr.message);
       if (result?.error) throw new Error(result.error);
       setData(result);
@@ -69,8 +70,12 @@ export default function AdminPage() {
             <div className="flex items-center gap-2">
               <Shield className="w-5 h-5 text-primary" />
               <div>
-                <h1 className="text-lg font-bold text-foreground">Admin Control Center</h1>
-                <p className="text-xs text-muted-foreground">System status & metrics</p>
+                <h1 className="text-lg font-bold text-foreground">
+                  Admin Control Center
+                </h1>
+                <p className="text-xs text-muted-foreground">
+                  System status & metrics
+                </p>
               </div>
             </div>
           </div>
@@ -95,7 +100,9 @@ export default function AdminPage() {
         {loading && !data ? (
           <div className="text-center py-20">
             <RefreshCw className="w-6 h-6 text-muted-foreground animate-spin mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">Loading system status...</p>
+            <p className="text-sm text-muted-foreground">
+              Loading system status...
+            </p>
           </div>
         ) : data ? (
           <>
@@ -105,10 +112,12 @@ export default function AdminPage() {
                 <DollarSign className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm font-semibold text-destructive">
-                    ⚠️ Monthly AI Cost Alert: ${data.gemini.estimatedCost.toFixed(2)}
+                    ⚠️ Monthly AI Cost Alert: $
+                    {data.gemini.estimatedCost.toFixed(2)}
                   </p>
                   <p className="text-xs text-destructive/80 mt-0.5">
-                    Gemini API costs have exceeded the $50.00 monthly threshold. Review usage patterns or consider rate limiting.
+                    Gemini API costs have exceeded the $50.00 monthly threshold.
+                    Review usage patterns or consider rate limiting.
                   </p>
                 </div>
               </div>
@@ -119,19 +128,25 @@ export default function AdminPage() {
               <div className="flex items-center gap-3">
                 <Bell className="w-4 h-4 text-muted-foreground" />
                 <div>
-                  <p className="text-sm font-medium text-foreground">Last Cost Alert Sent</p>
+                  <p className="text-sm font-medium text-foreground">
+                    Last Cost Alert Sent
+                  </p>
                   {data.lastCostAlert ? (
                     <p className="text-xs text-muted-foreground">
-                      {new Date(data.lastCostAlert.sent_at).toLocaleString()} — $
-                      {Number(data.lastCostAlert.total_cost).toFixed(2)} across{" "}
+                      {new Date(data.lastCostAlert.sent_at).toLocaleString()} —
+                      ${Number(data.lastCostAlert.total_cost).toFixed(2)} across{" "}
                       {data.lastCostAlert.total_requests} requests
                     </p>
                   ) : (
-                    <p className="text-xs text-muted-foreground">No alerts sent yet</p>
+                    <p className="text-xs text-muted-foreground">
+                      No alerts sent yet
+                    </p>
                   )}
                 </div>
               </div>
-              {data.lastCostAlert && <CheckCircle2 className="w-4 h-4 text-accent flex-shrink-0" />}
+              {data.lastCostAlert && (
+                <CheckCircle2 className="w-4 h-4 text-accent flex-shrink-0" />
+              )}
             </div>
 
             <SystemStatusChecklist data={data} />

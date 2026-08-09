@@ -26,7 +26,10 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
+      "react-refresh/only-export-components": [
+        "warn",
+        { allowConstantExport: true },
+      ],
       // Turned off — codebase uses `any` extensively for Supabase/eBay API responses
       // and edge function payloads where runtime shapes are unknown.
       "@typescript-eslint/no-explicit-any": "off",

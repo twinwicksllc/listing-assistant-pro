@@ -26,8 +26,10 @@ export const MAX_VIDEO_DURATION_SEC = 12;
 export const MIN_VIDEO_DURATION_SEC = 2;
 
 // Identity API endpoints
-export const IDENTITY_API_PROD = "https://apiz.ebay.com/commerce/identity/v1/user/";
-export const IDENTITY_API_SANDBOX = "https://apiz.sandbox.ebay.com/commerce/identity/v1/user/";
+export const IDENTITY_API_PROD =
+  "https://apiz.ebay.com/commerce/identity/v1/user/";
+export const IDENTITY_API_SANDBOX =
+  "https://apiz.sandbox.ebay.com/commerce/identity/v1/user/";
 
 // Marketplace constants
 export const EBAY_MARKETPLACE_ID = "EBAY_US";

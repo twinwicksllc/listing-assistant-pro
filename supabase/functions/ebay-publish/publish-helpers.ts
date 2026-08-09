@@ -87,7 +87,7 @@ export async function fetchDynamicAspectRule(
           {
             method: "POST",
             headers: {
-              "Authorization": `Bearer ${supabaseServiceKey}`,
+              Authorization: `Bearer ${supabaseServiceKey}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({ action: "aspects", categoryId }),
@@ -149,23 +149,25 @@ export const _categoryConditionCache: Map<
   Array<{ conditionId: number; conditionDescription: string }>
 > = new Map();
 
-export function normalizeConditionDescriptorToEnum(value: string | undefined | null): string {
+export function normalizeConditionDescriptorToEnum(
+  value: string | undefined | null,
+): string {
   const raw = String(value ?? "").trim();
   if (!raw) return "";
 
   const lowered = raw.toLowerCase();
   const aliases: Record<string, string> = {
     "brand new": "NEW",
-    "new": "NEW",
+    new: "NEW",
     "new other (see details)": "NEW_OTHER",
     "new-open box": "NEW_OTHER",
     "new open box": "NEW_OTHER",
     "open box": "LIKE_NEW",
     "like new": "LIKE_NEW",
-    "used": "USED_EXCELLENT",
+    used: "USED_EXCELLENT",
     "very good": "USED_VERY_GOOD",
-    "good": "USED_GOOD",
-    "acceptable": "USED_ACCEPTABLE",
+    good: "USED_GOOD",
+    acceptable: "USED_ACCEPTABLE",
     "for parts or not working": "FOR_PARTS_OR_NOT_WORKING",
     "certified refurbished": "CERTIFIED_REFURBISHED",
     "excellent refurbished": "EXCELLENT_REFURBISHED",
@@ -177,14 +179,20 @@ export function normalizeConditionDescriptorToEnum(value: string | undefined | n
     "pre-owned poor": "PRE_OWNED_POOR",
     "digital good": "DIGITAL_GOOD",
     "certified pre-owned": "CERTIFIED_PRE_OWNED",
-    "remanufactured": "REMANUFACTURED",
-    "retread": "RETREAD",
-    "damaged": "DAMAGED",
-    "graded": "LIKE_NEW", // 2750 = Graded (per eBay condition ID docs)
-    "ungraded": "USED_VERY_GOOD", // 4000 = Ungraded (per eBay condition ID docs)
+    remanufactured: "REMANUFACTURED",
+    retread: "RETREAD",
+    damaged: "DAMAGED",
+    graded: "LIKE_NEW", // 2750 = Graded (per eBay condition ID docs)
+    ungraded: "USED_VERY_GOOD", // 4000 = Ungraded (per eBay condition ID docs)
   };
 
-  return aliases[lowered] ?? raw.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "");
+  return (
+    aliases[lowered] ??
+    raw
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "_")
+      .replace(/^_|_$/g, "")
+  );
 }
 
 export async function fetchDynamicCategoryConditions(
@@ -202,7 +210,7 @@ export async function fetchDynamicCategoryConditions(
     const resp = await fetch(`${supabaseUrl}/functions/v1/category-lookup`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${supabaseServiceKey}`,
+        Authorization: `Bearer ${supabaseServiceKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ action: "conditions", categoryId }),
@@ -219,19 +227,29 @@ export async function fetchDynamicCategoryConditions(
     const data = await resp.json();
     const conditions = Array.isArray(data?.conditions)
       ? data.conditions
-        .map((condition: any) => ({
-          conditionId: Number(condition.conditionId),
-          conditionDescription: String(condition.conditionDescription ?? "").trim(),
-        }))
-        .filter((condition: { conditionId: number; conditionDescription: string }) =>
-          Number.isFinite(condition.conditionId) && condition.conditionDescription
-        )
+          .map((condition: any) => ({
+            conditionId: Number(condition.conditionId),
+            conditionDescription: String(
+              condition.conditionDescription ?? "",
+            ).trim(),
+          }))
+          .filter(
+            (condition: {
+              conditionId: number;
+              conditionDescription: string;
+            }) =>
+              Number.isFinite(condition.conditionId) &&
+              condition.conditionDescription,
+          )
       : [];
 
     _categoryConditionCache.set(categoryId, conditions);
     return conditions;
   } catch (err) {
-    console.warn(`fetchDynamicCategoryConditions: error for ${categoryId}:`, err);
+    console.warn(
+      `fetchDynamicCategoryConditions: error for ${categoryId}:`,
+      err,
+    );
     return [];
   }
 }
@@ -244,38 +262,48 @@ export async function fetchDynamicCategoryConditions(
 // ================================================================
 
 type CategoryTreeType =
-  | "coin"
-  | "bullion"
-  | "trading_card"
-  | "collectible"
-  | "other";
+  "coin" | "bullion" | "trading_card" | "collectible" | "other";
 
 export async function detectCategoryTree(
   categoryId: string,
   supabase: any,
 ): Promise<CategoryTreeType> {
   // eBay June 2026 mandate top-level parent IDs — always "coin" regardless of breadcrumb
-  const COIN_MANDATE_PARENT_IDS = new Set(["253", "256", "3377", "4733", "18466"]);
+  const COIN_MANDATE_PARENT_IDS = new Set([
+    "253",
+    "256",
+    "3377",
+    "4733",
+    "18466",
+  ]);
   if (COIN_MANDATE_PARENT_IDS.has(categoryId)) return "coin";
 
   const classifyBreadcrumb = (breadcrumb: string): CategoryTreeType => {
     const normalized = breadcrumb.toLowerCase();
     if (normalized.includes("bullion")) return "bullion";
     if (
-      normalized.includes("coins:") || normalized.includes("coins >") ||
-      normalized.includes("paper money") || normalized.includes("numismatic") ||
+      normalized.includes("coins:") ||
+      normalized.includes("coins >") ||
+      normalized.includes("paper money") ||
+      normalized.includes("numismatic") ||
       normalized.includes("coins & paper money")
-    ) return "coin";
+    )
+      return "coin";
     if (
       normalized.includes("trading cards") ||
       normalized.includes("collectible card games")
-    ) return "trading_card";
+    )
+      return "trading_card";
     if (
-      normalized.includes("collectibles") || normalized.includes("toys &") ||
+      normalized.includes("collectibles") ||
+      normalized.includes("toys &") ||
       normalized.includes("stuffed animal") ||
-      normalized.includes("action figure") || normalized.includes("funko") ||
-      normalized.includes("lego") || normalized.includes("board game")
-    ) return "collectible";
+      normalized.includes("action figure") ||
+      normalized.includes("funko") ||
+      normalized.includes("lego") ||
+      normalized.includes("board game")
+    )
+      return "collectible";
     return "other";
   };
 
@@ -290,7 +318,9 @@ export async function detectCategoryTree(
 
     const breadcrumb = taxonomy?.breadcrumb || taxonomy?.category_name || "";
     if (breadcrumb) return classifyBreadcrumb(String(breadcrumb));
-  } catch (_) { /* fall through to legacy mapping */ }
+  } catch (_) {
+    /* fall through to legacy mapping */
+  }
 
   // Legacy fallback for categories cached before the taxonomy sync existed.
   try {
@@ -302,7 +332,9 @@ export async function detectCategoryTree(
 
     const breadcrumb = mapping?.breadcrumb || mapping?.category_name || "";
     if (breadcrumb) return classifyBreadcrumb(String(breadcrumb));
-  } catch (_) { /* fall through to hardcoded */ }
+  } catch (_) {
+    /* fall through to hardcoded */
+  }
 
   // Fallback to hardcoded sets
   if (HARDCODED_BULLION_CATEGORY_IDS.has(categoryId)) return "bullion";
@@ -485,7 +517,7 @@ export const COIN_FIXED_VALUES_ALLOWED_IDS = new Set([
 
 export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
   // Empty rule set for non-coin categories with no specific aspect requirements
-  "__empty__": {
+  __empty__: {
     required: [],
     preferred: [],
     defaults: {},
@@ -500,7 +532,7 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Fineness",
     ],
     defaults: {},
-    fixedValues: { "Composition": "Gold" },
+    fixedValues: { Composition: "Gold" },
   },
   // Silver Bars & Rounds
   "39489": {
@@ -512,7 +544,7 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Fineness",
     ],
     defaults: {},
-    fixedValues: { "Composition": "Silver" },
+    fixedValues: { Composition: "Silver" },
   },
   // Silver Bars & Rounds (grain bar category; same Certification requirement as bullion)
   "3360": {
@@ -523,15 +555,15 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Brand/Mint",
       "Fineness",
     ],
-    defaults: { "Certification": "Uncertified" },
-    fixedValues: { "Composition": "Silver" },
+    defaults: { Certification: "Uncertified" },
+    fixedValues: { Composition: "Silver" },
   },
   // Other Silver Bullion
   "3361": {
     required: ["Certification"],
     preferred: ["Type"],
-    defaults: { "Certification": "Uncertified" },
-    fixedValues: { "Composition": "Silver" },
+    defaults: { Certification: "Uncertified" },
+    fixedValues: { Composition: "Silver" },
   },
   // Ancient Coins
   "532": {
@@ -556,11 +588,11 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Denomination",
     ],
     defaults: {
-      "Certification": "Uncertified",
+      Certification: "Uncertified",
       "Circulated/Uncirculated": "Unknown",
-      "Denomination": "$1",
+      Denomination: "$1",
     },
-    fixedValues: { "Denomination": "$1" },
+    fixedValues: { Denomination: "$1" },
   },
   // Morgan Dollars 1878-1921
   "39464": {
@@ -574,14 +606,14 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Denomination",
     ],
     defaults: {
-      "Certification": "Uncertified",
+      Certification: "Uncertified",
       "Circulated/Uncirculated": "Unknown",
-      "Denomination": "$1",
+      Denomination: "$1",
     },
     fixedValues: {
-      "Denomination": "$1",
-      "Composition": "Silver",
-      "Fineness": "0.900",
+      Denomination: "$1",
+      Composition: "Silver",
+      Fineness: "0.900",
     },
   },
   // Peace Dollars 1921-1935
@@ -595,14 +627,14 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Denomination",
     ],
     defaults: {
-      "Certification": "Uncertified",
+      Certification: "Uncertified",
       "Circulated/Uncirculated": "Unknown",
-      "Denomination": "$1",
+      Denomination: "$1",
     },
     fixedValues: {
-      "Denomination": "$1",
-      "Composition": "Silver",
-      "Fineness": "0.900",
+      Denomination: "$1",
+      Composition: "Silver",
+      Fineness: "0.900",
     },
   },
   // Barber Half Dollars 1892-1915
@@ -616,14 +648,14 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Denomination",
     ],
     defaults: {
-      "Certification": "Uncertified",
+      Certification: "Uncertified",
       "Circulated/Uncirculated": "Unknown",
-      "Denomination": "50C",
+      Denomination: "50C",
     },
     fixedValues: {
-      "Denomination": "50C",
-      "Composition": "Silver",
-      "Fineness": "0.900",
+      Denomination: "50C",
+      Composition: "Silver",
+      Fineness: "0.900",
     },
   },
   // Liberty Walking Half Dollars 1916-1947
@@ -637,14 +669,14 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Denomination",
     ],
     defaults: {
-      "Certification": "Uncertified",
+      Certification: "Uncertified",
       "Circulated/Uncirculated": "Unknown",
-      "Denomination": "50C",
+      Denomination: "50C",
     },
     fixedValues: {
-      "Denomination": "50C",
-      "Composition": "Silver",
-      "Fineness": "0.900",
+      Denomination: "50C",
+      Composition: "Silver",
+      Fineness: "0.900",
     },
   },
   // Kennedy Half Dollars (1964-present) - Coins & Paper Money > US Coins
@@ -652,11 +684,11 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
     required: ["Certification", "Circulated/Uncirculated"],
     preferred: ["Year", "Mint Location", "Strike Type", "Denomination"],
     defaults: {
-      "Certification": "Uncertified",
+      Certification: "Uncertified",
       "Circulated/Uncirculated": "Unknown",
-      "Denomination": "50C",
+      Denomination: "50C",
     },
-    fixedValues: { "Denomination": "50C" },
+    fixedValues: { Denomination: "50C" },
   },
   // Franklin Half Dollars (1948-1963) - Coins & Paper Money > US Coins
   "11973": {
@@ -669,14 +701,14 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Denomination",
     ],
     defaults: {
-      "Certification": "Uncertified",
+      Certification: "Uncertified",
       "Circulated/Uncirculated": "Unknown",
-      "Denomination": "50C",
+      Denomination: "50C",
     },
     fixedValues: {
-      "Denomination": "50C",
-      "Composition": "Silver",
-      "Fineness": "0.900",
+      Denomination: "50C",
+      Composition: "Silver",
+      Fineness: "0.900",
     },
   },
   // Wheat Penny (1909-1958) - Coins & Paper Money > US Coins
@@ -690,49 +722,49 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Denomination",
     ],
     defaults: {
-      "Certification": "Uncertified",
+      Certification: "Uncertified",
       "Circulated/Uncirculated": "Unknown",
-      "Denomination": "1C",
+      Denomination: "1C",
     },
-    fixedValues: { "Denomination": "1C", "Composition": "Copper" },
+    fixedValues: { Denomination: "1C", Composition: "Copper" },
   },
   // Indian Head Cent
   "41084": {
     required: ["Certification", "Circulated/Uncirculated", "Material"],
     preferred: ["Year", "Mint Location", "Strike Type", "Denomination"],
     defaults: {
-      "Certification": "Uncertified",
+      Certification: "Uncertified",
       "Circulated/Uncirculated": "Unknown",
-      "Denomination": "1C",
-      "Material": "Copper",
+      Denomination: "1C",
+      Material: "Copper",
     },
-    fixedValues: { "Denomination": "1C", "Material": "Copper" },
+    fixedValues: { Denomination: "1C", Material: "Copper" },
   },
   // Braided Hair Large Cent (1793-1857)
   "11950": {
     required: ["Certification", "Circulated/Uncirculated", "Material"],
     preferred: ["Year", "Mint Location", "Strike Type", "Denomination"],
     defaults: {
-      "Certification": "Uncertified",
+      Certification: "Uncertified",
       "Circulated/Uncirculated": "Unknown",
-      "Denomination": "1C",
-      "Material": "Copper",
+      Denomination: "1C",
+      Material: "Copper",
     },
-    fixedValues: { "Denomination": "1C", "Material": "Copper" },
+    fixedValues: { Denomination: "1C", Material: "Copper" },
   },
   // American Silver Eagle
   "41111": {
     required: ["Certification", "Circulated/Uncirculated"],
     preferred: ["Year", "Strike Type", "Denomination"],
     defaults: {
-      "Certification": "Uncertified",
+      Certification: "Uncertified",
       "Circulated/Uncirculated": "Uncirculated",
-      "Denomination": "$1",
+      Denomination: "$1",
     },
     fixedValues: {
-      "Denomination": "$1",
-      "Composition": "Silver",
-      "Fineness": "0.999",
+      Denomination: "$1",
+      Composition: "Silver",
+      Fineness: "0.999",
     },
   },
   // Copper Rounds (non-legal-tender) - Coins & Paper Money > Bullion > Other Bullion
@@ -746,11 +778,11 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Brand/Mint",
     ],
     defaults: {
-      "Certification": "Uncertified",
+      Certification: "Uncertified",
       "Circulated/Uncirculated": "Unknown",
-      "Type": "Round",
+      Type: "Round",
     },
-    fixedValues: { "Composition": "Copper" },
+    fixedValues: { Composition: "Copper" },
   },
   // US Coin Proof Sets
   "41109": {
@@ -762,7 +794,7 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Country/Region of Manufacture",
     ],
     defaults: {
-      "Certification": "U.S. Mint",
+      Certification: "U.S. Mint",
       "Circulated/Uncirculated": "Uncirculated",
       "Strike Type": "Proof",
       "Country/Region of Manufacture": "United States",
@@ -773,7 +805,7 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
     required: ["Certification", "Circulated/Uncirculated"],
     preferred: ["Year", "Mint Location", "Country/Region of Manufacture"],
     defaults: {
-      "Certification": "U.S. Mint",
+      Certification: "U.S. Mint",
       "Circulated/Uncirculated": "Uncirculated",
       "Country/Region of Manufacture": "United States",
     },
@@ -789,7 +821,7 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Fineness",
     ],
     defaults: {
-      "Certification": "Uncertified",
+      Certification: "Uncertified",
       "Circulated/Uncirculated": "Unknown",
     },
   },
@@ -814,7 +846,7 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Fineness",
       "Strike Type",
     ],
-    defaults: { "Certification": "Uncertified", "Department": "World Coins" },
+    defaults: { Certification: "Uncertified", Department: "World Coins" },
   },
   // Coins: World (taxonomy parent 256) — same Department requirement as 45243.
   "256": {
@@ -830,7 +862,7 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Materials sourced from",
       "Fineness",
     ],
-    defaults: { "Certification": "Uncertified", "Department": "World Coins" },
+    defaults: { Certification: "Uncertified", Department: "World Coins" },
   },
   // Coins: World > South Pacific (Cook Islands, Fiji, Niue, Palau, Tuvalu, …).
   // Graded-friendly leaf; also requires Department = "World Coins".
@@ -848,7 +880,7 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Fineness",
       "Strike Type",
     ],
-    defaults: { "Certification": "Uncertified", "Department": "World Coins" },
+    defaults: { Certification: "Uncertified", Department: "World Coins" },
   },
   // ── Collectibles / Toys / Trading Cards ──────────────────────────────────
   // Sports Trading Cards
@@ -865,7 +897,7 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Grade",
       "Professional Grader",
     ],
-    defaults: { "Sport": "Baseball" },
+    defaults: { Sport: "Baseball" },
   },
   // Baseball Cards
   "64482": {
@@ -878,13 +910,13 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Features",
       "Grade",
     ],
-    defaults: { "Sport": "Baseball" },
+    defaults: { Sport: "Baseball" },
   },
   // Sports Cards General (parent)
   "213": {
     required: ["Sport"],
     preferred: ["Player/Athlete", "Card Manufacturer", "Year", "Team"],
-    defaults: { "Sport": "Baseball" },
+    defaults: { Sport: "Baseball" },
   },
   // Pokémon Trading Card Games
   "183454": {
@@ -923,7 +955,7 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Features",
       "Animal",
     ],
-    defaults: { "Brand": "Ty" },
+    defaults: { Brand: "Ty" },
   },
   // Stuffed Animals & Plush
   "19209": {
@@ -949,7 +981,7 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Features",
       "Number in Series",
     ],
-    defaults: { "Brand": "Funko" },
+    defaults: { Brand: "Funko" },
   },
   // Action Figures
   "246": {
@@ -975,7 +1007,7 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
       "Features",
       "Number of Pieces",
     ],
-    defaults: { "Brand": "LEGO" },
+    defaults: { Brand: "LEGO" },
   },
   // Board Games
   "19016": {
@@ -996,9 +1028,9 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
 // VALID ASPECT VALUES
 // ================================================================
 export const VALID_ASPECT_VALUES: Record<string, Set<string>> = {
-  "Certification": CERTIFICATION_ASPECT_VALUES,
+  Certification: CERTIFICATION_ASPECT_VALUES,
   "Circulated/Uncirculated": new Set(["Uncirculated", "Circulated", "Unknown"]),
-  "Shape": new Set(["Bar", "Round"]),
+  Shape: new Set(["Bar", "Round"]),
   "Strike Type": new Set([
     "Business",
     "Proof",
@@ -1007,7 +1039,7 @@ export const VALID_ASPECT_VALUES: Record<string, Set<string>> = {
     "Satin",
     "Matte",
   ]),
-  "Composition": new Set([
+  Composition: new Set([
     "Gold",
     "Silver",
     "Platinum",
@@ -1025,7 +1057,7 @@ export const VALID_ASPECT_VALUES: Record<string, Set<string>> = {
     "Zinc Plated Steel",
   ]),
   // Copper coin color designations (used in World Coins and US Copper coins)
-  "Color": new Set(["RD", "RB", "BN", "BM"]), // BM = Bi-Metallic
+  Color: new Set(["RD", "RB", "BN", "BM"]), // BM = Bi-Metallic
 };
 
 // ================================================================
@@ -1089,7 +1121,10 @@ export function normalizeGrade(value: string): string {
   return v;
 }
 
-export function normalizeDenomination(value: string, categoryId: string): string {
+export function normalizeDenomination(
+  value: string,
+  categoryId: string,
+): string {
   const v = value.trim();
   const halfDollarCategories = new Set(["11971", "41099"]);
   const dollarCategories = new Set(["11981", "39464", "11980"]);
@@ -1168,7 +1203,10 @@ export function normalizePreciousMetalContent(value: string): string {
 
   // Step 1: Strip " Troy" (case-insensitive) -> normalize to plain oz
   // "1 Troy oz" -> "1 oz", "0.1607 Troy oz" -> "0.1607 oz"
-  const stripped = v.replace(/\s*troy\s*/i, " ").replace(/\s+/g, " ").trim();
+  const stripped = v
+    .replace(/\s*troy\s*/i, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
   // Step 2: Try to parse gram values
   // Matches: "5g", "5 g", "5 grams", "5.0g", "10 grams"
@@ -1247,9 +1285,9 @@ export function normalizePreciousMetalContent(value: string): string {
     // Map decimal oz values to eBay fraction strings
     const ozFractionMap: [number, string][] = [
       [0.05, "1/20 oz"],
-      [0.10, "1/10 oz"],
+      [0.1, "1/10 oz"],
       [0.25, "1/4 oz"],
-      [0.50, "1/2 oz"],
+      [0.5, "1/2 oz"],
       [1.0, "1 oz"],
       [2.0, "2 oz"],
       [5.0, "5 oz"],
@@ -1257,7 +1295,7 @@ export function normalizePreciousMetalContent(value: string): string {
       [32.15, "1 kilo"],
     ];
     for (const [target, label] of ozFractionMap) {
-      if (Math.abs(ozVal - target) / target < 0.10) return label;
+      if (Math.abs(ozVal - target) / target < 0.1) return label;
     }
 
     return `${ozVal} oz`;
@@ -1277,42 +1315,42 @@ export function normalizePreciousMetalContent(value: string): string {
 
 export const ASPECT_KEY_ALIASES: Record<string, string> = {
   "Circulated/Uncirculated": "Circulated/Uncirculated",
-  "CirculatedUncirculated": "Circulated/Uncirculated",
+  CirculatedUncirculated: "Circulated/Uncirculated",
   "Mint Location": "Mint Location",
-  "MintLocation": "Mint Location",
+  MintLocation: "Mint Location",
   "Strike Type": "Strike Type",
-  "StrikeType": "Strike Type",
+  StrikeType: "Strike Type",
   "KM Number": "KM Number",
-  "KMNumber": "KM Number",
+  KMNumber: "KM Number",
   "Precious Metal Content per Unit": "Precious Metal Content per Unit",
-  "PreciousMetalContentperUnit": "Precious Metal Content per Unit",
+  PreciousMetalContentperUnit: "Precious Metal Content per Unit",
   "Metal Content": "Precious Metal Content per Unit",
   "Brand/Mint": "Brand/Mint",
   "Manufacturer/Mint": "Brand/Mint",
-  "Fineness": "Fineness",
-  "Certification": "Certification",
-  "Denomination": "Denomination",
-  "Composition": "Composition",
-  "Year": "Year",
-  "Shape": "Shape",
-  "Grade": "Grade",
-  "Coin": "Coin",
+  Fineness: "Fineness",
+  Certification: "Certification",
+  Denomination: "Denomination",
+  Composition: "Composition",
+  Year: "Year",
+  Shape: "Shape",
+  Grade: "Grade",
+  Coin: "Coin",
   "Coin Type": "Coin",
   "Coin/Bullion Type": "Coin",
   "Country of Origin": "Country of Origin",
   "Country/Region of Manufacture": "Country of Origin",
   "Total Precious Metal Content": "Total Precious Metal Content",
   "Certification Number": "Certification Number",
-  "Variety": "Variety",
-  "Era": "Era",
+  Variety: "Variety",
+  Era: "Era",
   "Cleaned/Uncleaned": "Cleaned/Uncleaned",
-  "Provenance": "Provenance",
+  Provenance: "Provenance",
   // These were previously in NON_ASPECT_KEYS; now pass through as real eBay aspects:
-  "Type": "Type", // required by bullion categories (e.g. 261186 Silver Bullion Coins) — errorId 25002
-  "Color": "Color", // used by 45243 (World Coins) for copper/bronze coins
+  Type: "Type", // required by bullion categories (e.g. 261186 Silver Bullion Coins) — errorId 25002
+  Color: "Color", // used by 45243 (World Coins) for copper/bronze coins
   "Materials sourced from": "Materials sourced from",
-  "Brand": "Brand", // required by 45243 (World Coins) — errorId 25002 when missing
-  "Department": "Department", // required by Coins: World (45243/256/3392) — errorId 25002 when missing
+  Brand: "Brand", // required by 45243 (World Coins) — errorId 25002 when missing
+  Department: "Department", // required by Coins: World (45243/256/3392) — errorId 25002 when missing
 };
 
 export const NON_ASPECT_KEYS = new Set([
@@ -1380,13 +1418,16 @@ export function buildAndNormalizeAspects(
     // Guard against AI hallucination where description text is placed in this field:
     // drop the value if it exceeds 65 chars OR contains sentence-like punctuation (periods, commas in long strings) that no valid country name would ever contain.
     if (key === "Country of Origin") {
-      const looksLikeSentence = value.length > 65 || /[.!?]/.test(value) ||
+      const looksLikeSentence =
+        value.length > 65 ||
+        /[.!?]/.test(value) ||
         (value.includes(",") && value.length > 40);
       if (looksLikeSentence) {
         console.warn(
-          `buildAndNormalizeAspects: dropping Country of Origin — value looks like AI-generated text (${value.length} chars): "${
-            value.slice(0, 80)
-          }..."`,
+          `buildAndNormalizeAspects: dropping Country of Origin — value looks like AI-generated text (${value.length} chars): "${value.slice(
+            0,
+            80,
+          )}..."`,
         );
         continue;
       }
@@ -1404,7 +1445,9 @@ export function buildAndNormalizeAspects(
 
   // Apply fixed values ONLY for coin/bullion categories (deficiency #5 guard)
   // Strip "__dynamic_" prefix to get the real category ID for allowlist check
-  const realCatId = categoryId.startsWith("__dynamic_") ? categoryId.slice(10) : categoryId;
+  const realCatId = categoryId.startsWith("__dynamic_")
+    ? categoryId.slice(10)
+    : categoryId;
   if (rule?.fixedValues && COIN_FIXED_VALUES_ALLOWED_IDS.has(realCatId)) {
     for (const [k, v] of Object.entries(rule.fixedValues)) {
       aspects[k] = [v];
@@ -1421,8 +1464,10 @@ export function buildAndNormalizeAspects(
   if (SPORT_CARD_CATS.has(realCatId) && !aspects["Sport"]) {
     // Try to infer sport from item title or existing aspects
     const textToSearch = (
-      (aspects["Player/Athlete"]?.[0] || "") + " " +
-      (aspects["Team"]?.[0] || "") + " " +
+      (aspects["Player/Athlete"]?.[0] || "") +
+      " " +
+      (aspects["Team"]?.[0] || "") +
+      " " +
       (aspects["Card Manufacturer"]?.[0] || "")
     ).toLowerCase();
 
@@ -1545,28 +1590,38 @@ export const CONDITION_DESCRIPTIONS: Record<string, string> = {
   NEW_OTHER: "New without original packaging or tags.",
   NEW_WITH_DEFECTS: "New item with minor cosmetic defects.",
   LIKE_NEW: "Professionally graded and encapsulated coin.", // Used as conditionDescription for graded coins (LIKE_NEW = 2750 = Graded)
-  CERTIFIED_REFURBISHED: "Professionally refurbished and certified to work like new.",
+  CERTIFIED_REFURBISHED:
+    "Professionally refurbished and certified to work like new.",
   SELLER_REFURBISHED: "Seller-refurbished item in good working condition.",
   // USED_* — correct conditions for Coins & Paper Money category tree
   // NOTE: Do NOT include numerical grades (AU-50, MS-65, etc.) in descriptions unless coin is certified by NGC, PCGS, ANACS, ICG, CAC, ICCS, PMG, or Legacy Currency Grading
   USED_EXCELLENT: "Lightly circulated. Shows minimal wear on high points only.",
-  USED_VERY_GOOD: "Moderately circulated. Major details clear with moderate wear.",
+  USED_VERY_GOOD:
+    "Moderately circulated. Major details clear with moderate wear.",
   USED_GOOD: "Heavily circulated. All major features visible but worn.",
-  USED_ACCEPTABLE: "Heavily worn but identifiable. Outline and major features visible.",
-  FOR_PARTS_OR_NOT_WORKING: "Damaged, holed, bent, or corroded. Not suitable for collecting.",
+  USED_ACCEPTABLE:
+    "Heavily worn but identifiable. Outline and major features visible.",
+  FOR_PARTS_OR_NOT_WORKING:
+    "Damaged, holed, bent, or corroded. Not suitable for collecting.",
   // Trading card / collectible conditions
   VERY_GOOD: "Item in very good condition with minor wear.",
   GOOD: "Item in good condition with moderate wear.",
-  ACCEPTABLE: "Item in acceptable condition with heavy wear but still functional.",
+  ACCEPTABLE:
+    "Item in acceptable condition with heavy wear but still functional.",
   // Legacy aliases — redirect to their USED_* equivalents
-  EXCELLENT_REFURBISHED: "Lightly circulated. Shows minimal wear on high points only.",
-  VERY_GOOD_REFURBISHED: "Moderately circulated. Major details clear with moderate wear.",
-  GOOD_REFURBISHED: "Moderately circulated. Major details clear with moderate wear.",
+  EXCELLENT_REFURBISHED:
+    "Lightly circulated. Shows minimal wear on high points only.",
+  VERY_GOOD_REFURBISHED:
+    "Moderately circulated. Major details clear with moderate wear.",
+  GOOD_REFURBISHED:
+    "Moderately circulated. Major details clear with moderate wear.",
   PRE_OWNED_GOOD: "Lightly circulated. Shows minimal wear on high points only.",
   PRE_OWNED_FAIR: "Heavily circulated. All major features visible but worn.",
-  PRE_OWNED_POOR: "Heavily worn but identifiable. Outline and major features visible.",
+  PRE_OWNED_POOR:
+    "Heavily worn but identifiable. Outline and major features visible.",
   DIGITAL_GOOD: "Digital asset delivered electronically.",
-  CERTIFIED_PRE_OWNED: "Certified pre-owned item meeting manufacturer or seller program standards.",
+  CERTIFIED_PRE_OWNED:
+    "Certified pre-owned item meeting manufacturer or seller program standards.",
   REMANUFACTURED: "Properly rebuilt and restored to full working order.",
   RETREAD: "Used tire with professionally replaced tread.",
   DAMAGED: "Damaged item that may require repair or service.",
@@ -1588,44 +1643,44 @@ export const LEGACY_CONDITION_MAP: Record<string, string> = {
   // Root cause: analyze-item was using c.conditionDescription ("New", "Used", etc.)
   // as the enum value in the Gemini prompt, causing errorId 2004 on publish.
   // Fixed in analyze-item (PR #221) but keeping these mappings as a permanent backstop.
-  "New": "NEW",
+  New: "NEW",
   "New other (see details)": "NEW_OTHER",
   "New with defects": "NEW_WITH_DEFECTS",
   "Certified refurbished": "CERTIFIED_REFURBISHED",
   "Seller refurbished": "SELLER_REFURBISHED",
   "Like New": "LIKE_NEW",
-  "Used": "USED_EXCELLENT",
+  Used: "USED_EXCELLENT",
   "Very Good": "USED_VERY_GOOD",
-  "Good": "USED_GOOD",
-  "Acceptable": "USED_ACCEPTABLE",
+  Good: "USED_GOOD",
+  Acceptable: "USED_ACCEPTABLE",
   "For parts or not working": "FOR_PARTS_OR_NOT_WORKING",
   // Also handle plain lowercase variants
-  "new": "NEW",
-  "used": "USED_EXCELLENT",
+  new: "NEW",
+  used: "USED_EXCELLENT",
   "very good": "USED_VERY_GOOD",
-  "good": "USED_GOOD",
-  "acceptable": "USED_ACCEPTABLE",
+  good: "USED_GOOD",
+  acceptable: "USED_ACCEPTABLE",
   "like new": "LIKE_NEW",
   "Digital Good": "DIGITAL_GOOD",
   "digital good": "DIGITAL_GOOD",
   "Certified pre-owned": "CERTIFIED_PRE_OWNED",
   "certified pre-owned": "CERTIFIED_PRE_OWNED",
-  "Remanufactured": "REMANUFACTURED",
-  "remanufactured": "REMANUFACTURED",
-  "Retread": "RETREAD",
-  "retread": "RETREAD",
-  "Damaged": "DAMAGED",
-  "damaged": "DAMAGED",
+  Remanufactured: "REMANUFACTURED",
+  remanufactured: "REMANUFACTURED",
+  Retread: "RETREAD",
+  retread: "RETREAD",
+  Damaged: "DAMAGED",
+  damaged: "DAMAGED",
 
   // eBay returns "Ungraded" / "Graded" as conditionDescription strings for some coin
   // categories (e.g. 3377 Coins: Canada, 3379, etc.). These are NOT valid Inventory API
   // condition enum values and will cause errorId 2004 "Could not serialize field [condition]".
   // Map to the closest valid USED_* coin condition.
-  "Ungraded": "USED_VERY_GOOD",
-  "ungraded": "USED_VERY_GOOD",
-  "UNGRADED": "USED_VERY_GOOD",
-  "Graded": "NEW",
-  "GRADED": "NEW",
+  Ungraded: "USED_VERY_GOOD",
+  ungraded: "USED_VERY_GOOD",
+  UNGRADED: "USED_VERY_GOOD",
+  Graded: "NEW",
+  GRADED: "NEW",
 };
 
 // Condition normalization now uses both hardcoded fallback sets (from top of file)
@@ -1651,8 +1706,8 @@ export function normalizeConditionForCategory(
   const condition = normalizeConditionDescriptorToEnum(rawCondition);
 
   // Use provided tree type or fall back to hardcoded ID sets
-  const resolvedCategoryTreeType = categoryTreeType ||
-    detectCategoryTreeSync(categoryId ?? "", itemType);
+  const resolvedCategoryTreeType =
+    categoryTreeType || detectCategoryTreeSync(categoryId ?? "", itemType);
 
   const isCoin = resolvedCategoryTreeType === "coin";
   const isBullion = resolvedCategoryTreeType === "bullion";
@@ -1813,7 +1868,8 @@ export function detectCategoryTreeSync(
 
   // Also handle the legacy 261xxx range for silver/gold bullion coins/bars
   if (
-    /^261[0-9]{3}$/.test(categoryId) && parseInt(categoryId) >= 261000 &&
+    /^261[0-9]{3}$/.test(categoryId) &&
+    parseInt(categoryId) >= 261000 &&
     parseInt(categoryId) <= 261076
   ) {
     return "bullion";
@@ -2026,18 +2082,24 @@ export function markdownToHtml(markdown: string): string {
 // eBay errorId 25019: grades in title/description of uncertified coins
 // trigger a policy violation even if the Grade aspect was already dropped.
 // ----------------------------------------------------------------
-export const GRADE_PATTERN = /\b(MS|PR|PF|AU|XF|EF|VF|F|VG|G|AG|FA|PO|P)-?\s*(\d{1,2})\b/gi;
+export const GRADE_PATTERN =
+  /\b(MS|PR|PF|AU|XF|EF|VF|F|VG|G|AG|FA|PO|P)-?\s*(\d{1,2})\b/gi;
 export function stripGradesIfUncertified(
   text: string,
   certificationValue: string | undefined,
 ): string {
   if (!text) return text;
   // If certified by an approved grader, grades are allowed — don't strip
-  if (certificationValue && CERTIFIED_GRADING_SERVICES.has(certificationValue)) {
+  if (
+    certificationValue &&
+    CERTIFIED_GRADING_SERVICES.has(certificationValue)
+  ) {
     return text;
   }
   // Strip grade patterns from text (replace with empty string)
-  const stripped = text.replace(GRADE_PATTERN, "").replace(/\s{2,}/g, " ")
+  const stripped = text
+    .replace(GRADE_PATTERN, "")
+    .replace(/\s{2,}/g, " ")
     .trim();
   if (stripped !== text) {
     console.log(
@@ -2081,7 +2143,8 @@ export function buildFixedPriceOffer(params: {
       bestOfferEnabled: true,
     };
     if (
-      params.bestOfferAutoAcceptPrice && params.bestOfferAutoAcceptPrice > 0
+      params.bestOfferAutoAcceptPrice &&
+      params.bestOfferAutoAcceptPrice > 0
     ) {
       bestOfferTerms.autoAcceptPrice = {
         value: params.bestOfferAutoAcceptPrice.toFixed(2),
@@ -2089,7 +2152,8 @@ export function buildFixedPriceOffer(params: {
       };
     }
     if (
-      params.bestOfferAutoDeclinePrice && params.bestOfferAutoDeclinePrice > 0
+      params.bestOfferAutoDeclinePrice &&
+      params.bestOfferAutoDeclinePrice > 0
     ) {
       bestOfferTerms.autoDeclinePrice = {
         value: params.bestOfferAutoDeclinePrice.toFixed(2),
@@ -2104,7 +2168,8 @@ export function buildFixedPriceOffer(params: {
     marketplaceId: "EBAY_US",
     format: "FIXED_PRICE",
     listingDescription: params.description,
-    availableQuantity: params.quantity && params.quantity > 1 ? params.quantity : 1,
+    availableQuantity:
+      params.quantity && params.quantity > 1 ? params.quantity : 1,
     listingDuration: FIXED_PRICE_DURATION,
     merchantLocationKey: params.merchantLocationKey,
     pricingSummary: {
@@ -2323,9 +2388,12 @@ export async function ensureInventoryLocation(
 
   try {
     const errJson = JSON.parse(errText);
-    alreadyExists = Array.isArray(errJson.errors) &&
+    alreadyExists =
+      Array.isArray(errJson.errors) &&
       errJson.errors.some((e: { errorId: number }) => e.errorId === 25803);
-  } catch { /* not JSON */ }
+  } catch {
+    /* not JSON */
+  }
 
   if (resp.status === 409 || alreadyExists) {
     console.log(
@@ -2413,9 +2481,14 @@ export async function ensureInventoryLocation(
     let fallbackAlreadyExists = false;
     try {
       const fallbackErrJson = JSON.parse(fallbackErrText);
-      fallbackAlreadyExists = Array.isArray(fallbackErrJson.errors) &&
-        fallbackErrJson.errors.some((e: { errorId: number }) => e.errorId === 25803);
-    } catch { /* not JSON */ }
+      fallbackAlreadyExists =
+        Array.isArray(fallbackErrJson.errors) &&
+        fallbackErrJson.errors.some(
+          (e: { errorId: number }) => e.errorId === 25803,
+        );
+    } catch {
+      /* not JSON */
+    }
 
     if (fallbackResp.status === 409 || fallbackAlreadyExists) {
       // This postal code was used before — the location already exists with the right address.
@@ -2468,7 +2541,11 @@ export const COIN_CONDITION_DESCRIPTOR_PARENT_IDS = new Set([
 /** In-memory per-invocation cache for coin condition descriptor lookup results */
 export const _coinDescriptorCache: Map<
   string,
-  Array<{ descriptorId: string; descriptorName: string; values: Array<{ id: string; name: string }> }>
+  Array<{
+    descriptorId: string;
+    descriptorName: string;
+    values: Array<{ id: string; name: string }>;
+  }>
 > = new Map();
 
 /**
@@ -2486,21 +2563,21 @@ export async function fetchCoinConditionDescriptors(
   clientId: string,
   clientSecret: string,
   apiBase: string,
-): Promise<
-  Array<{
-    descriptorId: string;
-    descriptorName: string;
-    values: Array<{ id: string; name: string }>;
-    mode?: string; // "FREE_TEXT" for certification number
-  }> | null
-> {
+): Promise<Array<{
+  descriptorId: string;
+  descriptorName: string;
+  values: Array<{ id: string; name: string }>;
+  mode?: string; // "FREE_TEXT" for certification number
+}> | null> {
   const cacheKey = `${apiBase}:${categoryId}`;
   if (_coinDescriptorCache.has(cacheKey)) {
     console.log(`fetchCoinConditionDescriptors: cache hit for ${categoryId}`);
     return _coinDescriptorCache.get(cacheKey)!;
   }
 
-  console.log(`fetchCoinConditionDescriptors: cache miss for ${categoryId} — fetching from eBay Metadata API`);
+  console.log(
+    `fetchCoinConditionDescriptors: cache miss for ${categoryId} — fetching from eBay Metadata API`,
+  );
 
   try {
     // Step 1: Get app token for Metadata API
@@ -2509,7 +2586,9 @@ export async function fetchCoinConditionDescriptors(
       : "https://api.ebay.com/identity/v1/oauth2/token";
     const credentials = btoa(`${clientId}:${clientSecret}`);
 
-    console.log(`fetchCoinConditionDescriptors: requesting app token from ${tokenUrl}`);
+    console.log(
+      `fetchCoinConditionDescriptors: requesting app token from ${tokenUrl}`,
+    );
     const tokenResp = await fetchWithTimeout(tokenUrl, {
       method: "POST",
       headers: {
@@ -2532,21 +2611,28 @@ export async function fetchCoinConditionDescriptors(
     try {
       tokenData = await tokenResp.json();
     } catch (parseErr) {
-      console.error(`fetchCoinConditionDescriptors: failed to parse token response:`, parseErr);
+      console.error(
+        `fetchCoinConditionDescriptors: failed to parse token response:`,
+        parseErr,
+      );
       return null;
     }
 
     const appToken = tokenData?.access_token;
     if (!appToken) {
-      console.error(`fetchCoinConditionDescriptors: app token response missing access_token. Response:`, tokenData);
+      console.error(
+        `fetchCoinConditionDescriptors: app token response missing access_token. Response:`,
+        tokenData,
+      );
       return null;
     }
 
     // Step 2: Call Metadata API for this category
-    const metaBase = apiBase.includes("sandbox") ? "https://api.sandbox.ebay.com" : "https://api.ebay.com";
+    const metaBase = apiBase.includes("sandbox")
+      ? "https://api.sandbox.ebay.com"
+      : "https://api.ebay.com";
     const encodedFilter = encodeURIComponent(`categoryIds:{${categoryId}}`);
-    const metaUrl =
-      `${metaBase}/sell/metadata/v1/marketplace/EBAY_US/get_item_condition_policies?filter=${encodedFilter}`;
+    const metaUrl = `${metaBase}/sell/metadata/v1/marketplace/EBAY_US/get_item_condition_policies?filter=${encodedFilter}`;
 
     console.log(
       `fetchCoinConditionDescriptors: requesting condition policies from ${metaUrl.replace(encodedFilter, "...")}`,
@@ -2562,9 +2648,10 @@ export async function fetchCoinConditionDescriptors(
     if (!metaResp.ok) {
       const metaErrText = await metaResp.text();
       console.error(
-        `fetchCoinConditionDescriptors: Metadata API request FAILED (${metaResp.status}) for category ${categoryId}: ${
-          metaErrText.slice(0, 300)
-        }`,
+        `fetchCoinConditionDescriptors: Metadata API request FAILED (${metaResp.status}) for category ${categoryId}: ${metaErrText.slice(
+          0,
+          300,
+        )}`,
       );
       return null;
     }
@@ -2588,9 +2675,10 @@ export async function fetchCoinConditionDescriptors(
       metaData = JSON.parse(metaBodyText);
     } catch (parseErr) {
       console.warn(
-        `fetchCoinConditionDescriptors: could not parse Metadata API response for category ${categoryId} (treating as no policies). Body starts with: ${
-          metaBodyText.slice(0, 120)
-        }`,
+        `fetchCoinConditionDescriptors: could not parse Metadata API response for category ${categoryId} (treating as no policies). Body starts with: ${metaBodyText.slice(
+          0,
+          120,
+        )}`,
         parseErr,
       );
       return null;
@@ -2635,7 +2723,8 @@ export async function fetchCoinConditionDescriptors(
         for (const desc of conditionDescriptors) {
           const id = String(desc.conditionDescriptorId ?? "").trim();
           const name = String(desc.conditionDescriptorName ?? "").trim();
-          const mode = desc.conditionDescriptorConstraint?.mode as string | undefined;
+          const mode = desc.conditionDescriptorConstraint?.mode as
+            string | undefined;
 
           if (!id || !name) {
             console.warn(
@@ -2661,7 +2750,9 @@ export async function fetchCoinConditionDescriptors(
           if (Array.isArray(conditionValues)) {
             for (const val of conditionValues) {
               const valId = String(val.conditionDescriptorValueId ?? "").trim();
-              const valName = String(val.conditionDescriptorValueName ?? "").trim();
+              const valName = String(
+                val.conditionDescriptorValueName ?? "",
+              ).trim();
               if (valId && valName) {
                 entry.values.set(valId, valName);
                 valueCount++;
@@ -2676,19 +2767,28 @@ export async function fetchCoinConditionDescriptors(
       descriptorId: d.descriptorId,
       descriptorName: d.descriptorName,
       mode: d.mode,
-      values: Array.from(d.values.entries()).map(([id, name]) => ({ id, name })),
+      values: Array.from(d.values.entries()).map(([id, name]) => ({
+        id,
+        name,
+      })),
     }));
 
     console.log(
       `fetchCoinConditionDescriptors: SUCCESS — found ${result.length} descriptors (${descriptorCount} raw, ${valueCount} values) for category ${categoryId}:`,
-      result.map((d) => `${d.descriptorName}(${d.descriptorId})[${d.values.length}v]`).join(", "),
+      result
+        .map(
+          (d) => `${d.descriptorName}(${d.descriptorId})[${d.values.length}v]`,
+        )
+        .join(", "),
     );
 
     _coinDescriptorCache.set(cacheKey, result);
     return result;
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : String(e);
-    console.error(`fetchCoinConditionDescriptors: EXCEPTION for category ${categoryId}: ${errMsg}`);
+    console.error(
+      `fetchCoinConditionDescriptors: EXCEPTION for category ${categoryId}: ${errMsg}`,
+    );
     if (e instanceof Error) {
       console.error(`  Stack: ${e.stack?.split("\n").slice(0, 3).join("\n")}`);
     }
@@ -2709,14 +2809,17 @@ export interface CoinConditionDetailRaw {
   type: "raw";
   rawCondition: string;
 }
-export type CoinConditionDetail = CoinConditionDetailGraded | CoinConditionDetailRaw;
+export type CoinConditionDetail =
+  CoinConditionDetailGraded | CoinConditionDetailRaw;
 
 export function normalizeCoinConditionDetail(
   input: unknown,
 ): CoinConditionDetail | null {
   if (!input || typeof input !== "object") return null;
   const rec = input as Record<string, unknown>;
-  const type = String(rec.type ?? "").trim().toLowerCase();
+  const type = String(rec.type ?? "")
+    .trim()
+    .toLowerCase();
 
   if (type === "raw") {
     const rawCondition = String(rec.rawCondition ?? "").trim();
@@ -2727,11 +2830,15 @@ export function normalizeCoinConditionDetail(
   if (type === "graded") {
     const gradingCompany = String(
       rec.gradingCompany ??
-        (typeof rec.graded === "object" && rec.graded ? (rec.graded as Record<string, unknown>).company : ""),
+        (typeof rec.graded === "object" && rec.graded
+          ? (rec.graded as Record<string, unknown>).company
+          : ""),
     ).trim();
     const grade = String(
       rec.grade ??
-        (typeof rec.graded === "object" && rec.graded ? (rec.graded as Record<string, unknown>).grade : ""),
+        (typeof rec.graded === "object" && rec.graded
+          ? (rec.graded as Record<string, unknown>).grade
+          : ""),
     ).trim();
     const certificationNumber = String(
       rec.certificationNumber ??
@@ -2752,7 +2859,9 @@ export function normalizeCoinConditionDetail(
   return null;
 }
 
-export function mapConditionEnumToRawCoinTier(conditionEnum: string): CoinConditionDetailRaw["rawCondition"] {
+export function mapConditionEnumToRawCoinTier(
+  conditionEnum: string,
+): CoinConditionDetailRaw["rawCondition"] {
   const normalized = String(conditionEnum || "").toUpperCase();
   if (["NEW", "NEW_OTHER", "NEW_WITH_DEFECTS"].includes(normalized)) {
     return "Uncirculated";
@@ -2773,7 +2882,9 @@ export function synthesizeCoinConditionDetail(
   const cert = String(itemSpecifics["Certification"] ?? "").trim();
   const grade = String(itemSpecifics["Grade"] ?? "").trim();
   const certNum = String(itemSpecifics["Certification Number"] ?? "").trim();
-  const circulated = String(itemSpecifics["Circulated/Uncirculated"] ?? "").trim().toLowerCase();
+  const circulated = String(itemSpecifics["Circulated/Uncirculated"] ?? "")
+    .trim()
+    .toLowerCase();
 
   const isUncertified = !cert || /^uncertified$/i.test(cert);
   const hasUsableGrade = !!grade && !/^ungraded$/i.test(grade);
@@ -2827,7 +2938,11 @@ export function buildCoinConditionDescriptors(
     values: Array<{ id: string; name: string }>;
   }>,
 ): Array<{ name: string; values?: string[]; additionalInfo?: string }> | null {
-  const result: Array<{ name: string; values?: string[]; additionalInfo?: string }> = [];
+  const result: Array<{
+    name: string;
+    values?: string[];
+    additionalInfo?: string;
+  }> = [];
 
   if (detail.type === "graded") {
     const graded = detail as CoinConditionDetailGraded;
@@ -2855,11 +2970,13 @@ export function buildCoinConditionDescriptors(
     }
 
     // Find Grader descriptor
-    const graderDesc = descriptors.find(
-      (d) => d.descriptorName.toLowerCase().includes("grader"),
+    const graderDesc = descriptors.find((d) =>
+      d.descriptorName.toLowerCase().includes("grader"),
     );
     if (!graderDesc) {
-      console.error("buildCoinConditionDescriptors: Grader descriptor not found in eBay response");
+      console.error(
+        "buildCoinConditionDescriptors: Grader descriptor not found in eBay response",
+      );
       throw new Error(
         `eBay Metadata API error: Grader descriptor not found for this category. Please try again.`,
       );
@@ -2899,8 +3016,8 @@ export function buildCoinConditionDescriptors(
         d.descriptorName.toLowerCase().includes("numerical grade") ||
         d.descriptorName.toLowerCase() === "grade",
     );
-    const letterGradeDesc = descriptors.find(
-      (d) => d.descriptorName.toLowerCase().includes("letter grade"),
+    const letterGradeDesc = descriptors.find((d) =>
+      d.descriptorName.toLowerCase().includes("letter grade"),
     );
 
     if (numberGradeDesc && numberPart) {
@@ -2908,7 +3025,10 @@ export function buildCoinConditionDescriptors(
         (v) => v.name === numberPart || v.name.startsWith(numberPart),
       );
       if (numVal) {
-        result.push({ name: numberGradeDesc.descriptorId, values: [numVal.id] });
+        result.push({
+          name: numberGradeDesc.descriptorId,
+          values: [numVal.id],
+        });
       } else {
         console.warn(
           `buildCoinConditionDescriptors: no value ID for number grade="${numberPart}". ` +
@@ -2919,25 +3039,27 @@ export function buildCoinConditionDescriptors(
 
     if (letterGradeDesc && letterPart) {
       const letterGradeAliases: Record<string, string[]> = {
-        "MS": ["mint state", "ms"],
-        "PR": ["proof", "pf", "pr"],
-        "PF": ["proof", "pf", "pr"],
-        "AU": ["about uncirculated", "au"],
-        "EF": ["extremely fine", "ef", "xf"],
-        "XF": ["extremely fine", "ef", "xf"],
-        "VF": ["very fine", "vf"],
-        "F": ["fine", "f"],
-        "VG": ["very good", "vg"],
-        "G": ["good", "g"],
-        "AG": ["about good", "ag"],
-        "FR": ["fair", "fr"],
-        "PO": ["poor", "po"],
-        "SP": ["specimen", "sp"],
-        "SMS": ["special mint set", "sms"],
-        "DCAM": ["deep cameo", "dcam"],
-        "CAM": ["cameo", "cam"],
+        MS: ["mint state", "ms"],
+        PR: ["proof", "pf", "pr"],
+        PF: ["proof", "pf", "pr"],
+        AU: ["about uncirculated", "au"],
+        EF: ["extremely fine", "ef", "xf"],
+        XF: ["extremely fine", "ef", "xf"],
+        VF: ["very fine", "vf"],
+        F: ["fine", "f"],
+        VG: ["very good", "vg"],
+        G: ["good", "g"],
+        AG: ["about good", "ag"],
+        FR: ["fair", "fr"],
+        PO: ["poor", "po"],
+        SP: ["specimen", "sp"],
+        SMS: ["special mint set", "sms"],
+        DCAM: ["deep cameo", "dcam"],
+        CAM: ["cameo", "cam"],
       };
-      const aliases = letterGradeAliases[letterPart.toUpperCase()] ?? [letterPart.toLowerCase()];
+      const aliases = letterGradeAliases[letterPart.toUpperCase()] ?? [
+        letterPart.toLowerCase(),
+      ];
       if (suffixPart) {
         const suffixAliases = letterGradeAliases[suffixPart.toUpperCase()];
         if (suffixAliases) aliases.push(...suffixAliases);
@@ -2948,7 +3070,10 @@ export function buildCoinConditionDescriptors(
           v.name.toLowerCase() === letterPart.toLowerCase(),
       );
       if (letterVal) {
-        result.push({ name: letterGradeDesc.descriptorId, values: [letterVal.id] });
+        result.push({
+          name: letterGradeDesc.descriptorId,
+          values: [letterVal.id],
+        });
       } else {
         console.warn(
           `buildCoinConditionDescriptors: no value ID for letter grade="${letterPart}". ` +
@@ -2998,7 +3123,9 @@ export function buildCoinConditionDescriptors(
         d.descriptorName.toLowerCase().includes("condition"),
     );
     if (!coinCondDesc) {
-      console.error("buildCoinConditionDescriptors: Coin Condition descriptor not found in eBay response");
+      console.error(
+        "buildCoinConditionDescriptors: Coin Condition descriptor not found in eBay response",
+      );
       throw new Error(
         `eBay Metadata API error: Coin Condition descriptor not found for this category. Please try again.`,
       );
@@ -3029,7 +3156,10 @@ export function buildCoinConditionDescriptors(
             `Available values: ${coinCondDesc.values.map((v) => v.name).join(", ")}`,
         );
       }
-      result.push({ name: coinCondDesc.descriptorId, values: [condValueBroad.id] });
+      result.push({
+        name: coinCondDesc.descriptorId,
+        values: [condValueBroad.id],
+      });
       return result;
     }
 
@@ -3049,7 +3179,10 @@ export function buildCoinConditionDescriptors(
 // Keep the create_draft action readable by splitting each major publish
 // responsibility into a focused helper while preserving the existing flow.
 
-export async function generateDraftSku(incomingSku: unknown, userId: unknown): Promise<string> {
+export async function generateDraftSku(
+  incomingSku: unknown,
+  userId: unknown,
+): Promise<string> {
   let sku = incomingSku ? String(incomingSku) : "";
   if (sku) return sku;
 
@@ -3066,8 +3199,10 @@ export async function generateDraftSku(incomingSku: unknown, userId: unknown): P
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
         // Atomically increment next_sku_sequence via RPC and get the new value
-        const { data: seqNum, error: seqError } = await supabase
-          .rpc("increment_sku_sequence", { user_id: userId });
+        const { data: seqNum, error: seqError } = await supabase.rpc(
+          "increment_sku_sequence",
+          { user_id: userId },
+        );
 
         if (seqError || seqNum == null) {
           console.error(
@@ -3138,8 +3273,7 @@ export async function resolveAspectCategory(finalCategoryId: string): Promise<{
       );
       if (
         dynamicRule &&
-        (dynamicRule.required.length > 0 ||
-          dynamicRule.preferred.length > 0)
+        (dynamicRule.required.length > 0 || dynamicRule.preferred.length > 0)
       ) {
         // Merge: dynamic rules provide required/preferred/defaults,
         // but hardcoded fixedValues still override (they encode known-correct values like Fineness for Morgan Dollars)
@@ -3245,10 +3379,7 @@ export function prepareListingDescription(
 
   // Strip grade patterns from title & description if coin is not certified (errorId 25019)
   // eBay scans title and description text for grade patterns even when Grade aspect is dropped
-  const finalTitle = stripGradesIfUncertified(
-    title,
-    finalCertValue,
-  );
+  const finalTitle = stripGradesIfUncertified(title, finalCertValue);
   const finalDescription = stripGradesIfUncertified(
     sanitizedDescription,
     finalCertValue,
@@ -3281,9 +3412,7 @@ export function toPositiveNumber(v: unknown): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-export function inferWeightLbFromSpecifics(
-  specifics: unknown,
-): number | null {
+export function inferWeightLbFromSpecifics(specifics: unknown): number | null {
   if (!specifics || typeof specifics !== "object") return null;
   const rec = specifics as Record<string, unknown>;
   const raw = String(
@@ -3302,7 +3431,9 @@ export function inferWeightLbFromSpecifics(
   // weight field is the long-term solution.
   const MAX_SHIP_LB = 3.9;
 
-  const ozMatch = raw.match(/([0-9]+(?:\.[0-9]+)?)\s*(oz|ounce|ounces|troy\s*oz|toz)\b/);
+  const ozMatch = raw.match(
+    /([0-9]+(?:\.[0-9]+)?)\s*(oz|ounce|ounces|troy\s*oz|toz)\b/,
+  );
   if (ozMatch) {
     // Add light packaging buffer and enforce a sane minimum.
     const oz = Number(ozMatch[1]);
@@ -3332,29 +3463,35 @@ export function buildPackageWeightAndSize(
   itemSpecifics: unknown,
 ): Record<string, unknown> {
   let packageWeightAndSize: Record<string, unknown> | null = null;
-  if (payloadPackageWeightAndSize && typeof payloadPackageWeightAndSize === "object") {
+  if (
+    payloadPackageWeightAndSize &&
+    typeof payloadPackageWeightAndSize === "object"
+  ) {
     const incoming = payloadPackageWeightAndSize as Record<string, unknown>;
-    const incomingWeight = incoming.weight && typeof incoming.weight === "object"
-      ? (incoming.weight as Record<string, unknown>)
-      : null;
-    const incomingDimensions = incoming.dimensions && typeof incoming.dimensions === "object"
-      ? (incoming.dimensions as Record<string, unknown>)
-      : (incoming.dimension && typeof incoming.dimension === "object"
-        ? (incoming.dimension as Record<string, unknown>)
-        : null);
+    const incomingWeight =
+      incoming.weight && typeof incoming.weight === "object"
+        ? (incoming.weight as Record<string, unknown>)
+        : null;
+    const incomingDimensions =
+      incoming.dimensions && typeof incoming.dimensions === "object"
+        ? (incoming.dimensions as Record<string, unknown>)
+        : incoming.dimension && typeof incoming.dimension === "object"
+          ? (incoming.dimension as Record<string, unknown>)
+          : null;
     const incomingValue = toPositiveNumber(incomingWeight?.value);
 
     const dimLength = toPositiveNumber(incomingDimensions?.length);
     const dimWidth = toPositiveNumber(incomingDimensions?.width);
     const dimHeight = toPositiveNumber(incomingDimensions?.height);
-    const normalizedDimensions = (dimLength && dimWidth && dimHeight)
-      ? {
-        length: dimLength,
-        width: dimWidth,
-        height: dimHeight,
-        unit: String(incomingDimensions?.unit || "INCH").toUpperCase(),
-      }
-      : null;
+    const normalizedDimensions =
+      dimLength && dimWidth && dimHeight
+        ? {
+            length: dimLength,
+            width: dimWidth,
+            height: dimHeight,
+            unit: String(incomingDimensions?.unit || "INCH").toUpperCase(),
+          }
+        : null;
 
     if (incomingValue) {
       packageWeightAndSize = {
@@ -3379,7 +3516,10 @@ export function buildPackageWeightAndSize(
       },
     };
   } else {
-    console.log("[create_draft] final packageWeightAndSize:", JSON.stringify(packageWeightAndSize));
+    console.log(
+      "[create_draft] final packageWeightAndSize:",
+      JSON.stringify(packageWeightAndSize),
+    );
   }
 
   return packageWeightAndSize;
@@ -3416,14 +3556,20 @@ export async function resolveCategoryTreeType(
   return categoryTreeType;
 }
 
-export async function resolveDraftImageUrls(imageUrl: unknown, imageUrls: unknown): Promise<string[]> {
+export async function resolveDraftImageUrls(
+  imageUrl: unknown,
+  imageUrls: unknown,
+): Promise<string[]> {
   // Resolve imageUrl: eBay rejects base64 data: URLs (errorId 25721).
   // Upload to Supabase Storage if needed to get a public HTTPS URL.
   // Support multiple images: prefer `imageUrls` array if provided, else fall back to singular `imageUrl` for compatibility.
   const resolvedImageUrls: string[] = [];
-  const incomingImageUrls = Array.isArray(imageUrls) && imageUrls.length > 0
-    ? imageUrls
-    : (imageUrl ? [imageUrl as string] : []);
+  const incomingImageUrls =
+    Array.isArray(imageUrls) && imageUrls.length > 0
+      ? imageUrls
+      : imageUrl
+        ? [imageUrl as string]
+        : [];
   if (incomingImageUrls.length > 0) {
     console.log(
       `create_draft: received ${incomingImageUrls.length} image(s) — resolving to public URLs`,
@@ -3463,8 +3609,8 @@ export async function fetchDefaultPolicy(
     return null;
   }
   const data = await resp.json();
-  const policies = data[`${policyType}Policies`] ||
-    data[`${policyType}Policy`] || [];
+  const policies =
+    data[`${policyType}Policies`] || data[`${policyType}Policy`] || [];
   if (Array.isArray(policies) && policies.length > 0) {
     console.log(`Using ${policyType} policy: ${policies[0].name}`);
     return policies[0][`${policyType}PolicyId`] || null;
@@ -3492,23 +3638,18 @@ export async function resolveDraftBusinessPolicies({
   // Fetch policies — paymentPolicyId is optional for managed payments sellers.
   // Most eBay sellers enrolled in managed payments do NOT need a payment policy.
   // We only require fulfillment and return policies.
-  const [fulfillmentPolicyId, paymentPolicyId, returnPolicyId] = await Promise.all([
-    draftFulfillmentPolicyId ? Promise.resolve(String(draftFulfillmentPolicyId)) : fetchDefaultPolicy(
-      apiBase,
-      authHeaders,
-      "fulfillment",
-    ),
-    draftPaymentPolicyId ? Promise.resolve(String(draftPaymentPolicyId)) : fetchDefaultPolicy(
-      apiBase,
-      authHeaders,
-      "payment",
-    ),
-    draftReturnPolicyId ? Promise.resolve(String(draftReturnPolicyId)) : fetchDefaultPolicy(
-      apiBase,
-      authHeaders,
-      "return",
-    ),
-  ]);
+  const [fulfillmentPolicyId, paymentPolicyId, returnPolicyId] =
+    await Promise.all([
+      draftFulfillmentPolicyId
+        ? Promise.resolve(String(draftFulfillmentPolicyId))
+        : fetchDefaultPolicy(apiBase, authHeaders, "fulfillment"),
+      draftPaymentPolicyId
+        ? Promise.resolve(String(draftPaymentPolicyId))
+        : fetchDefaultPolicy(apiBase, authHeaders, "payment"),
+      draftReturnPolicyId
+        ? Promise.resolve(String(draftReturnPolicyId))
+        : fetchDefaultPolicy(apiBase, authHeaders, "return"),
+    ]);
 
   return { fulfillmentPolicyId, paymentPolicyId, returnPolicyId };
 }

@@ -1,5 +1,12 @@
 import { useState, useRef } from "react";
-import { Upload, X, Clock, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import {
+  Upload,
+  X,
+  Clock,
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -38,7 +45,8 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
   function normalizeListingId(val: string): string {
     if (!val) return val;
     // Strip ="..." wrapper produced by our escapeId export function
-    const formulaMatch = val.trim().match(/^="?(.*?)"?=?$/) || val.trim().match(/^=?"(.*)"$/);
+    const formulaMatch =
+      val.trim().match(/^="?(.*?)"?=?$/) || val.trim().match(/^=?"(.*)"$/);
     if (formulaMatch) return formulaMatch[1].trim();
     // Convert scientific notation to full integer
     if (/^-?\d+\.?\d*[eE][+-]?\d+$/.test(val.trim())) {
@@ -57,7 +65,9 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
     if (lines.length === 0) return { headers: [], rows: [] };
 
     const headerLine = lines[0];
-    const cols = headerLine.split(",").map((h) => h.trim().replace(/['"]/g, ""));
+    const cols = headerLine
+      .split(",")
+      .map((h) => h.trim().replace(/['"]/g, ""));
 
     const rows = lines.slice(1).map((line) => {
       const values = line.split(",").map((v) => v.trim().replace(/['"]/g, ""));
@@ -89,25 +99,44 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
       // Pass 1: exact matches (case-insensitive)
       parsedHeaders.forEach((h) => {
         const lower = h.toLowerCase().trim();
-        if (lower === "sku")                                                               autoMapping.skuCol      = h;
-        if (lower === "ebay_listing_id" || lower === "listing_id" || lower === "item_id") autoMapping.listingIdCol = h;
-        if (lower === "cogs" || lower === "cost" || lower === "item_cost")                autoMapping.cogsCol     = h;
+        if (lower === "sku") autoMapping.skuCol = h;
+        if (
+          lower === "ebay_listing_id" ||
+          lower === "listing_id" ||
+          lower === "item_id"
+        )
+          autoMapping.listingIdCol = h;
+        if (lower === "cogs" || lower === "cost" || lower === "item_cost")
+          autoMapping.cogsCol = h;
       });
       // Pass 2: partial matches only for fields not yet mapped
       parsedHeaders.forEach((h) => {
         const lower = h.toLowerCase().trim();
-        if (!autoMapping.skuCol      && lower.includes("sku"))                                       autoMapping.skuCol      = h;
-        if (!autoMapping.listingIdCol && (lower.includes("listing") || lower.includes("item_id")))   autoMapping.listingIdCol = h;
+        if (!autoMapping.skuCol && lower.includes("sku"))
+          autoMapping.skuCol = h;
+        if (
+          !autoMapping.listingIdCol &&
+          (lower.includes("listing") || lower.includes("item_id"))
+        )
+          autoMapping.listingIdCol = h;
         // Only fall back to partial match for cogs — never map "price" to cogs
-        if (!autoMapping.cogsCol     && (lower.includes("cogs") || lower.includes("cost")))          autoMapping.cogsCol     = h;
+        if (
+          !autoMapping.cogsCol &&
+          (lower.includes("cogs") || lower.includes("cost"))
+        )
+          autoMapping.cogsCol = h;
       });
       setMapping(autoMapping);
 
       // Show preview (first 5 rows only for display)
       const preview = rows.slice(0, 5).map((row) => ({
         sku: autoMapping.skuCol ? row[autoMapping.skuCol] : undefined,
-        listingId: autoMapping.listingIdCol ? normalizeListingId(row[autoMapping.listingIdCol]) : undefined,
-        cogs: autoMapping.cogsCol ? parseFloat(row[autoMapping.cogsCol]) : undefined,
+        listingId: autoMapping.listingIdCol
+          ? normalizeListingId(row[autoMapping.listingIdCol])
+          : undefined,
+        cogs: autoMapping.cogsCol
+          ? parseFloat(row[autoMapping.cogsCol])
+          : undefined,
         source: file.name,
       }));
       setPreviewRows(preview);
@@ -151,7 +180,9 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
 
       for (const row of rows) {
         const sku = mapping.skuCol ? row[mapping.skuCol]?.trim() : "";
-        const listingId = mapping.listingIdCol ? normalizeListingId(row[mapping.listingIdCol]?.trim()) : "";
+        const listingId = mapping.listingIdCol
+          ? normalizeListingId(row[mapping.listingIdCol]?.trim())
+          : "";
         const cogsStr = mapping.cogsCol ? row[mapping.cogsCol]?.trim() : "";
 
         if (!cogsStr) continue;
@@ -192,7 +223,7 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
       if (fetchError) throw fetchError;
 
       const byListingId = new Map<string, string>(); // listing_id -> row id
-      const bySku = new Map<string, string>();        // sku -> row id
+      const bySku = new Map<string, string>(); // sku -> row id
       for (const r of existingRows ?? []) {
         if (r.ebay_listing_id) byListingId.set(r.ebay_listing_id, r.id);
         if (r.ebay_sku) bySku.set(r.ebay_sku, r.id);
@@ -200,8 +231,14 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
       console.log("Existing DB rows:", existingRows?.length);
       console.log("byListingId map size:", byListingId.size);
       console.log("bySku map size:", bySku.size);
-      console.log("Sample byListingId keys (first 5):", Array.from(byListingId.keys()).slice(0, 5));
-      console.log("Sample bySku keys (first 5):", Array.from(bySku.keys()).slice(0, 5));
+      console.log(
+        "Sample byListingId keys (first 5):",
+        Array.from(byListingId.keys()).slice(0, 5),
+      );
+      console.log(
+        "Sample bySku keys (first 5):",
+        Array.from(bySku.keys()).slice(0, 5),
+      );
 
       // Step 2: Deduplicate CSV rows by SKU (primary) or listing_id (fallback).
       // IMPORTANT: Excel truncates long eBay listing IDs to scientific notation
@@ -225,11 +262,18 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
       // Priority: listing_id match > sku match > new insert.
       // Also track listing_ids and skus already scheduled for insert to prevent
       // duplicate inserts within the same batch.
-      const updates: Array<{ id: string; cogs: number; cogs_source: string; acquired_at: string; ebay_sku?: string | null; ebay_listing_id?: string | null }> = [];
+      const updates: Array<{
+        id: string;
+        cogs: number;
+        cogs_source: string;
+        acquired_at: string;
+        ebay_sku?: string | null;
+        ebay_listing_id?: string | null;
+      }> = [];
       const inserts: CsvRow[] = [];
-      const updatedIds = new Set<string>();         // prevent double-updating same DB row
+      const updatedIds = new Set<string>(); // prevent double-updating same DB row
       const insertedListingIds = new Set<string>(); // prevent duplicate inserts by listing_id
-      const insertedSkus = new Set<string>();       // prevent duplicate inserts by sku
+      const insertedSkus = new Set<string>(); // prevent duplicate inserts by sku
 
       for (const row of dedupedRows) {
         // Always include ebay_sku in updates so the DB row gets the SKU populated
@@ -266,7 +310,8 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
 
         // 3. Truly new row — check we haven't already queued an insert for this sku
         if (row.ebay_sku && insertedSkus.has(row.ebay_sku)) continue;
-        if (row.ebay_listing_id && insertedListingIds.has(row.ebay_listing_id)) continue;
+        if (row.ebay_listing_id && insertedListingIds.has(row.ebay_listing_id))
+          continue;
 
         inserts.push(row);
         if (row.ebay_sku) insertedSkus.add(row.ebay_sku);
@@ -308,7 +353,9 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
         if (error) throw error;
       }
 
-      toast.success(`Imported COGS for ${dedupedRows.length} items (${updates.length} updated, ${inserts.length} new)`);
+      toast.success(
+        `Imported COGS for ${dedupedRows.length} items (${updates.length} updated, ${inserts.length} new)`,
+      );
       setCsvText("");
       setHeaders([]);
       setMapping({});
@@ -341,8 +388,12 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
           >
             <Upload className="w-8 h-8 text-muted-foreground" />
             <div>
-              <p className="font-medium text-foreground">Drop CSV file here or click to upload</p>
-              <p className="text-xs text-muted-foreground">Excel files: Save as CSV format first</p>
+              <p className="font-medium text-foreground">
+                Drop CSV file here or click to upload
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Excel files: Save as CSV format first
+              </p>
             </div>
           </button>
         </div>
@@ -367,10 +418,17 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
           {/* Column Selection */}
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="text-xs font-medium text-muted-foreground block mb-1.5">SKU Column</label>
+              <label className="text-xs font-medium text-muted-foreground block mb-1.5">
+                SKU Column
+              </label>
               <select
                 value={mapping.skuCol || ""}
-                onChange={(e) => setMapping({ ...mapping, skuCol: e.target.value || undefined })}
+                onChange={(e) =>
+                  setMapping({
+                    ...mapping,
+                    skuCol: e.target.value || undefined,
+                  })
+                }
                 className="w-full bg-card border border-border rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="">— Skip —</option>
@@ -383,10 +441,17 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
             </div>
 
             <div>
-              <label className="text-xs font-medium text-muted-foreground block mb-1.5">Listing ID Column</label>
+              <label className="text-xs font-medium text-muted-foreground block mb-1.5">
+                Listing ID Column
+              </label>
               <select
                 value={mapping.listingIdCol || ""}
-                onChange={(e) => setMapping({ ...mapping, listingIdCol: e.target.value || undefined })}
+                onChange={(e) =>
+                  setMapping({
+                    ...mapping,
+                    listingIdCol: e.target.value || undefined,
+                  })
+                }
                 className="w-full bg-card border border-border rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="">— Skip —</option>
@@ -399,10 +464,17 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
             </div>
 
             <div>
-              <label className="text-xs font-medium text-muted-foreground block mb-1.5">COGS Column *</label>
+              <label className="text-xs font-medium text-muted-foreground block mb-1.5">
+                COGS Column *
+              </label>
               <select
                 value={mapping.cogsCol || ""}
-                onChange={(e) => setMapping({ ...mapping, cogsCol: e.target.value || undefined })}
+                onChange={(e) =>
+                  setMapping({
+                    ...mapping,
+                    cogsCol: e.target.value || undefined,
+                  })
+                }
                 className="w-full bg-card border border-border rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="">— Required —</option>
@@ -418,12 +490,25 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
           {/* Preview */}
           {previewRows.length > 0 && (
             <div className="border border-border rounded-lg p-3 bg-secondary/30">
-              <h4 className="text-xs font-semibold text-foreground mb-2">Preview (first 5 of {totalRows.toLocaleString()} rows)</h4>
+              <h4 className="text-xs font-semibold text-foreground mb-2">
+                Preview (first 5 of {totalRows.toLocaleString()} rows)
+              </h4>
               <div className="space-y-1 text-xs">
                 {previewRows.map((row, i) => (
-                  <div key={i} className="flex gap-2 p-1.5 bg-card rounded border border-border/50">
-                    {row.sku && <span className="flex-1 font-mono text-muted-foreground">SKU: {row.sku}</span>}
-                    {row.listingId && <span className="flex-1 font-mono text-muted-foreground">ID: {row.listingId}</span>}
+                  <div
+                    key={i}
+                    className="flex gap-2 p-1.5 bg-card rounded border border-border/50"
+                  >
+                    {row.sku && (
+                      <span className="flex-1 font-mono text-muted-foreground">
+                        SKU: {row.sku}
+                      </span>
+                    )}
+                    {row.listingId && (
+                      <span className="flex-1 font-mono text-muted-foreground">
+                        ID: {row.listingId}
+                      </span>
+                    )}
                     {row.cogs != null && (
                       <span className="flex-1 font-mono font-semibold text-emerald-600 dark:text-emerald-400">
                         ${row.cogs.toFixed(2)}
@@ -439,7 +524,10 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
           <div className="flex gap-2 p-2.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200/50 dark:border-blue-800/50 text-xs text-blue-900 dark:text-blue-400">
             <Clock className="w-4 h-4 shrink-0 mt-0.5" />
             <p>
-              All {totalRows.toLocaleString()} rows will be imported. Matches by Listing ID first, then SKU. Existing COGS values <strong>will be overwritten</strong> with the values from your CSV.
+              All {totalRows.toLocaleString()} rows will be imported. Matches by
+              Listing ID first, then SKU. Existing COGS values{" "}
+              <strong>will be overwritten</strong> with the values from your
+              CSV.
             </p>
           </div>
 
@@ -466,4 +554,3 @@ export function CsvCogsImporter({ userId, onSuccess }: CsvCogsImporterProps) {
     </div>
   );
 }
-

@@ -1,7 +1,8 @@
 # Listing Editor — Comprehensive Implementation Plan
+
 **Date:** March 30, 2026  
 **Status:** Ready for Implementation  
-**Scope:** Click-to-edit any live eBay listing from the Dashboard, with full write-back to eBay  
+**Scope:** Click-to-edit any live eBay listing from the Dashboard, with full write-back to eBay
 
 ---
 
@@ -10,6 +11,7 @@
 Users need to click on any listing card (or row in Pricing Insights table) to open a rich **Listing Editor** that exposes every editable field — title, description, price, quantity, condition, COGS, item specifics/attributes, and eBay category — and writes all changes back to eBay atomically using eBay's best-practice API paths.
 
 This is a **medium-large** feature spanning:
+
 - 1 new React component (`ListingEditorModal.tsx`)
 - 1 new Supabase Edge Function (`ebay-edit-listing`)
 - 1 new custom hook (`useListingEditor.ts`)
@@ -24,19 +26,21 @@ This is a **medium-large** feature spanning:
 ### Two API Paths — Must Handle Both
 
 #### Path A: Inventory API (REST) — Listings created via `ebay-publish`
+
 These have an `offerId` and `sku`. This is the modern path.
 
-| Operation | eBay REST Endpoint | Notes |
-|-----------|-------------------|-------|
-| Get inventory item | `GET /sell/inventory/v1/inventory_item/{sku}` | Returns title, condition, aspects, images, quantity |
-| Get offer | `GET /sell/inventory/v1/offer/{offerId}` | Returns price, categoryId, description, policies |
-| Update inventory item | `PUT /sell/inventory/v1/inventory_item/{sku}` | Full replace — must send complete body |
-| Update offer | `PUT /sell/inventory/v1/offer/{offerId}` | Full replace — must send complete body |
-| Update price + qty only | `POST /sell/inventory/v1/bulk_update_price_quantity` | Already implemented in `ebay-reprice` |
+| Operation               | eBay REST Endpoint                                   | Notes                                               |
+| ----------------------- | ---------------------------------------------------- | --------------------------------------------------- |
+| Get inventory item      | `GET /sell/inventory/v1/inventory_item/{sku}`        | Returns title, condition, aspects, images, quantity |
+| Get offer               | `GET /sell/inventory/v1/offer/{offerId}`             | Returns price, categoryId, description, policies    |
+| Update inventory item   | `PUT /sell/inventory/v1/inventory_item/{sku}`        | Full replace — must send complete body              |
+| Update offer            | `PUT /sell/inventory/v1/offer/{offerId}`             | Full replace — must send complete body              |
+| Update price + qty only | `POST /sell/inventory/v1/bulk_update_price_quantity` | Already implemented in `ebay-reprice`               |
 
 > **Critical eBay Best Practice:** `PUT /inventory_item/{sku}` and `PUT /offer/{offerId}` are **idempotent full-replace** calls. You MUST GET the current body first, merge your changes, then PUT the full merged body. Never PUT just the changed fields — this will wipe all other fields.
 
 #### Path B: Trading API (XML) — Legacy listings
+
 These have `listingId` but no `offerId`. Use `ReviseFixedPriceItem` XML call (already used in `ebay-reprice`).
 
 > **Key difference:** `ReviseFixedPriceItem` supports **partial** updates — you only need to send the fields you want to change.
@@ -45,18 +49,18 @@ These have `listingId` but no `offerId`. Use `ReviseFixedPriceItem` XML call (al
 
 ### What Fields Can Be Edited On a Live Listing
 
-| Field | Inventory API Path | Trading API Path | Notes |
-|-------|-------------------|-----------------|-------|
-| Title | `PUT /inventory_item/{sku}` → `product.title` | `ReviseFixedPriceItem` → `Item.Title` | Max 80 chars |
-| Description | `PUT /offer/{offerId}` → `listing.description` | `ReviseFixedPriceItem` → `Item.Description` | Note: lives on OFFER, not inventory item |
-| Price | `bulk_update_price_quantity` (existing) | `ReviseFixedPriceItem` → `Item.StartPrice` | Already in `ebay-reprice` |
-| Quantity | `bulk_update_price_quantity` with qty | `ReviseFixedPriceItem` → `Item.Quantity` | 0 = out of stock, keeps listing active |
-| Condition | `PUT /inventory_item/{sku}` → `condition` | `ReviseFixedPriceItem` → `Item.ConditionID` | Must use allowed enum values for category |
-| Condition Notes | `PUT /inventory_item/{sku}` → `conditionDescription` | `ReviseFixedPriceItem` → `Item.ConditionDescription` | |
-| Item Specifics/Aspects | `PUT /inventory_item/{sku}` → `product.aspects` | `ReviseFixedPriceItem` → `Item.ItemSpecifics` | Full replace of aspects block |
-| eBay Category ID | `PUT /offer/{offerId}` → `categoryId` | `ReviseFixedPriceItem` → `Item.PrimaryCategory` | Changing category may invalidate aspects |
-| Best Offer | `PUT /offer/{offerId}` → `bestOfferTerms` | `ReviseFixedPriceItem` → `Item.BestOfferDetails` | |
-| COGS | N/A — local DB only | N/A — local DB only | Write to `listing_cogs` table |
+| Field                  | Inventory API Path                                   | Trading API Path                                     | Notes                                     |
+| ---------------------- | ---------------------------------------------------- | ---------------------------------------------------- | ----------------------------------------- |
+| Title                  | `PUT /inventory_item/{sku}` → `product.title`        | `ReviseFixedPriceItem` → `Item.Title`                | Max 80 chars                              |
+| Description            | `PUT /offer/{offerId}` → `listing.description`       | `ReviseFixedPriceItem` → `Item.Description`          | Note: lives on OFFER, not inventory item  |
+| Price                  | `bulk_update_price_quantity` (existing)              | `ReviseFixedPriceItem` → `Item.StartPrice`           | Already in `ebay-reprice`                 |
+| Quantity               | `bulk_update_price_quantity` with qty                | `ReviseFixedPriceItem` → `Item.Quantity`             | 0 = out of stock, keeps listing active    |
+| Condition              | `PUT /inventory_item/{sku}` → `condition`            | `ReviseFixedPriceItem` → `Item.ConditionID`          | Must use allowed enum values for category |
+| Condition Notes        | `PUT /inventory_item/{sku}` → `conditionDescription` | `ReviseFixedPriceItem` → `Item.ConditionDescription` |                                           |
+| Item Specifics/Aspects | `PUT /inventory_item/{sku}` → `product.aspects`      | `ReviseFixedPriceItem` → `Item.ItemSpecifics`        | Full replace of aspects block             |
+| eBay Category ID       | `PUT /offer/{offerId}` → `categoryId`                | `ReviseFixedPriceItem` → `Item.PrimaryCategory`      | Changing category may invalidate aspects  |
+| Best Offer             | `PUT /offer/{offerId}` → `bestOfferTerms`            | `ReviseFixedPriceItem` → `Item.BestOfferDetails`     |                                           |
+| COGS                   | N/A — local DB only                                  | N/A — local DB only                                  | Write to `listing_cogs` table             |
 
 ---
 
@@ -124,6 +128,7 @@ CREATE POLICY "Users manage own reprice rules"
 ### Why a New Function (Not Extending `ebay-reprice`)
 
 `ebay-reprice` handles **price/quantity only** via `bulk_update_price_quantity`. Full listing editing requires:
+
 1. GET current inventory item state before PUT (merge pattern)
 2. GET current offer state before PUT (merge pattern)
 3. Category validation before PUT
@@ -137,9 +142,11 @@ This complexity warrants its own function.
 ### Actions
 
 #### Action: `get_listing_details`
+
 Fetches all current data needed to populate the editor form.
 
 **Input:**
+
 ```json
 {
   "action": "get_listing_details",
@@ -151,6 +158,7 @@ Fetches all current data needed to populate the editor form.
 ```
 
 **Output:**
+
 ```json
 {
   "inventoryItem": {
@@ -172,9 +180,11 @@ Fetches all current data needed to populate the editor form.
 ```
 
 #### Action: `save_changes`
+
 Applies changes to the live eBay listing.
 
 **Input:**
+
 ```json
 {
   "action": "save_changes",
@@ -192,11 +202,11 @@ Applies changes to the live eBay listing.
     "categoryId": "34200",
     "itemSpecifics": { "Year": "1921", "Grade": "MS-63" },
     "bestOfferEnabled": true,
-    "bestOfferAutoAcceptPrice": 42.00,
-    "bestOfferAutoDeclinePrice": 35.00
+    "bestOfferAutoAcceptPrice": 42.0,
+    "bestOfferAutoDeclinePrice": 35.0
   },
   "cogsUpdate": {
-    "cogs": 18.00,
+    "cogs": 18.0,
     "cogsSource": "manual",
     "acquiredAt": "2026-01-15T00:00:00Z"
   }
@@ -204,6 +214,7 @@ Applies changes to the live eBay listing.
 ```
 
 **Output:**
+
 ```json
 {
   "success": true,
@@ -242,7 +253,7 @@ LEGACY TRADING API PATH:
      (title, description, price, quantity, condition, ItemSpecifics, category)
 
 4. Update drafts table (match by ebay_sku or ebay_listing_id):
-   UPDATE drafts SET title=?, description=?, listing_price=?, 
+   UPDATE drafts SET title=?, description=?, listing_price=?,
    item_specifics=?, ebay_category_id=? WHERE ebay_sku=?
 
 5. Upsert listing_cogs (if cogsUpdate provided)
@@ -271,6 +282,7 @@ LEGACY TRADING API PATH:
 ### Decision: Drawer/Slide-over Modal (Not a New Page)
 
 **Rationale:**
+
 - Keeps Dashboard context visible while editing
 - Standard UX pattern (Shopify, eBay Seller Hub, Amazon Seller Central)
 - No route change required — avoids losing filter/sort state
@@ -286,13 +298,13 @@ interface UseListingEditorReturn {
   isSaving: boolean;
   dirtyFields: Set<string>;
   errors: Record<string, string>;
-  
+
   // Actions
   loadListing: (listing: EbayListing) => Promise<void>;
   updateField: (field: string, value: unknown) => void;
   saveChanges: () => Promise<SaveResult>;
   discardChanges: () => void;
-  
+
   // Category
   onCategoryChange: (newCategoryId: string) => Promise<void>;
   categoryAspects: EbayAspect[];
@@ -378,6 +390,7 @@ interface UseListingEditorReturn {
 #### Dirty Field Indicators
 
 Every edited field gets:
+
 - Yellow/amber left border: `border-l-2 border-amber-400`
 - Pencil icon in field label
 - "Save All Changes" button badge showing count: `Save 3 Changes ▶`
@@ -444,7 +457,7 @@ On `DashboardPage` mount: check `useSearchParams()` for `edit` param. If present
 User clicks listing title or edit icon
          │
          ▼
-DashboardPage: setEditingListing(listing) 
+DashboardPage: setEditingListing(listing)
          │   [listing has: offerId, sku, listingId, title, price, etc.]
          ▼
 ListingEditorModal opens (slide-over drawer)
@@ -497,7 +510,7 @@ Call ebay-edit-listing { action: "save_changes", ...changes }
          └── INSERT listing_edits_log (audit record)
          │
          ▼
-Success: 
+Success:
   toast("Listing updated on eBay ✅")
   onSaved(updatedListing) → parent updates listings array
   Modal stays open for further edits (or closes if user chose)
@@ -511,52 +524,60 @@ Failure:
 
 ## Part 7: Files to Create
 
-| File | Purpose | Est. Lines |
-|------|---------|-----------|
-| `supabase/functions/ebay-edit-listing/index.ts` | Edge function: get + save listing details | ~400 |
-| `src/components/ListingEditorModal.tsx` | Main drawer/modal UI | ~500 |
-| `src/hooks/useListingEditor.ts` | State management + API calls | ~200 |
-| `supabase/migrations/YYYYMMDD_listing_edits_log.sql` | Audit trail table | ~40 |
-| `supabase/migrations/YYYYMMDD_reprice_rules.sql` | Missing reprice_rules table | ~30 |
+| File                                                 | Purpose                                   | Est. Lines |
+| ---------------------------------------------------- | ----------------------------------------- | ---------- |
+| `supabase/functions/ebay-edit-listing/index.ts`      | Edge function: get + save listing details | ~400       |
+| `src/components/ListingEditorModal.tsx`              | Main drawer/modal UI                      | ~500       |
+| `src/hooks/useListingEditor.ts`                      | State management + API calls              | ~200       |
+| `supabase/migrations/YYYYMMDD_listing_edits_log.sql` | Audit trail table                         | ~40        |
+| `supabase/migrations/YYYYMMDD_reprice_rules.sql`     | Missing reprice_rules table               | ~30        |
 
 ---
 
 ## Part 8: Files to Modify
 
-| File | Change Required |
-|------|----------------|
-| `src/pages/DashboardPage.tsx` | Add `editingListing` state, `<ListingEditorModal>`, edit icon/clickable title on cards, `?edit=` URL param handler |
-| `src/components/PricingInsightsTable.tsx` | Add Edit icon column, `onEditListing` prop |
-| `src/App.tsx` | No changes needed (modal pattern, no new route) |
-| `supabase/functions/ebay-reprice/index.ts` | Optional: add `update_quantity` action since bulk_update_price_quantity also supports qty changes |
+| File                                       | Change Required                                                                                                    |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `src/pages/DashboardPage.tsx`              | Add `editingListing` state, `<ListingEditorModal>`, edit icon/clickable title on cards, `?edit=` URL param handler |
+| `src/components/PricingInsightsTable.tsx`  | Add Edit icon column, `onEditListing` prop                                                                         |
+| `src/App.tsx`                              | No changes needed (modal pattern, no new route)                                                                    |
+| `supabase/functions/ebay-reprice/index.ts` | Optional: add `update_quantity` action since bulk_update_price_quantity also supports qty changes                  |
 
 ---
 
 ## Part 9: Gotchas & Edge Cases
 
 ### 1. Description Lives on the OFFER, Not the Inventory Item
+
 For Inventory API listings, the **description is on the offer** (`PUT /offer/{offerId}`), NOT the inventory item. This is counter-intuitive but is eBay's design. The `get_listing_details` action must fetch it from the offer response.
 
 ### 2. Aspects Are a Full Replace
+
 When saving item specifics via `PUT /inventory_item/{sku}`, ALL aspects are replaced. The function must GET the current aspects first, then merge the user's changes on top. Never send only the user's modified aspects — this wipes all others.
 
 ### 3. Category Change Cascades
+
 Changing category may:
+
 - Make existing aspects invalid (aspects specific to old category)
 - Require new required aspects (aspects specific to new category)
 - Change which condition values are allowed
-The editor must re-fetch aspects + conditions when category changes and guide the user through any conflicts.
+  The editor must re-fetch aspects + conditions when category changes and guide the user through any conflicts.
 
 ### 4. Quantity 0 vs Ending a Listing
+
 - `quantity: 0` → listing stays active, shows "Out of Stock" to buyers
 - `DELETE /offer/{offerId}` → ends the listing entirely
-The editor should support setting quantity to 0 but NOT deleting/ending listings — that's a separate destructive action outside scope.
+  The editor should support setting quantity to 0 but NOT deleting/ending listings — that's a separate destructive action outside scope.
 
 ### 5. Token Expiry Mid-Edit
+
 The eBay OAuth token may expire during a long editing session. The `ebay-edit-listing` function must check token expiry before making API calls and trigger a refresh if needed (same pattern as `ebay-publish`).
 
 ### 6. eBay Error Code Handling
+
 The editor should translate common eBay error codes into user-friendly messages:
+
 - `25002`: Offer already exists (should not occur on edit, but handle gracefully)
 - `25004`: Invalid price (below minimum for category)
 - `25005`: Not a leaf category (show category search helper)
@@ -564,16 +585,21 @@ The editor should translate common eBay error codes into user-friendly messages:
 - `25002`: Item specific required (highlight the missing field)
 
 ### 7. Concurrent Edits (Multi-User Orgs)
+
 If two org members edit the same listing simultaneously, one will overwrite the other. Phase 1 should add a warning banner: "Another team member may have recently edited this listing." Phase 2 can add optimistic locking using eBay's `If-Match` header where supported.
 
 ### 8. Legacy Listings — Limited GET Support
+
 Legacy Trading API listings don't have a GET equivalent as clean as the Inventory API. Use `GetItem` XML call to fetch current state. This is more complex to parse — the `ebay-edit-listing` function must handle both XML (legacy) and JSON (Inventory API) response parsing.
 
 ### 9. Draft Sync
+
 After a successful edit, the corresponding `drafts` row (matched by `ebay_sku` or `ebay_listing_id`) should be updated to keep the local DB in sync with eBay. This ensures the Drafts page and Analyze page show accurate data.
 
 ### 10. Image Editing — Out of Scope for Phase 1
+
 Image replacement requires:
+
 - Uploading new images to Supabase Storage
 - Converting storage URLs to public CDN URLs
 - Sending new URLs via `PUT /inventory_item/{sku}` with `product.imageUrls`
@@ -585,24 +611,25 @@ Include image editing as a dedicated Phase 2 feature with a proper image managem
 
 ## Part 10: What's Not in the Original Request (Recommended Additions)
 
-| Addition | Rationale | Effort |
-|----------|-----------|--------|
-| **Best Offer settings** | Already supported by `PUT /offer/{offerId}` — very low effort to include | Low |
-| **Edit History tab** | Shows all past edits from `listing_edits_log` — builds trust, aids debugging | Low |
-| **"Preview on eBay" button** | Link directly to the live listing — already have `ebayUrl` in listing data | Trivial |
-| **Profit margin calculator** | Show real-time margin as user changes price/COGS — pure math, no API calls | Low |
-| **SEO title suggestions** | Gemini-powered title improvement suggestions when editing title field | Medium |
-| **Duplicate listing button** | Copy listing into a new draft in Analyze page | Low |
-| **Image management** | Add/remove/reorder photos on live listing | High |
-| **Shipping policy override** | Change fulfillment/return policies per-listing | Medium |
-| **End listing / Delist** | Separate destructive button with confirmation | Low |
-| **Relist ended listing** | Re-publish offer that was ended | Low |
+| Addition                     | Rationale                                                                    | Effort  |
+| ---------------------------- | ---------------------------------------------------------------------------- | ------- |
+| **Best Offer settings**      | Already supported by `PUT /offer/{offerId}` — very low effort to include     | Low     |
+| **Edit History tab**         | Shows all past edits from `listing_edits_log` — builds trust, aids debugging | Low     |
+| **"Preview on eBay" button** | Link directly to the live listing — already have `ebayUrl` in listing data   | Trivial |
+| **Profit margin calculator** | Show real-time margin as user changes price/COGS — pure math, no API calls   | Low     |
+| **SEO title suggestions**    | Gemini-powered title improvement suggestions when editing title field        | Medium  |
+| **Duplicate listing button** | Copy listing into a new draft in Analyze page                                | Low     |
+| **Image management**         | Add/remove/reorder photos on live listing                                    | High    |
+| **Shipping policy override** | Change fulfillment/return policies per-listing                               | Medium  |
+| **End listing / Delist**     | Separate destructive button with confirmation                                | Low     |
+| **Relist ended listing**     | Re-publish offer that was ended                                              | Low     |
 
 ---
 
 ## Part 11: Implementation Sequence
 
 ### Sprint 1 — Backend (2-3 days)
+
 1. Create `reprice_rules` migration (fix existing production gap)
 2. Create `listing_edits_log` migration
 3. Build `ebay-edit-listing` function → `get_listing_details` action
@@ -611,6 +638,7 @@ Include image editing as a dedicated Phase 2 feature with a proper image managem
 6. Add COGS write-back and audit logging
 
 ### Sprint 2 — Frontend Modal (3-4 days)
+
 7. Create `useListingEditor` hook
 8. Build `ListingEditorModal` shell with tabs
 9. Overview tab: title, description, condition fields
@@ -620,6 +648,7 @@ Include image editing as a dedicated Phase 2 feature with a proper image managem
 13. History tab: query `listing_edits_log` for this listing
 
 ### Sprint 3 — Dashboard Integration (1-2 days)
+
 14. Add `editingListing` state to DashboardPage
 15. Make listing card titles clickable + add edit icon
 16. Add Edit column to PricingInsightsTable
@@ -627,6 +656,7 @@ Include image editing as a dedicated Phase 2 feature with a proper image managem
 18. Wire up `onSaved` callback to update listings array in parent
 
 ### Sprint 4 — Polish & Testing (1-2 days)
+
 19. Per-field dirty indicators (amber border, pencil label, dirty count badge)
 20. eBay error code → user-friendly message mapping
 21. Category change warning + aspect refresh flow
@@ -639,20 +669,20 @@ Include image editing as a dedicated Phase 2 feature with a proper image managem
 
 ## Part 12: Effort Summary
 
-| Component | Effort | Priority |
-|-----------|--------|----------|
-| `reprice_rules` migration (fix gap) | 0.5 day | P0 — blocking existing features |
-| `listing_edits_log` migration | 0.5 day | P0 |
-| `ebay-edit-listing` edge function | 2.5 days | P0 |
-| `useListingEditor` hook | 1 day | P0 |
-| `ListingEditorModal` UI | 3 days | P0 |
-| Dashboard integration | 1 day | P0 |
-| PricingInsightsTable edit button | 0.5 day | P0 |
-| History tab | 0.5 day | P1 |
-| Image management | 2 days | P2 |
-| SEO title suggestions (Gemini) | 1 day | P2 |
-| **Total Phase 1 (P0)** | **~9 days** | |
-| **Total Phase 2 (P1 + P2)** | **~4 days** | |
+| Component                           | Effort      | Priority                        |
+| ----------------------------------- | ----------- | ------------------------------- |
+| `reprice_rules` migration (fix gap) | 0.5 day     | P0 — blocking existing features |
+| `listing_edits_log` migration       | 0.5 day     | P0                              |
+| `ebay-edit-listing` edge function   | 2.5 days    | P0                              |
+| `useListingEditor` hook             | 1 day       | P0                              |
+| `ListingEditorModal` UI             | 3 days      | P0                              |
+| Dashboard integration               | 1 day       | P0                              |
+| PricingInsightsTable edit button    | 0.5 day     | P0                              |
+| History tab                         | 0.5 day     | P1                              |
+| Image management                    | 2 days      | P2                              |
+| SEO title suggestions (Gemini)      | 1 day       | P2                              |
+| **Total Phase 1 (P0)**              | **~9 days** |                                 |
+| **Total Phase 2 (P1 + P2)**         | **~4 days** |                                 |
 
 ---
 

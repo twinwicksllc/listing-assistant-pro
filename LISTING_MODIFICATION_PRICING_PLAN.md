@@ -1,4 +1,5 @@
 # Listing Modification & Pricing Management Plan
+
 **Status:** Ready for Implementation  
 **Date:** March 29, 2026  
 **Target:** 260 Active Listings
@@ -8,6 +9,7 @@
 ## Current State Assessment
 
 ### ✅ What You Have
+
 1. **Price Editing:**
    - Inline price editor (click to edit, save with checkmark)
    - Bulk price modal (fixed price / % adjustment / $ adjustment)
@@ -34,6 +36,7 @@
 ### ⚠️ Gaps to Address
 
 **For Your Current Use Case:**
+
 1. **No table view** - Can't see all 260 listings with pricing comparison at once
 2. **No quick suggestions** - No "recommended price" based on market data
 3. **No competitor listings links** - Can see competitor data but no way to browse actual competitor listings
@@ -47,9 +50,11 @@
 ## Phase 1: Quick Wins (What to Build First)
 
 ### 1.1 Pricing Insights Dashboard Tab
+
 **Purpose:** See all 260 listings with pricing comparison at a glance
 
 **Layout:**
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ Pricing Insights                              [Refresh Data]│
@@ -64,8 +69,9 @@
 ```
 
 **Features:**
+
 - Sortable columns
-- Color coding: 
+- Color coding:
   - Red: >10% above market (overpriced)
   - Amber: 5-10% above market
   - Green: Within 5% of market
@@ -75,6 +81,7 @@
 - Select multiple + bulk actions
 
 **Implementation:**
+
 1. Create new tab "Pricing Insights" in dashboard
 2. Query competitor_prices table for all listings
 3. Show market data alongside your prices
@@ -86,15 +93,17 @@
 ---
 
 ### 1.2 Suggested Prices Feature
+
 **Purpose:** Highlight listings that should be repriced
 
 **Logic:**
+
 ```
 FOR each listing WITH competitor data:
   market_avg = competitor.avgPrice
   your_price = listing.price
   delta_pct = (your_price - market_avg) / market_avg * 100
-  
+
   IF delta_pct > 10:
     suggestion = "Lower to $" + (market_avg * 0.95)
     reason = "11% above market avg"
@@ -110,6 +119,7 @@ FOR each listing WITH competitor data:
 ```
 
 **UI:**
+
 ```
 Listing Card (updated):
 ┌────────────────────────────────┐
@@ -124,6 +134,7 @@ Listing Card (updated):
 ```
 
 **Implementation:**
+
 1. Add `priceSuggestion` calculation to listing enrichment
 2. Show suggestion card if significant deviation
 3. One-click apply button
@@ -134,9 +145,11 @@ Listing Card (updated):
 ---
 
 ### 1.3 Competitor Details Modal Enhancement
+
 **Purpose:** See actual competitor listings instead of just summary
 
 **UI:**
+
 ```
 ┌─────────────────────────────────────┐
 │ Competitor Listings for "Item Name" │
@@ -161,11 +174,13 @@ Listing Card (updated):
 ```
 
 **Data Source:**
+
 - Use `ebay-competitor-search` function to fetch top 20 competitors
 - Parse returned listings with title, price, seller, shipping info
 - Show images if available
 
 **Implementation:**
+
 1. Enhance CompetitorDetailsModal component
 2. Fetch top 20 competitors in modal
 3. Display as carousel or paginated list
@@ -177,9 +192,11 @@ Listing Card (updated):
 ---
 
 ### 1.4 Quick Bulk Reprice Strategies
+
 **Purpose:** Apply repricing strategy to multiple listings at once
 
 **Strategy Options:**
+
 ```
 ┌─ Bulk Repricing Strategies ─────┐
 │                                 │
@@ -209,6 +226,7 @@ Listing Card (updated):
 ```
 
 **Implementation:**
+
 1. Add modal with strategy templates
 2. Let user select strategy + parameters
 3. Calculate new prices for all selected
@@ -222,9 +240,11 @@ Listing Card (updated):
 ## Phase 2: Core Features (Weeks 2-3)
 
 ### 2.1 Listing Edit Modal
+
 **Purpose:** Modify listing details beyond just price
 
 **Editable Fields:**
+
 - Title (eBay format constraints)
 - Price
 - Quantity
@@ -234,6 +254,7 @@ Listing Card (updated):
 - Item specifics (material, era, grade, etc.)
 
 **Workflow:**
+
 1. User clicks "Edit" on listing
 2. Modal opens with current details
 3. eBay API constraints checked & displayed
@@ -243,6 +264,7 @@ Listing Card (updated):
 7. Log to optimization_history
 
 **Implementation:**
+
 1. Create ListingEditModal component
 2. Fetch current listing from eBay
 3. Create `ebay-revise-listing` Edge Function
@@ -254,10 +276,13 @@ Listing Card (updated):
 ---
 
 ### 2.2 Reprice Rules UI
+
 **Purpose:** Manage auto-repricing rules (backend already exists)
 
 **Pages:**
+
 1. **Rules List:**
+
    ```
    Rule Name          Type           Floor  Ceiling  Status
    ─────────────────────────────────────────────────
@@ -267,6 +292,7 @@ Listing Card (updated):
    ```
 
 2. **Create Rule:**
+
    ```
    Rule Name: [Shopping category focus]
    Type: [Dropdown: Match Lowest / Beat Lowest / Match Avg / Match Sold Avg]
@@ -284,6 +310,7 @@ Listing Card (updated):
    - Let user review before enabling
 
 **Implementation:**
+
 1. Create RepriceRulesPage
 2. Query reprice_rules table
 3. Create/update/delete rules to DB
@@ -295,9 +322,11 @@ Listing Card (updated):
 ---
 
 ### 2.3 Competitor Price Tracking
+
 **Purpose:** Historical tracking to see price trends
 
 **Dashboard:**
+
 ```
 Price Trend Chart (30-day)
 ┌──────────────────────────┐
@@ -310,6 +339,7 @@ Price Trend Chart (30-day)
 ```
 
 **Implementation:**
+
 1. Store daily price snapshots in `listing_price_history`
 2. Add trending chart component
 3. Show price elasticity (how selling changes with price)
@@ -332,6 +362,7 @@ Price Trend Chart (30-day)
 ## Immediate Action Items (Next 2 Days)
 
 ### PRIORITY 1: Pricing Insights Table
+
 1. Create new dashboard tab
 2. Add table showing all 260 listings with:
    - SKU
@@ -344,16 +375,19 @@ Price Trend Chart (30-day)
    - Action buttons (refresh competitor data, apply suggestion, edit)
 
 ### PRIORITY 2: Suggest Prices
+
 1. Calculate suggestion for each listing
 2. Show on listing card with one-click apply
 3. Log to optimization_history
 
 ### PRIORITY 3: Competitor Details
+
 1. Enhance modal to show top 15-20 competitor listings
 2. Add links to actual eBay pages
 3. Show seller info, shipping, ratings
 
 ### PRIORITY 4: Bulk Strategies
+
 1. Add modal with 5 repricing strategies
 2. Let user select strategy + params
 3. Preview & apply
@@ -369,9 +403,10 @@ Price Trend Chart (30-day)
 ✅ **auto-reprice-cron** - Daily scheduled repricing (needs rules UI)  
 ✅ **optimize-listing** - AI price suggestions  
 ✅ **competitor_prices** table - Competitor data snapshots  
-✅ **optimization_history** table - Audit log  
+✅ **optimization_history** table - Audit log
 
 **Still Needed:**
+
 - `ebay-revise-listing` (for title/description changes)
 - Price tracking/history table
 - Reprice rules CRUD UI
@@ -381,6 +416,7 @@ Price Trend Chart (30-day)
 ## Database Schema for Pricing Features
 
 ### New Table: listing_price_history
+
 ```sql
 CREATE TABLE listing_price_history (
   id uuid PRIMARY KEY,
@@ -394,7 +430,7 @@ CREATE TABLE listing_price_history (
   UNIQUE(listing_id, changed_at)
 );
 
-CREATE INDEX idx_listing_price_history_user_listing 
+CREATE INDEX idx_listing_price_history_user_listing
   ON listing_price_history(user_id, listing_id);
 ```
 
@@ -403,6 +439,7 @@ CREATE INDEX idx_listing_price_history_user_listing
 ## Expected Outcomes
 
 **After Phase 1 (2-3 days):**
+
 - See all 260 listings with market pricing at a glance
 - Identify which are overpriced/underpriced
 - Quick-apply suggested prices
@@ -410,6 +447,7 @@ CREATE INDEX idx_listing_price_history_user_listing
 - Bulk repricing strategies
 
 **After Phase 2 (weeks 2-3):**
+
 - Automated repricing rules
 - Edit listing details (title, condition, etc.)
 - Reprice by category/tag
@@ -417,6 +455,7 @@ CREATE INDEX idx_listing_price_history_user_listing
 - Dry-run testing before applying
 
 **Result:**
+
 - Time saved: 80% faster pricing decisions
 - Better prices: Data-driven instead of manual guessing
 - Scalable: Set rules once, auto-maintain pricing

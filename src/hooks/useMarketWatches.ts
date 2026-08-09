@@ -96,7 +96,7 @@ export function useMarketWatches() {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setWatches((data as WatchRow[] ?? []).map(toWatch));
+      setWatches(((data as WatchRow[]) ?? []).map(toWatch));
     } catch (err) {
       console.error("[useMarketWatches] fetch error:", err);
       toast({ title: "Failed to load market watches", variant: "destructive" });
@@ -110,7 +110,11 @@ export function useMarketWatches() {
   }, [fetchWatches]);
 
   const addWatch = useCallback(
-    async (params: { searchQuery: string; label?: string; categoryId?: string }) => {
+    async (params: {
+      searchQuery: string;
+      label?: string;
+      categoryId?: string;
+    }) => {
       if (!user) return null;
       try {
         const { data, error } = await supabase
@@ -129,7 +133,10 @@ export function useMarketWatches() {
         if (error) throw error;
         const newWatch = toWatch(data as WatchRow);
         setWatches((prev) => [newWatch, ...prev]);
-        toast({ title: "Watch added", description: `Tracking "${params.label || params.searchQuery}"` });
+        toast({
+          title: "Watch added",
+          description: `Tracking "${params.label || params.searchQuery}"`,
+        });
         return newWatch;
       } catch (err) {
         console.error("[useMarketWatches] add error:", err);
@@ -137,7 +144,7 @@ export function useMarketWatches() {
         return null;
       }
     },
-    [user, toast]
+    [user, toast],
   );
 
   const deleteWatch = useCallback(
@@ -156,7 +163,7 @@ export function useMarketWatches() {
         toast({ title: "Failed to remove watch", variant: "destructive" });
       }
     },
-    [toast]
+    [toast],
   );
 
   const refreshWatch = useCallback(
@@ -164,9 +171,12 @@ export function useMarketWatches() {
       if (!user) return;
       setRefreshingId(watchId);
       try {
-        const { data, error } = await supabase.functions.invoke("market-watch-refresh", {
-          body: { watchId, userId: user.id },
-        });
+        const { data, error } = await supabase.functions.invoke(
+          "market-watch-refresh",
+          {
+            body: { watchId, userId: user.id },
+          },
+        );
 
         if (error) throw error;
         if (data?.error) throw new Error(data.error);
@@ -186,20 +196,27 @@ export function useMarketWatches() {
                   soldCount: data.soldCount ?? 0,
                   sellThroughRate: data.sellThroughRate,
                 }
-              : w
-          )
+              : w,
+          ),
         );
 
-        toast({ title: "Watch refreshed", description: `avg $${data.avgPrice?.toFixed(2) ?? "—"}` });
+        toast({
+          title: "Watch refreshed",
+          description: `avg $${data.avgPrice?.toFixed(2) ?? "—"}`,
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("[useMarketWatches] refresh error:", msg);
-        toast({ title: "Refresh failed", description: msg, variant: "destructive" });
+        toast({
+          title: "Refresh failed",
+          description: msg,
+          variant: "destructive",
+        });
       } finally {
         setRefreshingId(null);
       }
     },
-    [user, toast]
+    [user, toast],
   );
 
   const fetchHistory = useCallback(
@@ -213,13 +230,13 @@ export function useMarketWatches() {
           .limit(limit);
 
         if (error) throw error;
-        return (data as HistoryRow[] ?? []).map(toHistory);
+        return ((data as HistoryRow[]) ?? []).map(toHistory);
       } catch (err) {
         console.error("[useMarketWatches] history fetch error:", err);
         return [];
       }
     },
-    []
+    [],
   );
 
   return {

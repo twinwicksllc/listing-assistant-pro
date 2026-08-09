@@ -1,5 +1,14 @@
 import { useEffect, useState } from "react";
-import { Check, Crown, Zap, Loader2, ExternalLink, ArrowLeft, Store, Sparkles } from "lucide-react";
+import {
+  Check,
+  Crown,
+  Zap,
+  Loader2,
+  ExternalLink,
+  ArrowLeft,
+  Store,
+  Sparkles,
+} from "lucide-react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth, PLANS, PlanKey } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,12 +30,19 @@ export default function BillingPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const {
-    currentPlan, isPaid, isShop, subscription, usage,
-    refreshSubscription, currentPlanLimits, planFeatures,
+    currentPlan,
+    isPaid,
+    isShop,
+    subscription,
+    usage,
+    refreshSubscription,
+    currentPlanLimits,
+    planFeatures,
   } = useAuth();
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
-  const [freeCreditStatus, setFreeCreditStatus] = useState<FreeCreditStatus | null>(null);
+  const [freeCreditStatus, setFreeCreditStatus] =
+    useState<FreeCreditStatus | null>(null);
   const [freeCreditsLoading, setFreeCreditsLoading] = useState(false);
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
 
@@ -44,9 +60,12 @@ export default function BillingPage() {
 
       setFreeCreditsLoading(true);
       try {
-        const { data, error } = await supabase.functions.invoke("get-free-credits", {
-          body: {},
-        });
+        const { data, error } = await supabase.functions.invoke(
+          "get-free-credits",
+          {
+            body: {},
+          },
+        );
 
         if (error) {
           throw error;
@@ -76,11 +95,16 @@ export default function BillingPage() {
     setCheckoutLoading(planKey);
     try {
       const plan = PLANS[planKey];
-      if (!("monthlyPriceId" in plan)) throw new Error("No price configured for this plan");
-      const priceId = billingCycle === "annual" ? plan.annualPriceId : plan.monthlyPriceId;
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { priceId },
-      });
+      if (!("monthlyPriceId" in plan))
+        throw new Error("No price configured for this plan");
+      const priceId =
+        billingCycle === "annual" ? plan.annualPriceId : plan.monthlyPriceId;
+      const { data, error } = await supabase.functions.invoke(
+        "create-checkout",
+        {
+          body: { priceId },
+        },
+      );
       if (error) throw error;
       if (data?.url) {
         window.location.href = data.url;
@@ -95,7 +119,8 @@ export default function BillingPage() {
   const handleManage = async () => {
     setPortalLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("customer-portal");
+      const { data, error } =
+        await supabase.functions.invoke("customer-portal");
       if (error) throw error;
       if (data?.url) {
         window.location.href = data.url;
@@ -124,7 +149,10 @@ export default function BillingPage() {
       <div className="max-w-4xl mx-auto px-4 py-6">
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => navigate(-1)} className="p-2 rounded-lg hover:bg-muted transition-colors">
+          <button
+            onClick={() => navigate(-1)}
+            className="p-2 rounded-lg hover:bg-muted transition-colors"
+          >
             <ArrowLeft className="h-5 w-5" />
           </button>
           <img src={teckstartLogo} alt="Logo" className="h-8 w-8" />
@@ -145,45 +173,56 @@ export default function BillingPage() {
         {/* Current usage */}
         <div className="mb-6 p-4 bg-muted/50 rounded-xl border">
           <h2 className="text-sm font-semibold mb-3">
-            {currentPlan === "free" ? "Rolling Window Credits" : "This Month's Usage"}
+            {currentPlan === "free"
+              ? "Rolling Window Credits"
+              : "This Month's Usage"}
           </h2>
           <div className="flex gap-6 text-sm">
             <div>
               <span className="text-muted-foreground">
-                {currentPlan === "free" ? "AI Analyses (Rolling)" : "AI Analyses"}
+                {currentPlan === "free"
+                  ? "AI Analyses (Rolling)"
+                  : "AI Analyses"}
               </span>
               <p className="font-semibold">
                 {currentPlan === "free" && freeCreditStatus
                   ? freeCreditStatus.creditsUsed
                   : usage.aiAnalysis}{" "}
-                / {currentPlanLimits.analysisLimit === Infinity ? "∞" : currentPlanLimits.analysisLimit}
+                /{" "}
+                {currentPlanLimits.analysisLimit === Infinity
+                  ? "∞"
+                  : currentPlanLimits.analysisLimit}
               </p>
               {currentPlan === "free" && (
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {freeCreditsLoading
                     ? "Loading reset date..."
                     : freeCreditStatus?.creditsResetAt
-                    ? `Resets ${new Date(freeCreditStatus.creditsResetAt).toLocaleDateString()}`
-                    : "Resets monthly (rolling window)"}
+                      ? `Resets ${new Date(freeCreditStatus.creditsResetAt).toLocaleDateString()}`
+                      : "Resets monthly (rolling window)"}
                 </p>
               )}
             </div>
             <div>
               <span className="text-muted-foreground">eBay Publishes</span>
               <p className="font-semibold">
-                {usage.ebayPublish}{" "}
-                / {currentPlanLimits.publishLimit === Infinity ? "∞" : currentPlanLimits.publishLimit}
+                {usage.ebayPublish} /{" "}
+                {currentPlanLimits.publishLimit === Infinity
+                  ? "∞"
+                  : currentPlanLimits.publishLimit}
               </p>
             </div>
           </div>
-          {currentPlan === "free" && (freeCreditStatus?.limitReached || usage.aiAnalysis >= currentPlanLimits.analysisLimit) && (
-            <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              🔄 Rolling window credits exhausted.
-              {freeCreditStatus?.creditsResetAt
-                ? ` Credits reset on ${new Date(freeCreditStatus.creditsResetAt).toLocaleDateString()}.`
-                : ""}
-            </p>
-          )}
+          {currentPlan === "free" &&
+            (freeCreditStatus?.limitReached ||
+              usage.aiAnalysis >= currentPlanLimits.analysisLimit) && (
+              <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                🔄 Rolling window credits exhausted.
+                {freeCreditStatus?.creditsResetAt
+                  ? ` Credits reset on ${new Date(freeCreditStatus.creditsResetAt).toLocaleDateString()}.`
+                  : ""}
+              </p>
+            )}
         </div>
 
         {/* Free tier requirements info */}
@@ -191,11 +230,23 @@ export default function BillingPage() {
           <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm">
             <h3 className="font-semibold mb-2">Free Tier Requirements</h3>
             <ul className="space-y-1 text-blue-800">
-              <li>✓ <strong>eBay Account Required:</strong> You must connect an active eBay account to generate listings</li>
-              <li>✓ <strong>Rolling Window:</strong> 6 analyses per month, resets on the same day each month</li>
-              <li>✓ <strong>One Account Per Org:</strong> You can only link one eBay account to your organization</li>
+              <li>
+                ✓ <strong>eBay Account Required:</strong> You must connect an
+                active eBay account to generate listings
+              </li>
+              <li>
+                ✓ <strong>Rolling Window:</strong> 6 analyses per month, resets
+                on the same day each month
+              </li>
+              <li>
+                ✓ <strong>One Account Per Org:</strong> You can only link one
+                eBay account to your organization
+              </li>
             </ul>
-            <Link to="/settings" className="inline-flex items-center gap-1 mt-2 text-blue-700 font-medium hover:underline text-xs">
+            <Link
+              to="/settings"
+              className="inline-flex items-center gap-1 mt-2 text-blue-700 font-medium hover:underline text-xs"
+            >
               Go to Settings <span>→</span>
             </Link>
           </div>
@@ -240,7 +291,11 @@ export default function BillingPage() {
             annualPrice=""
             icon={planIcons.free}
             isCurrent={currentPlan === "free"}
-            features={["6 AI analyses/mo", "6 eBay publishes/mo", "eBay account required"]}
+            features={[
+              "6 AI analyses/mo",
+              "6 eBay publishes/mo",
+              "eBay account required",
+            ]}
             currentPlan={currentPlan}
             planKey="free"
             tierOrder={tierOrder}
@@ -255,7 +310,11 @@ export default function BillingPage() {
             annualPrice="$190/yr"
             icon={planIcons.starter}
             isCurrent={currentPlan === "starter"}
-            features={["25 AI analyses/mo", "25 eBay publishes/mo", "Basic AI enhancement"]}
+            features={[
+              "25 AI analyses/mo",
+              "25 eBay publishes/mo",
+              "Basic AI enhancement",
+            ]}
             currentPlan={currentPlan}
             planKey="starter"
             tierOrder={tierOrder}
@@ -276,7 +335,14 @@ export default function BillingPage() {
             icon={planIcons.pro}
             isCurrent={currentPlan === "pro"}
             badge="Most Popular"
-            features={["200 AI analyses/mo", "200 eBay publishes/mo", "Full AI enhancement", "Voice notes", "Melt protection", "COGS tracking"]}
+            features={[
+              "200 AI analyses/mo",
+              "200 eBay publishes/mo",
+              "Full AI enhancement",
+              "Voice notes",
+              "Melt protection",
+              "COGS tracking",
+            ]}
             currentPlan={currentPlan}
             planKey="pro"
             tierOrder={tierOrder}
@@ -296,7 +362,15 @@ export default function BillingPage() {
             annualPrice="$990/yr"
             icon={planIcons.shop}
             isCurrent={currentPlan === "shop"}
-            features={["1,200 AI analyses/mo", "1,200 eBay publishes/mo", "Full AI enhancement", "Voice notes", "Melt protection", "Team / org features", "COGS tracking"]}
+            features={[
+              "1,200 AI analyses/mo",
+              "1,200 eBay publishes/mo",
+              "Full AI enhancement",
+              "Voice notes",
+              "Melt protection",
+              "Team / org features",
+              "COGS tracking",
+            ]}
             currentPlan={currentPlan}
             planKey="shop"
             tierOrder={tierOrder}
@@ -337,9 +411,23 @@ interface PlanCardProps {
 }
 
 function PlanCard({
-  name, price, period, annualPrice, icon: Icon, isCurrent, badge, features,
-  currentPlan, planKey, tierOrder, billingCycle,
-  onUpgrade, onManage, checkoutLoading, portalLoading, subscriptionEnd,
+  name,
+  price,
+  period,
+  annualPrice,
+  icon: Icon,
+  isCurrent,
+  badge,
+  features,
+  currentPlan,
+  planKey,
+  tierOrder,
+  billingCycle,
+  onUpgrade,
+  onManage,
+  checkoutLoading,
+  portalLoading,
+  subscriptionEnd,
 }: PlanCardProps) {
   const currentIndex = tierOrder.indexOf(currentPlan);
   const thisIndex = tierOrder.indexOf(planKey);
@@ -347,15 +435,19 @@ function PlanCard({
   const isDowngrade = thisIndex < currentIndex;
   const isPaidPlan = planKey !== "free";
 
-  const displayPrice = isPaidPlan && billingCycle === "annual" ? annualPrice : `${price}${period}`;
-  const monthlyEquiv = isPaidPlan && billingCycle === "annual"
-    ? `(~${price.replace("$", "$")}${period} billed annually)`
-    : null;
+  const displayPrice =
+    isPaidPlan && billingCycle === "annual" ? annualPrice : `${price}${period}`;
+  const monthlyEquiv =
+    isPaidPlan && billingCycle === "annual"
+      ? `(~${price.replace("$", "$")}${period} billed annually)`
+      : null;
 
   return (
     <div
       className={`relative flex flex-col rounded-2xl border p-5 transition-shadow ${
-        isCurrent ? "border-primary ring-1 ring-primary shadow-md" : "border-border hover:shadow-sm"
+        isCurrent
+          ? "border-primary ring-1 ring-primary shadow-md"
+          : "border-border hover:shadow-sm"
       }`}
     >
       {badge && !isCurrent && (
@@ -383,7 +475,10 @@ function PlanCard({
 
       <ul className="space-y-1.5 mb-4 flex-1">
         {features.map((f) => (
-          <li key={f} className="flex items-start gap-1.5 text-xs text-muted-foreground">
+          <li
+            key={f}
+            className="flex items-start gap-1.5 text-xs text-muted-foreground"
+          >
             <Check className="h-3.5 w-3.5 text-green-500 mt-0.5 shrink-0" />
             {f}
           </li>
@@ -394,19 +489,28 @@ function PlanCard({
       {isCurrent && isPaidPlan ? (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">
-            Renews {subscriptionEnd ? new Date(subscriptionEnd).toLocaleDateString() : "—"}
+            Renews{" "}
+            {subscriptionEnd
+              ? new Date(subscriptionEnd).toLocaleDateString()
+              : "—"}
           </p>
           <button
             onClick={onManage}
             disabled={portalLoading}
             className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg border text-sm font-medium hover:bg-muted transition-colors disabled:opacity-60"
           >
-            {portalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+            {portalLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ExternalLink className="h-4 w-4" />
+            )}
             Manage Subscription
           </button>
         </div>
       ) : isCurrent && !isPaidPlan ? (
-        <div className="py-2 text-center text-sm text-muted-foreground font-medium">Current plan</div>
+        <div className="py-2 text-center text-sm text-muted-foreground font-medium">
+          Current plan
+        </div>
       ) : isUpgrade && isPaidPlan ? (
         <div className="space-y-2">
           <button
@@ -414,7 +518,9 @@ function PlanCard({
             disabled={!!checkoutLoading}
             className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-60"
           >
-            {checkoutLoading === planKey ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {checkoutLoading === planKey ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : null}
             Upgrade to {name}
           </button>
           <p className="text-xs text-muted-foreground text-center">
@@ -422,8 +528,13 @@ function PlanCard({
           </p>
           <p className="text-xs text-muted-foreground text-center">
             By proceeding, you agree to our{" "}
-            <Link to="/terms" className="underline">Terms</Link> and{" "}
-            <Link to="/privacy" className="underline">Privacy Policy</Link>
+            <Link to="/terms" className="underline">
+              Terms
+            </Link>{" "}
+            and{" "}
+            <Link to="/privacy" className="underline">
+              Privacy Policy
+            </Link>
           </p>
         </div>
       ) : isDowngrade ? (

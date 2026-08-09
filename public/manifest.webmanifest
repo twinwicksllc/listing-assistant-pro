@@ -39,10 +39,7 @@
       "purpose": "maskable"
     }
   ],
-  "categories": [
-    "business",
-    "productivity"
-  ],
+  "categories": ["business", "productivity"],
   "screenshots": [
     {
       "src": "/pwa-icon-192.png",

@@ -7,12 +7,14 @@ Your Competitor Details Modal now has **AI-powered intelligent filtering** that 
 ## What Changed
 
 ### For Free/Starter Tier Users
+
 - **Price Stats Tab** (always available)
   - Aggregate market data: average, median, min, max prices
   - Price distribution chart showing where your price falls
   - "Updated X hours ago" indicator
 
 ### For Pro/Shop Tier Users (NEW 🎉)
+
 - **Price Stats Tab** (same as above)
 - **AI-Filtered Comparable Listings Tab** (NEW)
   - Up to 15 truly comparable coins from eBay
@@ -30,7 +32,9 @@ Your Competitor Details Modal now has **AI-powered intelligent filtering** that 
 The system uses **Google Gemini AI** to be numismatically intelligent:
 
 ### Step 1: Analyze Your Listing
+
 AI extracts key attributes from your listing title:
+
 - **Year/Date** (e.g., 1889, 1921-S, 1949 Silver)
 - **Country** (e.g., USA, Great Britain)
 - **Denomination** (e.g., Morgan Dollar, Peace Dollar, Half Dollar)
@@ -40,21 +44,24 @@ AI extracts key attributes from your listing title:
 - **Special Features** (e.g., key date, rare variety, VAM number)
 
 ### Step 2: Fetch Raw Competitors
+
 Searches eBay Finding API for ~20 generic "competitor" listings for the item type.
 
 ### Step 3: Score for True Comparability
+
 For each competitor, Gemini scores 0-100:
 
 **Examples:**
 
-| Comparability | Score | Your Coin | Competitor | Reason |
-|---|---|---|---|---|
-| Perfect Match | 95 | 1889-CC Morgan, MS-65, NGC | 1889-CC Morgan, MS-65, NGC | Exact match |
-| Highly Comparable | 85 | 1889-CC Morgan, MS-65 | 1889-CC Morgan, MS-63 | Same date & mint, close grade |
-| Not Really | 40 | 1889-CC Morgan, MS-65 | 1889 Philly Morgan, XF-40 | Different mint + grade |
-| Completely Different | 5 | Peace Dollar, 1921 | Morgan Dollar, 1889 | Different coin type |
+| Comparability        | Score | Your Coin                  | Competitor                 | Reason                        |
+| -------------------- | ----- | -------------------------- | -------------------------- | ----------------------------- |
+| Perfect Match        | 95    | 1889-CC Morgan, MS-65, NGC | 1889-CC Morgan, MS-65, NGC | Exact match                   |
+| Highly Comparable    | 85    | 1889-CC Morgan, MS-65      | 1889-CC Morgan, MS-63      | Same date & mint, close grade |
+| Not Really           | 40    | 1889-CC Morgan, MS-65      | 1889 Philly Morgan, XF-40  | Different mint + grade        |
+| Completely Different | 5     | Peace Dollar, 1921         | Morgan Dollar, 1889        | Different coin type           |
 
 **Key Decision Rules:**
+
 - ❌ Different year/date = not comparable
 - ❌ Different mint mark = not comparable (affects value significantly)
 - ❌ Grade differs by more than 2-3 grades = not comparable
@@ -62,12 +69,15 @@ For each competitor, Gemini scores 0-100:
 - ✅ Only scores 75+ are displayed (must be truly comparable)
 
 ### Step 4: Display Top 15
+
 Shows the highest-scoring comparable listings, sorted best match first.
 
 ## Why This Matters for Collectibles
 
 ### Without AI Filtering (Bad ❌)
+
 eBay's generic search returns: "Morgan Dollars"
+
 - 1889 Philly Morgan, circulated, $25
 - 1889-CC Morgan, MS-65, $800
 - 1921-S Morgan, XF-40, $50
@@ -76,7 +86,9 @@ eBay's generic search returns: "Morgan Dollars"
 Your 1889-CC MS-65 Morgan at $750 looks "above market" ($52 avg) → suggests lowering price ❌ WRONG!
 
 ### With AI Filtering (Smart ✅)
+
 Only shows true 1889-CC Morgan comparables:
+
 - 1889-CC Morgan, MS-65, PCGS, $795
 - 1889-CC Morgan, MS-60, $650
 - 1889-CC Morgan, MS-63, NGC, $720
@@ -114,6 +126,7 @@ Your price of $750 looks "at market" ($721 avg) → pricing is accurate ✅ CORR
 ## Technical Details
 
 ### New Edge Function
+
 **`filter-comparable-listings`** — Called when Pro/Shop user opens modal
 
 ```
@@ -138,11 +151,13 @@ Output: {
 ```
 
 ### Gemini Model
+
 - **Model**: `gemini-flash-latest` (fast, cost-effective)
 - **Temperature**: 0.1 for extraction, 0.2 for scoring (deterministic)
 - **Cost**: ~0.5¢ per modal open (1-2 API calls)
 
 ### UI Components
+
 - Tab switcher: "Price Stats" vs "Comparable Listings"
 - Lock icon on comparable tab for Free/Starter tier
 - Loading spinner while AI analyzes
@@ -187,6 +202,7 @@ Output: {
 After competitor details is tested, Phase 2b will add:
 
 **Suggested Pricing** — AI recommends optimal price based on:
+
 - Filtered comparable listings (same as above)
 - Your coin's position in market
 - Seller ratings (higher-rated sellers can price 10% higher)
@@ -194,6 +210,7 @@ After competitor details is tested, Phase 2b will add:
 - Rarity factors
 
 Example output:
+
 > **Suggest: $765**
 > Market average for 1889-CC Morgan MS-65: $745
 > Your cert status (NGC) commands +2.7% premium
@@ -242,15 +259,18 @@ Dashboard
 ## Troubleshooting
 
 **Listings not loading?**
+
 - Check browser console for errors
 - Ensure you're Pro/Shop tier
 - Refresh the page and try again
 
 **Comparability scores too low?**
+
 - AI might not recognize your listing type
 - Try adding year, mint mark, grade, cert info to title
 
 **Seller info missing?**
+
 - eBay API sometimes doesn't return full data
 - Fallback to "Unknown" seller name
 

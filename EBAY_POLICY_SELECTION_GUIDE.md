@@ -47,12 +47,14 @@ GET /sell/account/v1/return_policy?marketplace_id=EBAY_US
 ```
 
 **Request Format:**
+
 ```typescript
 Authorization: Bearer <userToken>
 Content-Type: application/json
 ```
 
 **Response Format:**
+
 ```json
 {
   "fulfillmentPolicies": [
@@ -68,12 +70,12 @@ Content-Type: application/json
 
 ### Error Handling
 
-| Error Type | Cause | User Action |
-|-----------|-------|-------------|
-| `INVALID_TOKEN` | OAuth token expired | Reconnect eBay in Settings |
-| `NO_POLICIES` | Missing one or more policy types | Create policies in eBay Seller Hub |
-| `NETWORK_ERROR` | API fetch failed | Retry or check internet connection |
-| `FETCH_ERROR` | Generic API error | Check eBay account status |
+| Error Type      | Cause                            | User Action                        |
+| --------------- | -------------------------------- | ---------------------------------- |
+| `INVALID_TOKEN` | OAuth token expired              | Reconnect eBay in Settings         |
+| `NO_POLICIES`   | Missing one or more policy types | Create policies in eBay Seller Hub |
+| `NETWORK_ERROR` | API fetch failed                 | Retry or check internet connection |
+| `FETCH_ERROR`   | Generic API error                | Check eBay account status          |
 
 ## Usage Examples
 
@@ -119,7 +121,7 @@ export default function AnalyzePage() {
   return (
     <div className="space-y-4">
       {/* Existing form fields */}
-      
+
       {/* Add policy selector */}
       {ebayToken && (
         <div className="border-t border-border pt-4">
@@ -150,20 +152,20 @@ export default function AnalyzePage() {
 import { useEbayPolicies } from "@/hooks/useEbayPolicies";
 
 function PolicyManagement() {
-  const { 
-    policies, 
-    selectedPolicies, 
+  const {
+    policies,
+    selectedPolicies,
     selectPolicy,
-    loading, 
+    loading,
     error,
     hasPolicies,
-    refreshPolicies 
+    refreshPolicies
   } = useEbayPolicies(userToken);
 
   // Auto-select a specific policy
   useEffect(() => {
     if (policies.fulfillment.length > 0) {
-      const expressShipping = policies.fulfillment.find(p => 
+      const expressShipping = policies.fulfillment.find(p =>
         p.name.toLowerCase().includes("express")
       );
       if (expressShipping) {
@@ -194,6 +196,7 @@ const CACHE_TTL = 3600000; // 1 hour
 ```
 
 **Cache location in localStorage:**
+
 ```json
 {
   "ebay-business-policies": {
@@ -208,6 +211,7 @@ const CACHE_TTL = 3600000; // 1 hour
 ```
 
 **Cache invalidation methods:**
+
 - Automatic: After 1 hour
 - Manual: Call `refreshPolicies()` or `clearCache()`
 
@@ -241,6 +245,7 @@ User submits listing → policies included in offer payload
 ## TypeScript Types Reference
 
 ### SelectedPolicies
+
 ```typescript
 interface SelectedPolicies {
   fulfillmentPolicyId: string | null;
@@ -250,6 +255,7 @@ interface SelectedPolicies {
 ```
 
 ### useEbayPolicies Return Type
+
 ```typescript
 {
   policies: BusinessPolicies;              // All fetched policies
@@ -312,17 +318,20 @@ interface SelectedPolicies {
 ## Troubleshooting
 
 ### Policies not loading
+
 - Check localStorage `ebay-business-policies`
 - Verify `sell.account` scope in OAuth token
 - Check browser DevTools Network tab for API errors
 - Clear localStorage and retry
 
 ### Selected policies not saving
+
 - Verify `onPoliciesSelected` callback is connected
 - Check parent component state is updating
 - Ensure listener is not debounced
 
 ### Stale policies in dropdown
+
 - Click "Retry" button to clear cache
 - Or wait 1 hour for automatic refresh
 - Or manually call `refreshPolicies()`
