@@ -94,26 +94,81 @@ workspace quota before beginning each phase.
 6. Human owners retain approval authority for production access, legal decisions,
    destructive operations, migration go/no-go, and rollback.
 
+### Human-and-AI operating protocol
+
+The user is the operational owner for every phase. The AI model assigned to the
+active phase is the user's implementation partner and guided technical operator.
+The AI must assume that the user has limited coding and infrastructure
+experience and should explain the reason, risk, and expected result before each
+non-trivial action.
+
+For every task, the AI should:
+
+1. State the current objective and the smallest safe next step.
+2. Inspect the repository or service context before proposing a change.
+3. Identify exactly what it needs from the user, separating public values such
+   as URLs, project IDs, and account names from secrets.
+4. Walk the user through creating or changing settings in Vercel, Supabase,
+   GitHub, Stripe, eBay, Resend, DNS, Sentry, or other provider dashboards.
+5. Provide copyable commands or field-by-field instructions and explain where
+   each value belongs.
+6. Pause for the user's confirmation after account creation, permission
+   changes, production access, destructive actions, or irreversible cutover
+   steps.
+7. Run the narrowest available validation immediately after each edit or
+   configuration change, then report the result plainly.
+8. Maintain the decision log, evidence references, unresolved questions, and
+   rollback notes as work progresses.
+
+### Secret and credential protocol
+
+The AI may ask the user which secret names, providers, environments, or URLs are
+required, but must never ask the user to paste secret values, tokens, password
+hashes, service-role keys, webhook signing secrets, or private customer data
+into chat, Markdown, source files, tickets, or model prompts. Instead, the AI
+must:
+
+- Explain how to generate or retrieve the credential from the official provider
+  dashboard.
+- Tell the user exactly where to enter it, such as a Vercel environment variable,
+  Supabase secret, GitHub Actions secret, Stripe webhook configuration, or local
+  terminal prompt.
+- Use a placeholder or secret name in all repository artifacts.
+- Ask the user to confirm only that the value was entered and, where possible,
+  validate it through a safe health check that does not print the credential.
+- Stop and request the user to enter sensitive input directly into their own
+  terminal when a command prompts for it; the AI must not collect the value.
+
+For authentication setup, the AI should walk through provider configuration,
+redirect URLs, callback routes, email templates, allowed origins, and test-user
+verification one screen or command at a time. It should distinguish staging
+from production and never recommend unrestricted wildcard redirects or using
+production credentials in automated tests.
+
 ## 5. Ownership and Approvals
 
-Assign names before discovery work begins. Until names are entered, the role is
-blocked rather than implicitly owned by the person running the migration.
+The user is the single operational owner for all roles below. The AI model
+assigned to the active phase performs the corresponding planning, research,
+implementation guidance, documentation, and validation with the user's direct
+approval. Specialist review models remain escalation reviewers rather than
+independent production operators.
 
-| Role                 | Named owner | Phase 0 responsibility                                     | Status     |
-| -------------------- | ----------- | ---------------------------------------------------------- | ---------- |
-| Launch lead          | TBD         | Schedule, decision log, go/no-go, rollback authority       | Unassigned |
-| Brand/design owner   | TBD         | Name, asset, and visual-system inventory                   | Unassigned |
-| Frontend owner       | TBD         | Runtime and metadata inventory                             | Unassigned |
-| Backend owner        | TBD         | Supabase, functions, schema, and secrets inventory         | Unassigned |
-| Data migration owner | TBD         | Cohort, backup, counts, and restore rehearsal              | Unassigned |
-| Platform/DNS owner   | TBD         | Domain, Vercel, DNS, TLS, and monitoring inventory         | Unassigned |
-| Integrations owner   | TBD         | eBay, Stripe, Resend, OAuth, AI, and Sentry inventory      | Unassigned |
-| Security reviewer    | TBD         | Access, secret handling, RLS, backup, and rollback review  | Unassigned |
-| QA owner             | TBD         | Baseline tests, acceptance matrix, and evidence collection | Unassigned |
-| Legal/support owner  | TBD         | Legal identity, notices, mailboxes, and support readiness  | Unassigned |
+| Role                 | Operational owner | AI responsibility                                      |
+| -------------------- | ----------------- | ------------------------------------------------------ |
+| Launch lead          | User              | Schedule, decision log, go/no-go, rollback guidance    |
+| Brand/design owner   | User              | Name, asset, and visual-system guidance                |
+| Frontend owner       | User              | Runtime and metadata implementation guidance           |
+| Backend owner        | User              | Supabase, functions, schema, and secret setup guidance |
+| Data migration owner | User              | Cohort, backup, counts, and restore guidance           |
+| Platform/DNS owner   | User              | Domain, Vercel, DNS, TLS, and monitoring walkthrough   |
+| Integrations owner   | User              | eBay, Stripe, Resend, OAuth, AI, and Sentry guidance   |
+| Security reviewer    | User              | Access, secret, RLS, backup, and rollback review       |
+| QA owner             | User              | Test execution, acceptance evidence, and defect triage |
+| Legal/support owner  | User              | Legal identity, notices, mailboxes, and support review |
 
-Required approvals for the Phase 0 packet: launch lead, backend owner, data
-migration owner, platform/DNS owner, security reviewer, and legal/support owner.
+The user's approval is required for production access, provider account changes,
+secret creation, data exports, migration scope, legal copy, maintenance windows,
+and go/no-go decisions. The AI must not infer approval from silence.
 
 ## 5. Repository Baseline
 
