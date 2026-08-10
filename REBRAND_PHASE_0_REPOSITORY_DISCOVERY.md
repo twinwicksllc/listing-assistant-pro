@@ -6,6 +6,9 @@
 **Discovery date:** 2026-08-10  
 **Scope:** Read-only repository inspection; no production systems, credentials, or customer data accessed
 
+**Related implementation plan:** `REBRAND_PHASE_0_IMPLEMENTATION.md`
+**Parent migration plan:** `LISTRASSISTR_REBRAND_AND_MIGRATION_PLAN.md`
+
 ## Summary
 
 This report records repository evidence that can be collected without provider

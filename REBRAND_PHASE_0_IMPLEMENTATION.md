@@ -6,6 +6,8 @@
 **Date opened:** 2026-08-10  
 **Status:** In progress
 
+**Related repository discovery:** `REBRAND_PHASE_0_REPOSITORY_DISCOVERY.md`
+
 ## 1. Purpose
 
 Phase 0 establishes the factual baseline, owners, controls, and decision record
@@ -346,18 +348,18 @@ and unresolved exceptions.
 
 ## 9. Suggested Evidence Artifacts
 
-Create these restricted or version-controlled artifacts as appropriate:
+Create these restricted or version-controlled rebrand artifacts as appropriate:
 
-- `phase-0-decision-log.md` - decisions, owners, timestamps, and approvals
-- `phase-0-service-inventory.md` - endpoints and resource names, no secrets
-- `phase-0-secret-inventory.md` - secret names, source, owner, rotation status;
+- `REBRAND_PHASE_0_DECISION_LOG.md` - decisions, owners, timestamps, and approvals
+- `REBRAND_PHASE_0_SERVICE_INVENTORY.md` - endpoints and resource names, no secrets
+- `REBRAND_PHASE_0_SECRET_INVENTORY.md` - secret names, source, owner, rotation status;
   never values
-- `phase-0-schema-inventory.md` - live objects, migration coverage, ownership
-- `phase-0-baseline.csv` - counts and checksums, stored securely if customer data
+- `REBRAND_PHASE_0_SCHEMA_INVENTORY.md` - live objects, migration coverage, ownership
+- `REBRAND_PHASE_0_BASELINE.csv` - counts and checksums, stored securely if customer data
   could be inferred
-- `phase-0-restore-report.md` - backup and restore rehearsal evidence
-- `phase-0-cohort-definition.sql` - deterministic selection query after review
-- `phase-0-exception-log.md` - unresolved items, impact, owner, due date
+- `REBRAND_PHASE_0_RESTORE_REPORT.md` - backup and restore rehearsal evidence
+- `REBRAND_PHASE_0_COHORT_DEFINITION.sql` - deterministic selection query after review
+- `REBRAND_PHASE_0_EXCEPTION_LOG.md` - unresolved items, impact, owner, due date
 
 Keep artifacts containing production topology, counts, customer-derived data, or
 secret names in the approved restricted location unless the team explicitly

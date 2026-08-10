@@ -176,6 +176,13 @@ objects and eBay sandbox credentials in staging.
 
 **Owner:** Launch lead with all technical owners
 
+The rebrand-specific working documents for this phase are:
+
+- `REBRAND_PHASE_0_IMPLEMENTATION.md` - execution roadmap, ownership protocol,
+  model assignments, controls, and completion gate
+- `REBRAND_PHASE_0_REPOSITORY_DISCOVERY.md` - repository-only findings and
+  discovery limits collected without production-dashboard access
+
 1. Create a launch project with task owners, due dates, dependencies, and a
    decision log.
 2. Record current production and QA URLs, Vercel projects, Supabase project IDs,
