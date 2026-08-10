@@ -3,14 +3,17 @@
 **Product:** ListrAssistr  
 **Source repository:** `twinwicksllc/listing-assistant-pro`  
 **Discovery date:** 2026-08-10  
-**Status:** Repository migration inventory; live schema reconciliation pending
+**Status:** Live object-name reconciliation recorded; definitions, dependencies, cohort, and restore evidence pending
 
 ## Scope and limitations
 
-This inventory is derived from migration filenames, function references, and the
-repository function/table mapping. It is not a dump of the live database. Any
-live object absent from this file or repository migrations is an exception until
-reviewed.
+This inventory began as a repository-derived migration inventory. The owner has
+now supplied a live Supabase object export containing schemas, object types, RLS
+state, bucket names, and policy metadata. The normalized classification is in
+[REBRAND_PHASE_0_LIVE_SCHEMA_RECONCILIATION.md](REBRAND_PHASE_0_LIVE_SCHEMA_RECONCILIATION.md).
+That export does not include definitions, columns, dependencies, row counts,
+storage manifests, cron schedules, or policy expressions. Any live object absent
+from repository migrations remains an exception until reviewed.
 
 ## Product data groups
 
@@ -28,12 +31,32 @@ reviewed.
 | Knowledge/RAG      | pgvector and knowledge-base migrations                              | Verify extension, embeddings, and source ownership      | Requires review                |
 | Support/alerts     | Support, alert, and domain-quality references                       | Apply retention and privacy policy                      | Requires live review           |
 
+## Live reconciliation summary
+
+The live project is shared production infrastructure. The export confirms a
+large CRM schema in `public` alongside the listing-app schema, plus Supabase
+system schemas and a `client-uploads` bucket absent from the listing migrations.
+The selective migration boundary is therefore the approved ListrAssistr cohort,
+not the complete `public` schema. Listing candidates include drafts, eBay tokens,
+taxonomy/cache, market/reprice, listing COGS/financials, and `listing-images`.
+CRM candidates include accounts, contacts, campaigns, leads, deals, pipelines,
+email, commission, tenant/site, CRM billing, and public-intake surfaces.
+Profiles, organizations, subscriptions, usage/AI, knowledge, support, and
+analytics remain shared or ambiguous until ownership is proven. Auth, cron, net,
+realtime, storage internals, vault, extensions, and migration metadata are
+system-managed and are not application-data migration scope.
+
+The live export also shows RLS policy-name/role drift from repository migrations.
+Exact policy expressions and grants must be exported and tested before any
+selective copy. See the focused reconciliation document for the object groups,
+storage review, and unresolved controls.
+
 ## Storage
 
-| Bucket           | Repository evidence                             | Migration controls                                              | Live status |
-| ---------------- | ----------------------------------------------- | --------------------------------------------------------------- | ----------- |
-| `listing-images` | Bucket migrations and frontend/function uploads | Preserve paths, MIME types, checksums, media retention metadata | Unknown     |
-| `avatars`        | Bucket migration and profile upload path        | Preserve user linkage and access policy                         | Unknown     |
+| Bucket           | Repository evidence                             | Migration controls                                              | Live status     |
+| ---------------- | ----------------------------------------------- | --------------------------------------------------------------- | --------------- |
+| `listing-images` | Bucket migrations and frontend/function uploads | Preserve paths, MIME types, checksums, media retention metadata | Present; public |
+| `avatars`        | Bucket migration and profile upload path        | Preserve user linkage and access policy                         | Present; public |
 
 ## Function-to-data relationships observed
 
@@ -65,7 +88,7 @@ The repository mapping identifies these important relationships:
 - Storage public URL generation appears in frontend and functions; absolute old
   URLs must be identified before storage migration.
 
-## Required live reconciliation
+## Remaining live reconciliation
 
 The user and AI should collect from the live Supabase project, without exposing
 secret values:
