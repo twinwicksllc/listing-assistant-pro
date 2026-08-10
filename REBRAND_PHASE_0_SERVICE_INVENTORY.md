@@ -14,23 +14,23 @@ user in the relevant dashboard or authorized CLI session.
 
 ## Services and endpoints
 
-| Service                 | Repository evidence                                          | Environment/status                           | Verification required                                        |
-| ----------------------- | ------------------------------------------------------------ | -------------------------------------------- | ------------------------------------------------------------ |
-| Frontend                | Vite React app; `npm run build`; output `dist`               | Legacy app source                            | Confirm Vercel project, domains, deployments                 |
-| Legacy application URL  | README references `https://lister.teckstart.com`             | Historical repository value                  | Confirm current production URL and all aliases               |
-| Supabase API            | `VITE_SUPABASE_URL`; config ref `wcednzaxmxwfiijzmjmx`       | Linked repository project; live role unknown | Confirm project name, region, plan, and ownership            |
-| New staging Supabase    | Owner-reported project ref `yqftpibxplachhwoclam`            | Initial staging; no production data approved | Confirm owner, region, empty status, and project URL         |
-| Supabase Edge Functions | 36 function-related directories                              | Repository deployment surface                | Confirm deployed functions, versions, JWT settings, CORS     |
-| Supabase Storage        | Buckets `listing-images` and `avatars` in migrations/code    | Repository-defined storage surface           | Confirm live buckets, object counts, bytes, access policies  |
-| GitHub Actions          | 6 workflow files under `.github/workflows`                   | Repository CI/CD                             | Confirm environments, approvals, variables, and secret names |
-| Vercel                  | `vercel.json` SPA rewrite; Vite build                        | Deployment configuration source              | Confirm project, team, domains, environment variables        |
-| Stripe                  | Checkout, portal, subscription check, webhook functions      | Integration in source                        | Confirm account, products, prices, endpoints, event routing  |
-| eBay                    | OAuth, Inventory/Browse/Taxonomy/Policies functions          | Integration in source                        | Confirm app, RuName, scopes, sandbox/production settings     |
-| Google/Supabase Auth    | Browser callbacks derive from origin                         | Auth integration in source                   | Confirm Site URL, allowed redirects, providers, templates    |
-| Gemini/OpenAI           | Gemini analysis and usage; OpenAI proxy names in config scan | AI provider integration                      | Confirm providers, models, quotas, environments              |
-| Resend                  | Cost alert function and `RESEND_API_KEY` reference           | Email integration in source                  | Confirm domain, sender identities, SPF/DKIM/DMARC            |
-| Sentry                  | Function helper and `SENTRY_DSN` reference                   | Monitoring integration in source             | Confirm projects, environments, alert routes, retention      |
-| Scheduled work          | Cron/trigger function directories and taxonomy workflow      | Repository-defined jobs                      | Confirm live schedules, invocations, pause/restart methods   |
+| Service                 | Repository evidence                                          | Environment/status                                     | Verification required                                         |
+| ----------------------- | ------------------------------------------------------------ | ------------------------------------------------------ | ------------------------------------------------------------- |
+| Frontend                | Vite React app; `npm run build`; output `dist`               | Legacy app source                                      | Confirm Vercel project, domains, deployments                  |
+| Legacy application URL  | README references `https://lister.teckstart.com`             | Historical repository value                            | Confirm current production URL and all aliases                |
+| Supabase API            | `VITE_SUPABASE_URL`; config ref `wcednzaxmxwfiijzmjmx`       | RankedCEO-CRM production; shared with eBay listing app | Project and shared ownership confirmed; schema review pending |
+| New staging Supabase    | Owner-reported project ref `yqftpibxplachhwoclam`            | Initial staging; no production data approved           | Confirm owner, region, empty status, and project URL          |
+| Supabase Edge Functions | 36 function-related directories                              | Repository deployment surface                          | Confirm deployed functions, versions, JWT settings, CORS      |
+| Supabase Storage        | Buckets `listing-images` and `avatars` in migrations/code    | Repository-defined storage surface                     | Confirm live buckets, object counts, bytes, access policies   |
+| GitHub Actions          | 6 workflow files under `.github/workflows`                   | Repository CI/CD                                       | Confirm environments, approvals, variables, and secret names  |
+| Vercel                  | `vercel.json` SPA rewrite; Vite build                        | Deployment configuration source                        | Confirm project, team, domains, environment variables         |
+| Stripe                  | Checkout, portal, subscription check, webhook functions      | Integration in source                                  | Confirm account, products, prices, endpoints, event routing   |
+| eBay                    | OAuth, Inventory/Browse/Taxonomy/Policies functions          | Integration in source                                  | Confirm app, RuName, scopes, sandbox/production settings      |
+| Google/Supabase Auth    | Browser callbacks derive from origin                         | Email and Google Auth; email confirmation enabled      | User/cohort classification and template review pending        |
+| Gemini/OpenAI           | Gemini analysis and usage; OpenAI proxy names in config scan | AI provider integration                                | Confirm providers, models, quotas, environments               |
+| Resend                  | Cost alert function and `RESEND_API_KEY` reference           | Email integration in source                            | Confirm domain, sender identities, SPF/DKIM/DMARC             |
+| Sentry                  | Function helper and `SENTRY_DSN` reference                   | Monitoring integration in source                       | Confirm projects, environments, alert routes, retention       |
+| Scheduled work          | Cron/trigger function directories and taxonomy workflow      | Repository-defined jobs                                | Confirm live schedules, invocations, pause/restart methods    |
 
 ## GitHub Actions workflow inventory
 
@@ -79,3 +79,28 @@ The apex-domain setup is an initial staging arrangement, not approval to connect
 production data or legacy credentials. Verify the project owner, region, empty
 state, Vercel Preview environment, and final `qa.listrassistr.com` configuration
 before declaring environment separation complete.
+
+### Live legacy Supabase findings
+
+Owner-reported from the Supabase dashboard on 2026-08-10:
+
+- Project: `RankedCEO-CRM`
+- Project ref: `wcednzaxmxwfiijzmjmx`
+- Region: `us-east-2`
+- Environment: Production
+- Owner/organization: `twinwicksllc@gmail.com`
+- Products present: RankedCEO CRM and the eBay listing application
+- Auth users: approximately 10
+- Auth providers: email and Google
+- Email confirmation: enabled
+- Auth Site URL: `https://crm.rankedceo.com`
+- Redirect URL configuration: reviewed in the dashboard; includes CRM, legacy
+  listing, audit, and Vercel preview/QA origins. Exact dashboard values remain
+  provider evidence and are not duplicated here.
+- User ownership: users do not span both products, except the owner/admin
+  account, which is shared and requires explicit handling.
+
+This confirms that the project is shared production infrastructure. It does not
+authorize an export or migration. The owner/admin account must be excluded from
+any automated cohort until its identity, roles, and product relationships are
+explicitly classified.

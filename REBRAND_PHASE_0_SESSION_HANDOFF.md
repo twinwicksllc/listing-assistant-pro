@@ -81,7 +81,11 @@ customer data or legacy database credentials.
 ## Pending Phase 0 gates
 
 - Confirm whether Supabase project `wcednzaxmxwfiijzmjmx` is shared production
-  infrastructure.
+  infrastructure. **Confirmed:** it is shared production infrastructure for
+  RankedCEO CRM and the eBay listing application.
+- Record the live Auth findings: approximately 10 users, email and Google Auth,
+  email confirmation enabled, Site URL `https://crm.rankedceo.com`, and one
+  owner/admin account shared across both products.
 - Reconcile live schema, RLS, Auth, Storage, Edge Functions, cron, and objects
   absent from repository migrations.
 - Review broad `verify_jwt = false` usage and production deployment automation.
