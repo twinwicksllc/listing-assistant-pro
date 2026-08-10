@@ -116,7 +116,7 @@ export default function PrivacyPage() {
             the Service), legitimate interests (improving our platform), and
             consent (where applicable, such as cookies). To exercise your
             rights, contact{" "}
-            <span className="text-primary">privacy@twinwicksds.com</span>.
+            <span className="text-primary">privacy@twin-wicks.com</span>.
           </p>
 
           <h2>6. CCPA Compliance (California Residents)</h2>
@@ -129,7 +129,7 @@ export default function PrivacyPage() {
               Sovereign Listing Suite does not sell personal information.
             </strong>{" "}
             To submit a CCPA request, contact{" "}
-            <span className="text-primary">privacy@twinwicksds.com</span>.
+            <span className="text-primary">privacy@twin-wicks.com</span>.
           </p>
 
           <h2>7. Cookies &amp; Tracking</h2>
@@ -175,7 +175,7 @@ export default function PrivacyPage() {
           <h2>12. Contact</h2>
           <p>
             For privacy inquiries or data requests, contact us at{" "}
-            <span className="text-primary">privacy@twinwicksds.com</span>.
+            <span className="text-primary">privacy@twin-wicks.com</span>.
           </p>
         </div>
       </div>
