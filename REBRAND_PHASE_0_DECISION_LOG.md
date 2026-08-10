@@ -1,0 +1,55 @@
+# Rebrand Phase 0 Decision Log
+
+**Product:** ListrAssistr  
+**Repository:** `twinwicksllc/listing-assistant-pro`  
+**Log opened:** 2026-08-10  
+**Status:** In progress; Phase 0 exit approval is pending
+
+## Decision rules
+
+This log records decisions and approvals that control the rebrand and migration.
+A documented direction is not permission to change production. Production access,
+provider changes, data exports, destructive actions, migration scope, and cutover
+still require explicit approval from the operational owner.
+
+Secret values, customer data, tokens, password hashes, and private exports must
+never be recorded here.
+
+## Recorded decisions
+
+| ID       | Decision                                                                                                                                              | Status             | Evidence / rationale                                              |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ----------------------------------------------------------------- |
+| DEC-0001 | The target product name is ListrAssistr.                                                                                                              | Recorded           | Parent migration plan                                             |
+| DEC-0002 | The target repository is private `twinwicksllc/listrassistr-official`.                                                                                | Recorded           | Parent migration plan and repository transition control           |
+| DEC-0003 | `twinwicksllc/listing-assistant-pro` remains the running legacy application until cutover is explicitly approved.                                     | Recorded           | Repository transition control                                     |
+| DEC-0004 | The target backend is a new ListrAssistr-only Supabase project, separate from the legacy project.                                                     | Recorded direction | Parent migration plan; live ownership still requires verification |
+| DEC-0005 | Staging and production must use separate environments and credentials.                                                                                | Recorded           | Phase 0 implementation plan                                       |
+| DEC-0006 | No production data is deleted or modified during Phase 0 discovery.                                                                                   | Control active     | Phase 0 implementation plan                                       |
+| DEC-0007 | Phase 0 artifacts record secret names and locations only, never secret values.                                                                        | Control active     | Secret-handling protocol and secret inventory                     |
+| DEC-0008 | The user is the operational owner for launch, brand, frontend, backend, migration, platform, integrations, security, QA, and legal/support decisions. | Recorded           | Ownership table in Phase 0 implementation plan                    |
+| DEC-0009 | AI models provide implementation and review support; the user retains approval authority for production and irreversible actions.                     | Control active     | Human-and-AI operating protocol                                   |
+| DEC-0010 | Repository changes use reviewable branches and pull requests before merge.                                                                            | Control active     | Existing repository workflow; PRs #454, #455, and #456            |
+| DEC-0011 | The initial migration preserves user UUID relationships and does not rename stable internal identifiers solely for branding.                          | Recorded direction | Parent migration plan safety rules                                |
+| DEC-0012 | The initial migration keeps the existing Stripe and eBay accounts but requires ListrAssistr-specific configuration and explicit integration review.   | Recorded direction | Parent migration plan                                             |
+| DEC-0013 | The old backend remains recoverable and read-only for the approved post-launch retention period.                                                      | Recorded direction | Parent migration plan safety rules                                |
+
+## Pending approvals and decisions
+
+| ID        | Decision required                                                                                                    | Owner | Evidence required                                | Status  |
+| --------- | -------------------------------------------------------------------------------------------------------------------- | ----- | ------------------------------------------------ | ------- |
+| PEND-0001 | Confirm whether Supabase project `wcednzaxmxwfiijzmjmx` is shared production infrastructure and identify its owners. | User  | Provider dashboard inventory                     | Pending |
+| PEND-0002 | Approve the live service, secret-name, schema, and exception inventories.                                            | User  | Dashboard reconciliation and review notes        | Pending |
+| PEND-0003 | Approve the ListrAssistr migration cohort and ambiguous/shared-resource classifications.                             | User  | Deterministic cohort query and ownership review  | Pending |
+| PEND-0004 | Approve encrypted backup location, restore target, and retention period.                                             | User  | Backup and disposable restore evidence           | Pending |
+| PEND-0005 | Approve changes, if any, to production deployment gates, JWT settings, CORS, and migration automation.               | User  | GitHub/Supabase configuration review             | Pending |
+| PEND-0006 | Approve maintenance window, customer communication schedule, go/no-go meeting, and rollback deadline.                | User  | Cutover runbook and communication plan           | Pending |
+| PEND-0007 | Approve Phase 0 exit and Phase 1 entry.                                                                              | User  | Resolved exceptions and completed exit checklist | Pending |
+
+## Approval record
+
+No production or irreversible approval is recorded in this file yet.
+
+- **Phase 0 decision:** `Pending`
+- **Approved by:** `TBD`
+- **Approval date:** `TBD`
+- **Notes:** Live provider inventory, baseline, backup/restore, cohort, and exception review remain outstanding.
