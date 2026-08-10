@@ -31,9 +31,3 @@ reviewed.
 | RBR-0015 | Live RLS policy metadata differs from repository policy names, roles, and command coverage; names do not expose policy expressions                                 | High: authorization regression or unintended access                | Owner-provided live RLS export; repository `CREATE POLICY` migrations                  | User + AI | Open; export exact expressions/grants and run anon/authenticated/service-role tests       |
 | RBR-0016 | Live `cron.job` and `cron.job_run_details` existence is confirmed, but individual job definitions and schedules were not included                                  | Medium: duplicate, missing, or incorrectly migrated scheduled work | Owner-provided live object export; repository scheduled-function inventory             | User + AI | Open; capture job name, schedule, command, enabled state, owner, and run history          |
 | RBR-0017 | Live public buckets include `client-uploads` in addition to repository buckets `listing-images` and `avatars`                                                      | High: client media exposure or accidental cross-product copy       | Owner-provided live storage export; storage migrations and policies                    | User + AI | Open; capture object manifest, policy expressions, linkage, and retention decision        |
-
-## Closure requirements
-
-Close an exception only when evidence is attached or referenced, the user has
-approved the decision where required, and any follow-up task has an owner. High-
-impact exceptions require explicit user approval before Phase 1/3/4/6/7 gates.
