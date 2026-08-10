@@ -2,12 +2,20 @@
 
 **Product:** ListrAssistr  
 **Repository:** `twinwicksllc/listing-assistant-pro`  
-**Branch:** `docs/phase-0-roadmap`  
+**Source branch:** `main`
+**Source commit:** `7cdfa806f26b9b521312fa9337103df1b179601c`
 **Discovery date:** 2026-08-10  
 **Scope:** Read-only repository inspection; no production systems, credentials, or customer data accessed
 
 **Related implementation plan:** `REBRAND_PHASE_0_IMPLEMENTATION.md`
 **Parent migration plan:** `LISTRASSISTR_REBRAND_AND_MIGRATION_PLAN.md`
+
+**Related inventories:**
+
+- `REBRAND_PHASE_0_SERVICE_INVENTORY.md`
+- `REBRAND_PHASE_0_SECRET_INVENTORY.md`
+- `REBRAND_PHASE_0_SCHEMA_INVENTORY.md`
+- `REBRAND_PHASE_0_EXCEPTION_LOG.md`
 
 ## Summary
 
@@ -15,6 +23,10 @@ This report records repository evidence that can be collected without provider
 or production-dashboard access. It supports the Phase 0 implementation plan but
 does not replace live Vercel, Supabase, GitHub, Stripe, eBay, Resend, DNS, or
 Sentry inventory.
+
+The findings below are a source snapshot. Current-state reconciliation is called
+out where later edits or merged documentation changed the original observation;
+historical evidence is retained so the discovery trail remains auditable.
 
 ## Confirmed Repository Findings
 
@@ -27,12 +39,13 @@ references and should be addressed during the later brand phases:
   Team, Home, Auth Callback, Landing, Reset Password, Signup, Dashboard,
   Settings, and Forgot Password.
 - `src/v2/components/SideNav.tsx` imports the same legacy logo asset.
-- `src/pages/LandingPage.tsx` contains `sls.twinwicksds.com`.
+- `src/pages/LandingPage.tsx` contains the legacy subdomain `sls.twin-wicks.com`.
 - `supabase/functions/cost-alert-cron/index.ts` sends from
   `alerts@teckstart.com` with legacy product branding.
 - `README.md` still documents `https://lister.teckstart.com` as the live URL.
 - Archived V2 pages contain duplicate legacy references and should remain
-  excluded from runtime scans unless their imports are reactivated.
+  excluded from runtime scans unless their imports are reactivated. Their
+  contact addresses now use the `twin-wicks.com` domain.
 
 These findings confirm that the rebrand is a multi-surface change rather than a
 single asset replacement.
