@@ -19,6 +19,7 @@ user in the relevant dashboard or authorized CLI session.
 | Frontend                | Vite React app; `npm run build`; output `dist`               | Legacy app source                            | Confirm Vercel project, domains, deployments                 |
 | Legacy application URL  | README references `https://lister.teckstart.com`             | Historical repository value                  | Confirm current production URL and all aliases               |
 | Supabase API            | `VITE_SUPABASE_URL`; config ref `wcednzaxmxwfiijzmjmx`       | Linked repository project; live role unknown | Confirm project name, region, plan, and ownership            |
+| New staging Supabase    | Owner-reported project ref `yqftpibxplachhwoclam`            | Initial staging; no production data approved | Confirm owner, region, empty status, and project URL         |
 | Supabase Edge Functions | 36 function-related directories                              | Repository deployment surface                | Confirm deployed functions, versions, JWT settings, CORS     |
 | Supabase Storage        | Buckets `listing-images` and `avatars` in migrations/code    | Repository-defined storage surface           | Confirm live buckets, object counts, bytes, access policies  |
 | GitHub Actions          | 6 workflow files under `.github/workflows`                   | Repository CI/CD                             | Confirm environments, approvals, variables, and secret names |
@@ -63,3 +64,18 @@ user in the relevant dashboard or authorized CLI session.
 The user should collect provider-visible names and statuses only. The AI can
 walk through each dashboard and record the results without receiving secret
 values. No production change is implied by this inventory.
+
+### Initial staging confirmation
+
+Owner-reported on 2026-08-10:
+
+- New staging project ref: `yqftpibxplachhwoclam`
+- Supabase Auth Site URL: `https://listrassistr.com`
+- Allowed callback URLs: `https://listrassistr.com/auth/callback` and
+  `http://localhost:3000/auth/callback`
+- Planned dedicated QA hostname: `https://qa.listrassistr.com`
+
+The apex-domain setup is an initial staging arrangement, not approval to connect
+production data or legacy credentials. Verify the project owner, region, empty
+state, Vercel Preview environment, and final `qa.listrassistr.com` configuration
+before declaring environment separation complete.

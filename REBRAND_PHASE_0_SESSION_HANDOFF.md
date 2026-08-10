@@ -47,11 +47,24 @@ Reported status from the new agent:
 - PR #4, updates to the staging authentication plan, is being pushed.
 - The next new-repository PR is expected to be #5.
 - Vercel is green.
-- The target app has not connected to Supabase or any production provider.
+- A dedicated Supabase project was created for the new application:
+  `yqftpibxplachhwoclam`.
+- Supabase Auth URL configuration was entered for the initial staging setup:
+  Site URL `https://listrassistr.com`, callback
+  `https://listrassistr.com/auth/callback`, and local callback
+  `http://localhost:3000/auth/callback`.
+- The target app has not connected to the legacy Supabase project or any
+  production provider.
 
 The new repository must remain a separate target-product workspace. Do not copy
 production data, secrets, tokens, password hashes, or the legacy backend into it.
 The legacy Phase 0 inventories remain authoritative here.
+
+For now, `https://listrassistr.com` is the initial staging application origin.
+The planned dedicated QA hostname remains `https://qa.listrassistr.com`; it must
+be configured and tested before treating staging and production as fully
+separated environments. The current staging project must not receive production
+customer data or legacy database credentials.
 
 ## Next legacy action after resume
 
@@ -73,6 +86,8 @@ The legacy Phase 0 inventories remain authoritative here.
   absent from repository migrations.
 - Review broad `verify_jwt = false` usage and production deployment automation.
 - Confirm Vercel, DNS, Stripe, eBay, Resend, Sentry, and GitHub environments.
+- Confirm the staging Supabase project owner, region, empty-project status, and
+  final QA hostname plan.
 - Approve ownership classification, backup/restore evidence, cohort scope,
   maintenance window, rollback deadline, and Phase 0 exit.
 
