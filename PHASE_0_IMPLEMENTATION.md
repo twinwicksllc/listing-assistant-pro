@@ -94,28 +94,163 @@ workspace quota before beginning each phase.
 6. Human owners retain approval authority for production access, legal decisions,
    destructive operations, migration go/no-go, and rollback.
 
+### Human-and-AI operating protocol
+
+The user is the operational owner for every phase. The AI model assigned to the
+active phase is the user's implementation partner and guided technical operator.
+The AI must assume that the user has limited coding and infrastructure
+experience and should explain the reason, risk, and expected result before each
+non-trivial action.
+
+For every task, the AI should:
+
+1. State the current objective and the smallest safe next step.
+2. Inspect the repository or service context before proposing a change.
+3. Identify exactly what it needs from the user, separating public values such
+   as URLs, project IDs, and account names from secrets.
+4. Walk the user through creating or changing settings in Vercel, Supabase,
+   GitHub, Stripe, eBay, Resend, DNS, Sentry, or other provider dashboards.
+5. Provide copyable commands or field-by-field instructions and explain where
+   each value belongs.
+6. Pause for the user's confirmation after account creation, permission
+   changes, production access, destructive actions, or irreversible cutover
+   steps.
+7. Run the narrowest available validation immediately after each edit or
+   configuration change, then report the result plainly.
+8. Maintain the decision log, evidence references, unresolved questions, and
+   rollback notes as work progresses.
+
+### Secret and credential protocol
+
+The AI may ask the user which secret names, providers, environments, or URLs are
+required, but must never ask the user to paste secret values, tokens, password
+hashes, service-role keys, webhook signing secrets, or private customer data
+into chat, Markdown, source files, tickets, or model prompts. Instead, the AI
+must:
+
+- Explain how to generate or retrieve the credential from the official provider
+  dashboard.
+- Tell the user exactly where to enter it, such as a Vercel environment variable,
+  Supabase secret, GitHub Actions secret, Stripe webhook configuration, or local
+  terminal prompt.
+- Use a placeholder or secret name in all repository artifacts.
+- Ask the user to confirm only that the value was entered and, where possible,
+  validate it through a safe health check that does not print the credential.
+- Stop and request the user to enter sensitive input directly into their own
+  terminal when a command prompts for it; the AI must not collect the value.
+
+For authentication setup, the AI should walk through provider configuration,
+redirect URLs, callback routes, email templates, allowed origins, and test-user
+verification one screen or command at a time. It should distinguish staging
+from production and never recommend unrestricted wildcard redirects or using
+production credentials in automated tests.
+
 ## 5. Ownership and Approvals
 
-Assign names before discovery work begins. Until names are entered, the role is
-blocked rather than implicitly owned by the person running the migration.
+The user is the single operational owner for all roles below. The AI model
+assigned to the active phase performs the corresponding planning, research,
+implementation guidance, documentation, and validation with the user's direct
+approval. Specialist review models remain escalation reviewers rather than
+independent production operators.
 
-| Role                 | Named owner | Phase 0 responsibility                                     | Status     |
-| -------------------- | ----------- | ---------------------------------------------------------- | ---------- |
-| Launch lead          | TBD         | Schedule, decision log, go/no-go, rollback authority       | Unassigned |
-| Brand/design owner   | TBD         | Name, asset, and visual-system inventory                   | Unassigned |
-| Frontend owner       | TBD         | Runtime and metadata inventory                             | Unassigned |
-| Backend owner        | TBD         | Supabase, functions, schema, and secrets inventory         | Unassigned |
-| Data migration owner | TBD         | Cohort, backup, counts, and restore rehearsal              | Unassigned |
-| Platform/DNS owner   | TBD         | Domain, Vercel, DNS, TLS, and monitoring inventory         | Unassigned |
-| Integrations owner   | TBD         | eBay, Stripe, Resend, OAuth, AI, and Sentry inventory      | Unassigned |
-| Security reviewer    | TBD         | Access, secret handling, RLS, backup, and rollback review  | Unassigned |
-| QA owner             | TBD         | Baseline tests, acceptance matrix, and evidence collection | Unassigned |
-| Legal/support owner  | TBD         | Legal identity, notices, mailboxes, and support readiness  | Unassigned |
+| Role                 | Operational owner | AI responsibility                                      |
+| -------------------- | ----------------- | ------------------------------------------------------ |
+| Launch lead          | User              | Schedule, decision log, go/no-go, rollback guidance    |
+| Brand/design owner   | User              | Name, asset, and visual-system guidance                |
+| Frontend owner       | User              | Runtime and metadata implementation guidance           |
+| Backend owner        | User              | Supabase, functions, schema, and secret setup guidance |
+| Data migration owner | User              | Cohort, backup, counts, and restore guidance           |
+| Platform/DNS owner   | User              | Domain, Vercel, DNS, TLS, and monitoring walkthrough   |
+| Integrations owner   | User              | eBay, Stripe, Resend, OAuth, AI, and Sentry guidance   |
+| Security reviewer    | User              | Access, secret, RLS, backup, and rollback review       |
+| QA owner             | User              | Test execution, acceptance evidence, and defect triage |
+| Legal/support owner  | User              | Legal identity, notices, mailboxes, and support review |
 
-Required approvals for the Phase 0 packet: launch lead, backend owner, data
-migration owner, platform/DNS owner, security reviewer, and legal/support owner.
+The user's approval is required for production access, provider account changes,
+secret creation, data exports, migration scope, legal copy, maintenance windows,
+and go/no-go decisions. The AI must not infer approval from silence.
 
-## 5. Repository Baseline
+## 6. Phase 0 Execution Roadmap
+
+### Current status
+
+Completed:
+
+- Phase 0 implementation document created, reviewed, and published to the
+  current repository
+- AI model assignment and human-and-AI operating protocol documented
+- Repository lint, unit tests, production build, and formatting checks passed
+- Current repository and new private-repository transition rule documented
+
+Pending:
+
+- Access confirmation for `listrassistr-official`
+- Live provider and infrastructure inventory
+- Named service/account values and secret-name inventory
+- Live Supabase schema, ownership, and storage inventory
+- Encrypted backup and disposable-project restore test
+- Migration cohort review, maintenance window, and rollback deadline
+- Phase 0 approvals and exception resolution
+
+### User and AI division of work
+
+The user performs or approves actions that require account access, production
+authority, legal judgment, or secret entry. The AI performs repository analysis,
+prepares documents and scripts, explains risks, provides field-by-field or
+command-by-command guidance, and validates results. The AI must pause before
+production access, permission changes, data exports, destructive actions,
+provider account changes, and cutover decisions.
+
+The user should provide only non-sensitive values in chat, such as project names,
+URLs, project IDs, environment names, account names, and whether a setting is
+enabled. Secret values must be entered directly into the provider dashboard or
+the user's own terminal. The AI should request confirmation that the value was
+entered and validate it through a safe check without printing it.
+
+### Immediate work sequence
+
+1. Confirm that the user can access the private
+   `twinwicksllc/listrassistr-official` repository and that it has appropriate
+   administrator/write access.
+2. Confirm the user as operational owner for every role in Section 5.
+3. Build the current service and endpoint inventory across GitHub, Vercel,
+   Supabase, DNS, Stripe, eBay, Auth, Resend, AI providers, Sentry, and jobs.
+4. Inventory the live Supabase project, including objects absent from repository
+   migrations, RLS, Auth, Storage, Edge Functions, secrets by name, and cron.
+5. Capture database, Auth, organization, subscription, eBay-connection, and
+   storage baselines without exporting secret values or unnecessary customer data.
+6. Create an encrypted backup and storage manifest, then restore them into a
+   disposable project and record the result.
+7. Review the deterministic migration cohort and classify records as
+   ListrAssistr-only, other-product-only, shared, or ambiguous.
+8. Select the maintenance window, customer communication schedule, go/no-go
+   meeting, and rollback decision deadline.
+9. Resolve Phase 0 exceptions, obtain the user's approvals, and approve Phase 1
+   entry criteria.
+
+### Dashboard-guided setup protocol
+
+When a provider or authentication setting must be updated, the AI should guide
+the user one screen or command at a time. For each setting it should identify
+the environment, explain why the setting is needed, provide the exact value or
+placeholder to use, identify whether the value is sensitive, and define the
+validation check. This applies to:
+
+- GitHub repository permissions, environments, variables, and secrets
+- Vercel projects, domains, environment variables, and deployment settings
+- Supabase projects, Auth URLs, redirect URLs, providers, Storage, functions,
+  database settings, and secrets
+- DNS records, TLS, SPF, DKIM, and DMARC
+- Stripe products, prices, webhooks, portal settings, and return URLs
+- eBay application branding, RuName, OAuth URLs, scopes, and environments
+- Resend sending domains, sender identities, and email authentication
+- Sentry projects, environments, releases, alerts, and uptime checks
+
+The AI must keep staging and production separate, use test credentials for
+automated tests, avoid unrestricted wildcard redirects, and never place a
+production secret in source control or a model prompt.
+
+## 7. Repository Baseline
 
 These findings were verified from the repository during Phase 0 initialization.
 They are starting evidence, not a substitute for inspecting live services.
@@ -134,7 +269,7 @@ They are starting evidence, not a substitute for inspecting live services.
 | AI provider          | README identifies Google Gemini as the current analysis provider      | Inventory Gemini keys, quotas, models, and usage tracking without exposing values |
 | Integrations         | eBay, Stripe, Supabase Auth, Resend, Sentry, and AI are in scope      | Each needs an owner, endpoint inventory, and rollback note                        |
 
-## 6. Discovery Work Plan
+## 8. Discovery Work Plan
 
 ### 6.1 Launch controls
 
@@ -209,7 +344,7 @@ Create an encrypted database backup and storage manifest. Perform a restore test
 against a disposable project and record the result, duration, checksum results,
 and unresolved exceptions.
 
-## 7. Suggested Evidence Artifacts
+## 9. Suggested Evidence Artifacts
 
 Create these restricted or version-controlled artifacts as appropriate:
 
@@ -229,7 +364,7 @@ secret names in the approved restricted location unless the team explicitly
 approves repository storage. Never commit secret values, tokens, plaintext user
 exports, password hashes, or private listing content.
 
-## 8. Repository Checks
+## 10. Repository Checks
 
 Run these checks from the repository root and attach results to the Phase 0
 packet. These are discovery/baseline checks; they do not prove production safety.
@@ -255,7 +390,7 @@ rg -n "SUPABASE|APP_URL|EBAY_|STRIPE|RESEND|GEMINI|OPENAI|SENTRY|QA_BASE_URL" \
 Record failures as baseline findings. Do not broaden Phase 0 into brand edits;
 those belong to Phase 1 and Phase 2.
 
-## 9. Risks and Controls
+## 11. Risks and Controls
 
 | Risk                                          | Control                                                                 | Owner                |
 | --------------------------------------------- | ----------------------------------------------------------------------- | -------------------- |
@@ -267,11 +402,12 @@ those belong to Phase 1 and Phase 2.
 | Model output is accepted without verification | Independent escalation review and executable checks                     | QA owner             |
 | Cutover cannot be reversed in time            | Timed rehearsal, write freeze, rollback deadline, old backend read-only | Launch lead          |
 
-## 10. Phase 0 Completion Record
+## 12. Phase 0 Completion Record
 
 Complete this section during the phase review.
 
-- [ ] Owners assigned and launch decision log created
+- [x] User assigned as operational owner for all roles
+- [ ] Launch decision log created
 - [ ] Service and endpoint inventory approved
 - [ ] Secret-name inventory approved
 - [ ] Live Supabase inventory completed
@@ -280,7 +416,7 @@ Complete this section during the phase review.
 - [ ] Encrypted backup created and restore tested
 - [ ] Migration cohort approach reviewed
 - [ ] Maintenance window and rollback deadline approved
-- [ ] Repository baseline checks recorded
+- [x] Repository baseline checks recorded: lint, 58 unit tests, build, and format
 - [ ] Phase 0 exceptions resolved or explicitly accepted by launch lead
 - [ ] Phase 1 entry criteria approved
 

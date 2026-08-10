@@ -312,7 +312,7 @@ export default function LandingPage() {
               <div className="w-2 h-2 rounded-full bg-amber-400" />
               <div className="w-2 h-2 rounded-full bg-green-400" />
               <span className="text-xs text-muted-foreground ml-2 font-mono">
-                sls.twinwicksds.com
+                sls.twin-wicks.com
               </span>
             </div>
             {/* Mock listing result */}

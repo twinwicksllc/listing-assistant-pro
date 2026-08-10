@@ -115,7 +115,7 @@ export default function TermsPage() {
           <h2>11. Contact</h2>
           <p>
             For questions about these Terms, contact us at{" "}
-            <span className="text-primary">legal@twinwicksds.com</span>.
+            <span className="text-primary">legal@twin-wicks.com</span>.
           </p>
         </div>
       </div>
