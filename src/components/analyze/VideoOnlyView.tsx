@@ -199,7 +199,9 @@ export function VideoOnlyView({
         </button>
         <p className="text-[11px] text-center text-muted-foreground -mt-1">
           Your video
-          {extractedFrameDataUrls.length > 0 ? " and extracted frames" : ""}{" "}
+          {extractedFrameDataUrls.length > 0
+            ? " and extracted frames"
+            : ""}{" "}
           will come with you — nothing is lost.
         </p>
       </div>
