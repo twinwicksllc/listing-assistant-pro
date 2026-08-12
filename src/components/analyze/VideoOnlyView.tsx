@@ -11,6 +11,9 @@ interface VideoOnlyViewProps {
   ebayTokenForPolicies: string | null;
   title: string;
   initialVideoFile?: File;
+  /** Populated when re-entering this screen with a video already uploaded/attached */
+  initialEbayVideoId?: string | null;
+  initialEbayVideoStatus?: string | null;
   videoIsProcessing: boolean;
   videoUrl: string | null;
   extractingFrames: boolean;
@@ -31,6 +34,8 @@ export function VideoOnlyView({
   ebayTokenForPolicies,
   title,
   initialVideoFile,
+  initialEbayVideoId,
+  initialEbayVideoStatus,
   videoIsProcessing,
   videoUrl,
   extractingFrames,
@@ -78,6 +83,9 @@ export function VideoOnlyView({
           title={title}
           userToken={ebayTokenForPolicies}
           initialFile={initialVideoFile}
+          initialVideoId={initialEbayVideoId ?? undefined}
+          initialVideoStatus={initialEbayVideoStatus ?? undefined}
+          initialVideoUrl={videoUrl ?? undefined}
           onVideoReady={onVideoReady}
           onVideoRemoved={onVideoRemoved}
           onStatusChange={onVideoStatusChange}
@@ -145,7 +153,7 @@ export function VideoOnlyView({
                 onClick={onBack}
                 className="w-full py-2 rounded-lg border border-border bg-card text-foreground text-xs font-medium hover:border-primary/40"
               >
-                Use Photo Capture Instead
+                Add Photos Instead
               </button>
             </div>
           )}
@@ -187,8 +195,15 @@ export function VideoOnlyView({
           onClick={onBack}
           className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-secondary text-foreground font-medium text-sm hover:bg-secondary/80"
         >
-          Back to Capture
+          Add More Photos
         </button>
+        <p className="text-[11px] text-center text-muted-foreground -mt-1">
+          Your video
+          {extractedFrameDataUrls.length > 0
+            ? " and extracted frames"
+            : ""}{" "}
+          will come with you — nothing is lost.
+        </p>
       </div>
     </div>
   );

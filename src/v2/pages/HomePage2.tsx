@@ -28,7 +28,7 @@ import {
   Video,
 } from "lucide-react";
 import { useRef, useState, useCallback, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
@@ -563,6 +563,7 @@ export default function HomePage2() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const location = useLocation();
   const isMobile = useIsMobile();
 
   const [stagedImages, setStagedImages] = useState<string[]>([]);
@@ -575,6 +576,18 @@ export default function HomePage2() {
   });
   const [imagesOptimized, setImagesOptimized] = useState(false);
   const [showTour, setShowTour] = useState(false);
+
+  // Video carried over from the video-only Analyze flow ("Add More Photos" /
+  // back-to-capture round trip). When present, it is shown as an attached
+  // video here and passed back into /analyze when the user processes the
+  // listing, so nothing recorded/uploaded is ever lost.
+  const [attachedVideoUrl, setAttachedVideoUrl] = useState<string | null>(null);
+  const [attachedEbayVideoId, setAttachedEbayVideoId] = useState<string | null>(
+    null,
+  );
+  const [attachedEbayVideoStatus, setAttachedEbayVideoStatus] = useState<
+    string | null
+  >(null);
 
   // Voice state
   const [recording, setRecording] = useState(false);
@@ -594,6 +607,47 @@ export default function HomePage2() {
       const t = setTimeout(() => setShowTour(true), 600);
       return () => clearTimeout(t);
     }
+  }, []);
+
+  // Restore state when returning from the video-only Analyze screen (see
+  // AnalyzePage.tsx's videoOnlyMode handleReturnToCapture). Re-stages any
+  // extracted frames as photos and re-attaches the uploaded video so the user
+  // can add more photos and/or process everything together.
+  useEffect(() => {
+    const state = location.state as
+      | {
+          fromVideoOnly?: boolean;
+          voiceNote?: string;
+          videoUrl?: string | null;
+          ebayVideoId?: string | null;
+          ebayVideoStatus?: string | null;
+          extractedFrameDataUrls?: string[];
+        }
+      | null
+      | undefined;
+
+    if (!state?.fromVideoOnly) return;
+
+    if (state.videoUrl) setAttachedVideoUrl(state.videoUrl);
+    if (state.ebayVideoId) setAttachedEbayVideoId(state.ebayVideoId);
+    if (state.ebayVideoStatus)
+      setAttachedEbayVideoStatus(state.ebayVideoStatus);
+    if (state.voiceNote) setVoiceNote(state.voiceNote);
+    if (state.extractedFrameDataUrls?.length) {
+      setStagedImages((prev) => [
+        ...prev,
+        ...state.extractedFrameDataUrls!.filter((u) => !prev.includes(u)),
+      ]);
+      setImagesOptimized(false);
+      toast.info(
+        `Restored your video${state.extractedFrameDataUrls.length ? " and extracted frames" : ""}. Add more photos or process when ready.`,
+      );
+    } else {
+      toast.info("Your video is still attached. Add photos when ready.");
+    }
+
+    // Clear navigation state so a page refresh doesn't re-apply this restore.
+    navigate(location.pathname, { replace: true, state: null });
   }, []);
 
   useEffect(() => {
@@ -637,11 +691,28 @@ export default function HomePage2() {
           voiceNote,
           videoOnly: true,
           selectedVideoFile,
+          // Carry forward an already-attached video (e.g. user came back to
+          // add photos) so re-entering the video screen doesn't lose it.
+          videoUrl: attachedVideoUrl,
+          ebayVideoId: attachedEbayVideoId,
+          ebayVideoStatus: attachedEbayVideoStatus,
         },
       });
     },
-    [navigate, voiceNote],
+    [
+      navigate,
+      voiceNote,
+      attachedVideoUrl,
+      attachedEbayVideoId,
+      attachedEbayVideoStatus,
+    ],
   );
+
+  const removeAttachedVideo = useCallback(() => {
+    setAttachedVideoUrl(null);
+    setAttachedEbayVideoId(null);
+    setAttachedEbayVideoStatus(null);
+  }, []);
 
   const validateAndStageFiles = useCallback(
     (files: FileList | File[] | null) => {
@@ -707,9 +778,36 @@ export default function HomePage2() {
     e.target.value = "";
   };
   const handleProcess = () => {
-    if (!stagedImages.length) return;
+    // Allow processing with just an attached video (no staged photos yet) —
+    // this routes back into the video-only Analyze screen so the user can
+    // extract frames / run AI identification from the video alone. If photos
+    // are staged, process normally and carry the video along with them.
+    if (!stagedImages.length) {
+      if (!attachedVideoUrl) return;
+      navigate("/analyze", {
+        state: {
+          imageUrls: [],
+          voiceNote,
+          videoOnly: true,
+          videoUrl: attachedVideoUrl,
+          ebayVideoId: attachedEbayVideoId,
+          ebayVideoStatus: attachedEbayVideoStatus,
+        },
+      });
+      return;
+    }
     // Ensure main photo is first
-    navigate("/analyze", { state: { imageUrls: stagedImages, voiceNote } });
+    navigate("/analyze", {
+      state: {
+        imageUrls: stagedImages,
+        voiceNote,
+        // Preserve any video attached from the video-only flow so it stays
+        // linked to this listing even though we're now processing with photos.
+        videoUrl: attachedVideoUrl,
+        ebayVideoId: attachedEbayVideoId,
+        ebayVideoStatus: attachedEbayVideoStatus,
+      },
+    });
   };
 
   const stopRecording = useCallback(() => {
@@ -1331,6 +1429,69 @@ export default function HomePage2() {
               planName={planLabel}
             />
           </div>
+
+          {/* Attached video banner — shown when a video (and optionally
+              extracted frames) was carried back from the video-only Analyze
+              flow. Lets the user add photos, remove the video, or jump
+              straight to processing without losing it. */}
+          {attachedVideoUrl && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.75rem",
+                background: "rgba(0,118,182,0.06)",
+                border: `1px solid ${BRAND}33`,
+                borderRadius: 14,
+                padding: "0.75rem 1rem",
+                marginBottom: "1rem",
+              }}
+            >
+              <Video size={18} color={BRAND} />
+              <div style={{ flex: 1 }}>
+                <p
+                  style={{
+                    fontSize: "0.85rem",
+                    fontWeight: 700,
+                    color: FG,
+                    margin: 0,
+                  }}
+                >
+                  Video attached
+                </p>
+                <p
+                  style={{
+                    fontSize: "0.75rem",
+                    color: MUTED,
+                    margin: 0,
+                  }}
+                >
+                  {stagedImages.length > 0
+                    ? "Add more photos or process now — your video will be included."
+                    : "Add photos, or process with the video alone."}
+                </p>
+              </div>
+              {stagedImages.length === 0 && (
+                <button
+                  style={{
+                    ...S.btnPrimary,
+                    width: "auto",
+                    padding: "0.5rem 1rem",
+                  }}
+                  onClick={handleProcess}
+                >
+                  Process Now
+                </button>
+              )}
+              <button
+                style={S.btnSecondary}
+                onClick={removeAttachedVideo}
+                title="Remove attached video"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
 
           {/* Content */}
           {isDesktop ? (
