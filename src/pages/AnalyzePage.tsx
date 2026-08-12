@@ -630,11 +630,31 @@ export default function AnalyzePage() {
   // ââ Video-only early return ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
   if (videoOnlyMode) {
+    // Returning to the capture (Home) screen from the video-only flow must
+    // NOT discard the video or any already-extracted frames. Carry them back
+    // via navigation state so HomePage2 can restore the video attachment and
+    // pre-stage extracted frames as photos, letting the user add more photos
+    // and/or combine everything into one listing.
+    const handleReturnToCapture = () => {
+      navigate("/home", {
+        state: {
+          fromVideoOnly: true,
+          voiceNote,
+          videoUrl,
+          ebayVideoId,
+          ebayVideoStatus,
+          extractedFrameDataUrls,
+        },
+      });
+    };
+
     return (
       <VideoOnlyView
         ebayTokenForPolicies={ebayTokenForPolicies}
         title={title}
         initialVideoFile={selectedVideoFile}
+        initialEbayVideoId={initialEbayVideoId}
+        initialEbayVideoStatus={initialEbayVideoStatus}
         videoIsProcessing={videoIsProcessing}
         videoUrl={videoUrl}
         extractingFrames={extractingFrames}
@@ -648,7 +668,7 @@ export default function AnalyzePage() {
         onExtractFrames={handleExtractFrames}
         onExtractFramesFallback={handleExtractFramesFallback}
         onAnalyzeExtractedFrames={handleAnalyzeExtractedFrames}
-        onBack={() => navigate("/home")}
+        onBack={handleReturnToCapture}
       />
     );
   }
