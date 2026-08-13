@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { requireUser } from "../_helpers/authGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -260,13 +261,24 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await requireUser(req);
+  if (!auth.ok) {
+    return new Response(JSON.stringify({ error: auth.message }), {
+      status: auth.status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const body = await req.json();
-    const { watchId, userId } = body as { watchId: string; userId: string };
+    const { watchId } = body as { watchId: string };
+    // Never trust a client-supplied userId; the verified session is the only
+    // valid identity for scoping this watch to its owner.
+    const userId = auth.userId!;
 
-    if (!watchId || !userId) {
+    if (!watchId) {
       return new Response(
-        JSON.stringify({ error: "watchId and userId are required" }),
+        JSON.stringify({ error: "watchId is required" }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
