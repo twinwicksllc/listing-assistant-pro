@@ -1,16 +1,11 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
-import {
-  requireServiceRole,
-  requireUser,
-  requireUserOrServiceRole,
-} from "./authGuard.ts";
+import { requireServiceRole, requireUser, requireUserOrServiceRole } from "./authGuard.ts";
 
 const FAKE_SERVICE_KEY = "fake-service-role-key";
 const deps = {
   supabaseUrl: "https://example.supabase.co",
   supabaseServiceKey: FAKE_SERVICE_KEY,
-  verifyJwt: async (jwt: string) =>
-    jwt === "valid-user-jwt" ? "user-123" : null,
+  verifyJwt: async (jwt: string) => jwt === "valid-user-jwt" ? "user-123" : null,
 };
 
 function reqWithAuth(bearer?: string) {
