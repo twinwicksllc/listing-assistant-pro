@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if ! command -v deno >/dev/null 2>&1; then echo \"[claude-hook] WARNING: deno not found on PATH; required for supabase/functions/ work (fmt/lint/check/test) and not auto-installed. See CLAUDE.md for setup/TLS notes.\" >&2; fi; if [ ! -d node_modules ]; then echo \"[claude-hook] node_modules/ missing; starting npm install in the background (log: .git/claude-npm-install.log).\" >&2; (npm install --no-audit --no-fund > .git/claude-npm-install.log 2>&1 &) ; fi; true",
+            "timeout": 15,
+            "statusMessage": "Checking deno/node_modules setup..."
+          }
+        ]
+      }
+    ]
+  }
+}
