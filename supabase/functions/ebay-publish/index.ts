@@ -124,17 +124,18 @@ serve(async (req) => {
 
     // --- ACTION: Upload video to eBay Video API ---
     if (action === "upload_video") {
-      return await handleUploadVideo({ payload, apiBase, ebayEnv });
+      return await handleUploadVideo({ req, payload, apiBase, ebayEnv });
     }
 
     // --- ACTION: Get eBay video processing status ---
     if (action === "get_video_status") {
-      return await handleGetVideoStatus({ payload, apiBase, ebayEnv });
+      return await handleGetVideoStatus({ req, payload, apiBase, ebayEnv });
     }
 
     // --- ACTION: Poll eBay video status until LIVE or FAILED (with retry backoff) ---
     if (action === "poll_video_status_until_live") {
       return await handlePollVideoStatusUntilLive({
+        req,
         payload,
         apiBase,
         ebayEnv,

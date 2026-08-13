@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { requireUser } from "../_helpers/authGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,6 +11,14 @@ const corsHeaders = {
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  const auth = await requireUser(req);
+  if (!auth.ok) {
+    return new Response(JSON.stringify({ error: auth.message }), {
+      status: auth.status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   try {
@@ -109,16 +118,8 @@ serve(async (req) => {
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
         { auth: { persistSession: false } },
       );
-      let userId: string | null = null;
-      const authHeader = req.headers.get("Authorization");
-      if (authHeader) {
-        const { data: ud } = await svc.auth.getUser(
-          authHeader.replace("Bearer ", ""),
-        );
-        userId = ud?.user?.id || null;
-      }
       await svc.from("gemini_usage").insert({
-        user_id: userId,
+        user_id: auth.userId,
         function_name: "transcribe-voice",
         model: "gemini-flash-latest",
         prompt_tokens: usage?.prompt_tokens || 0,
