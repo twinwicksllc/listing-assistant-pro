@@ -9,11 +9,22 @@ import {
   MIN_VIDEO_DURATION_SEC,
 } from "./constants.ts";
 import { fetchWithTimeout } from "./fetch.ts";
+import { requireUser } from "../_helpers/authGuard.ts";
 
 export interface VideoHandlerContext {
+  req: Request;
   payload: Record<string, unknown>;
   apiBase: string;
   ebayEnv?: string;
+}
+
+async function requireAuthenticatedSession(req: Request): Promise<Response | null> {
+  const auth = await requireUser(req);
+  if (auth.ok) return null;
+  return new Response(JSON.stringify({ error: auth.message }), {
+    status: auth.status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 }
 
 function getMediaVideoBaseCandidates(ebayEnv: string): string[] {
@@ -252,10 +263,14 @@ async function probeTokenEnvironment(userToken: string): Promise<string> {
  * Validates format/duration server-side, creates video entity, uploads bytes, returns videoId.
  */
 export async function handleUploadVideo({
+  req,
   payload,
   apiBase,
   ebayEnv,
 }: VideoHandlerContext): Promise<Response> {
+  const authFailure = await requireAuthenticatedSession(req);
+  if (authFailure) return authFailure;
+
   const {
     userToken,
     videoUrl,
@@ -508,10 +523,14 @@ export async function handleUploadVideo({
  * Get the processing status of an uploaded eBay video.
  */
 export async function handleGetVideoStatus({
+  req,
   payload,
   apiBase,
   ebayEnv,
 }: VideoHandlerContext): Promise<Response> {
+  const authFailure = await requireAuthenticatedSession(req);
+  if (authFailure) return authFailure;
+
   const { userToken, videoId } = payload;
   if (!userToken) throw new Error("No eBay user token provided");
   if (!videoId) throw new Error("No videoId provided");
@@ -595,10 +614,14 @@ export async function handleGetVideoStatus({
  * Exported for frontend to use for monitoring video processing.
  */
 export async function handlePollVideoStatusUntilLive({
+  req,
   payload,
   apiBase,
   ebayEnv,
 }: VideoHandlerContext): Promise<Response> {
+  const authFailure = await requireAuthenticatedSession(req);
+  if (authFailure) return authFailure;
+
   const { userToken, videoId, maxWaitMs } = payload;
   if (!userToken) throw new Error("No eBay user token provided");
   if (!videoId) throw new Error("No videoId provided");

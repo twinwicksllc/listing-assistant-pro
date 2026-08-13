@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireUserOrServiceRole } from "../_helpers/authGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -558,6 +559,14 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const auth = await requireUserOrServiceRole(req);
+  if (!auth.ok) {
+    return new Response(JSON.stringify({ error: auth.message }), {
+      status: auth.status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   // Track these for stale-cache fallback in error handler
   let userId: string | undefined;
   let listingId: string | undefined;
@@ -582,6 +591,17 @@ serve(async (req) => {
     const { title, categoryId, yourPrice } = body;
     listingId = body.listingId;
     userId = body.userId;
+
+    if (!auth.isServiceRole) {
+      // Real end-user session — never trust a client-supplied userId; force it
+      // to the verified identity so cache rows can't be written/read under an
+      // arbitrary user's id.
+      userId = auth.userId!;
+      body.userId = auth.userId;
+    }
+    // Trusted internal caller (ebay-pricing / optimize-listing / competitor-prices-cron /
+    // analyze-item) legitimately passes userId for whichever end-user's listing it's
+    // refreshing on their behalf — leave body.userId as-is in that case.
 
     if (!title) {
       return new Response(JSON.stringify({ error: "title is required" }), {
