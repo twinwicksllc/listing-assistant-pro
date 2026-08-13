@@ -35,16 +35,24 @@ On Windows, if `deno` hits TLS errors resolving `deno.land`/npm imports, prefix 
 
 No root `deno.json` — Deno config lives at `supabase/functions/deno.json` and only applies there.
 
-Some dev sandboxes have no `node_modules/` installed and a corporate TLS proxy that makes `npm install`/`npx prettier` fail with `SELF_SIGNED_CERT_IN_CHAIN`, even with `DENO_TLS_CA_STORE=system` (that flag only affects Deno, not Node/npm). If `npx prettier --write <file>` fails that way, fall back to Prettier's standalone ESM bundle via Deno, which respects `DENO_TLS_CA_STORE=system` and works from `esm.sh`:
+Some dev sandboxes have no `node_modules/` installed and a corporate TLS proxy that makes `npm install`/`npx prettier` fail with `SELF_SIGNED_CERT_IN_CHAIN`, even with `DENO_TLS_CA_STORE=system` (that flag only affects Deno, not Node/npm). If `npx prettier --write <file>` fails that way, fall back to Prettier's standalone ESM bundle via Deno, which respects `DENO_TLS_CA_STORE=system` and works from `esm.sh`. For Markdown files, load the `babel`/`typescript`/`estree` plugins too, not just `markdown` — Prettier also reformats code inside fenced code blocks, and a markdown-only plugin set will silently skip that and disagree with the real CLI:
 
 ```ts
 // run: DENO_TLS_CA_STORE=system deno run -A fmt-md.ts <file>
-import * as prettier from "https://esm.sh/prettier@3.3.3/standalone?target=es2022";
-import * as markdown from "https://esm.sh/prettier@3.3.3/plugins/markdown?target=es2022";
+import * as prettier from "https://esm.sh/prettier@3.9.6/standalone?target=es2022";
+import * as markdown from "https://esm.sh/prettier@3.9.6/plugins/markdown?target=es2022";
+import * as babel from "https://esm.sh/prettier@3.9.6/plugins/babel?target=es2022";
+import * as typescript from "https://esm.sh/prettier@3.9.6/plugins/typescript?target=es2022";
+import * as estree from "https://esm.sh/prettier@3.9.6/plugins/estree?target=es2022";
 const path = Deno.args[0];
-const out = await prettier.format(await Deno.readTextFile(path), { parser: "markdown", plugins: [markdown] });
+const out = await prettier.format(await Deno.readTextFile(path), {
+  parser: "markdown",
+  plugins: [markdown, babel, typescript, estree],
+});
 await Deno.writeTextFile(path, out);
 ```
+
+Pin the prettier version to match `package.json`'s (`^3.9.6` at last check) — a version mismatch between this workaround and the real CLI can itself produce a different, spurious diff.
 
 (The default esm.sh build for `prettier/standalone` breaks under Deno with a `createRequire` error — the `?target=es2022` query param avoids it.) Delete the script after use; don't commit it, and don't leave stray `deno.lock` entries for it — `git checkout HEAD -- deno.lock` if a one-off script pollutes the lockfile with deps nothing actually imports.
 
