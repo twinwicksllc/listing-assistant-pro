@@ -16,7 +16,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { requireServiceRole } from "../_helpers/authGuard.ts";
+import { describeCronAuthEnv, requireCronSecret } from "../_helpers/authGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -116,8 +116,14 @@ serve(async (req: Request) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  const auth = await requireServiceRole(req);
+  const auth = await requireCronSecret(req);
   if (!auth.ok) {
+    // Redacted diagnostic to the function log only -- lengths and booleans, no
+    // secret material, and nothing added to the response body. See RBR-0025.
+    console.warn(
+      "[SYNC-EBAY-TAXONOMY] auth rejected:",
+      JSON.stringify(describeCronAuthEnv(req)),
+    );
     return new Response(JSON.stringify({ error: auth.message }), {
       status: auth.status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
