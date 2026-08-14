@@ -195,6 +195,27 @@ async function getEbayAppToken(): Promise<
 }
 
 /**
+ * Leaf status of a single eBay categorySubtreeNode, or null when the response
+ * carries neither signal.
+ *
+ * Exported for tests. Returning null rather than defaulting to a boolean is the
+ * point: `ebay_taxonomy_cache.is_leaf` is NOT NULL DEFAULT true, so any caller
+ * that guesses here writes a claim nothing downstream re-verifies.
+ */
+export function deriveLeafStatus(node: unknown): boolean | null {
+  if (!node || typeof node !== "object") return null;
+  const n = node as {
+    leafCategoryTreeNode?: unknown;
+    childCategoryTreeNodes?: unknown;
+  };
+  if (n.leafCategoryTreeNode === true) return true;
+  if (Array.isArray(n.childCategoryTreeNodes)) {
+    return n.childCategoryTreeNodes.length === 0 ? null : false;
+  }
+  return null;
+}
+
+/**
  * Live eBay getCategorySubtree fallback: walks up parentCategoryTreeNodeHref to
  * reconstruct the full breadcrumb. Result is written to ebay_taxonomy_cache so
  * subsequent lookups hit the DB instead of calling the API again.
@@ -208,6 +229,12 @@ async function fetchLiveBreadcrumb(
 
   const parts: string[] = [];
   let currentId = cid;
+
+  // Captured from the depth-0 node, which is `cid` itself. Needed because the
+  // cache row we write below must state `cid`'s real leaf status rather than
+  // assume it — see the note on the upsert.
+  let selfIsLeaf: boolean | null = null;
+  let selfParentId: string | null = null;
 
   for (let depth = 0; depth < 8; depth++) {
     let resp: Response;
@@ -236,12 +263,17 @@ async function fetchLiveBreadcrumb(
     }
     const node = json?.categorySubtreeNode;
     if (!node?.category) break;
+
+    // Depth 0 is `cid` itself, the only node whose leaf status we may record.
+    if (depth === 0) selfIsLeaf = deriveLeafStatus(node);
+
     parts.unshift(node.category.categoryName as string);
     const parentHref: string | undefined = node.parentCategoryTreeNodeHref;
     if (!parentHref) break;
     const match = parentHref.match(/category_id=(\d+)/);
     if (!match) break;
     const parentId = match[1];
+    if (depth === 0) selfParentId = parentId;
     if (parentId === currentId) break;
     currentId = parentId;
   }
@@ -249,15 +281,34 @@ async function fetchLiveBreadcrumb(
   if (parts.length === 0) return null;
   const breadcrumb = parts.join(" > ");
 
-  // Cache the result so future calls are instant
-  if (svc) {
+  // Cache the result so future calls are instant.
+  //
+  // is_leaf must reflect what eBay reported for `cid`, never an assumption. This
+  // previously hardcoded `is_leaf: true`, which meant any branch category routed
+  // through this helper was permanently recorded as a listable leaf. Five coin
+  // branch categories -- 11116 Coins & Paper Money, 11945 Large Cents, 11951
+  // Nickels, 11956 Dimes, 11968 Half Dollars -- were found mislabelled that way
+  // on 2026-08-14, and they were immortal: sync-ebay-taxonomy only upserts IDs
+  // present in eBay's current leaf set, so it never touched or corrected them.
+  // Downstream, publish-helpers reads this table on the documented assumption
+  // that every row is an active leaf, so a mislabelled branch can be selected as
+  // a listing target and rejected by eBay, which surfaces as a publishing bug
+  // rather than a cache problem.
+  //
+  // The column is NOT NULL DEFAULT true, so omitting the field would reintroduce
+  // exactly the wrong claim. When leaf status cannot be established we skip the
+  // write entirely: the breadcrumb is still returned to the caller, we simply do
+  // not persist a row we cannot characterise. Losing a cache hit is cheaper than
+  // laundering a guess into a fact that nothing later corrects.
+  if (svc && selfIsLeaf !== null) {
     try {
       await svc.from("ebay_taxonomy_cache").upsert(
         {
           category_id: cid,
           category_name: parts[parts.length - 1],
           breadcrumb,
-          is_leaf: true,
+          parent_category_id: selfParentId,
+          is_leaf: selfIsLeaf,
           synced_at: new Date().toISOString(),
         },
         { onConflict: "category_id" },
@@ -265,6 +316,10 @@ async function fetchLiveBreadcrumb(
     } catch (_) {
       /* cache write failure is non-fatal */
     }
+  } else if (svc) {
+    console.warn(
+      `[suggestedCategories] leaf status unknown for category ${cid}; breadcrumb returned but not cached`,
+    );
   }
   return breadcrumb;
 }
