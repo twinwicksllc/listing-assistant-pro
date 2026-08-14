@@ -14,6 +14,8 @@ export type AuthResult = AuthOk | AuthFail;
 export interface AuthGuardDeps {
   supabaseUrl?: string;
   supabaseServiceKey?: string;
+  /** Shared secret for database-scheduled (pg_cron) callers. */
+  cronSecret?: string;
   /** Injectable for tests — verify a bearer JWT, return the user id or null. */
   verifyJwt?: (
     jwt: string,
@@ -27,8 +29,22 @@ function resolveDeps(deps?: AuthGuardDeps) {
     supabaseUrl: deps?.supabaseUrl ?? Deno.env.get("SUPABASE_URL") ?? "",
     supabaseServiceKey: deps?.supabaseServiceKey ??
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    cronSecret: deps?.cronSecret ?? Deno.env.get("CRON_SECRET") ?? "",
     verifyJwt: deps?.verifyJwt ?? defaultVerifyJwt,
   };
+}
+
+/**
+ * Constant-time string comparison, so a rejected bearer token cannot be
+ * distinguished by response timing. Both guards below compare secrets.
+ */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
 }
 
 function extractBearer(req: Request): string | null {
@@ -95,8 +111,45 @@ export async function requireServiceRole(
 ): Promise<AuthResult> {
   const { supabaseServiceKey } = resolveDeps(deps);
   const jwt = extractBearer(req);
-  if (!jwt || !supabaseServiceKey || jwt !== supabaseServiceKey) {
+  if (!jwt || !supabaseServiceKey || !timingSafeEqual(jwt, supabaseServiceKey)) {
     return { ok: false, status: 401, message: "Unauthorized" };
   }
   return { ok: true, userId: null, isServiceRole: true };
+}
+
+/**
+ * Require either the dedicated cron shared secret OR the service-role key.
+ * For endpoints invoked by pg_cron from the database.
+ *
+ * Why a separate secret rather than reusing the service-role key: an internal
+ * Edge Function caller and `requireServiceRole` both read
+ * SUPABASE_SERVICE_ROLE_KEY from the environment, so their comparison matches
+ * whatever that value happens to be and never exercises it. A pg_cron caller is
+ * the only one that must supply the value as a literal, and that value is opaque
+ * from outside the runtime — which made a mismatch undiagnosable and cost this
+ * project roughly 145 days of silently failing cost alerts (RBR-0025).
+ *
+ * CRON_SECRET is a value the operator sets on both sides, so it can be verified
+ * and rotated deliberately. It is also unaffected by the deprecation of
+ * Supabase's legacy JWT API keys, which the service-role comparison depends on.
+ *
+ * The service-role key stays accepted so existing internal callers and manual
+ * service-role invocations keep working.
+ */
+export async function requireCronSecret(
+  req: Request,
+  deps?: AuthGuardDeps,
+): Promise<AuthResult> {
+  const { supabaseServiceKey, cronSecret } = resolveDeps(deps);
+  const token = extractBearer(req);
+  if (!token) {
+    return { ok: false, status: 401, message: "Unauthorized" };
+  }
+  if (cronSecret && timingSafeEqual(token, cronSecret)) {
+    return { ok: true, userId: null, isServiceRole: true };
+  }
+  if (supabaseServiceKey && timingSafeEqual(token, supabaseServiceKey)) {
+    return { ok: true, userId: null, isServiceRole: true };
+  }
+  return { ok: false, status: 401, message: "Unauthorized" };
 }

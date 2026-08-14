@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
-import { requireServiceRole } from "../_helpers/authGuard.ts";
+import { requireCronSecret } from "../_helpers/authGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,7 +24,7 @@ serve(async (req) => {
   // verify_jwt = true -- which the public anon key satisfies. Any holder of the
   // publishable key could therefore trigger it, and it sends email via Resend.
   // See RBR-0025.
-  const auth = await requireServiceRole(req);
+  const auth = await requireCronSecret(req);
   if (!auth.ok) {
     return new Response(JSON.stringify({ error: auth.message }), {
       status: auth.status,
