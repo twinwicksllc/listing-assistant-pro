@@ -131,7 +131,13 @@ serve(async (req) => {
             Authorization: `Bearer ${resendKey}`,
           },
           body: JSON.stringify({
-            from: "Sovereign Listing Suite Alerts <alerts@teckstart.com>",
+            // teckstart.com is not a verified sending domain in this Resend
+            // account -- only rankedceo.com is, and the account is on a plan
+            // tier that charges for a second verified domain. This alert is
+            // internal-only (ADMIN_EMAIL, not customer-facing), so sending from
+            // the domain that is actually verified costs nothing and fixes
+            // silent delivery failure. See RBR-0031.
+            from: "Sovereign Listing Suite Alerts <alerts@rankedceo.com>",
             to: [ADMIN_EMAIL],
             subject: `⚠️ Sovereign Listing Suite Cost Alert: $${totalCost.toFixed(2)} this month`,
             html: `
