@@ -236,11 +236,16 @@ Recorded so this rehearsal is not over-credited:
    tables, keys, and indexes only. A restore from it alone yields tables with no
    row-level authorization. This is sufficient for a data-movement rehearsal and
    insufficient for a cutover.
-4. **Vector integrity was not verified.** `knowledge_base` imported all 6 rows,
-   but a row count cannot detect a truncated or mangled pgvector `embedding`. A
-   dimension-level comparison between projects is still outstanding; silently
-   corrupted embeddings would degrade RAG grounding in a way that looks like poor
-   AI output rather than bad data.
+4. **Vector integrity WAS verified — this deviation is closed.** A row count
+   cannot detect a truncated or mangled pgvector `embedding`, so all six
+   `knowledge_base` rows were compared across both projects on
+   `vector_dims(embedding)`, `length(embedding::text)`, and
+   `md5(embedding::text)`. All three matched on every row: 768 dimensions, text
+   lengths of 9,683 to 9,738 characters, and identical hashes. The embeddings
+   round-tripped byte-identically, so RAG grounding is unaffected. (A pgvector
+   version comparison was not needed: a version difference could only produce a
+   false mismatch, and the hashes matched.) This was the check most likely to fail
+   and the one a row count could never have caught.
 5. **Duration was not recorded.** The run took one working session on 2026-08-14;
    no per-phase timings were captured. A cutover maintenance window cannot be
    sized from this report alone.
@@ -255,16 +260,38 @@ which affects the entire Phase 1 target-schema design, not just this rehearsal.
 
 **Recommended before P0-11/P0-12 are approved rather than merely evidenced:**
 
-1. Decide encryption, storage location, and retention for the export CSVs, which
-   currently sit unencrypted on a local disk (P0-11).
-2. Capture the exact definition of `idx_drafts_published_at`, and decide whether the four missing `idx_subscriptions_*` indexes and the `status` CHECK should exist in the target schema (RBR-0022).
-3. Verify `knowledge_base` embedding dimensions survived the round trip.
+1. ~~Decide encryption, storage location, and retention for the export CSVs.~~
+   **Resolved:** the owner elected to destroy them rather than retain them, since
+   they hold customer names, listing content, and COGS financials and their only
+   purpose was this completed rehearsal. P0-11 rests on the managed daily backup
+   instead — a stronger artifact than an encrypted folder would have been.
+2. Capture the exact definition of `idx_drafts_published_at`, and decide whether
+   the four missing `idx_subscriptions_*` indexes and the `status` CHECK should
+   exist in the target schema (RBR-0022).
+3. ~~Verify `knowledge_base` embedding integrity.~~ **Resolved:** verified
+   byte-identical across both projects by dimension, text length, and md5.
 4. Re-run a timed rehearsal once the export path is fixed, to size the
    maintenance window (feeds P0-14).
 5. Decide whether the two unexercised telemetry tables need to migrate at all.
+6. Settle the rollback strategy on the basis that a full-database restore is not
+   available, since the project is shared with the CRM (RBR-0024, feeds P0-15).
 
 ## Cleanup
 
-The disposable project `mydedtvyledbjarockrg` still exists and still holds the
-imported data, including redacted `profiles` rows. It should be deleted once the
-outstanding checks above are done. It contains no credentials and no CRM data.
+Both rehearsal artifacts were deliberately destroyed after the verification work
+completed, rather than retained:
+
+- **Disposable project `mydedtvyledbjarockrg`** — held the imported copy,
+  including redacted `profiles` rows. Deleted once the embedding comparison, which
+  required both projects alive, had passed. It never contained credentials or CRM
+  data.
+- **Local CSV export set** — `profiles`, `drafts`, `listing_cogs` and the rest,
+  plus the `.orig` pre-cleanup backups. These held customer names, listing
+  content, and COGS financials in plaintext, so retaining them would have created
+  standing exposure for no ongoing benefit. Re-export takes minutes and the
+  procedure is documented above.
+
+Nothing in this report depends on either artifact still existing: every number
+here was verified while they were live, and the schema findings are preserved in
+the recreation script and the exception log. A future reader should not go looking
+for them.
