@@ -35,24 +35,28 @@ never be recorded here.
 
 ## Pending approvals and decisions
 
-| ID        | Decision required                                                                                                    | Owner | Evidence required                                | Status  |
-| --------- | -------------------------------------------------------------------------------------------------------------------- | ----- | ------------------------------------------------ | ------- |
-| PEND-0001 | Confirm whether Supabase project `wcednzaxmxwfiijzmjmx` is shared production infrastructure and identify its owners. | User  | Provider dashboard inventory                     | Pending |
-| PEND-0002 | Approve the live service, secret-name, schema, and exception inventories.                                            | User  | Dashboard reconciliation and review notes        | Pending |
-| PEND-0003 | Approve the ListrAssistr migration cohort and ambiguous/shared-resource classifications.                             | User  | Deterministic cohort query and ownership review  | Pending |
-| PEND-0004 | Approve encrypted backup location, restore target, and retention period.                                             | User  | Backup and disposable restore evidence           | Pending |
-| PEND-0005 | Approve changes, if any, to production deployment gates, JWT settings, CORS, and migration automation.               | User  | GitHub/Supabase configuration review             | Pending |
-| PEND-0006 | Approve maintenance window, customer communication schedule, go/no-go meeting, and rollback deadline.                | User  | Cutover runbook and communication plan           | Pending |
-| PEND-0007 | Approve Phase 0 exit and Phase 1 entry.                                                                              | User  | Resolved exceptions and completed exit checklist | Pending |
+| ID        | Decision required                                                                                                    | Owner | Evidence required                                | Status                  |
+| --------- | -------------------------------------------------------------------------------------------------------------------- | ----- | ------------------------------------------------ | ----------------------- |
+| PEND-0001 | Confirm whether Supabase project `wcednzaxmxwfiijzmjmx` is shared production infrastructure and identify its owners. | User  | Provider dashboard inventory                     | **Approved 2026-08-14** |
+| PEND-0002 | Approve the live service, secret-name, schema, and exception inventories.                                            | User  | Dashboard reconciliation and review notes        | Pending                 |
+| PEND-0003 | Approve the ListrAssistr migration cohort and ambiguous/shared-resource classifications.                             | User  | Deterministic cohort query and ownership review  | Pending                 |
+| PEND-0004 | Approve encrypted backup location, restore target, and retention period.                                             | User  | Backup and disposable restore evidence           | **Approved 2026-08-14** |
+| PEND-0005 | Approve changes, if any, to production deployment gates, JWT settings, CORS, and migration automation.               | User  | GitHub/Supabase configuration review             | **Decided 2026-08-14**  |
+| PEND-0006 | Approve maintenance window, customer communication schedule, go/no-go meeting, and rollback deadline.                | User  | Cutover runbook and communication plan           | Pending                 |
+| PEND-0007 | Approve Phase 0 exit and Phase 1 entry.                                                                              | User  | Resolved exceptions and completed exit checklist | Pending                 |
 
 ## Approval record
 
-No production or irreversible approval is recorded in this file yet.
+- **PEND-0001** — Approved 2026-08-14 by the owner. Confirms `wcednzaxmxwfiijzmjmx` (RankedCEO-CRM) is shared production infrastructure between the CRM and this listing app, one shared admin account, per RBR-0001. Formalizes what discovery had already established rather than resolving new uncertainty.
+- **PEND-0004** — Approved 2026-08-14 by the owner. Accepts the backup posture as evidenced in P0-11 and `REBRAND_PHASE_0_RESTORE_REPORT.md`: Supabase-managed daily backups, latest 6 retained, no point-in-time recovery. Approval carries the consequences documented in RBR-0024 — up to 24h RPO, ~6-day recovery window, and no full-database restore usable as a rollback mechanism because the project is shared with the CRM. If PITR or a different retention window is wanted before cutover, that is a separate provider change, not implied by this approval.
+- **PEND-0005** — Decided 2026-08-14 by the owner: **no approval gate added** to `deploy-functions.yml`. Production deploys on merge to `main` remain immediate, with no manual click required before a migration or function change applies. This decision was made with the RBR-0023 incident in view — that incident happened precisely because merge-to-deploy is instant with no pause to catch a mistake — and the owner chose to accept that risk rather than add friction, relying instead on the fail-closed environment guards adopted in DEC-0014 as the more targeted mitigation. No GitHub environment protection rule change follows from this decision.
+
+Overall Phase 0 decision remains **Pending** — three of seven approvals/decisions are recorded; PEND-0002, 0003, 0006, 0007 are still open.
 
 - **Phase 0 decision:** `Pending`
 - **Approved by:** `TBD`
 - **Approval date:** `TBD`
-- **Notes:** Live provider inventory, baseline, backup/restore, cohort, and exception review remain outstanding.
+- **Notes:** Provider inventory (P0-01/02/03), migration cohort (P0-13), deployment-gate decision (PEND-0005), and maintenance/rollback plans (P0-14/P0-15) remain outstanding.
 
 ## Corrective controls adopted after the RBR-0023 incident
 
@@ -78,3 +82,10 @@ No production or irreversible approval is recorded in this file yet.
 | DEC-0021 | The move from Supabase legacy JWT API keys to the newer sb_publishable_ / sb_secret_ format is deferred until the product is running in its new ListrAssistr state.              | Recorded       | Owner decision. 39 files under `supabase/functions` read `SUPABASE_SERVICE_ROLE_KEY`, and the change also touches `authGuard.ts`, the frontend env, GitHub Actions secrets, Vercel env vars and the cron definitions: substantial work in a repository being retired                |
 | DEC-0022 | Database-scheduled (pg_cron) callers authenticate with a dedicated `CRON_SECRET`, set by the operator in both Edge Function secrets and Vault, rather than the service-role key. | Control active | RBR-0025: exact-match against `SUPABASE_SERVICE_ROLE_KEY` works between Edge Functions because both sides read the same variable, so it is never exercised; a pg_cron caller must supply the literal, and that value is opaque outside the runtime, making a mismatch undiagnosable |
 | DEC-0023 | Rejected cron authentication logs a redacted diagnostic, lengths and booleans only, to the function log and never to the HTTP response.                                          | Control active | The RBR-0025 401s were debugged from outside the runtime across four wrong hypotheses; one log line would have identified the cause immediately                                                                                                                                     |
+
+## Shared account and observability findings (2026-08-14)
+
+| ID       | Decision                                                                                                                                                                                        | Status             | Evidence / rationale                                                                                                                                                                                                |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DEC-0024 | `cost-alert-cron` sends its internal admin alert from `alerts@rankedceo.com` rather than paying to verify a second domain in the shared Resend account, since the alert is not customer-facing. | Recorded           | RBR-0031: the Resend account (same login as the CRM owner) has only `rankedceo.com` verified, and adding a second domain requires a paid plan tier; not worth it for a single internal alert address                |
+| DEC-0025 | Real error tracking (Sentry or equivalent) is built for the ListrAssistr project rather than porting forward the existing no-op stub.                                                           | Recorded direction | RBR-0032: no Sentry account has ever existed for this product, and `_helpers/sentry.ts` is a documented no-op left over from an unresolved CDN issue; treated as a clean-slate opportunity, not a migration blocker |
