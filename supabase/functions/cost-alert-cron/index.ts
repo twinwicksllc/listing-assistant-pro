@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { requireServiceRole } from "../_helpers/authGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,6 +17,19 @@ const COST_PER_OUTPUT_TOKEN = 0.000005;
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Cron-only endpoint. Previously this function had no code-level auth and was
+  // absent from config.toml, so it inherited the gateway default
+  // verify_jwt = true -- which the public anon key satisfies. Any holder of the
+  // publishable key could therefore trigger it, and it sends email via Resend.
+  // See RBR-0025.
+  const auth = await requireServiceRole(req);
+  if (!auth.ok) {
+    return new Response(JSON.stringify({ error: auth.message }), {
+      status: auth.status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   const svc = createClient(

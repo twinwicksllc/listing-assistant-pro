@@ -42,6 +42,12 @@ verify_jwt = false
 [functions.competitor-prices-cron]
 verify_jwt = false
 
+# Cron-only. Gated in code by requireServiceRole, so gateway JWT verification is
+# redundant here; leaving verify_jwt at its true default would only mean the anon
+# key passes the gateway before the code check rejects it. See RBR-0025.
+[functions.cost-alert-cron]
+verify_jwt = false
+
 [functions.stripe-webhook]
 # Stripe POSTs here directly — no Supabase JWT, verified via Stripe-Signature header
 verify_jwt = false
