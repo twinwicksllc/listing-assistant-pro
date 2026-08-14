@@ -1,63 +1,130 @@
 # Rebrand Phase 0 Session Handoff
 
-**As of:** 2026-08-13
+**As of:** 2026-08-14
 **Repository:** `twinwicksllc/listing-assistant-pro`
-**Current branch:** `main` (clean); this update is being made on `docs/session-handoff-2026-08-13`
-**Note:** a `docs/phase-0-status-update-post-464` branch was pushed earlier today but never actually had a PR opened for it (a link was given but not clicked). Its content (confirming PR #464 deployed live, RBR-0015/0018/P0-07 updates) has been merged into this branch instead, so there's nothing separate to track — just this one PR to review.
+**Working branch:** `docs/phase-0-rbr-0014-schema-capture` — 5 commits, PR open, docs only
+**Production changed today:** yes, once, unintentionally. Read the incident section before doing anything else.
 
-## Where work stops
+## Read this first — a production schema change happened
 
-No destructive or irreversible action was taken against the shared production Supabase project (`wcednzaxmxwfiijzmjmx`, RankedCEO-CRM) today. Everything below is either (a) already-merged code/doc changes, or (b) read-only queries plus work against a brand-new, disposable, empty Supabase project created purely for a restore rehearsal.
+A rehearsal script intended for a disposable project was executed against shared
+production and dropped all ten `public` → `auth.users` foreign keys. It has been
+fully repaired and verified free of orphans, and is recorded as **RBR-0023**.
 
-## What happened today, in order
+The lesson is encoded as **DEC-0014**: any SQL capable of modifying schema or data
+must carry a guard that raises an exception unless the target project is confirmed
+by fingerprint. A prose warning naming the right project is not sufficient — that
+is exactly what failed. The fingerprint for the shared production project is the
+presence of CRM tables:
 
-1. **PR #462, #463 merged** (from a prior session): edge-function auth hardening (`authGuard.ts`) and `CLAUDE.md`.
-2. **PR #464 merged**: fixed a real, exploitable RLS gap on `market_price_history` (anonymous callers could insert fake rows) and a companion auth fix to `market-watch-refresh`. Confirmed deployed live (owner observed the function's "updated" timestamp in the dashboard).
-3. **RLS/grants review (RBR-0015) completed** for the 26-table listing-app/shared list — most `roles={public}` policies turned out to be false alarms; `market_price_history` was the one real gap (now fixed).
-4. **Started P0-11/P0-12 (encrypted backup + restore rehearsal)** — this is the unfinished thread to pick up tomorrow. See "Next action" below for exactly where it stands.
+```sql
+-- Aborts unless this IS production. Invert the NOT for disposable-only scripts.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.tables
+                 WHERE table_schema = 'public' AND table_name = 'accounts') THEN
+    RAISE EXCEPTION 'Refusing to run: not the production project';
+  END IF;
+  -- statements here
+END $$;
+```
 
-## Critical environment finding: this network cannot reach Supabase's database ports directly
+**DEC-0015** clarifies that DEC-0006 covers schema as well as rows. **DEC-0016**
+requires re-verifying any finding derived from a query run after a known mutation —
+added because one finding was recorded from a post-drop query and had to be
+retracted.
 
-Confirmed via repeated testing (DNS resolves fine, but every TCP connection to port 5432 **and** 6543 times out, and even ICMP ping fails): **this machine/network cannot make direct Postgres connections to Supabase** (not a Supabase-side issue, not project-specific — a local network/firewall block). This means `psql`, `pg_dump`, `pg_restore`, and the Supabase CLI's `db dump`/`db push` **cannot be used against any Supabase project from here**, full stop.
+## What was accomplished today
 
-**Implication for all future Phase 0 (and later migration) work from this machine:** everything must go through the Supabase Dashboard's browser UI (SQL Editor, Table Editor CSV import/export) — that channel is confirmed working (used repeatedly today for RLS/grants queries and schema creation). Don't waste time re-attempting CLI-based database connections here unless the network situation changes.
+1. **P0-10 baseline captured** — row counts for all 26 listing tables. The headline:
+   96% of rows (31,518 of 32,687) are regenerable cache or telemetry. Real business
+   data is only ~1,169 rows across 12 tables. See `REBRAND_PHASE_0_BASELINE.md`.
+2. **P0-12 restore rehearsal completed and passed** — 13 tables, 16,285 rows, 100%
+   row-count match into a disposable project. Three defects found, all documented
+   in `REBRAND_PHASE_0_RESTORE_REPORT.md`.
+3. **P0-11 evidence captured** — production has daily backups, latest 6 retained,
+   no PITR.
+4. **Schema drift fully mapped for all 26 tables** — columns, constraints, and
+   indexes, which this repo has never had before.
+5. **Six new exceptions logged** — RBR-0019 through RBR-0024.
 
-Local tools were installed anyway (in case this ever gets unblocked, or for use from a different network):
+## The findings that change future work
 
-- `C:\Users\fenwitr\pgsql-tools\bin\` — `psql.exe`, `pg_dump.exe`, `pg_restore.exe`, `pg_dumpall.exe`
-- `C:\Users\fenwitr\pgsql-tools\bin-supabase\supabase.exe` — Supabase CLI v2.114.0
+- **`drafts` live has 52 columns; the migrations produce 43.** The nine missing ones
+  include `status`, `price`, `listing_id`, and all three eBay business-policy IDs.
+  A ListrAssistr project built from `supabase/migrations/` alone would ship a
+  broken publish flow. **The repo does not describe production** — do not assume it
+  does. (RBR-0021)
+- **eBay OAuth tokens live in `public.profiles` as plaintext columns**, not in
+  `ebay_tokens`, which is dead schema with zero rows. Never `SELECT *` from
+  `profiles` into a file; use the redacting column list in the restore report.
+  Only 2 of 9 users hold tokens, and the owner has accepted asking them to
+  reconnect, so tokens are deliberately out of migration scope. (RBR-0019, RBR-0020)
+- **A database restore cannot be the rollback plan.** The project is shared with an
+  unrelated CRM product and Supabase has no table-subset restore, so rolling back
+  would revert CRM data too. RPO is up to 24 hours; the recovery window is about 6
+  days. Plan forward-fix instead. (RBR-0024)
+- **Count-based comparison is not a sufficient drift check.** `subscriptions` has 11
+  columns live and 11 from migrations, and they are not the same 11. Diff names.
 
-Not added to system PATH (intentionally, to avoid an unrequested system change) — use full paths or `cd` into the folder.
+## Environment constraints that still apply
 
-## P0-11/P0-12 (encrypted backup + restore rehearsal) — current state
+- **No direct Postgres connectivity from this machine.** DNS resolves but TCP to
+  5432 and 6543 times out; ICMP fails. `psql`, `pg_dump`, `pg_restore`, and
+  `supabase db dump`/`db push` are all unusable here. Everything goes through the
+  Dashboard browser UI. Do not spend time re-testing this.
+- **The SQL Editor caps results at 100 rows** and "Download CSV" exports only what
+  the grid returned, silently. There is a **"No limit"** selector — use it, or use
+  the Table Editor export. Three tables were silently truncated before this was
+  noticed.
+- **CSV exports write SQL NULL as the literal string `null`**, which errors on
+  `timestamptz`/`uuid`/`numeric` and, worse, silently stores `"null"` as text.
+- **No `node_modules`; `npx prettier` fails on TLS.** Use the Deno standalone
+  Prettier fallback in `CLAUDE.md` for markdown formatting, and delete the helper
+  script afterward.
 
-**Approach, given the network constraint above:** dashboard-only. Export via `SELECT * FROM <table>` + "Download CSV" per table in the SQL Editor; restore into a disposable project via a schema script + Table Editor CSV import.
+## Artifacts
 
-**Disposable restore-test project:** `phase0-restore-test`, project ref **`mydedtvyledbjarockrg`**.
+**Keep:** `C:\Users\fenwitr\phase0-restore-schema.sql` — the schema-recreation
+script, now covering all 26 tables with drift and provenance annotated inline. A
+copy lives at `.git\phase0-restore-schema.sql` (untracked by virtue of being inside
+`.git/`). It is a **rehearsal scaffold, not a migration schema**: no RLS, grants,
+triggers, functions, or views. Its header says so.
 
-**Schema: DONE — all 26 tables now exist in the disposable project.**
+**Deliberately destroyed 2026-08-14:** the disposable project
+`phase0-restore-test` (`mydedtvyledbjarockrg`) and the local CSV export set,
+including `.orig` backups. The CSVs held customer names, listing content, and COGS
+financials in plaintext. Nothing in the evidence depends on either — all numbers
+were verified while they were live. Do not go looking for them.
 
-- 24 of 26 were reconstructed by tracing every migration in `supabase/migrations/` that touches each table (chronologically, to get the _current_ shape, not just the first `CREATE TABLE`). Verified independently against the actual migration files before use (spot-checked a mid-history primary-key change and a pgvector column — both matched exactly).
-- The other 2 — **`reprice_rules`** and **`optimization_history`** — had no tracked migration at all (their placeholder migration, `20260324000001_add_optimization_tables.sql`, is a literal `SELECT 1` no-op; the tables were created by hand directly against the live database). Their schema was captured today via `information_schema` queries against the live project and has now been created in the disposable project too. **This also resolves the "capture definitions" part of RBR-0014** for these two tables specifically (see exception log update).
-- The full reconstructed schema script (schema-only, no data, no secrets) is saved locally at `C:\Users\fenwitr\phase0-restore-schema.sql` (also a copy at `.git\phase0-restore-schema.sql`, gitignored by virtue of being inside `.git/`). It only covers the first 24 tables — the `reprice_rules`/`optimization_history` `CREATE TABLE` statements were given directly in chat, not yet appended to that file.
+## Next actions, cheapest first
 
-**Data: NOT STARTED.** This is where to pick up tomorrow.
+1. **P0-09 cron inventory** — not started, read-only, no approval needed.
+2. **P0-13 cohort query** — the exclusion rule is settled: profiles whose
+   `display_name` matches `qa%` are test accounts (3 of 9). All 54 `test_items`
+   rows are orphans and that table should be excluded entirely. What remains is
+   writing the selection SQL and getting scope approval. Note several of the
+   remaining 6 profiles appear to be the owner's own duplicate accounts — that
+   consolidation question is unresolved and is a decision, not a query.
+3. **P0-14 and P0-15** — writing tasks needing owner decisions. RBR-0024 already
+   frames the P0-15 constraint. P0-14 needs a timed rehearsal to size the window;
+   today's run was not timed.
+4. **RBR-0022 leftovers** — capture the exact `indexdef` for
+   `idx_drafts_published_at` (inferred from its name, not captured), and decide
+   whether the four absent `idx_subscriptions_*` indexes and the `status` CHECK
+   belong in the target schema.
 
-**26-table list** (for the CSV export/import loop):
-`drafts`, `ebay_tokens`, `category_mappings`, `category_aspects_cache`, `category_hygiene_log`, `lookup_decisions`, `ebay_taxonomy_cache`, `competitor_prices`, `market_watches`, `market_price_history`, `spot_price_cache`, `reprice_rules`, `optimization_history`, `listing_cogs`, `listing_financials`, `profiles`, `organizations`, `org_members`, `org_invitations`, `subscriptions`, `usage_tracking`, `gemini_usage`, `knowledge_base`, `test_items`, `cost_alerts`, `support_tickets`
+## Two verifications never returned
 
-## Next action (start here tomorrow)
+Neither is blocking, both are one query:
 
-1. For each of the 26 tables above: run `SELECT * FROM public.<table>;` in the **source** project's (`wcednzaxmxwfiijzmjmx`) SQL Editor, click "Download CSV", save with a clear naming convention (e.g. `phase0_export_<table>.csv`) into one local folder outside the repo.
-2. For each table's CSV: use the **disposable project's** (`mydedtvyledbjarockrg`) Table Editor → select the table → "Import data from CSV" to load it.
-3. Validate: compare row counts between source and disposable-project tables (a `SELECT count(*)` in each SQL Editor is enough — non-sensitive, safe to share).
-4. Write up the rehearsal result (duration, table-by-table row-count match/mismatch, any defects) into a new `REBRAND_PHASE_0_RESTORE_REPORT.md` — this is the evidence artifact Phase 0 actually asks for (see `REBRAND_PHASE_0_IMPLEMENTATION.md` §9).
-5. Once that's done, P0-11 and P0-12 can move from "Not started"/"In progress" to "Evidence captured" in the closure checklist.
-6. Security cleanup whenever convenient (not blocking): `C:\Users\fenwitr\pgconn.txt` still holds the production DB password in plain text and is no longer needed (everything remaining is browser-based) — delete it. `C:\Users\fenwitr\phase0-backup-2026-08-13.dump` is a leftover empty (0-byte) file from an abandoned CLI attempt — also safe to delete.
+1. **The FK repair** — production should now show 10 rows for:
+   `SELECT conrelid::regclass, conname FROM pg_constraint WHERE confrelid = 'auth.users'::regclass AND connamespace = 'public'::regnamespace ORDER BY 1;`
+   The repair reported success, but success was inferred from the absence of an
+   error rather than confirmed. This is the one production change from today.
+2. **`idx_drafts_published_at`** — see item 4 above.
 
-## Safe resume command
-
-From the repository root:
+## Safe resume
 
 ```bash
 git fetch origin
@@ -66,6 +133,15 @@ git pull --ff-only origin main
 git status --short --branch
 ```
 
-Check for open PRs before starting new work — as of this handoff, only today's session-handoff PR (branch `docs/session-handoff-2026-08-13`) should be open.
+Check for open PRs first — as of this handoff, `docs/phase-0-rbr-0014-schema-capture`
+should be the only one. Review `REBRAND_PHASE_0_DECISION_LOG.md` and
+`REBRAND_PHASE_0_CLOSURE_CHECKLIST.md` for approval status before any provider
+action, and guide dashboard steps one at a time.
 
-Before any further provider action, review `REBRAND_PHASE_0_DECISION_LOG.md` and `REBRAND_PHASE_0_CLOSURE_CHECKLIST.md` for current approval status. Guide dashboard actions one step at a time; never request or print secret values — the network-connectivity issue above means every remaining database interaction should go through the dashboard UI anyway, which naturally keeps secrets out of the terminal/chat.
+## Gate status
+
+4 of 18 gates have evidence: P0-04 (secret inventory), P0-10 (partial — `auth.users`
+count confirmed at 9, storage baseline still open under P0-08), P0-11, and P0-12.
+Zero gates are approved. All 7 pending approvals (PEND-0001 … PEND-0007) remain
+pending, and 24 exceptions are logged with most still open. **Phase 0 is not close
+to closing**, and Phase 1 entry (P0-18) has not started.
