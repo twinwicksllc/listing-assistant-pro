@@ -1,5 +1,6 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import {
+  describeCronAuthEnv,
   requireCronSecret,
   requireServiceRole,
   requireUser,
@@ -113,4 +114,31 @@ Deno.test("requireCronSecret: rejects a near-miss secret differing in length", a
     (await requireCronSecret(reqWithAuth(FAKE_CRON_SECRET + "x"), cronDeps)).ok,
     false,
   );
+});
+
+// --- describeCronAuthEnv ----------------------------------------------------
+// Logged on a 401 so the operator can see the runtime's own view. It must expose
+// lengths and booleans only -- never any part of a secret.
+
+Deno.test("describeCronAuthEnv: reports configuration without leaking secrets", () => {
+  const summary = describeCronAuthEnv(reqWithAuth("some-presented-token"), cronDeps);
+  const serialised = JSON.stringify(summary);
+  assertEquals(serialised.includes(FAKE_CRON_SECRET), false);
+  assertEquals(serialised.includes(FAKE_SERVICE_KEY), false);
+  assertEquals(serialised.includes("some-presented-token"), false);
+  assertEquals(summary.cronSecretConfigured, true);
+  assertEquals(summary.cronSecretLength, FAKE_CRON_SECRET.length);
+  assertEquals(summary.presentedTokenLength, "some-presented-token".length);
+});
+
+Deno.test("describeCronAuthEnv: flags an unconfigured cron secret", () => {
+  const summary = describeCronAuthEnv(reqWithAuth("t"), { ...deps, cronSecret: "" });
+  assertEquals(summary.cronSecretConfigured, false);
+  assertEquals(summary.cronSecretLength, 0);
+});
+
+Deno.test("describeCronAuthEnv: surfaces a length match, the usual near-miss clue", () => {
+  const sameLength = "x".repeat(FAKE_CRON_SECRET.length);
+  const summary = describeCronAuthEnv(reqWithAuth(sameLength), cronDeps);
+  assertEquals(summary.lengthMatchesCronSecret, true);
 });

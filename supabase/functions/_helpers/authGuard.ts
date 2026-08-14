@@ -153,3 +153,35 @@ export async function requireCronSecret(
   }
   return { ok: false, status: 401, message: "Unauthorized" };
 }
+
+/**
+ * Redacted summary of what a cron guard had available, for logging on a 401.
+ *
+ * Lengths and booleans only — never any part of a secret. Deliberately written to
+ * the function log rather than the HTTP response, so an unauthenticated caller
+ * learns nothing while the operator can see the runtime's own view.
+ *
+ * This exists because diagnosing the RBR-0025 401s from outside the runtime was
+ * effectively guesswork: the presented token and the expected value were both
+ * invisible, and four separate hypotheses were tested against an opaque
+ * comparison. A single line of this in the log would have identified the cause
+ * immediately.
+ */
+export function describeCronAuthEnv(
+  req: Request,
+  deps?: AuthGuardDeps,
+): Record<string, unknown> {
+  const { supabaseServiceKey, cronSecret } = resolveDeps(deps);
+  const token = extractBearer(req);
+  return {
+    presentedTokenLength: token?.length ?? 0,
+    hasAuthorizationHeader: req.headers.has("Authorization"),
+    cronSecretConfigured: cronSecret.length > 0,
+    cronSecretLength: cronSecret.length,
+    serviceKeyConfigured: supabaseServiceKey.length > 0,
+    serviceKeyLength: supabaseServiceKey.length,
+    lengthMatchesCronSecret: token != null && token.length === cronSecret.length,
+    lengthMatchesServiceKey: token != null &&
+      token.length === supabaseServiceKey.length,
+  };
+}

@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
-import { requireCronSecret } from "../_helpers/authGuard.ts";
+import { describeCronAuthEnv, requireCronSecret } from "../_helpers/authGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -26,6 +26,12 @@ serve(async (req) => {
   // See RBR-0025.
   const auth = await requireCronSecret(req);
   if (!auth.ok) {
+    // Redacted diagnostic to the function log only -- lengths and booleans, no
+    // secret material, and nothing added to the response body. See RBR-0025.
+    console.warn(
+      "[COST-ALERT-CRON] auth rejected:",
+      JSON.stringify(describeCronAuthEnv(req)),
+    );
     return new Response(JSON.stringify({ error: auth.message }), {
       status: auth.status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
