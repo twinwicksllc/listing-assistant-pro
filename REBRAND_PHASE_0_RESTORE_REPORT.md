@@ -116,10 +116,17 @@ exports only what the grid returned. No warning is shown.
 `listing_cogs` (814) and `competitor_prices` (257) were also truncated to 100 by
 the same cap and would have migrated as ~12% and ~39% of their real content.
 
-**Fix:** use the Table Editor's export (`⋯` → Export data → Download as CSV),
-which has no row cap. `profiles` is the deliberate exception — it must come from
-the SQL Editor so a redacting column list can be applied (see below). Every
-export was then verified by record count before import.
+**Fix as performed:** use the Table Editor's export (`⋯` → Export data →
+Download as CSV), which has no row cap. `profiles` was the deliberate exception —
+it had to come from the SQL Editor so a redacting column list could be applied
+(see below). Every export was then verified by record count before import.
+
+**Better fix, found afterwards:** the SQL Editor has a **"No limit"** selector
+that disables the 100-row cap outright. That is preferable for a real cutover,
+because it removes the awkward split where one table uses a different export path
+from the other twelve — `profiles` could then be exported both redacted and
+untruncated from the same place. The rehearsal did not use this route, so it is
+untested at 15,000 rows and should be verified before being relied on.
 
 ### Defect 3 — Live schema drift from the tracked migrations
 
@@ -151,22 +158,63 @@ provenance recorded inline.
 reported `subscriptions` as matching. Only a column _name_ diff caught it. Count
 comparison is not a sufficient drift check.
 
-## Constraint drift — verified for one table, and it drifted
+## Constraint and index drift — full diff across all 26 tables
 
-Beyond columns, live `subscriptions` carries exactly three constraints:
-`subscriptions_pkey`, `subscriptions_stripe_sub_id_key`, and
-`subscriptions_org_id_fkey`. The migrations declare two more that **production
-does not have**:
+A complete diff of live `pg_constraint` and `pg_indexes` against the recreation
+artifact was run on 2026-08-14. The first pass produced a misleading result
+because it ran while production was missing ten foreign keys due to the incident
+recorded in RBR-0023. With that noise excluded, the real picture is narrow:
 
-- `subscriptions_user_id_fkey` → `auth.users` — absent live, so orphaned
-  subscription rows are possible in production.
-- `subscriptions_status_check` (8 allowed values) — absent live, so production
-  can hold arbitrary status strings. Any target schema that reinstates this CHECK
-  must first confirm every existing value passes it, or the migration will fail.
+| Comparison  | Tables identical |
+| ----------- | ---------------- |
+| Constraints | 25 of 26         |
+| Indexes     | 23 of 26         |
 
-**This is an open risk, not a closed finding.** Constraints were compared against
-live for this one table only. Column names are now verified for all 26 tables;
-constraints are verified for one. See RBR-0022.
+Genuine drift, all four items now annotated in the recreation artifact:
+
+1. **`profiles_stripe_customer_id_key`** — a UNIQUE constraint on
+   `stripe_customer_id` present in production that no migration declares. Also
+   supplies the implicit index of the same name.
+2. **`idx_drafts_published_at`** — an index present in production that no
+   migration declares. Its exact definition was inferred from the name and has
+   **not** been captured; pull `pg_indexes.indexdef` before relying on it.
+3. **Four `idx_subscriptions_*` indexes** — `user_id`, `stripe_sub_id`,
+   `stripe_cust_id`, and `status` are declared by the migrations but absent in
+   production. A performance gap rather than a correctness one; adding them to the
+   target schema is recommended.
+4. **`subscriptions_status_check`** — an 8-value CHECK declared by the migrations
+   and absent in production, so `status` can hold arbitrary strings. A CHECK was
+   unaffected by the RBR-0023 incident, so this finding is real. Any target schema
+   reinstating it must first confirm every existing value passes, or the migration
+   will fail.
+
+**Retracted from an earlier revision of this report:** the claim that production
+lacked `subscriptions_user_id_fkey`. That was inferred from a query run after the
+RBR-0023 drop and was wrong. The constraint has been restored in production.
+
+## Incident during the rehearsal — RBR-0023
+
+A `DO` block written to drop `auth.users` foreign keys in the disposable project
+was executed against **shared production** instead, removing all ten such
+constraints from the `public` schema. It relied on a prose warning to target the
+right project rather than a guard that could refuse to run.
+
+Detected the same day by the constraint diff above: every `auth.users` FK was
+missing while unrelated constraints from the same migration files were present,
+an absence pattern matching the script's `WHERE` clause exactly. Project identity
+was confirmed by a CRM-table fingerprint query.
+
+No data was lost — dropping a foreign key removes a rule, not rows, and the
+rehearsal row counts were unaffected. The exposure was loss of `ON DELETE
+CASCADE`, which would have silently orphaned a user's records on the next auth
+deletion. An orphan check across all ten relationships returned zero rows, so all
+ten constraints were re-added with their original definitions and no data repair
+was required.
+
+Corrective controls are recorded as DEC-0014 through DEC-0016: destructive
+snippets must carry a fail-closed environment guard, DEC-0006 is clarified to
+cover schema as well as rows, and any finding derived from a query run after a
+known mutation must be re-verified before being recorded.
 
 ## Deviations from a true restore
 
@@ -209,7 +257,7 @@ which affects the entire Phase 1 target-schema design, not just this rehearsal.
 
 1. Decide encryption, storage location, and retention for the export CSVs, which
    currently sit unencrypted on a local disk (P0-11).
-2. Run a full constraint and index diff across all 26 tables (RBR-0022).
+2. Capture the exact definition of `idx_drafts_published_at`, and decide whether the four missing `idx_subscriptions_*` indexes and the `status` CHECK should exist in the target schema (RBR-0022).
 3. Verify `knowledge_base` embedding dimensions survived the round trip.
 4. Re-run a timed rehearsal once the export path is fixed, to size the
    maintenance window (feeds P0-14).

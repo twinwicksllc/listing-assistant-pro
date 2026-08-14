@@ -53,3 +53,11 @@ No production or irreversible approval is recorded in this file yet.
 - **Approved by:** `TBD`
 - **Approval date:** `TBD`
 - **Notes:** Live provider inventory, baseline, backup/restore, cohort, and exception review remain outstanding.
+
+## Corrective controls adopted after the RBR-0023 incident
+
+| ID       | Decision                                                                                                                                                                                                                                          | Status         | Evidence / rationale                                                                                                               |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| DEC-0014 | Every SQL snippet capable of modifying schema or data must carry an environment guard that raises an exception unless the target project is confirmed by fingerprint. A prose warning about which project to use is not an acceptable substitute. | Control active | RBR-0023: a rehearsal script intended for the disposable project ran against shared production and dropped ten foreign keys        |
+| DEC-0015 | DEC-0006 is clarified to cover schema as well as rows: no production schema object is created, altered, or dropped during Phase 0 discovery without explicit prior approval for that specific change.                                             | Control active | RBR-0023 breached DEC-0006 under a reading in which it governed only data                                                          |
+| DEC-0016 | Read-only verification is preferred over inference when a Phase 0 finding depends on live state, and any finding derived from a query run after a known mutation must be re-verified before it is recorded.                                       | Control active | The retracted portion of RBR-0022 was inferred from a query run after the RBR-0023 drop and wrongly recorded as pre-existing drift |
