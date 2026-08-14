@@ -571,7 +571,21 @@ Do not use unrestricted wildcard redirects in production.
 1. Update Resend sender identities and all template URLs.
 2. Verify provider budgets/quotas and move Gemini/OpenAI credentials to the new
    Supabase project.
-3. Create separate Sentry environments/projects or release tags for ListrAssistr.
+3. **Implement Sentry (or equivalent) from scratch for ListrAssistr — do not
+   assume an existing setup to separate into new environments.** Phase 0
+   discovery (RBR-0032, 2026-08-14) found that Sentry has never actually been
+   set up for this product: `_helpers/sentry.ts` in the legacy repo is an
+   undocumented no-op stub — `initSentry()` never initializes a real client,
+   and `captureException`/`withSentryScope` only `console.log`/`console.error`
+   — left in place after the real SDK import caused CDN timeout issues during
+   deployment and was never revisited. No Sentry account exists at all, and
+   there is no frontend instrumentation either. This is a clean-slate build,
+   not a migration of working observability, so budget real implementation
+   time here rather than a config copy. Whatever CDN/proxy issue blocked the
+   original attempt should be diagnosed and avoided before wiring functions
+   back into it, and this closes a real gap: without it, function errors
+   (including delivery failures like RBR-0031) are only visible in per-function
+   console logs that nobody watches proactively.
 4. Scrub secrets, OAuth codes, access tokens, and customer listing content from
    logs and error events.
 5. Configure uptime checks for marketing, app, auth callback, and a safe backend
