@@ -4,6 +4,7 @@ import {
   useEffect,
   useState,
   useCallback,
+  useRef,
   ReactNode,
 } from "react";
 import { Session, User } from "@supabase/supabase-js";
@@ -192,6 +193,15 @@ const AuthContext = createContext<AuthContextType>({
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
+  // Mirrors `session` for refreshOrg to read without depending on it via
+  // useCallback. refreshOrg is itself a dependency of the effect that calls
+  // setSession, so giving it a `[session]` dependency would change its
+  // identity on every auth event and retrigger that effect -- tearing down
+  // and re-subscribing onAuthStateChange, and re-calling getSession(), in a
+  // cascade. A ref lets refreshOrg read the current session at call time
+  // while keeping a stable `[]` identity.
+  const sessionRef = useRef<Session | null>(null);
+  sessionRef.current = session;
   const [loading, setLoading] = useState(true);
   const [subscription, setSubscription] = useState<SubscriptionState>({
     subscribed: false,
@@ -212,20 +222,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading: true,
   });
 
-  const refreshOrg = useCallback(async () => {
+  const refreshOrg = useCallback(async (knownUserId?: string) => {
     try {
-      // Resolve the caller's own id first. This query MUST be scoped to the
-      // current user: the "Org members can view members" RLS policy lets any
-      // member SELECT every row of their org, so an unscoped `.limit(1)`
-      // returns an arbitrary teammate's row once an org has more than one
-      // member. When that row belonged to a 'lister', the real owner was
-      // demoted client-side and every ownerOnly route (Dashboard, Billing,
-      // P&L, Reprice Rules) silently bounced back to /home.
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser();
+      // Resolve the caller's own id from the session already in hand,
+      // rather than calling supabase.auth.getUser(). refreshOrg is invoked
+      // from onAuthStateChange (deferred) and from getSession().then() on
+      // mount (not deferred) -- awaiting another auth method from either of
+      // those paths can deadlock on auth-js's internal session lock, which is
+      // legitimately held during session recovery. That lock is client-wide,
+      // so while stuck it can also stall unrelated concurrent calls on other
+      // tables (drafts, usage_tracking) that share the same Supabase client.
+      // Both internal call sites already have `session` as a local variable
+      // and pass its user id in directly; TeamPage.tsx's manual refreshOrg()
+      // call (after accepting a team invite) has no session param to pass,
+      // so it falls back to sessionRef. Either way this is the same value
+      // onAuthStateChange/getSession() already handed the caller -- no extra
+      // network round trip needed. This query MUST still be scoped to that
+      // id: the "Org members can view members" RLS policy lets any member
+      // SELECT every row of their org, so an unscoped `.limit(1)` returns an
+      // arbitrary teammate's row once an org has more than one member. When
+      // that row belonged to a 'lister', the real owner was demoted
+      // client-side and every ownerOnly route (Dashboard, Billing, P&L,
+      // Reprice Rules) silently bounced back to /home.
+      const userId = knownUserId ?? sessionRef.current?.user?.id;
 
-      if (!authUser) {
+      if (!userId) {
         setOrg({ orgId: null, orgName: null, role: null, loading: false });
         return;
       }
@@ -233,7 +254,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: memberRows, error: memberError } = await supabase
         .from("org_members")
         .select("org_id, role")
-        .eq("user_id", authUser.id);
+        .eq("user_id", userId);
 
       if (memberError || !memberRows || memberRows.length === 0) {
         setOrg({ orgId: null, orgName: null, role: null, loading: false });
@@ -332,7 +353,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setTimeout(() => {
           refreshSubscription();
           refreshUsage();
-          refreshOrg();
+          refreshOrg(session.user.id);
         }, 0);
       } else {
         setSubscription({
@@ -352,9 +373,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setLoading(false);
       if (session) {
-        refreshSubscription();
-        refreshUsage();
-        refreshOrg();
+        // Deferred for the same reason as the onAuthStateChange branch above:
+        // this runs inside a .then() chained directly off getSession(),
+        // which is itself part of session initialization. Keeping both
+        // branches' post-session-resolved work identically deferred avoids
+        // one of them being an unexplained special case.
+        setTimeout(() => {
+          refreshSubscription();
+          refreshUsage();
+          refreshOrg(session.user.id);
+        }, 0);
       } else {
         setSubscription((s) => ({ ...s, loading: false }));
         setOrg((s) => ({ ...s, loading: false }));
