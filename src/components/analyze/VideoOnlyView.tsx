@@ -72,10 +72,9 @@ export function VideoOnlyView({
             Upload a Video
           </p>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Record or upload one video (max 10 seconds) for your listing media.
-            AI item identification still needs photos today. We are planning
-            automatic key-frame extraction so video-only uploads can run
-            identification in a future release.
+            Record or upload one video (max 10 seconds) for your listing
+            media. Use "Extract Frames for AI" below to pull key frames from
+            it and run AI item identification without separate photos.
           </p>
         </div>
 
