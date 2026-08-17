@@ -8,6 +8,25 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
+const LISTING_IMAGES_PUBLIC_URL_MARKER =
+  "/object/public/listing-images/";
+
+/**
+ * Reverse of getPublicUrl(): recover a bare storage object path from a
+ * listing-images public URL, for use with storage.remove(). Returns null for
+ * anything that isn't a listing-images URL (e.g. a data: URL from a failed
+ * upload, or an unrelated remote URL) so callers can safely skip those
+ * instead of passing them to remove().
+ */
+function listingImagesPathFromPublicUrl(
+  url: string | null | undefined,
+): string | null {
+  if (!url) return null;
+  const idx = url.indexOf(LISTING_IMAGES_PUBLIC_URL_MARKER);
+  if (idx === -1) return null;
+  return url.slice(idx + LISTING_IMAGES_PUBLIC_URL_MARKER.length);
+}
+
 export function useDrafts() {
   const { user, org } = useAuth();
   const [drafts, setDrafts] = useState<ListingDraft[]>([]);
@@ -181,6 +200,34 @@ export function useDrafts() {
   };
 
   const removeDraft = async (id: string) => {
+    // Best-effort cleanup of this draft's own storage objects before
+    // deleting the row -- without this, every deleted draft permanently
+    // orphans its images/video, which is how listing-images ended up with
+    // 4,716 orphaned objects (RBR-0033). Non-fatal: the row delete below is
+    // the primary operation and must still succeed even if this fails.
+    const draft = drafts.find((d) => d.id === id);
+    if (draft) {
+      const paths = [
+        draft.imageUrl,
+        ...(draft.imageUrls ?? []),
+        draft.videoUrl,
+      ]
+        .map((url) => listingImagesPathFromPublicUrl(url))
+        .filter((path): path is string => path !== null);
+
+      if (paths.length > 0) {
+        const { error: storageError } = await supabase.storage
+          .from("listing-images")
+          .remove(paths);
+        if (storageError) {
+          console.warn(
+            `removeDraft: failed to delete storage objects for draft ${id}`,
+            storageError.message,
+          );
+        }
+      }
+    }
+
     const { error } = await supabase.from("drafts").delete().eq("id", id);
 
     if (error) {
