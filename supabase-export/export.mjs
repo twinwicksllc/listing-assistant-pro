@@ -1,22 +1,28 @@
-import { createClient } from '@supabase/supabase-js';
-import fs from 'fs';
+import { createClient } from "@supabase/supabase-js";
+import fs from "fs";
 
 // Read Supabase credentials from environment variables to avoid committing secrets.
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://wcednzaxmxwfiijzmjmx.supabase.co';
-const SERVICE_ROLE_KEY = process.env.SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || 'YOUR_SERVICE_ROLE_KEY';
+const SUPABASE_URL =
+  process.env.SUPABASE_URL || "https://wcednzaxmxwfiijzmjmx.supabase.co";
+const SERVICE_ROLE_KEY =
+  process.env.SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  "YOUR_SERVICE_ROLE_KEY";
 
-if (!SERVICE_ROLE_KEY || SERVICE_ROLE_KEY === 'YOUR_SERVICE_ROLE_KEY') {
-  console.error('Missing Supabase service role key. Set $SERVICE_ROLE_KEY (do not commit this key).');
+if (!SERVICE_ROLE_KEY || SERVICE_ROLE_KEY === "YOUR_SERVICE_ROLE_KEY") {
+  console.error(
+    "Missing Supabase service role key. Set $SERVICE_ROLE_KEY (do not commit this key).",
+  );
   process.exit(1);
 }
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
-async function listAllFilesInBucket(bucketName, path = '') {
+async function listAllFilesInBucket(bucketName, path = "") {
   const { data, error } = await supabase.storage.from(bucketName).list(path, {
     limit: 1000,
     offset: 0,
-    sortBy: { column: 'name', order: 'asc' },
+    sortBy: { column: "name", order: "asc" },
   });
 
   if (error) {
@@ -50,8 +56,9 @@ async function listAllFilesInBucket(bucketName, path = '') {
 }
 
 async function exportAll() {
-  console.log('Fetching storage buckets...');
-  const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+  console.log("Fetching storage buckets...");
+  const { data: buckets, error: bucketsError } =
+    await supabase.storage.listBuckets();
 
   if (bucketsError) {
     throw bucketsError;
@@ -66,11 +73,11 @@ async function exportAll() {
     console.log(`Found ${files.length} files in bucket ${bucket.name}`);
   }
 
-  fs.writeFileSync('storage_objects.json', JSON.stringify(allRows, null, 2));
+  fs.writeFileSync("storage_objects.json", JSON.stringify(allRows, null, 2));
   console.log(`\nDone! Saved ${allRows.length} files to storage_objects.json`);
 }
 
 exportAll().catch((error) => {
-  console.error('Storage export failed:', error);
+  console.error("Storage export failed:", error);
   process.exit(1);
 });

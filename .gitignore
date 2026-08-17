@@ -40,3 +40,9 @@ supabase/.temp/
 .vercel
 .env*.local
 supabase/functions/deno.lock
+
+# Storage export output — real object paths/UUIDs, keep local only
+supabase-export/storage_objects.json
+supabase-export/*.json
+!supabase-export/package.json
+!supabase-export/package-lock.json
