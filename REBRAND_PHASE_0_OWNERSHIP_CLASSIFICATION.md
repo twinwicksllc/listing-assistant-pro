@@ -59,7 +59,7 @@ per-object tables. Summary:
 | Bucket           | Classification    | Evidence                                                                                       |
 | ---------------- | ----------------- | ---------------------------------------------------------------------------------------------- |
 | `listing-images` | ListrAssistr-only | Repository-backed; 4,735 objects/1,274 MB (RBR-0026)                                           |
-| `avatars`        | Shared/identity   | Repository-backed but used by whichever product's user uploads one; owner mapping not yet done |
+| `avatars`        | Shared            | Repository-backed but used by whichever product's user uploads one; owner mapping not yet done |
 | `client-uploads` | CRM-only          | Empty; CRM/client-site surface, not in listing migrations                                      |
 
 ## Edge Functions (Supabase, this repository)
