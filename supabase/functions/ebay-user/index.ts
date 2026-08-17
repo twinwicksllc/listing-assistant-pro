@@ -44,7 +44,13 @@ serve(async (req) => {
 
     const { userToken } = await req.json();
 
-    const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
+    // Default to production, matching ebay-publish/category-lookup/etc. --
+    // this app's eBay integration is production (confirmed 500+ live
+    // listings). A silent sandbox default here would feed a real production
+    // OAuth token into eBay's sandbox API, which correctly rejects it -- this
+    // is the root cause of a 502 seen live 2026-08-17 (eBay returned 404 for
+    // a production token queried against api.sandbox.ebay.com).
+    const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "production";
     const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
 
     if (!userToken) {

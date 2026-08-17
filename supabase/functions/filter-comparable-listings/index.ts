@@ -328,7 +328,11 @@ serve(async (req: Request) => {
 
     const geminiKey = Deno.env.get("GEMINI_API_KEY");
     const ebayAppId = Deno.env.get("EBAY_CLIENT_ID");
-    const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
+    // Default to production, matching ebay-publish/category-lookup/etc. --
+    // this app's eBay integration is production (confirmed 500+ live
+    // listings). A silent sandbox default here would feed a real production
+    // OAuth token into eBay's sandbox API, which correctly rejects it.
+    const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "production";
 
     if (!geminiKey || !ebayAppId) {
       return new Response(

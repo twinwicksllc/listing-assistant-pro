@@ -371,8 +371,14 @@ serve(async (req: Request) => {
       );
     }
 
-    const ebayEnv = Deno.env.get("EBAY_ENV") || "production";
-    const apiBase = ebayEnv === "sandbox" ? "https://api.sandbox.ebay.com" : "https://api.ebay.com";
+    // Was reading EBAY_ENV -- every other eBay function in this codebase
+    // reads EBAY_ENVIRONMENT, so this never actually picked up the real
+    // secret and was silently relying on its own "production" default the
+    // whole time (correct by coincidence, not by configuration). Aligned to
+    // the same variable name and the same production-default/ternary
+    // polarity used everywhere else.
+    const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "production";
+    const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
 
     const authHeaders = {
       Authorization: `Bearer ${userToken}`,

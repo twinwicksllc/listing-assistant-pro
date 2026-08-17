@@ -74,7 +74,11 @@ async function getEbayAppToken(): Promise<string> {
   }
 
   const credentials = btoa(`${clientId}:${clientSecret}`);
-  const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
+  // Default to production, matching ebay-publish/category-lookup/etc. --
+  // this app's eBay integration is production (confirmed 500+ live
+  // listings). A silent sandbox default here would feed a real production
+  // OAuth token into eBay's sandbox API, which correctly rejects it.
+  const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "production";
   const tokenUrl = ebayEnv === "production"
     ? "https://api.ebay.com/identity/v1/oauth2/token"
     : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
