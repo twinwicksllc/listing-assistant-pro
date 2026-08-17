@@ -18,6 +18,10 @@ Security
 
 - Do not commit `SERVICE_ROLE_KEY` to source control.
 - Use CI secrets or your environment's secret manager for automation.
+- Do not commit `storage_objects.json` either -- it contains real object
+  paths, owner UUIDs, and etags for every file in the project's storage
+  buckets. `.gitignore` excludes it, but don't fight that by force-adding it.
+  Keep exports on local disk only.
 
 Notes
 
