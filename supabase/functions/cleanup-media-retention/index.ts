@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { describeCronAuthEnv, requireCronSecret } from "../_helpers/authGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -102,25 +103,25 @@ serve(async (req: Request) => {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const expectedSecret = Deno.env.get("MEDIA_RETENTION_SECRET");
-  const providedAuth = req.headers
-    .get("Authorization")
-    ?.replace("Bearer ", "")
-    .trim();
-  const providedSecret = req.headers.get("x-cleanup-secret");
-
-  const isAuthorized = Boolean(
-    serviceKey &&
-      (providedAuth === serviceKey || providedSecret === expectedSecret),
-  );
-  if (!serviceKey || !isAuthorized) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
+  // Uses the same CRON_SECRET pattern adopted for cost-alert-cron and
+  // sync-ebay-taxonomy (see authGuard.ts) rather than this function's own
+  // former bespoke MEDIA_RETENTION_SECRET/x-cleanup-secret check, so there is
+  // one consistent, tested cron-auth mechanism instead of several one-off
+  // ones. Also accepts the service-role key directly, so a manual dashboard
+  // trigger or another internal caller still works.
+  const auth = await requireCronSecret(req);
+  if (!auth.ok) {
+    console.warn(
+      "[cleanup-media-retention] auth rejected:",
+      JSON.stringify(describeCronAuthEnv(req)),
+    );
+    return new Response(JSON.stringify({ error: auth.message }), {
+      status: auth.status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   if (!supabaseUrl || !serviceKey) {
     return new Response(
@@ -130,6 +131,23 @@ serve(async (req: Request) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       },
     );
+  }
+
+  // Dry-run mode: report exactly what a real run would delete/update without
+  // touching storage or the drafts table. Intended for a manual verification
+  // pass before this function is put on a recurring schedule, since unlike
+  // the other scheduled functions this one deletes production storage
+  // objects and mutates drafts rows -- accept via JSON body ({"dryRun":true})
+  // or a query string (?dryRun=true) so it is easy to trigger either way from
+  // the dashboard or a net.http_post test call.
+  let dryRun = new URL(req.url).searchParams.get("dryRun") === "true";
+  if (!dryRun && req.method === "POST") {
+    try {
+      const body = await req.json();
+      dryRun = body?.dryRun === true;
+    } catch {
+      // No body, or not JSON -- fine, dryRun stays false.
+    }
   }
 
   const adminClient = createClient(supabaseUrl, serviceKey, {
@@ -196,6 +214,13 @@ serve(async (req: Request) => {
           continue;
         }
 
+        if (dryRun) {
+          // Report what would happen without touching storage or drafts.
+          deletedPaths.push(path);
+          deletedCount += 1;
+          continue;
+        }
+
         const { error: removeError } = await adminClient.storage
           .from(BUCKET_ID)
           .remove([path]);
@@ -237,11 +262,12 @@ serve(async (req: Request) => {
       }
     }
 
-    const afterStats = await getBucketStats(adminClient);
+    const afterStats = dryRun ? beforeStats : await getBucketStats(adminClient);
 
     return new Response(
       JSON.stringify({
         ok: true,
+        dryRun,
         bucket: BUCKET_ID,
         scanned,
         deletedCount,
