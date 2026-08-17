@@ -1,6 +1,7 @@
 import { fetchWithTimeout } from "./fetch.ts";
 import { corsHeaders } from "./constants.ts";
 import { assertCallerOwnsUser } from "./supabase.ts";
+import { fetchEbayVideoStatus } from "./video.ts";
 import { buildEbayJsonHeaders } from "./publish.ts";
 import {
   buildAndNormalizeAspects,
@@ -447,14 +448,50 @@ export async function handleCreateDraft({
     (inventoryBody.product as Record<string, unknown>).aspects = aspects;
   }
 
-  // Add video if it has been uploaded and is LIVE on eBay
+  // Add video if it has been uploaded and is LIVE on eBay.
+  //
+  // The frontend already gates on this (usePublishDraft.ts only sends
+  // ebayVideoId once draft.ebayVideoStatus === "LIVE"), so payloadEbayVideoId
+  // being present here already implies the client believed it was live. This
+  // re-verifies server-side rather than trusting that unconditionally --
+  // defense in depth, not a fix for an active exploit, since nothing in this
+  // codebase currently sends a video id it doesn't believe is live.
+  //
+  // If the verification call itself fails (network blip, eBay-side hiccup),
+  // fall back to attaching the video anyway rather than failing the whole
+  // publish over a check that couldn't complete -- the frontend's own gate
+  // is still the primary safeguard, and being stricter here would make video
+  // attachment less reliable than before this change, not more.
   if (payloadEbayVideoId) {
-    (inventoryBody.product as Record<string, unknown>).videoIds = [
-      String(payloadEbayVideoId),
-    ];
-    console.log(
-      `create_draft: attaching ebayVideoId=${payloadEbayVideoId} to product.videoIds`,
-    );
+    let shouldAttachVideo = true;
+    try {
+      const { status: liveStatus } = await fetchEbayVideoStatus(
+        String(payloadEbayVideoId),
+        String(userToken),
+        ebayEnv,
+      );
+      if (liveStatus !== "LIVE") {
+        shouldAttachVideo = false;
+        console.warn(
+          `create_draft: ebayVideoId=${payloadEbayVideoId} is not LIVE on eBay (status=${liveStatus}); publishing without video`,
+        );
+      }
+    } catch (err) {
+      console.warn(
+        `create_draft: could not re-verify ebayVideoId=${payloadEbayVideoId} status (${
+          err instanceof Error ? err.message : String(err)
+        }); attaching anyway on the frontend's LIVE gate`,
+      );
+    }
+
+    if (shouldAttachVideo) {
+      (inventoryBody.product as Record<string, unknown>).videoIds = [
+        String(payloadEbayVideoId),
+      ];
+      console.log(
+        `create_draft: attaching ebayVideoId=${payloadEbayVideoId} to product.videoIds`,
+      );
+    }
   }
 
   // ── eBay June 2026 Coin Condition Descriptors (MANDATORY) ──────────────────

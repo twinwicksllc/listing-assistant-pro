@@ -171,10 +171,30 @@ export function VideoUploadInput({
 
   const startPolling = (vidId: string) => {
     stopPolling();
+    let pollCount = 0;
+    // 10 minutes at the 15s interval below. Previously this had no cap at
+    // all -- a genuinely stuck eBay-side processing job (PENDING/PROCESSING
+    // forever) would poll indefinitely with the publish button silently
+    // disabled and no explanation. Reusing the "failed" status rather than
+    // adding a new one, since no "timeout" status exists in UploadStatus;
+    // the distinct error message is what actually tells the user it's a
+    // timeout, not a processing failure, so they know retrying may help.
+    const MAX_POLL_ATTEMPTS = 40;
     pollingRef.current = setInterval(async () => {
       if (!mountedRef.current) return stopPolling();
       const token = userToken ?? localStorage.getItem("ebay-user-token");
       if (!token) return;
+
+      pollCount += 1;
+      if (pollCount > MAX_POLL_ATTEMPTS) {
+        stopPolling();
+        setStatus("failed");
+        onStatusChange?.("FAILED");
+        setErrorMsg(
+          "eBay is still processing this video after 10 minutes. This is unusual -- please try uploading again.",
+        );
+        return;
+      }
 
       try {
         const { data } = await supabase.functions.invoke("ebay-publish", {

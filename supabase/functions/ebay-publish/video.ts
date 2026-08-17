@@ -43,7 +43,15 @@ function getMediaVideoBaseCandidates(ebayEnv: string): string[] {
 }
 
 function isRetryableCreateEndpointStatus(status: number): boolean {
-  return status === 404 || status === 405;
+  // 404/405 are the clean "wrong path" signals. 400 is included too because
+  // some API gateways (this function tries four base-URL variants across
+  // apim/rest and v1/v1_beta) return a plain 400 rather than 404 for an
+  // unrecognized route. Deliberately NOT retrying 401/403 here: those
+  // typically mean the request reached real routing and was rejected on
+  // auth, so retrying across endpoint variants would just delay reaching the
+  // existing, more specific auth guidance below with no better outcome --
+  // a genuinely bad/expired token fails identically on every variant.
+  return status === 404 || status === 405 || status === 400;
 }
 
 function isRetryableStatusCode(status: number): boolean {
@@ -493,18 +501,26 @@ export async function handleUploadVideo({
     );
   }
 
-  // Step 3: Upload bytes to eBay (no short timeout — large files may take minutes)
-  const uploadResp = await fetch(`${mediaApiBase}/${videoId}/upload`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${userToken}`,
-      "Content-Type": "application/octet-stream",
-      "Content-Language": CONTENT_LANGUAGE,
-      "X-EBAY-C-MARKETPLACE-ID": EBAY_MARKETPLACE_ID,
-      ...(fileSize ? { "Content-Length": String(fileSize) } : {}),
+  // Step 3: Upload bytes to eBay. Generous timeout (large files legitimately
+  // take minutes) rather than no timeout at all -- previously this relied
+  // entirely on the platform's own hard limit, which would abort silently
+  // with no clear error attributing the failure to this specific step.
+  const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
+  const uploadResp = await fetchWithTimeout(
+    `${mediaApiBase}/${videoId}/upload`,
+    {
+      method: "POST",
+      timeout: UPLOAD_TIMEOUT_MS,
+      headers: {
+        Authorization: `Bearer ${userToken}`,
+        "Content-Type": "application/octet-stream",
+        "Content-Language": CONTENT_LANGUAGE,
+        "X-EBAY-C-MARKETPLACE-ID": EBAY_MARKETPLACE_ID,
+        ...(fileSize ? { "Content-Length": String(fileSize) } : {}),
+      },
+      body: videoFetchResp.body,
     },
-    body: videoFetchResp.body,
-  });
+  );
 
   if (!uploadResp.ok && uploadResp.status !== 204) {
     const e = await uploadResp.text();
@@ -520,21 +536,23 @@ export async function handleUploadVideo({
 }
 
 /**
- * Get the processing status of an uploaded eBay video.
+ * Core "ask eBay for this video's status" logic, with no Request/Response
+ * wrapping -- shared by handleGetVideoStatus (the HTTP action handler) and
+ * by publish-create-draft.ts, which calls this directly server-side to
+ * re-verify a video is actually LIVE before attaching it to a listing,
+ * rather than trusting the client-supplied ebayVideoId/ebayVideoStatus
+ * unconditionally.
  */
-export async function handleGetVideoStatus({
-  req,
-  payload,
-  apiBase,
-  ebayEnv,
-}: VideoHandlerContext): Promise<Response> {
-  const authFailure = await requireAuthenticatedSession(req);
-  if (authFailure) return authFailure;
-
-  const { userToken, videoId } = payload;
-  if (!userToken) throw new Error("No eBay user token provided");
-  if (!videoId) throw new Error("No videoId provided");
-
+export async function fetchEbayVideoStatus(
+  videoId: string,
+  userToken: string,
+  ebayEnv: string | undefined,
+): Promise<{
+  status: string;
+  rawStatus: string;
+  statusMessage: unknown;
+  raw: Record<string, unknown>;
+}> {
   const mediaApiCandidates = getMediaVideoBaseCandidates(
     ebayEnv || "production",
   );
@@ -578,29 +596,59 @@ export async function handleGetVideoStatus({
   const rawStatus = String(
     statusData.videoStatus ?? statusData.status ?? "PENDING",
   );
-  const normalizedStatus = normalizeVideoStatus(rawStatus);
+  const status = normalizeVideoStatus(rawStatus);
   console.log(
-    `get_video_status: videoId=${videoId} status=${normalizedStatus} rawStatus=${rawStatus}`,
+    `fetchEbayVideoStatus: videoId=${videoId} status=${status} rawStatus=${rawStatus}`,
   );
 
-  // If video is FAILED, provide diagnostic information
-  if (normalizedStatus === "FAILED") {
-    console.error(`get_video_status: video processing FAILED`, {
+  if (status === "FAILED") {
+    console.error(`fetchEbayVideoStatus: video processing FAILED`, {
       videoId,
       statusMessage: statusData.statusMessage ?? statusData.status_message,
       rawResponse: statusData,
     });
   }
 
+  return {
+    status,
+    rawStatus,
+    statusMessage: statusData.statusMessage ?? statusData.status_message ??
+      null,
+    raw: statusData,
+  };
+}
+
+/**
+ * Get the processing status of an uploaded eBay video.
+ */
+export async function handleGetVideoStatus({
+  req,
+  payload,
+  apiBase,
+  ebayEnv,
+}: VideoHandlerContext): Promise<Response> {
+  const authFailure = await requireAuthenticatedSession(req);
+  if (authFailure) return authFailure;
+
+  const { userToken, videoId } = payload;
+  if (!userToken) throw new Error("No eBay user token provided");
+  if (!videoId) throw new Error("No videoId provided");
+
+  const { status: normalizedStatus, rawStatus, statusMessage, raw } = await fetchEbayVideoStatus(
+    String(videoId),
+    String(userToken),
+    ebayEnv,
+  );
+
   return new Response(
     JSON.stringify({
       videoId,
       status: normalizedStatus,
       rawStatus,
-      statusMessage: statusData.statusMessage ?? statusData.status_message ?? null,
+      statusMessage,
       // Include additional metadata for debugging
       debugData: {
-        fullResponse: statusData,
+        fullResponse: raw,
       },
     }),
     {
