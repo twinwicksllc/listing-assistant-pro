@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { requireServiceRole } from "../_helpers/authGuard.ts";
+import { EbayTokenRefreshConfig, refreshEbayAccessToken } from "../_helpers/ebayTokenRefresh.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -27,11 +28,18 @@ async function fetchActiveListings(
   supabaseUrl: string,
   serviceKey: string,
   userId: string,
+  // deno-lint-ignore no-explicit-any -- matches the loose typing already
+  // used throughout this file (e.g. fetchFreshCacheMap's own supabase
+  // param below has a pre-existing, unrelated ReturnType<typeof
+  // createClient> generic-mismatch error under `deno check`; not this
+  // change's scope to fix, so this param avoids repeating it instead).
+  supabase: any,
+  ebayConfig: EbayTokenRefreshConfig,
 ): Promise<
   { listingId: string; title: string; price: number; categoryId?: string }[]
 > {
   const profileResp = await fetch(
-    `${supabaseUrl}/rest/v1/profiles?id=eq.${userId}&select=ebay_access_token,ebay_token_expires_at`,
+    `${supabaseUrl}/rest/v1/profiles?id=eq.${userId}&select=ebay_access_token,ebay_token_expires_at,ebay_refresh_token`,
     {
       headers: {
         apikey: serviceKey,
@@ -55,16 +63,30 @@ async function fetchActiveListings(
     return [];
   }
 
-  const token = profiles?.[0]?.ebay_access_token;
-  if (!token) {
-    console.log(`[cron] No eBay token for user ${userId}, skipping`);
-    return [];
-  }
-
+  let token = profiles?.[0]?.ebay_access_token;
+  const refreshToken = profiles?.[0]?.ebay_refresh_token;
   const expiresAt = profiles?.[0]?.ebay_token_expires_at;
-  if (expiresAt && new Date(expiresAt) < new Date()) {
-    console.log(`[cron] eBay token expired for user ${userId}, skipping`);
-    return [];
+  const isExpiredOrMissing = !token ||
+    (expiresAt && new Date(expiresAt) < new Date());
+
+  if (isExpiredOrMissing) {
+    if (!refreshToken) {
+      console.log(`[cron] No eBay refresh token for user ${userId}, skipping`);
+      return [];
+    }
+    const refreshResult = await refreshEbayAccessToken(
+      supabase,
+      userId,
+      refreshToken,
+      ebayConfig,
+    );
+    if (!refreshResult.ok) {
+      console.warn(
+        `[cron] eBay token refresh failed for user ${userId}: ${refreshResult.error}`,
+      );
+      return [];
+    }
+    token = refreshResult.accessToken;
   }
 
   const listingsResp = await fetch(
@@ -251,6 +273,30 @@ serve(async (req) => {
     );
   }
 
+  // Needed to refresh an expired access token from its stored refresh
+  // token (RBR-0028) -- without this, every run selects zero users, since
+  // eBay access tokens live ~2 hours and nothing here ever refreshed one.
+  const ebayClientId = Deno.env.get("EBAY_CLIENT_ID") ?? "";
+  const ebayClientSecret = Deno.env.get("EBAY_CLIENT_SECRET") ?? "";
+  const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "production";
+  const ebayConfig = {
+    clientId: ebayClientId,
+    clientSecret: ebayClientSecret,
+    tokenUrl: ebayEnv === "production"
+      ? "https://api.ebay.com/identity/v1/oauth2/token"
+      : "https://api.sandbox.ebay.com/identity/v1/oauth2/token",
+  };
+
+  if (!ebayClientId || !ebayClientSecret) {
+    return new Response(
+      JSON.stringify({ error: "eBay API credentials not configured" }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
+  }
+
   const supabase = createClient(supabaseUrl, serviceKey, {
     auth: { persistSession: false },
   });
@@ -275,12 +321,15 @@ serve(async (req) => {
     console.log("[competitor-prices-cron] Expired rows cleaned up");
   }
 
-  // Step 2: Fetch all users with a connected, non-expired eBay token
+  // Step 2: Fetch all users with a connected eBay account. Deliberately not
+  // filtering on ebay_token_expires_at here (RBR-0028) -- an expired access
+  // token is refreshed per-user in fetchActiveListings below, so requiring
+  // an already-valid one at this stage would select nobody on any real
+  // schedule, since eBay access tokens live only ~2 hours.
   const { data: users, error: usersErr } = await supabase
     .from("profiles")
     .select("id")
-    .not("ebay_access_token", "is", null)
-    .gt("ebay_token_expires_at", new Date().toISOString());
+    .not("ebay_refresh_token", "is", null);
 
   if (usersErr) {
     console.error(
@@ -305,7 +354,13 @@ serve(async (req) => {
 
   // Step 3: For each user, fetch their active listings and refresh stale ones
   for (const userId of userIds) {
-    const listings = await fetchActiveListings(supabaseUrl, serviceKey, userId);
+    const listings = await fetchActiveListings(
+      supabaseUrl,
+      serviceKey,
+      userId,
+      supabase,
+      ebayConfig,
+    );
     console.log(
       `[competitor-prices-cron] User ${userId}: ${listings.length} active listing(s)`,
     );
