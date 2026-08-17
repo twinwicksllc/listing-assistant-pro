@@ -3,14 +3,14 @@
 **Product:** ListrAssistr
 **Source repository:** `twinwicksllc/listing-assistant-pro`
 **Discovery date:** 2026-08-17
-**Status:** Two of three open questions resolved by owner 2026-08-17 (Stripe
-account relationship, CRM Edge Functions). One item remains — the
-`subscriptions`/`usage_tracking`/`gemini_usage` reclassification, pending a
-read-only confirmation query at the end of this document. Table/storage
-classification below restates already-evidenced findings from
-`REBRAND_PHASE_0_LIVE_SCHEMA_RECONCILIATION.md`; functions, cron, provider
-accounts, billing, OAuth, email domains, monitoring, and secrets are classified
-here for the first time as a dedicated P0-06 pass.
+**Status:** All three open questions resolved by owner 2026-08-17 (Stripe
+account relationship, CRM Edge Functions, and the `subscriptions`/
+`usage_tracking`/`gemini_usage` reclassification, confirmed by query — see
+below). Table/storage classification below restates already-evidenced
+findings from `REBRAND_PHASE_0_LIVE_SCHEMA_RECONCILIATION.md`; functions,
+cron, provider accounts, billing, OAuth, email domains, monitoring, and
+secrets are classified here for the first time as a dedicated P0-06 pass.
+P0-06 is ready for final owner sign-off.
 
 ## Purpose and rule
 
@@ -44,14 +44,14 @@ per-object tables. Summary:
   handful of specific rows the owner's own account and QA/test accounts occupy
   are (resolved for cohort purposes under DEC-0029/P0-13). Any separate `users`
   table is CRM's own and out of scope here.
-- **Refinement proposed here:** `subscriptions`, `usage_tracking`, `gemini_usage`
-  were classified "shared/ambiguous" on 2026-08-10 out of caution. Since then,
-  the live export has confirmed CRM maintains its **own** separate billing surface
-  (`crm_subscriptions`, `crm_billing_events`, `crm_billing_...`) — evidence CRM
-  never used this app's `subscriptions` table. Proposing **ListrAssistr-only**
-  for these three, pending a quick confirmation query (do all `subscriptions.user_id`
-  values resolve to a listing-app profile, none to a CRM-only account?) before
-  this is finalized rather than just renamed.
+- **Reclassified, confirmed 2026-08-17 (DEC-0030):** `subscriptions`,
+  `usage_tracking`, `gemini_usage` were classified "shared/ambiguous" on
+  2026-08-10 out of caution. CRM maintains its **own** separate billing surface
+  (`crm_subscriptions`, `crm_billing_events`) — evidence CRM never used this
+  app's `subscriptions` table. The confirmation query below returned zero
+  rows with no listing-app footprint across all three tables (1, 6,667, and
+  2,709 total rows respectively), confirming every user with a row in any of
+  them is also a confirmed listing-app user. Reclassified **ListrAssistr-only**.
 - **System-managed:** `auth.*`, `cron.*`, `storage.*` internals, `vault.*`, unchanged.
 
 ## Storage buckets
@@ -159,11 +159,15 @@ Classifying by pattern rather than repeating all ~20 names from
    of closing this gate.
 2. **CRM Edge Functions — resolved.** Confirmed the CRM does not deploy any
    Edge Functions into this shared Supabase project.
-3. **`subscriptions`/`usage_tracking`/`gemini_usage` refinement — pending one
-   query.** Owner believes these are ListrAssistr-only. Confirmation query
-   below; not yet run.
+3. **`subscriptions`/`usage_tracking`/`gemini_usage` refinement — resolved.**
+   Confirmation query run 2026-08-17: `subscriptions` (1 row), `usage_tracking`
+   (6,667 rows), and `gemini_usage` (2,709 rows) each returned `0` rows with no
+   listing-app footprint. Reclassified **ListrAssistr-only** (DEC-0030).
 
-## Confirmation query for item 3 (read-only, counts only — safe to run as-is)
+All three open questions are now resolved. This document is ready for owner
+sign-off; no further discovery is needed to close P0-06.
+
+## Confirmation query for item 3 (read-only, counts only — run 2026-08-17, kept for the audit trail)
 
 Run in the Supabase SQL Editor against the production project, with **No
 limit** selected on the result count. Returns table name, total row count,
