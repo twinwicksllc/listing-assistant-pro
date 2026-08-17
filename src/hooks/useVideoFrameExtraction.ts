@@ -191,7 +191,6 @@ export function useVideoFrameExtraction({
     try {
       const startedAt = performance.now();
       const clientFrames = await extractFramesClientSide(videoUrl, 6);
-      setExtractedFrameDataUrls(clientFrames.map((f) => f.dataUrl));
       const extractionMs = Math.round(performance.now() - startedAt);
 
       const { data, error } = await supabase.functions.invoke(
@@ -213,12 +212,19 @@ export function useVideoFrameExtraction({
       );
       if (error) throw error;
 
-      const frames = Array.isArray(data?.frames)
-        ? data.frames.filter(
-            (f: { url?: unknown }) => typeof f?.url === "string",
-          )
-        : [];
+      const frames: Array<{ url: string; timestampSec: number; score: number }> =
+        Array.isArray(data?.frames)
+          ? data.frames.filter(
+              (f: { url?: unknown }) => typeof f?.url === "string",
+            )
+          : [];
       setExtractedFrames(frames);
+      // Use the Storage URLs the edge function already wrote the frames to,
+      // rather than the raw client-side data URLs generated above -- those
+      // data URLs would otherwise flow into imageUrls and get re-uploaded a
+      // second time by uploadListingImage, duplicating storage of the same
+      // frame content.
+      setExtractedFrameDataUrls(frames.map((f) => f.url));
       setExtractFramesMessage(
         frames.length > 0
           ? `Extracted ${frames.length} frame${frames.length !== 1 ? "s" : ""}. Ready for AI identification.`
