@@ -1,0 +1,21 @@
+{
+  "name": "supabase-export",
+  "version": "1.0.0",
+  "description": "Run the Supabase storage export script",
+  "main": "index.js",
+  "scripts": {
+    "export": "node export.mjs",
+    "export:dev": "cross-env SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY SUPABASE_URL='https://wcednzaxmxwfiijzmjmx.supabase.co' node export.mjs",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.112.3"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0"
+  }
+}
