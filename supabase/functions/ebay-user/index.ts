@@ -76,7 +76,20 @@ serve(async (req) => {
 
     if (!userResp.ok) {
       const errText = await userResp.text();
-      console.error("eBay user info error:", userResp.status, errText);
+      // Redacted diagnostic to the function log only -- lengths and a
+      // strict-equality boolean, never the raw value, per the pattern
+      // adopted for CRON_SECRET debugging. Supabase Edge Function secrets
+      // can only be overwritten, never revealed, so if this still 404s after
+      // the "default to production" fix (2026-08-14), the only way to tell
+      // whether EBAY_ENVIRONMENT is unset vs explicitly set to something
+      // other than "production" is from inside the running function.
+      const rawEbayEnv = Deno.env.get("EBAY_ENVIRONMENT");
+      console.error("eBay user info error:", userResp.status, errText, {
+        apiBaseUsed: apiBase,
+        ebayEnvIsSet: rawEbayEnv !== undefined,
+        ebayEnvLength: rawEbayEnv?.length ?? 0,
+        ebayEnvIsExactlyProduction: rawEbayEnv === "production",
+      });
       return new Response(
         JSON.stringify({
           error: `eBay API error ${userResp.status}: ${errText}`,
