@@ -21,6 +21,7 @@ must be classified as one of:
 - **Other-product-only (CRM-only)** — do not migrate; retain under its current owner.
 - **Shared** — document the dependency and create an explicit split plan.
 - **Ambiguous** — blocked until both product owners approve ownership.
+- **System-managed** — platform-owned resources that can’t be split per-product (record current state; plan replacements in the new project as needed).
 
 This is a planning classification, not authorization to export, modify, or delete
 anything. No production change is implied by this document.
