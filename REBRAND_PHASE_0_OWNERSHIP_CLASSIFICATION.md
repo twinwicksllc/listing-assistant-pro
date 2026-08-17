@@ -32,7 +32,7 @@ Already classified at object-name/RLS-metadata level in
 `REBRAND_PHASE_0_LIVE_SCHEMA_RECONCILIATION.md` — see that document for the full
 per-object tables. Summary:
 
-- **ListrAssistr candidates:** `drafts`, `ebay_tokens`, taxonomy/cache tables,
+- **ListrAssistr-only:** `drafts`, `ebay_tokens`, taxonomy/cache tables,
   market/reprice tables, `listing_cogs`/`listing_financials`, `listing-images` bucket.
 - **CRM-only:** `accounts`, `contacts`, `deals`, `campaigns`, `commissions`,
   `tenants`, and ~40 other CRM-named tables (full list in the reconciliation doc).
