@@ -212,12 +212,15 @@ export function useVideoFrameExtraction({
       );
       if (error) throw error;
 
-      const frames: Array<{ url: string; timestampSec: number; score: number }> =
-        Array.isArray(data?.frames)
-          ? data.frames.filter(
-              (f: { url?: unknown }) => typeof f?.url === "string",
-            )
-          : [];
+      const frames: Array<{
+        url: string;
+        timestampSec: number;
+        score: number;
+      }> = Array.isArray(data?.frames)
+        ? data.frames.filter(
+            (f: { url?: unknown }) => typeof f?.url === "string",
+          )
+        : [];
       setExtractedFrames(frames);
       // Use the Storage URLs the edge function already wrote the frames to,
       // rather than the raw client-side data URLs generated above -- those
