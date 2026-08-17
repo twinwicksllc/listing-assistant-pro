@@ -44,8 +44,8 @@ export default function ProtectedRoute({
             Owner access required
           </h1>
           <p className="text-sm text-muted-foreground mb-1">
-            The page at <span className="font-mono">{location.pathname}</span> is
-            only available to the owner of your organization.
+            The page at <span className="font-mono">{location.pathname}</span>{" "}
+            is only available to the owner of your organization.
           </p>
           <p className="text-sm text-muted-foreground mb-6">
             {org.role
