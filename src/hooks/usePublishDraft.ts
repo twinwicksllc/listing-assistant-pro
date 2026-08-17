@@ -295,6 +295,14 @@ export function usePublishDraft() {
         action: "create_draft",
         userId: user?.id,
         userToken: ebayToken,
+        // If a prior attempt got far enough to create the eBay inventory
+        // item before failing at a later step, ebaySku was persisted onto
+        // the draft (see markDraftFailed/auctionNotSupported handling
+        // below) so this retry reuses it. generateDraftSku only mints a new
+        // sequential SKU when none is supplied -- without this, every retry
+        // orphaned the previous inventory item instead of the existing
+        // idempotent PUT ever converging on it.
+        sku: draft.ebaySku || undefined,
         postalCode: postalCode || undefined,
         city: city || undefined,
         _debug_postalCode: postalCode,
@@ -356,7 +364,14 @@ export function usePublishDraft() {
 
         // --- Permanent failures: don't retry ---
         if (data?.auctionNotSupported) {
-          await updateDraft(draft.id, { publishStatus: "draft" });
+          // The inventory item PUT already succeeded before this check runs
+          // server-side (see publish-create-draft.ts) -- persist the sku so
+          // a retry, after the user switches to Fixed Price, reuses it
+          // instead of orphaning this inventory item under a new one.
+          await updateDraft(draft.id, {
+            publishStatus: "draft",
+            ...(data?.sku ? { ebaySku: data.sku } : {}),
+          });
           toast.error("Auction format not supported", {
             description:
               "The eBay Inventory API only supports Fixed Price listings. " +
@@ -374,7 +389,7 @@ export function usePublishDraft() {
           return false;
         }
         if (data?.missingPolicies) {
-          await markDraftFailed(draft.id, errMsg);
+          await markDraftFailed(draft.id, errMsg, { sku: data?.sku });
           toast.error("eBay business policies not configured", {
             description: data.error,
             action: {
@@ -387,7 +402,10 @@ export function usePublishDraft() {
           return false;
         }
         if (data?.publishFailed) {
-          await markDraftFailed(draft.id, errMsg);
+          await markDraftFailed(draft.id, errMsg, {
+            sku: data?.sku,
+            offerId: data?.offerId,
+          });
           toast.error(`"${draft.title}" — offer created but couldn't go live`, {
             description: data.error,
             duration: 8000,

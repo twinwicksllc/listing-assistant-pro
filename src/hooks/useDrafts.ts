@@ -336,15 +336,28 @@ export function useDrafts() {
   };
 
   /**
-   * Mark a draft as failed with an error message.
+   * Mark a draft as failed with an error message. `meta.sku`/`meta.offerId`,
+   * when the failure response included them, are persisted the same way
+   * markDraftPublished persists them on success -- ebay-publish's
+   * generateDraftSku only reuses a SKU if one is passed back in, so without
+   * this, every retry after a partial failure (inventory item created, then
+   * offer/publish failed) mints a brand-new SKU and permanently orphans the
+   * first inventory item on eBay instead of the existing idempotent-PUT
+   * behavior ever engaging.
    */
-  const markDraftFailed = async (id: string, errorMsg: string) => {
+  const markDraftFailed = async (
+    id: string,
+    errorMsg: string,
+    meta?: { sku?: string; offerId?: string },
+  ) => {
     console.error(
       `markDraftFailed: draft ${id} failed with error: ${errorMsg}`,
     );
     await updateDraft(id, {
       publishStatus: "failed",
       lastPublishError: errorMsg,
+      ...(meta?.sku ? { ebaySku: meta.sku } : {}),
+      ...(meta?.offerId ? { ebayOfferId: meta.offerId } : {}),
     });
   };
 
