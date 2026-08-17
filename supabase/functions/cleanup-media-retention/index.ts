@@ -5,7 +5,7 @@ import { describeCronAuthEnv, requireCronSecret } from "../_helpers/authGuard.ts
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, apikey, x-cleanup-secret, content-type",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
   "Access-Control-Max-Age": "86400",
 };
 
@@ -27,11 +27,6 @@ type DraftRow = {
   image_url?: string | null;
   image_urls?: string[] | null;
   video_url?: string | null;
-};
-
-type BucketStats = {
-  sizeBytes: number;
-  objectCount: number;
 };
 
 function parseDate(value: string | null | undefined): Date | null {
@@ -57,45 +52,6 @@ function isDraftStillActive(draft: DraftRow | null | undefined): boolean {
     .trim()
     .toLowerCase();
   return publishStatus !== "published";
-}
-
-async function getBucketStats(adminClient: any): Promise<BucketStats> {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!supabaseUrl || !serviceKey) {
-    return { sizeBytes: 0, objectCount: 0 };
-  }
-
-  try {
-    const response = await fetch(
-      `${supabaseUrl}/storage/v1/bucket/${BUCKET_ID}/stats`,
-      {
-        headers: {
-          apikey: serviceKey,
-          Authorization: `Bearer ${serviceKey}`,
-        },
-      },
-    );
-
-    if (!response.ok) {
-      console.warn(
-        "cleanup-media-retention: bucket stats request failed",
-        response.status,
-        response.statusText,
-      );
-      return { sizeBytes: 0, objectCount: 0 };
-    }
-
-    const payload = await response.json();
-    const sizeBytes = Number(payload?.size ?? payload?.total_size ?? payload?.bytes ?? 0) || 0;
-    const objectCount = Number(
-      payload?.objects ?? payload?.object_count ?? payload?.count ?? 0,
-    ) || 0;
-    return { sizeBytes, objectCount };
-  } catch (err) {
-    console.warn("cleanup-media-retention: bucket stats request error", err);
-    return { sizeBytes: 0, objectCount: 0 };
-  }
 }
 
 serve(async (req: Request) => {
@@ -155,7 +111,6 @@ serve(async (req: Request) => {
   });
 
   try {
-    const beforeStats = await getBucketStats(adminClient);
     const { data: draftsData, error: draftsError } = await adminClient
       .from("drafts")
       .select(
@@ -169,6 +124,16 @@ serve(async (req: Request) => {
     let keptForDraft = 0;
     let deletedCount = 0;
     let scanned = 0;
+    // Computed from the objects actually listed below, rather than a
+    // whole-bucket stats call -- there is no documented Supabase Storage
+    // REST endpoint for bucket-level stats, and the previous
+    // /storage/v1/bucket/{id}/stats call had been silently 404ing since this
+    // function was written, always falling back to {sizeBytes:0}. This also
+    // reports a more useful number: bytes this run actually freed within the
+    // three TTL-tracked prefixes, not a whole-bucket total dominated by the
+    // ~4,700 other photo objects this function never touches.
+    let bytesScanned = 0;
+    let bytesFreed = 0;
 
     for (const prefix of PREFIXES) {
       const { data: objects, error: listError } = await adminClient.storage
@@ -180,6 +145,8 @@ serve(async (req: Request) => {
 
       for (const object of objects ?? []) {
         scanned += 1;
+        const objectSizeBytes = Number(object.metadata?.size) || 0;
+        bytesScanned += objectSizeBytes;
         const path = `${prefix}${object.name}`;
         const publicUrl = adminClient.storage.from(BUCKET_ID).getPublicUrl(path)
           .data.publicUrl;
@@ -218,6 +185,7 @@ serve(async (req: Request) => {
           // Report what would happen without touching storage or drafts.
           deletedPaths.push(path);
           deletedCount += 1;
+          bytesFreed += objectSizeBytes;
           continue;
         }
 
@@ -234,6 +202,7 @@ serve(async (req: Request) => {
 
         deletedPaths.push(path);
         deletedCount += 1;
+        bytesFreed += objectSizeBytes;
 
         for (const draft of referencedDrafts) {
           const nextImageUrl = draft.image_url === publicUrl ? "" : draft.image_url;
@@ -262,20 +231,18 @@ serve(async (req: Request) => {
       }
     }
 
-    const afterStats = dryRun ? beforeStats : await getBucketStats(adminClient);
-
     return new Response(
       JSON.stringify({
         ok: true,
         dryRun,
         bucket: BUCKET_ID,
+        prefixesScanned: PREFIXES,
         scanned,
+        bytesScanned,
         deletedCount,
+        bytesFreed,
         keptForDraft,
         deletedPaths,
-        beforeStats,
-        afterStats,
-        bytesFreed: Math.max(0, beforeStats.sizeBytes - afterStats.sizeBytes),
       }),
       {
         status: 200,
