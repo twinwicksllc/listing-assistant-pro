@@ -8,8 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
-const LISTING_IMAGES_PUBLIC_URL_MARKER =
-  "/object/public/listing-images/";
+const LISTING_IMAGES_PUBLIC_URL_MARKER = "/object/public/listing-images/";
 
 /**
  * Reverse of getPublicUrl(): recover a bare storage object path from a
@@ -207,11 +206,7 @@ export function useDrafts() {
     // the primary operation and must still succeed even if this fails.
     const draft = drafts.find((d) => d.id === id);
     if (draft) {
-      const paths = [
-        draft.imageUrl,
-        ...(draft.imageUrls ?? []),
-        draft.videoUrl,
-      ]
+      const paths = [draft.imageUrl, ...(draft.imageUrls ?? []), draft.videoUrl]
         .map((url) => listingImagesPathFromPublicUrl(url))
         .filter((path): path is string => path !== null);
 
