@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { isAdminEmail } from "@/lib/adminEmails";
 
 // ─── 4-Tier Plan Configuration ────────────────────────────────────────────────
 export const PLANS = {
@@ -76,8 +77,8 @@ export const PLANS = {
 
 export type PlanKey = keyof typeof PLANS;
 
-// Admin emails that always get full Shop-level access regardless of subscription
-const ADMIN_EMAILS = ["twinwicksllc@gmail.com"];
+// Admin allowlist lives in its own module so it is unit-testable without
+// instantiating the Supabase client. See src/lib/adminEmails.ts.
 
 export type OrgRole = "owner" | "lister";
 
@@ -213,27 +214,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshOrg = useCallback(async () => {
     try {
-      const { data: memberData, error: memberError } = await supabase
-        .from("org_members")
-        .select("org_id, role")
-        .limit(1)
-        .single();
+      // Resolve the caller's own id first. This query MUST be scoped to the
+      // current user: the "Org members can view members" RLS policy lets any
+      // member SELECT every row of their org, so an unscoped `.limit(1)`
+      // returns an arbitrary teammate's row once an org has more than one
+      // member. When that row belonged to a 'lister', the real owner was
+      // demoted client-side and every ownerOnly route (Dashboard, Billing,
+      // P&L, Reprice Rules) silently bounced back to /home.
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
 
-      if (memberError || !memberData) {
+      if (!authUser) {
         setOrg({ orgId: null, orgName: null, role: null, loading: false });
         return;
       }
 
+      const { data: memberRows, error: memberError } = await supabase
+        .from("org_members")
+        .select("org_id, role")
+        .eq("user_id", authUser.id);
+
+      if (memberError || !memberRows || memberRows.length === 0) {
+        setOrg({ orgId: null, orgName: null, role: null, loading: false });
+        return;
+      }
+
+      // A user can legitimately belong to more than one org (their own personal
+      // org plus an org they were invited into). Prefer the membership where
+      // they are the owner so their own org's capabilities are never lost to a
+      // nondeterministic row order.
+      const membership =
+        memberRows.find((m) => m.role === "owner") ?? memberRows[0];
+
       const { data: orgData } = await supabase
         .from("organizations")
         .select("name")
-        .eq("id", memberData.org_id)
-        .single();
+        .eq("id", membership.org_id)
+        .maybeSingle();
 
       setOrg({
-        orgId: memberData.org_id,
+        orgId: membership.org_id,
         orgName: orgData?.name || null,
-        role: memberData.role as OrgRole,
+        role: membership.role as OrgRole,
         loading: false,
       });
     } catch {
@@ -351,7 +374,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session, subscription.subscribed, refreshSubscription]);
 
   // ─── Derived tier values ────────────────────────────────────────────────────
-  const isAdmin = ADMIN_EMAILS.includes(session?.user?.email ?? "");
+  const isAdmin = isAdminEmail(session?.user?.email);
   const isActivePaid =
     subscription.subscribed || subscription.status === "trialing";
 
@@ -394,8 +417,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const finalCanAnalyze = usage.aiAnalysis < currentPlanLimits.analysisLimit;
   const finalCanPublish = usage.ebayPublish < currentPlanLimits.publishLimit;
 
-  const isOwner = org.role === "owner";
-  const isLister = org.role === "lister";
+  // Admins are implicitly owners. Without this, an admin whose org membership
+  // fails to resolve (RLS change, missing org_members row, transient error) is
+  // locked out of every ownerOnly route with no way back in.
+  const isOwner = org.role === "owner" || isAdmin;
+  const isLister = org.role === "lister" && !isAdmin;
 
   const signOut = async () => {
     await supabase.auth.signOut();
