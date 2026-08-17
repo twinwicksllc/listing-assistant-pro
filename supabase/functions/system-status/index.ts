@@ -58,7 +58,12 @@ serve(async (req) => {
     // --- eBay API Ping ---
     const ebayStatus = { ok: false, error: "" };
     try {
-      const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "sandbox";
+      // Default to production, matching ebay-publish/category-lookup/etc. --
+      // this app's eBay integration is production (confirmed 500+ live
+      // listings). A silent sandbox default here would feed a real
+      // production OAuth token into eBay's sandbox API, which correctly
+      // rejects it.
+      const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "production";
       const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
       const resp = await fetch(
         `${apiBase}/buy/browse/v1/item_summary/search?q=test&limit=1`,
