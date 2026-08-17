@@ -689,6 +689,11 @@ export async function handleCreateDraft({
         error:
           `Missing required eBay business policies: ${missing}. Please create these policies in your eBay Seller Hub (https://www.ebay.com/sh/ovw/policies) before publishing.`,
         missingPolicies: true,
+        // sku is included so the caller can persist it and retry with the
+        // SAME sku -- the inventory item PUT above already succeeded and is
+        // idempotent, but only if a retry reuses this id instead of minting a
+        // new one via generateDraftSku.
+        sku,
       }),
       {
         status: 200,
@@ -784,6 +789,9 @@ export async function handleCreateDraft({
                   policyConflict: true,
                   fulfillmentPolicyId: fulfillmentPolicyId,
                   offendingServiceHint: "USPS Priority Mail Small Flat Rate Box",
+                  // See the missingPolicies response above for why this
+                  // matters: the inventory item PUT already succeeded.
+                  sku,
                 }),
                 {
                   headers: {
@@ -826,6 +834,7 @@ export async function handleCreateDraft({
           "Please change the listing format to Fixed Price, or use the eBay " +
           "Seller Hub to create auction listings manually.",
         auctionNotSupported: true,
+        sku,
       }),
       {
         status: 200,
@@ -930,8 +939,28 @@ export async function handleCreateDraft({
     }
 
     if (!offerId) {
-      throw new Error(
-        `Failed to create offer: ${offerResp.status} - ${errText}`,
+      // Structured response instead of a bare throw, matching the other
+      // failure shapes in this function (missingPolicies, auctionNotSupported,
+      // policyConflict, publishFailed below). A throw here would bubble up to
+      // index.ts's generic outer catch, which returns {error, action} with no
+      // sku -- discarding the fact that the inventory item PUT above already
+      // succeeded, and orphaning it on retry since the caller would have no
+      // sku to pass back into generateDraftSku. Reuses the publishFailed flag
+      // so the existing frontend handler (markDraftFailed + toast) applies
+      // without a new UI branch; the toast title says "offer created but
+      // couldn't go live", which is not quite accurate for this specific
+      // step (offer creation itself failed) -- acceptable wording gap, not a
+      // functional one, since the description text is this error message.
+      return new Response(
+        JSON.stringify({
+          error: `Failed to create offer: ${offerResp.status} - ${errText}`,
+          publishFailed: true,
+          sku,
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
   } else {
