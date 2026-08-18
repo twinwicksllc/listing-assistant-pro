@@ -13,10 +13,18 @@ const corsHeaders = {
 // The cron skips any listing whose cache is younger than this.
 const CACHE_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
 
-// How long to wait between per-listing eBay calls (ms).
+// How long to wait between batches of eBay calls (ms).
 // Browse API has no hard quota, but we throttle to be polite and
 // avoid transient 429s under sustained load.
 const SEARCH_DELAY_MS = 300;
+
+// How many refreshCompetitorData calls to run concurrently per batch.
+// First real run (2026-08-18) had 539 stale listings for one user; fully
+// sequential processing (1 at a time + SEARCH_DELAY_MS between each) put
+// that alone past the platform's 150s request idle timeout before this
+// function ever got to a second user. Batching bounds eBay API burst rate
+// while keeping wall-clock time within the timeout.
+const REFRESH_CONCURRENCY = 15;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -390,6 +398,7 @@ serve(async (req) => {
       `[competitor-prices-cron] User ${userId}: ${freshCount} fresh (skip), ${staleCount} stale (refresh)`,
     );
 
+    const staleListings: typeof listings = [];
     for (const listing of listings) {
       // Skip if cache is still fresh
       if (freshMap[listing.listingId]) {
@@ -403,21 +412,28 @@ serve(async (req) => {
         totalSkipped++;
         continue;
       }
+      staleListings.push(listing);
+    }
 
-      const ok = await refreshCompetitorData(
-        supabaseUrl,
-        serviceKey,
-        userId,
-        listing,
+    // Refresh stale listings in bounded-concurrency batches instead of one
+    // at a time -- see REFRESH_CONCURRENCY above for why.
+    for (let i = 0; i < staleListings.length; i += REFRESH_CONCURRENCY) {
+      const batch = staleListings.slice(i, i + REFRESH_CONCURRENCY);
+      const results = await Promise.all(
+        batch.map((listing) => refreshCompetitorData(supabaseUrl, serviceKey, userId, listing)),
       );
-      if (ok) {
-        totalRefreshed++;
-      } else {
-        totalSkipped++;
+      for (const ok of results) {
+        if (ok) {
+          totalRefreshed++;
+        } else {
+          totalSkipped++;
+        }
       }
 
-      // Throttle between eBay calls
-      await sleep(SEARCH_DELAY_MS);
+      // Throttle between batches, not between individual calls.
+      if (i + REFRESH_CONCURRENCY < staleListings.length) {
+        await sleep(SEARCH_DELAY_MS);
+      }
     }
   }
 
