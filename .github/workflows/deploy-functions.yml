@@ -49,9 +49,32 @@ jobs:
           # Deploy all functions with JWT verification enabled by default
           supabase functions deploy --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
 
-          # Public functions (no JWT verification)
+          # Every function below is marked verify_jwt = false in
+          # supabase/config.toml, but the bulk deploy above does not reliably
+          # apply that per-function setting (RBR-0028 follow-up: this gap left
+          # competitor-prices-cron rejected by the platform's JWT gate before
+          # its own code-level auth check ever ran — zero function logs on a
+          # 401 is the signature of this, since the gateway rejects before
+          # Deno starts). verify_jwt = false does NOT mean unauthenticated —
+          # most of these do their own JWT/service-role/cron-secret check in
+          # code (see CLAUDE.md's Auth pattern for Edge Functions).
           supabase functions deploy analyze-item --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
           supabase functions deploy ebay-publish --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
+          supabase functions deploy ebay-pricing --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
+          supabase functions deploy spot-prices --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
+          supabase functions deploy transcribe-voice --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
+          supabase functions deploy ebay-user --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
+          supabase functions deploy ebay-listings --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
+          supabase functions deploy create-checkout --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
+          supabase functions deploy check-subscription --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
+          supabase functions deploy customer-portal --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
+          supabase functions deploy ebay-competitor-search --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
+          supabase functions deploy category-lookup --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
+          supabase functions deploy sync-ebay-taxonomy --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
+          supabase functions deploy competitor-prices-cron --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
+          supabase functions deploy cost-alert-cron --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
+          supabase functions deploy cleanup-media-retention --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
+          supabase functions deploy stripe-webhook --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 # Migration auto-apply enabled
