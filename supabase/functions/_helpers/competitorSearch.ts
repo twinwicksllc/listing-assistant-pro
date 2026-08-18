@@ -13,11 +13,14 @@
 // reasoning as ebayTokenRefresh.ts's extraction from ebay-publish/auth.ts).
 
 // ----------------------------------------------------------------
-// Cache TTL — 8 hours. Balances freshness vs. API call volume.
-// competitor-prices-cron also uses this constant to decide whether to skip
-// a listing (if its cache is younger than CACHE_TTL_MS, skip it).
+// Cache TTL — 24 hours. Balances freshness vs. API call volume; raised from
+// 8h once competitor-prices-cron moved to a capped, fairness-ranked cursor
+// (see get_next_competitor_price_batch) that no longer needs a tight TTL to
+// bound per-invocation work -- a longer TTL now reduces steady-state churn
+// instead. competitor-prices-cron also uses this constant to decide whether
+// a listing is stale enough to refresh (see its p_stale_before parameter).
 // ----------------------------------------------------------------
-export const CACHE_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours in milliseconds
+export const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
 export interface CompetitorSearchOutcome {
   status: number;
