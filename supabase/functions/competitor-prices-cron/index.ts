@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { describeCronAuthEnv, requireCronSecret } from "../_helpers/authGuard.ts";
 import { EbayTokenRefreshConfig, refreshEbayAccessToken } from "../_helpers/ebayTokenRefresh.ts";
+import { CACHE_TTL_MS, runCompetitorSearch } from "../_helpers/competitorSearch.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,9 +10,9 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Must match CACHE_TTL_MS in ebay-competitor-search/index.ts.
-// The cron skips any listing whose cache is younger than this.
-const CACHE_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
+// CACHE_TTL_MS imported above -- the cron skips any listing whose cache is
+// younger than this. Shared with competitorSearch.ts's own cache check so
+// the two can't drift out of sync (they used to be duplicated constants).
 
 // How long to wait between batches of eBay calls (ms).
 // Browse API has no hard quota, but we throttle to be polite and
@@ -23,7 +24,10 @@ const SEARCH_DELAY_MS = 300;
 // sequential processing (1 at a time + SEARCH_DELAY_MS between each) put
 // that alone past the platform's 150s request idle timeout before this
 // function ever got to a second user. Batching bounds eBay API burst rate
-// while keeping wall-clock time within the timeout.
+// while keeping wall-clock time within the timeout. (A later run at this
+// concurrency also revealed refreshCompetitorData was invoking
+// ebay-competitor-search over HTTP -- see runCompetitorSearch's own comment
+// for why that moved in-process instead of this number changing.)
 const REFRESH_CONCURRENCY = 15;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -172,14 +176,16 @@ async function fetchFreshCacheMap(
 }
 
 // ----------------------------------------------------------------
-// Invoke the ebay-competitor-search function for a single listing.
-// The function handles its own cache check internally — the cron's
-// pre-check above is an optimisation to avoid even invoking the
-// function for obviously-fresh listings.
+// Run the competitor-search logic for a single listing, in-process (see
+// runCompetitorSearch's own comment for why this doesn't go over HTTP to
+// ebay-competitor-search). runCompetitorSearch does its own cache check
+// internally — the cron's pre-check above is an optimisation to avoid even
+// calling it for obviously-fresh listings.
 // ----------------------------------------------------------------
 async function refreshCompetitorData(
-  supabaseUrl: string,
-  serviceKey: string,
+  // deno-lint-ignore no-explicit-any -- matches the loose typing already
+  // used throughout this file for the supabase-js client.
+  supabase: any,
   userId: string,
   listing: {
     listingId: string;
@@ -187,42 +193,23 @@ async function refreshCompetitorData(
     price: number;
     categoryId?: string;
   },
+  ebayEnv: string,
+  geminiKey: string | undefined,
 ): Promise<boolean> {
   try {
-    const resp = await fetch(
-      `${supabaseUrl}/functions/v1/ebay-competitor-search`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${serviceKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userId,
-          listingId: listing.listingId,
-          title: listing.title,
-          categoryId: listing.categoryId,
-          yourPrice: listing.price,
-        }),
-      },
-    );
-
-    if (!resp.ok) {
-      console.warn(
-        `[cron] competitor-search failed for listing ${listing.listingId}: ${resp.status}`,
-      );
-      return false;
-    }
-
-    let result: any;
-    try {
-      result = JSON.parse(await resp.text());
-    } catch (e) {
-      console.warn(
-        `[cron] Failed to parse competitor-search response for listing ${listing.listingId}: ${e}`,
-      );
-      return false;
-    }
+    // Runs the same logic ebay-competitor-search's HTTP handler runs, but
+    // in-process -- see runCompetitorSearch's own comment for why this
+    // stopped going through fetch() to that function.
+    const { body: result } = await runCompetitorSearch({
+      supabase,
+      userId,
+      listingId: listing.listingId,
+      title: listing.title,
+      categoryId: listing.categoryId,
+      yourPrice: listing.price,
+      ebayEnv,
+      geminiKey,
+    });
 
     if (result.error) {
       console.warn(
@@ -298,6 +285,7 @@ serve(async (req) => {
   const ebayClientId = Deno.env.get("EBAY_CLIENT_ID") ?? "";
   const ebayClientSecret = Deno.env.get("EBAY_CLIENT_SECRET") ?? "";
   const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "production";
+  const geminiKey = Deno.env.get("GEMINI_API_KEY");
   const ebayConfig = {
     clientId: ebayClientId,
     clientSecret: ebayClientSecret,
@@ -420,7 +408,7 @@ serve(async (req) => {
     for (let i = 0; i < staleListings.length; i += REFRESH_CONCURRENCY) {
       const batch = staleListings.slice(i, i + REFRESH_CONCURRENCY);
       const results = await Promise.all(
-        batch.map((listing) => refreshCompetitorData(supabaseUrl, serviceKey, userId, listing)),
+        batch.map((listing) => refreshCompetitorData(supabase, userId, listing, ebayEnv, geminiKey)),
       );
       for (const ok of results) {
         if (ok) {
