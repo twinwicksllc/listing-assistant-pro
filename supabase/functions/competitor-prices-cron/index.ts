@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
-import { describeCronAuthEnv, requireServiceRole } from "../_helpers/authGuard.ts";
+import { describeCronAuthEnv, requireCronSecret } from "../_helpers/authGuard.ts";
 import { EbayTokenRefreshConfig, refreshEbayAccessToken } from "../_helpers/ebayTokenRefresh.ts";
 
 const corsHeaders = {
@@ -252,7 +252,14 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const auth = await requireServiceRole(req);
+  // Uses the same CRON_SECRET pattern as cleanup-media-retention,
+  // cost-alert-cron, and sync-ebay-taxonomy (see authGuard.ts), rather than
+  // requiring the service-role key directly -- that comparison broke here
+  // once the platform's injected SUPABASE_SERVICE_ROLE_KEY value moved to
+  // Supabase's newer, shorter secret-key format while the dashboard's
+  // legacy "service_role" panel still showed the old ~200+ char JWT-format
+  // key, so a correctly-copied key still failed a length-mismatched compare.
+  const auth = await requireCronSecret(req);
   if (!auth.ok) {
     console.warn(
       "[competitor-prices-cron] auth rejected:",
