@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
-import { requireServiceRole } from "../_helpers/authGuard.ts";
+import { describeCronAuthEnv, requireServiceRole } from "../_helpers/authGuard.ts";
 import { EbayTokenRefreshConfig, refreshEbayAccessToken } from "../_helpers/ebayTokenRefresh.ts";
 
 const corsHeaders = {
@@ -254,6 +254,10 @@ serve(async (req) => {
 
   const auth = await requireServiceRole(req);
   if (!auth.ok) {
+    console.warn(
+      "[competitor-prices-cron] auth rejected:",
+      JSON.stringify(describeCronAuthEnv(req)),
+    );
     return new Response(JSON.stringify({ error: auth.message }), {
       status: auth.status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
