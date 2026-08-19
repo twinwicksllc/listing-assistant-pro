@@ -372,8 +372,13 @@ serve(async (req) => {
     });
   }
 
+  // Hoisted so the catch block below can report which query was in flight --
+  // `query` itself is destructured inside the try and out of scope there.
+  let requestQuery: string | undefined;
+
   try {
     const { query } = await req.json();
+    requestQuery = query;
     if (!query) {
       return new Response(
         JSON.stringify({ error: "No search query provided" }),
@@ -485,7 +490,7 @@ serve(async (req) => {
     );
   } catch (e) {
     console.error("ebay-pricing error:", e);
-    captureException(e, { function: "ebay-pricing", query });
+    captureException(e, { function: "ebay-pricing", query: requestQuery });
     return new Response(
       JSON.stringify({
         error: e instanceof Error ? e.message : "Unknown error",
