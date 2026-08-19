@@ -148,6 +148,43 @@ export async function syncUserInventory(
     ebayConfig,
   );
 
+  const result = await syncListingsIntoCache(supabase, userId, syncStartedAt, listings);
+
+  // Set unconditionally, regardless of outcome above -- see this column's
+  // own migration comment (20260819000000) for why: a user whose sync
+  // attempt finds zero listings (or fails) must still be marked as
+  // attempted, or get_users_for_inventory_sync would re-select them on
+  // every single tick forever instead of waiting out the staleness window
+  // like everyone else.
+  const { error: markSyncedErr } = await supabase
+    .from("profiles")
+    .update({ last_ebay_sync_at: syncStartedAt })
+    .eq("id", userId);
+
+  if (markSyncedErr) {
+    console.warn(
+      `[inventory-sync] Failed to record last_ebay_sync_at for user ${userId}: ${markSyncedErr.message}`,
+    );
+  }
+
+  return result;
+}
+
+// ----------------------------------------------------------------
+// Upserts fetched listings into user_active_listings and prunes anything
+// for this user not touched by this pass (ended/sold since the last sync),
+// cleaning up the corresponding competitor_prices rows too. Extracted from
+// syncUserInventory so the unconditional last_ebay_sync_at update above
+// isn't duplicated across every early-return path.
+// ----------------------------------------------------------------
+async function syncListingsIntoCache(
+  // deno-lint-ignore no-explicit-any -- matches the loose typing already
+  // used throughout this codebase for the supabase-js client.
+  supabase: any,
+  userId: string,
+  syncStartedAt: string,
+  listings: { listingId: string; title: string; price: number; categoryId?: string }[],
+): Promise<{ listingCount: number; endedCount: number }> {
   if (listings.length === 0) {
     return { listingCount: 0, endedCount: 0 };
   }
