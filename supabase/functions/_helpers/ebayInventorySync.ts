@@ -13,6 +13,7 @@
 // ----------------------------------------------------------------
 
 import { EbayTokenRefreshConfig, refreshEbayAccessToken } from "./ebayTokenRefresh.ts";
+import { decryptToken } from "./tokenCrypto.ts";
 
 // ----------------------------------------------------------------
 // Fetch active listings for a user via the ebay-listings function.
@@ -54,8 +55,8 @@ async function fetchActiveListings(
     return null;
   }
 
-  let token = profiles?.[0]?.ebay_access_token;
-  const refreshToken = profiles?.[0]?.ebay_refresh_token;
+  let token = await decryptToken(profiles?.[0]?.ebay_access_token);
+  const refreshToken = await decryptToken(profiles?.[0]?.ebay_refresh_token);
   const expiresAt = profiles?.[0]?.ebay_token_expires_at;
   const isExpiredOrMissing = !token ||
     (expiresAt && new Date(expiresAt) < new Date());

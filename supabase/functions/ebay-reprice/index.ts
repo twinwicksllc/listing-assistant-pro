@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { decryptToken } from "../_helpers/tokenCrypto.ts";
 
 // ebay-reprice v1: supports single + bulk price updates for eBay listings
 // - Inventory API listings: bulkUpdatePriceQuantity (up to 25 per call)
@@ -485,7 +486,9 @@ serve(async (req) => {
         .select("ebay_access_token")
         .eq("id", userId)
         .single();
-      if (profile?.ebay_access_token) token = profile.ebay_access_token;
+      if (profile?.ebay_access_token) {
+        token = (await decryptToken(profile.ebay_access_token)) ?? "";
+      }
     }
 
     if (!token) {

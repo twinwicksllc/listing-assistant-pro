@@ -7,6 +7,7 @@ import {
 } from "./constants.ts";
 import { assertCallerOwnsUser, createClient } from "./supabase.ts";
 import { fetchWithTimeout } from "./fetch.ts";
+import { decryptToken, encryptToken } from "../_helpers/tokenCrypto.ts";
 
 export { corsHeaders };
 
@@ -155,11 +156,13 @@ export async function handleExchangeCode({
         ).toISOString();
 
         // upsert with onConflict: "id" — creates the row if missing, updates if present
+        const encryptedAccessToken = await encryptToken(tokenData.access_token);
+        const encryptedRefreshToken = tokenData.refresh_token ? await encryptToken(tokenData.refresh_token) : null;
         const { error: upsertError } = await supabase.from("profiles").upsert(
           {
             id: userId,
-            ebay_access_token: tokenData.access_token,
-            ebay_refresh_token: tokenData.refresh_token ?? null,
+            ebay_access_token: encryptedAccessToken,
+            ebay_refresh_token: encryptedRefreshToken,
             ebay_token_expires_at: expiresAt,
           },
           { onConflict: "id" },
@@ -384,6 +387,8 @@ export async function handleRefreshToken({
     );
   }
 
+  const refreshToken = await decryptToken(data.ebay_refresh_token);
+
   const credentials = btoa(`${clientId}:${clientSecret}`);
   const refreshResp = await fetchWithTimeout(tokenUrl, {
     method: "POST",
@@ -394,7 +399,7 @@ export async function handleRefreshToken({
     },
     body: new URLSearchParams({
       grant_type: "refresh_token",
-      refresh_token: data.ebay_refresh_token,
+      refresh_token: refreshToken ?? "",
       scope: EBAY_OAUTH_SCOPES.join(" "),
     }).toString(),
   });
@@ -431,11 +436,11 @@ export async function handleRefreshToken({
     Date.now() + tokenData.expires_in * 1000,
   ).toISOString();
   const updatePatch: Record<string, string> = {
-    ebay_access_token: tokenData.access_token,
+    ebay_access_token: await encryptToken(tokenData.access_token),
     ebay_token_expires_at: expiresAt,
   };
   if (tokenData.refresh_token) {
-    updatePatch.ebay_refresh_token = tokenData.refresh_token;
+    updatePatch.ebay_refresh_token = await encryptToken(tokenData.refresh_token);
   }
 
   const { error: updateError } = await supabase
@@ -524,13 +529,16 @@ export async function handleGetStoredToken({
     );
   }
 
+  const decryptedAccessToken = await decryptToken(data.ebay_access_token);
+  const decryptedRefreshToken = await decryptToken(data.ebay_refresh_token);
+
   const now = new Date();
   const expiresAt = data.ebay_token_expires_at ? new Date(data.ebay_token_expires_at) : null;
   // Consider token expired if it expires within 5 minutes (proactive refresh window)
   const isExpiredOrExpiringSoon = expiresAt ? expiresAt.getTime() - now.getTime() < REFRESH_BUFFER_MS : true;
 
   // Proactively refresh if token is expired or expiring within 5 minutes
-  if (isExpiredOrExpiringSoon && data.ebay_refresh_token) {
+  if (isExpiredOrExpiringSoon && decryptedRefreshToken) {
     console.log(
       "get_stored_token: token expiring soon, attempting proactive refresh for user",
       userId,
@@ -542,7 +550,7 @@ export async function handleGetStoredToken({
       );
       return new Response(
         JSON.stringify({
-          token: data.ebay_access_token,
+          token: decryptedAccessToken,
           postalCode: data.postal_code,
           city: (data as any).city ?? null,
           isExpired: false,
@@ -561,7 +569,7 @@ export async function handleGetStoredToken({
         },
         body: new URLSearchParams({
           grant_type: "refresh_token",
-          refresh_token: data.ebay_refresh_token,
+          refresh_token: decryptedRefreshToken,
           scope: EBAY_OAUTH_SCOPES.join(" "),
         }).toString(),
       });
@@ -573,11 +581,11 @@ export async function handleGetStoredToken({
             Date.now() + tokenData.expires_in * 1000,
           ).toISOString();
           const updatePatch: Record<string, string> = {
-            ebay_access_token: tokenData.access_token,
+            ebay_access_token: await encryptToken(tokenData.access_token),
             ebay_token_expires_at: newExpiresAt,
           };
           if (tokenData.refresh_token) {
-            updatePatch.ebay_refresh_token = tokenData.refresh_token;
+            updatePatch.ebay_refresh_token = await encryptToken(tokenData.refresh_token);
           }
           await supabase.from("profiles").update(updatePatch).eq("id", userId);
           console.log(
@@ -642,7 +650,7 @@ export async function handleGetStoredToken({
 
   return new Response(
     JSON.stringify({
-      token: data.ebay_access_token,
+      token: decryptedAccessToken,
       postalCode: data.postal_code,
       city: (data as any).city ?? null,
       isExpired: false,

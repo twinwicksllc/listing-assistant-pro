@@ -1,6 +1,7 @@
 import { corsHeaders } from "./constants.ts";
 import { assertCallerOwnsUser, createClient } from "./supabase.ts";
 import { fetchWithTimeout } from "./fetch.ts";
+import { decryptToken } from "../_helpers/tokenCrypto.ts";
 
 export function buildEbayJsonHeaders(
   accessToken: unknown,
@@ -50,7 +51,9 @@ export async function handleGetPolicies({
           .select("ebay_access_token")
           .eq("id", userId)
           .single();
-        if (data?.ebay_access_token) resolvedToken = data.ebay_access_token;
+        if (data?.ebay_access_token) {
+          resolvedToken = await decryptToken(data.ebay_access_token);
+        }
       }
     } catch (e) {
       console.warn("get_policies: could not fetch token from profiles:", e);
