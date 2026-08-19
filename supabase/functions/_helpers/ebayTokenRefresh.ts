@@ -1,3 +1,5 @@
+import { encryptToken } from "./tokenCrypto.ts";
+
 // Must match EBAY_OAUTH_SCOPES in ../ebay-publish/constants.ts. Duplicated
 // rather than imported because Edge Functions in this repo don't import
 // across function-specific directories -- shared logic lives in _helpers/.
@@ -25,6 +27,10 @@ export type EbayTokenRefreshConfig = {
  * Refresh an eBay access token from a stored refresh token and persist the
  * result to profiles. Never throws -- callers treat a failed refresh as a
  * normal skip-this-user case, not an exception.
+ *
+ * `refreshToken` must already be plaintext -- this function encrypts before
+ * persisting (RBR-0020) but does not decrypt on the way in; the caller is
+ * responsible for decrypting whatever it read from profiles first.
  *
  * Extracted from ebay-publish/auth.ts's handleRefreshToken, minus the
  * Request/Response wrapping and the assertCallerOwnsUser check -- both are
@@ -91,11 +97,11 @@ export async function refreshEbayAccessToken(
     Date.now() + tokenData.expires_in * 1000,
   ).toISOString();
   const updatePatch: Record<string, string> = {
-    ebay_access_token: tokenData.access_token,
+    ebay_access_token: await encryptToken(tokenData.access_token),
     ebay_token_expires_at: expiresAt,
   };
   if (tokenData.refresh_token) {
-    updatePatch.ebay_refresh_token = tokenData.refresh_token;
+    updatePatch.ebay_refresh_token = await encryptToken(tokenData.refresh_token);
   }
 
   const { error: updateError } = await supabase

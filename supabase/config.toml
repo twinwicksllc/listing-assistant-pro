@@ -59,6 +59,12 @@ verify_jwt = false
 [functions.cleanup-media-retention]
 verify_jwt = false
 
+# One-off, manually-invoked backfill for RBR-0020 (encrypts any eBay OAuth
+# tokens still in legacy plaintext). Not scheduled. Gated in code by
+# requireCronSecret (same reasoning as above).
+[functions.backfill-ebay-token-encryption]
+verify_jwt = false
+
 [functions.stripe-webhook]
 # Stripe POSTs here directly — no Supabase JWT, verified via Stripe-Signature header
 verify_jwt = false
