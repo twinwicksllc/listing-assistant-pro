@@ -27,5 +27,9 @@
 ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS last_ebay_sync_at TIMESTAMPTZ;
 
+CREATE INDEX IF NOT EXISTS idx_profiles_last_ebay_sync_at_connected
+  ON public.profiles (last_ebay_sync_at ASC NULLS FIRST)
+  WHERE ebay_refresh_token IS NOT NULL;
+
 COMMENT ON COLUMN public.profiles.last_ebay_sync_at IS
   'Set unconditionally at the end of every inventory-sync-cron attempt for this user, regardless of how many active listings were found. Used by get_users_for_inventory_sync to pick the next sync batch -- prevents a zero-listing account from being re-selected on every tick forever.';
