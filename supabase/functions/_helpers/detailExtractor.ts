@@ -14,8 +14,9 @@
  * Unlike the advisory pre-pass, findings from this module are AUTHORITATIVE
  * and will OVERRIDE the main model's output when they differ.
  *
- * Uses gemini-3-flash-preview with structured JSON output (no code_execution needed —
- * we send ALL images and ask the model to focus specifically on the detail areas).
+ * Uses the fast tier (DETAIL_MODEL, see geminiModels.ts) with structured JSON
+ * output (no code_execution needed — we send ALL images and ask the model to
+ * focus specifically on the detail areas).
  */
 
 // Canonical 12-domain type — kept in sync with agent-system/pipelineContracts.ts
@@ -153,7 +154,9 @@ export interface DetailExtractionResult {
   rawFindings: string; // Full narrative for logging
 }
 
-const DETAIL_MODEL = "gemini-3-flash-preview";
+import { GEMINI_FAST_MODEL } from "./geminiModels.ts";
+
+const DETAIL_MODEL = GEMINI_FAST_MODEL;
 const DETAIL_TIMEOUT_MS = 15_000; // 15 seconds
 
 async function fetchWithTimeout(

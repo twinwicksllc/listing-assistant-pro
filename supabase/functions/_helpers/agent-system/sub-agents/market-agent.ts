@@ -8,6 +8,7 @@ import { DomainDefinition } from "../registry.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { getEmbedding } from "../../rag/embedding.ts";
 import { findSimilarContext, formatRagResults } from "../../rag/retriever.ts";
+import { GEMINI_FAST_MODEL } from "../../geminiModels.ts";
 
 export async function runMarketAgent(
   apiKey: string,
@@ -69,7 +70,7 @@ Return your report in JSON format:
 
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_FAST_MODEL}:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

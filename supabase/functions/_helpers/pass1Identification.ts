@@ -1,3 +1,5 @@
+import { GEMINI_HEAVY_MODEL } from "./geminiModels.ts";
+
 // Canonical 12-domain type lives in agent-system/pipelineContracts.ts.
 // Re-export it so there is a single source of truth for Domain across the
 // entire pipeline (Pass 1, registry, controller, prompts, detail extraction).
@@ -74,7 +76,7 @@ export async function runPass1Identification(
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gemini-3.1-pro-preview",
+          model: GEMINI_HEAVY_MODEL,
           response_format: { type: "json_object" },
           messages: [
             {

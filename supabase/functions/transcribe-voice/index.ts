@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { requireUser } from "../_helpers/authGuard.ts";
+import { GEMINI_FAST_MODEL } from "../_helpers/geminiModels.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,7 +47,7 @@ serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gemini-flash-latest",
+          model: GEMINI_FAST_MODEL,
           messages: [
             {
               role: "system",
@@ -121,7 +122,7 @@ serve(async (req) => {
       await svc.from("gemini_usage").insert({
         user_id: auth.userId,
         function_name: "transcribe-voice",
-        model: "gemini-flash-latest",
+        model: GEMINI_FAST_MODEL,
         prompt_tokens: usage?.prompt_tokens || 0,
         completion_tokens: usage?.completion_tokens || 0,
         total_tokens: usage?.total_tokens || 0,
