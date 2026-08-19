@@ -11,7 +11,7 @@ CREATE OR REPLACE FUNCTION public.get_users_for_inventory_sync(
   p_limit INTEGER,
   p_stale_before TIMESTAMPTZ
 )
-RETURNS TABLE (user_id UUID, oldest_last_seen_at TIMESTAMPTZ)
+RETURNS TABLE (user_id UUID, last_ebay_sync_at TIMESTAMPTZ)
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
