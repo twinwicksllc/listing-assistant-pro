@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { describeCronAuthEnv, requireCronSecret } from "../_helpers/authGuard.ts";
+import { captureException, initSentry } from "../_helpers/sentry.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -15,6 +16,8 @@ const COST_PER_INPUT_TOKEN = 0.00000125;
 const COST_PER_OUTPUT_TOKEN = 0.000005;
 
 serve(async (req) => {
+  initSentry();
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -190,9 +193,18 @@ serve(async (req) => {
         } else {
           const errBody = await emailRes.text();
           console.error("[COST-ALERT-CRON] Resend API error:", errBody);
+          // RBR-0031's second fix: a Resend rejection used to be visible only
+          // in a function log nobody watches routinely. Surfacing it via
+          // Sentry means a real delivery failure gets seen even if the
+          // $50 threshold is crossed and this branch silently fires.
+          captureException(new Error(`Resend API error: ${errBody}`), {
+            function: "cost-alert-cron",
+            totalCost,
+          });
         }
       } catch (emailErr) {
         console.error("[COST-ALERT-CRON] Email sending failed:", emailErr);
+        captureException(emailErr, { function: "cost-alert-cron", totalCost });
       }
     } else {
       console.log(

@@ -10,5 +10,11 @@
 -- creation migration (20260308173315_d58efbf4-52ff-46ae-8750-d9897656af22.sql)
 -- and the Phase 0 discovery docs describing it as dead. Owner decision
 -- 2026-08-19: drop rather than retain as documented debt.
+--
+-- Follow-up required after this migration deploys: src/integrations/supabase/
+-- types.ts is a generated file (via `supabase gen types typescript`) that
+-- still declares a type block for ebay_tokens -- regenerate it against the
+-- live schema once this migration has applied, rather than hand-editing the
+-- generated block.
 
 DROP TABLE IF EXISTS public.ebay_tokens;
