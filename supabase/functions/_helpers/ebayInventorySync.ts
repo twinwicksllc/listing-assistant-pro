@@ -27,7 +27,7 @@ async function fetchActiveListings(
   supabase: any,
   ebayConfig: EbayTokenRefreshConfig,
 ): Promise<
-  { listingId: string; title: string; price: number; categoryId?: string }[]
+  { listingId: string; title: string; price: number; categoryId?: string }[] | null
 > {
   const profileResp = await fetch(
     `${supabaseUrl}/rest/v1/profiles?id=eq.${userId}&select=ebay_access_token,ebay_token_expires_at,ebay_refresh_token`,
@@ -41,7 +41,7 @@ async function fetchActiveListings(
 
   if (!profileResp.ok) {
     console.warn(`[inventory-sync] Failed to fetch profile for user ${userId}`);
-    return [];
+    return null;
   }
 
   let profiles: any;
@@ -51,7 +51,7 @@ async function fetchActiveListings(
     console.warn(
       `[inventory-sync] Failed to parse profile response for user ${userId}: ${e}`,
     );
-    return [];
+    return null;
   }
 
   let token = profiles?.[0]?.ebay_access_token;
@@ -63,7 +63,7 @@ async function fetchActiveListings(
   if (isExpiredOrMissing) {
     if (!refreshToken) {
       console.log(`[inventory-sync] No eBay refresh token for user ${userId}, skipping`);
-      return [];
+      return null;
     }
     const refreshResult = await refreshEbayAccessToken(
       supabase,
@@ -75,7 +75,7 @@ async function fetchActiveListings(
       console.warn(
         `[inventory-sync] eBay token refresh failed for user ${userId}: ${refreshResult.error}`,
       );
-      return [];
+      return null;
     }
     token = refreshResult.accessToken;
   }
@@ -96,7 +96,7 @@ async function fetchActiveListings(
     console.warn(
       `[inventory-sync] ebay-listings failed for user ${userId}: ${listingsResp.status}`,
     );
-    return [];
+    return null;
   }
 
   let data: any;
@@ -106,7 +106,7 @@ async function fetchActiveListings(
     console.warn(
       `[inventory-sync] Failed to parse ebay-listings response for user ${userId}: ${e}`,
     );
-    return [];
+    return null;
   }
 
   return (data?.listings ?? [])
@@ -187,31 +187,33 @@ async function syncListingsIntoCache(
   supabase: any,
   userId: string,
   syncStartedAt: string,
-  listings: { listingId: string; title: string; price: number; categoryId?: string }[],
+  listings: { listingId: string; title: string; price: number; categoryId?: string }[] | null,
 ): Promise<{ listingCount: number; endedCount: number }> {
-  if (listings.length === 0) {
+  if (!listings) {
     return { listingCount: 0, endedCount: 0 };
   }
 
-  const { error: upsertErr } = await supabase
-    .from("user_active_listings")
-    .upsert(
-      listings.map((l) => ({
-        user_id: userId,
-        ebay_listing_id: l.listingId,
-        title: l.title,
-        price: l.price,
-        category_id: l.categoryId ?? null,
-        last_seen_at: syncStartedAt,
-      })),
-      { onConflict: "user_id,ebay_listing_id" },
-    );
+  if (listings.length > 0) {
+    const { error: upsertErr } = await supabase
+      .from("user_active_listings")
+      .upsert(
+        listings.map((l) => ({
+          user_id: userId,
+          ebay_listing_id: l.listingId,
+          title: l.title,
+          price: l.price,
+          category_id: l.categoryId ?? null,
+          last_seen_at: syncStartedAt,
+        })),
+        { onConflict: "user_id,ebay_listing_id" },
+      );
 
-  if (upsertErr) {
-    console.warn(
-      `[inventory-sync] Upsert failed for user ${userId}: ${upsertErr.message}`,
-    );
-    return { listingCount: 0, endedCount: 0 };
+    if (upsertErr) {
+      console.warn(
+        `[inventory-sync] Upsert failed for user ${userId}: ${upsertErr.message}`,
+      );
+      return { listingCount: 0, endedCount: 0 };
+    }
   }
 
   const { data: ended, error: pruneErr } = await supabase
