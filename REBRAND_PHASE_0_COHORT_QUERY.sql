@@ -52,7 +52,11 @@ WITH excluded_duplicate_profiles AS (
 cohort_profiles AS (
   SELECT p.id AS user_id
   FROM public.profiles p
-  WHERE p.id NOT IN (SELECT id FROM excluded_duplicate_profiles)
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM excluded_duplicate_profiles e
+    WHERE e.id = p.id
+  )
 ),
 cohort_orgs AS (
   SELECT o.id AS org_id
@@ -70,7 +74,7 @@ UNION ALL
 SELECT 'org_members', count(*)
   FROM public.org_members m
   WHERE m.user_id IN (SELECT user_id FROM cohort_profiles)
-     OR m.org_id IN (SELECT org_id FROM cohort_orgs)
+  AND m.org_id IN (SELECT org_id FROM cohort_orgs)
 UNION ALL
 SELECT 'org_invitations', count(*)
   FROM public.org_invitations i
