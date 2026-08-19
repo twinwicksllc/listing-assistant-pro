@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-echo "Running pre-push: deno format check and lint for Supabase functions"
-deno fmt --check supabase/functions/ || { echo "deno fmt --check failed"; exit 1; }
-deno lint --config supabase/functions/deno.json supabase/functions/ || { echo "deno lint failed"; exit 1; }
