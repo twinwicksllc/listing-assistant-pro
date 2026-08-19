@@ -102,6 +102,7 @@ export function initSentry() {
 
   const dsn = Deno.env.get("SENTRY_DSN");
   if (!dsn) {
+    initialized = true;
     console.debug(
       "[Error Tracking] SENTRY_DSN not configured - error tracking disabled.",
     );
