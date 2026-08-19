@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { GEMINI_FAST_MODEL } from "../_helpers/geminiModels.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -69,7 +70,7 @@ Return ONLY the JSON object, nothing else.`;
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gemini-flash-latest",
+          model: GEMINI_FAST_MODEL,
           messages: [{ role: "user", content: prompt }],
           temperature: 0.1,
         }),
@@ -150,7 +151,7 @@ Return ONLY the JSON object.`;
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gemini-flash-latest",
+          model: GEMINI_FAST_MODEL,
           messages: [{ role: "user", content: prompt }],
           temperature: 0.2,
         }),
@@ -425,7 +426,7 @@ serve(async (req: Request) => {
         await svc.from("gemini_usage").insert({
           user_id: userId,
           function_name: "filter-comparable-listings",
-          model: "gemini-flash-latest",
+          model: GEMINI_FAST_MODEL,
           prompt_tokens: 0, // Estimate
           completion_tokens: 0,
           total_tokens: 0,

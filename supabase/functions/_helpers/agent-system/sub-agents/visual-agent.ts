@@ -8,6 +8,7 @@ import { DOMAIN_RAG_CATEGORIES, DomainDefinition } from "../registry.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { getEmbedding } from "../../rag/embedding.ts";
 import { findSimilarContext, formatRagResults } from "../../rag/retriever.ts";
+import { GEMINI_FAST_MODEL, GEMINI_HEAVY_MODEL } from "../../geminiModels.ts";
 
 export async function runAgenticVisualAgent(
   apiKey: string,
@@ -102,8 +103,8 @@ You must return your findings in JSON format:
 } (Only include attributes you are ≥90% confident in. Use eBay-friendly values.)`;
 
   // Use the stronger model for coins_bullion — precision slab label reading demands it.
-  // For other domains, gemini-2.0-flash is fast and sufficient.
-  const visualModel = domainDef.domain === "coins_bullion" ? "gemini-3.1-pro-preview" : "gemini-2.0-flash";
+  // For other domains, the fast tier is sufficient.
+  const visualModel = domainDef.domain === "coins_bullion" ? GEMINI_HEAVY_MODEL : GEMINI_FAST_MODEL;
 
   try {
     const response = await fetch(

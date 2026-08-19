@@ -65,6 +65,12 @@ verify_jwt = false
 [functions.backfill-ebay-token-encryption]
 verify_jwt = false
 
+# One-off, manually-invoked backfill for RBR-0030's embedding-model swap
+# (re-embeds any knowledge_base row not yet on GEMINI_EMBEDDING_MODEL). Not
+# scheduled. Gated in code by requireCronSecret (same reasoning as above).
+[functions.backfill-knowledge-base-embeddings]
+verify_jwt = false
+
 [functions.stripe-webhook]
 # Stripe POSTs here directly — no Supabase JWT, verified via Stripe-Signature header
 verify_jwt = false

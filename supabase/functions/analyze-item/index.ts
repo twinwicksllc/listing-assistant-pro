@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { captureException, initSentry } from "../_helpers/sentry.ts";
+import { GEMINI_HEAVY_MODEL } from "../_helpers/geminiModels.ts";
 import { applyVoiceNoteMetalFallback, runPass1Identification } from "../_helpers/pass1Identification.ts";
 import type { Identification } from "../_helpers/pass1Identification.ts";
 
@@ -1753,7 +1754,7 @@ Seller's note: "${voiceNote}"`;
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gemini-3.1-pro-preview",
+          model: GEMINI_HEAVY_MODEL,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: contentParts },
@@ -1872,7 +1873,7 @@ Seller's note: "${voiceNote}"`;
       await svc.from("gemini_usage").insert({
         user_id: userId,
         function_name: "analyze-item",
-        model: "gemini-3.1-pro-preview",
+        model: GEMINI_HEAVY_MODEL,
         prompt_tokens: usage?.prompt_tokens || 0,
         completion_tokens: usage?.completion_tokens || 0,
         total_tokens: usage?.total_tokens || 0,
@@ -2567,7 +2568,7 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
                   "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                  model: "gemini-3.1-pro-preview",
+                  model: GEMINI_HEAVY_MODEL,
                   messages: [{ role: "user", content: regenContentParts }],
                   tools: [
                     {

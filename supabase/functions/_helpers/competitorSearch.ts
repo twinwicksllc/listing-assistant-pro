@@ -20,6 +20,9 @@
 // instead. competitor-prices-cron also uses this constant to decide whether
 // a listing is stale enough to refresh (see its p_stale_before parameter).
 // ----------------------------------------------------------------
+
+import { GEMINI_FAST_MODEL } from "./geminiModels.ts";
+
 export const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
 export interface CompetitorSearchOutcome {
@@ -265,7 +268,7 @@ eBay search keywords:`;
     let resp: Response;
     try {
       resp = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_FAST_MODEL}:generateContent?key=${apiKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

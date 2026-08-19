@@ -8,15 +8,16 @@
  *   • google_search built-in tool  → Real-Time Category & Comp Grounding
  *   • code_execution built-in tool → Agentic Vision Think-Act-Observe loop
  *
- * MODEL ROUTING (per official Gemini API docs, verified 2026):
+ * MODEL ROUTING (RBR-0030 — both stages route through GEMINI_FAST_MODEL,
+ * see geminiModels.ts; override via that env var to pin a specific release):
  * ┌─────────────────────────────────────────────────────────────────────────┐
- * │  Stage A — Google Search Grounding   → gemini-3-flash-preview          │
- * │    • googleSearch tool fully supported on gemini-3-flash-preview        │
+ * │  Stage A — Google Search Grounding                                     │
+ * │    • googleSearch tool fully supported on the fast tier                 │
  * │    • No images needed; pure text grounding pass                        │
  * │    • Cheaper, faster, stable GA model                                  │
  * │                                                                         │
- * │  Stage B — Agentic Vision Inspection → gemini-3-flash-preview          │
- * │    • codeExecution WITH images officially supported in Gemini 3+ only  │
+ * │  Stage B — Agentic Vision Inspection                                   │
+ * │    • codeExecution WITH images requires Gemini 3+ (fast tier covers it) │
  * │    • Model writes Python to crop/zoom/inspect image regions             │
  * │    • Falls back gracefully to null if model unavailable                │
  * └─────────────────────────────────────────────────────────────────────────┘
@@ -32,6 +33,8 @@
  *   - Fast: per-stage timeouts so neither stage can stall the overall pipeline
  *   - Independent: Stage A and Stage B run concurrently and fail independently
  */
+
+import { GEMINI_FAST_MODEL } from "./geminiModels.ts";
 
 // Canonical 12-domain type — kept in sync with agent-system/pipelineContracts.ts.
 // Single source of truth for domain routing.
@@ -63,13 +66,11 @@ export interface PrePassResult {
 }
 
 // ─── Model constants ──────────────────────────────────────────────────────────
-// Stage A: Google Search grounding — supported on 2.5 Flash (GA, stable, cheaper)
-const GROUNDING_MODEL = "gemini-3-flash-preview";
-// Stage B: Agentic vision inspection with images — requires Gemini 3+ (per docs):
-// "Code Execution with images is officially supported in Gemini 3 Flash.
-//  The model writes and executes Python code to actively manipulate and
-//  inspect images — zoom and inspect, visual math, image annotation."
-const VISION_MODEL = "gemini-3-flash-preview";
+// Both stages route through the fast tier (RBR-0030) — see geminiModels.ts.
+// Kept as separate names since Stage A/B are independently swappable if a
+// future model regresses on one of googleSearch/codeExecution but not both.
+const GROUNDING_MODEL = GEMINI_FAST_MODEL;
+const VISION_MODEL = GEMINI_FAST_MODEL;
 
 const STAGE_A_TIMEOUT_MS = 8_000; // 8 s for search grounding
 const STAGE_B_TIMEOUT_MS = 30_000; // 30 s for vision inspection (code_execution needs more time)
@@ -418,7 +419,7 @@ After searching, return ONLY a single valid JSON object (no markdown, no code bl
   return { marketAnalysis, groundedCategoryId };
 }
 
-// ─── Stage B: Agentic Vision Inspection (gemini-3-flash-preview) ──────────────
+// ─── Stage B: Agentic Vision Inspection (VISION_MODEL) ────────────────────────
 //
 // Requires Gemini 3+ per official Gemini API docs:
 // "Code Execution with images is officially supported in Gemini 3 Flash.
@@ -632,8 +633,8 @@ Return ONLY a single valid JSON object (no markdown, no code blocks):
 /**
  * Runs the two-stage agentic pre-pass concurrently:
  *
- *   Stage A (gemini-3-flash-preview)   — googleSearch for eBay category + market pricing
- *   Stage B (gemini-3-flash-preview) — codeExecution vision inspection on images
+ *   Stage A (GROUNDING_MODEL) — googleSearch for eBay category + market pricing
+ *   Stage B (VISION_MODEL)    — codeExecution vision inspection on images
  *
  * Both stages run in parallel via Promise.allSettled.
  * Either stage may fail independently without affecting the other or the

@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireUserOrServiceRole } from "../_helpers/authGuard.ts";
+import { GEMINI_FAST_MODEL } from "../_helpers/geminiModels.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -834,7 +835,7 @@ Example response:
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gemini-flash-latest",
+          model: GEMINI_FAST_MODEL,
           messages: [{ role: "user", content: prompt }],
           temperature: 0.1,
         }),
