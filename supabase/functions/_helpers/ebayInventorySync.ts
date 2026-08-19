@@ -139,16 +139,20 @@ export async function syncUserInventory(
   ebayConfig: EbayTokenRefreshConfig,
 ): Promise<{ listingCount: number; endedCount: number }> {
   const syncStartedAt = new Date().toISOString();
+  let result: { listingCount: number; endedCount: number } = { listingCount: 0, endedCount: 0 };
+  try {
+    const listings = await fetchActiveListings(
+      supabaseUrl,
+      serviceKey,
+      userId,
+      supabase,
+      ebayConfig,
+    );
 
-  const listings = await fetchActiveListings(
-    supabaseUrl,
-    serviceKey,
-    userId,
-    supabase,
-    ebayConfig,
-  );
-
-  const result = await syncListingsIntoCache(supabase, userId, syncStartedAt, listings);
+    result = await syncListingsIntoCache(supabase, userId, syncStartedAt, listings);
+  } catch (e) {
+    console.warn(`[inventory-sync] Sync failed for user ${userId}: ${e}`);
+  }
 
   // Set unconditionally, regardless of outcome above -- see this column's
   // own migration comment (20260819000000) for why: a user whose sync
