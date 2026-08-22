@@ -1676,6 +1676,8 @@ export async function handleRequest(req: Request): Promise<Response> {
             categoryId: cid,
             categoryName: catName,
             aspects: aspects,
+            // A category that returns aspects is by definition a leaf.
+            isLeaf: true,
             source: "ebay_api",
             fetchedAt: now.toISOString(),
           }),
@@ -1683,12 +1685,33 @@ export async function handleRequest(req: Request): Promise<Response> {
         );
       }
 
+      // Zero aspects almost always means `cid` is a parent/rollup node rather
+      // than a true leaf — eBay only exposes item aspects on leaf categories.
+      // Verify explicitly so the client can distinguish "this category is a
+      // parent, pick a real leaf" from "transient API failure, retry".
+      const leafCheck = await verifyCategoryLeafActive(
+        cid,
+        ebayAuth.token,
+        ebayAuth.base,
+      );
+
+      if (!leafCheck.isLeaf) {
+        console.warn(
+          `category-lookup: aspects requested for NON-LEAF category ${cid} — returning isLeaf:false`,
+        );
+      }
+
       return new Response(
         JSON.stringify({
           categoryId: cid,
+          categoryName: leafCheck.categoryName,
           aspects: [],
+          isLeaf: leafCheck.isLeaf,
+          isActive: leafCheck.isActive,
           source: "ebay_api",
-          message: "No aspects found",
+          message: leafCheck.isLeaf
+            ? "No aspects found"
+            : "Category is not a leaf — eBay exposes no item aspects for parent categories",
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
