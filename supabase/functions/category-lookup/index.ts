@@ -1374,21 +1374,72 @@ export async function handleRequest(req: Request): Promise<Response> {
       let winner: LookupCandidate | null = null;
       let lockReason = "";
 
-      if (
+      // ── Human corrections outrank the eBay suggestion ────────────────────
+      // eBay's own docs state category suggestions are "partially determined
+      // by live inventory data" and "should be treated as recommendations
+      // rather than authoritative classifications". A mapping a human
+      // explicitly verified is stronger evidence than a popularity signal.
+      //
+      // This ALSO fixes a scoring bug: an eBay rank-1 candidate scores
+      // rawScore(80) + sourceWeight(12) = 92 at minimum, which exactly equals
+      // DETERMINISTIC_LOCK_THRESHOLD. The lock therefore fired on EVERY
+      // lookup where eBay returned anything, and because the lock was
+      // evaluated before the sorted-candidate loop, a user_verified mapping
+      // (which can score up to 100) could never win. User corrections were
+      // silently discarded on the next lookup.
+      const userVerified = allCandidates.find(
+        (c) => c.source === "db_exact_user_verified" && c.verifiedLeaf !== false,
+      );
+
+      if (userVerified) {
+        winner = userVerified;
+        lockReason = `User-verified mapping (score ${
+          userVerified.effectiveScore.toFixed(
+            1,
+          )
+        }) — human correction outranks eBay suggestion`;
+      } else if (
         topEbay &&
         topEbay.effectiveScore >= DETERMINISTIC_LOCK_THRESHOLD &&
-        topEbay.verifiedLeaf !== false
+        // Require a POSITIVE leaf confirmation. Previously this was
+        // `!== false`, so `null` (verification request failed / timed out)
+        // also locked — meaning a transient network error could pin an
+        // unverified, possibly non-leaf category.
+        topEbay.verifiedLeaf === true
       ) {
         winner = topEbay;
         lockReason = `Deterministic lock: eBay top-1 score ${
           topEbay.effectiveScore.toFixed(
             1,
           )
-        } >= ${DETERMINISTIC_LOCK_THRESHOLD}`;
+        } >= ${DETERMINISTIC_LOCK_THRESHOLD} (leaf verified)`;
       } else {
-        // Take highest effective score, preferring verified leaf
+        // Take highest effective score, preferring verified leaf.
+        //
+        // Ranks #2..#5 are not leaf-verified up front (that would cost an
+        // extra API call per lookup on the happy path). Instead we verify
+        // LAZILY here: only the candidates we actually consider promoting
+        // get checked, so the common case still costs exactly one
+        // verification call.
         for (const c of allCandidates) {
           if (c.verifiedLeaf === false) continue; // Skip known non-leaf (#4)
+
+          if (c.source === "ebay_api" && c.verifiedLeaf === null && ebayAuth) {
+            const lazyVerification = await verifyCategoryLeafActive(
+              c.categoryId,
+              ebayAuth.token,
+              ebayAuth.base,
+            );
+            c.verifiedLeaf = lazyVerification.isLeaf;
+            c.verifiedActive = lazyVerification.isActive;
+            if (lazyVerification.isLeaf === false) {
+              console.log(
+                `category-lookup: lazy leaf check rejected eBay rank #${c.rank} (${c.categoryId}) — not a leaf`,
+              );
+              continue;
+            }
+          }
+
           winner = c;
           lockReason = `Highest effective score: ${c.effectiveScore.toFixed(1)} from ${c.source}`;
           break;

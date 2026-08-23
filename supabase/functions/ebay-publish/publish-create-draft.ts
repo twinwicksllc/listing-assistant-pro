@@ -10,9 +10,11 @@ import {
   buildListingUrl,
   buildPackageWeightAndSize,
   CATEGORY_ASPECT_RULES,
+  categoryAcceptsCondition,
   type CoinConditionDetail,
   CONDITION_DESCRIPTIONS,
   CONDITION_ID_MAP,
+  EBAY_CONDITION_ID_GRADED,
   ensureInventoryLocation,
   fetchCoinConditionDescriptors,
   fetchDynamicCategoryConditions,
@@ -168,12 +170,48 @@ export async function handleCreateDraft({
         _rerouteCert.trim() !== "");
 
     // Parent world-coin categories that reject the Graded (2750) condition.
+    // RETAINED AS A BACKUP/OFFLINE PATH. The authoritative check is now the
+    // dynamic `categoryAcceptsCondition()` probe below, which asks eBay
+    // directly instead of relying on this list staying current.
     const GRADED_UNFRIENDLY_WORLD_PARENTS = new Set(["45243"]);
 
-    if (
-      _rerouteGraded &&
-      GRADED_UNFRIENDLY_WORLD_PARENTS.has(finalCategoryId)
-    ) {
+    // ── Dynamic condition-capability gate ───────────────────────────────
+    // Ask eBay whether this category actually accepts the Graded (2750)
+    // condition rather than trusting the hardcoded set above. This catches
+    // rollups we have never hit in production and automatically adapts if
+    // eBay changes a category's policy.
+    //
+    // Resolution:
+    //   false → eBay says 2750 is NOT accepted, reroute (even if not listed)
+    //   true  → eBay says 2750 IS accepted, do NOT reroute
+    //   null  → unknown (no creds / API error); fall back to the hardcoded set
+    //
+    // Costs no extra API calls in practice: the response is cached and the
+    // same endpoint is already called moments later for conditionDescriptors.
+    let _acceptsGraded: boolean | null = null;
+    if (_rerouteGraded && clientId && clientSecret) {
+      _acceptsGraded = await categoryAcceptsCondition(
+        finalCategoryId,
+        EBAY_CONDITION_ID_GRADED,
+        clientId,
+        clientSecret,
+        apiBase,
+      );
+      console.log(
+        `create_draft: dynamic graded-condition check for category ${finalCategoryId}: ${
+          _acceptsGraded === null
+            ? "UNKNOWN (falling back to static list)"
+            : _acceptsGraded
+            ? "ACCEPTS 2750"
+            : "REJECTS 2750"
+        }`,
+      );
+    }
+
+    const _needsGradedReroute = _acceptsGraded === false ||
+      (_acceptsGraded === null && GRADED_UNFRIENDLY_WORLD_PARENTS.has(finalCategoryId));
+
+    if (_rerouteGraded && _needsGradedReroute) {
       const country = (
         typeof _rerouteIS["Country of Origin"] === "string" ? (_rerouteIS["Country of Origin"] as string) : ""
       )
@@ -202,9 +240,11 @@ export async function handleCreateDraft({
         : "256"; // Coins: World (graded-friendly leaf) — safe default
 
       console.log(
-        `create_draft: GRADED WORLD COIN in graded-unfriendly parent ${finalCategoryId} — re-routing to ${rerouteTarget} (country="${
+        `create_draft: GRADED WORLD COIN in graded-unfriendly category ${finalCategoryId} — re-routing to ${rerouteTarget} (country="${
           country || "unknown"
-        }") so the Graded condition (2750) is accepted`,
+        }", detectedBy=${
+          _acceptsGraded === false ? "eBay condition policy" : "static fallback list"
+        }) so the Graded condition (2750) is accepted`,
       );
       finalCategoryId = rerouteTarget;
     }
