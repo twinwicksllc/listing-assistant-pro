@@ -2787,6 +2787,166 @@ export async function fetchCoinConditionDescriptors(
 }
 
 /**
+ * eBay conditionId 2750 = "Graded" (LIKE_NEW). Professionally slabbed coins
+ * MUST publish under this condition, and not every category accepts it.
+ */
+export const EBAY_CONDITION_ID_GRADED = "2750";
+
+/** Cache of categoryId -> accepted conditionIds (null = unknown). */
+export const _conditionPolicyCache: Map<string, string[] | null> = new Map();
+
+/**
+ * Determines whether a category accepts the "Graded" (2750) condition, by
+ * asking eBay rather than consulting a hardcoded blocklist.
+ *
+ * WHY THIS EXISTS
+ * ---------------
+ * Rollup categories such as 45243 ("Coins: World") reject graded coins with
+ * `invalid condition for category 45243` at publish time. We previously
+ * hardcoded that single ID in `GRADED_UNFRIENDLY_WORLD_PARENTS`, which:
+ *   - only covers the one rollup we happened to hit in production, and
+ *   - goes stale the moment eBay changes a category's policy.
+ *
+ * eBay models graded-vs-raw as a CONDITION, not as a branch of the taxonomy
+ * (their coin-mandate docs note grading is available to "all leaf categories
+ * descending from" the coin parents, except rolls/sets/lots). So the
+ * authoritative question is not "which category is this?" but "does this
+ * category accept condition 2750?" — which only getItemConditionPolicies can
+ * answer.
+ *
+ * COST: none in the common path. Results are cached, and the same Metadata
+ * API endpoint is already called moments later by
+ * `fetchCoinConditionDescriptors` during a graded-coin publish.
+ *
+ * Returns:
+ *   true  — category explicitly lists condition 2750
+ *   false — category returned policies that do NOT include 2750
+ *   null  — unknown (no credentials, API error, or empty policy response).
+ *           Callers MUST treat null as "don't know" and fall back to the
+ *           existing hardcoded rules rather than blocking a publish.
+ */
+export async function categoryAcceptsCondition(
+  categoryId: string,
+  conditionId: string,
+  clientId: string,
+  clientSecret: string,
+  apiBase: string,
+): Promise<boolean | null> {
+  const cacheKey = `${apiBase}:${categoryId}`;
+
+  let conditionIds: string[] | null | undefined = _conditionPolicyCache.get(cacheKey);
+
+  if (conditionIds === undefined) {
+    conditionIds = await fetchCategoryConditionIds(
+      categoryId,
+      clientId,
+      clientSecret,
+      apiBase,
+    );
+    _conditionPolicyCache.set(cacheKey, conditionIds);
+  }
+
+  // Unknown → let the caller keep its existing behaviour.
+  if (conditionIds === null || conditionIds.length === 0) return null;
+
+  return conditionIds.includes(String(conditionId));
+}
+
+/**
+ * Fetches the list of valid conditionIds for a category from eBay's
+ * getItemConditionPolicies Metadata API. Returns null when the answer cannot
+ * be determined (auth failure, non-200, empty body, or unexpected schema).
+ *
+ * NOTE: some categories legitimately return HTTP 200 with an EMPTY body,
+ * which means "no condition policies" — that is reported as null (unknown),
+ * never as an empty allow-list, so we never block a publish on it.
+ */
+async function fetchCategoryConditionIds(
+  categoryId: string,
+  clientId: string,
+  clientSecret: string,
+  apiBase: string,
+): Promise<string[] | null> {
+  try {
+    const tokenUrl = apiBase.includes("sandbox")
+      ? "https://api.sandbox.ebay.com/identity/v1/oauth2/token"
+      : "https://api.ebay.com/identity/v1/oauth2/token";
+    const credentials = btoa(`${clientId}:${clientSecret}`);
+
+    const tokenResp = await fetchWithTimeout(tokenUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${credentials}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
+      timeout: 8000,
+    });
+    if (!tokenResp.ok) {
+      console.warn(
+        `categoryAcceptsCondition: token request failed (${tokenResp.status}) — treating as unknown`,
+      );
+      return null;
+    }
+
+    const tokenData = await tokenResp.json();
+    const appToken = tokenData?.access_token;
+    if (!appToken) return null;
+
+    const metaBase = apiBase.includes("sandbox") ? "https://api.sandbox.ebay.com" : "https://api.ebay.com";
+    const encodedFilter = encodeURIComponent(`categoryIds:{${categoryId}}`);
+    const metaResp = await fetchWithTimeout(
+      `${metaBase}/sell/metadata/v1/marketplace/EBAY_US/get_item_condition_policies?filter=${encodedFilter}`,
+      {
+        headers: {
+          Authorization: `Bearer ${appToken}`,
+          "Accept-Language": "en-US",
+        },
+        timeout: 10000,
+      },
+    );
+    if (!metaResp.ok) {
+      console.warn(
+        `categoryAcceptsCondition: Metadata API ${metaResp.status} for category ${categoryId} — treating as unknown`,
+      );
+      return null;
+    }
+
+    const bodyText = await metaResp.text();
+    if (!bodyText || bodyText.trim() === "") {
+      console.log(
+        `categoryAcceptsCondition: empty policy body for category ${categoryId} — treating as unknown`,
+      );
+      return null;
+    }
+
+    const data = JSON.parse(bodyText);
+    const policies = data?.itemConditionPolicies;
+    if (!Array.isArray(policies) || policies.length === 0) return null;
+
+    const policy = policies.find((p: { categoryId?: string }) => p?.categoryId === categoryId) ??
+      policies[0];
+    const itemConditions = policy?.itemConditions;
+    if (!Array.isArray(itemConditions)) return null;
+
+    const ids = itemConditions
+      .map((c: { conditionId?: string | number }) => String(c?.conditionId ?? "").trim())
+      .filter((id: string) => id.length > 0);
+
+    console.log(
+      `categoryAcceptsCondition: category ${categoryId} accepts conditionIds [${ids.join(", ")}]`,
+    );
+    return ids.length > 0 ? ids : null;
+  } catch (e) {
+    console.warn(
+      `categoryAcceptsCondition: exception for category ${categoryId} — treating as unknown:`,
+      e instanceof Error ? e.message : String(e),
+    );
+    return null;
+  }
+}
+
+/**
  * CoinConditionDetail type (mirrors pipelineContracts.ts — kept local to avoid shared imports)
  */
 export interface CoinConditionDetailGraded {
