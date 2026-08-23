@@ -47,9 +47,9 @@ describe("inferUsCoinLeafFromText", () => {
 
   test("falls back to Barber Half when OCR mangles the denomination", () => {
     // Real-world scan text: "Barber Domes" with no denomination present.
-    expect(inferUsCoinLeafFromText("Lot of 2 - 1892 Barber Domes 90% Silver")).toBe(
-      "11971",
-    );
+    expect(
+      inferUsCoinLeafFromText("Lot of 2 - 1892 Barber Domes 90% Silver"),
+    ).toBe("11971");
   });
 
   test("routes a Shield Nickel to the Shield Nickel leaf", () => {

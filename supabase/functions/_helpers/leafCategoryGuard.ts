@@ -218,9 +218,7 @@ export function enforceLeafCategory(input: LeafGuardInput): LeafGuardResult {
 
   // 2. Try ordered candidates (lookup alternatives, then AI suggestions).
   for (const candidate of input.candidates ?? []) {
-    const cid = candidate?.categoryId
-      ? String(candidate.categoryId).trim()
-      : null;
+    const cid = candidate?.categoryId ? String(candidate.categoryId).trim() : null;
     if (!cid || cid === original) continue;
     if (isKnownParentCategoryId(cid)) continue;
     return {

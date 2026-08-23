@@ -125,7 +125,7 @@ export function useAnalyzeCategoryAspects({
           if (isParentCategory) {
             toast.warning(
               `Category ${requestedCategoryId} is a parent category — eBay provides no item specifics for it. ` +
-                "Pick a more specific sub-category (e.g. \"Barber (1892-1915)\" rather than \"Half Dollars\").",
+                'Pick a more specific sub-category (e.g. "Barber (1892-1915)" rather than "Half Dollars").',
               { duration: 10000 },
             );
           }
@@ -173,7 +173,8 @@ export function useAnalyzeCategoryAspects({
               next[key] = value;
               continue;
             }
-            const isEmptyString = typeof value === "string" && value.trim() === "";
+            const isEmptyString =
+              typeof value === "string" && value.trim() === "";
             if (isEmptyString && !validAspectNames.has(key)) continue;
             next[key] = value;
           }
