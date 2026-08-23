@@ -1812,6 +1812,59 @@ Seller's note: "${voiceNote}"`;
                       enum: ["gold", "silver", "platinum", "none"],
                     },
                     metalWeightOz: { type: "number" },
+                    coinConditionDetail: {
+                      type: "object",
+                      description: isCoinCategoryForSchema
+                        ? "REQUIRED for this coin listing per eBay's June 2026 structured-condition mandate. " +
+                          "If isSlabbed=true, set type='graded' with gradingCompany, grade (e.g. 'MS 65'), " +
+                          "and certificationNumber (if visible on the slab label). " +
+                          "If isSlabbed=false, set type='raw' with rawCondition set to exactly one of: " +
+                          "'Uncirculated', 'Extremely Fine to About Uncirculated', 'Fine to Very Fine', 'Below Fine'. " +
+                          "Do NOT omit this field for a coin."
+                        : "Only for coins. Omit this field entirely for non-coin items.",
+                      properties: {
+                        type: {
+                          type: "string",
+                          enum: ["graded", "raw"],
+                          description:
+                            "'graded' if the coin is in a PCGS/NGC/ANACS/ICG/CAC/ICCS slab, otherwise 'raw'.",
+                        },
+                        gradingCompany: {
+                          type: "string",
+                          enum: [
+                            "PCGS",
+                            "NGC",
+                            "ANACS",
+                            "ICG",
+                            "CAC",
+                            "ICCS",
+                            "PMG",
+                            "Legacy Currency Grading",
+                          ],
+                          description: "Required when type='graded'.",
+                        },
+                        grade: {
+                          type: "string",
+                          description:
+                            "Required when type='graded'. Full grade string as printed on slab label, e.g. 'MS 65', 'PR 70 DCAM'.",
+                        },
+                        certificationNumber: {
+                          type: "string",
+                          description: "Optional. Certification number from the slab label, if visible.",
+                        },
+                        rawCondition: {
+                          type: "string",
+                          enum: [
+                            "Uncirculated",
+                            "Extremely Fine to About Uncirculated",
+                            "Fine to Very Fine",
+                            "Below Fine",
+                          ],
+                          description: "Required when type='raw'.",
+                        },
+                      },
+                      required: ["type"],
+                    },
                   },
                   required: [
                     "title",
@@ -1823,6 +1876,7 @@ Seller's note: "${voiceNote}"`;
                     "isSlabbed",
                     "metalType",
                     "metalWeightOz",
+                    ...(isCoinCategoryForSchema ? ["coinConditionDetail"] : []),
                   ],
                   additionalProperties: false,
                 },
@@ -3024,6 +3078,10 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
       "suggestedGrade",
       "packageWeightAndSize",
       "domain",
+      // eBay June 2026 structured coin condition mandate applies to ALL tiers
+      // (this is a compliance requirement for publishing, not a premium feature).
+      "coinConditionDetail",
+      "isSlabbed",
       // Agentic Pre-Pass 0 fields (available on all tiers — no pricing info)
       "market_analysis",
       "grounded_category_id",
