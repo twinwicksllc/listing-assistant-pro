@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { captureException, initSentry } from "../_helpers/sentry.ts";
 import { GEMINI_HEAVY_MODEL } from "../_helpers/geminiModels.ts";
 import { applyVoiceNoteMetalFallback, runPass1Identification } from "../_helpers/pass1Identification.ts";
+import { enforceLeafCategory } from "../_helpers/leafCategoryGuard.ts";
 import type { Identification } from "../_helpers/pass1Identification.ts";
 
 const corsHeaders = {
@@ -2425,6 +2426,79 @@ Seller's note: "${voiceNote}"`;
       );
     }
     // --- end post-lookup ---
+
+    // ─── FINAL LEAF GUARD ──────────────────────────────────────────────────
+    // Every category path above (deterministic lock, live `verify`, post-lookup
+    // override, domain-mismatch safety net) is best-effort and wrapped in a
+    // non-blocking try/catch. If any of them threw — or if `verify` reported a
+    // non-leaf but neither `lookupAlternatives` nor `suggestedCategories` had a
+    // usable replacement — the AI's original pick survives untouched.
+    //
+    // When that pick is a parent/rollup node, eBay's getItemAspectsForCategory
+    // returns ZERO aspects, so the seller sees an empty item-specifics table
+    // with no Year / Grade / Mint Location / Composition fields. This guard is
+    // the last chance to swap in a real leaf, and it runs BEFORE the metadata
+    // resync below so the aspects we fetch belong to the corrected category.
+    try {
+      const guardText = [
+        listing.title,
+        identification.itemName,
+        (identification.keywords ?? []).join(" "),
+        listing.description,
+      ]
+        .filter(Boolean)
+        .join(" ");
+
+      const guardResult = enforceLeafCategory({
+        categoryId: listing.ebayCategoryId,
+        domain: identification.domain,
+        text: guardText,
+        candidates: [
+          ...(lookupAlternatives ?? []),
+          ...(listing.suggestedCategories ?? []),
+        ],
+      });
+
+      if (guardResult.changed && guardResult.categoryId) {
+        console.warn(
+          `[${invocationId}] analyze-item: LEAF GUARD corrected category ` +
+            `${listing.ebayCategoryId} -> ${guardResult.categoryId} (${guardResult.reason})`,
+        );
+        listing.ebayCategoryId = guardResult.categoryId;
+        listing.categoryId = guardResult.categoryId;
+
+        // Surface the corrected leaf at the top of the suggestion list so the
+        // dropdown opens on the category we actually applied.
+        listing.suggestedCategories = [
+          {
+            categoryId: guardResult.categoryId,
+            categoryName: "Corrected leaf category",
+            breadcrumb: "",
+            reason: guardResult.reason,
+          },
+          ...(listing.suggestedCategories ?? []).filter(
+            (c: { categoryId?: string }) => c?.categoryId !== guardResult.categoryId,
+          ),
+        ];
+      }
+
+      // Tell the client when we could not guarantee a leaf so the UI can ask
+      // the seller to confirm instead of silently publishing an aspect-less
+      // parent category.
+      listing.categoryNeedsConfirmation = guardResult.needsUserConfirmation;
+      if (guardResult.needsUserConfirmation) {
+        console.warn(
+          `[${invocationId}] analyze-item: LEAF GUARD could not resolve a leaf for ` +
+            `${listing.ebayCategoryId} — flagging for user confirmation (${guardResult.reason})`,
+        );
+      }
+    } catch (leafGuardErr) {
+      console.warn(
+        `[${invocationId}] analyze-item: leaf guard failed (non-blocking):`,
+        leafGuardErr,
+      );
+    }
+    // --- end final leaf guard ---
 
     // --- Resync metadata to the final category so UI aspects match the chosen category ---
     if (

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { ItemSpecifics } from "@/types/listing";
 
@@ -11,6 +12,12 @@ interface AspectInfo {
   values: string[];
 }
 
+interface EbayMetadata {
+  requiredAspects: string[];
+  suggestedAspects: string[];
+  allowedConditions: string[];
+}
+
 interface UseAnalyzeCategoryAspectsParams {
   /** The eBay category ID to fetch aspects for */
   ebayCategoryId: string;
@@ -19,72 +26,127 @@ interface UseAnalyzeCategoryAspectsParams {
   /** Current item specifics — used to preserve values the user has already entered */
   itemSpecifics: ItemSpecifics;
   setItemSpecifics: (updater: (prev: ItemSpecifics) => ItemSpecifics) => void;
-  setEbayMetadata: (
-    meta: {
-      requiredAspects: string[];
-      suggestedAspects: string[];
-      allowedConditions: string[];
-    } | null,
-  ) => void;
+  setEbayMetadata: (meta: EbayMetadata | null) => void;
   /** Previous metadata (to preserve allowedConditions when we only update aspects) */
-  currentEbayMetadata: {
-    requiredAspects: string[];
-    suggestedAspects: string[];
-    allowedConditions: string[];
-  } | null;
+  currentEbayMetadata: EbayMetadata | null;
 }
 
 /**
- * Watches ebayCategoryId for changes after the initial analysis is complete.
- * When the category changes (e.g. user overrides the AI's category), fetches
- * the new category's required + suggested aspects from the category-lookup
- * edge function and seeds itemSpecifics with empty strings for any aspects
- * that don't already have a value — so they appear as editable rows in the UI.
+ * Watches ebayCategoryId and refreshes the eBay item-specifics schema whenever
+ * it changes (AI analysis result, dropdown pick, or custom-ID confirm).
  *
- * Also updates ebayMetadata.requiredAspects and suggestedAspects so that
- * the "req" / "opt" labels and the publish-time validation reflect the new category.
+ * ── Why this hook was rewritten ────────────────────────────────────────────
+ * The previous implementation had four defects that combined into the bug
+ * "I changed the category to Barber Half but the attributes never refreshed":
+ *
+ *  1. `lastFetchedCategoryRef` was set BEFORE the network call and never rolled
+ *     back on failure. A single failed/empty fetch permanently poisoned that
+ *     category ID — every later attempt hit the `=== ebayCategoryId` early
+ *     return and no request was ever made again.
+ *  2. An empty `aspects` array (exactly what eBay returns for a parent/rollup
+ *     category) took the same silent `return` path, so `ebayMetadata` stayed
+ *     `null` after `handleCategorySelectChange` cleared it — leaving the UI
+ *     with no req/opt labels and an empty specifics table.
+ *  3. `currentEbayMetadata` sat in the dependency array while the effect itself
+ *     called `setEbayMetadata`, so the effect re-ran on its own output. The ref
+ *     guard hid the churn instead of fixing it.
+ *  4. Stale specifics from the previous category were never removed, so aspects
+ *     belonging to the old category lingered in the table.
+ *
+ * This version keeps a per-category request token, rolls the ref back on
+ * failure so retries are possible, prunes stale untouched aspects, and tells
+ * the seller when a category is a parent with no aspects.
  */
 export function useAnalyzeCategoryAspects({
   ebayCategoryId,
   generated,
-  itemSpecifics,
   setItemSpecifics,
   setEbayMetadata,
   currentEbayMetadata,
 }: UseAnalyzeCategoryAspectsParams) {
-  // Track the last category we fetched aspects for so we don't re-fetch on
-  // every render (ebayCategoryId is stable between renders once set).
+  // Last category we SUCCESSFULLY fetched aspects for.
   const lastFetchedCategoryRef = useRef<string>("");
+  // Category of the request currently in flight (prevents duplicate fetches
+  // and lets us ignore responses that arrive out of order).
+  const inFlightCategoryRef = useRef<string>("");
+  // Read allowedConditions without making it an effect dependency.
+  const metadataRef = useRef<EbayMetadata | null>(currentEbayMetadata);
+  metadataRef.current = currentEbayMetadata;
 
   useEffect(() => {
-    // Only run after the initial AI analysis has completed and a category is set.
     if (!generated || !ebayCategoryId) return;
 
-    // Don't re-fetch for the same category we already have data for.
+    // Already have this category's aspects, or a request is already running.
     if (lastFetchedCategoryRef.current === ebayCategoryId) return;
+    if (inFlightCategoryRef.current === ebayCategoryId) return;
 
-    lastFetchedCategoryRef.current = ebayCategoryId;
+    inFlightCategoryRef.current = ebayCategoryId;
+    // Capture the target so a slow response for an old category cannot
+    // overwrite state belonging to a newer selection.
+    const requestedCategoryId = ebayCategoryId;
+    let cancelled = false;
 
     const fetchAndSeed = async () => {
       try {
         const { data, error } = await supabase.functions.invoke(
           "category-lookup",
-          {
-            body: { action: "aspects", categoryId: ebayCategoryId },
-          },
+          { body: { action: "aspects", categoryId: requestedCategoryId } },
         );
 
-        if (error || !data?.aspects?.length) {
+        // The user moved on to a different category while we were waiting.
+        if (cancelled || requestedCategoryId !== ebayCategoryId) return;
+
+        if (error) {
+          // Transient failure — do NOT mark this category as fetched so the
+          // next render (or the user re-picking it) can retry.
           console.warn(
-            `useAnalyzeCategoryAspects: no aspects for category ${ebayCategoryId}`,
+            `useAnalyzeCategoryAspects: aspects fetch failed for ${requestedCategoryId}`,
             error,
+          );
+          toast.error(
+            "Couldn't load eBay item specifics for this category. Re-select the category to retry.",
           );
           return;
         }
 
-        const aspects: AspectInfo[] = data.aspects;
+        const aspects: AspectInfo[] = Array.isArray(data?.aspects)
+          ? data.aspects
+          : [];
 
-        // Separate into required and suggested for metadata
+        if (aspects.length === 0) {
+          // eBay returns no aspects for parent/rollup categories. Tell the
+          // seller explicitly instead of silently rendering an empty table.
+          const isParentCategory = data?.isLeaf === false;
+          console.warn(
+            `useAnalyzeCategoryAspects: no aspects for category ${requestedCategoryId}` +
+              (isParentCategory ? " (non-leaf/parent category)" : ""),
+          );
+
+          if (isParentCategory) {
+            toast.warning(
+              `Category ${requestedCategoryId} is a parent category — eBay provides no item specifics for it. ` +
+                'Pick a more specific sub-category (e.g. "Barber (1892-1915)" rather than "Half Dollars").',
+              { duration: 10000 },
+            );
+          }
+
+          // Publish-time validation must not keep enforcing the OLD category's
+          // required aspects, so commit an empty schema rather than leaving
+          // metadata null.
+          setEbayMetadata({
+            requiredAspects: [],
+            suggestedAspects: [],
+            allowedConditions: metadataRef.current?.allowedConditions ?? [],
+          });
+
+          // Only cache the "no aspects" outcome for a confirmed parent. A
+          // transient empty response stays retryable.
+          if (isParentCategory) {
+            lastFetchedCategoryRef.current = requestedCategoryId;
+          }
+          return;
+        }
+
         const required = aspects
           .filter((a) => a.required || a.usage === "REQUIRED")
           .map((a) => a.name);
@@ -92,53 +154,68 @@ export function useAnalyzeCategoryAspects({
           .filter((a) => !a.required && a.usage !== "REQUIRED")
           .map((a) => a.name);
 
-        // Update ebayMetadata with new required/suggested aspects.
-        // Preserve allowedConditions from the previous fetch if available.
         setEbayMetadata({
           requiredAspects: required,
           suggestedAspects: suggested,
-          allowedConditions: currentEbayMetadata?.allowedConditions ?? [],
+          allowedConditions: metadataRef.current?.allowedConditions ?? [],
         });
 
-        // Seed itemSpecifics: add empty string entries for any required or
-        // suggested aspect that doesn't already have a value.
-        // Required aspects are seeded first, then suggested.
-        const seedOrder = [
-          ...aspects.filter((a) => a.required || a.usage === "REQUIRED"),
-          ...aspects.filter((a) => !a.required && a.usage !== "REQUIRED"),
-        ];
+        const validAspectNames = new Set(aspects.map((a) => a.name));
 
         setItemSpecifics((prev) => {
-          const next: ItemSpecifics = { ...prev };
-          // Remove stale keys that start with _ (internal) but keep user-visible ones
-          // that are already filled in by the user.
+          const next: ItemSpecifics = {};
+
+          // Keep internal keys (_ prefixed) and any value the user actually
+          // filled in; drop empty placeholders left over from the previous
+          // category so the table doesn't show stale, unrelated fields.
+          for (const [key, value] of Object.entries(prev)) {
+            if (key.startsWith("_")) {
+              next[key] = value;
+              continue;
+            }
+            const isEmptyString =
+              typeof value === "string" && value.trim() === "";
+            if (isEmptyString && !validAspectNames.has(key)) continue;
+            next[key] = value;
+          }
+
+          // Seed required aspects first, then suggested, so the UI order is
+          // meaningful for the seller.
+          const seedOrder = [
+            ...aspects.filter((a) => a.required || a.usage === "REQUIRED"),
+            ...aspects.filter((a) => !a.required && a.usage !== "REQUIRED"),
+          ];
           for (const aspect of seedOrder) {
             if (!(aspect.name in next)) {
-              // New aspect for this category — seed with empty string so it shows
-              // as an editable row even before the user types anything.
               (next as Record<string, string>)[aspect.name] = "";
             }
-            // If the key already exists (user filled it in or AI set it), keep the value.
           }
           return next;
         });
 
+        // Only mark as fetched after a genuinely successful load.
+        lastFetchedCategoryRef.current = requestedCategoryId;
+
         console.log(
-          `useAnalyzeCategoryAspects: seeded ${seedOrder.length} aspects for category ${ebayCategoryId} (${required.length} required, ${suggested.length} suggested)`,
+          `useAnalyzeCategoryAspects: seeded ${aspects.length} aspects for category ${requestedCategoryId} ` +
+            `(${required.length} required, ${suggested.length} suggested)`,
         );
       } catch (e) {
         console.warn("useAnalyzeCategoryAspects: fetch error", e);
+      } finally {
+        if (inFlightCategoryRef.current === requestedCategoryId) {
+          inFlightCategoryRef.current = "";
+        }
       }
     };
 
     void fetchAndSeed();
-  }, [
-    ebayCategoryId,
-    generated,
-    // NOTE: intentionally NOT including itemSpecifics in deps — we read it
-    // via the functional updater to avoid stale closure issues.
-    setItemSpecifics,
-    setEbayMetadata,
-    currentEbayMetadata,
-  ]);
+
+    return () => {
+      cancelled = true;
+    };
+    // NOTE: `itemSpecifics` and `currentEbayMetadata` are deliberately excluded.
+    // Both are written by this effect; including them would make it re-run on
+    // its own output. They are read via functional updaters / metadataRef.
+  }, [ebayCategoryId, generated, setItemSpecifics, setEbayMetadata]);
 }
