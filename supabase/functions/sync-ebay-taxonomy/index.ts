@@ -202,6 +202,47 @@ serve(async (req: Request) => {
   const fetchMs = Date.now() - startMs;
   console.log(`[sync-ebay-taxonomy] ✅ tree parsed in ${fetchMs}ms`);
 
+  // ── Category tree version / drift detection ──────────────────────────────
+  // eBay returns `categoryTreeVersion` on taxonomy responses and their docs
+  // recommend tracking it: when the version changes, eBay has restructured the
+  // tree, which can silently invalidate cached breadcrumbs, stored
+  // category_mappings, and any hardcoded leaf ID we rely on.
+  //
+  // We record it and log loudly on change so a restructure is visible in logs
+  // rather than surfacing later as mysterious "wrong category" reports.
+  const categoryTreeVersion = typeof treeJson.categoryTreeVersion === "string" ? treeJson.categoryTreeVersion : null;
+
+  let previousTreeVersion: string | null = null;
+  if (categoryTreeVersion) {
+    const { data: versionRow } = await svc
+      .from("ebay_taxonomy_meta")
+      .select("category_tree_version")
+      .eq("category_tree_id", CATEGORY_TREE_ID)
+      .maybeSingle();
+
+    previousTreeVersion = versionRow?.category_tree_version ?? null;
+
+    if (previousTreeVersion && previousTreeVersion !== categoryTreeVersion) {
+      console.warn(
+        `[sync-ebay-taxonomy] ⚠️  CATEGORY TREE VERSION CHANGED: ${previousTreeVersion} → ${categoryTreeVersion}. ` +
+          `eBay has restructured the taxonomy. Cached breadcrumbs are being refreshed by this run, but ` +
+          `stored category_mappings and any hardcoded leaf IDs should be re-verified.`,
+      );
+    } else if (!previousTreeVersion) {
+      console.log(
+        `[sync-ebay-taxonomy] recording category tree version ${categoryTreeVersion} (first observation)`,
+      );
+    } else {
+      console.log(
+        `[sync-ebay-taxonomy] category tree version unchanged (${categoryTreeVersion})`,
+      );
+    }
+  } else {
+    console.warn(
+      "[sync-ebay-taxonomy] eBay response did not include categoryTreeVersion — skipping drift detection",
+    );
+  }
+
   // eBay uses "rootCategoryNode" for the full tree; "categoryTreeNode" for subtrees
   const rootNode = treeJson.rootCategoryNode ?? treeJson.categoryTreeNode;
   if (!rootNode) {
@@ -245,6 +286,33 @@ serve(async (req: Request) => {
     }
   }
 
+  // Persist the tree version only after a materially successful sync, so a
+  // failed/partial run does not mask a genuine restructure on the next pass.
+  const treeVersionChanged = !!categoryTreeVersion &&
+    !!previousTreeVersion &&
+    previousTreeVersion !== categoryTreeVersion;
+
+  if (categoryTreeVersion && upserted > 0) {
+    const { error: versionError } = await svc
+      .from("ebay_taxonomy_meta")
+      .upsert(
+        {
+          category_tree_id: CATEGORY_TREE_ID,
+          category_tree_version: categoryTreeVersion,
+          leaf_count: leaves.length,
+          synced_at: new Date().toISOString(),
+        },
+        { onConflict: "category_tree_id" },
+      );
+
+    if (versionError) {
+      console.error(
+        "[sync-ebay-taxonomy] failed to record category tree version:",
+        versionError.message,
+      );
+    }
+  }
+
   const totalMs = Date.now() - startMs;
   console.log(
     `[sync-ebay-taxonomy] ✅ done — ${upserted} upserted, ${errors} errors, ${totalMs}ms total`,
@@ -256,6 +324,9 @@ serve(async (req: Request) => {
       leafCount: leaves.length,
       upserted,
       errors,
+      categoryTreeVersion,
+      previousTreeVersion,
+      treeVersionChanged,
       durationMs: totalMs,
     }),
     {

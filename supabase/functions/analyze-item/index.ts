@@ -1786,6 +1786,19 @@ Seller's note: "${voiceNote}"`;
                       items: { type: "string" },
                       maxItems: 2,
                     },
+                    categoryQuery: {
+                      type: "string",
+                      description:
+                        "A short, plain descriptive phrase (4-8 words) naming WHAT THE ITEM IS, used to look up the category via eBay's taxonomy API. This is NOT the sales title. " +
+                        "INCLUDE: year, issuing country, denomination, series/design name, and the item noun. " +
+                        "EXCLUDE ALL of the following, they actively harm lookup accuracy: marketing words (RARE, GEM, STUNNING, L@@K, WOW, HOT, NR), " +
+                        "grading company names (PCGS, NGC, ANACS, ICG, CAC, ICCS), grades (MS-65, PF70, AU58), certification numbers, " +
+                        "the words graded/slabbed/certified/raw/ungraded, prices, quantities, and punctuation. " +
+                        "Grading is NOT a category dimension on eBay — including it adds noise and can pull in miscategorised listings. " +
+                        'Examples: "1883 Shield Nickel five cent coin" (NOT "RARE 1883 Shield Nickel PCGS MS-65 GEM!"), ' +
+                        '"2021 Cook Islands 2 dollar silver commemorative coin", "1oz silver bullion bar", ' +
+                        '"1998 Pokemon Base Set Charizard trading card".',
+                    },
                     condition: {
                       type: "string",
                       enum: conditionEnum,
@@ -2224,11 +2237,34 @@ Seller's note: "${voiceNote}"`;
     // --- Post-lookup: category verification using AI-generated title ---
     // RC-1 FIX: The pre-lookup only runs with voice notes. When no voice note is
     // provided, Gemini picks categories blindly from its tool description. This
-    // post-lookup uses the AI-generated title (which is a reliable item description)
-    // to run category-lookup's 4-tier system and override if we find a verified
-    // leaf category with high confidence.
+    // post-lookup uses a clean descriptive phrase to run category-lookup's
+    // 4-tier system and override if we find a verified leaf category with high
+    // confidence.
+    //
+    // QUERY CHOICE: prefer `categoryQuery` (a plain "what the item is" phrase)
+    // over `listing.title`. The title is SEO-optimised and keyword-stuffed
+    // ("RARE!! 1883 Shield Nickel PCGS MS-65 GEM BU L@@K"), and eBay's docs
+    // warn that getCategorySuggestions is "partially determined by live
+    // inventory data" — so noisy marketing tokens actively pull in
+    // miscategorised listings and degrade the suggestion. Falls back to the
+    // title when Gemini omits the field, so behaviour is never worse.
     try {
-      if (!lockedCategoryId && listing.title) {
+      const _categoryQuery = typeof listing.categoryQuery === "string" && listing.categoryQuery.trim().length > 2
+        ? listing.categoryQuery.trim()
+        : null;
+      const _lookupQuery = _categoryQuery ?? listing.title;
+
+      if (!lockedCategoryId && _lookupQuery) {
+        if (_categoryQuery) {
+          console.log(
+            `analyze-item: post-lookup using categoryQuery "${_categoryQuery}" (title was "${listing.title}")`,
+          );
+        } else {
+          console.log(
+            "analyze-item: post-lookup falling back to title — no categoryQuery supplied by the model",
+          );
+        }
+
         const _postLookupUrl = Deno.env.get("SUPABASE_URL");
         const _postLookupKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
         if (_postLookupUrl && _postLookupKey) {
@@ -2242,7 +2278,7 @@ Seller's note: "${voiceNote}"`;
               },
               body: JSON.stringify({
                 action: "lookup",
-                itemType: listing.title,
+                itemType: _lookupQuery,
               }),
             },
           );
@@ -3144,6 +3180,12 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
         platinum: spotPlatinum,
       },
     };
+    // `categoryQuery` is an internal lookup hint used to query eBay's taxonomy
+    // API — it is not listing data and must never reach the client on any tier.
+    // (Starter tier already drops it via FREE_TIER_ALLOWED_FIELDS; this covers
+    // the paid tiers, which spread `...listing` wholesale.)
+    delete (responsePayload as Record<string, unknown>).categoryQuery;
+
     if (tier === "starter") {
       responsePayload = Object.fromEntries(
         Object.entries(responsePayload).filter(([k]) => FREE_TIER_ALLOWED_FIELDS.has(k)),
