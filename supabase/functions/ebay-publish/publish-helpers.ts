@@ -425,6 +425,9 @@ export const HARDCODED_COIN_CATEGORY_IDS = new Set([
   // ── World / Canadian / Ancient / Medieval / Commemorative / Exonumia ───────
   "45243", // World Coins
   "45244", // World Coins (variant)
+  "257", // Coins: World > Other Coins of the World (confirmed live LEAF;
+  // the graded-friendly catch-all analyze-item/ebay-publish route to
+  // instead of the non-leaf 45243/256 rollups — see Finding B)
   "39471", // Canadian Coins
   "39472", // Ancient Coins
   "39473", // Medieval Coins
@@ -851,7 +854,28 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
     defaults: { Certification: "Uncertified", Department: "World Coins" },
   },
   // Coins: World (taxonomy parent 256) — same Department requirement as 45243.
+  // NOTE: 256 is a non-leaf rollup (confirmed absent from ebay_taxonomy_cache,
+  // Finding B) — kept here only in case a legacy/stale mapping still ships it;
+  // new code should never assign 256 as a category.
   "256": {
+    required: ["Department"],
+    preferred: [
+      "Year",
+      "Denomination",
+      "Composition",
+      "Circulated/Uncirculated",
+      "Certification",
+      "Grade",
+      "Country of Origin",
+      "Materials sourced from",
+      "Fineness",
+    ],
+    defaults: { Certification: "Uncertified", Department: "World Coins" },
+  },
+  // Coins: World > Other Coins of the World (257) — confirmed live LEAF, and
+  // the graded-friendly catch-all analyze-item now routes to instead of the
+  // non-leaf 45243/256 rollups. Same Department requirement as its siblings.
+  "257": {
     required: ["Department"],
     preferred: [
       "Year",

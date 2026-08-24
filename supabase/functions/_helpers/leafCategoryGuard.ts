@@ -32,6 +32,21 @@
  * analyze-item/index.ts. It is a static backstop only — the authoritative
  * check is always the live `get_category_subtree` leaf verification. IDs here
  * are the ones we have observed leaking into production listings.
+ *
+ * STALENESS NOTE (2026-08-24, CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md
+ * Finding B): cross-referencing this entire set against the live
+ * ebay_taxonomy_cache export (15,116 rows, synced 2026-08-23) found that only
+ * 13 of these 33 IDs still resolve to a real node (as either a category_id or
+ * a parent_category_id) in the current eBay tree; the other 20 IDs are
+ * confirmed absent and may correspond to categories eBay has since removed or
+ * merged. Absence from the cache does not prove an ID no longer needs
+ * blocking, so this list is deliberately NOT pruned here -- removing entries
+ * is only safe once Phase 4's live-cache-backed leaf check (which supersedes
+ * this whole static list) is in place. "99" was added below after a live
+ * incident (1893 Columbian Half Dollar routed to category 99): 99 is not a
+ * real eBay leaf category, is absent from the live taxonomy cache, and was
+ * previously unblocked here, allowing the `winner = allCandidates[0]`
+ * fallback in category-lookup/index.ts to ship it.
  */
 export const KNOWN_PARENT_CATEGORY_IDS: ReadonlySet<string> = new Set([
   // ── Coins & Paper Money ────────────────────────────────────────────────
@@ -50,6 +65,9 @@ export const KNOWN_PARENT_CATEGORY_IDS: ReadonlySet<string> = new Set([
   "88433", // Coins: US > Dimes / rollup node returning zero aspects
   // ── Everything else ────────────────────────────────────────────────────
   "1", // Collectibles
+  "99", // NOT a real eBay leaf category -- "Everything Else" rollup ID;
+  // confirmed absent from ebay_taxonomy_cache. Root cause of the 1893
+  // Columbian Half Dollar mis-routing incident (see implementation plan).
   "11232", // Jewelry & Watches (rollup)
   "11233", // Jewelry & Watches
   "11450", // Clothing, Shoes & Accessories

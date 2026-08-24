@@ -154,7 +154,9 @@ export async function handleCreateDraft({
   // condition fallback can save it. The correct home for a graded world coin
   // is a graded-friendly LEAF category (which supports the Grade item
   // specific + condition 2750). We map based on Country of Origin, defaulting
-  // to the generic Coins: World leaf (256) when the country is unknown.
+  // to the generic Coins: World catch-all leaf (257 — confirmed live leaf;
+  // 256 was previously used here but is itself a non-leaf rollup, confirmed
+  // absent from ebay_taxonomy_cache, Finding B) when the country is unknown.
   {
     const _rerouteIS = itemSpecifics && typeof itemSpecifics === "object"
       ? (itemSpecifics as Record<string, unknown>)
@@ -173,7 +175,7 @@ export async function handleCreateDraft({
     // RETAINED AS A BACKUP/OFFLINE PATH. The authoritative check is now the
     // dynamic `categoryAcceptsCondition()` probe below, which asks eBay
     // directly instead of relying on this list staying current.
-    const GRADED_UNFRIENDLY_WORLD_PARENTS = new Set(["45243"]);
+    const GRADED_UNFRIENDLY_WORLD_PARENTS = new Set(["45243", "256"]);
 
     // ── Dynamic condition-capability gate ───────────────────────────────
     // Ask eBay whether this category actually accepts the Graded (2750)
@@ -237,7 +239,7 @@ export async function handleCreateDraft({
 
       const rerouteTarget = SOUTH_PACIFIC_COUNTRIES.has(country)
         ? "3392" // Coins: World > South Pacific
-        : "256"; // Coins: World (graded-friendly leaf) — safe default
+        : "257"; // Coins: World > Other Coins of the World — confirmed live leaf, safe default
 
       console.log(
         `create_draft: GRADED WORLD COIN in graded-unfriendly category ${finalCategoryId} — re-routing to ${rerouteTarget} (country="${
