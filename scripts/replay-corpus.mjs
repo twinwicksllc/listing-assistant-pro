@@ -72,12 +72,16 @@ function extractGuardBlocklist(guardSrc) {
   // Pull every quoted numeric-looking string literal between the Set([ ... ]) bounds.
   const start = guardSrc.indexOf("KNOWN_PARENT_CATEGORY_IDS");
   if (start === -1) {
-    throw new Error("KNOWN_PARENT_CATEGORY_IDS not found in leafCategoryGuard.ts");
+    throw new Error(
+      "KNOWN_PARENT_CATEGORY_IDS not found in leafCategoryGuard.ts",
+    );
   }
   const openParen = guardSrc.indexOf("([", start);
   const closeParen = guardSrc.indexOf("]);", openParen);
   if (openParen === -1 || closeParen === -1) {
-    throw new Error("Could not locate KNOWN_PARENT_CATEGORY_IDS Set([...]) bounds");
+    throw new Error(
+      "Could not locate KNOWN_PARENT_CATEGORY_IDS Set([...]) bounds",
+    );
   }
   const body = guardSrc.slice(openParen, closeParen);
   const ids = new Set();
@@ -107,8 +111,12 @@ function main() {
   const guardBlocklist = extractGuardBlocklist(guardSrc);
 
   console.log(`Loaded ${corpus.cases.length} corpus cases.`);
-  console.log(`Loaded ${snapshot.categories.length} taxonomy rows from snapshot.`);
-  console.log(`Loaded ${guardBlocklist.size} ids from leafCategoryGuard.ts KNOWN_PARENT_CATEGORY_IDS.`);
+  console.log(
+    `Loaded ${snapshot.categories.length} taxonomy rows from snapshot.`,
+  );
+  console.log(
+    `Loaded ${guardBlocklist.size} ids from leafCategoryGuard.ts KNOWN_PARENT_CATEGORY_IDS.`,
+  );
   console.log("");
 
   const failures = [];
@@ -171,7 +179,11 @@ function main() {
         }
         if (Array.isArray(c.sub_cases)) {
           for (const sc of c.sub_cases) {
-            checkExpected(c.id, sc.expected_category_id, "sub_case.expected_category_id");
+            checkExpected(
+              c.id,
+              sc.expected_category_id,
+              "sub_case.expected_category_id",
+            );
           }
         }
         checkForbidden(c.id, c.forbidden_category_ids);
@@ -209,7 +221,9 @@ function main() {
               `${leafOk ? "a valid (if imprecise) leaf" : "NOT a valid leaf -- worth escalating to must_not_regress"}.`,
           );
         } else {
-          infoNotes.push(`[${c.id}] quarantine case -- no single ebay_category_id to check (structural issue).`);
+          infoNotes.push(
+            `[${c.id}] quarantine case -- no single ebay_category_id to check (structural issue).`,
+          );
         }
         break;
       }
