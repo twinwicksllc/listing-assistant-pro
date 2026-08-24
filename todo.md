@@ -149,12 +149,12 @@ Reference: CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md
       score-based logic locally, which would have silently kept "passing"
       after the logic it was meant to guard was deleted from production).
       Full local CI-equivalent suite run and green: `deno fmt --check
-  supabase/functions/` (84 files), `deno lint --config
-  supabase/functions/deno.json supabase/functions/` (81 files), `deno
-  check` on category-lookup/*.ts and analyze-item/index.ts, `deno test`
+supabase/functions/` (84 files), `deno lint --config
+supabase/functions/deno.json supabase/functions/` (81 files), `deno
+check` on category-lookup/*.ts and analyze-item/index.ts, `deno test`
       on resolverCore.test.ts (10/10) and leafCategoryGuard.test.ts (24/24),
       `npm run test` (118/118 across 13 files), `npx tsc --noEmit`, `npx
-  eslint src/ --max-warnings 0`, `node scripts/replay-corpus.mjs`
+eslint src/ --max-warnings 0`, `node scripts/replay-corpus.mjs`
       (18/18). Also updated analyze-item/index.ts's two category-lookup
       consumer sites (pre-lookup + post-lookup) to drop all
       effectiveScore/confidence/score references, since `found: true` now
