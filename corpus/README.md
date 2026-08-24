@@ -67,13 +67,45 @@ Exit code `0` = all hard checks passed. Exit code `1` = at least one failure
 (printed to stdout). This is wired into CI as the `category-corpus-replay`
 job in `.github/workflows/test.yml` and is blocking.
 
-## Refreshing the snapshot
+## Refreshing the snapshot (automatic)
 
-If `ebay_taxonomy_cache` changes meaningfully (e.g. after a `sync-ebay-taxonomy`
-run), re-export it and regenerate `ebay_taxonomy_snapshot.json` in the same
-shape: `{ snapshot_meta: {...}, categories: [{ category_id, category_name,
-breadcrumb, parent_category_id, is_leaf }, ...] }` with `is_leaf` as a real
-JSON boolean. Re-run the harness afterward to confirm the corpus still holds.
+`ebay_taxonomy_cache` is refreshed weekly by the `sync-ebay-taxonomy-weekly`
+cron, but the committed `ebay_taxonomy_snapshot.json` used by CI does **not**
+update itself just because the live table changed — it's a frozen file,
+intentionally, for reproducibility. Left alone, this would let the live
+table drift (renames, removed categories, new leaves) invisibly out of sync
+with what CI is checking.
+
+To close that gap, `.github/workflows/category-taxonomy-sync.yml` runs a
+`refresh-taxonomy-snapshot` job immediately after every weekly
+`sync-ebay-taxonomy` run. It:
+
+1. Fetches the _current_ `ebay_taxonomy_cache` table directly via the
+   Supabase REST API (using the `SUPABASE_URL` / `SUPABASE_SERVICE_KEY`
+   secrets already configured for that workflow).
+2. Re-validates every golden-corpus case against that live data (same logic
+   as `scripts/replay-corpus.mjs`, just pointed at live data instead of the
+   committed file) — if eBay renamed/removed/demoted a category that a
+   `must_resolve` or `must_not_regress` case depends on, **the job fails
+   loudly here**, before anything is auto-committed.
+3. Diffs the live data against the committed snapshot and logs exactly what
+   changed (added / removed / renamed / leaf-status-flipped categories).
+4. Overwrites `corpus/ebay_taxonomy_snapshot.json` on disk and, if anything
+   changed, opens a PR with that diff for review — drift becomes a visible,
+   reviewable change instead of a silent gap between the real table and
+   what CI checks.
+
+Run it manually anytime with:
+
+```bash
+SUPABASE_URL=... SUPABASE_SERVICE_KEY=... node scripts/refresh-taxonomy-snapshot.mjs
+```
+
+If you need to regenerate the snapshot some other way (e.g. from a raw CSV
+export), build it in the same shape: `{ snapshot_meta: {...}, categories:
+[{ category_id, category_name, breadcrumb, parent_category_id, is_leaf }, ...] }`
+with `is_leaf` as a real JSON boolean, then run `node scripts/replay-corpus.mjs`
+to confirm the corpus still holds.
 
 ## Adding a new case
 

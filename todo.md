@@ -89,6 +89,19 @@ Reference: CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md
       scripts/replay-corpus.mjs, no live credentials needed) and added it to
       the blocking test-summary gate alongside frontend-tests and
       functions-check.
+- [x] (follow-up, user question: "shouldn't we use the live Supabase table
+      since it refreshes weekly?") Added scripts/refresh-taxonomy-snapshot.mjs + a new `refresh-taxonomy-snapshot` job in
+      .github/workflows/category-taxonomy-sync.yml that runs right after the
+      weekly sync-ebay-taxonomy cron: fetches the live ebay_taxonomy_cache via
+      Supabase REST (reusing the already-configured SUPABASE_URL /
+      SUPABASE_SERVICE_KEY secrets), re-validates the golden corpus against
+      that live data (failing loudly if eBay broke a documented guarantee),
+      diffs it against the committed snapshot (added/removed/renamed/
+      leaf-flipped categories), and opens a PR with the refreshed snapshot
+      when drift is detected. Keeps the CI replay harness reproducible
+      (frozen snapshot) while ensuring it never silently drifts from the
+      real weekly-refreshed table. Tested locally against a mock REST server
+      in both clean and drift scenarios (exit 0 / exit 1 respectively).
 
 ## Phase 4 — Filter-then-rank resolver rewrite
 
