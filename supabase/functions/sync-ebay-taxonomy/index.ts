@@ -10,7 +10,10 @@
  * Result: every eBay leaf category is always in the DB with a fresh breadcrumb.
  * No more hardcoded maps anywhere in the codebase.
  *
- * Schedule: weekly (Sunday 03:00 UTC) via Supabase pg_cron.
+ * Schedule: weekly (Sunday 03:11 UTC) via Supabase pg_cron, job
+ * 'sync-ebay-taxonomy-weekly'. pg_cron is the single scheduler for this
+ * function; .github/workflows/category-taxonomy-sync.yml can invoke it
+ * on demand but no longer schedules it (it used to, double-invoking).
  * Can also be triggered manually by POSTing to the function URL.
  */
 

@@ -52,9 +52,63 @@ Cross-checking `leafCategoryGuard.ts`'s `KNOWN_PARENT_CATEGORY_IDS` blocklist ag
 
 (Carried forward from the earlier audit, restated briefly since it directly shapes §4 below.) 96 recorded publish successes, 0 recorded failures, across 40 rows — while the user was independently reporting category errors the same week. 11 of those 40 rows are `ai_auto` guesses that reached `approved` status on a single successful publish, with no human ever reviewing them. 17 of 40 are year-locked duplicates of concepts that already have a generic, verified row (e.g., `1921 morgan silver dollar` alongside the already-`user_verified` `morgan dollar`). Three sports-card rows are mislabeled (`Basketball Cards` for Donruss/Upper Deck _baseball_; one row's own stored name is the placeholder string `"Category #183437"`, meaning the code that wrote it did not know what that category was).
 
-### Finding D — `category-hygiene-cron` (the job that would have caught Finding C) has never run
+### Finding D — `category-hygiene-cron` was never scheduled from pg_cron (but see the correction below)
 
 Confirmed by reading every migration that calls `cron.schedule()`: only `sync-ebay-taxonomy-weekly`, `invoke-cost-alert-cron-daily`, `cleanup-media-retention-daily`, `inventory-sync-every-15min`, and `competitor-prices-refresh-cursor-5min` are actually scheduled. The migration meant to schedule `category-hygiene-cron` (`20260331000000_schedule_category_hygiene_cron.sql`) creates a log table and leaves the actual scheduling as a comment with three unexecuted options. `category_hygiene_log` should be empty — that's the one-query way to confirm this before touching anything.
+
+**Correction (2026-08-24), after Phase 1 shipped.** The scan above only looked at
+`cron.schedule()` calls in migrations, and that was too narrow a search: it missed
+`.github/workflows/category-taxonomy-sync.yml`, which has been POSTing
+`category-hygiene-cron` (and `sync-ebay-taxonomy`) on a weekly GitHub Actions
+`schedule:` trigger since commit `bb938ee`, 2026-07-18 — whose subject line is
+"fix: actually schedule the weekly eBay category taxonomy sync + hygiene cron."
+It authenticates with `SUPABASE_SERVICE_KEY`, which `requireCronSecret()` accepts,
+so it was not failing auth. **The function has been running; it just was not
+running from pg_cron.**
+
+This was then confirmed directly against production: `category_hygiene_log` holds
+six rows, one per week from 2026-07-19 to 2026-08-23, every one `status = success`
+— i.e. starting the week after `bb938ee` landed the GitHub Actions schedule. The
+claim that the job "has never run" is false. Reassuringly, the two score-based
+duties that Phase 5 deleted were no-ops in every logged run (`"expired": 0`,
+`"audit_cleaned": 0`), so removing them destroyed no behaviour that was actually
+doing work.
+
+**One open question from those logs.** The first three runs are timestamped
+`03:11:23`, `03:11:16`, and `03:11:19` — three consecutive weeks agreeing to within
+seven seconds — then the last three move to `02:47`, `02:31`, `02:33`. The later,
+jittery times are what a 02:00 UTC GitHub Actions schedule looks like (Actions cron
+drifts by tens of minutes under queue load). The earlier seconds-precise cluster at
+exactly `03:11` is not, and `03:11` happens to be `sync-ebay-taxonomy-weekly`'s
+pg_cron slot. No migration and no Edge Function in this repo posts
+`category-hygiene-cron` at that time, so if those three runs were not unusually
+consistent Actions jitter, the remaining explanation is a **pg_cron job created by
+hand in the Supabase Dashboard** — which `20260331000000_schedule_category_hygiene_cron.sql`
+explicitly offered as "Option 1" and which would be invisible to this repo.
+Settle it with `SELECT jobname, schedule, command FROM cron.job ORDER BY jobname;`
+before assuming pg_cron is now the only scheduler; if a Dashboard-created job
+exists, it needs unscheduling too.
+
+The narrow conclusion Phase 1 acted on — that no `cron.schedule()` call existed —
+was correct, and scheduling the job from pg_cron is still the right end state.
+But because the GitHub Actions schedule was left in place alongside it, the job
+became **double-scheduled**: GitHub Actions at Sunday 02:00 UTC and pg_cron at
+Sunday 04:11 UTC. That was actively harmful rather than merely wasteful, because
+pg_cron's 04:11 slot was chosen specifically to land after the 03:11 taxonomy
+sync so Phase 5's rot detection reads a fresh `ebay_taxonomy_cache`; the 02:00
+run evaluated `find_rotted_mappings()` against a week-old cache and could flag
+rows `needs_review` on stale evidence. (`sync-ebay-taxonomy` was likewise
+double-invoked, 03:00 via Actions and 03:11 via pg_cron — a full-tree eBay pull
+twice, 11 minutes apart.)
+
+Fixed by making pg_cron the single scheduler: both jobs in
+`category-taxonomy-sync.yml` are now `workflow_dispatch`-only, leaving the
+weekly golden-corpus snapshot refresh as that workflow's only scheduled job.
+
+**Method note worth carrying forward:** "is this job scheduled?" is not answerable
+from `supabase/migrations/` alone in this repo. Cron-shaped work lives in at least
+two places — pg_cron migrations and `.github/workflows/*.yml` — so both need
+checking before concluding a function is dormant.
 
 ---
 
