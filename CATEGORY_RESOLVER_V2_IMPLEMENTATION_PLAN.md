@@ -74,36 +74,64 @@ duties that Phase 5 deleted were no-ops in every logged run (`"expired": 0`,
 `"audit_cleaned": 0`), so removing them destroyed no behaviour that was actually
 doing work.
 
-**One open question from those logs.** The first three runs are timestamped
-`03:11:23`, `03:11:16`, and `03:11:19` — three consecutive weeks agreeing to within
-seven seconds — then the last three move to `02:47`, `02:31`, `02:33`. The later,
-jittery times are what a 02:00 UTC GitHub Actions schedule looks like (Actions cron
-drifts by tens of minutes under queue load). The earlier seconds-precise cluster at
-exactly `03:11` is not, and `03:11` happens to be `sync-ebay-taxonomy-weekly`'s
-pg_cron slot. No migration and no Edge Function in this repo posts
-`category-hygiene-cron` at that time, so if those three runs were not unusually
-consistent Actions jitter, the remaining explanation is a **pg_cron job created by
-hand in the Supabase Dashboard** — which `20260331000000_schedule_category_hygiene_cron.sql`
-explicitly offered as "Option 1" and which would be invisible to this repo.
-Settle it with `SELECT jobname, schedule, command FROM cron.job ORDER BY jobname;`
-before assuming pg_cron is now the only scheduler; if a Dashboard-created job
-exists, it needs unscheduling too.
+**The timestamp anomaly, resolved.** The first three logged runs cluster at
+`03:11:23`/`03:11:16`/`03:11:19` — seconds-precise across three weeks — which looked
+like pg_cron rather than GitHub Actions jitter, and `03:11` is
+`sync-ebay-taxonomy-weekly`'s slot. `SELECT jobname, schedule FROM cron.job` settled
+it: there is no hygiene job in pg_cron at all, and the workflow has had
+`0 2 * * 0` since `bb938ee`. So those runs were Actions cron drift after all
+(~71 min, versus 31–47 min for the later three). No hidden Dashboard job exists.
 
-The narrow conclusion Phase 1 acted on — that no `cron.schedule()` call existed —
-was correct, and scheduling the job from pg_cron is still the right end state.
-But because the GitHub Actions schedule was left in place alongside it, the job
-became **double-scheduled**: GitHub Actions at Sunday 02:00 UTC and pg_cron at
-Sunday 04:11 UTC. That was actively harmful rather than merely wasteful, because
-pg_cron's 04:11 slot was chosen specifically to land after the 03:11 taxonomy
-sync so Phase 5's rot detection reads a fresh `ebay_taxonomy_cache`; the 02:00
-run evaluated `find_rotted_mappings()` against a week-old cache and could flag
-rows `needs_review` on stale evidence. (`sync-ebay-taxonomy` was likewise
-double-invoked, 03:00 via Actions and 03:11 via pg_cron — a full-tree eBay pull
-twice, 11 minutes apart.)
+### Finding E — migration `20260824000000` is merged but NOT applied to production
 
-Fixed by making pg_cron the single scheduler: both jobs in
-`category-taxonomy-sync.yml` are now `workflow_dispatch`-only, leaving the
-weekly golden-corpus snapshot refresh as that workflow's only scheduled job.
+The same `cron.job` query surfaced something more consequential. Production has
+exactly five scheduled jobs — `cleanup-media-retention-daily`,
+`competitor-prices-refresh-cursor-5min`, `inventory-sync-every-15min`,
+`invoke-cost-alert-cron-daily`, `sync-ebay-taxonomy-weekly` — and
+**`category-hygiene-weekly` is not among them.** Phase 1's migration is in `main`
+but has not reached the database, which means:
+
+- `category-hygiene-cron` is scheduled **only** by
+  `.github/workflows/category-taxonomy-sync.yml`. It was never actually
+  double-scheduled; the double-schedule was a latent problem waiting for the
+  migration to land, not a live one.
+- Phase 5's edge-function code **has** deployed (functions and migrations ship
+  from the same workflow), so the deployed `category-hygiene-cron` now calls
+  `find_rotted_mappings()` — created by `20260825000000`, also unapplied. Both RPC
+  calls are defensively wrapped (`console.warn` + an error counter, no throw), so
+  the job degrades to a no-op on those duties rather than failing; expect
+  `rot_errors: 1` / `dedup_errors: 1` in `category_hygiene_log` while this holds.
+- `ebay_taxonomy_meta` (`20260823000000`) is likely absent too, so the PR #528
+  tree-version drift tripwire — the thing meant to catch Finding B automatically —
+  probably is not recording anything yet. Worth confirming.
+
+**Likely mechanism.** `deploy-functions.yml`'s "Push Database Migrations" step is
+`continue-on-error: true` with `timeout-minutes: 2`, and it runs `supabase link`
+plus `supabase db push --yes --include-all` inside that budget. If the push fails
+or simply exceeds two minutes, the workflow swallows it and proceeds to deploy the
+Edge Functions anyway. That combination can put deployed function code in front of
+a schema that never migrated, with a green checkmark on the run — which is exactly
+the state observed here. Confirm what actually applied with:
+
+```sql
+SELECT version FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 10;
+```
+
+This is a pipeline-integrity issue that outlives the category work: any migration
+in this repo can silently fail to apply while its dependent function code ships.
+Worth its own fix (drop `continue-on-error`, or raise the timeout and gate the
+function deploy on migration success) rather than being folded into this plan.
+
+**What was fixed, given Finding E.** `sync-ebay-taxonomy` genuinely was
+double-invoked (Actions 03:00 + pg_cron 03:11), so its Actions job is now
+`workflow_dispatch`-only and pg_cron owns it. `category-hygiene-cron` keeps its
+Actions schedule, because that is currently the only thing running it — but moved
+from Sun 02:00 to Sun 04:47 UTC so it lands _after_ the 03:11 taxonomy sync and
+rot detection reads a fresh cache. That is the stale-evidence bug fixed without
+depending on an unapplied migration. Once `category-hygiene-weekly` is confirmed
+live in `cron.job`, the 04:47 Actions schedule becomes redundant and should be
+removed, leaving pg_cron as the single scheduler as originally intended; the
+workflow carries that follow-up and the verification query inline.
 
 **Method note worth carrying forward:** "is this job scheduled?" is not answerable
 from `supabase/migrations/` alone in this repo. Cron-shaped work lives in at least

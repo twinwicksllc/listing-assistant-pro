@@ -11,9 +11,10 @@
  * No more hardcoded maps anywhere in the codebase.
  *
  * Schedule: weekly (Sunday 03:11 UTC) via Supabase pg_cron, job
- * 'sync-ebay-taxonomy-weekly'. pg_cron is the single scheduler for this
- * function; .github/workflows/category-taxonomy-sync.yml can invoke it
- * on demand but no longer schedules it (it used to, double-invoking).
+ * 'sync-ebay-taxonomy-weekly' -- confirmed present in production cron.job.
+ * pg_cron is the single scheduler for this function;
+ * .github/workflows/category-taxonomy-sync.yml can invoke it on demand but no
+ * longer schedules it (it used to, double-invoking this 11 minutes apart).
  * Can also be triggered manually by POSTing to the function URL.
  */
 
