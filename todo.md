@@ -71,8 +71,13 @@ Reference: CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md
 
 ## Phase 6 — Promote gate 4 to enforcing (deferred / follow-up, not this pass)
 
-## Wrap-up
+## Wrap-up (Phase 1+2 checkpoint)
 
-- [ ] Push branch(es), open PR(s)
-- [ ] Monitor CI
-- [ ] Report back with links + deploy notes
+- [x] Push branch feat/category-resolver-v2-phase1-2, open PR
+      (https://github.com/twinwicksllc/listing-assistant-pro/pull/529)
+- [x] Monitor CI — all checks green (format-and-lint, Edge Functions Check,
+      Frontend Tests, E2E Smoke Tests, Integration Tests, Test Summary)
+- [x] Report back with links + deploy notes (see PR description; migration
+      auto-applies via the Supabase migration pipeline on merge — no manual step)
+- [ ] Full project wrap-up (push/PR/monitor/report) deferred until Phases
+      3-6 are also implemented, per the original plan sequencing
