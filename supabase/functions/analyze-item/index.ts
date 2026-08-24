@@ -989,17 +989,13 @@ serve(async (req: Request) => {
               }
 
               if (lookupData && lookupData.found) {
-                const score = lookupData.effectiveScore || lookupData.confidence || 0;
-                const isVerifiedLeaf = lookupData.verifiedLeaf !== false;
+                // Filter-then-rank resolver (CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md
+                // §2): a `found: true` result has already passed every Layer-1 hard
+                // gate (leaf, active, condition, aspects) AND either won on
+                // user_verified precedence or cleared the Layer-3 agreement check.
+                // There is no score to threshold anymore — "found" IS the lock
+                // signal. The only remaining question is domain compatibility.
                 const source = lookupData.source || "";
-
-                // Deterministic lock: high-confidence verified result (#3)
-                // Lock if: score >= 88 AND (source is eBay API or user-verified DB exact)
-                const isLockable = score >= 88 &&
-                  isVerifiedLeaf &&
-                  (source === "ebay_api" ||
-                    source.includes("user_verified") ||
-                    source.includes("db_exact"));
                 const isDomainCompatible = isCategoryCompatibleWithDomain(
                   identification.domain,
                   lookupData.categoryId,
@@ -1007,31 +1003,23 @@ serve(async (req: Request) => {
                   lookupData.breadcrumb,
                 );
 
-                if (isLockable && isDomainCompatible) {
+                if (isDomainCompatible) {
                   lockedCategoryId = lookupData.categoryId;
                   lockedCategoryName = lookupData.categoryName || "";
                   lockedBreadcrumb = lookupData.breadcrumb || lookupData.categoryName || "";
                   categoryHints +=
-                    `\n- **LOCKED CATEGORY** (verified, high-confidence): **${lockedCategoryId}** — ${lockedBreadcrumb}. YOU MUST USE THIS CATEGORY ID. Do not override.`;
+                    `\n- **LOCKED CATEGORY** (verified via filter-then-rank resolver): **${lockedCategoryId}** — ${lockedBreadcrumb}. YOU MUST USE THIS CATEGORY ID. Do not override.`;
                   console.log(
-                    `analyze-item: DETERMINISTIC LOCK on category ${lockedCategoryId} (score=${score}, source=${source})`,
+                    `analyze-item: DETERMINISTIC LOCK on category ${lockedCategoryId} (source=${source}, reason=${lookupData.reasonSelected})`,
                   );
                 } else {
-                  // Not locked — but only pass as a hint if it is domain-compatible.
-                  // A domain-incompatible "BEST MATCH" hint (e.g. "Action Figures" for
-                  // a silver bar) would mislead the AI into picking the wrong category.
-                  if (isLockable && !isDomainCompatible) {
-                    console.warn(
-                      `analyze-item: rejecting deterministic lock ${lookupData.categoryId} for domain ${identification.domain} (${
-                        lookupData.breadcrumb || lookupData.categoryName
-                      }) — suppressing hint to avoid AI confusion`,
-                    );
-                  } else {
-                    categoryHints +=
-                      `\n- BEST MATCH (score=${score}, source=${source}): **${lookupData.categoryId}** — ${
-                        lookupData.breadcrumb || lookupData.categoryName
-                      }. Use this as primary category unless the item clearly belongs elsewhere.`;
-                  }
+                  // Domain-incompatible — suppress the hint entirely rather than
+                  // risk misleading the AI (e.g. "Action Figures" for a silver bar).
+                  console.warn(
+                    `analyze-item: rejecting resolver winner ${lookupData.categoryId} for domain ${identification.domain} (${
+                      lookupData.breadcrumb || lookupData.categoryName
+                    }) — suppressing hint to avoid AI confusion`,
+                  );
                 }
 
                 // Collect alternatives for fallback
@@ -1042,8 +1030,8 @@ serve(async (req: Request) => {
                   lookupAlternatives = lookupData.alternatives;
                   categoryHints += "\n- ALTERNATIVE CATEGORIES:";
                   for (const alt of lookupData.alternatives.slice(0, 3)) {
-                    categoryHints += `\n  * **${alt.categoryId}** — ${alt.breadcrumb || alt.categoryName} (score=${
-                      alt.score || "?"
+                    categoryHints += `\n  * **${alt.categoryId}** — ${alt.breadcrumb || alt.categoryName} (source=${
+                      alt.source || "?"
                     })`;
                   }
                 }
@@ -1052,12 +1040,14 @@ serve(async (req: Request) => {
                 lookupData.topCandidates &&
                 lookupData.topCandidates.length > 0
               ) {
-                // Circuit breaker fired — no candidate passed threshold (#9)
-                categoryHints += "\n- LOW-CONFIDENCE CANDIDATES (use your best judgment):";
+                // NEEDS_CONFIRMATION — no candidate survived every gate, or the
+                // agreement check failed. Surface the survivors/near-misses so
+                // the AI (and ultimately the user) can make an informed choice.
+                categoryHints += "\n- NEEDS_CONFIRMATION CANDIDATES (use your best judgment):";
                 for (const c of lookupData.topCandidates) {
-                  categoryHints += `\n  * **${c.categoryId}** — ${c.breadcrumb || c.categoryName} (score=${
-                    c.score || "?"
-                  })`;
+                  categoryHints += `\n  * **${c.categoryId}** — ${c.breadcrumb || c.categoryName}${
+                    c.survived === false ? ` (rejected: ${c.dropReason})` : ""
+                  }`;
                 }
                 lookupAlternatives = lookupData.topCandidates;
               }
@@ -2286,7 +2276,9 @@ Seller's note: "${voiceNote}"`;
               postLookupData = {};
             }
             if (postLookupData.found && postLookupData.verifiedLeaf !== false) {
-              const postScore = postLookupData.effectiveScore || postLookupData.confidence || 0;
+              // Filter-then-rank resolver: a `found: true` result has already
+              // cleared gate 1 (leaf) + gate 2 (active) — there is no separate
+              // score to re-check here anymore.
               const postSource = postLookupData.source || "";
               const postIsLeaf = postLookupData.verifiedLeaf === true;
 
@@ -2430,7 +2422,9 @@ Seller's note: "${voiceNote}"`;
               const aiCategoryIsParent = KNOWN_PARENT_CATEGORIES.has(
                 listing.ebayCategoryId,
               );
-              const postLookupIsStrong = postScore >= 80 && postIsLeaf;
+              // Any `found: true` resolver result is already leaf-verified and
+              // gate-passed — treat it as "strong" outright (no score left to threshold).
+              const postLookupIsStrong = postIsLeaf;
 
               // Domain mismatch: Pass 1 said coins_bullion but AI chose a Books/Electronics/etc. category
               const isDomainMismatch = identification.domain === "coins_bullion" &&
@@ -2448,7 +2442,7 @@ Seller's note: "${voiceNote}"`;
                 console.log(
                   `analyze-item: POST-LOOKUP override: AI picked ${listing.ebayCategoryId}, ` +
                     `post-lookup found ${postLookupData.categoryId} (${postLookupData.categoryName}, ` +
-                    `score=${postScore}, source=${postSource}, leaf=${postIsLeaf}, ` +
+                    `source=${postSource}, leaf=${postIsLeaf}, ` +
                     `aiWasParent=${aiCategoryIsParent}, domainMismatch=${isDomainMismatch})`,
                 );
                 listing.ebayCategoryId = postLookupData.categoryId;
@@ -2460,7 +2454,7 @@ Seller's note: "${voiceNote}"`;
                     categoryId: postLookupData.categoryId,
                     categoryName: postLookupData.categoryName,
                     breadcrumb: postLookupData.breadcrumb || postLookupData.categoryName,
-                    reason: `Post-lookup verified (score=${postScore}, source=${postSource})`,
+                    reason: `Post-lookup verified (source=${postSource})`,
                   });
                   // Dedupe
                   const seenIds = new Set<string>();

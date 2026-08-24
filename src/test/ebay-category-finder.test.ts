@@ -1,268 +1,302 @@
 /**
  * ebay-category-finder.test.ts
  *
- * Regression coverage for the eBay category finder work:
+ * Regression coverage for the eBay category resolver.
  *
- *  1. SCORING BUG — an eBay rank-#1 suggestion scores exactly 92
- *     (rawScore 80 + ebay_api source weight 12), which equalled
- *     DETERMINISTIC_LOCK_THRESHOLD. The lock therefore fired on every lookup
- *     that returned any eBay result, and because it was evaluated BEFORE the
- *     sorted-candidate loop, a `db_exact_user_verified` mapping (up to 100)
- *     could never win. User corrections were silently discarded.
+ * HISTORY: this file used to replicate a score-based winner-selection
+ * algorithm (computeEffectiveScore / SOURCE_WEIGHTS / DETERMINISTIC_LOCK_THRESHOLD)
+ * because the Deno edge function couldn't be imported from Vitest. As of the
+ * Category Resolver v2 "filter-then-rank" rewrite
+ * (CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md \u00a72), that scoring model has
+ * been deleted from production code entirely (supabase/functions/category-lookup/index.ts)
+ * in favour of a pure-precedence model with no arithmetic.
  *
- *  2. LOCK-ON-NULL — the lock guard was `verifiedLeaf !== false`, so a failed
- *     or timed-out leaf verification (`null`) still locked the category.
+ * The precedence/agreement logic now lives in a dependency-free module,
+ * supabase/functions/category-lookup/resolverCore.ts, which has NO Deno-only
+ * APIs (no `Deno.*`, no network/Supabase calls) \u2014 so it can be imported
+ * directly here and tested against the SAME production code that
+ * `deno test` exercises in supabase/functions/category-lookup/resolverCore.test.ts.
+ * This avoids the old duplication problem where the test suite could pass
+ * while asserting on logic that no longer existed anywhere in the app.
  *
- *  3. DYNAMIC CONDITION GATE — graded coins must not be published into a
- *     category that rejects conditionId 2750. This is now resolved by asking
- *     eBay (getItemConditionPolicies) instead of a hardcoded blocklist, with
- *     the static list retained as an offline fallback.
- *
- * These tests replicate the edge-function logic rather than importing it,
- * because the Deno edge functions are not loadable from the Vitest
- * (node/browser) environment.
+ * The gate functions themselves (leaf/active cache lookup, condition-policy
+ * fetch, aspect-satisfiability check) DO perform network/Supabase I/O and
+ * live in index.ts \u2014 they are covered by the Deno-side corpus replay
+ * (scripts/replay-corpus.mjs) and manual/integration verification instead,
+ * per the plan's phasing.
  */
 
 import { describe, expect, it } from "vitest";
+import {
+  type GatedCandidate,
+  selectWinner,
+} from "../../supabase/functions/category-lookup/resolverCore.ts";
 
-// ── Replicated from supabase/functions/category-lookup/index.ts ────────────
-const DETERMINISTIC_LOCK_THRESHOLD = 92;
-const FUZZY_MIN_TOKEN_OVERLAP = 2;
-
-const SOURCE_WEIGHTS: Record<string, number> = {
-  db_exact_user_verified: 15,
-  db_exact_ebay_api: 10,
-  db_exact: 8,
-  ebay_api: 12,
-  db_fuzzy: 3,
-  gemini: 5,
-};
-
-function computeEffectiveScore(
-  source: string,
-  rawScore: number,
-  tokenOverlap: number,
-  totalQueryTokens: number,
-  isGeneric: boolean,
-  daysSinceUpdate: number,
-  verifiedLeaf: boolean | null = null,
-): number {
-  const sourceWeight = SOURCE_WEIGHTS[source] ?? 0;
-  const similarityBonus =
-    totalQueryTokens > 0 ? (tokenOverlap / totalQueryTokens) * 15 : 0;
-  const recencyBonus = source.startsWith("db_")
-    ? Math.max(0, 5 - daysSinceUpdate / 30)
-    : 0;
-  const genericPenalty = isGeneric ? 20 : 0;
-  const ambiguityPenalty =
-    source === "db_fuzzy" && tokenOverlap < FUZZY_MIN_TOKEN_OVERLAP ? 15 : 0;
-  const nonLeafPenalty = verifiedLeaf === false ? 30 : 0;
-
-  return Math.min(
-    100,
-    Math.max(
-      0,
-      rawScore +
-        sourceWeight +
-        similarityBonus +
-        recencyBonus -
-        genericPenalty -
-        ambiguityPenalty -
-        nonLeafPenalty,
-    ),
-  );
+function candidate(overrides: Partial<GatedCandidate> = {}): GatedCandidate {
+  return {
+    categoryId: "12345",
+    categoryName: "Test Category",
+    breadcrumb: "Domain > Sub > Test Category",
+    source: "ebay_api",
+    rank: 1,
+    survived: true,
+    dropReason: null,
+    gate4Warnings: [],
+    reason: "test candidate",
+    ...overrides,
+  };
 }
 
-interface Candidate {
-  categoryId: string;
-  source: string;
-  effectiveScore: number;
-  verifiedLeaf: boolean | null;
-  rank: number;
-}
-
-/** Winner selection AFTER the fix. */
-function selectWinner(candidates: Candidate[]): {
-  winner: Candidate | null;
-  reason: string;
-} {
-  const sorted = [...candidates].sort(
-    (a, b) => b.effectiveScore - a.effectiveScore,
-  );
-
-  const userVerified = sorted.find(
-    (c) => c.source === "db_exact_user_verified" && c.verifiedLeaf !== false,
-  );
-  if (userVerified) return { winner: userVerified, reason: "user_verified" };
-
-  const topEbay = sorted.find((c) => c.source === "ebay_api" && c.rank === 1);
-  if (
-    topEbay &&
-    topEbay.effectiveScore >= DETERMINISTIC_LOCK_THRESHOLD &&
-    topEbay.verifiedLeaf === true
-  ) {
-    return { winner: topEbay, reason: "deterministic_lock" };
-  }
-
-  for (const c of sorted) {
-    if (c.verifiedLeaf === false) continue;
-    return { winner: c, reason: "highest_score" };
-  }
-  return { winner: sorted[0] ?? null, reason: "fallback" };
-}
-
-/** Winner selection BEFORE the fix — proves the bug was real. */
-function selectWinnerLegacy(candidates: Candidate[]): Candidate | null {
-  const sorted = [...candidates].sort(
-    (a, b) => b.effectiveScore - a.effectiveScore,
-  );
-  const topEbay = sorted.find((c) => c.source === "ebay_api" && c.rank === 1);
-  if (
-    topEbay &&
-    topEbay.effectiveScore >= DETERMINISTIC_LOCK_THRESHOLD &&
-    topEbay.verifiedLeaf !== false
-  ) {
-    return topEbay;
-  }
-  for (const c of sorted) {
-    if (c.verifiedLeaf === false) continue;
-    return c;
-  }
-  return sorted[0] ?? null;
-}
-
-const ebayRank1 = (
-  verifiedLeaf: boolean | null,
-  categoryId = "45243",
-): Candidate => ({
-  categoryId,
-  source: "ebay_api",
-  effectiveScore: computeEffectiveScore(
-    "ebay_api",
-    80,
-    0,
-    5,
-    false,
-    0,
-    verifiedLeaf,
-  ),
-  verifiedLeaf,
-  rank: 1,
-});
-
-const userVerifiedCandidate = (categoryId = "3392"): Candidate => ({
-  categoryId,
-  source: "db_exact_user_verified",
-  effectiveScore: computeEffectiveScore(
-    "db_exact_user_verified",
-    100,
-    5,
-    5,
-    false,
-    0,
-    null,
-  ),
-  verifiedLeaf: null,
-  rank: 1,
-});
-
-describe("category-lookup scoring", () => {
-  it("eBay rank #1 hits exactly the lock threshold even with zero token overlap", () => {
-    // Root cause: 80 + 12 = 92 === DETERMINISTIC_LOCK_THRESHOLD.
-    const score = computeEffectiveScore("ebay_api", 80, 0, 5, false, 0, true);
-    expect(score).toBe(92);
-    expect(score).toBeGreaterThanOrEqual(DETERMINISTIC_LOCK_THRESHOLD);
-  });
-
-  it("a user-verified mapping outscores eBay rank #1", () => {
-    expect(userVerifiedCandidate().effectiveScore).toBe(100);
-    expect(userVerifiedCandidate().effectiveScore).toBeGreaterThan(
-      ebayRank1(true).effectiveScore,
-    );
-  });
-
-  it("confirmed non-leaf eBay rank #1 drops below the lock threshold", () => {
-    const score = computeEffectiveScore("ebay_api", 80, 5, 5, false, 0, false);
-    expect(score).toBe(77);
-    expect(score).toBeLessThan(DETERMINISTIC_LOCK_THRESHOLD);
-  });
-});
-
-describe("winner selection — user corrections", () => {
-  it("REGRESSION: legacy logic discarded the user-verified mapping", () => {
-    const legacy = selectWinnerLegacy([
-      userVerifiedCandidate("3392"),
-      ebayRank1(true, "45243"),
-    ]);
-    // Despite scoring 100 vs 92, the human correction lost.
-    expect(legacy?.categoryId).toBe("45243");
-    expect(legacy?.source).toBe("ebay_api");
-  });
-
-  it("user-verified mapping now wins over eBay rank #1", () => {
-    const { winner, reason } = selectWinner([
-      userVerifiedCandidate("3392"),
-      ebayRank1(true, "45243"),
-    ]);
-    expect(winner?.categoryId).toBe("3392");
-    expect(winner?.source).toBe("db_exact_user_verified");
-    expect(reason).toBe("user_verified");
-  });
-
-  it("a non-leaf user-verified mapping does NOT win", () => {
-    const stale = { ...userVerifiedCandidate("256"), verifiedLeaf: false };
-    const { winner } = selectWinner([stale, ebayRank1(true, "11952")]);
-    expect(winner?.categoryId).toBe("11952");
-  });
-});
-
-describe("winner selection — lock requires positive leaf confirmation", () => {
-  it("REGRESSION: legacy logic locked even when verification returned null", () => {
-    const legacy = selectWinnerLegacy([ebayRank1(null, "45243")]);
-    expect(legacy?.categoryId).toBe("45243");
-  });
-
-  it("does not deterministically lock when leaf verification failed (null)", () => {
-    const { reason } = selectWinner([ebayRank1(null, "45243")]);
-    expect(reason).not.toBe("deterministic_lock");
-  });
-
-  it("locks when the leaf is positively verified", () => {
-    const { winner, reason } = selectWinner([ebayRank1(true, "11952")]);
-    expect(reason).toBe("deterministic_lock");
-    expect(winner?.categoryId).toBe("11952");
-  });
-
-  it("never returns a candidate known to be non-leaf when a leaf exists", () => {
-    const nonLeaf = ebayRank1(false, "45243");
-    const leaf: Candidate = {
+describe("selectWinner \u2014 user corrections take precedence over eBay", () => {
+  it("REGRESSION: a user-verified mapping must win even when eBay's rank #1 also survives", () => {
+    // This is the original bug this file was written to catch: a
+    // db_exact_user_verified mapping (human correction) being outscored by
+    // an eBay rank-#1 suggestion. The new model has no scores to tie, so
+    // this is now a precedence guarantee instead of an arithmetic one.
+    const userVerified = candidate({
       categoryId: "3392",
+      source: "user_verified",
+      rank: 1,
+    });
+    const ebayTop = candidate({
+      categoryId: "45243",
       source: "ebay_api",
-      effectiveScore: computeEffectiveScore(
-        "ebay_api",
-        76,
-        3,
-        5,
-        false,
-        0,
-        true,
-      ),
-      verifiedLeaf: true,
-      rank: 2,
-    };
-    const { winner } = selectWinner([nonLeaf, leaf]);
-    expect(winner?.categoryId).toBe("3392");
+      rank: 1,
+    });
+
+    const result = selectWinner([userVerified, ebayTop]);
+
+    expect(result.winner?.categoryId).toBe("3392");
+    expect(result.winner?.source).toBe("user_verified");
+    expect(result.needsConfirmation).toBe(false);
+  });
+
+  it("a non-surviving (non-leaf) user-verified mapping does not win", () => {
+    const staleUserVerified = candidate({
+      categoryId: "256",
+      source: "user_verified",
+      rank: 1,
+      survived: false,
+      dropReason: "not a leaf",
+    });
+    const ebayTop = candidate({
+      categoryId: "11952",
+      source: "ebay_api",
+      rank: 1,
+      breadcrumb: "Coins & Paper Money > Coins: US",
+    });
+    const dbAgree = candidate({
+      categoryId: "11952",
+      source: "db_exact",
+      rank: 1,
+      breadcrumb: "Coins & Paper Money > Coins: US",
+    });
+
+    const result = selectWinner([staleUserVerified, ebayTop, dbAgree]);
+
+    expect(result.winner?.categoryId).toBe("11952");
+    expect(result.winner?.source).toBe("ebay_api");
   });
 });
 
-// ── Dynamic condition gate ────────────────────────────────────────────────
+describe("selectWinner \u2014 lock requires the eBay #1 candidate to have survived the hard gates", () => {
+  it("REGRESSION: a non-leaf/inactive eBay #1 must never win, even with no other candidates", () => {
+    // Original bug: `verifiedLeaf !== false` treated a failed/timed-out (null)
+    // verification as good enough to lock. The new model requires
+    // `survived: true`, set only after a positive leaf+active confirmation.
+    const nonLeafEbayTop = candidate({
+      categoryId: "99",
+      source: "ebay_api",
+      rank: 1,
+      survived: false,
+      dropReason: "not a leaf",
+    });
+
+    const result = selectWinner([nonLeafEbayTop]);
+
+    expect(result.winner).toBeNull();
+    expect(result.needsConfirmation).toBe(true);
+  });
+
+  it("locks on eBay #1 when it survived, an independent source agrees, and rank #2 is a separated subtree", () => {
+    const ebayTop = candidate({
+      categoryId: "222",
+      source: "ebay_api",
+      rank: 1,
+      breadcrumb: "Coins & Paper Money > Coins: US > Commemorative > Silver",
+    });
+    const ebaySecond = candidate({
+      categoryId: "999",
+      source: "ebay_api",
+      rank: 2,
+      breadcrumb: "Toys & Hobbies > Action Figures",
+    });
+    const dbAgree = candidate({
+      categoryId: "222",
+      source: "db_exact",
+      rank: 1,
+      breadcrumb: "Coins & Paper Money > Coins: US > Commemorative > Silver",
+    });
+
+    const result = selectWinner([ebayTop, ebaySecond, dbAgree]);
+
+    expect(result.winner?.categoryId).toBe("222");
+    expect(result.needsConfirmation).toBe(false);
+    expect(result.agreementChecked).toBe(true);
+    expect(result.subtreeSeparated).toBe(true);
+  });
+
+  it("never promotes a lower-ranked candidate as a consolation prize when eBay #1 is dropped", () => {
+    // Explicitly documented "no consolation prize" behaviour: if eBay's #1
+    // pick fails a hard gate, a surviving db_fuzzy/gemini candidate does NOT
+    // become the winner \u2014 the response is NEEDS_CONFIRMATION instead.
+    const ebayTopDropped = candidate({
+      categoryId: "99",
+      source: "ebay_api",
+      rank: 1,
+      survived: false,
+      dropReason: "not a leaf",
+    });
+    const fuzzySurvivor = candidate({
+      categoryId: "555",
+      source: "db_fuzzy",
+      rank: 1,
+      survived: true,
+    });
+
+    const result = selectWinner([ebayTopDropped, fuzzySurvivor]);
+
+    expect(result.winner).toBeNull();
+    expect(result.needsConfirmation).toBe(true);
+  });
+});
+
+describe("selectWinner \u2014 agreement + subtree-separation routing (Layer 3)", () => {
+  it("requires an independent source to agree with eBay #1, not just survive", () => {
+    const ebayTop = candidate({
+      categoryId: "222",
+      source: "ebay_api",
+      rank: 1,
+      breadcrumb: "Coins & Paper Money > Coins: US > Commemorative > Silver",
+    });
+    const ebaySecond = candidate({
+      categoryId: "999",
+      source: "ebay_api",
+      rank: 2,
+      breadcrumb: "Toys & Hobbies > Action Figures",
+    });
+
+    const result = selectWinner([ebayTop, ebaySecond]);
+
+    expect(result.winner).toBeNull();
+    expect(result.needsConfirmation).toBe(true);
+    expect(result.agreementSourcesMatched.length).toBe(0);
+  });
+
+  it("requires eBay #1 and #2 to be in different top-level subtrees, even when agreement holds", () => {
+    const ebayTop = candidate({
+      categoryId: "222",
+      source: "ebay_api",
+      rank: 1,
+      breadcrumb: "Coins & Paper Money > Coins: US > Commemorative > Silver",
+    });
+    const ebaySecond = candidate({
+      categoryId: "223",
+      source: "ebay_api",
+      rank: 2,
+      breadcrumb: "Coins & Paper Money > Coins: US > Commemorative > Gold",
+    });
+    const dbAgree = candidate({
+      categoryId: "222",
+      source: "db_exact",
+      rank: 1,
+      breadcrumb: "Coins & Paper Money > Coins: US > Commemorative > Silver",
+    });
+
+    const result = selectWinner([ebayTop, ebaySecond, dbAgree]);
+
+    expect(result.winner).toBeNull();
+    expect(result.needsConfirmation).toBe(true);
+    expect(result.subtreeSeparated).toBe(false);
+  });
+
+  it("treats a missing rank #2 as vacuously subtree-separated", () => {
+    const ebayTop = candidate({
+      categoryId: "222",
+      source: "ebay_api",
+      rank: 1,
+    });
+    const dbAgree = candidate({
+      categoryId: "222",
+      source: "db_exact",
+      rank: 1,
+    });
+
+    const result = selectWinner([ebayTop, dbAgree]);
+
+    expect(result.winner?.categoryId).toBe("222");
+    expect(result.subtreeSeparated).toBe(true);
+  });
+
+  it("Gemini is never an outright winner, even if it is the only surviving candidate", () => {
+    // Direct test of plan \u00a75's "Gemini should never be an oracle" rule.
+    const geminiOnly = candidate({
+      categoryId: "777",
+      source: "gemini",
+      rank: 1,
+      survived: true,
+    });
+
+    const result = selectWinner([geminiOnly]);
+
+    expect(result.winner).toBeNull();
+    expect(result.needsConfirmation).toBe(true);
+  });
+});
+
+describe("selectWinner \u2014 empty / all-dropped candidate sets", () => {
+  it("returns NEEDS_CONFIRMATION for an empty candidate list", () => {
+    const result = selectWinner([]);
+    expect(result.winner).toBeNull();
+    expect(result.needsConfirmation).toBe(true);
+  });
+
+  it("returns NEEDS_CONFIRMATION when every candidate failed a hard gate", () => {
+    const dead1 = candidate({
+      categoryId: "99",
+      source: "ebay_api",
+      rank: 1,
+      survived: false,
+      dropReason: "not a leaf",
+    });
+    const dead2 = candidate({
+      categoryId: "256",
+      source: "gemini",
+      rank: 1,
+      survived: false,
+      dropReason: "not active",
+    });
+
+    const result = selectWinner([dead1, dead2]);
+
+    expect(result.winner).toBeNull();
+    expect(result.needsConfirmation).toBe(true);
+  });
+});
+
+// \u2500\u2500 Dynamic condition gate (ebay-publish's downstream safety net) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+//
+// category-lookup's own gate 3 (checkConditionGate in index.ts) is
+// payload-optional and performs a live eBay Metadata API call, so it isn't
+// unit-testable here without a network mock. What we CAN verify without a
+// mock is the pure fallback/reroute decision logic mirrored from
+// ebay-publish/publish-helpers.ts, which remains the second line of
+// defense at publish time regardless of whether category-lookup's callers
+// supply a conditionId.
+
 const EBAY_CONDITION_ID_GRADED = "2750";
 const GRADED_UNFRIENDLY_WORLD_PARENTS = new Set(["45243"]);
 
-/**
- * Mirrors the resolution in publish-create-draft.ts:
- *   false → reroute; true → keep; null → fall back to the static list.
- */
 function needsGradedReroute(
   categoryId: string,
   acceptsGraded: boolean | null,
@@ -273,7 +307,6 @@ function needsGradedReroute(
   );
 }
 
-/** Mirrors categoryAcceptsCondition() against a policy fixture. */
 function categoryAcceptsCondition(
   conditionIds: string[] | null,
   conditionId: string,
@@ -282,9 +315,8 @@ function categoryAcceptsCondition(
   return conditionIds.includes(conditionId);
 }
 
-describe("dynamic graded-condition gate", () => {
+describe("dynamic graded-condition gate (publish-time fallback)", () => {
   it("reroutes when eBay reports the category rejects 2750", () => {
-    // 45243 returns policies without the Graded condition.
     const accepts = categoryAcceptsCondition(
       ["1000", "3000"],
       EBAY_CONDITION_ID_GRADED,
@@ -302,9 +334,7 @@ describe("dynamic graded-condition gate", () => {
     expect(needsGradedReroute("3392", accepts)).toBe(false);
   });
 
-  it("catches a graded-hostile category that is NOT in the hardcoded list", () => {
-    // The whole point of the dynamic gate: 256 is not in the static set,
-    // but eBay says it rejects 2750, so we still reroute.
+  it("catches a graded-hostile category that is NOT in the hardcoded fallback list", () => {
     const accepts = categoryAcceptsCondition(
       ["1000"],
       EBAY_CONDITION_ID_GRADED,
@@ -314,15 +344,13 @@ describe("dynamic graded-condition gate", () => {
   });
 
   it("falls back to the static list when the policy lookup is unknown", () => {
-    // Empty body / API error / no credentials → null.
     const accepts = categoryAcceptsCondition(null, EBAY_CONDITION_ID_GRADED);
     expect(accepts).toBeNull();
-    expect(needsGradedReroute("45243", accepts)).toBe(true); // preserved behaviour
-    expect(needsGradedReroute("11952", accepts)).toBe(false); // no false positives
+    expect(needsGradedReroute("45243", accepts)).toBe(true);
+    expect(needsGradedReroute("11952", accepts)).toBe(false);
   });
 
   it("treats an empty policy list as unknown, never as 'rejects everything'", () => {
-    // Guards against blocking every publish if eBay returns an empty array.
     expect(categoryAcceptsCondition([], EBAY_CONDITION_ID_GRADED)).toBeNull();
     expect(
       needsGradedReroute(

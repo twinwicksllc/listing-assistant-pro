@@ -105,12 +105,73 @@ Reference: CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md
 
 ## Phase 4 — Filter-then-rank resolver rewrite
 
-- [ ] Design gate functions (leaf/active/condition/aspects) in category-lookup
-- [ ] Remove computeEffectiveScore + weights + thresholds
-- [ ] Implement precedence-based winner selection incl. NEEDS_CONFIRMATION
-- [ ] Gate 4 (aspect satisfiability) in warn-only mode
-- [ ] Validate against corpus at each step
-- [ ] Tests + CI green
+- [x] Design gate functions (leaf/active/condition/aspects) in category-lookup
+      — checkLeafActiveCacheFirst() (gates 1+2, cache-first against
+      ebay_taxonomy_cache with CACHE_STALE_DAYS=7 freshness, live fallback via
+      the existing verifyCategoryLeafActive()), fetchCategoryConditionIds()/
+      checkConditionGate() (gate 3, duplicated — not imported, cross-function
+      imports aren't possible — from ebay-publish's categoryAcceptsCondition()
+      pattern, reusing the already-obtained eBay app token; made
+      payload-optional via a new `conditionId` lookup-request field since no
+      caller currently supplies one), checkAspectSatisfiability() (gate 4,
+      required-aspect token-overlap heuristic against getItemAspectsForCategory).
+      All wired together per-candidate via gateCandidate().
+- [x] Remove computeEffectiveScore + weights + thresholds — deleted
+      LookupCandidate interface, computeEffectiveScore(), isGenericItemType(),
+      SOURCE_WEIGHTS/nonLeafPenalty/genericPenalty/ambiguityPenalty,
+      DETERMINISTIC_LOCK_THRESHOLD, and the `winner = allCandidates[0]`
+      fallback from category-lookup/index.ts. Re-added only a minimal
+      non-scoring computeTokenOverlap() used purely as a candidate-gathering
+      filter (FUZZY_MIN_TOKEN_OVERLAP), never as a score input.
+- [x] Implement precedence-based winner selection incl. NEEDS_CONFIRMATION —
+      resolverCore.ts (pure, dependency-free selectWinner(): Layer 2
+      precedence [user_verified > eBay #1 survivor > NEEDS_CONFIRMATION] +
+      Layer 3 agreement/subtree-separation check) wired into the fully
+      rewritten `action === "lookup"` handler in index.ts, which now gathers
+      candidates from 4 sources (user_verified/db_exact DB rows, eBay
+      getCategorySuggestions, DB fuzzy match, Gemini fallback), gates every
+      one, and hands off to selectWinner() — no arithmetic anywhere in the
+      decision path.
+- [x] Gate 4 (aspect satisfiability) in warn-only mode — checkAspectSatisfiability()
+      collects warnings into `gate4Warnings` on each GatedCandidate without
+      ever causing a drop, gated behind a `GATE4_ENFORCE` env flag for a
+      future promotion to enforcing (tracked as Phase 6).
+- [x] Validate against corpus at each step — scripts/replay-corpus.mjs
+      re-run and confirmed green (18/18 cases) after the rewrite; this is a
+      static/offline check of the taxonomy snapshot + leafCategoryGuard.ts
+      blocklist and does not itself exercise the live gate/resolver code
+      paths (those require a running Supabase + eBay credentials, out of
+      scope for this repo's local sandbox — covered instead by
+      resolverCore.test.ts's 10 unit tests over the pure decision logic).
+- [x] Tests + CI green — resolverCore.test.ts (10/10, deno test), rewrote
+      src/test/ebay-category-finder.test.ts to import and test the ACTUAL
+      production resolverCore.ts module (previously it duplicated the old
+      score-based logic locally, which would have silently kept "passing"
+      after the logic it was meant to guard was deleted from production).
+      Full local CI-equivalent suite run and green: `deno fmt --check
+supabase/functions/` (84 files), `deno lint --config
+supabase/functions/deno.json supabase/functions/` (81 files), `deno
+check` on category-lookup/*.ts and analyze-item/index.ts, `deno test`
+      on resolverCore.test.ts (10/10) and leafCategoryGuard.test.ts (24/24),
+      `npm run test` (118/118 across 13 files), `npx tsc --noEmit`, `npx
+eslint src/ --max-warnings 0`, `node scripts/replay-corpus.mjs`
+      (18/18). Also updated analyze-item/index.ts's two category-lookup
+      consumer sites (pre-lookup + post-lookup) to drop all
+      effectiveScore/confidence/score references, since `found: true` now
+      already implies every gate + precedence/agreement check passed —
+      confirmed CategoryConfirmDialog.tsx's separate `action: "verify"` path
+      is unaffected.
+
+Deferred to a follow-up phase (not blocking Phase 4, tracked for later —
+same pattern as Phase 6's gate-4-enforcement deferral): deleting the
+hardcoded category-ID allowlist baked into analyze-item's tool-schema AI
+prompt (plan §2.2), and consolidating the three duplicate parent/blocklist
+mechanisms (leafCategoryGuard.ts's KNOWN_PARENT_CATEGORY_IDS,
+category-lookup's BLOCKED_PARENT_CATEGORIES, analyze-item's inline
+COINS_PAPER_MONEY_IDS/KNOWN_WRONG_DOMAIN_FOR_COINS/KNOWN_PARENT_CATEGORIES).
+Both are higher-risk, AI-prompt-adjacent changes that deserve their own
+isolated validation pass rather than being bundled into the resolver
+rewrite itself.
 
 ## Phase 5 — Harden crons
 
