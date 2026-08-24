@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireUserOrServiceRole } from "../_helpers/authGuard.ts";
 import { GEMINI_FAST_MODEL } from "../_helpers/geminiModels.ts";
+import { type CandidateSource, type GatedCandidate, selectWinner } from "./resolverCore.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,143 +11,31 @@ const corsHeaders = {
 };
 
 // ── Constants ────────────────────────────────────────────────────────────────
-const FUZZY_MIN_SIMILARITY = 0.65; // Minimum fuzzy match threshold (#1)
-const FUZZY_MIN_TOKEN_OVERLAP = 2; // Minimum meaningful token overlap (#1)
 const AUTO_PERSIST_MIN_CONFIDENCE = 85; // Minimum confidence for auto-persist (#2)
-const DETERMINISTIC_LOCK_THRESHOLD = 92; // eBay top-1 score above this = lock (#3) [raised from 88 — EA-P2-C]
 const MARKETPLACE_ID = "EBAY_US";
 const CATEGORY_TREE_ID = "0";
+// CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md §2.4: gate 4 (required-aspect
+// satisfiability) ships in warn-only mode for the first two weeks. Set to
+// "true" only once corpus data shows no false-positive pattern (Phase 6).
+const GATE4_ENFORCE = (Deno.env.get("CATEGORY_GATE4_ENFORCE") || "").toLowerCase() === "true";
+// A cache row this old is treated as possibly-stale and revalidated live
+// against eBay's getCategorySubtree before being trusted for gate 1/2
+// (plan §2.3: "cache-first fast path, live API fallback if cache row
+// missing/>7 days old").
+const CACHE_STALE_DAYS = 7;
+// Minimum meaningful-token overlap for a DB "fuzzy" row to even be gathered
+// as a candidate at all. This is a hard filter on candidate GATHERING, not
+// a score weight — it never survives into the winner-selection logic below,
+// which is pure precedence (resolverCore.ts).
+const FUZZY_MIN_TOKEN_OVERLAP = 2;
 
-// Terms that are ALWAYS generic regardless of domain (EA-P1-C)
-const ALWAYS_GENERIC_TERMS = new Set([
-  "item",
-  "items",
-  "thing",
-  "stuff",
-  "misc",
-  "miscellaneous",
-  "other",
-  "general",
-  "various",
-  "mixed",
-  "piece",
-  "pieces",
-]);
-
-// Domain-specific terms: generic OUTSIDE their domain, meaningful INSIDE it (EA-P1-C)
-// Key = the potentially-generic word; Value = domain keywords that make it meaningful
-const DOMAIN_SPECIFIC_TERMS: Record<string, string[]> = {
-  card: [
-    "pokemon",
-    "trading",
-    "baseball",
-    "football",
-    "basketball",
-    "hockey",
-    "tcg",
-    "mtg",
-    "yugioh",
-    "magic",
-    "topps",
-    "panini",
-    "bowman",
-    "fleer",
-    "donruss",
-    "upperdeck",
-    "sport",
-    "sports",
-  ],
-  cards: [
-    "pokemon",
-    "trading",
-    "baseball",
-    "football",
-    "basketball",
-    "hockey",
-    "tcg",
-    "mtg",
-    "yugioh",
-    "magic",
-    "sport",
-    "sports",
-  ],
-  trading: ["card", "cards", "pokemon", "tcg", "mtg"],
-  collectible: [
-    "beanie",
-    "funko",
-    "pop",
-    "figurine",
-    "plush",
-    "vintage",
-    "antique",
-    "memorabilia",
-    "figure",
-    "action",
-  ],
-  collectibles: [
-    "beanie",
-    "funko",
-    "pop",
-    "figurine",
-    "plush",
-    "vintage",
-    "antique",
-    "memorabilia",
-    "figure",
-    "action",
-  ],
-  toy: [
-    "beanie",
-    "baby",
-    "plush",
-    "action",
-    "figure",
-    "lego",
-    "barbie",
-    "hotwheels",
-    "hot",
-    "wheels",
-  ],
-  toys: ["beanie", "baby", "plush", "action", "figure", "lego"],
-  coin: [
-    "penny",
-    "nickel",
-    "dime",
-    "quarter",
-    "dollar",
-    "eagle",
-    "morgan",
-    "kennedy",
-    "lincoln",
-    "buffalo",
-    "walking",
-    "silver",
-    "gold",
-    "platinum",
-    "proof",
-    "bullion",
-  ],
-  coins: [
-    "penny",
-    "nickel",
-    "dime",
-    "quarter",
-    "dollar",
-    "eagle",
-    "morgan",
-    "kennedy",
-    "lincoln",
-    "buffalo",
-    "silver",
-    "gold",
-  ],
-  lot: ["coin", "coins", "card", "cards"],
-  set: ["coin", "coins", "proof", "mint", "card", "cards", "lego"],
-  collection: ["coin", "coins", "card", "cards"],
-  vintage: ["coin", "coins", "toy", "toys", "card", "cards"],
-  antique: ["coin", "coins", "toy", "toys"],
-  rare: ["coin", "coins", "card", "cards", "pokemon"],
-};
+// NOTE (CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md §2.2 "What gets
+// deleted"): ALWAYS_GENERIC_TERMS, DOMAIN_SPECIFIC_TERMS, isGenericItemType(),
+// computeEffectiveScore(), and every weight/penalty constant that fed the
+// old scored-ranking system have all been removed. The new resolver is
+// filter-then-rank (hard gates + precedence, no arithmetic) — see
+// resolverCore.ts for the replacement logic. Check git history on this file
+// if any of that scoring code is ever needed for reference.
 
 // Stopwords removed during normalization (#6) — true English stopwords ONLY (EA-P2-D)
 // NOTE: Do NOT add domain-relevant terms here (baby, new, set, mint, lot, rare, etc.)
@@ -265,20 +154,6 @@ interface AspectInfo {
   values: string[];
 }
 
-interface LookupCandidate {
-  categoryId: string;
-  categoryName: string;
-  breadcrumb: string;
-  source: string; // db_exact, db_fuzzy, ebay_api, gemini
-  rawScore: number; // Raw confidence/score from source
-  effectiveScore: number; // Computed score after weighting
-  reason: string; // Why this score
-  verifiedLeaf: boolean | null;
-  verifiedActive: boolean | null;
-  tokenOverlap: number; // For fuzzy: how many meaningful tokens matched
-  rank: number; // Rank within source
-}
-
 interface AuditEntry {
   request_id: string;
   query_text: string;
@@ -332,93 +207,14 @@ function meaningfulTokens(input: string): string[] {
 }
 
 // ── Helper: Compute token overlap between query and candidate ────────────────
+// Used only as a candidate-gathering filter for DB fuzzy rows (is this row
+// even plausibly related to the query text?), never as a score input.
 function computeTokenOverlap(
   queryTokens: string[],
   candidateText: string,
 ): number {
   const candidateTokens = new Set(meaningfulTokens(candidateText));
   return queryTokens.filter((t) => candidateTokens.has(t)).length;
-}
-
-// ── Helper: Check if item_type is too generic (#1) ───────────────────────────
-// Context-aware generic check (EA-P1-C):
-// A term is only generic if the query is outside its domain.
-function isGenericItemType(
-  candidateText: string,
-  queryTokens: string[] = [],
-): boolean {
-  const tokens = meaningfulTokens(candidateText);
-  if (tokens.length === 0) return true;
-
-  const queryLower = queryTokens.map((t) => t.toLowerCase());
-
-  const isTokenGeneric = (t: string): boolean => {
-    if (ALWAYS_GENERIC_TERMS.has(t)) return true;
-    // Domain-specific: generic only if query is NOT in that domain
-    const domainKeywords = DOMAIN_SPECIFIC_TERMS[t];
-    if (domainKeywords) {
-      const queryInDomain = queryLower.some((q) => domainKeywords.includes(q));
-      return !queryInDomain; // Only generic when query is outside this domain
-    }
-    return false; // Unknown term = not generic
-  };
-
-  // Item type is "too generic" only if ALL meaningful tokens are generic
-  return tokens.every((t) => isTokenGeneric(t));
-}
-
-// ── Helper: Compute effective score with source weighting (#8) ───────────────
-function computeEffectiveScore(
-  source: string,
-  rawScore: number,
-  tokenOverlap: number,
-  totalQueryTokens: number,
-  isGeneric: boolean,
-  daysSinceUpdate: number,
-  verifiedLeaf: boolean | null = null, // EA-P2-C: non-leaf penalty
-): number {
-  // Source weight
-  const sourceWeights: Record<string, number> = {
-    db_exact_user_verified: 15,
-    db_exact_ebay_api: 10,
-    db_exact: 8,
-    ebay_api: 12,
-    db_fuzzy: 3,
-    gemini: 5,
-  };
-  const sourceWeight = sourceWeights[source] || 0;
-
-  // Similarity bonus (token overlap as % of query tokens)
-  const similarityBonus = totalQueryTokens > 0 ? (tokenOverlap / totalQueryTokens) * 15 : 0;
-
-  // Recency bonus (decays over time for non-verified sources)
-  let recencyBonus = 0;
-  if (source.startsWith("db_")) {
-    recencyBonus = Math.max(0, 5 - daysSinceUpdate / 30); // Lose 1 point per month
-  }
-
-  // Generic penalty (#1)
-  const genericPenalty = isGeneric ? 20 : 0;
-
-  // Ambiguity penalty (low token overlap on fuzzy)
-  const ambiguityPenalty = source === "db_fuzzy" && tokenOverlap < FUZZY_MIN_TOKEN_OVERLAP ? 15 : 0;
-
-  // Non-leaf penalty (EA-P2-C): parent categories should not reach lock threshold
-  const nonLeafPenalty = verifiedLeaf === false ? 30 : 0;
-
-  return Math.min(
-    100,
-    Math.max(
-      0,
-      rawScore +
-        sourceWeight +
-        similarityBonus +
-        recencyBonus -
-        genericPenalty -
-        ambiguityPenalty -
-        nonLeafPenalty,
-    ),
-  );
 }
 
 // ── Helper: Get eBay app token (client credentials) ──────────────────────────
@@ -1004,6 +800,267 @@ async function safePersistMapping(
   }
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Filter-then-rank gate helpers (CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md §2)
+//
+// These implement Layer 1's hard gates. All of the precedence/agreement
+// DECISION logic (Layer 2 + 3) lives in resolverCore.ts as a pure function —
+// everything here is I/O (Supabase cache lookups, eBay API calls) that
+// produces the GatedCandidate[] resolverCore.selectWinner() consumes.
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Gate 1 + 2: leaf existence + active status.
+ *
+ * Cache-first (plan §2.3): a fresh (<= CACHE_STALE_DAYS) row in
+ * ebay_taxonomy_cache is authoritative and costs zero API calls. Anything
+ * missing, or older than the staleness window, falls back to the live
+ * getCategorySubtree check (verifyCategoryLeafActive, kept unchanged from
+ * the pre-rewrite implementation).
+ */
+async function checkLeafActiveCacheFirst(
+  supabase: any,
+  categoryId: string,
+  ebayAuth: { token: string; base: string } | null,
+): Promise<
+  {
+    isLeaf: boolean;
+    isActive: boolean;
+    categoryName: string | null;
+    breadcrumb: string | null;
+    source: "cache" | "live" | "unknown";
+  }
+> {
+  try {
+    const { data: cacheRow } = await supabase
+      .from("ebay_taxonomy_cache")
+      .select("category_id, category_name, breadcrumb, is_leaf, synced_at")
+      .eq("category_id", categoryId)
+      .maybeSingle();
+
+    if (cacheRow) {
+      const ageDays = (Date.now() - new Date(cacheRow.synced_at).getTime()) /
+        (1000 * 60 * 60 * 24);
+      if (ageDays <= CACHE_STALE_DAYS) {
+        // Fresh cache row is authoritative either way — a confident "not a
+        // leaf" from a fresh sync is just as trustworthy as a confident
+        // "is a leaf", and saves an API call in both directions.
+        return {
+          isLeaf: cacheRow.is_leaf === true,
+          isActive: cacheRow.is_leaf === true, // presence in the cache implies active
+          categoryName: cacheRow.category_name ?? null,
+          breadcrumb: cacheRow.breadcrumb ?? null,
+          source: "cache",
+        };
+      }
+    }
+  } catch (err) {
+    console.warn(
+      `category-lookup: ebay_taxonomy_cache lookup failed for ${categoryId} — falling back to live check`,
+      err,
+    );
+  }
+
+  if (!ebayAuth) {
+    return { isLeaf: false, isActive: false, categoryName: null, breadcrumb: null, source: "unknown" };
+  }
+
+  const live = await verifyCategoryLeafActive(categoryId, ebayAuth.token, ebayAuth.base);
+  return {
+    isLeaf: live.isLeaf,
+    isActive: live.isActive,
+    categoryName: live.categoryName,
+    breadcrumb: null,
+    source: "live",
+  };
+}
+
+/** Cache of categoryId -> accepted conditionIds (null = unknown), scoped to this module. */
+const _categoryConditionCache: Map<string, string[] | null> = new Map();
+
+/**
+ * Gate 3: does this category accept the item's condition?
+ *
+ * Mirrors ebay-publish/publish-helpers.ts's categoryAcceptsCondition() —
+ * duplicated rather than imported because Supabase edge functions cannot
+ * import across function directories (each is deployed independently; see
+ * CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md discussion of this
+ * constraint). Reuses the app token already obtained via getEbayAppToken()
+ * instead of re-authenticating with clientId/clientSecret.
+ */
+async function fetchCategoryConditionIds(
+  categoryId: string,
+  ebayAuth: { token: string; base: string },
+): Promise<string[] | null> {
+  const cacheKey = `${ebayAuth.base}:${categoryId}`;
+  const cached = _categoryConditionCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  try {
+    const filterParam = encodeURIComponent(`categoryIds:{${categoryId}}`);
+    const url =
+      `${ebayAuth.base}/sell/metadata/v1/marketplace/${MARKETPLACE_ID}/get_item_condition_policies?filter=${filterParam}`;
+    const resp = await fetch(url, {
+      headers: { Authorization: `Bearer ${ebayAuth.token}`, Accept: "application/json" },
+    });
+    if (!resp.ok) {
+      _categoryConditionCache.set(cacheKey, null);
+      return null;
+    }
+    const text = await resp.text();
+    if (!text || text.trim() === "") {
+      _categoryConditionCache.set(cacheKey, null);
+      return null;
+    }
+    const data = JSON.parse(text);
+    const policies = data?.itemConditionPolicies;
+    if (!Array.isArray(policies) || policies.length === 0) {
+      _categoryConditionCache.set(cacheKey, null);
+      return null;
+    }
+    const policy = policies.find((p: any) => p?.categoryId === categoryId) ?? policies[0];
+    const ids = (policy?.itemConditions || [])
+      .map((c: any) => String(c?.conditionId ?? "").trim())
+      .filter((id: string) => id.length > 0);
+    const result = ids.length > 0 ? ids : null;
+    _categoryConditionCache.set(cacheKey, result);
+    return result;
+  } catch (err) {
+    console.warn(`category-lookup: fetchCategoryConditionIds(${categoryId}) exception`, err);
+    _categoryConditionCache.set(cacheKey, null);
+    return null;
+  }
+}
+
+/**
+ * Gate 3 wrapper: returns false only when we POSITIVELY know the category
+ * rejects this condition. null/true both mean "don't drop" — per the same
+ * fail-safe contract as categoryAcceptsCondition() in ebay-publish.
+ *
+ * DESIGN NOTE (resolves an open question from the Phase 4 plan): the
+ * `lookup` action's caller (analyze-item, Pass 1) does not yet have a
+ * condition determined at pre-lookup time — condition is only known later
+ * in analyze-item's own pipeline. Rather than block gate 3 entirely on that
+ * gap, this gate is made payload-optional: it activates ONLY when a caller
+ * supplies `conditionId` in the lookup request. When omitted, gate 3 is a
+ * no-op here and the existing downstream ebay-publish condition-reroute
+ * logic (categoryAcceptsCondition + GRADED_UNFRIENDLY_WORLD_PARENTS) remains
+ * the second line of defense at publish time, as it does today.
+ */
+async function checkConditionGate(
+  categoryId: string,
+  conditionId: string | null,
+  ebayAuth: { token: string; base: string } | null,
+): Promise<boolean | null> {
+  if (!conditionId || !ebayAuth) return null; // gate not applicable — don't drop
+  const acceptedIds = await fetchCategoryConditionIds(categoryId, ebayAuth);
+  if (acceptedIds === null) return null; // unknown — don't drop
+  return acceptedIds.includes(String(conditionId));
+}
+
+/**
+ * Gate 4 (warn-only unless CATEGORY_GATE4_ENFORCE=true): required-aspect
+ * satisfiability (plan §2.4). Deliberately conservative for v1 — only
+ * REQUIRED aspects are checked, and the bar is "do we have a plausible
+ * token from the query text that could satisfy this aspect," not an exact
+ * value match. Returns a list of warning strings; empty = no concerns.
+ */
+async function checkAspectSatisfiability(
+  categoryId: string,
+  ebayAuth: { token: string; base: string } | null,
+  knownTokens: string[],
+): Promise<string[]> {
+  if (!ebayAuth) return [];
+  try {
+    const aspects = await fetchItemAspects(categoryId, ebayAuth.token, ebayAuth.base);
+    const requiredAspects = aspects.filter((a) => a.required);
+    const warnings: string[] = [];
+
+    for (const aspect of requiredAspects) {
+      const aspectNameTokens = meaningfulTokens(aspect.name);
+      const hasNameOverlap = aspectNameTokens.some((t) => knownTokens.includes(t));
+      const hasValueOverlap = aspect.values.some((v) => knownTokens.includes(v.toLowerCase()));
+      if (!hasNameOverlap && !hasValueOverlap) {
+        warnings.push(
+          `Required aspect "${aspect.name}" has no plausible value in the known item data`,
+        );
+      }
+    }
+    return warnings;
+  } catch (err) {
+    console.warn(`category-lookup: checkAspectSatisfiability(${categoryId}) exception`, err);
+    return [];
+  }
+}
+
+/** A candidate as gathered, before Layer 1 gating is applied. */
+interface RawCandidate {
+  categoryId: string;
+  categoryName: string;
+  breadcrumb: string;
+  source: CandidateSource;
+  rank: number;
+  reason: string;
+}
+
+/**
+ * Runs a single gathered candidate through all Layer-1 hard gates and
+ * returns the GatedCandidate resolverCore.selectWinner() expects. ANY gate
+ * failure marks `survived: false` with a `dropReason` — gate 4 is the sole
+ * exception, which only drops when GATE4_ENFORCE is explicitly turned on.
+ */
+async function gateCandidate(
+  raw: RawCandidate,
+  supabase: any,
+  ebayAuth: { token: string; base: string } | null,
+  conditionId: string | null,
+  knownTokens: string[],
+): Promise<GatedCandidate> {
+  let categoryName = raw.categoryName;
+  let breadcrumb = raw.breadcrumb;
+  let dropReason: string | null = null;
+
+  // Gates 1 + 2: leaf existence + active status
+  const leafActive = await checkLeafActiveCacheFirst(supabase, raw.categoryId, ebayAuth);
+  if (leafActive.categoryName) categoryName = leafActive.categoryName;
+  if (leafActive.breadcrumb) breadcrumb = leafActive.breadcrumb;
+
+  if (!leafActive.isLeaf) {
+    dropReason = `Gate 1 failed: category ${raw.categoryId} is not a confirmed leaf (checked via ${leafActive.source})`;
+  } else if (!leafActive.isActive) {
+    dropReason = `Gate 2 failed: category ${raw.categoryId} is not confirmed active (checked via ${leafActive.source})`;
+  }
+
+  // Gate 3: condition acceptance (only enforced when a conditionId was supplied)
+  if (!dropReason && conditionId) {
+    const accepts = await checkConditionGate(raw.categoryId, conditionId, ebayAuth);
+    if (accepts === false) {
+      dropReason = `Gate 3 failed: category ${raw.categoryId} does not accept condition ${conditionId}`;
+    }
+  }
+
+  // Gate 4: required-aspect satisfiability (warn-only unless GATE4_ENFORCE)
+  let gate4Warnings: string[] = [];
+  if (!dropReason) {
+    gate4Warnings = await checkAspectSatisfiability(raw.categoryId, ebayAuth, knownTokens);
+    if (GATE4_ENFORCE && gate4Warnings.length > 0) {
+      dropReason = `Gate 4 failed (enforced): ${gate4Warnings.join("; ")}`;
+    }
+  }
+
+  return {
+    categoryId: raw.categoryId,
+    categoryName,
+    breadcrumb,
+    source: raw.source,
+    rank: raw.rank,
+    survived: dropReason === null,
+    dropReason,
+    gate4Warnings,
+    reason: raw.reason,
+  };
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN REQUEST HANDLER
 // ════════════════════════════════════════════════════════════════════════════
@@ -1038,26 +1095,30 @@ export async function handleRequest(req: Request): Promise<Response> {
       categoryId,
       categoryName,
       verificationSource,
+      conditionId,
     } = payload;
 
     const rawItemType = itemType || coinType || "";
     const normalizedKey = normalizeItemType(rawItemType);
     const queryTokens = meaningfulTokens(rawItemType);
 
-    // ══════════════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════════════
     // ACTION: lookup
-    // ══════════════════════════════════════════════════════════════════════
-    // Ranked candidate system with deterministic precedence (#1, #3):
-    //   1. DB exact (approved, user_verified) — highest trust
-    //   2. DB exact (approved, other sources) — high trust
-    //   3. eBay getCategorySuggestions — verified leaf from official API
-    //   4. DB fuzzy (approved, gated) — only if passes similarity threshold
-    //   5. Gemini AI — last resort
+    // ════════════════════════════════════════════════════════════════════
+    // Filter-then-rank resolver (CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md
+    // §2). No score, no arithmetic:
     //
-    // Winner selection: highest effective_score among verified candidates.
-    // If top eBay candidate >= DETERMINISTIC_LOCK_THRESHOLD, lock it (#3).
-    // All candidates logged to lookup_decisions table (#0).
-    // ══════════════════════════════════════════════════════════════════════
+    //   1. Gather candidates from user_verified DB row, db_exact DB row,
+    //      eBay getCategorySuggestions, DB fuzzy, and Gemini fallback.
+    //   2. Run every candidate through Layer-1 hard gates (leaf, active,
+    //      condition, aspect satisfiability) — gateCandidate().
+    //   3. Hand the gated list to resolverCore.selectWinner() for Layer 2
+    //      (precedence) + Layer 3 (agreement check). NEEDS_CONFIRMATION is
+    //      a first-class outcome, never silently resolved.
+    //
+    // All candidates (survivors and drops alike) are logged to
+    // lookup_decisions for audit/debugging.
+    // ════════════════════════════════════════════════════════════════════
 
     if (action === "lookup") {
       if (!normalizedKey) {
@@ -1068,526 +1129,239 @@ export async function handleRequest(req: Request): Promise<Response> {
       }
 
       const requestId = generateRequestId();
-      const allCandidates: LookupCandidate[] = [];
-      const auditEntries: AuditEntry[] = [];
-      let ebayAuth: { token: string; base: string } | null = null;
+      const rawCandidates: RawCandidate[] = [];
+      const conditionIdStr = conditionId != null ? String(conditionId) : null;
 
-      // ── Tier 1: DB exact match (approved only) (#2) ──────────────────
-      const dbExactStart = Date.now();
-      // EA-P2-B: Also match on item_type_normalized for order-insensitive exact matches
+      const ebayAuth = await getEbayAppToken();
+
+      // ── Gather: user_verified / db_exact DB row(s) ─────────────────────
       const deepNormalizedKey = deepNormalize(normalizedKey);
+      const dbStart = Date.now();
       const { data: exactRows } = await supabase
         .from("category_mappings")
         .select(
-          "ebay_category_id, category_name, confidence, verification_source, item_type, coin_type, breadcrumb, effective_score, updated_at, status",
+          "ebay_category_id, category_name, confidence, verification_source, item_type, coin_type, breadcrumb, updated_at, status",
         )
         .or(
           `item_type.eq.${normalizedKey},coin_type.eq.${normalizedKey},item_type_normalized.eq.${deepNormalizedKey}`,
         )
         .eq("status", "approved")
-        .order("effective_score", { ascending: false })
+        .order("updated_at", { ascending: false })
         .limit(3);
-
-      const dbExactLatency = Date.now() - dbExactStart;
+      const dbLatency = Date.now() - dbStart;
 
       if (exactRows && exactRows.length > 0) {
         for (let i = 0; i < exactRows.length; i++) {
           const row = exactRows[i];
-          const daysSinceUpdate = (Date.now() - new Date(row.updated_at).getTime()) /
-            (1000 * 60 * 60 * 24);
-          const sourceKey = row.verification_source === "user_verified"
-            ? "db_exact_user_verified"
-            : row.verification_source === "ebay_api"
-            ? "db_exact_ebay_api"
-            : "db_exact";
-
-          const effectiveScore = computeEffectiveScore(
-            sourceKey,
-            row.confidence ?? 80,
-            queryTokens.length, // exact match = full overlap
-            queryTokens.length,
-            false, // exact match is never generic
-            daysSinceUpdate,
-          );
-
-          allCandidates.push({
+          const source: CandidateSource = row.verification_source === "user_verified" ? "user_verified" : "db_exact";
+          rawCandidates.push({
             categoryId: row.ebay_category_id,
             categoryName: row.category_name,
             breadcrumb: row.breadcrumb || row.category_name,
-            source: sourceKey,
-            rawScore: row.confidence ?? 80,
-            effectiveScore,
-            reason: `DB exact match (${row.verification_source}, confidence=${row.confidence})`,
-            verifiedLeaf: null, // Not re-verified for DB exact
-            verifiedActive: null,
-            tokenOverlap: queryTokens.length,
+            source,
             rank: i + 1,
+            reason: `DB exact match (${row.verification_source}, confidence=${row.confidence})`,
           });
         }
       }
 
-      // ── Tier 2: eBay getCategorySuggestions (always run for comparison) ─
+      // ── Gather: eBay getCategorySuggestions ────────────────────────────
       const ebayStart = Date.now();
-      ebayAuth = await getEbayAppToken();
       let ebaySuggestions: CategorySuggestion[] = [];
-
       if (ebayAuth) {
         ebaySuggestions = await fetchCategorySuggestions(
           rawItemType,
           ebayAuth.token,
           ebayAuth.base,
         );
-
         for (let i = 0; i < Math.min(ebaySuggestions.length, 5); i++) {
           const s = ebaySuggestions[i];
-          const tokenOverlap = computeTokenOverlap(
-            queryTokens,
-            `${s.categoryName} ${s.breadcrumb}`,
-          );
-
-          // EA-P2-C: Lower raw scores to leave room for penalties (was 90-3*i)
-          const rawScore = 80 - i * 4; // 80, 76, 72, 68, 64 for ranks 1-5
-
-          // Verify leaf status for top candidate (#4) — needed BEFORE scoring for penalty
-          let verifiedLeaf: boolean | null = null;
-          let verifiedActive: boolean | null = null;
-          if (i === 0 && ebayAuth) {
-            const verification = await verifyCategoryLeafActive(
-              s.categoryId,
-              ebayAuth.token,
-              ebayAuth.base,
-            );
-            verifiedLeaf = verification.isLeaf;
-            verifiedActive = verification.isActive;
-          }
-
-          // EA-P2-C: Pass verifiedLeaf so non-leaf penalty is applied BEFORE lock check
-          const effectiveScore = computeEffectiveScore(
-            "ebay_api",
-            rawScore,
-            tokenOverlap,
-            queryTokens.length,
-            false, // eBay results are never generic
-            0, // Fresh from API
-            verifiedLeaf, // EA-P2-C: non-leaf penalty in scoring
-          );
-
-          allCandidates.push({
+          rawCandidates.push({
             categoryId: s.categoryId,
             categoryName: s.categoryName,
             breadcrumb: s.breadcrumb,
             source: "ebay_api",
-            rawScore,
-            effectiveScore,
-            reason: `eBay getCategorySuggestions rank #${i + 1}`,
-            verifiedLeaf,
-            verifiedActive,
-            tokenOverlap,
             rank: i + 1,
+            reason: `eBay getCategorySuggestions rank #${i + 1}`,
           });
         }
       }
       const ebayLatency = Date.now() - ebayStart;
 
-      // ── Tier 3: DB fuzzy match (approved only, gated) (#1) ───────────
+      // ── Gather: DB fuzzy match (candidate-gathering filter only — no score) ──
       const dbFuzzyStart = Date.now();
       const keywords = normalizedKey
         .split(" ")
         .filter((w) => w.length > 3 && !STOPWORDS.has(w));
       let fuzzyMatches: any[] = [];
-
       for (const kw of keywords.slice(0, 3)) {
         const { data: fuzzy } = await supabase
           .from("category_mappings")
           .select(
-            "ebay_category_id, category_name, confidence, verification_source, item_type, coin_type, breadcrumb, effective_score, updated_at, status",
+            "ebay_category_id, category_name, confidence, verification_source, item_type, coin_type, breadcrumb, updated_at, status",
           )
           .eq("status", "approved")
           .or(`item_type.ilike.%${kw}%,coin_type.ilike.%${kw}%`)
-          .order("effective_score", { ascending: false })
+          .order("updated_at", { ascending: false })
           .limit(3);
-
-        if (fuzzy && fuzzy.length > 0) {
-          fuzzyMatches.push(...fuzzy);
-        }
+        if (fuzzy && fuzzy.length > 0) fuzzyMatches.push(...fuzzy);
       }
-
-      // Deduplicate fuzzy matches by category ID
       const seenFuzzy = new Set<string>();
       fuzzyMatches = fuzzyMatches.filter((f) => {
         if (seenFuzzy.has(f.ebay_category_id)) return false;
         seenFuzzy.add(f.ebay_category_id);
         return true;
       });
-
       const dbFuzzyLatency = Date.now() - dbFuzzyStart;
 
-      for (let i = 0; i < Math.min(fuzzyMatches.length, 3); i++) {
-        const row = fuzzyMatches[i];
+      let fuzzyRank = 1;
+      for (const row of fuzzyMatches.slice(0, 5)) {
         const candidateText = row.item_type || row.coin_type || "";
         const tokenOverlap = computeTokenOverlap(queryTokens, candidateText);
-        const daysSinceUpdate = (Date.now() - new Date(row.updated_at).getTime()) /
-          (1000 * 60 * 60 * 24);
-        const isGeneric = isGenericItemType(candidateText, queryTokens); // EA-P1-C: context-aware
-
-        // Apply fuzzy gates (#1)
-        if (tokenOverlap < FUZZY_MIN_TOKEN_OVERLAP) {
-          console.log(
-            `category-lookup: fuzzy candidate "${candidateText}" rejected — token overlap ${tokenOverlap} < ${FUZZY_MIN_TOKEN_OVERLAP}`,
-          );
-          continue;
-        }
-
-        const effectiveScore = computeEffectiveScore(
-          "db_fuzzy",
-          row.confidence ?? 70,
-          tokenOverlap,
-          queryTokens.length,
-          isGeneric,
-          daysSinceUpdate,
-        );
-
-        // Skip if score too low after penalties
-        if (effectiveScore < FUZZY_MIN_SIMILARITY * 100) {
-          console.log(
-            `category-lookup: fuzzy candidate "${candidateText}" rejected — effective score ${
-              effectiveScore.toFixed(
-                1,
-              )
-            } < ${FUZZY_MIN_SIMILARITY * 100}`,
-          );
-          continue;
-        }
-
-        allCandidates.push({
+        if (tokenOverlap < FUZZY_MIN_TOKEN_OVERLAP) continue; // not even plausibly related
+        rawCandidates.push({
           categoryId: row.ebay_category_id,
           categoryName: row.category_name,
           breadcrumb: row.breadcrumb || row.category_name,
           source: "db_fuzzy",
-          rawScore: row.confidence ?? 70,
-          effectiveScore,
-          reason: `DB fuzzy match "${candidateText}" (overlap=${tokenOverlap}, generic=${isGeneric}, days=${
-            Math.round(
-              daysSinceUpdate,
-            )
-          })`,
-          verifiedLeaf: null,
-          verifiedActive: null,
-          tokenOverlap,
-          rank: i + 1,
+          rank: fuzzyRank++,
+          reason: `DB fuzzy match "${candidateText}" (token overlap=${tokenOverlap})`,
         });
+        if (fuzzyRank > 3) break;
       }
 
-      // ── Tier 4: Gemini fallback (only if no good candidates) ─────────
+      // ── Gather: Gemini fallback (only when nothing else was found) ─────
       let geminiLatency = 0;
-      const bestSoFar = allCandidates.reduce(
-        (best, c) => c.effectiveScore > (best?.effectiveScore ?? 0) ? c : best,
-        null as LookupCandidate | null,
-      );
-
-      if (!bestSoFar || bestSoFar.effectiveScore < 70) {
+      if (rawCandidates.length === 0) {
         const geminiStart = Date.now();
         const geminiResult = await askGeminiForCategory(rawItemType);
         geminiLatency = Date.now() - geminiStart;
-
         if (geminiResult) {
-          // EA-P1-B: Verify Gemini's suggestion — LLMs hallucinate category IDs
-          let geminiVerifiedLeaf: boolean | null = null;
-          let geminiVerifiedActive: boolean | null = null;
-
-          if (ebayAuth) {
-            const geminiVerification = await verifyCategoryLeafActive(
-              geminiResult.categoryId,
-              ebayAuth.token,
-              ebayAuth.base,
-            );
-            geminiVerifiedLeaf = geminiVerification.isLeaf;
-            geminiVerifiedActive = geminiVerification.isActive;
-
-            if (!geminiVerification.isLeaf || !geminiVerification.isActive) {
-              console.warn(
-                `category-lookup: Gemini suggested category ${geminiResult.categoryId} ` +
-                  `(${geminiResult.categoryName}) is NOT a valid leaf/active category — discarding`,
-              );
-              // Do NOT add invalid Gemini suggestions to candidates
-            } else {
-              const effectiveScore = computeEffectiveScore(
-                "gemini",
-                geminiResult.confidence,
-                0,
-                0,
-                false,
-                0,
-                geminiVerifiedLeaf,
-              );
-              allCandidates.push({
-                categoryId: geminiResult.categoryId,
-                categoryName: geminiResult.categoryName,
-                breadcrumb: geminiResult.categoryName,
-                source: "gemini",
-                rawScore: geminiResult.confidence,
-                effectiveScore,
-                reason: `Gemini AI suggestion (self-reported confidence=${geminiResult.confidence}, verified leaf)`,
-                verifiedLeaf: geminiVerifiedLeaf,
-                verifiedActive: geminiVerifiedActive,
-                tokenOverlap: 0,
-                rank: 1,
-              });
-            }
-          } else {
-            // No eBay auth — add with null verification (lower trust, will not reach lock threshold)
-            const effectiveScore = computeEffectiveScore(
-              "gemini",
-              geminiResult.confidence,
-              0,
-              0,
-              false,
-              0,
-              null,
-            );
-            allCandidates.push({
-              categoryId: geminiResult.categoryId,
-              categoryName: geminiResult.categoryName,
-              breadcrumb: geminiResult.categoryName,
-              source: "gemini",
-              rawScore: geminiResult.confidence,
-              effectiveScore,
-              reason:
-                `Gemini AI suggestion (self-reported confidence=${geminiResult.confidence}, unverified — no eBay auth)`,
-              verifiedLeaf: null,
-              verifiedActive: null,
-              tokenOverlap: 0,
-              rank: 1,
-            });
-          }
+          rawCandidates.push({
+            categoryId: geminiResult.categoryId,
+            categoryName: geminiResult.categoryName,
+            breadcrumb: geminiResult.categoryName,
+            source: "gemini",
+            rank: 1,
+            reason:
+              `Gemini AI suggestion (self-reported confidence=${geminiResult.confidence}) — never an oracle, agreement-check participant only`,
+          });
         }
       }
 
-      // ── Winner selection ─────────────────────────────────────────────
-      // Sort all candidates by effective score descending
-      allCandidates.sort((a, b) => b.effectiveScore - a.effectiveScore);
-
-      // Check for deterministic lock (#3): if top eBay candidate is strong enough, lock it
-      const topEbay = allCandidates.find(
-        (c) => c.source === "ebay_api" && c.rank === 1,
-      );
-      let winner: LookupCandidate | null = null;
-      let lockReason = "";
-
-      // ── Human corrections outrank the eBay suggestion ────────────────────
-      // eBay's own docs state category suggestions are "partially determined
-      // by live inventory data" and "should be treated as recommendations
-      // rather than authoritative classifications". A mapping a human
-      // explicitly verified is stronger evidence than a popularity signal.
-      //
-      // This ALSO fixes a scoring bug: an eBay rank-1 candidate scores
-      // rawScore(80) + sourceWeight(12) = 92 at minimum, which exactly equals
-      // DETERMINISTIC_LOCK_THRESHOLD. The lock therefore fired on EVERY
-      // lookup where eBay returned anything, and because the lock was
-      // evaluated before the sorted-candidate loop, a user_verified mapping
-      // (which can score up to 100) could never win. User corrections were
-      // silently discarded on the next lookup.
-      const userVerified = allCandidates.find(
-        (c) => c.source === "db_exact_user_verified" && c.verifiedLeaf !== false,
+      // ── Layer 1: run every gathered candidate through the hard gates ───
+      const gatedCandidates: GatedCandidate[] = await Promise.all(
+        rawCandidates.map((c) => gateCandidate(c, supabase, ebayAuth, conditionIdStr, queryTokens)),
       );
 
-      if (userVerified) {
-        winner = userVerified;
-        lockReason = `User-verified mapping (score ${
-          userVerified.effectiveScore.toFixed(
-            1,
-          )
-        }) — human correction outranks eBay suggestion`;
-      } else if (
-        topEbay &&
-        topEbay.effectiveScore >= DETERMINISTIC_LOCK_THRESHOLD &&
-        // Require a POSITIVE leaf confirmation. Previously this was
-        // `!== false`, so `null` (verification request failed / timed out)
-        // also locked — meaning a transient network error could pin an
-        // unverified, possibly non-leaf category.
-        topEbay.verifiedLeaf === true
-      ) {
-        winner = topEbay;
-        lockReason = `Deterministic lock: eBay top-1 score ${
-          topEbay.effectiveScore.toFixed(
-            1,
-          )
-        } >= ${DETERMINISTIC_LOCK_THRESHOLD} (leaf verified)`;
-      } else {
-        // Take highest effective score, preferring verified leaf.
-        //
-        // Ranks #2..#5 are not leaf-verified up front (that would cost an
-        // extra API call per lookup on the happy path). Instead we verify
-        // LAZILY here: only the candidates we actually consider promoting
-        // get checked, so the common case still costs exactly one
-        // verification call.
-        for (const c of allCandidates) {
-          if (c.verifiedLeaf === false) continue; // Skip known non-leaf (#4)
+      // ── Layer 2 + 3: precedence + agreement check (resolverCore.ts) ─────
+      const result = selectWinner(gatedCandidates);
 
-          if (c.source === "ebay_api" && c.verifiedLeaf === null && ebayAuth) {
-            const lazyVerification = await verifyCategoryLeafActive(
-              c.categoryId,
-              ebayAuth.token,
-              ebayAuth.base,
-            );
-            c.verifiedLeaf = lazyVerification.isLeaf;
-            c.verifiedActive = lazyVerification.isActive;
-            if (lazyVerification.isLeaf === false) {
-              console.log(
-                `category-lookup: lazy leaf check rejected eBay rank #${c.rank} (${c.categoryId}) — not a leaf`,
-              );
-              continue;
-            }
-          }
+      // ── Audit logging (#0, #9) ──────────────────────────────────────────
+      const auditEntries: AuditEntry[] = gatedCandidates.map((c) => ({
+        request_id: requestId,
+        query_text: rawItemType,
+        candidate_source: c.source,
+        candidate_id: c.categoryId,
+        candidate_name: c.categoryName,
+        candidate_score: 0, // no score in the filter-then-rank model
+        candidate_rank: c.rank,
+        was_selected: result.winner !== null &&
+          c.categoryId === result.winner.categoryId &&
+          c.source === result.winner.source,
+        reason_selected: c === result.winner ? result.lockReason : (c.dropReason ?? c.reason),
+        verified_leaf: c.survived ? true : (c.dropReason?.startsWith("Gate 1") ? false : null),
+        verified_active: c.survived ? true : (c.dropReason?.startsWith("Gate 2") ? false : null),
+        persisted_to_db: false,
+        latency_ms: c.source === "user_verified" || c.source === "db_exact"
+          ? dbLatency
+          : c.source === "ebay_api"
+          ? ebayLatency
+          : c.source === "db_fuzzy"
+          ? dbFuzzyLatency
+          : geminiLatency,
+      }));
 
-          winner = c;
-          lockReason = `Highest effective score: ${c.effectiveScore.toFixed(1)} from ${c.source}`;
-          break;
-        }
-        // ── No verified leaf among any candidate ──────────────────────────
-        // Previously this fell back to `allCandidates[0]` — the single
-        // highest-scoring candidate REGARDLESS of leaf status. That is what
-        // shipped the 1893 Columbian Half Dollar to category 99 ("Everything
-        // Else" rollup): every candidate had failed leaf verification, so the
-        // fallback blindly took rank #1 anyway. A wrong-but-not-rejected
-        // category like that can accept nearly any listing without erroring,
-        // so the mistake was never caught by any downstream check.
-        //
-        // Ship nothing here instead: `winner` stays null, and the "no
-        // winner" branch below returns `found: false` with `topCandidates`
-        // so the caller (analyze-item) surfaces a confirm-your-category
-        // prompt to the seller rather than silently publishing a guess.
-        if (!winner && allCandidates.length > 0) {
-          lockReason = "NEEDS_CONFIRMATION: no candidate passed leaf verification — refusing to guess";
-          console.warn(
-            `category-lookup: ${lockReason} for "${normalizedKey}" — ` +
-              `top candidate was ${allCandidates[0].categoryId} (${allCandidates[0].categoryName}, ` +
-              `verifiedLeaf=${allCandidates[0].verifiedLeaf})`,
-          );
-        }
-      }
-
-      // ── Audit logging (#0, #9) ──────────────────────────────────────
-      for (const c of allCandidates) {
-        auditEntries.push({
-          request_id: requestId,
-          query_text: rawItemType,
-          candidate_source: c.source,
-          candidate_id: c.categoryId,
-          candidate_name: c.categoryName,
-          candidate_score: c.effectiveScore,
-          candidate_rank: c.rank,
-          was_selected: winner !== null &&
-            c.categoryId === winner.categoryId &&
-            c.source === winner.source,
-          reason_selected: c === winner ? lockReason : c.reason,
-          verified_leaf: c.verifiedLeaf,
-          verified_active: c.verifiedActive,
-          persisted_to_db: false,
-          latency_ms: c.source.startsWith("db_exact")
-            ? dbExactLatency
-            : c.source === "ebay_api"
-            ? ebayLatency
-            : c.source === "db_fuzzy"
-            ? dbFuzzyLatency
-            : geminiLatency,
-        });
-      }
-
-      // ── Auto-persist winner (#2 gates applied) ──────────────────────
+      // ── Auto-persist winner (only automated sources — never re-persist
+      //    a user_verified row back over itself) ──────────────────────────
       let persisted = false;
-      if (winner && winner.source === "ebay_api") {
+      if (result.winner && result.winner.source === "ebay_api") {
         persisted = await safePersistMapping(
           supabase,
           normalizedKey,
-          winner.categoryId,
-          winner.categoryName,
-          winner.breadcrumb,
+          result.winner.categoryId,
+          result.winner.categoryName,
+          result.winner.breadcrumb,
           "ebay_api",
-          winner.rawScore,
-          ebayAuth,
-        );
-      } else if (winner && winner.source === "gemini") {
-        persisted = await safePersistMapping(
-          supabase,
-          normalizedKey,
-          winner.categoryId,
-          winner.categoryName,
-          winner.breadcrumb,
-          "gemini_ai",
-          winner.rawScore,
+          AUTO_PERSIST_MIN_CONFIDENCE,
           ebayAuth,
         );
       }
-
-      // Update audit entries with persist status
-      if (persisted && winner) {
+      if (persisted) {
         const winnerAudit = auditEntries.find((a) => a.was_selected);
         if (winnerAudit) winnerAudit.persisted_to_db = true;
       }
 
-      // Persist audit (non-blocking)
       persistAuditEntries(supabase, auditEntries).catch((e) => console.warn("audit persist failed:", e));
 
-      // ── Build response ──────────────────────────────────────────────
-      if (winner) {
+      // ── Build response ──────────────────────────────────────────────────
+      // Field names are kept as close as possible to the pre-rewrite shape
+      // (found, categoryId, categoryName, breadcrumb, verifiedLeaf,
+      // needsConfirmation, topCandidates, alternatives, source) to minimize
+      // downstream breakage in analyze-item / the frontend. `effectiveScore`
+      // and `confidence` are retired — there is no score in this model.
+      if (result.winner) {
         return new Response(
           JSON.stringify({
             found: true,
             itemType: normalizedKey,
-            categoryId: winner.categoryId,
-            categoryName: winner.categoryName,
-            breadcrumb: winner.breadcrumb,
-            confidence: winner.rawScore,
-            effectiveScore: Math.round(winner.effectiveScore * 100) / 100,
-            verificationSource: winner.source.replace("db_exact_", ""),
-            source: winner.source,
-            reasonSelected: lockReason,
-            verifiedLeaf: winner.verifiedLeaf,
-            verifiedActive: winner.verifiedActive,
+            categoryId: result.winner.categoryId,
+            categoryName: result.winner.categoryName,
+            breadcrumb: result.winner.breadcrumb,
+            verificationSource: result.winner.source,
+            source: result.winner.source,
+            reasonSelected: result.lockReason,
+            verifiedLeaf: true,
+            verifiedActive: true,
+            agreementChecked: result.agreementChecked,
+            agreementSourcesMatched: result.agreementSourcesMatched,
+            subtreeSeparated: result.subtreeSeparated,
+            gate4Warnings: result.winner.gate4Warnings,
             persistedToDb: persisted,
-            requestId: requestId,
-            candidateCount: allCandidates.length,
-            alternatives: allCandidates
-              .filter((c) => c !== winner)
+            requestId,
+            candidateCount: gatedCandidates.length,
+            alternatives: gatedCandidates
+              .filter((c) => c !== result.winner)
               .slice(0, 3)
               .map((c) => ({
                 categoryId: c.categoryId,
                 categoryName: c.categoryName,
                 breadcrumb: c.breadcrumb,
                 source: c.source,
-                score: Math.round(c.effectiveScore * 100) / 100,
+                survived: c.survived,
               })),
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
-      // No winner — circuit breaker (#9)
-      //
-      // `needsConfirmation: true` makes this a first-class, explicitly-named
-      // outcome (NEEDS_CONFIRMATION) rather than just an absence of `found`,
-      // so callers can distinguish "nothing came back at all" from "multiple
-      // candidates existed but none passed leaf verification, so this needs
-      // a human". This is the outcome that replaces the old
-      // `winner = allCandidates[0]` fallback that shipped the Columbian Half
-      // Dollar to category 99.
+      // No winner — NEEDS_CONFIRMATION. Never silently resolved via
+      // allCandidates[0]; the caller must surface a confirm-your-category
+      // prompt with the top surviving/near-miss candidates.
       return new Response(
         JSON.stringify({
           found: false,
-          needsConfirmation: allCandidates.length > 0,
+          needsConfirmation: true,
           itemType: normalizedKey,
-          message: allCandidates.length > 0
-            ? "NEEDS_CONFIRMATION: candidates exist but none passed leaf verification — present top options to user"
-            : "No category passed confidence threshold — present top options to user",
-          requestId: requestId,
-          topCandidates: allCandidates.slice(0, 3).map((c) => ({
+          message: result.lockReason,
+          requestId,
+          topCandidates: gatedCandidates.slice(0, 5).map((c) => ({
             categoryId: c.categoryId,
             categoryName: c.categoryName,
             breadcrumb: c.breadcrumb,
             source: c.source,
-            score: Math.round(c.effectiveScore * 100) / 100,
-            verifiedLeaf: c.verifiedLeaf,
+            survived: c.survived,
+            dropReason: c.dropReason,
           })),
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
