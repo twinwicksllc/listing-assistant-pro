@@ -48,7 +48,12 @@ const _LEGACY_BOOTSTRAP_BREADCRUMBS: Record<string, string> = {
   "40155": "Coins & Paper Money > Coins: US > Pennies > Lincoln Wheat (1909-1958)",
   "40156": "Coins & Paper Money > Coins: US > Half Dollars > Kennedy (1964-Now)",
   "40157": "Coins & Paper Money > Coins: US > Half Dollars > Franklin (1948-1963)",
-  "39461": "Coins & Paper Money > Coins: US > Half Dollars > Commemorative",
+  "39461": "Coins & Paper Money > Coins: US > Quarters > Washington (1932-98)",
+  "179531": "Coins & Paper Money > Coins: US > Commemorative > Silver (1892-1954)",
+  "179532": "Coins & Paper Money > Coins: US > Commemorative > Gold (1903-1926)",
+  "179533": "Coins & Paper Money > Coins: US > Commemorative > Modern Silver/Clad (1982-Now)",
+  "179534": "Coins & Paper Money > Coins: US > Commemorative > Modern Gold (1984-Now)",
+  "529": "Coins & Paper Money > Coins: US > Commemorative > Mixed Lots",
   "40158": "Coins & Paper Money > Coins: US > Dollars > Sacagawea/Native American",
   "40159": "Coins & Paper Money > Coins: US > Dollars > Presidential",
   "40160": "Coins & Paper Money > Coins: US > Dollars > Susan B. Anthony",
@@ -75,12 +80,16 @@ const _LEGACY_BOOTSTRAP_BREADCRUMBS: Record<string, string> = {
   "166679": "Coins & Paper Money > Bullion > Other",
   "166680": "Coins & Paper Money > Bullion > Other > Copper > Bars & Rounds",
   "166681": "Coins & Paper Money > Bullion > Other > Copper > Coins",
-  "45243": "Coins & Paper Money > Coins: World",
-  "40196": "Coins & Paper Money > Coins: World > Canada",
-  "40197": "Coins & Paper Money > Coins: World > Mexico",
-  "40198": "Coins & Paper Money > Coins: World > Great Britain",
-  "40199": "Coins & Paper Money > Coins: World > Australia",
-  "40200": "Coins & Paper Money > Coins: World > Germany",
+  // 45243 and 40196-40200 were removed 2026-08-24: confirmed absent from the
+  // live ebay_taxonomy_cache (Finding B, CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md).
+  // eBay restructured World Coins into country-specific era/denomination leaves.
+  // Replacements below are confirmed live leaves as of the 2026-08-23 sync.
+  "536": "Coins & Paper Money > Coins: Canada > Other Canadian Coins",
+  "173692": "Coins & Paper Money > Coins: World > North & Central America > Mexico > Mixed Lots",
+  "538": "Coins & Paper Money > Coins: World > Europe > UK (Great Britain) > Other UK Coins",
+  "535": "Coins & Paper Money > Coins: World > Australia & Oceania > Australia > Other Australian Coins",
+  "173694": "Coins & Paper Money > Coins: World > Europe > Germany > Mixed Lots",
+  "257": "Coins & Paper Money > Coins: World > Other Coins of the World",
   "3411": "Coins & Paper Money > Paper Money: US",
   "45244": "Coins & Paper Money > Paper Money: World",
   "19167": "Coins & Paper Money > Exonumia > Tokens",
@@ -151,7 +160,11 @@ const _LEGACY_BOOTSTRAP_BREADCRUMBS: Record<string, string> = {
   "870": "Collectibles > Militaria",
   "45": "Collectibles > Animation Art & Characters",
   "40": "Collectibles > Autographs",
-  "99": "Collectibles > Vintage Sports Memorabilia",
+  // "99" removed 2026-08-24: not a real eBay leaf category (confirmed absent
+  // from live ebay_taxonomy_cache) and was mislabeled here as "Vintage Sports
+  // Memorabilia" -- it is actually the "Everything Else" rollup ID. This was
+  // the root cause of the 1893 Columbian Half Dollar routing to category 99
+  // (see CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md Finding, screenshots).
   "261": "Collectibles > Holiday & Seasonal > Christmas",
   "14339": "Collectibles > Banks, Registers & Vending > Still Banks",
 };

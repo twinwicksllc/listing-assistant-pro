@@ -1444,10 +1444,26 @@ export async function handleRequest(req: Request): Promise<Response> {
           lockReason = `Highest effective score: ${c.effectiveScore.toFixed(1)} from ${c.source}`;
           break;
         }
-        // If all are non-leaf, take the best anyway
+        // ── No verified leaf among any candidate ──────────────────────────
+        // Previously this fell back to `allCandidates[0]` — the single
+        // highest-scoring candidate REGARDLESS of leaf status. That is what
+        // shipped the 1893 Columbian Half Dollar to category 99 ("Everything
+        // Else" rollup): every candidate had failed leaf verification, so the
+        // fallback blindly took rank #1 anyway. A wrong-but-not-rejected
+        // category like that can accept nearly any listing without erroring,
+        // so the mistake was never caught by any downstream check.
+        //
+        // Ship nothing here instead: `winner` stays null, and the "no
+        // winner" branch below returns `found: false` with `topCandidates`
+        // so the caller (analyze-item) surfaces a confirm-your-category
+        // prompt to the seller rather than silently publishing a guess.
         if (!winner && allCandidates.length > 0) {
-          winner = allCandidates[0];
-          lockReason = `Fallback: best available candidate (no verified leaf)`;
+          lockReason = "NEEDS_CONFIRMATION: no candidate passed leaf verification — refusing to guess";
+          console.warn(
+            `category-lookup: ${lockReason} for "${normalizedKey}" — ` +
+              `top candidate was ${allCandidates[0].categoryId} (${allCandidates[0].categoryName}, ` +
+              `verifiedLeaf=${allCandidates[0].verifiedLeaf})`,
+          );
         }
       }
 
@@ -1548,11 +1564,22 @@ export async function handleRequest(req: Request): Promise<Response> {
       }
 
       // No winner — circuit breaker (#9)
+      //
+      // `needsConfirmation: true` makes this a first-class, explicitly-named
+      // outcome (NEEDS_CONFIRMATION) rather than just an absence of `found`,
+      // so callers can distinguish "nothing came back at all" from "multiple
+      // candidates existed but none passed leaf verification, so this needs
+      // a human". This is the outcome that replaces the old
+      // `winner = allCandidates[0]` fallback that shipped the Columbian Half
+      // Dollar to category 99.
       return new Response(
         JSON.stringify({
           found: false,
+          needsConfirmation: allCandidates.length > 0,
           itemType: normalizedKey,
-          message: "No category passed confidence threshold — present top options to user",
+          message: allCandidates.length > 0
+            ? "NEEDS_CONFIRMATION: candidates exist but none passed leaf verification — present top options to user"
+            : "No category passed confidence threshold — present top options to user",
           requestId: requestId,
           topCandidates: allCandidates.slice(0, 3).map((c) => ({
             categoryId: c.categoryId,
@@ -1560,6 +1587,7 @@ export async function handleRequest(req: Request): Promise<Response> {
             breadcrumb: c.breadcrumb,
             source: c.source,
             score: Math.round(c.effectiveScore * 100) / 100,
+            verifiedLeaf: c.verifiedLeaf,
           })),
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
