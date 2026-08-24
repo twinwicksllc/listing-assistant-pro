@@ -114,8 +114,29 @@ Reference: CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md
 
 ## Phase 5 — Harden crons
 
-- [ ] sync-ebay-taxonomy: drift-diff logging (which IDs disappeared) + staleness health check
-- [ ] category-hygiene-cron rewrite: dedup by precedence, rot detection, drop decay/expiry
+- [x] sync-ebay-taxonomy: drift-diff logging (which IDs disappeared) + staleness
+      health check — diffs the newly-walked leaf set against the previous
+      ebay_taxonomy_cache leaf set every run, logs a warning with a sample of
+      disappeared IDs (Finding B's bug class, now caught automatically
+      instead of by hand), and reports `disappearedLeafCount`/
+      `disappearedLeafSample`/`staleRowCount` (rows not synced in >8 days) in
+      the JSON response for visibility without a manual query.
+- [x] category-hygiene-cron rewrite: dedup by precedence, rot detection, drop
+      decay/expiry — migration 20260825000000_category_hygiene_precedence_rewrite.sql
+      rewrites find_duplicate_mappings() to a precedence rule (user_verified >
+      most-recently-published > most-recently-updated, no arithmetic) and adds
+      find_rotted_mappings() (approved rows whose ebay_category_id is no
+      longer a live leaf in ebay_taxonomy_cache, flagged `needs_review` — a new
+      allowed status value — rather than silently rejected). Removed the two
+      score-dependent duties (decay effective_score by 5/90d; expire at
+      score<=10) from category-hygiene-cron/index.ts entirely, since
+      effective_score is no longer part of the live decision path after Phase 4. Job was already scheduled in Phase 1 (20260824000000_schedule_category_hygiene_cron_properly.sql,
+      weekly Sun 04:11 UTC) — no scheduling changes needed this phase.
+      Verified: `deno check`/`deno fmt --check`/`deno lint` clean on both
+      files and across the whole supabase/functions/ tree (82 fmt / 79 lint),
+      `npm run test` (117/117), `node scripts/replay-corpus.mjs` (18/18,
+      unaffected — no test coverage exists for these two cron functions,
+      consistent with the rest of the codebase).
 
 ## Phase 6 — Promote gate 4 to enforcing (deferred / follow-up, not this pass)
 

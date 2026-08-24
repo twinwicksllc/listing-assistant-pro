@@ -9,19 +9,44 @@ const corsHeaders = {
 };
 
 // ================================================================
-// Category Hygiene Cron (deficiency #9)
+// Category Hygiene Cron
 //
-// Weekly maintenance job that:
-//   1. Deduplicates category_mappings (normalised item_type)
-//   2. Decays confidence on stale rows (no publish in 90 days)
-//   3. Expires (soft-deletes) very low-confidence rows
-//   4. Cleans up old audit entries (>180 days)
-//   5. Removes expired aspect cache entries
+// Rewritten for the Category Resolver v2 filter-then-rank model
+// (CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md, plan section 3.2). The old version had
+// four duties, two of which (decay effective_score by 5 after 90 days;
+// expire rows at effective_score <= 10) no longer make sense -- the
+// resolver rewrite (Phase 4) deleted effective_score from the live decision
+// path entirely, so there is nothing left to decay or threshold against.
+//
+// Three duties remain, weekly:
+//   1. DEDUP -- precedence-based, not score-based (find_duplicate_mappings
+//      RPC, rewritten in 20260825000000_category_hygiene_precedence_rewrite.sql):
+//      keep the user_verified row among duplicates; otherwise the most
+//      recently successfully-published; otherwise the most recently updated.
+//   2. ROT DETECTION (new) -- find approved category_mappings rows whose
+//      ebay_category_id is no longer a live leaf in ebay_taxonomy_cache
+//      (Finding B's bug class, applied to our own table instead of the AI
+//      prompt). Flagged status = 'needs_review', never silently rejected,
+//      since a human should confirm the replacement.
+//   3. AUDIT CLEANUP -- lookup_decisions older than 180 days. Unchanged,
+//      never was score-related.
 // ================================================================
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
+  }
+
+  const auth = await requireCronSecret(req);
+  if (!auth.ok) {
+    console.warn(
+      "[CATEGORY-HYGIENE-CRON] auth rejected:",
+      JSON.stringify(describeCronAuthEnv(req)),
+    );
+    return new Response(JSON.stringify({ error: auth.message }), {
+      status: auth.status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   try {
@@ -35,8 +60,10 @@ serve(async (req: Request) => {
     const results: Record<string, number> = {};
 
     // ────────────────────────────────────────────────────────────
-    // 1. DEDUP: Find rows with same (category_id, item_type_normalized)
-    //    Keep the row with the highest effective_score; reject the rest
+    // 1. DEDUP: precedence-based (user_verified > most-recently-published
+    //    > most-recently-updated). See find_duplicate_mappings() in
+    //    20260825000000_category_hygiene_precedence_rewrite.sql -- no
+    //    arithmetic here, consistent with the resolver's own model.
     // ────────────────────────────────────────────────────────────
     const { data: dupes, error: dupErr } = await supabase.rpc(
       "find_duplicate_mappings",
@@ -45,8 +72,6 @@ serve(async (req: Request) => {
       console.warn("category-hygiene: dedup RPC failed:", dupErr.message);
       results.dedup_errors = 1;
     } else if (dupes && dupes.length > 0) {
-      // dupes is an array of { id, category_id, item_type_normalized, effective_score }
-      // grouped by (category_id, item_type_normalized) — the RPC returns losers only
       const dupeIds = dupes.map((d: { id: string }) => d.id);
       const { error: rejectErr } = await supabase
         .from("category_mappings")
@@ -60,70 +85,43 @@ serve(async (req: Request) => {
       }
       results.dedup_rejected = dupeIds.length;
       console.log(
-        `category-hygiene: rejected ${dupeIds.length} duplicate mappings`,
+        `category-hygiene: rejected ${dupeIds.length} duplicate mappings (precedence-based)`,
       );
     } else {
       results.dedup_rejected = 0;
     }
 
     // ────────────────────────────────────────────────────────────
-    // 2. DECAY: Reduce effective_score by 5 for rows not published
-    //    in the last 90 days (approved or quarantine only)
+    // 2. ROT DETECTION (new, replaces decay + expire): approved mappings
+    //    whose ebay_category_id is no longer a confirmed live leaf in
+    //    ebay_taxonomy_cache. Flagged needs_review, not rejected outright --
+    //    a human should confirm the replacement before it's trusted again.
     // ────────────────────────────────────────────────────────────
-    const ninetyDaysAgo = new Date(
-      Date.now() - 90 * 24 * 60 * 60 * 1000,
-    ).toISOString();
-    const { data: staleRows, error: staleErr } = await supabase
-      .from("category_mappings")
-      .select("id, effective_score")
-      .in("status", ["approved", "quarantine"])
-      .or(
-        `last_publish_success.is.null,last_publish_success.lt.${ninetyDaysAgo}`,
-      )
-      .gt("effective_score", 0);
-
-    if (staleErr) {
-      console.warn("category-hygiene: stale query failed:", staleErr.message);
-      results.decay_errors = 1;
-    } else if (staleRows && staleRows.length > 0) {
-      let decayed = 0;
-      for (const row of staleRows) {
-        const newScore = Math.max(0, (row.effective_score || 0) - 5);
-        const { error: updateErr } = await supabase
-          .from("category_mappings")
-          .update({ effective_score: newScore })
-          .eq("id", row.id);
-        if (!updateErr) decayed++;
+    const { data: rotted, error: rotErr } = await supabase.rpc(
+      "find_rotted_mappings",
+    );
+    if (rotErr) {
+      console.warn("category-hygiene: rot-detection RPC failed:", rotErr.message);
+      results.rot_errors = 1;
+    } else if (rotted && rotted.length > 0) {
+      const rottenIds = rotted.map((r: { id: string }) => r.id);
+      const { error: flagErr } = await supabase
+        .from("category_mappings")
+        .update({ status: "needs_review" })
+        .in("id", rottenIds);
+      if (flagErr) {
+        console.warn("category-hygiene: rot-detection flag failed:", flagErr.message);
       }
-      results.decay_applied = decayed;
-      console.log(`category-hygiene: decayed ${decayed} stale mappings`);
-    } else {
-      results.decay_applied = 0;
-    }
-
-    // ────────────────────────────────────────────────────────────
-    // 3. EXPIRE: Reject rows with effective_score <= 10
-    //    These are too unreliable to keep active
-    // ────────────────────────────────────────────────────────────
-    const { data: expiredRows, error: expireErr } = await supabase
-      .from("category_mappings")
-      .update({ status: "rejected" })
-      .in("status", ["approved", "quarantine"])
-      .lte("effective_score", 10)
-      .select("id");
-
-    if (expireErr) {
-      console.warn("category-hygiene: expire failed:", expireErr.message);
-      results.expire_errors = 1;
-    } else {
-      results.expired = expiredRows?.length || 0;
+      results.rot_flagged = rottenIds.length;
       console.log(
-        `category-hygiene: expired ${results.expired} low-score mappings`,
+        `category-hygiene: flagged ${rottenIds.length} mappings needs_review (ebay_category_id no longer a live leaf)`,
       );
+    } else {
+      results.rot_flagged = 0;
     }
 
     // ────────────────────────────────────────────────────────────
-    // 4. AUDIT CLEANUP: Delete lookup_decisions older than 180 days
+    // 3. AUDIT CLEANUP: Delete lookup_decisions older than 180 days
     // ────────────────────────────────────────────────────────────
     const oneEightyDaysAgo = new Date(
       Date.now() - 180 * 24 * 60 * 60 * 1000,
@@ -145,7 +143,8 @@ serve(async (req: Request) => {
     }
 
     // ────────────────────────────────────────────────────────────
-    // 5. CACHE CLEANUP: Delete expired aspect cache entries
+    // 4. CACHE CLEANUP: Delete expired aspect cache entries (unchanged,
+    //    unrelated to scoring)
     // ────────────────────────────────────────────────────────────
     const now = new Date().toISOString();
     const { data: deletedCache, error: cacheErr } = await supabase
@@ -169,7 +168,6 @@ serve(async (req: Request) => {
     // ────────────────────────────────────────────────────────────
     console.log("category-hygiene: completed", JSON.stringify(results));
 
-    // Log the run to the database
     try {
       await supabase.from("category_hygiene_log").insert({
         status: "success",
@@ -186,7 +184,6 @@ serve(async (req: Request) => {
     const message = err instanceof Error ? err.message : String(err);
     console.error("category-hygiene: fatal error:", message);
 
-    // Log the error to the database
     try {
       const supabaseUrl = Deno.env.get("SUPABASE_URL");
       const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");

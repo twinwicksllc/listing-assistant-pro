@@ -265,6 +265,41 @@ serve(async (req: Request) => {
 
   console.log(`[sync-ebay-taxonomy] 🌳 found ${leaves.length} leaf categories`);
 
+  // ── Drift-diff logging (plan §3.1): which leaf IDs disappeared this sync ─────
+  // Finding B showed hardcoded leaf IDs can silently go dead between syncs.
+  // The full new tree is already in memory here, so diffing against the
+  // previous snapshot is cheap — this turns "found by hand, weeks later"
+  // into "logged automatically the week it happened."
+  let disappearedCount = 0;
+  let disappearedSample: { category_id: string; category_name: string }[] = [];
+  try {
+    const { data: previousLeaves, error: prevErr } = await svc
+      .from("ebay_taxonomy_cache")
+      .select("category_id, category_name")
+      .eq("is_leaf", true);
+
+    if (prevErr) {
+      console.warn("[sync-ebay-taxonomy] drift-diff: failed to load previous leaf set:", prevErr.message);
+    } else if (previousLeaves && previousLeaves.length > 0) {
+      const newIds = new Set(leaves.map((l) => l.category_id));
+      const disappeared = previousLeaves.filter((p) => !newIds.has(p.category_id));
+      disappearedCount = disappeared.length;
+      disappearedSample = disappeared.slice(0, 25);
+      if (disappearedCount > 0) {
+        console.warn(
+          `[sync-ebay-taxonomy] ⚠️  DRIFT: ${disappearedCount} previously-leaf category ID(s) are no longer in the tree ` +
+            `(no longer a leaf, or removed entirely): ${
+              disappearedSample.map((d) => `${d.category_id} (${d.category_name})`).join(", ")
+            }${disappearedCount > disappearedSample.length ? ", ..." : ""}`,
+        );
+      } else {
+        console.log("[sync-ebay-taxonomy] drift-diff: no previously-leaf categories disappeared");
+      }
+    }
+  } catch (err) {
+    console.warn("[sync-ebay-taxonomy] drift-diff: exception during diff:", err);
+  }
+
   // ── 4. Batch-upsert into ebay_taxonomy_cache ──────────────────────────────
   let upserted = 0;
   let errors = 0;
@@ -313,6 +348,34 @@ serve(async (req: Request) => {
     }
   }
 
+  // ── Staleness health check (plan §3.1) ──────────────────────────────────────────
+  // Under the resolver rewrite ebay_taxonomy_cache is load-bearing (gate 1),
+  // so staleness should be visible without a manual query. This counts rows
+  // this run just refreshed too, so a healthy sync should always report 0
+  // right after it runs — a nonzero count on a later manual check means the
+  // NEXT scheduled sync hasn't happened yet (missed cron, revoked eBay
+  // creds, etc.).
+  let staleRowCount: number | null = null;
+  try {
+    const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+    const { count, error: staleErr } = await svc
+      .from("ebay_taxonomy_cache")
+      .select("category_id", { count: "exact", head: true })
+      .lt("synced_at", eightDaysAgo);
+    if (staleErr) {
+      console.warn("[sync-ebay-taxonomy] staleness check failed:", staleErr.message);
+    } else {
+      staleRowCount = count ?? 0;
+      if (staleRowCount > 0) {
+        console.warn(
+          `[sync-ebay-taxonomy] ⚠️  ${staleRowCount} ebay_taxonomy_cache row(s) have not been synced in over 8 days`,
+        );
+      }
+    }
+  } catch (err) {
+    console.warn("[sync-ebay-taxonomy] staleness check exception:", err);
+  }
+
   const totalMs = Date.now() - startMs;
   console.log(
     `[sync-ebay-taxonomy] ✅ done — ${upserted} upserted, ${errors} errors, ${totalMs}ms total`,
@@ -327,6 +390,9 @@ serve(async (req: Request) => {
       categoryTreeVersion,
       previousTreeVersion,
       treeVersionChanged,
+      disappearedLeafCount: disappearedCount,
+      disappearedLeafSample: disappearedSample,
+      staleRowCount,
       durationMs: totalMs,
     }),
     {
