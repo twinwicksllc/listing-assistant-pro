@@ -57,6 +57,35 @@ jobs:
       - name: Lint functions
         run: deno lint --config supabase/functions/deno.json supabase/functions/
 
+  # Category Resolver v2: golden-corpus replay harness (Phase 3)
+  # Static/offline check that corpus/golden_corpus.json is internally
+  # consistent with the frozen corpus/ebay_taxonomy_snapshot.json AND that
+  # every dead/non-leaf id documented in the corpus is actually enforced by
+  # leafCategoryGuard.ts's KNOWN_PARENT_CATEGORY_IDS blocklist. No live
+  # Supabase/eBay credentials required, so this is fast and fully blocking.
+  category-corpus-replay:
+    name: Category Corpus Replay
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: v2.x
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run leafCategoryGuard unit tests
+        run: deno test --allow-net --allow-env supabase/functions/_helpers/leafCategoryGuard.test.ts
+
+      - name: Run golden-corpus replay harness
+        run: node scripts/replay-corpus.mjs
+
   # E2E Smoke Tests: Verify critical user flows work end-to-end
   e2e-smoke-tests:
     name: E2E Smoke Tests
@@ -108,18 +137,26 @@ jobs:
           deno check --config supabase/functions/deno.json supabase/functions/analyze-item/test.ts
         continue-on-error: true
 
-  # Send summary — only frontend and functions-check are blocking
+  # Send summary — frontend, functions-check, and category-corpus-replay are blocking
   test-summary:
     name: Test Summary
     runs-on: ubuntu-latest
     if: always()
-    needs: [frontend-tests, functions-check, e2e-smoke-tests, integration-tests]
+    needs:
+      [
+        frontend-tests,
+        functions-check,
+        category-corpus-replay,
+        e2e-smoke-tests,
+        integration-tests,
+      ]
 
     steps:
       - name: Check test results
         run: |
           if [ "${{ needs.frontend-tests.result }}" = "failure" ] || \
-             [ "${{ needs.functions-check.result }}" = "failure" ]; then
+             [ "${{ needs.functions-check.result }}" = "failure" ] || \
+             [ "${{ needs.category-corpus-replay.result }}" = "failure" ]; then
             echo "❌ Tests failed"
             exit 1
           fi

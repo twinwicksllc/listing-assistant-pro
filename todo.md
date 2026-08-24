@@ -49,11 +49,46 @@ Reference: CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md
 
 ## Phase 3 — Golden corpus + replay harness
 
-- [ ] Build corpus JSON from category_mappings_rows.csv (40 rows, corrected where wrong)
-- [ ] Add Columbian Half Dollar case + Finding B dead-ID cases
-- [ ] Build replay harness script
-- [ ] Snapshot ebay_taxonomy_cache for deterministic replay
-- [ ] Wire into CI (or document manual invocation)
+- [x] Build corpus JSON from category_mappings_rows.csv (40 rows, corrected where wrong)
+      — corpus/golden_corpus.json, 18 cases across must_resolve/must_not_regress/
+      must_confirm/quarantine_needs_review. Audited all 41 raw data rows against
+      the taxonomy cache; found 13 rows spanning 6 distinct dead/non-leaf category
+      ids beyond the ones already fixed in PR #529.
+- [x] Add Columbian Half Dollar case + Finding B dead-ID cases — cases 1-9
+      (columbian-half-dollar-1893, us-commemorative-siblings, the 5
+      dead-world-coin-* cases for 40196-40200, dead-world-coin-catchall-45243,
+      world-coins-rollup-256-bug) plus a must_confirm case for the
+      NEEDS_CONFIRMATION fix itself.
+- [x] (bonus, discovered mid-Phase-3) found the SAME non-leaf-rollup bug class
+      as 99/256/45243 in 5 more ids OUTSIDE the coins domain, all previously
+      trusted as user_verified/approved: 19203 (Beanie Babies), 246 (Action
+      Figures), 19209 (Stuffed Animals), 10986 (mislabeled Necklaces &
+      Pendants id), 41111 (American Silver Eagle — taxonomy drift, had a
+      recorded publish success before eBay retired the id). Added corpus
+      cases for all 5 AND extended leafCategoryGuard.ts's
+      KNOWN_PARENT_CATEGORY_IDS + added 7 new unit tests (24/24 passing,
+      deno fmt/lint clean).
+- [x] Build replay harness script — scripts/replay-corpus.mjs. Static/offline
+      Node script: validates every corpus expected_category_id is a confirmed
+      live leaf in the snapshot, every forbidden/dead id is confirmed
+      non-shippable, and (for must_not_regress cases) cross-checks that
+      leafCategoryGuard.ts's KNOWN_PARENT_CATEGORY_IDS actually contains each
+      dead id — a static-analysis regression guard since it can't invoke the
+      live edge function without a running Supabase instance. Distinguishes
+      forbidden_category_ids (never shippable anywhere) from
+      forbidden_wrong_answer_ids (valid leaves that are simply the wrong pick
+      for a specific item, e.g. Washington Quarters 39461 for a Columbian
+      Half Dollar). Caught a real gap on first run: dead World Coin ids
+      40196-40200 had been pulled from the AI prompt allowlist in Phase 2 but
+      never added to the guard's static blocklist — fixed.
+- [x] Snapshot ebay_taxonomy_cache for deterministic replay —
+      corpus/ebay_taxonomy_snapshot.json (15,116 rows, ~3.5MB, converted from
+      ebay_taxonomy_cache_rows.csv with real JSON booleans for is_leaf).
+- [x] Wire into CI — added `category-corpus-replay` job to
+      .github/workflows/test.yml (runs leafCategoryGuard.test.ts +
+      scripts/replay-corpus.mjs, no live credentials needed) and added it to
+      the blocking test-summary gate alongside frontend-tests and
+      functions-check.
 
 ## Phase 4 — Filter-then-rank resolver rewrite
 
