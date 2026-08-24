@@ -47,6 +47,25 @@
  * real eBay leaf category, is absent from the live taxonomy cache, and was
  * previously unblocked here, allowing the `winner = allCandidates[0]`
  * fallback in category-lookup/index.ts to ship it.
+ *
+ * PHASE 3 CORPUS AUDIT (2026-08-24): cross-referencing every category_mappings
+ * row against the live taxonomy snapshot found five more non-leaf ids outside
+ * the coins domain, each with a `user_verified`/`approved` category_mappings
+ * row: 19203 (Beanie Babies -- real node, but only a parent of Ty sub-lines),
+ * 246 (Action Figures -- parent of the real Action Figures leaf 261068),
+ * 19209 (Stuffed Animals -- parent of Other Stuffed Animals leaf 230), 10986
+ * (stored as "Fine Jewelry > Necklaces & Pendants" -- that breadcrumb text is
+ * correct but this numeric id does not match it; the live id for that
+ * breadcrumb is 261993), and 41111 (American Silver Eagle -- has a recorded
+ * successful publish on 2026-08-11, so this is taxonomy DRIFT: eBay retired
+ * an id that used to work, not an id that was always wrong). See
+ * corpus/golden_corpus.json for the full evidence trail and replacement ids.
+ *
+ * The corpus/replay-corpus.mjs harness also caught that the Phase 2 dead
+ * World Coin ids (40196/40197/40198/40199/40200 -- Canada/Mexico/UK/
+ * Australia/Germany) had only been removed from the AI prompt allowlist,
+ * never added to this static blocklist. They are added below alongside
+ * 45243 for the same defense-in-depth reasoning as 99/256.
  */
 export const KNOWN_PARENT_CATEGORY_IDS: ReadonlySet<string> = new Set([
   // ── Coins & Paper Money ────────────────────────────────────────────────
@@ -63,6 +82,17 @@ export const KNOWN_PARENT_CATEGORY_IDS: ReadonlySet<string> = new Set([
   "3394", // Coins: World (regional rollup)
   "45243", // Coins: World > Other — rollup that rejects graded coins
   "88433", // Coins: US > Dimes / rollup node returning zero aspects
+  "40196", // Coins: World > Canada — confirmed absent from live cache (Phase
+  // 2 Finding B); removed from the AI prompt allowlist, added here too for
+  // defense-in-depth. Live replacement: 536 (Other Canadian Coins).
+  "40197", // Coins: World > Mexico — confirmed absent from live cache; live
+  // replacement: 173631.
+  "40198", // Coins: World > UK — confirmed absent from live cache; live
+  // replacement: 3406.
+  "40199", // Coins: World > Australia — confirmed absent from live cache;
+  // live replacement: 535.
+  "40200", // Coins: World > Germany — confirmed absent from live cache;
+  // live replacement: 7955.
   // ── Everything else ────────────────────────────────────────────────────
   "1", // Collectibles
   "99", // NOT a real eBay leaf category -- "Everything Else" rollup ID;
@@ -81,6 +111,15 @@ export const KNOWN_PARENT_CATEGORY_IDS: ReadonlySet<string> = new Set([
   "550", // Art
   "631", // Tools & Workshop Equipment
   "64482", // Sports Trading Cards (rollup)
+  // ── Phase 3 corpus audit (2026-08-24) — non-coin non-leaf rollups found in
+  // live category_mappings rows, same bug class as 99/256/45243 above ──────
+  "19203", // Beanie Babies -- parent of Ty sub-lines only; leaf is e.g. 1037
+  "246", // Action Figures -- parent of the real leaf 261068
+  "19209", // Stuffed Animals -- parent of Other Stuffed Animals leaf 230
+  "10986", // stored as "Fine Jewelry > Necklaces & Pendants" but that id does
+  // not exist; the live id for that breadcrumb is 261993
+  "41111", // American Silver Eagle -- taxonomy drift: worked once (recorded
+  // publish success 2026-08-11), now absent from the live tree; use 177653
 ]);
 
 /**

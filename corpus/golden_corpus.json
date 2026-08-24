@@ -1,0 +1,253 @@
+{
+  "corpus_meta": {
+    "purpose": "Golden corpus of category-resolution test cases for the replay harness (scripts/replay-corpus.mjs). Each case captures an item description plus the category outcome the resolver MUST produce against the frozen taxonomy snapshot in corpus/ebay_taxonomy_snapshot.json. Run after any change to category-lookup, leafCategoryGuard, suggestedCategories, or the analyze-item AI prompt's category allowlist.",
+    "sources": [
+      "category_mappings_rows.csv (40 rows, exported 2026-08-23) -- every row audited against the taxonomy snapshot",
+      "CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md Finding B (6 dead World Coin IDs) and the PR #529 fix (category 99/256 non-leaf rollups)",
+      "The 1893 Columbian Half Dollar live incident"
+    ],
+    "case_kinds": {
+      "must_resolve": "Resolver must land on expected_category_id (a confirmed live leaf) and must NOT return any id in forbidden_category_ids.",
+      "must_not_regress": "A previously-broken hardcoded ID must remain absent from any allowlist/candidate the resolver could surface; expected_category_id is the confirmed-live replacement.",
+      "must_confirm": "No candidate should be auto-shipped; the resolver must return needsConfirmation=true / found=false instead of guessing.",
+      "quarantine_needs_review": "Existing ai_auto mapping in category_mappings that is leaf-valid but is either mislabeled, imprecise, or a duplicate of a verified generic mapping -- not a hard resolver bug, tracked so Phase 5's hygiene-cron rewrite has a concrete list to act on."
+    },
+    "forbidden_id_fields": {
+      "forbidden_category_ids": "Ids that must NEVER be shippable for ANY item, because they are dead/non-leaf/rollup nodes in the live taxonomy tree. The replay harness verifies these are absent-or-non-leaf in the snapshot AND (for must_not_regress cases) present in leafCategoryGuard.ts's KNOWN_PARENT_CATEGORY_IDS.",
+      "forbidden_wrong_answer_ids": "Ids that ARE valid live leaves elsewhere in the tree, but would be the WRONG answer for this specific item (a plausible mis-identification, not a dead id). The replay harness only checks these are real leaves (so the corpus case itself is well-formed) -- it does NOT expect them to be blocklisted, since blocking a real leaf globally would break legitimate listings that actually belong there."
+    }
+  },
+  "cases": [
+    {
+      "id": "columbian-half-dollar-1893",
+      "kind": "must_resolve",
+      "description": "1893 Columbian Commemorative Half Dollar (World's Columbian Exposition)",
+      "item_type_query": "1893 columbian commemorative half dollar",
+      "expected_category_id": "179531",
+      "expected_breadcrumb": "Coins & Paper Money > Coins: US > Commemorative > Silver (1892-1954)",
+      "forbidden_category_ids": ["99", "256", "45243"],
+      "notes": "The live incident this whole plan is built around: shipped to category 99 (\"Everything Else\") because every real candidate failed leaf verification and the old winner=allCandidates[0] fallback took the top-ranked reject anyway. 39461 was an earlier documented mis-identification in this project's own plan doc (it is actually Washington Quarters, category `Coins & Paper Money > Coins: US > Quarters > Washington (1932-98)`), listed here as a forbidden id specifically to catch any regression back to that wrong assumption.",
+      "forbidden_wrong_answer_ids": ["39461"]
+    },
+    {
+      "id": "us-commemorative-siblings",
+      "kind": "must_resolve",
+      "description": "Sibling leaves of the Columbian Half Dollar fix must all independently resolve correctly",
+      "sub_cases": [
+        {
+          "item_type_query": "1926 oregon trail commemorative half dollar silver",
+          "expected_category_id": "179531"
+        },
+        {
+          "item_type_query": "1915 panama pacific commemorative gold dollar",
+          "expected_category_id": "179532"
+        },
+        {
+          "item_type_query": "1986 statue of liberty commemorative silver dollar modern",
+          "expected_category_id": "179533"
+        },
+        {
+          "item_type_query": "1986 statue of liberty commemorative gold five dollar modern",
+          "expected_category_id": "179534"
+        },
+        {
+          "item_type_query": "mixed lot us commemorative coins assorted",
+          "expected_category_id": "529"
+        }
+      ],
+      "forbidden_category_ids": ["99", "256", "45243"],
+      "forbidden_wrong_answer_ids": ["39461"]
+    },
+    {
+      "id": "dead-world-coin-canada",
+      "kind": "must_not_regress",
+      "description": "Finding B: hardcoded Canada World-Coins ID 40196 no longer exists in the live tree",
+      "item_type_query": "2015 canada bison 9999 fine silver coin",
+      "dead_category_id": "40196",
+      "expected_category_id": "536",
+      "expected_breadcrumb": "Coins & Paper Money > Coins: Canada > Other Canadian Coins",
+      "forbidden_category_ids": ["40196", "45243", "256", "99"],
+      "notes": "category_mappings row 'coin_type=2015 canada bison 9999' is currently pinned to 45243, itself confirmed absent from the live cache (quarantine status, ai_auto). Fixed replacement leaves for Canada: 536 (Other), 3379 (Commemorative), 3383 (Dollars)."
+    },
+    {
+      "id": "dead-world-coin-mexico",
+      "kind": "must_not_regress",
+      "description": "Finding B: hardcoded Mexico World-Coins ID 40197 no longer exists as a single flat leaf",
+      "item_type_query": "1947 mexico 5 pesos silver coin",
+      "dead_category_id": "40197",
+      "expected_category_id": "173631",
+      "expected_breadcrumb": "Coins & Paper Money > Coins: World > North & Central America > Mexico > Mexico (1905-Now)",
+      "forbidden_category_ids": ["40197", "45243", "256", "99"],
+      "notes": "Mexico replacement leaves: 173629 (Colonial up to 1821), 173631 (1905-Now), 173692 (Mixed Lots)."
+    },
+    {
+      "id": "dead-world-coin-uk",
+      "kind": "must_not_regress",
+      "description": "Finding B: hardcoded Great Britain World-Coins ID 40198 no longer exists",
+      "item_type_query": "1935 great britain crown silver coin",
+      "dead_category_id": "40198",
+      "expected_category_id": "3406",
+      "expected_breadcrumb": "Coins & Paper Money > Coins: World > Europe > UK (Great Britain) > Crown",
+      "forbidden_category_ids": ["40198", "45243", "256", "99"],
+      "notes": "UK replacement leaves: 141146 (Commemorative), 3406 (Crown), 538 (Other UK Coins)."
+    },
+    {
+      "id": "dead-world-coin-australia",
+      "kind": "must_not_regress",
+      "description": "Finding B: hardcoded Australia World-Coins ID 40199 no longer exists",
+      "item_type_query": "2025 australia kookaburra 9999 fine silver coin",
+      "dead_category_id": "40199",
+      "expected_category_id": "535",
+      "expected_breadcrumb": "Coins & Paper Money > Coins: World > Australia & Oceania > Australia > Other Australian Coins",
+      "forbidden_category_ids": ["40199", "45243", "256", "99"],
+      "notes": "category_mappings has three rows for Australia Kookaburra (2007, 2023, 2025 vintages) all pinned to dead 45243, all quarantine/ai_auto. Australia replacement leaves: 3375 (Commemorative), 535 (Other)."
+    },
+    {
+      "id": "dead-world-coin-germany",
+      "kind": "must_not_regress",
+      "description": "Finding B: hardcoded Germany World-Coins ID 40200 no longer exists",
+      "item_type_query": "1975 west germany 5 mark silver coin",
+      "dead_category_id": "40200",
+      "expected_category_id": "7955",
+      "expected_breadcrumb": "Coins & Paper Money > Coins: World > Europe > Germany > West & Unified (1949-Now)",
+      "forbidden_category_ids": ["40200", "45243", "256", "99"],
+      "notes": "Germany replacement leaves: 173620 (Empire 1871-1918), 7955 (West & Unified), 173694 (Mixed Lots)."
+    },
+    {
+      "id": "dead-world-coin-catchall-45243",
+      "kind": "must_not_regress",
+      "description": "Finding B: 45243 (\"Other World Coins\" catch-all, also the graded-coin-reroute safety net target from PR #527) does not exist in the live tree at all",
+      "item_type_query": "unidentified world coin silver graded",
+      "dead_category_id": "45243",
+      "expected_category_id": "257",
+      "expected_breadcrumb": "Coins & Paper Money > Coins: World > Other Coins of the World",
+      "forbidden_category_ids": ["45243", "256", "99"],
+      "notes": "This was the highest-severity Finding B item: every previous graded-world-coin reroute (PR #527's GRADED_UNFRIENDLY_WORLD_PARENTS) defended against 45243 by rerouting to 256 -- which this session's audit found is ALSO a non-leaf rollup absent from the cache as its own row. 257 is the confirmed-live catch-all leaf that replaces both."
+    },
+    {
+      "id": "world-coins-rollup-256-bug",
+      "kind": "must_not_regress",
+      "description": "256 (\"Coins: World\" rollup) is a non-leaf, was used as the graded-friendly safe default across 3 files, must never be shipped",
+      "item_type_query": "graded world coin ngc slabbed unidentified country",
+      "dead_category_id": "256",
+      "expected_category_id": "257",
+      "forbidden_category_ids": ["256", "45243", "99"],
+      "notes": "Discovered mid-Phase-2 in PR #529 (not in the original Finding B table). 256 has zero rows of its own in the taxonomy cache and only appears as a parent_category_id for 257/543/546/547 -- i.e. it is real as a tree node but is a branch, not a leaf."
+    },
+    {
+      "id": "columbian-half-dollar-no-candidates-needs-confirmation",
+      "kind": "must_confirm",
+      "description": "Synthetic worst case: if every real candidate genuinely fails leaf verification (e.g. eBay API degraded, DB has no exact match), the resolver must surface NEEDS_CONFIRMATION rather than shipping category 99 or any other guess",
+      "item_type_query": "completely unrecognizable numismatic item xyz123",
+      "expected_outcome": "needsConfirmation",
+      "forbidden_category_ids": ["99", "256", "45243"],
+      "notes": "Regression test for the exact code path fixed in category-lookup/index.ts: `winner = allCandidates[0]` removed, replaced with winner staying null + needsConfirmation:true. This is the root-cause fix itself, not just a downstream symptom."
+    },
+    {
+      "id": "beanie-babies-non-leaf",
+      "kind": "must_not_regress",
+      "description": "category_mappings has a user_verified, approved mapping for 'beanie babies plush' / 'ty beanie baby' pinned to 19203 ('Beanie Babies'), which is absent from the live cache as its own leaf and only exists as a parent of Ty sub-lines (Teenie Beanies, Attic, Beanie Boppers, etc.)",
+      "item_type_query": "ty beanie baby plush retired",
+      "dead_category_id": "19203",
+      "expected_category_id": "1037",
+      "expected_breadcrumb": "Toys & Hobbies > Beanbag Plush > Ty > Other Ty Beanbag Plush",
+      "forbidden_category_ids": ["19203"],
+      "notes": "NEW finding from the Phase 3 corpus audit (2026-08-24), outside the coins domain -- same non-leaf-rollup bug class as 99/256/45243, but this one is a user_verified mapping with 'approved' status and zero recorded publish failures, meaning it has likely never actually been published (publish_success_count=0, publish_failure_count=0 for both rows). 1037 ('Other Ty Beanbag Plush') is the closest generic live leaf; 441/16479/158681/7111/95274 are more specific Ty sub-line leaves if the exact line is known."
+    },
+    {
+      "id": "action-figure-non-leaf",
+      "kind": "must_not_regress",
+      "description": "category_mappings has a user_verified, approved mapping for 'action figure' pinned to 246, which is absent from the cache as its own leaf and is the parent of the real Action Figures leaves",
+      "item_type_query": "vintage action figure loose",
+      "dead_category_id": "246",
+      "expected_category_id": "261068",
+      "expected_breadcrumb": "Toys & Hobbies > Action Figures & Accessories > Action Figures",
+      "forbidden_category_ids": ["246"],
+      "notes": "NEW finding from the Phase 3 corpus audit. 246 is a real tree node (it is the parent_category_id of 261068/261069/261070/261071/49018) but has no leaf row of its own. Also affects the 'funko pop' mapping's grandparent chain indirectly, though funko pop's own mapping (261068) is already a confirmed-live leaf."
+    },
+    {
+      "id": "stuffed-animal-non-leaf",
+      "kind": "must_not_regress",
+      "description": "category_mappings has a user_verified, approved mapping for 'stuffed animal plush' pinned to 19209, absent from the live cache",
+      "item_type_query": "generic plush stuffed animal toy",
+      "dead_category_id": "19209",
+      "expected_category_id": "230",
+      "expected_breadcrumb": "Toys & Hobbies > Stuffed Animals > Other Stuffed Animals",
+      "forbidden_category_ids": ["19209"],
+      "notes": "NEW finding from the Phase 3 corpus audit. 230 ('Other Stuffed Animals') is the correct live catch-all leaf under Toys & Hobbies > Stuffed Animals."
+    },
+    {
+      "id": "jewelry-necklaces-non-leaf",
+      "kind": "must_not_regress",
+      "description": "category_mappings has two user_verified, approved mappings ('silver jewelry', 'gold jewelry') pinned to 10986, whose own stored breadcrumb 'Fine Jewelry > Necklaces & Pendants' is a plausible-looking but non-existent category id in the live tree",
+      "item_type_query": "sterling silver necklace pendant",
+      "dead_category_id": "10986",
+      "expected_category_id": "261993",
+      "expected_breadcrumb": "Jewelry & Watches > Fine Jewelry > Necklaces & Pendants",
+      "forbidden_category_ids": ["10986"],
+      "notes": "NEW finding from the Phase 3 corpus audit. This is the most subtle case in the corpus: the stored breadcrumb text ('Fine Jewelry > Necklaces & Pendants') is CORRECT, but the numeric id (10986) it's paired with is not the live id for that breadcrumb -- the live id is 261993. This proves breadcrumb text alone cannot be trusted to validate an id; the id itself must be checked against the taxonomy snapshot. eBay's tree also has 5 other 'Necklaces & Pendants' leaves under different parents (Fashion Jewelry=155101, Men's Jewelry=137839, Handcrafted & Artisan=110655, Children's=84607, Vintage & Antique=262013, Ethnic/Regional/Tribal=261984) -- picking the right one requires the jewelry sub-type, not just the leaf name, which is a Phase 4 concern (aspect/attribute-based disambiguation), not a Phase 3 corpus concern."
+    },
+    {
+      "id": "american-silver-eagle-dead-id",
+      "kind": "must_not_regress",
+      "description": "category_mappings has two mappings for American Silver Eagle (one user_verified, one ai_auto, both with a recorded successful publish) pinned to 41111, which is absent from the current live tree",
+      "item_type_query": "2019 american silver eagle 1oz coin",
+      "dead_category_id": "41111",
+      "expected_category_id": "177653",
+      "expected_breadcrumb": "Coins & Paper Money > Bullion > Silver > Coins",
+      "forbidden_category_ids": ["41111"],
+      "notes": "NEW finding from the Phase 3 corpus audit. Unlike the other non-coin non-leaf cases, this one HAS a recorded publish_success_count=1 on both rows (dated 2026-08-11), meaning 41111 worked at some point and has since been retired/merged by eBay -- a live example of taxonomy drift silently breaking a previously-good mapping. Confirmed replacement via eBay's own current site navigation (searches for 'American Eagle Silver' resolve to category 177653, 'Bullion > Silver > Coins', which is already a leaf in this repo's cache)."
+    },
+    {
+      "id": "sports-cards-mislabel-basketball-for-baseball",
+      "kind": "quarantine_needs_review",
+      "description": "Two ai_auto quarantine rows ('1989 donruss baseball value', '1992 upper deck scoring') are stored with category_name='Basketball Cards' despite both item_type strings explicitly saying baseball/scoring (Donruss and Upper Deck are historically baseball-card-first brands)",
+      "ebay_category_id": "261328",
+      "is_leaf_valid": true,
+      "actual_breadcrumb": "Sports Mem, Cards & Fan Shop > Sports Trading Cards > Trading Card Singles",
+      "notes": "The numeric id (261328) IS a valid leaf, so this is not a resolver-correctness bug -- it's a bad cached category_name string that would mislead a human reviewer glancing at the mappings table. Tracked here so Phase 5's category-hygiene-cron rewrite can refresh stale category_name/breadcrumb text from the taxonomy snapshot instead of trusting whatever name was recorded at write time."
+    },
+    {
+      "id": "placeholder-category-name",
+      "kind": "quarantine_needs_review",
+      "description": "Row for '1987 1989 donruss baseball' stores category_name literally as the placeholder string 'Category #183437', meaning the code that wrote it never resolved a real name",
+      "ebay_category_id": "183437",
+      "is_leaf_valid": true,
+      "actual_breadcrumb": "Sports Mem, Cards & Fan Shop > Sports Trading Cards > Storage & Display Supplies > Card Sleeves & Bags",
+      "notes": "183437 is a valid leaf but describes card SLEEVES/supplies, not the trading cards themselves -- so even though it passes the leaf check, it is very likely the wrong category for a listing described as a baseball card. Flagged for Phase 5 hygiene-cron review, not a hard resolver bug for Phase 3/4 purposes since the corpus's job here is leaf-existence regression, not semantic-fit scoring."
+    },
+    {
+      "id": "duplicate-year-locked-mappings",
+      "kind": "quarantine_needs_review",
+      "description": "17 of 40 category_mappings rows are year-locked duplicates of a concept that already has a generic, verified row (e.g. '1921 morgan silver dollar' alongside the already-user_verified 'morgan dollar'; three separate Eisenhower Dollar year variants alongside the generic 'eisenhower dollar')",
+      "examples": [
+        {
+          "specific": "1921 morgan silver dollar",
+          "generic": "morgan dollar",
+          "shared_category_id": "39464"
+        },
+        {
+          "specific": "1974 eisenhower dollar clad",
+          "generic": "eisenhower dollar",
+          "shared_category_id": "11981"
+        },
+        {
+          "specific": "1973 eisenhower silver dollar",
+          "generic": "eisenhower dollar",
+          "shared_category_id": "11981"
+        },
+        {
+          "specific": "1971 eisenhower dollar silver",
+          "generic": "eisenhower dollar",
+          "shared_category_id": "11981"
+        },
+        {
+          "specific": "2019 american silver eagle",
+          "generic": "american silver eagle",
+          "shared_category_id": "41111"
+        }
+      ],
+      "notes": "Not a correctness bug (the category ids agree with their generic counterpart in every case checked), but it inflates category_mappings with redundant rows that a token-overlap/exact-match lookup will never actually need, and doubles the blast radius when an id like 41111 goes dead (both the generic and every year-locked variant need fixing). Tracked for Phase 5 hygiene-cron dedup-by-precedence."
+    }
+  ]
+}
