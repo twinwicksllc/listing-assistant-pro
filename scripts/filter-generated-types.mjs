@@ -63,7 +63,9 @@ const ALLOWED_ENUMS = new Set(["org_role"]);
 
 const [inputPath, outputPath] = process.argv.slice(2);
 if (!inputPath || !outputPath) {
-  console.error("Usage: node scripts/filter-generated-types.mjs <input> <output>");
+  console.error(
+    "Usage: node scripts/filter-generated-types.mjs <input> <output>",
+  );
   process.exit(1);
 }
 const lines = readFileSync(inputPath, "utf8").split(/\r?\n/);
@@ -119,7 +121,11 @@ const viewsStart = findLine(tablesRes.sectionEnd, "    Views: {");
 const viewsRes = filterSection(viewsStart, ALLOWED_VIEWS, "Views");
 
 const functionsStart = findLine(viewsRes.sectionEnd, "    Functions: {");
-const functionsRes = filterSection(functionsStart, ALLOWED_FUNCTIONS, "Functions");
+const functionsRes = filterSection(
+  functionsStart,
+  ALLOWED_FUNCTIONS,
+  "Functions",
+);
 
 const enumsStart = findLine(functionsRes.sectionEnd, "    Enums: {");
 const enumsRes = filterSection(enumsStart, ALLOWED_ENUMS, "Enums");
