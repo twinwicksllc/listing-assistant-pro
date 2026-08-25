@@ -117,6 +117,32 @@ the state observed here. Confirm what actually applied with:
 SELECT version FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 10;
 ```
 
+**Confirmed 2026-08-25.** The latest applied version is `20260819000000`. **Ten
+migrations are pending**, and the backlog is far wider than the category work — it
+has been accumulating since 2026-08-19:
+
+| Pending version  | What it does                                                         |
+| ---------------- | -------------------------------------------------------------------- |
+| `20260819010000` | inventory-sync cursor-starvation fix                                 |
+| `20260819020000` | **`DROP TABLE public.ebay_tokens`** (dead schema, 0 rows)            |
+| `20260819030000` | reprice/optimization table tracking                                  |
+| `20260819040000` | drafts + subscriptions drift reconcile, incl. **`DROP COLUMN`**      |
+| `20260819050000` | subscriptions constraint drift reconcile                             |
+| `20260819060000` | subscriptions status CHECK                                           |
+| `20260819070000` | subscriptions status CHECK convergence, drops/recreates a constraint |
+| `20260823000000` | `ebay_taxonomy_meta` (PR #528 drift tripwire)                        |
+| `20260824000000` | schedule `category-hygiene-weekly` (Finding D fix)                   |
+| `20260825000000` | hygiene precedence rewrite (`find_rotted_mappings`)                  |
+
+Two consequences worth separating. First, the category-resolver symptoms are the
+tail of a general pipeline failure, not a category-specific problem — notably
+`inventory-sync-every-15min` is scheduled and running against unpatched SQL from
+`20260819010000`. Second, **clearing this backlog is not a routine re-run**: it
+includes a `DROP TABLE`, a `DROP COLUMN created_at` on `subscriptions`, and
+constraint drops/recreates on a billing table in a database shared with the
+unrelated CRM product. That needs explicit owner sign-off and a backup check
+before any deploy re-run, not an automatic retry.
+
 This is a pipeline-integrity issue that outlives the category work: any migration
 in this repo can silently fail to apply while its dependent function code ships.
 Worth its own fix (drop `continue-on-error`, or raise the timeout and gate the
