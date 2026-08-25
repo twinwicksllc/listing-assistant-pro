@@ -79,10 +79,9 @@ function findLineMatching(from, re) {
 }
 
 function filterSection(sectionStart, allowed, label) {
-  // sectionStart points at e.g. "    Tables: {" (4-space indent). The
-  // closing brace is "    }" when more siblings follow, or "    }," when
-  // this is the last/only key in its parent (e.g. Constants.public).
-  const sectionEnd = findLineMatching(sectionStart + 1, /^    \},?$/);
+  // sectionStart points at e.g. "    Tables: {" (4-space indent).
+  // The section ends with "    };" (type literal) or "    }," / "    }" (object literal).
+  const sectionEnd = findLineMatching(sectionStart + 1, /^    \}[;,]?$/);
   const kept = [];
   let i = sectionStart + 1;
   let removed = [];
