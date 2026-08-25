@@ -3,36 +3,29 @@ name: Category Taxonomy Maintenance
 # Manual triggers for the two category-maintenance Edge Functions, the weekly
 # category_mappings hygiene run, and the weekly golden-corpus snapshot refresh.
 #
-# SCHEDULING OWNERSHIP -- verified against production cron.job on 2026-08-24:
+# SCHEDULING OWNERSHIP:
 #
 #   sync-ebay-taxonomy    pg_cron 'sync-ebay-taxonomy-weekly', Sun 03:11 UTC
-#                         CONFIRMED PRESENT in cron.job.
+#                         CONFIRMED PRESENT in cron.job as of 2026-08-24.
 #                         This workflow ALSO scheduled it (Sun 03:00), so it was
 #                         being double-invoked -- a full-tree eBay pull twice, 11
 #                         minutes apart. Now dispatch-only here; pg_cron owns it.
 #
 #   category-hygiene-cron pg_cron 'category-hygiene-weekly', Sun 04:11 UTC
-#                         NOT PRESENT in cron.job. Migration
-#                         20260824000000_schedule_category_hygiene_cron_properly.sql
-#                         is merged but has NOT been applied to production, so
-#                         this workflow is currently the ONLY thing running the
-#                         hygiene job. Its schedule therefore stays here.
+#                         Migration 20260824000000_schedule_category_hygiene_cron_properly.sql
+#                         applied to production 2026-08-25 (unconditional
+#                         cron.schedule() call, part of the same deploy that
+#                         cleared the migration backlog) -- pg_cron now owns
+#                         this schedule too. This workflow is dispatch-only for
+#                         it, matching sync-taxonomy, to avoid re-introducing
+#                         the double-invoke bug this file was written to fix.
 #
-# What WAS wrong with the hygiene schedule, and what this fixes: it ran at Sun
-# 02:00 UTC, an hour BEFORE the 03:11 taxonomy sync. Phase 5 gave the job a
+# What WAS wrong with the hygiene schedule, historically: it ran at Sun 02:00
+# UTC, an hour BEFORE the 03:11 taxonomy sync. Phase 5 gave the job a
 # rot-detection duty (find_rotted_mappings) that compares category_mappings
 # against ebay_taxonomy_cache, so running it pre-sync evaluated rot against a
-# week-old cache and could flag rows 'needs_review' on stale evidence. It now
-# runs at 04:47 UTC, after the sync has refreshed the cache. (GitHub Actions cron
-# drifts under queue load -- observed 31-71 min late in category_hygiene_log --
-# so the nominal time is set late enough that even a zero-drift run lands after
-# the sync.)
-#
-# FOLLOW-UP, once 20260824000000 is actually applied: 'category-hygiene-weekly'
-# will run at 04:11 and this workflow's 04:47 run becomes a duplicate. Delete the
-# '47 4 * * 0' schedule below and make the category-hygiene job dispatch-only,
-# matching sync-taxonomy. Verify first with:
-#   SELECT jobname, schedule FROM cron.job ORDER BY jobname;
+# week-old cache and could flag rows 'needs_review' on stale evidence. pg_cron's
+# 04:11 UTC schedule runs it after the sync, same rationale.
 #
 # Note on 20260824000000's Finding D: it concluded category-hygiene-cron had
 # "never run" from inspecting cron.schedule() calls alone. That missed this
@@ -44,10 +37,6 @@ name: Category Taxonomy Maintenance
 
 on:
   schedule:
-    # category_mappings hygiene -- Sunday 04:47 UTC, after pg_cron's 03:11
-    # taxonomy sync, so rot detection reads a freshly-synced cache. Remove this
-    # once pg_cron's 'category-hygiene-weekly' exists (see FOLLOW-UP above).
-    - cron: "47 4 * * 0"
     # Golden-corpus snapshot refresh -- Sunday 05:47 UTC, comfortably after
     # pg_cron's 03:11 taxonomy sync has finished writing ebay_taxonomy_cache.
     # Off-minutes per the project convention for spacing scheduled jobs apart.
@@ -75,10 +64,8 @@ jobs:
   category-hygiene:
     name: Category Hygiene Cleanup
     runs-on: ubuntu-latest
-    # Scheduled here because pg_cron's 'category-hygiene-weekly' does not exist
-    # yet (migration 20260824000000 unapplied) -- this is the only thing running
-    # the hygiene job today. Make dispatch-only once that job is confirmed live.
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '47 4 * * 0'
+    # Manual only -- pg_cron 'category-hygiene-weekly' owns the schedule.
+    if: github.event_name == 'workflow_dispatch'
     steps:
       - name: Call category-hygiene-cron
         run: |
