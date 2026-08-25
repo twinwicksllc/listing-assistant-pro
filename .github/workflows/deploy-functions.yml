@@ -23,16 +23,43 @@ jobs:
         with:
           version: latest
 
-      - name: Push Database Migrations
-        continue-on-error: true
-        timeout-minutes: 2
+      # Fails the deploy if supabase/config.toml's verify_jwt = false set and the
+      # explicit --no-verify-jwt deploy list below have drifted, or if any
+      # requireCronSecret function is missing from both. See the script header and
+      # the RBR-0028 note on the deploy step for why that drift is invisible in
+      # production (401 at the gateway, zero function logs). Runs before anything
+      # is touched so a misconfigured deploy never starts.
+      - name: Verify function auth config
+        run: bash scripts/verify-function-auth-config.sh
+
+      # NOTE: this step deliberately has NO continue-on-error. It used to, paired
+      # with timeout-minutes: 2 covering link + repair + push. The combination
+      # silently swallowed every migration failure and let the Edge Function
+      # deploy proceed anyway, so a green run could ship function code against a
+      # schema that never migrated. That is not hypothetical: it was found on
+      # 2026-08-25 with the database ten migrations behind (latest applied
+      # 20260819000000) while all functions were current -- including
+      # category-hygiene-cron calling find_rotted_mappings(), an RPC from the
+      # unapplied 20260825000000. A failed migration must now fail the run and
+      # stop the deploy, which is the whole point.
+      #
+      # The timeout is 15 minutes rather than 2 because link + repair + a
+      # multi-migration push against a remote project genuinely exceeds two
+      # minutes; that tight budget was itself a likely cause of the failures.
+      - name: Report pending migrations
+        timeout-minutes: 5
         run: |
           set -euo pipefail
-
-          # Apply migrations using Supabase CLI
-          # First link the project using the access token
-
           supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
+          echo "── Migration state BEFORE push (Local = in repo, Remote = applied) ──"
+          supabase migration list --linked
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Push Database Migrations
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
 
           # Repair any remote migrations that no longer exist locally
           # (marks them as reverted so db push doesn't complain)
@@ -41,6 +68,15 @@ jobs:
 
           # Then push migrations (include-all handles missing historical migrations)
           supabase db push --yes --include-all
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Confirm migration state after push
+        if: always()
+        timeout-minutes: 5
+        run: |
+          echo "── Migration state AFTER push ──"
+          supabase migration list --linked || true
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
@@ -75,6 +111,7 @@ jobs:
           supabase functions deploy inventory-sync-cron --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
           supabase functions deploy cost-alert-cron --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
           supabase functions deploy cleanup-media-retention --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
+          supabase functions deploy category-hygiene-cron --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
           supabase functions deploy backfill-ebay-token-encryption --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
           supabase functions deploy backfill-knowledge-base-embeddings --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
           supabase functions deploy stripe-webhook --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt

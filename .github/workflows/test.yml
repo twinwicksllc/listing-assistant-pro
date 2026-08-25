@@ -57,6 +57,14 @@ jobs:
       - name: Lint functions
         run: deno lint --config supabase/functions/deno.json supabase/functions/
 
+      # Catches verify_jwt/deploy-list drift at PR time rather than at deploy
+      # time. deploy-functions.yml runs the same script, but only on main -- and a
+      # function whose verify_jwt = false never reaches the platform fails with a
+      # 401 and zero function logs, which is expensive to diagnose after the fact
+      # (RBR-0028). No credentials needed; it only reads files in the repo.
+      - name: Verify function auth config
+        run: bash scripts/verify-function-auth-config.sh
+
   # Category Resolver v2: golden-corpus replay harness (Phase 3)
   # Static/offline check that corpus/golden_corpus.json is internally
   # consistent with the frozen corpus/ebay_taxonomy_snapshot.json AND that
