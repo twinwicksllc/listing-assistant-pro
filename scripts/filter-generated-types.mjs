@@ -62,7 +62,11 @@ const ALLOWED_FUNCTIONS = new Set([
 const ALLOWED_ENUMS = new Set(["org_role"]);
 
 const [inputPath, outputPath] = process.argv.slice(2);
-const lines = readFileSync(inputPath, "utf8").split("\n");
+if (!inputPath || !outputPath) {
+  console.error("Usage: node scripts/filter-generated-types.mjs <input> <output>");
+  process.exit(1);
+}
+const lines = readFileSync(inputPath, "utf8").split(/\r?\n/);
 
 function findLine(from, exact) {
   for (let i = from; i < lines.length; i++) {
