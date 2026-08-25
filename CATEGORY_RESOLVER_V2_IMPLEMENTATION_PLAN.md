@@ -52,9 +52,117 @@ Cross-checking `leafCategoryGuard.ts`'s `KNOWN_PARENT_CATEGORY_IDS` blocklist ag
 
 (Carried forward from the earlier audit, restated briefly since it directly shapes §4 below.) 96 recorded publish successes, 0 recorded failures, across 40 rows — while the user was independently reporting category errors the same week. 11 of those 40 rows are `ai_auto` guesses that reached `approved` status on a single successful publish, with no human ever reviewing them. 17 of 40 are year-locked duplicates of concepts that already have a generic, verified row (e.g., `1921 morgan silver dollar` alongside the already-`user_verified` `morgan dollar`). Three sports-card rows are mislabeled (`Basketball Cards` for Donruss/Upper Deck _baseball_; one row's own stored name is the placeholder string `"Category #183437"`, meaning the code that wrote it did not know what that category was).
 
-### Finding D — `category-hygiene-cron` (the job that would have caught Finding C) has never run
+### Finding D — `category-hygiene-cron` was never scheduled from pg_cron (but see the correction below)
 
 Confirmed by reading every migration that calls `cron.schedule()`: only `sync-ebay-taxonomy-weekly`, `invoke-cost-alert-cron-daily`, `cleanup-media-retention-daily`, `inventory-sync-every-15min`, and `competitor-prices-refresh-cursor-5min` are actually scheduled. The migration meant to schedule `category-hygiene-cron` (`20260331000000_schedule_category_hygiene_cron.sql`) creates a log table and leaves the actual scheduling as a comment with three unexecuted options. `category_hygiene_log` should be empty — that's the one-query way to confirm this before touching anything.
+
+**Correction (2026-08-24), after Phase 1 shipped.** The scan above only looked at
+`cron.schedule()` calls in migrations, and that was too narrow a search: it missed
+`.github/workflows/category-taxonomy-sync.yml`, which has been POSTing
+`category-hygiene-cron` (and `sync-ebay-taxonomy`) on a weekly GitHub Actions
+`schedule:` trigger since commit `bb938ee`, 2026-07-18 — whose subject line is
+"fix: actually schedule the weekly eBay category taxonomy sync + hygiene cron."
+It authenticates with `SUPABASE_SERVICE_KEY`, which `requireCronSecret()` accepts,
+so it was not failing auth. **The function has been running; it just was not
+running from pg_cron.**
+
+This was then confirmed directly against production: `category_hygiene_log` holds
+six rows, one per week from 2026-07-19 to 2026-08-23, every one `status = success`
+— i.e. starting the week after `bb938ee` landed the GitHub Actions schedule. The
+claim that the job "has never run" is false. Reassuringly, the two score-based
+duties that Phase 5 deleted were no-ops in every logged run (`"expired": 0`,
+`"audit_cleaned": 0`), so removing them destroyed no behaviour that was actually
+doing work.
+
+**The timestamp anomaly, resolved.** The first three logged runs cluster at
+`03:11:23`/`03:11:16`/`03:11:19` — seconds-precise across three weeks — which looked
+like pg_cron rather than GitHub Actions jitter, and `03:11` is
+`sync-ebay-taxonomy-weekly`'s slot. `SELECT jobname, schedule FROM cron.job` settled
+it: there is no hygiene job in pg_cron at all, and the workflow has had
+`0 2 * * 0` since `bb938ee`. So those runs were Actions cron drift after all
+(~71 min, versus 31–47 min for the later three). No hidden Dashboard job exists.
+
+### Finding E — migration `20260824000000` is merged but NOT applied to production
+
+The same `cron.job` query surfaced something more consequential. Production has
+exactly five scheduled jobs — `cleanup-media-retention-daily`,
+`competitor-prices-refresh-cursor-5min`, `inventory-sync-every-15min`,
+`invoke-cost-alert-cron-daily`, `sync-ebay-taxonomy-weekly` — and
+**`category-hygiene-weekly` is not among them.** Phase 1's migration is in `main`
+but has not reached the database, which means:
+
+- `category-hygiene-cron` is scheduled **only** by
+  `.github/workflows/category-taxonomy-sync.yml`. It was never actually
+  double-scheduled; the double-schedule was a latent problem waiting for the
+  migration to land, not a live one.
+- Phase 5's edge-function code **has** deployed (functions and migrations ship
+  from the same workflow), so the deployed `category-hygiene-cron` now calls
+  `find_rotted_mappings()` — created by `20260825000000`, also unapplied. Both RPC
+  calls are defensively wrapped (`console.warn` + an error counter, no throw), so
+  the job degrades to a no-op on those duties rather than failing; expect
+  `rot_errors: 1` / `dedup_errors: 1` in `category_hygiene_log` while this holds.
+- `ebay_taxonomy_meta` (`20260823000000`) is likely absent too, so the PR #528
+  tree-version drift tripwire — the thing meant to catch Finding B automatically —
+  probably is not recording anything yet. Worth confirming.
+
+**Likely mechanism.** `deploy-functions.yml`'s "Push Database Migrations" step is
+`continue-on-error: true` with `timeout-minutes: 2`, and it runs `supabase link`
+plus `supabase db push --yes --include-all` inside that budget. If the push fails
+or simply exceeds two minutes, the workflow swallows it and proceeds to deploy the
+Edge Functions anyway. That combination can put deployed function code in front of
+a schema that never migrated, with a green checkmark on the run — which is exactly
+the state observed here. Confirm what actually applied with:
+
+```sql
+SELECT version FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 10;
+```
+
+**Confirmed 2026-08-25.** The latest applied version is `20260819000000`. **Ten
+migrations are pending**, and the backlog is far wider than the category work — it
+has been accumulating since 2026-08-19:
+
+| Pending version  | What it does                                                         |
+| ---------------- | -------------------------------------------------------------------- |
+| `20260819010000` | inventory-sync cursor-starvation fix                                 |
+| `20260819020000` | **`DROP TABLE public.ebay_tokens`** (dead schema, 0 rows)            |
+| `20260819030000` | reprice/optimization table tracking                                  |
+| `20260819040000` | drafts + subscriptions drift reconcile, incl. **`DROP COLUMN`**      |
+| `20260819050000` | subscriptions constraint drift reconcile                             |
+| `20260819060000` | subscriptions status CHECK                                           |
+| `20260819070000` | subscriptions status CHECK convergence, drops/recreates a constraint |
+| `20260823000000` | `ebay_taxonomy_meta` (PR #528 drift tripwire)                        |
+| `20260824000000` | schedule `category-hygiene-weekly` (Finding D fix)                   |
+| `20260825000000` | hygiene precedence rewrite (`find_rotted_mappings`)                  |
+
+Two consequences worth separating. First, the category-resolver symptoms are the
+tail of a general pipeline failure, not a category-specific problem — notably
+`inventory-sync-every-15min` is scheduled and running against unpatched SQL from
+`20260819010000`. Second, **clearing this backlog is not a routine re-run**: it
+includes a `DROP TABLE`, a `DROP COLUMN created_at` on `subscriptions`, and
+constraint drops/recreates on a billing table in a database shared with the
+unrelated CRM product. That needs explicit owner sign-off and a backup check
+before any deploy re-run, not an automatic retry.
+
+This is a pipeline-integrity issue that outlives the category work: any migration
+in this repo can silently fail to apply while its dependent function code ships.
+Worth its own fix (drop `continue-on-error`, or raise the timeout and gate the
+function deploy on migration success) rather than being folded into this plan.
+
+**What was fixed, given Finding E.** `sync-ebay-taxonomy` genuinely was
+double-invoked (Actions 03:00 + pg_cron 03:11), so its Actions job is now
+`workflow_dispatch`-only and pg_cron owns it. `category-hygiene-cron` keeps its
+Actions schedule, because that is currently the only thing running it — but moved
+from Sun 02:00 to Sun 04:47 UTC so it lands _after_ the 03:11 taxonomy sync and
+rot detection reads a fresh cache. That is the stale-evidence bug fixed without
+depending on an unapplied migration. Once `category-hygiene-weekly` is confirmed
+live in `cron.job`, the 04:47 Actions schedule becomes redundant and should be
+removed, leaving pg_cron as the single scheduler as originally intended; the
+workflow carries that follow-up and the verification query inline.
+
+**Method note worth carrying forward:** "is this job scheduled?" is not answerable
+from `supabase/migrations/` alone in this repo. Cron-shaped work lives in at least
+two places — pg_cron migrations and `.github/workflows/*.yml` — so both need
+checking before concluding a function is dormant.
 
 ---
 

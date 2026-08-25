@@ -1,29 +1,54 @@
-name: Weekly Category Taxonomy Sync
+name: Category Taxonomy Maintenance
 
-# Runs two previously-unscheduled maintenance jobs:
-#   - sync-ebay-taxonomy: pulls eBay's full active/current category tree
-#     into ebay_taxonomy_cache (source of truth for category breadcrumbs
-#     used by analyze-item and the frontend Analyze page)
-#   - category-hygiene-cron: dedupes, decays, and expires stale/low-confidence
-#     rows in category_mappings, and cleans up old cache/audit entries
+# Manual triggers for the two category-maintenance Edge Functions, the weekly
+# category_mappings hygiene run, and the weekly golden-corpus snapshot refresh.
 #
-# Both functions previously had comments claiming a weekly pg_cron schedule
-# that was never actually created — they only ran when manually POSTed.
-# This workflow is the actual schedule.
+# SCHEDULING OWNERSHIP:
+#
+#   sync-ebay-taxonomy    pg_cron 'sync-ebay-taxonomy-weekly', Sun 03:11 UTC
+#                         CONFIRMED PRESENT in cron.job as of 2026-08-24.
+#                         This workflow ALSO scheduled it (Sun 03:00), so it was
+#                         being double-invoked -- a full-tree eBay pull twice, 11
+#                         minutes apart. Now dispatch-only here; pg_cron owns it.
+#
+#   category-hygiene-cron pg_cron 'category-hygiene-weekly', Sun 04:11 UTC
+#                         Migration 20260824000000_schedule_category_hygiene_cron_properly.sql
+#                         applied to production 2026-08-25 (unconditional
+#                         cron.schedule() call, part of the same deploy that
+#                         cleared the migration backlog) -- pg_cron now owns
+#                         this schedule too. This workflow is dispatch-only for
+#                         it, matching sync-taxonomy, to avoid re-introducing
+#                         the double-invoke bug this file was written to fix.
+#
+# What WAS wrong with the hygiene schedule, historically: it ran at Sun 02:00
+# UTC, an hour BEFORE the 03:11 taxonomy sync. Phase 5 gave the job a
+# rot-detection duty (find_rotted_mappings) that compares category_mappings
+# against ebay_taxonomy_cache, so running it pre-sync evaluated rot against a
+# week-old cache and could flag rows 'needs_review' on stale evidence. pg_cron's
+# 04:11 UTC schedule runs it after the sync, same rationale.
+#
+# Note on 20260824000000's Finding D: it concluded category-hygiene-cron had
+# "never run" from inspecting cron.schedule() calls alone. That missed this
+# workflow, which had POSTed the function weekly since 2026-07-18 (bb938ee) using
+# SUPABASE_SERVICE_KEY -- a token requireCronSecret() accepts. Verified against
+# production: category_hygiene_log holds six weekly rows, 2026-07-19 to
+# 2026-08-23, all status=success. The score-based duties Phase 5 deleted were
+# no-ops in every logged run ("expired": 0), so nothing load-bearing was removed.
 
 on:
   schedule:
-    # eBay taxonomy full-tree sync — Sunday 03:00 UTC
-    - cron: "0 3 * * 0"
-    # category hygiene cleanup — Sunday 02:00 UTC
-    - cron: "0 2 * * 0"
+    # Golden-corpus snapshot refresh -- Sunday 05:47 UTC, comfortably after
+    # pg_cron's 03:11 taxonomy sync has finished writing ebay_taxonomy_cache.
+    # Off-minutes per the project convention for spacing scheduled jobs apart.
+    - cron: "47 5 * * 0"
   workflow_dispatch: {}
 
 jobs:
   sync-taxonomy:
     name: Sync eBay Taxonomy
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 3 * * 0'
+    # Manual only -- pg_cron 'sync-ebay-taxonomy-weekly' owns the schedule.
+    if: github.event_name == 'workflow_dispatch'
     steps:
       - name: Call sync-ebay-taxonomy
         run: |
@@ -39,7 +64,8 @@ jobs:
   category-hygiene:
     name: Category Hygiene Cleanup
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 2 * * 0'
+    # Manual only -- pg_cron 'category-hygiene-weekly' owns the schedule.
+    if: github.event_name == 'workflow_dispatch'
     steps:
       - name: Call category-hygiene-cron
         run: |
@@ -52,20 +78,29 @@ jobs:
         if: always()
         run: cat /tmp/hygiene-result.json || true
 
-  # Runs immediately after the weekly taxonomy sync (Phase 3/5 follow-up:
-  # the golden corpus in corpus/golden_corpus.json ships with a FROZEN
-  # snapshot of ebay_taxonomy_cache for reproducible CI replay, which would
-  # otherwise silently drift every time this sync runs. This job re-validates
-  # the corpus against the table Sunday's sync just refreshed, refreshes the
-  # committed snapshot file, and opens a PR with the diff so drift is always
-  # a reviewable change instead of an invisible staleness gap.
+  # Runs after pg_cron's weekly taxonomy sync (Phase 3/5 follow-up: the golden
+  # corpus in corpus/golden_corpus.json ships with a FROZEN snapshot of
+  # ebay_taxonomy_cache for reproducible CI replay, which would otherwise
+  # silently drift every time that sync runs). This job re-validates the corpus
+  # against the table Sunday's 03:11 UTC sync just refreshed, refreshes the
+  # committed snapshot file, and opens a PR with the diff so drift is always a
+  # reviewable change instead of an invisible staleness gap.
+  #
+  # This is the ONLY scheduled job in this workflow -- see the ownership note at
+  # the top of the file.
   refresh-taxonomy-snapshot:
     name: Refresh Golden-Corpus Taxonomy Snapshot
     runs-on: ubuntu-latest
     needs: sync-taxonomy
+    # 'skipped' is the normal path on the weekly schedule: pg_cron already ran
+    # the sync at 03:11, so sync-taxonomy above is manual-only and does not run
+    # here. On a workflow_dispatch run it DOES run, and must succeed first so the
+    # snapshot is taken from a freshly-synced table. Without allowing 'skipped',
+    # `needs` would suppress this job on every scheduled run.
     if: |
-      always() && needs.sync-taxonomy.result == 'success' &&
-      (github.event_name == 'workflow_dispatch' || github.event.schedule == '0 3 * * 0')
+      always() &&
+      (needs.sync-taxonomy.result == 'success' || needs.sync-taxonomy.result == 'skipped') &&
+      (github.event_name == 'workflow_dispatch' || github.event.schedule == '47 5 * * 0')
     steps:
       - uses: actions/checkout@v4
 
