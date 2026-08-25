@@ -65,6 +65,15 @@ verify_jwt = false
 [functions.backfill-ebay-token-encryption]
 verify_jwt = false
 
+# Weekly category_mappings hygiene (dedup by precedence, rot detection, audit
+# cleanup). Gated in code by requireCronSecret, so it MUST be verify_jwt = false:
+# its pg_cron caller presents the cron_secret as a bearer token, which is not a
+# JWT, and the platform gate would 401 it before the function ever runs (the
+# RBR-0028 signature -- a 401 with zero function logs). Missing this entry was
+# why 20260824000000's pg_cron job could never have worked.
+[functions.category-hygiene-cron]
+verify_jwt = false
+
 # One-off, manually-invoked backfill for RBR-0030's embedding-model swap
 # (re-embeds any knowledge_base row not yet on GEMINI_EMBEDDING_MODEL). Not
 # scheduled. Gated in code by requireCronSecret (same reasoning as above).
