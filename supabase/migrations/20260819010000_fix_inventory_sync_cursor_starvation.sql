@@ -6,8 +6,16 @@
 -- satisfy, since no row is ever written for them) with the new
 -- profiles.last_ebay_sync_at column, set unconditionally after every sync
 -- attempt regardless of outcome.
+--
+-- The OUT parameter is renamed (oldest_last_seen_at -> last_ebay_sync_at) to
+-- match the new source column, so this must DROP first: Postgres rejects
+-- CREATE OR REPLACE FUNCTION when it would change the row type defined by
+-- OUT parameters (SQLSTATE 42P13). Safe to drop and recreate -- the only
+-- caller (inventory-sync-cron/index.ts) reads candidates by user_id only,
+-- never by this column's name.
+DROP FUNCTION IF EXISTS public.get_users_for_inventory_sync(INTEGER, TIMESTAMPTZ);
 
-CREATE OR REPLACE FUNCTION public.get_users_for_inventory_sync(
+CREATE FUNCTION public.get_users_for_inventory_sync(
   p_limit INTEGER,
   p_stale_before TIMESTAMPTZ
 )
