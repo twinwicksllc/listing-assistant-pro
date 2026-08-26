@@ -160,7 +160,7 @@ behind each is on the record, with disposition stated.
 | A3  | Trademark and naming-conflict research (A.1 below)            | **Name approved by the owner 2026-08-26 (A.1a, option 1).** Filing still deferred. Basis was the `listerassister` search: dead/abandoned 2014, never registered (A.1c). Wider A.1b search list and the TSDR Office action (A.1h) remain open but are no longer gating                                                                                                                 |
 | A4  | Defensive registrations                                       | **Resolved into a recommendation — see A.1e.** No variants owned. `listerassister.com` is taken by a live business and must not be pursued (A.1d). All nine other checked variants appear unregistered; the two worth taking are `listerassistr.com` and `listrassister.com`                                                                                                          |
 | A5  | Authoritative DNS provider                                    | **Settled: AWS Route 53.** Registrar and DNS are the same provider and the same AWS account. See Section C for the consequence                                                                                                                                                                                                                                                        |
-| A6  | **Inbound** mailbox provider for role addresses               | **Open (Group 4, not yet answered).** Plan §8.2.1 needs `support`/`privacy`/`legal`/`security@`; §6.1 also names `alerts@`. Resend is **send-only** and does not receive mail, so this is a separate provider decision (Google Workspace, Microsoft 365, Fastmail, or registrar-level forwarding) that adds MX records to the zone                                                    |
+| A6  | **Inbound** mailbox provider for role addresses               | **Open, with a recommendation — see F.4.** Resend is **send-only**. A free `@gmail.com` account **cannot** receive domain mail, so forwarding or a real mailbox provider is required. Recommended: **Google Workspace, one seat, role addresses as free aliases**. Also unresolved: which role-address set is authoritative, plus a `From` address for auth mail (F.3)                |
 
 ### A.2 The §8.1.1 entity gate cannot be met yet — owner decision required
 
@@ -1041,6 +1041,125 @@ makes the recommendation fairly clear.
 Either way, this stays an owner decision — it is a provider account and a spend
 commitment.
 
+**Confirmed 2026-08-26: yes, a new dedicated Resend account is the recommendation.**
+$0 versus $20/month, consistent with DEC-0027, and a sending reputation independent
+of the CRM's.
+
+### F.2 Is Resend the right provider at all? Lock-in is almost nil
+
+Asked by the owner 2026-08-26. Resend is **not** an industry standard — it is the
+modern developer-experience pick, and it is a layer **on top of Amazon SES**. The
+long-standing incumbents are SendGrid, Mailgun, and SES itself.
+
+**The switching cost is far lower than expected.** Verified by grep 2026-08-26:
+Resend appears in **exactly one file** — `supabase/functions/cost-alert-cron/index.ts`,
+one `fetch` to `api.resend.com/emails` at line 130, sending one internal admin alert
+from `alerts@rankedceo.com` (line 143). No other sender exists anywhere in the
+repository. So the provider is not a load-bearing architectural choice here; changing
+it is roughly a ten-line edit.
+
+| Option                 | Fits                                                                                                                                                                          | Against                                                                                                                                                                    |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Resend** (stay)      | Already wired; good DX for a solo operator; free tier covers current volume; SMTP available for Supabase Auth                                                                 | A reseller margin over SES; free tier caps at 3,000/month and 100/day                                                                                                      |
+| **Amazon SES**         | **Same delivery infrastructure Resend resells**, at a fraction of the cost and no monthly fee. Already an AWS shop — Route 53 is here, so one vendor, one bill, one IAM story | Rawest DX: you handle bounce/complaint webhooks via SNS, your own suppression list, and you must request exit from the SES sandbox before sending to unverified recipients |
+| **Postmark**           | Strongest transactional deliverability reputation; excellent logs                                                                                                             | Costs more; strict separation of transactional and marketing mail                                                                                                          |
+| **SendGrid / Mailgun** | Long-established, huge scale                                                                                                                                                  | Shared-IP reputation on lower tiers is a known deliverability risk                                                                                                         |
+
+**Recommendation: stay with Resend for Phase 1.** It is already integrated, the DX
+is worth real time on a solo project, and the free tier covers current volume. The
+grep result is what makes this low-stakes — if cost or volume ever argues for SES,
+that switch is cheap and can happen whenever.
+
+Worth stating the honest alternative: consolidating on **SES** from the start is
+defensible, given everything else is already AWS. The trade is DX and
+bounce-handling work against per-email cost, and at 3,000 emails/month the cost
+difference is negligible — so DX should win for now.
+
+**Scope note:** changing provider touches `cost-alert-cron`, which is repository
+code and therefore §9/Phase 2, **not** authorised by DEC-0035. Publishing a
+provider's DNS records is §8.2 and is in scope. The reason the decision still
+belongs in Phase 1 is that the DKIM/SPF records are provider-specific — choosing
+later means republishing records and restarting DMARC alignment work.
+
+### F.3 The customer-facing mail path is not Resend — verify Supabase Auth SMTP
+
+This matters more than the provider question, and it was not previously captured.
+
+Established by inspection 2026-08-26: `supabase/config.toml` contains **only**
+`project_id` and `[functions.*]` `verify_jwt` blocks — there is **no `[auth]`
+section and no SMTP configuration anywhere in the repository**, and Resend is called
+only from `cost-alert-cron`. So nothing in this repo sends customer-facing mail.
+
+That means **signup confirmations, password resets, and magic links are being sent
+by whatever the live Supabase project's Auth settings specify** — a dashboard
+setting this repository cannot see. Two possibilities:
+
+- **Custom SMTP already configured** in the dashboard → fine, but it needs to be
+  identified and included in the SPF/DKIM/DMARC record set.
+- **Supabase's built-in mailer** (the default) → it sends from a Supabase-owned
+  domain, so it is **not DMARC-aligned with `listrassistr.com`**, and it is
+  explicitly rate-limited and not intended for production volume.
+
+**Why this is an exit-gate issue.** P1-08 is "branded email authenticates —
+Gmail/Outlook headers showing aligned SPF+DKIM+DMARC pass, `d=listrassistr.com`".
+Auth email is the mail customers actually receive; the internal cost alert is not.
+Fixing only `cost-alert-cron` would leave the gate unmet in the way that matters.
+
+**Good news on scope:** Supabase Auth SMTP is a **project dashboard setting**, not
+repository code, so configuring it sits inside §8.2 and is authorised under
+DEC-0035.
+
+- [ ] Check the live Supabase project → Authentication → SMTP settings. Record
+      whether custom SMTP is set, and if so, which provider. Names only, never the
+      credential.
+- [ ] If it is the built-in mailer, point Auth at the new Resend account's SMTP so
+      auth mail sends from `listrassistr.com` and can align for DMARC.
+- [ ] Decide the `From` address for auth mail — plan §6.1's set does not name one;
+      something like `no-reply@` or `accounts@` is conventional and should be added
+      to the address list in A6/F.4.
+- [ ] Do the same check for the **staging** project (`yqftpibxplachhwoclam`), so test
+      signups do not send from an unaligned or production sender.
+
+### F.4 Inbound role mailboxes — a free Gmail account cannot receive domain mail
+
+Asked by the owner 2026-08-26 ("create a Gmail to be aliased as
+@listrassistr.com"). The instinct is right but one mechanism does not exist, and it
+is the crux:
+
+**A free `@gmail.com` account cannot receive mail addressed to your domain.** There
+is no way to point `listrassistr.com`'s MX records at a personal Gmail mailbox.
+Gmail's "Send mail as" only affects the **From** address on outbound mail; it does
+nothing for inbound. So something else must accept the mail first.
+
+| Option                                                   | Cost                                                | Notes                                                                                                                                                                                                                                                                                                                                             |
+| -------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Google Workspace** (Business Starter)                  | ~$7/user/month                                      | Real mailboxes on the domain, with proper domain DKIM. **Crucially: one paid seat carries around 30 free aliases**, so a single mailbox can hold `support@`, `privacy@`, `legal@`, `security@`, and `alerts@`, all landing in one inbox with send-as for each. One human, one seat, five role addresses                                           |
+| **Microsoft 365 Business Basic**                         | Similar                                             | Equivalent capability; shared mailboxes included with a license                                                                                                                                                                                                                                                                                   |
+| **Forwarding service** — ImprovMX, Forward Email, Migadu | Free to a few $/month                               | Forwards role addresses to a personal Gmail. Cheapest path. **Weak spot is replies:** replying via free Gmail's "send mail as" typically routes through Google's infrastructure and can fail DMARC alignment or render as "via gmail.com" — unprofessional, and an alignment problem for §8.2. Doing it properly needs the forwarder's SMTP relay |
+| **Zoho Mail**                                            | Free tier historically available for custom domains | Budget option; verify current terms, they have changed                                                                                                                                                                                                                                                                                            |
+| **AWS-native**                                           | —                                                   | **Route 53 offers no email forwarding.** AWS inbound mail means SES receiving, which is region-limited and needs S3/Lambda or WorkMail. More work than four aliases justify                                                                                                                                                                       |
+| Cloudflare Email Routing                                 | Free                                                | Frequently recommended, but **requires Cloudflare to be the DNS provider**. DNS is Route 53 here, so it is not available without moving DNS                                                                                                                                                                                                       |
+
+**Recommendation: Google Workspace, one seat, role addresses as free aliases.** Two
+reasons beyond convenience:
+
+1. **`security@` and `privacy@` will receive consequential mail** — vulnerability
+   reports, GDPR/CCPA data-subject requests, abuse notices. Silently losing one to a
+   forwarder misconfiguration costs far more than the monthly seat.
+2. **A clean reply path with real domain DKIM removes a DMARC alignment problem**
+   rather than adding one.
+
+**The interaction with Section D, which is the Phase 1 consequence.** Whichever is
+chosen becomes a **second legitimate sender** alongside Resend. That means:
+
+- Its **SPF include** must be merged into the single apex SPF TXT record — still
+  exactly one `v=spf1` record, per Section D.
+- Its **DKIM** must be published and passing.
+- Both senders must show alignment before moving off `p=none` (D.2).
+
+So the mailbox decision is part of the §8.2 record set, not a separate errand — and
+it is on the critical path for P1-07, P1-08, and the DMARC clock.
+
 ## Section G — Boundary
 
 I can draft, specify, and verify-by-procedure. I cannot and will not: register or
@@ -1096,16 +1215,22 @@ email, Supabase, brand) are not yet.
    `app`/`qa` record targets.
 6. Whether `qa` maps to a Vercel Preview environment or its own project.
 7. **Canonical host**: apex or `www`. Plan §6.1 implies apex.
-8. **Inbound mailbox provider** for the role addresses (A6).
+8. **Inbound mailbox provider** for the role addresses (A6/F.4) — recommendation is
+   Google Workspace with aliases; a free Gmail cannot receive domain mail.
 9. **Which role-address set is authoritative** — §8.2.1's four including
    `security@`, or §6.1's four including `alerts@`, or all five.
-10. **Resend path**: dedicated ListrAssistr account or shared-account upgrade
+10. ~~**Resend path**~~ — **confirmed 2026-08-26**: new dedicated Resend account
+    ($0 versus $20/month). The provider itself was reviewed in F.2 and Resend is
+    retained; lock-in is one file, so revisiting later is cheap.
+11. **Supabase Auth SMTP** (F.3) — verify whether custom SMTP is configured on the
+    live and staging projects. If it is the built-in mailer, customer-facing auth
+    mail is not aligned with the domain and P1-08 cannot be met.
     (Section F).
-11. **DMARC `rua` analyzer** destination address.
-12. Whether the "Join the preview" form on the coming-soon page **sends email
+12. **DMARC `rua` analyzer** destination address.
+13. Whether the "Join the preview" form on the coming-soon page **sends email
     today**, and where "Sign in" points — both bear on §8.2 and on whether any
     sender already needs DMARC alignment.
-13. **Which Supabase project the owner considers current**, and confirmation of
+14. **Which Supabase project the owner considers current**, and confirmation of
     the four unverified facts about `yqftpibxplachhwoclam`.
 
 ## Accepted risks carried into Phase 1
@@ -1288,7 +1413,7 @@ rather than recollection. Statuses: `Not started`, `In progress`,
 | P1-05 | DNSSEC enabled and DS chain verified                                | External validator output (Section E)                                                         | **Not started** — no DNSKEY or DS present, confirmed 2026-08-26. Sequenced early per I.1                                                                                                                                                                                             |
 | P1-06 | Vercel apex/`www`/`app`/`qa` resolving, certs issued                | External resolver output; cert status                                                         | **In progress** — apex and `www` live and verified. `app` and `qa` absent. Vercel project identity open (Group 3)                                                                                                                                                                    |
 | P1-07 | Role mailboxes receiving                                            | Inbound test result for every address                                                         | **Not started** — no MX present. Address set itself unresolved (four vs five, §8.2.1 vs §6.1)                                                                                                                                                                                        |
-| P1-08 | Branded email authenticates                                         | Gmail/Outlook headers showing aligned SPF+DKIM+DMARC pass, `d=listrassistr.com`               | **Not started** — no SPF, DKIM, or DMARC records present                                                                                                                                                                                                                             |
+| P1-08 | Branded email authenticates                                         | Gmail/Outlook headers showing aligned SPF+DKIM+DMARC pass, `d=listrassistr.com`               | **Not started** — no SPF, DKIM, or DMARC records present. Note F.3: the mail that must pass here is Supabase **Auth** mail, not the internal cost alert; verify the Auth SMTP setting                                                                                                |
 | P1-09 | DMARC report-review period completed                                | Analyzer reports covering every legitimate sender, over 2-4 weeks minimum                     | **Not started** — 30-day target per D.2; longest fixed wait in the phase, clock not begun                                                                                                                                                                                            |
 | P1-10 | Brand asset package produced                                        | Full §8.3 deliverable list                                                                    | **Not started**                                                                                                                                                                                                                                                                      |
 | P1-11 | Design tokens pass WCAG AA                                          | Measured contrast ratios; confirmation red is never the sole state indicator                  | **Not started**                                                                                                                                                                                                                                                                      |
