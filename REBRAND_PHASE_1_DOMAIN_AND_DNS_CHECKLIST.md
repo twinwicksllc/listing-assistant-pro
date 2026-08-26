@@ -822,19 +822,19 @@ The authority is **the Vercel dashboard for this project**, and that is where th
 cannot be used here at all — alias targets are AWS-only, and Vercel is not among
 them — so the plain A record is correct, not a workaround.
 
-| Host / name                                  | Type      | Value                                                                     | TTL at setup | Source of truth  | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| -------------------------------------------- | --------- | ------------------------------------------------------------------------- | ------------ | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `@` (apex)                                   | A         | `216.150.1.1` — **live**                                                  | 300          | Vercel           | Already configured and serving. **Verify against Vercel's current recommended apex value** before treating as final; also check whether Vercel now prefers a Route 53 ALIAS at the apex                                                                                                                                                                                                                                                                                                                            |
-| `www`                                        | CNAME     | `2f1e3f86cb32a6a8.vercel-dns-016.com` — **live**                          | 300          | Vercel           | Already configured. Canonical-host decision (apex vs `www`) still open — plan §6.1 implies apex = marketing, so apex-canonical with `www` redirecting                                                                                                                                                                                                                                                                                                                                                              |
-| `app`                                        | CNAME     | `<target shown by Vercel>` — **absent, required**                         | 300          | Vercel           | Plan §8.1.6. The primary application hostname per plan §6.1                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `qa`                                         | CNAME     | `<target shown by Vercel>` — **absent, required**                         | 300          | Vercel           | Plan §8.1.6; maps to the Vercel Preview/QA environment                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `_vercel`                                    | TXT       | `<verification token from Vercel>`                                        | 3600         | Vercel           | Not currently present and apparently not needed — the apex already resolves and serves. Add only if Vercel asks when `app`/`qa` are attached                                                                                                                                                                                                                                                                                                                                                                       |
-| `<selector>._domainkey`                      | TXT       | `<issued by Resend>`                                                      | 3600         | Resend           | Confirmed 2026-08-26 as a **TXT** record, not a CNAME. Publish exactly what the Resend dashboard issues, including the selector subdomain — do not template it                                                                                                                                                                                                                                                                                                                                                     |
-| `send` (or Resend's stated return-path host) | TXT / MX  | `<issued by Resend>`                                                      | 3600         | Resend           | Custom return-path / MAIL FROM alignment, plan §8.2.4                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `@` (apex)                                   | TXT (SPF) | `v=spf1 include:<resend-issued-include> ~all`                             | 3600         | Hand-built       | **Exactly one SPF TXT record per name.** Two SPF records is a permanent hard failure. Merge all senders into one string. Stay within the 10-DNS-lookup limit. Start `~all` (softfail), not `-all`                                                                                                                                                                                                                                                                                                                  |
-| `_dmarc`                                     | TXT       | `v=DMARC1; p=none; rua=mailto:<analyzer>; fo=1; adkim=r; aspf=r; pct=100` | 3600         | Hand-built       | Plan §8.2.3 mandates `p=none` **and a report-review period** before tightening. Start relaxed alignment (`r`) to avoid false failures during setup; tighten to `s` alongside the move to quarantine                                                                                                                                                                                                                                                                                                                |
-| `@` and/or mail host                         | MX        | `<issued by the A6 mailbox provider>`                                     | 3600         | Mailbox provider | Required for inbound `support`/`privacy`/`legal`/`security@`. Resend does not receive mail                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `@`                                          | CAA       | `0 issue "<CA confirmed from the live cert>"`                             | 3600         | Hand-built       | **Add only after certificates have issued, and only once the real issuing CA is confirmed.** Documentation says Vercel uses Let's Encrypt and auto-creates this record — but no CAA exists in this zone, because Vercel can only manage CAA when Vercel manages the DNS. The issuing CA **cannot be read from the owner's workstation** (Zscaler TLS interception returns a corporate certificate); confirm externally via SSL Labs or a personal device first. A wrong value silently blocks issuance and renewal |
+| Host / name                                  | Type      | Value                                                                         | TTL at setup | Source of truth  | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| -------------------------------------------- | --------- | ----------------------------------------------------------------------------- | ------------ | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@` (apex)                                   | A         | `216.150.1.1` — **live**                                                      | 300          | Vercel           | Already configured and serving. **Verify against Vercel's current recommended apex value** before treating as final; also check whether Vercel now prefers a Route 53 ALIAS at the apex                                                                                                                                                                                                                                                                                                                            |
+| `www`                                        | CNAME     | `2f1e3f86cb32a6a8.vercel-dns-016.com` — **live**                              | 300          | Vercel           | Already configured. Canonical-host decision (apex vs `www`) still open — plan §6.1 implies apex = marketing, so apex-canonical with `www` redirecting                                                                                                                                                                                                                                                                                                                                                              |
+| `app`                                        | CNAME     | `<target shown by Vercel>` — **absent, required**                             | 300          | Vercel           | Plan §8.1.6. The primary application hostname per plan §6.1                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `qa`                                         | CNAME     | `<target shown by Vercel>` — **absent, required**                             | 300          | Vercel           | Plan §8.1.6; maps to the Vercel Preview/QA environment                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `_vercel`                                    | TXT       | `<verification token from Vercel>`                                            | 3600         | Vercel           | Not currently present and apparently not needed — the apex already resolves and serves. Add only if Vercel asks when `app`/`qa` are attached                                                                                                                                                                                                                                                                                                                                                                       |
+| `<selector>._domainkey`                      | TXT       | `<issued by Resend>`                                                          | 3600         | Resend           | Confirmed 2026-08-26 as a **TXT** record, not a CNAME. Publish exactly what the Resend dashboard issues, including the selector subdomain — do not template it                                                                                                                                                                                                                                                                                                                                                     |
+| `send` (or Resend's stated return-path host) | TXT / MX  | `<issued by Resend>`                                                          | 3600         | Resend           | Custom return-path / MAIL FROM alignment, plan §8.2.4                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `@` (apex)                                   | TXT (SPF) | `v=spf1 include:<ses-issued-include> include:<mailbox-provider-include> ~all` | 3600         | Hand-built       | **Exactly one SPF TXT record per name.** Two SPF records is a permanent hard failure. Merge all senders into one string. Stay within the 10-DNS-lookup limit. Start `~all` (softfail), not `-all`                                                                                                                                                                                                                                                                                                                  |
+| `_dmarc`                                     | TXT       | `v=DMARC1; p=none; rua=mailto:<analyzer>; fo=1; adkim=r; aspf=r; pct=100`     | 3600         | Hand-built       | Plan §8.2.3 mandates `p=none` **and a report-review period** before tightening. Start relaxed alignment (`r`) to avoid false failures during setup; tighten to `s` alongside the move to quarantine                                                                                                                                                                                                                                                                                                                |
+| `@` and/or mail host                         | MX        | `<issued by the A6 mailbox provider>`                                         | 3600         | Mailbox provider | Required for inbound `support`/`privacy`/`legal`/`security@`. Resend does not receive mail                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `@`                                          | CAA       | `0 issue "<CA confirmed from the live cert>"`                                 | 3600         | Hand-built       | **Add only after certificates have issued, and only once the real issuing CA is confirmed.** Documentation says Vercel uses Let's Encrypt and auto-creates this record — but no CAA exists in this zone, because Vercel can only manage CAA when Vercel manages the DNS. The issuing CA **cannot be read from the owner's workstation** (Zscaler TLS interception returns a corporate certificate); confirm externally via SSL Labs or a personal device first. A wrong value silently blocks issuance and renewal |
 
 ### D.1 TTL sequencing (plan §8.1.7)
 
@@ -1041,9 +1041,11 @@ makes the recommendation fairly clear.
 Either way, this stays an owner decision — it is a provider account and a spend
 commitment.
 
-**Confirmed 2026-08-26: yes, a new dedicated Resend account is the recommendation.**
-$0 versus $20/month, consistent with DEC-0027, and a sending reputation independent
-of the CRM's.
+**Superseded 2026-08-26 — see F.5.** This was confirmed as "yes, a new dedicated
+Resend account" earlier the same day, on $0-versus-$20 grounds. The owner then chose
+to pursue **SES**, which carries auth mail without needing any Resend domain at all.
+So no Resend account is required right now. The pricing analysis above stays on the
+record for whenever `alerts@listrassistr.com` is wired in Phase 2.
 
 ### F.2 Is Resend the right provider at all? Lock-in is almost nil
 
@@ -1065,10 +1067,15 @@ it is roughly a ten-line edit.
 | **Postmark**           | Strongest transactional deliverability reputation; excellent logs                                                                                                             | Costs more; strict separation of transactional and marketing mail                                                                                                          |
 | **SendGrid / Mailgun** | Long-established, huge scale                                                                                                                                                  | Shared-IP reputation on lower tiers is a known deliverability risk                                                                                                         |
 
-**Recommendation: stay with Resend for Phase 1.** It is already integrated, the DX
-is worth real time on a solo project, and the free tier covers current volume. The
-grep result is what makes this low-stakes — if cost or volume ever argues for SES,
-that switch is cheap and can happen whenever.
+**Recommendation as first written: stay with Resend for Phase 1** — already
+integrated, good DX, free tier covers volume, and the one-file grep makes any later
+switch cheap.
+
+**Withdrawn 2026-08-26 — see F.5.** The "already integrated" argument does not
+survive inspection: the single Resend call sends from `alerts@rankedceo.com`, a
+different domain, so it carries no customer mail and appears nowhere in this zone's
+records. Combined with the owner's preference for AWS and the fact that Supabase
+Auth SMTP needs no code change, SES is the better fit. F.5 has the analysis.
 
 Worth stating the honest alternative: consolidating on **SES** from the start is
 defensible, given everything else is already AWS. The trade is DX and
@@ -1112,8 +1119,9 @@ DEC-0035.
 - [ ] Check the live Supabase project → Authentication → SMTP settings. Record
       whether custom SMTP is set, and if so, which provider. Names only, never the
       credential.
-- [ ] If it is the built-in mailer, point Auth at the new Resend account's SMTP so
-      auth mail sends from `listrassistr.com` and can align for DMARC.
+- [ ] If it is the built-in mailer, point Auth at **SES SMTP** (F.5) so auth mail
+      sends from `listrassistr.com` and can align for DMARC. This is a dashboard
+      change, not a code change.
 - [ ] Decide the `From` address for auth mail — plan §6.1's set does not name one;
       something like `no-reply@` or `accounts@` is conventional and should be added
       to the address list in A6/F.4.
@@ -1152,13 +1160,137 @@ reasons beyond convenience:
 **The interaction with Section D, which is the Phase 1 consequence.** Whichever is
 chosen becomes a **second legitimate sender** alongside Resend. That means:
 
-- Its **SPF include** must be merged into the single apex SPF TXT record — still
-  exactly one `v=spf1` record, per Section D.
+- Its **SPF include** must be merged into the single apex SPF TXT record, alongside
+  SES's include — still exactly one `v=spf1` record, per Section D.
 - Its **DKIM** must be published and passing.
 - Both senders must show alignment before moving off `p=none` (D.2).
 
 So the mailbox decision is part of the §8.2 record set, not a separate errand — and
 it is on the critical path for P1-07, P1-08, and the DMARC clock.
+
+### F.5 SES in practice — revises F.2's recommendation
+
+Owner stated a preference for staying on AWS, 2026-08-26. On re-examination that
+is better supported than F.2 allowed, because F.2's main argument for Resend —
+"it is already wired" — turns out not to apply to the mail that matters.
+
+**Why the existing integration is not an argument.** `cost-alert-cron/index.ts:143`
+sends from `alerts@rankedceo.com`, per DEC-0024. A **different domain**. So the
+existing Resend wiring:
+
+- does not carry any customer-facing mail, and
+- does not appear in `listrassistr.com`'s SPF or DKIM at all.
+
+It is an internal admin alert on the CRM's domain. Keeping it has no bearing on
+ListrAssistr's email identity, and moving it is a §9/Phase 2 code change either way.
+
+**The decisive point: SES can carry auth mail with zero code change.** Supabase Auth
+takes **SMTP credentials in the project dashboard** (F.3). SES exposes an SMTP
+endpoint. So pointing customer-facing auth mail at SES is a dashboard configuration,
+inside §8.2 and authorised by DEC-0035 — no repository change, no Phase 2 gate.
+
+That produces a clean split:
+
+| Mail                                     | Sender                    | Domain             | Scope                               |
+| ---------------------------------------- | ------------------------- | ------------------ | ----------------------------------- |
+| Auth: signup, password reset, magic link | **SES via Supabase SMTP** | `listrassistr.com` | §8.2, dashboard only                |
+| Role mailboxes: `support@` etc.          | Mailbox provider (F.4)    | `listrassistr.com` | §8.2                                |
+| Internal Gemini cost alert               | Resend, unchanged         | `rankedceo.com`    | §9 to move; irrelevant to this zone |
+
+**Consequence: the Resend account decision in F.1 may be moot for now.** If SES
+carries auth mail, no second Resend domain is needed, so neither the $0 dedicated
+account nor the $20/month upgrade is required yet. F.1 stays on the record for
+whenever `alerts@listrassistr.com` is wired up in Phase 2.
+
+#### How much harder is SES, honestly
+
+Five things Resend does for you that SES does not. Only two are real work at this
+scale.
+
+| Area                          | SES burden                                                                                   | Real impact here                                                                                                                                                                                                |
+| ----------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Sandbox exit**              | One-time written request                                                                     | Minor, see below                                                                                                                                                                                                |
+| **Observability**             | No send-log UI. CloudWatch metrics plus whatever you build                                   | **The one you will actually feel.** See below                                                                                                                                                                   |
+| **Bounce/complaint handling** | You own it. AWS enforces roughly <5% bounce and <0.1% complaint or sending goes under review | Largely mitigated — SES has an **account-level suppression list** that handles bounces and complaints automatically. Much less work than the folklore suggests, and at current volume bounces will be near zero |
+| **DKIM setup**                | Easy DKIM issues 3 CNAMEs                                                                    | **Easier than Resend here.** The zone is in the same AWS account, so SES can write its own DKIM records straight into Route 53 rather than you copying values across                                            |
+| **Templating**                | Primitive versus React Email                                                                 | Irrelevant — Supabase Auth owns these templates                                                                                                                                                                 |
+
+**Sandbox exit.** New SES accounts start restricted: you can only send to verified
+addresses, on a low daily quota. Exit is a support case — "Request production
+access" — and it is judged, not automatic. It is routine to get approved for
+legitimate transactional mail, and turnaround is typically a day or two. What gets
+approvals is a specific answer rather than a vague one:
+
+- **Use case:** transactional only — account confirmation, password reset, magic
+  link, sent to users who created their own account. No marketing, no purchased lists.
+- **Bounce/complaint handling:** state that you use the SES account-level suppression
+  list, and that you will monitor via CloudWatch and act on the reputation dashboard.
+- **Unsubscribe:** note that transactional auth mail is not marketing, and that any
+  future marketing mail would carry unsubscribe handling.
+- **Volume:** give a real figure. Small honest numbers are fine and easier to approve
+  than inflated ones.
+
+Worth writing rather than improvising. Vague answers are the common reason for a
+first refusal, and a refusal is recoverable — you reply with more detail.
+
+**Observability is the real cost.** When a customer says "I never got the reset
+email", Resend shows you a send log in a UI. SES gives you CloudWatch metrics and
+nothing per-message unless you set it up. Mitigation, worth doing on day one rather
+than during an incident:
+
+- Create a **Configuration Set** and attach **event destinations** for send, delivery,
+  bounce, and complaint.
+- Point them at CloudWatch for metrics, and optionally SNS for anything you want to
+  react to.
+- Check the **reputation dashboard** occasionally — it is where a problem shows up
+  before AWS emails you about it.
+
+#### Recommendation, revised
+
+**SES is a sound choice, and F.2's preference for Resend is withdrawn as applied to
+this decision.** The reasons that tip it:
+
+- Auth mail needs **no code change** — dashboard SMTP either way.
+- DKIM is **less** work than Resend, because the hosted zone is in the same account.
+- One vendor, one bill, one IAM story, consistent with A5/Section C already being AWS.
+- No 100/day free-tier cliff; cost is roughly \$0.10 per thousand emails.
+- Suppression is handled account-level, so the classic SES objection mostly does not
+  apply at this volume.
+
+The honest cost is **observability**, and it is a genuine ongoing difference rather
+than a one-time hurdle. Setting up the configuration set and event destinations at
+the start is what keeps it from biting.
+
+#### Steps
+
+- [ ] Pick an SES **region** and record it — SES is regional and the SMTP endpoint is
+      region-specific. Keep it consistent with anything else regional.
+- [ ] Verify `listrassistr.com` as a sending identity; use **Easy DKIM** and let SES
+      publish the three CNAMEs into the Route 53 hosted zone directly.
+- [ ] Publish the SPF include SES specifies for the apex — still **exactly one**
+      `v=spf1` record, merged with the mailbox provider's include (Section D).
+- [ ] Configure a **custom MAIL FROM** subdomain if strict DMARC alignment on the
+      return-path is wanted (§8.2.4).
+- [ ] Create a **Configuration Set** with event destinations before sending real mail.
+- [ ] Generate **SMTP credentials** from IAM and enter them in Supabase → Auth → SMTP.
+      Never record the credential here; note only that it is set.
+- [ ] Set the auth `From` address — plan §6.1 names no such address; `no-reply@` or
+      `accounts@` is conventional.
+- [ ] **Request production access** (sandbox exit) using the answers above.
+- [ ] Repeat the SMTP configuration for the **staging** project so test signups do not
+      send through the production identity.
+
+#### To verify before acting
+
+Consistent with how the Vercel apex value was handled, these are version-sensitive
+and should be confirmed against live AWS documentation rather than taken from here:
+
+- Current sandbox limits — daily send quota and per-second rate.
+- Current sandbox-exit request flow and expected turnaround.
+- Whether the account-level suppression list is on by default, and its exact scope.
+- Current per-email pricing and whether any free tier applies from EC2/Lambda origins.
+- Whether SES can still write Easy DKIM records into a same-account Route 53 zone
+  automatically.
 
 ## Section G — Boundary
 
