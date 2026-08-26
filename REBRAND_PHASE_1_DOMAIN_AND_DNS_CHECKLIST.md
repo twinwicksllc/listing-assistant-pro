@@ -49,15 +49,16 @@ Owner-supplied 2026-08-26 (Route 53 console screenshots), independently verified
 by DNS query from the owner's workstation the same day. This supersedes the
 earlier draft's assumption that nothing had been registered yet.
 
-| Fact                | Value                                                               | How confirmed                           |
-| ------------------- | ------------------------------------------------------------------- | --------------------------------------- |
-| Domain              | `listrassistr.com` — **registered and live**                        | Owner + resolver query                  |
-| Registrar           | **AWS Route 53 Domains**                                            | Owner                                   |
-| Registration date   | **2026-08-06**                                                      | Owner                                   |
-| Expiry              | **2027-08-06**, auto-renew on                                       | Owner                                   |
-| Authoritative DNS   | **AWS Route 53** public hosted zone                                 | Owner + `NS` records are all `awsdns-*` |
-| Currently serving   | A branded "Coming Soon" page at the apex                            | Owner screenshot                        |
-| Other domains owned | `teckstart.com`, `twin-wicks.com` — separate projects, out of scope | Owner                                   |
+| Fact                | Value                                                                                                                                                                                                | How confirmed                           |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| Domain              | `listrassistr.com` — **registered and live**                                                                                                                                                         | Owner + resolver query                  |
+| Registrar           | **AWS Route 53 Domains**                                                                                                                                                                             | Owner                                   |
+| Registration date   | **2026-08-06**                                                                                                                                                                                       | Owner                                   |
+| Expiry              | **2027-08-06**, auto-renew on                                                                                                                                                                        | Owner                                   |
+| Authoritative DNS   | **AWS Route 53** public hosted zone                                                                                                                                                                  | Owner + `NS` records are all `awsdns-*` |
+| Currently serving   | A branded "Coming Soon" page at the apex                                                                                                                                                             | Owner screenshot                        |
+| Other domains owned | `teckstart.com`, `twin-wicks.com` — separate projects, out of scope                                                                                                                                  | Owner                                   |
+| Typo-defence domain | `listerassistr.com` — **acquired 2026-08-26**, own Route 53 zone, pointed at the same Vercel project. Redirect-vs-serve still unconfirmed (A.1f). `listrassister.com` registration **failed** (A.1g) | Owner + resolver query                  |
 
 ### Verified zone contents
 
@@ -497,22 +498,119 @@ The actual goal is typo recovery, and that does not require anyone else's domain
 Checked by DNS 2026-08-26 — **no NS delegation, so almost certainly unregistered**
 (confirm at the registrar, which is authoritative, before assuming):
 
-| Domain                                      | Status                    | Value as a typo catcher                                                       |
-| ------------------------------------------- | ------------------------- | ----------------------------------------------------------------------------- |
-| `listerassistr.com`                         | Available                 | **High** — first E restored only. The most likely misfire from "drop the E's" |
-| `listrassister.com`                         | Available                 | **High** — second E restored only. The other half-corrected spelling          |
-| `listrasistr.com`                           | Available                 | Medium — dropped S                                                            |
-| `listassistr.com`                           | Available                 | Medium — dropped the `r` from `listr`                                         |
-| `listrassist.com`                           | Available                 | Medium — dropped trailing `r`                                                 |
-| `listrassistr.net` / `.co` / `.app` / `.io` | Available                 | Low-medium — brand defence rather than typo defence                           |
-| `listerassister.com`                        | **Taken** — live business | Not available, and see A.1d                                                   |
+| Domain                                      | Status 2026-08-26                    | Value as a typo catcher                                                       |
+| ------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------- |
+| `listerassistr.com`                         | **ACQUIRED and configured** by owner | **High** — first E restored only. The most likely misfire from "drop the E's" |
+| `listrassister.com`                         | **Registration failed** — see A.1g   | **High** — second E restored only. The other half-corrected spelling          |
+| `listrasistr.com`                           | Appeared unregistered                | Medium — dropped S                                                            |
+| `listassistr.com`                           | Appeared unregistered                | Medium — dropped the `r` from `listr`                                         |
+| `listrassist.com`                           | Appeared unregistered                | Medium — dropped trailing `r`                                                 |
+| `listrassistr.net` / `.co` / `.app` / `.io` | Appeared unregistered                | Low-medium — brand defence rather than typo defence                           |
+| `listerassister.com`                        | **Taken** — live business            | Not available, and see A.1d                                                   |
 
-Recommendation: register **`listerassistr.com`** and **`listrassister.com`** and
-redirect both to the apex. They are the two spellings a customer working from
-memory of a "drop the E's" instruction will actually produce, they cost roughly the
-price of a coffee each per year, and — unlike `listerassister.com` — they belong to
-nobody else. That captures essentially all the practical benefit the owner was
-after in asking about the other domain, with none of the exposure.
+Original recommendation was to register both high-value variants and redirect both
+to the apex — the two spellings a customer working from memory of a "drop the E's"
+instruction will actually produce, at roughly the price of a coffee each per year,
+and unlike `listerassister.com` belonging to nobody else. One is done; the other
+failed.
+
+### A.1f `listerassistr.com` — verified live, with one setting still to confirm
+
+Confirmed by DNS 2026-08-26:
+
+| Record                        | Value                                          | Note                                                                                                                       |
+| ----------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `listerassistr.com` NS        | `ns-277.awsdns-34.com` + 3 more                | Its **own** Route 53 hosted zone, separate from `listrassistr.com`'s                                                       |
+| `listerassistr.com` A         | `216.150.1.1`, TTL 300                         | Same Vercel apex value as the main domain                                                                                  |
+| `www.listerassistr.com` CNAME | `2f1e3f86cb32a6a8.vercel-dns-016.com`, TTL 300 | **The same per-project Vercel target as `www.listrassistr.com`** — so both domains are attached to the same Vercel project |
+
+**The open question DNS cannot answer: does it _redirect_, or does it _serve_ the
+same site?** Both configurations produce exactly the DNS above; the difference is a
+Vercel-side setting. An HTTP check from the owner's workstation returned 403 for
+both hostnames — the same Zscaler interception documented earlier — so this must be
+confirmed in the Vercel dashboard or from a personal device.
+
+**It should be a redirect** (Vercel offers a "Redirect to" option when adding a
+domain; a 308 to `https://listrassistr.com` is the intent). Three reasons, in
+increasing order of importance:
+
+1. **SEO.** Two hostnames serving identical content splits ranking signals unless
+   canonical tags are exactly right. A redirect makes the question moot.
+2. **Brand.** If the typo domain serves the full site, it stops being a funnel and
+   becomes a second legitimate address — people bookmark it, share it, cite it. That
+   perpetuates the "which spelling is it?" ambiguity that owning one canonical
+   domain is meant to end.
+3. **Authentication, and this one is functional rather than cosmetic.** The staging
+   Supabase project records Auth Site URL `https://listrassistr.com` and callback
+   `https://listrassistr.com/auth/callback`
+   (`REBRAND_PHASE_0_SERVICE_INVENTORY.md:76`). The coming-soon page already has a
+   **Sign in** link. If `listerassistr.com` serves the app rather than redirecting,
+   a user who signs in from that origin hits a callback on a different host than
+   they started on — cookies scoped to the wrong domain, and a redirect URI that
+   does not match the allow-list. Sign-in breaks, or behaves unpredictably. A
+   redirect at the edge means only one origin ever reaches the app, and the existing
+   Supabase configuration stays correct without adding a second allowed origin.
+
+- [ ] Confirm in Vercel that `listerassistr.com` (and its `www`) are configured as a
+      **redirect** to `https://listrassistr.com`, not as additional serving domains.
+- [ ] Verify externally — the workstation cannot see past its proxy.
+
+**A fourth reason, not flagged clearly enough when this domain was recommended.**
+`listerassistr.com` sits **one character** from `listerassister.com`, the live
+business in A.1c/A.1d — it is that name minus the final `e`. Viewed in isolation,
+owning a one-character variant of another business's domain is the typosquatting
+pattern. Viewed accurately, it is also a one-character variant of the owner's _own_
+mark (`listrassistr` plus one `e`), which is why it was recommended: it sits
+between the two names.
+
+What determines which reading applies is **what it does**:
+
+- **Redirecting to `listrassistr.com`** makes it unambiguously defensive — a
+  variant of the owner's own mark, funnelling to the owner's own brand. Normal,
+  routine, easy to explain.
+- **Serving content, or ever pointing anywhere else**, is where the
+  one-letter-from-their-domain fact becomes the weak point in any dispute.
+
+Mitigating facts remain strong: the other party holds **no registration**, the
+markets differ, and the variant is equally derived from the owner's own name. But
+the redirect is what keeps that posture clean, which makes it worth doing promptly
+rather than eventually. The same reasoning applies to `listrassister.com` if that
+registration is retried successfully.
+
+### A.1g `listrassister.com` — registration failed, and NXDOMAIN does not mean free
+
+Confirmed by DNS 2026-08-26: `listrassister.com` returns **NXDOMAIN** with no NS,
+no A, no CNAME. So the registration did not complete.
+
+**Correcting an over-read of the earlier check, including mine.** A.1e's "no NS
+delegation, so almost certainly unregistered" was hedged, and this is exactly why:
+**a domain can be registered with no nameserver delegation at all**, in which case
+it returns NXDOMAIN and looks identical to an unregistered domain. DNS cannot
+distinguish the two. Only the registrar's availability check or a WHOIS/RDAP lookup
+is authoritative.
+
+So the failure has more than one possible cause, and the error text determines which:
+
+| Likely cause                      | How it shows                                                          | Fix                                                                                                                                                   |
+| --------------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Transient registrar/AWS error     | Generic failure, no specific reason                                   | Retry                                                                                                                                                 |
+| **Someone else registered it**    | "unavailable" / "already registered"                                  | None — reassess whether the variant is still worth chasing                                                                                            |
+| Registry-reserved or premium name | Priced far above normal, or "not available for registration"          | Owner decision on cost                                                                                                                                |
+| **Registrant email not verified** | Registration accepted then suspended, or blocked pending verification | ICANN requires registrant contact verification; complete the emailed verification. Worth checking regardless, since it can suspend an existing domain |
+| Payment method declined           | Billing error                                                         | Fix the card on the AWS account                                                                                                                       |
+| Route 53 per-account domain limit | Quota error                                                           | Request a limit increase                                                                                                                              |
+
+- [ ] Capture the **exact error text** from Route 53 — it distinguishes "retry this"
+      from "this is gone."
+- [ ] Re-check availability authoritatively via the Route 53 domain search or
+      WHOIS/RDAP, not DNS.
+- [ ] Confirm the registrant contact on the **existing** domains is verified, since
+      an unverified contact is a live risk to `listrassistr.com` itself, not just to
+      a new registration.
+
+Priority note: `listrassister.com` is worth a retry, but it is **defence in depth,
+not a blocker**. The higher-value half of the pair is already secured, and A.1c's
+tagline rewording would reduce the need for either.
 
 Note the interaction with A.1c: the two half-corrected spellings only exist as
 likely typos _because_ of the "drop the E's" framing. If that tagline is reworded
@@ -892,9 +990,10 @@ email, Supabase, brand) are not yet.
    typo mnemonic but explicitly invokes a similar existing name, which cuts
    against the goods-and-services separation that is otherwise the strongest
    argument for coexistence.
-4. **Defensive registrations** — recommendation now concrete (A.1e): take
-   `listerassistr.com` and `listrassister.com`, both apparently free. Owner
-   decision on whether to spend it.
+4. ~~**Defensive registrations**~~ — **acted on 2026-08-26**: `listerassistr.com`
+   acquired and configured; `listrassister.com` failed. Two follow-ups remain:
+   **confirm `listerassistr.com` is a redirect, not a second serving domain**
+   (A.1f), and capture the exact `listrassister.com` error text (A.1g).
 5. **Read the LISTERASSISTER Office action in TSDR** (A.1c) — free, and it either
    flags descriptiveness risk for `LISTRASSISTR` itself or identifies a prior mark
    that matters more than the dead one.
