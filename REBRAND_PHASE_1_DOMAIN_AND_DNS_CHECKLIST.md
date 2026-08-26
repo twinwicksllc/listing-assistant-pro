@@ -2,34 +2,46 @@
 
 **Product:** ListrAssistr
 **Repository:** `twinwicksllc/listing-assistant-pro` (legacy; stays live per DEC-0003)
-**Scope:** `LISTRASSISTR_REBRAND_AND_MIGRATION_PLAN.md` §8.1 and the DNS-resident
-parts of §8.2. Repository code changes are §9/Phase 2 and out of scope here.
+**Scope:** Detailed checklists cover `LISTRASSISTR_REBRAND_AND_MIGRATION_PLAN.md`
+§8.1 and the DNS-resident parts of §8.2. Section J tracks the full §8 exit gate,
+including §8.3 brand assets, so Phase 1 can be closed on evidence. Repository code
+changes are §9/Phase 2 and out of scope here per DEC-0035.
 **Owner:** User (all registrar, DNS, Vercel, Resend, and legal actions)
 **AI role:** Drafting, record shapes, verification procedure. No provider action.
 
 ## Gate status — read first
 
-This document is **prepared, not authorized**. It commits nothing and spends
-nothing. At the time of writing:
+**Phase 1 is approved.** Phase 0 closed 2026-08-25:
 
-- `REBRAND_PHASE_0_CLOSURE_CHECKLIST.md:6` records Phase 0 **Status: Open**.
-- **P0-18 "Phase 1 entry decision"** — the gate whose evidence is a "Signed
-  decision record, date, scope, conditions, unresolved accepted risks" and whose
-  approval mode is "Explicit go/no-go" — is **Not started**.
-- The decision log's highest entry is **DEC-0033**. There is no DEC-0034 or
-  DEC-0035 recorded in this repository.
-- P0-08 (storage), P0-13 (migration cohort), and P0-17 (exception disposition)
-  are still **In progress**.
+- `REBRAND_PHASE_0_CLOSURE_CHECKLIST.md` records **Status: Closed — Phase 0 exit
+  and Phase 1 entry approved 2026-08-25 (DEC-0035)**.
+- **P0-18 "Phase 1 entry decision"** is **Approved — GO (2026-08-25,
+  DEC-0035)**, resolving P0-17 alongside it.
+- **DEC-0034** approved the final migration cohort (4 of 9 profiles transfer;
+  all QA-shaped profiles excluded, revising DEC-0029).
 
-Nothing below requires that gate to be closed first, because everything below is
-either a research task or a checklist to work from. **Section B onward involves
-real spend, a legal-entity commitment, and an ICANN 60-day transfer lock** — run
-those only once the Phase 1 entry decision exists as a written record, or once
-the owner explicitly waives that sequencing.
+**What DEC-0035 authorizes, verbatim in scope:** plan §8 **only** — domain
+acquisition/security, email identity, and brand asset production. Provider
+dashboard and creative work, **not repository code**. §9 (Phase 2: repository
+brand foundation) and beyond remain separately gated and are explicitly **not**
+approved by DEC-0035.
 
-DEC-0033 is consistent with domain registration being the correct next action: it
-records the October 1, 2026 window as explicitly provisional _because_ "none of
-Phases 1–6 have started (domain not yet registered)".
+**Conditions DEC-0035 carries forward unchanged**, and which therefore govern
+every item in this document:
+
+- `twinwicksllc/listing-assistant-pro` remains the live production application.
+- No cutover, migration execution, or destructive production action is implied.
+- All standing rules in `CLAUDE.md`'s rebrand section continue to apply
+  throughout Phase 1 — secret handling, and **explicit owner approval before any
+  production/provider/DNS/Stripe/eBay/Supabase change**.
+
+That last condition is the operative one here: DEC-0035 approves _doing Phase 1_,
+it does not pre-approve each individual provider action inside it. Every registrar
+purchase, DNS write, and Resend change still needs the owner at the keyboard.
+
+Sequencing note: DEC-0033 records the October 1, 2026 window as explicitly
+provisional _because_ "none of Phases 1–6 have started (domain not yet
+registered)". Domain registration is the item that unblocks re-assessing it.
 
 ## Section A — Settle before spending money
 
@@ -280,22 +292,103 @@ Answers to these turn the placeholders in Section D into real values.
 5. Canonical host: apex or `www`.
 6. Resend path: dedicated account or shared-account upgrade (Section F).
 7. DMARC `rua` analyzer destination address.
-8. Whether the Phase 1 entry decision (P0-18) is recorded before Section B runs.
+8. Timing of the staging-project prerequisite that DEC-0035 flags as "worth
+   addressing early in Phase 1 rather than deferring further" (see below).
 
 ## Accepted risks carried into Phase 1
 
-Recorded as-is, not reopened here:
+DEC-0035 names these explicitly as carried forward and **not reopened by that
+approval**. Recorded here as-is, for reference only.
 
-- **RBR-0004** — no migration approval gate on `deploy-functions.yml`. Accepted
-  2026-08-19, ratifying PEND-0005; mitigated by DEC-0014's fail-closed SQL guards
-  instead.
+- **RBR-0004** — no migration approval gate on `deploy-functions.yml`. Accepted,
+  and reaffirmed 2026-08-25 per RBR-0034; mitigated by DEC-0014's fail-closed SQL
+  guards instead of a gate.
+- **RBR-0003** — the staging-environment prerequisite. DEC-0035 labels this "no
+  staging Supabase project yet — tracked as a Phase 1 prerequisite, worth
+  addressing early in Phase 1 rather than deferring further." **Label
+  discrepancy worth fixing in the source docs:** RBR-0003's own row in
+  `REBRAND_PHASE_0_EXCEPTION_LOG.md` is "Function config has broad
+  `verify_jwt = false` entries" (partially resolved, PR #462), which is a
+  different finding. The staging requirement itself traces to **DEC-0005**
+  (separate staging/production environments and credentials) and **DEC-0004**
+  (ListrAssistr-only Supabase project). Anyone chasing "the staging prerequisite"
+  via RBR-0003 will land on the wrong row.
 - **RBR-0030** — Gemini cost-alert threshold inert at current spend (hardcoded
   50 USD/month against roughly 1.72 USD month-to-date).
-- **RBR-0032** — Sentry is a no-op across the application; DEC-0025 directs
-  building real error tracking in the ListrAssistr project rather than porting
-  the stub.
-- **Separate staging environment** — DEC-0005 requires separate staging and
-  production environments and credentials; no ListrAssistr staging Supabase
-  project exists yet. Tracked against DEC-0005 and DEC-0004. Note this is
-  §9/Phase 2 infrastructure, not §8 scope, so it needs its own slot rather than
-  being folded under this banner.
+- **RBR-0032** — Sentry gap; DEC-0025 directs building real error tracking in the
+  ListrAssistr project rather than porting the existing no-op stub.
+- **RBR-0036** — eBay Developer API call-volume re-check, deferred to a later
+  phase. The 2026-08-17 measurement (50 of 5,000 daily calls) predates
+  `competitor-prices-cron`'s current `*/5 * * * *` cadence, so it is stale rather
+  than wrong. No due date.
+- **P0-08 remaining storage-migration-path workstream** — roughly 190 objects,
+  recorded as non-urgent.
+
+### On the staging prerequisite
+
+DEC-0035 puts this inside Phase 1 rather than deferring it, and a staging Supabase
+project is provider-dashboard work, not repository code, so it sits inside the
+approved scope even though plan §8's own text does not mention it.
+
+It is genuinely independent of everything else in this document — no DNS record,
+domain, or brand asset depends on it — so it parallelizes cleanly rather than
+blocking. Two notes for when it is picked up:
+
+- It needs its own decision record and its own slot; it should not be folded under
+  the §8.1/§8.2 banner or treated as satisfied by this checklist.
+- Per DEC-0021, the Supabase legacy-JWT-to-`sb_*`-key migration is deferred until
+  the product is running in its ListrAssistr state, so a new staging project
+  should be stood up consistently with whichever key format the migration target
+  will use — worth deciding before creating it, not after.
+
+## Section I — Critical path and sequencing
+
+DNS and email verification run on their own clocks; the trademark research and
+brand production run on yours. These are the dependencies that actually matter,
+so the slow clocks start first.
+
+| Order | Item                                                               | Gated on         | Clock                                                                                                                                             |
+| ----- | ------------------------------------------------------------------ | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | Trademark/naming research kicked off (A3)                          | Nothing          | Days to weeks if counsel is involved. Start first — it is the only item that can invalidate the name, and everything in §8.3 is wasted if it does |
+| 2     | Registrar + legal entity decision (A1), DNS provider decision (A5) | Nothing          | Your decision                                                                                                                                     |
+| 3     | Register `listrassistr.com`, then Section B hardening              | 2                | Minutes, then immediate                                                                                                                           |
+| 4     | Delegate to the chosen DNS provider; verify authoritative NS       | 3                | Up to 24-48h for NS delegation                                                                                                                    |
+| 5     | Enable DNSSEC, publish DS at registrar, verify chain (§8.1.8)      | 4                | Hours; verify before relying on it                                                                                                                |
+| 6     | Resend account decision (Section F), then publish DKIM/SPF         | 3                | Your decision, then minutes to publish                                                                                                            |
+| 7     | Publish DMARC at `p=none` with `rua`                               | 6                | Immediate                                                                                                                                         |
+| 8     | Add domain to Vercel; apex/`www`/`app`/`qa` records; certs issue   | 4                | Minutes to hours                                                                                                                                  |
+| 9     | Mailbox provider (A6) + MX; role mailboxes live                    | 4                | Provider-dependent                                                                                                                                |
+| 10    | Deliverability tests to Gmail/Outlook/analyzer (§8.2.5, E.1)       | 6, 7, 9          | Immediate, but see 11                                                                                                                             |
+| 11    | **DMARC report-review period** before tightening (§8.2.3, D.2)     | 7, 10            | **At least one full weekly reporting cycle.** This is the longest fixed wait in Phase 1 — start it as early as possible                           |
+| 12    | CAA record, if used                                                | 8                | After certs issue, never before                                                                                                                   |
+| 13    | §8.3 brand asset production                                        | 1 (name cleared) | Your creative timeline                                                                                                                            |
+| 14    | TTL drop to 300 on cutover-relevant records (D.1)                  | Everything above | T-48h before any cutover, not during Phase 1                                                                                                      |
+
+The two items that will dominate the calendar are **trademark clearance** and the
+**DMARC report-review period**. Both should be started before anything in §8.3
+gets expensive.
+
+## Section J — Plan §8 exit-gate tracking
+
+Plan §8's stated exit gate: "Domain ownership is secure, legal has approved the
+name, branded email can authenticate, and the asset package is approved."
+
+Mirrors the Phase 0 closure-checklist format so Phase 1 can be closed on evidence
+rather than recollection. Statuses: `Not started`, `In progress`,
+`Evidence captured`, `Reviewed`, `Approved`, `Blocked`.
+
+| ID    | Exit-gate requirement                                | Evidence needed                                                                 | Status      |
+| ----- | ---------------------------------------------------- | ------------------------------------------------------------------------------- | ----------- |
+| P1-01 | Domain registered in the legal business entity       | Registrar account owner, registration date, entity name                         | Not started |
+| P1-02 | Registrar hardened                                   | Section B checklist complete; `clientTransferProhibited` confirmed; MFA method  | Not started |
+| P1-03 | Legal approval of the stylized spelling              | Recorded DEC entry per plan §8.1.3, with the A.1 search results attached        | Not started |
+| P1-04 | Authoritative DNS documented                         | Provider, account owner, recovery path, added to the service inventory          | Not started |
+| P1-05 | DNSSEC enabled and DS chain verified                 | External validator output (Section E)                                           | Not started |
+| P1-06 | Vercel apex/`www`/`app`/`qa` resolving, certs issued | Resolver output from two public resolvers; cert status                          | Not started |
+| P1-07 | Role mailboxes receiving                             | Inbound test result for all four addresses                                      | Not started |
+| P1-08 | Branded email authenticates                          | Gmail/Outlook headers showing aligned SPF+DKIM+DMARC pass, `d=listrassistr.com` | Not started |
+| P1-09 | DMARC report-review period completed                 | Analyzer reports covering every legitimate sender, over at least one full cycle | Not started |
+| P1-10 | Brand asset package produced                         | Full §8.3 deliverable list                                                      | Not started |
+| P1-11 | Design tokens pass WCAG AA                           | Measured contrast ratios; confirmation red is never the sole state indicator    | Not started |
+| P1-12 | Asset package approved                               | Owner sign-off, recorded as a DEC entry                                         | Not started |
+| P1-13 | Phase 2 entry decision                               | Explicit go/no-go for plan §9, which DEC-0035 does **not** grant                | Not started |
