@@ -1,0 +1,22 @@
+# Normalize all text files to LF on checkout and commit, regardless of the
+# local core.autocrlf setting or however a given file's line endings got
+# committed historically. Without this, deno fmt/prettier checks intermittently
+# fail on Windows checkouts purely from CRLF-vs-LF differences, not real
+# formatting regressions.
+* text=auto eol=lf
+
+# Explicit binary markers so git never attempts line-ending normalization or
+# text diffing on these.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
+*.pdf binary
+*.zip binary
