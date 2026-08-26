@@ -152,14 +152,14 @@ Written before the domain's status was known. Most are now settled by events —
 the domain was registered 2026-08-06. Kept rather than deleted so the reasoning
 behind each is on the record, with disposition stated.
 
-| #   | Item                                                          | Disposition as of 2026-08-26                                                                                                                                                                                                                                                                                                                                  |
-| --- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A1  | Register under the **legal business entity**                  | **Cannot currently be satisfied — see A.2.** The AWS account and all four Route 53 contacts are the owner **as an individual**. Twin Wicks Digital Solutions is **not yet a registered entity**, deferred for the same reason as the trademark filing. Plan §8.1.1 requires a legal business account, so this gate is blocked on a decision, not on an action |
-| A2  | Registrant/recovery email must **not** be `@listrassistr.com` | **Satisfied.** Recovery contacts are the owner plus `twinwicksllc@gmail.com` — both outside the new zone, so the circular-dependency failure mode is avoided                                                                                                                                                                                                  |
-| A3  | Trademark and naming-conflict research (A.1 below)            | **Split — see A.1.** Owner defers _filing_; the _clearance search_ is still a §8.1.3 gate requirement and is unstarted                                                                                                                                                                                                                                        |
-| A4  | Defensive registrations                                       | **Open, low urgency.** No variants owned. `listerassister` (with the letter e's) is taken by an unrelated realtor site and unavailable. Different market and Nice class, so low confusion risk, but it does mean that particular typo cannot be defensively held                                                                                              |
-| A5  | Authoritative DNS provider                                    | **Settled: AWS Route 53.** Registrar and DNS are the same provider and the same AWS account. See Section C for the consequence                                                                                                                                                                                                                                |
-| A6  | **Inbound** mailbox provider for role addresses               | **Open (Group 4, not yet answered).** Plan §8.2.1 needs `support`/`privacy`/`legal`/`security@`; §6.1 also names `alerts@`. Resend is **send-only** and does not receive mail, so this is a separate provider decision (Google Workspace, Microsoft 365, Fastmail, or registrar-level forwarding) that adds MX records to the zone                            |
+| #   | Item                                                          | Disposition as of 2026-08-26                                                                                                                                                                                                                                                                                                                                                          |
+| --- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A1  | Register under the **legal business entity**                  | **Deviation accepted 2026-08-26, LLC formation underway — see A.2.** The AWS account and all four Route 53 contacts are the owner **as an individual**. Twin Wicks Digital Solutions is **not yet a registered entity**, deferred for the same reason as the trademark filing. Plan §8.1.1 requires a legal business account, so this gate is blocked on a decision, not on an action |
+| A2  | Registrant/recovery email must **not** be `@listrassistr.com` | **Satisfied.** Recovery contacts are the owner plus `twinwicksllc@gmail.com` — both outside the new zone, so the circular-dependency failure mode is avoided                                                                                                                                                                                                                          |
+| A3  | Trademark and naming-conflict research (A.1 below)            | **Split, and materially de-risked.** Owner defers _filing_ (A.1a). The `listerassister` search is done: **dead/abandoned 2014, never registered** (A.1c). Remaining: read the Office action in TSDR, plus the wider search list                                                                                                                                                       |
+| A4  | Defensive registrations                                       | **Resolved into a recommendation — see A.1e.** No variants owned. `listerassister.com` is taken by a live business and must not be pursued (A.1d). All nine other checked variants appear unregistered; the two worth taking are `listerassistr.com` and `listrassister.com`                                                                                                          |
+| A5  | Authoritative DNS provider                                    | **Settled: AWS Route 53.** Registrar and DNS are the same provider and the same AWS account. See Section C for the consequence                                                                                                                                                                                                                                                        |
+| A6  | **Inbound** mailbox provider for role addresses               | **Open (Group 4, not yet answered).** Plan §8.2.1 needs `support`/`privacy`/`legal`/`security@`; §6.1 also names `alerts@`. Resend is **send-only** and does not receive mail, so this is a separate provider decision (Google Workspace, Microsoft 365, Fastmail, or registrar-level forwarding) that adds MX records to the zone                                                    |
 
 ### A.2 The §8.1.1 entity gate cannot be met yet — owner decision required
 
@@ -207,6 +207,35 @@ Recommendation: **Option B**, with the revisit trigger set at Stripe onboarding,
 since that is the point where the entity question stops being deferrable. This
 keeps Phase 1 moving without pretending the gate is met. Owner's call, and it needs
 a DEC entry either way — tracked as P1-01 in Section J.
+
+**Owner decision, 2026-08-26: Option B accepted** — the §8.1.1 deviation is
+recorded and revisited later, and the owner is **beginning LLC formation** in
+parallel. So this is effectively B trending toward A rather than B indefinitely.
+
+Draft DEC entry text, for the owner to place in
+`REBRAND_PHASE_0_DECISION_LOG.md` if they want it in the formal record:
+
+> **DEC-0036** — Plan §8.1.1 requires the domain to be registered in a legal
+> business account. `listrassistr.com` is registered in the owner's **individual**
+> AWS account, with all four Route 53 contacts resolving to the owner personally,
+> because Twin Wicks Digital Solutions is not yet a registered entity. **The
+> deviation is knowingly accepted and recorded**, not treated as satisfied. LLC
+> formation is being explored as of 2026-08-26. Revisit trigger: **before Stripe
+> onboarding** for the dedicated ListrAssistr Stripe account (DEC-0027), since
+> that is the point at which the entity question stops being deferrable.
+> Constraint recorded alongside it: changing the Route 53 registrant
+> organisation/name re-triggers a fresh ICANN 60-day transfer lock, so the entity
+> change and any account move must be sequenced deliberately and well away from a
+> cutover window (see A.2a).
+
+**One sequencing warning now that LLC formation is live.** When the entity exists
+and the Route 53 registrant organisation is updated, that change **re-triggers the
+60-day lock** (A.2a). So:
+
+- Doing it **now**, while nothing depends on the domain moving, costs nothing.
+- Doing it **near cutover** injects 60 days into the critical path.
+
+If the LLC is going to happen, front-load it.
 
 ### A.2a The 60-day lock collides with DEC-0033's provisional window
 
@@ -316,11 +345,62 @@ field in e-commerce seller tooling. Treat the crowding as the main risk to check
 
 Not legal advice. This is a research plan and a flag on one specific fact pattern.
 
-**The single most important thing to establish first:** does the operator of
-`listerassister.com` hold a **registered trademark**, and if so, in which class
-and covering what services? Everything else follows from that answer. A domain
-alone confers far weaker rights than a registration. Search their name and mark in
-`tmsearch.uspto.gov` before spending effort anywhere else.
+**Answered 2026-08-26 — and the answer is favourable.** USPTO search for
+`listerassister` returns exactly one record:
+
+| Field                   | Value                                                                                            |
+| ----------------------- | ------------------------------------------------------------------------------------------------ |
+| Mark                    | **LISTERASSISTER** (standard characters, service mark)                                           |
+| Serial                  | 86189022                                                                                         |
+| Filed                   | 2014-02-10                                                                                       |
+| **Status**              | **DEAD / ABANDONED**, 2014-12-12                                                                 |
+| Case status             | "Abandoned because the applicant failed to respond or filed a late response to an Office action" |
+| **Registration number** | **N/A — never registered**                                                                       |
+| **Publication date**    | **N/A — never published**                                                                        |
+| Classes                 | **035** (on-line advertising and marketing services), **041** (photography)                      |
+| Claimed first use       | 2008-10-01, both classes                                                                         |
+| Owner                   | Lister Assister, **sole proprietorship**, Phoenix, Arizona                                       |
+| Assignments             | None                                                                                             |
+| Related properties      | None                                                                                             |
+
+**What this removes.** There is **no federal registration** to conflict with — the
+application died at the Office-action stage twelve years ago, never reached
+publication, and was never assigned to anyone. So there is no registered mark
+barring `LISTRASSISTR`, and no nationwide constructive notice attaching to
+`LISTERASSISTER`. The risk this section was written to flag is substantially lower
+than it looked.
+
+**What it does not remove — two things.**
+
+1. **An abandoned application is not abandoned rights.** US trademark rights arise
+   from **use**, not registration. The application claimed continuous use from
+   2008, and the business appears to still be operating. That supports
+   **common-law rights**, which are real but **geographically limited to the
+   area where the mark is actually used** — on this record, Arizona and wherever
+   else they demonstrably trade. Far weaker than a registration, not nothing.
+2. **The Office action itself is unread, and it is the highest-value thing left to
+   look at.** Click **View in TSDR** on that record and read why the examiner
+   objected. Two possibilities, both directly useful:
+   - **Refused as merely descriptive.** "Lister Assister" describes
+     listing-assistance services, and USPTO frequently refuses phonetic
+     misspellings of descriptive terms on the same basis — examiners look through
+     the respelling. If that is what happened, it is a direct signal about whether
+     `LISTRASSISTR` is registrable when the owner eventually files, independent of
+     this other party entirely.
+   - **Refused over a prior conflicting mark.** If so, **that** mark is a bigger
+     concern than this dead application, and it needs to be identified and
+     assessed.
+
+   Either way it is free information behind one click, and it is the single best
+   next step in this whole section.
+
+**On the services comparison, now that the classes are known.** Classes 035 and
+041 covering online advertising/marketing plus photography, from a sole proprietor,
+reads as a done-for-you real-estate listing marketing and photography service — not
+software. ListrAssistr is SaaS, which is **Class 42**, with plausible adjacency in 035. So the goods-and-services separation is real and better than assumed: a
+service business versus a software product, different customers, different channels.
+There is genuine 035 adjacency and both involve "listings", so it is a strong
+argument rather than a total absence of overlap.
 
 **Why the spelling difference protects you less than it appears to.** Trademark
 similarity analysis weighs **sound**, not just spelling — marks that are
@@ -380,6 +460,65 @@ than theirs) gets the same typo-recovery benefit without the evidentiary downsid
 - [ ] **Record findings with screenshots and dates** into a DEC entry, per §8.1.3.
       Even under option 1 in A.1a, contemporaneous evidence of a good-faith search
       is worth more than a recollection later.
+
+### A.1d Can `listerassister.com` be acquired? No — and it should not be pursued
+
+Asked by the owner 2026-08-26 on the basis that the trademark is dead. **The
+trademark status and the domain's availability are unrelated systems**, so the dead
+mark does not free the domain:
+
+- Domain registration is a first-come-first-served contract with a registrar. It
+  has no connection to USPTO status. A mark can be dead while its domain stays
+  registered indefinitely, and a domain can be registered by someone with no mark
+  at all.
+- **`listerassister.com` is registered and live.** Verified by DNS 2026-08-26:
+  resolves to `20.40.24.37`, delegated to `ns27.domaincontrol.com` (GoDaddy). The
+  only route to it would be buying it from the current owner — a private
+  negotiation for the operating domain of a running business.
+
+**And pursuing it would create the risk this whole section exists to avoid.**
+Acquiring a domain that matches another operating business's name, while running an
+adjacent "listing" product and marketing a tagline that instructs customers to
+respell that name, is close to the textbook fact pattern for a **UDRP complaint or
+an ACPA cybersquatting claim**. Two things make that worse rather than better here:
+
+- UDRP explicitly accepts **unregistered/common-law** marks as a basis for a
+  complaint, so the dead application is no shield — the continuous-use claim from
+  2008 is what would be asserted.
+- Intent is a factor, and deliberately acquiring the confusingly-similar domain is
+  the strongest possible evidence of it.
+
+So: the dead mark is good news for **using your own name**, and no basis at all for
+**taking theirs**.
+
+### A.1e What to register instead — all the useful variants are free
+
+The actual goal is typo recovery, and that does not require anyone else's domain.
+Checked by DNS 2026-08-26 — **no NS delegation, so almost certainly unregistered**
+(confirm at the registrar, which is authoritative, before assuming):
+
+| Domain                                      | Status                    | Value as a typo catcher                                                       |
+| ------------------------------------------- | ------------------------- | ----------------------------------------------------------------------------- |
+| `listerassistr.com`                         | Available                 | **High** — first E restored only. The most likely misfire from "drop the E's" |
+| `listrassister.com`                         | Available                 | **High** — second E restored only. The other half-corrected spelling          |
+| `listrasistr.com`                           | Available                 | Medium — dropped S                                                            |
+| `listassistr.com`                           | Available                 | Medium — dropped the `r` from `listr`                                         |
+| `listrassist.com`                           | Available                 | Medium — dropped trailing `r`                                                 |
+| `listrassistr.net` / `.co` / `.app` / `.io` | Available                 | Low-medium — brand defence rather than typo defence                           |
+| `listerassister.com`                        | **Taken** — live business | Not available, and see A.1d                                                   |
+
+Recommendation: register **`listerassistr.com`** and **`listrassister.com`** and
+redirect both to the apex. They are the two spellings a customer working from
+memory of a "drop the E's" instruction will actually produce, they cost roughly the
+price of a coffee each per year, and — unlike `listerassister.com` — they belong to
+nobody else. That captures essentially all the practical benefit the owner was
+after in asking about the other domain, with none of the exposure.
+
+Note the interaction with A.1c: the two half-corrected spellings only exist as
+likely typos _because_ of the "drop the E's" framing. If that tagline is reworded
+to reference `ListrAssistr` directly rather than the other spelling, the typo
+pressure drops and these become ordinary cheap brand defence rather than a
+necessity.
 
 ## Section B — Registrar hardening (plan §8.1.2)
 
@@ -744,16 +883,21 @@ email, Supabase, brand) are not yet.
 
 ### Still open — Groups 1 and 2
 
-1. **The §8.1.1 entity gate** (A.2) — form the entity now, record the deviation
-   with a revisit trigger, or rewrite the gate. Needs a DEC entry either way.
+1. ~~**The §8.1.1 entity gate**~~ — **decided 2026-08-26**: deviation accepted and
+   recorded, LLC formation beginning (A.2). Remaining sub-task: place the draft
+   DEC-0036 text into the decision log if it should be in the formal record.
 2. **What satisfies "legal has approved the name"** — owner-run search plus a
    recorded DEC entry, or counsel-run clearance (A.1a, P1-03).
 3. **Whether the "drop the E's" tagline ships as written** (A.1c) — it is a good
    typo mnemonic but explicitly invokes a similar existing name, which cuts
    against the goods-and-services separation that is otherwise the strongest
    argument for coexistence.
-4. **Defensive registrations** — any additional TLDs worth taking (A4). Low
-   urgency; `listerassister.com` is unavailable regardless.
+4. **Defensive registrations** — recommendation now concrete (A.1e): take
+   `listerassistr.com` and `listrassister.com`, both apparently free. Owner
+   decision on whether to spend it.
+5. **Read the LISTERASSISTER Office action in TSDR** (A.1c) — free, and it either
+   flags descriptiveness risk for `LISTRASSISTR` itself or identifies a prior mark
+   that matters more than the dead one.
 
 ### Still open — Groups 3+ (not yet discussed)
 
@@ -945,21 +1089,21 @@ Mirrors the Phase 0 closure-checklist format so Phase 1 can be closed on evidenc
 rather than recollection. Statuses: `Not started`, `In progress`,
 `Evidence captured`, `Reviewed`, `Approved`, `Blocked`.
 
-| ID    | Exit-gate requirement                                | Evidence needed                                                                 | Status                                                                                                                                                                                                                                                                       |
-| ----- | ---------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P1-01 | Domain registered in the legal business entity       | Registrar account owner, registration date, entity name                         | **Blocked on a decision** — registered 2026-08-06 via Route 53, but the AWS account and all four contacts are the owner as an **individual**, and Twin Wicks Digital Solutions is not a registered entity. §8.1.1 is unsatisfiable as written; see A.2 for the three options |
-| P1-02 | Registrar hardened                                   | Section B checklist complete; MFA method; privacy state                         | **Evidence captured** — transfer lock, auto-renew, recovery contacts, expiry alerts, root MFA, and WHOIS privacy on all four contacts, all confirmed 2026-08-26. Remaining: service-inventory write-up, root-vs-IAM check, CAA (sequenced late)                              |
-| P1-03 | Legal approval of the stylized spelling              | Recorded DEC entry per §8.1.3 with A.1b/A.1c search results                     | **Not started** — owner defers filing; clearance search still required. Gate wording pending the A.1a decision. A.1c flags the `listerassister.com` phonetic-similarity question as the priority item                                                                        |
-| P1-04 | Authoritative DNS documented                         | Provider, account owner, recovery path, added to the service inventory          | **In progress** — provider confirmed (Route 53, verified via NS). Service-inventory entry not yet written                                                                                                                                                                    |
-| P1-05 | DNSSEC enabled and DS chain verified                 | External validator output (Section E)                                           | **Not started** — no DNSKEY or DS present, confirmed 2026-08-26. Sequenced early per I.1                                                                                                                                                                                     |
-| P1-06 | Vercel apex/`www`/`app`/`qa` resolving, certs issued | External resolver output; cert status                                           | **In progress** — apex and `www` live and verified. `app` and `qa` absent. Vercel project identity open (Group 3)                                                                                                                                                            |
-| P1-07 | Role mailboxes receiving                             | Inbound test result for every address                                           | **Not started** — no MX present. Address set itself unresolved (four vs five, §8.2.1 vs §6.1)                                                                                                                                                                                |
-| P1-08 | Branded email authenticates                          | Gmail/Outlook headers showing aligned SPF+DKIM+DMARC pass, `d=listrassistr.com` | **Not started** — no SPF, DKIM, or DMARC records present                                                                                                                                                                                                                     |
-| P1-09 | DMARC report-review period completed                 | Analyzer reports covering every legitimate sender, over 2-4 weeks minimum       | **Not started** — 30-day target per D.2; longest fixed wait in the phase, clock not begun                                                                                                                                                                                    |
-| P1-10 | Brand asset package produced                         | Full §8.3 deliverable list                                                      | **Not started**                                                                                                                                                                                                                                                              |
-| P1-11 | Design tokens pass WCAG AA                           | Measured contrast ratios; confirmation red is never the sole state indicator    | **Not started**                                                                                                                                                                                                                                                              |
-| P1-12 | Asset package approved                               | Owner sign-off, recorded as a DEC entry                                         | **Not started**                                                                                                                                                                                                                                                              |
-| P1-13 | Phase 2 entry decision                               | Explicit go/no-go for plan §9, which DEC-0035 does **not** grant                | **Not started**                                                                                                                                                                                                                                                              |
+| ID    | Exit-gate requirement                                               | Evidence needed                                                                               | Status                                                                                                                                                                                                                                              |
+| ----- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1-01 | Domain registered in the legal business entity (deviation accepted) | Registrar account owner, registration date, entity name; recorded DEC entry for the deviation | **Approved with recorded deviation (2026-08-26)** — registered 2026-08-06 via Route 53 in the owner's individual account. §8.1.1 knowingly unmet; owner accepted option B in A.2 and is beginning LLC formation. Draft DEC text in A.2              |
+| P1-02 | Registrar hardened                                                  | Section B checklist complete; MFA method; privacy state                                       | **Evidence captured** — transfer lock, auto-renew, recovery contacts, expiry alerts, root MFA, and WHOIS privacy on all four contacts, all confirmed 2026-08-26. Remaining: service-inventory write-up, root-vs-IAM check, CAA (sequenced late)     |
+| P1-03 | Legal approval of the stylized spelling                             | Recorded DEC entry per §8.1.3 with A.1b–A.1e findings                                         | **In progress** — the priority search is done: LISTERASSISTER is dead/abandoned 2014, never registered, Classes 035/041 (A.1c). Remaining: TSDR Office action, wider search list, tagline decision, and the A.1a choice of what satisfies this gate |
+| P1-04 | Authoritative DNS documented                                        | Provider, account owner, recovery path, added to the service inventory                        | **In progress** — provider confirmed (Route 53, verified via NS). Service-inventory entry not yet written                                                                                                                                           |
+| P1-05 | DNSSEC enabled and DS chain verified                                | External validator output (Section E)                                                         | **Not started** — no DNSKEY or DS present, confirmed 2026-08-26. Sequenced early per I.1                                                                                                                                                            |
+| P1-06 | Vercel apex/`www`/`app`/`qa` resolving, certs issued                | External resolver output; cert status                                                         | **In progress** — apex and `www` live and verified. `app` and `qa` absent. Vercel project identity open (Group 3)                                                                                                                                   |
+| P1-07 | Role mailboxes receiving                                            | Inbound test result for every address                                                         | **Not started** — no MX present. Address set itself unresolved (four vs five, §8.2.1 vs §6.1)                                                                                                                                                       |
+| P1-08 | Branded email authenticates                                         | Gmail/Outlook headers showing aligned SPF+DKIM+DMARC pass, `d=listrassistr.com`               | **Not started** — no SPF, DKIM, or DMARC records present                                                                                                                                                                                            |
+| P1-09 | DMARC report-review period completed                                | Analyzer reports covering every legitimate sender, over 2-4 weeks minimum                     | **Not started** — 30-day target per D.2; longest fixed wait in the phase, clock not begun                                                                                                                                                           |
+| P1-10 | Brand asset package produced                                        | Full §8.3 deliverable list                                                                    | **Not started**                                                                                                                                                                                                                                     |
+| P1-11 | Design tokens pass WCAG AA                                          | Measured contrast ratios; confirmation red is never the sole state indicator                  | **Not started**                                                                                                                                                                                                                                     |
+| P1-12 | Asset package approved                                              | Owner sign-off, recorded as a DEC entry                                                       | **Not started**                                                                                                                                                                                                                                     |
+| P1-13 | Phase 2 entry decision                                              | Explicit go/no-go for plan §9, which DEC-0035 does **not** grant                              | **Not started**                                                                                                                                                                                                                                     |
 
 Not part of §8's exit gate, tracked so it is not lost: the **staging-project
 prerequisite** DEC-0035 places inside Phase 1. Now believed to be a _verify_ task —
