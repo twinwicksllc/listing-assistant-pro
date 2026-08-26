@@ -61,19 +61,19 @@ earlier draft's assumption that nothing had been registered yet.
 
 ### Verified zone contents
 
-| Record                 | Type  | Value                                 | TTL    | State                                                                                        |
-| ---------------------- | ----- | ------------------------------------- | ------ | -------------------------------------------------------------------------------------------- |
-| `listrassistr.com`     | A     | `216.150.1.1`                         | 300    | Live — Vercel apex. **Pending confirmation** against Vercel's current recommended apex value |
-| `www.listrassistr.com` | CNAME | `2f1e3f86cb32a6a8.vercel-dns-016.com` | 300    | Live                                                                                         |
-| `listrassistr.com`     | NS    | 4× `awsdns-*`                         | 172800 | Route 53 default, correct                                                                    |
-| `listrassistr.com`     | SOA   | `ns-1068.awsdns-05.org`               | 900    | Route 53 default                                                                             |
-| `app`                  | —     | —                                     | —      | **Absent** — required by §8.1.6                                                              |
-| `qa`                   | —     | —                                     | —      | **Absent** — required by §8.1.6                                                              |
-| TXT / SPF              | —     | —                                     | —      | **Absent**                                                                                   |
-| MX                     | —     | —                                     | —      | **Absent**                                                                                   |
-| `_dmarc`               | —     | —                                     | —      | **Absent**                                                                                   |
-| DNSKEY / DS            | —     | —                                     | —      | **Absent** — DNSSEC not enabled                                                              |
-| CAA                    | —     | —                                     | —      | **Absent**                                                                                   |
+| Record                 | Type  | Value                                 | TTL    | State                                                                                                                                                      |
+| ---------------------- | ----- | ------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `listrassistr.com`     | A     | `216.150.1.1`                         | 300    | Live — Vercel apex. **Leave as-is**; confirm against the Vercel dashboard for this project, not against documentation. See the external-verification table |
+| `www.listrassistr.com` | CNAME | `2f1e3f86cb32a6a8.vercel-dns-016.com` | 300    | Live                                                                                                                                                       |
+| `listrassistr.com`     | NS    | 4× `awsdns-*`                         | 172800 | Route 53 default, correct                                                                                                                                  |
+| `listrassistr.com`     | SOA   | `ns-1068.awsdns-05.org`               | 900    | Route 53 default                                                                                                                                           |
+| `app`                  | —     | —                                     | —      | **Absent** — required by §8.1.6                                                                                                                            |
+| `qa`                   | —     | —                                     | —      | **Absent** — required by §8.1.6                                                                                                                            |
+| TXT / SPF              | —     | —                                     | —      | **Absent**                                                                                                                                                 |
+| MX                     | —     | —                                     | —      | **Absent**                                                                                                                                                 |
+| `_dmarc`               | —     | —                                     | —      | **Absent**                                                                                                                                                 |
+| DNSKEY / DS            | —     | —                                     | —      | **Absent** — DNSSEC not enabled                                                                                                                            |
+| CAA                    | —     | —                                     | —      | **Absent**                                                                                                                                                 |
 
 Two consequences worth stating plainly:
 
@@ -94,19 +94,57 @@ call.
 | DEC-0035, same clause                                       | "no staging Supabase project yet"                                                                    | `REBRAND_PHASE_0_SERVICE_INVENTORY.md:22` records staging project `yqftpibxplachhwoclam`, owner-reported 2026-08-10, with Auth Site URL already set to `https://listrassistr.com`. Its row still says "Confirm owner, region, empty status, and project URL" — so the prerequisite is a **verify** task, not a **create** task |
 | `LISTRASSISTR_REBRAND_AND_MIGRATION_PLAN.md` §8.2.1 vs §6.1 | §8.2.1 lists `support`/`privacy`/`legal`/`security`; §6.1 lists `support`/`privacy`/`legal`/`alerts` | Five distinct addresses across the two lists. Which set is authoritative is an open question (Group 4)                                                                                                                                                                                                                         |
 
-### Pending external verification
+### External verification — results, 2026-08-26
 
-Queued for confirmation against live vendor documentation before any value below
-is treated as final:
+Answers obtained from vendor documentation via a web-enabled research pass, then
+assessed against the zone's observed state. **Three findings conflict with what
+the live zone actually does, and one is technically impossible as stated.** Both
+sources are recorded so the disagreement is visible rather than averaged away.
 
-- Whether `216.150.1.1` is Vercel's current recommended apex value, and whether
-  Vercel now prefers a Route 53 ALIAS record over a plain A record at the apex.
-- Current Resend DKIM/SPF record types and whether a second verified sending
-  domain still requires a paid tier (the RBR-0031 claim, dated mid-2026).
-- Route 53 DNSSEC enablement steps, and whether Route 53 auto-publishes the DS
-  record when the domain is registered through Route 53 as well.
-- Whether the ICANN 60-day post-registration transfer lock applies to an
-  AWS-account-to-AWS-account domain move, or only to registrar-to-registrar.
+| Question                      | Research answer                                                                                                                                            | Assessment                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vercel apex A value           | "Officially `76.76.21.21`; do not use `216.150.1.1`, it is flagged by security vendors"                                                                    | **Do not act on this.** `76.76.21.21` is Vercel's long-standing _generic documented_ value. The live zone serves `216.150.1.1` and works, and the `www` record is a _per-project_ target — a pattern consistent with Vercel now issuing project-specific values. Plan §8.1.5 resolves this directly: use what **Vercel's dashboard displays for this project**, not what any documentation says. The "flagged for abuse" reasoning is weak — that is true of any shared anycast IP, `76.76.21.21` included |
+| Route 53 ALIAS at apex        | "AWS recommends an ALIAS record rather than a standard A record"                                                                                           | **Impossible as applied here.** Route 53 ALIAS targets are AWS-only — CloudFront, ELB, S3 website endpoints, API Gateway, Global Accelerator, or another record in the same zone. **Vercel is none of these, so a Route 53 ALIAS cannot point at Vercel.** The generic AWS advice is correct for AWS-hosted origins and a dead end for this stack. Keep the plain A record                                                                                                                                 |
+| Subdomain CNAME target        | "`cname.vercel-dns.com`"                                                                                                                                   | Legacy generic value. The live `www` uses `2f1e3f86cb32a6a8.vercel-dns-016.com`, per-project. Take `app` and `qa` targets from the dashboard                                                                                                                                                                                                                                                                                                                                                               |
+| CAA / issuing CA              | "Vercel automatically creates a CAA record for `letsencrypt.org`"                                                                                          | **Not happening here** — the zone has no CAA record. Vercel can only manage CAA when Vercel manages the DNS; with Route 53 external it cannot. So CAA is a manual add, and the CA must be confirmed before setting it (see below)                                                                                                                                                                                                                                                                          |
+| Resend DKIM/SPF types         | DKIM as TXT; SPF as TXT, often `include:amazonses.com` since Resend runs on SES                                                                            | Plausible and consistent with Resend's architecture. **Still publish exactly what the Resend dashboard issues** — the include value may be Resend-specific rather than raw SES                                                                                                                                                                                                                                                                                                                             |
+| Resend custom return-path     | Supported, default `send.yourdomain.tld`, not gated behind Enterprise                                                                                      | Accepted. Satisfies §8.2.4                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **Resend free-tier domains**  | **1 verified domain**, 3,000 emails/month, 100/day cap. Second domain requires **Pro at $20/month** (10 domains, 50,000 emails)                            | Accepted, and it **confirms RBR-0031**. Materially changes the Section F recommendation — see F.1                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Route 53 DNSSEC DS publishing | **Manual.** Route 53 does _not_ auto-publish DS to the parent even when it is also the registrar. Copy Key tag, Algorithm, Digest into Registered domains  | Accepted, and it removes the hoped-for simplification in C.1. Raises the care required — see I.2                                                                                                                                                                                                                                                                                                                                                                                                           |
+| DNSSEC rollback               | Delete DS at registrar **first**, wait out the parent DS TTL, **then** disable signing. Wrong order breaks the chain and the domain drops off the internet | Accepted and load-bearing. Captured as an explicit ordering in I.2                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Route 53 registrar settings   | Route 53 → Domains → Registered domains. Privacy per-contact; AWS recommends the same level on all four                                                    | Matches the owner's existing configuration — all four already on, which is what AWS recommends                                                                                                                                                                                                                                                                                                                                                                                                             |
+| **ICANN 60-day lock**         | **Applies to cross-account transfers.** Triggered by registration **and by any change to WHOIS registrant name, email, or organization**                   | Accepted, and it creates a schedule conflict — see A.2a                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| USPTO tool                    | TESS retired 2023-11-30, replaced by `tmsearch.uspto.gov`; free; searching creates no public record                                                        | Confirms A.1a's reasoning. No change needed                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| **DMARC `p=none` duration**   | M3AAWG: **minimum 2–4 weeks**, commonly **30–90 days** recommended                                                                                         | **Longer than this document previously assumed.** D.2 said "one full weekly reporting cycle," which was too short. Corrected in D.2 and Section I                                                                                                                                                                                                                                                                                                                                                          |
+
+### The owner's workstation cannot verify external state
+
+Measured directly 2026-08-26, and it generalises well beyond one record:
+
+- **DNS is filtered.** Only `1.1.1.1` is reachable; `8.8.8.8`, `9.9.9.9`, `1.0.0.1`,
+  and `208.67.222.222` all fail, including for `google.com`.
+- **TLS is intercepted.** An HTTPS request to `listrassistr.com` from that machine
+  returns a certificate issued by `ABBVIE-ZSCALER-SSLDE.ABBVIE.COM`, with subject
+  organisation "Zscaler Inc." — not Vercel's certificate. The request itself
+  returned 403 through the proxy.
+
+Consequences for Phase 1, all of which land on gates in Section J:
+
+- **The real issuing CA cannot be determined from that machine**, browser padlock
+  included, because the padlock shows the interception certificate. This blocks
+  setting a CAA record safely (P1-06, and B.1's CAA item) — a CAA record naming
+  the wrong CA silently blocks issuance and renewal.
+- **Certificate and DNSSEC validation must be done externally** — `dnsviz.net`,
+  `dnschecker.org`, `whatsmydns.net`, or SSL Labs — or from a personal device
+  (P1-05, P1-06).
+- **Email header inspection** for SPF/DKIM/DMARC alignment should be done in a
+  personal mailbox, not one behind corporate mail security that may rewrite or
+  re-sign headers (P1-08).
+
+Separately worth knowing rather than acting on: provider-dashboard work for this
+project — registrar, Resend, Supabase, Stripe — currently passes through corporate
+TLS inspection on that network. That is a reason to do credential-entering work
+from a personal device, independent of any policy question.
 
 ## Section A — Pre-registration decisions, and their disposition
 
@@ -169,6 +207,40 @@ Recommendation: **Option B**, with the revisit trigger set at Stripe onboarding,
 since that is the point where the entity question stops being deferrable. This
 keeps Phase 1 moving without pretending the gate is met. Owner's call, and it needs
 a DEC entry either way — tracked as P1-01 in Section J.
+
+### A.2a The 60-day lock collides with DEC-0033's provisional window
+
+Confirmed 2026-08-26: the ICANN 60-day lock **does** apply to AWS
+account-to-account domain transfers, and it is triggered both by initial
+registration **and by any change to WHOIS registrant name, email, or
+organisation**.
+
+Two consequences that were not visible before:
+
+**1. The lock does not lapse until roughly 2026-10-05.** Registered 2026-08-06,
+plus 60 days. DEC-0033's provisional maintenance window is **2026-10-01**. So:
+
+> If the domain is to sit in a business AWS account **before** cutover, an
+> October 1 window is not achievable. The lock outlasts it by about four days.
+
+DEC-0033 already records October 1 as provisional and not a customer commitment,
+so nothing is broken — but this is now a concrete constraint on it rather than a
+general caution. Three ways it resolves, all owner decisions:
+
+- Cut over with the domain in the individual account, and move it afterwards.
+- Slip the window past 2026-10-05.
+- Do not move the domain at all, consistent with option C in A.2.
+
+**2. Forming the entity re-triggers the lock.** Changing the registrant
+organisation or name to a newly formed entity starts a **fresh** 60-day lock. So
+"form the entity, then move the domain to its account" is a two-step sequence with
+a 60-day gap in the middle unless both are done as one operation.
+
+Practical implication: if the entity is going to be formed at all, doing it
+**early in Phase 1** costs almost nothing, whereas doing it near cutover injects a
+60-day delay into the critical path at the worst possible moment. This strengthens
+option A in A.2 relative to how it looked before this was confirmed — not decisive,
+but the cost ordering has changed.
 
 ### A.1 Trademark research checklist (research only — not legal advice)
 
@@ -407,24 +479,35 @@ a placeholder — take those from the provider dashboard that issues them, at th
 time you configure them.
 
 Note that §8.1.5's rule cuts both ways here: `216.150.1.1` is recorded because it
-is what the zone genuinely serves, but that is evidence it _works_, not evidence
-it is what Vercel currently recommends. Those can differ — Vercel has changed its
-apex guidance before. Confirming it is a queued verification item, not a
-formality.
+is what the zone genuinely serves, but that is evidence it _works_, not evidence it
+is what Vercel currently recommends.
 
-| Host / name                                  | Type         | Value                                                                     | TTL at setup | Source of truth  | Notes                                                                                                                                                                                               |
-| -------------------------------------------- | ------------ | ------------------------------------------------------------------------- | ------------ | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@` (apex)                                   | A            | `216.150.1.1` — **live**                                                  | 300          | Vercel           | Already configured and serving. **Verify against Vercel's current recommended apex value** before treating as final; also check whether Vercel now prefers a Route 53 ALIAS at the apex             |
-| `www`                                        | CNAME        | `2f1e3f86cb32a6a8.vercel-dns-016.com` — **live**                          | 300          | Vercel           | Already configured. Canonical-host decision (apex vs `www`) still open — plan §6.1 implies apex = marketing, so apex-canonical with `www` redirecting                                               |
-| `app`                                        | CNAME        | `<target shown by Vercel>` — **absent, required**                         | 300          | Vercel           | Plan §8.1.6. The primary application hostname per plan §6.1                                                                                                                                         |
-| `qa`                                         | CNAME        | `<target shown by Vercel>` — **absent, required**                         | 300          | Vercel           | Plan §8.1.6; maps to the Vercel Preview/QA environment                                                                                                                                              |
-| `_vercel`                                    | TXT          | `<verification token from Vercel>`                                        | 3600         | Vercel           | Not currently present and apparently not needed — the apex already resolves and serves. Add only if Vercel asks when `app`/`qa` are attached                                                        |
-| `<selector>._domainkey`                      | CNAME or TXT | `<issued by Resend>`                                                      | 3600         | Resend           | Publish exactly what the Resend dashboard issues, including the selector subdomain. Record shape differs by account/region — do not template it                                                     |
-| `send` (or Resend's stated return-path host) | TXT / MX     | `<issued by Resend>`                                                      | 3600         | Resend           | Custom return-path / MAIL FROM alignment, plan §8.2.4                                                                                                                                               |
-| `@` (apex)                                   | TXT (SPF)    | `v=spf1 include:<resend-issued-include> ~all`                             | 3600         | Hand-built       | **Exactly one SPF TXT record per name.** Two SPF records is a permanent hard failure. Merge all senders into one string. Stay within the 10-DNS-lookup limit. Start `~all` (softfail), not `-all`   |
-| `_dmarc`                                     | TXT          | `v=DMARC1; p=none; rua=mailto:<analyzer>; fo=1; adkim=r; aspf=r; pct=100` | 3600         | Hand-built       | Plan §8.2.3 mandates `p=none` **and a report-review period** before tightening. Start relaxed alignment (`r`) to avoid false failures during setup; tighten to `s` alongside the move to quarantine |
-| `@` and/or mail host                         | MX           | `<issued by the A6 mailbox provider>`                                     | 3600         | Mailbox provider | Required for inbound `support`/`privacy`/`legal`/`security@`. Resend does not receive mail                                                                                                          |
-| `@`                                          | CAA          | `0 issue "<CA used by Vercel>"`                                           | 3600         | Hand-built       | **Add only after certificates have issued.** A wrong CAA record silently blocks renewal. Optional but recommended                                                                                   |
+**Resolved 2026-08-26, and it is a good illustration of why §8.1.5 is worded the
+way it is.** A documentation search returned `76.76.21.21` as the "official" apex
+value along with advice not to use `216.150.1.1`. That advice was **not acted on**:
+`76.76.21.21` is Vercel's older generic value, while this zone carries
+`216.150.1.1` at the apex and a _per-project_ `www` target — the signature of
+Vercel issuing project-specific values. Changing a working apex record on the
+strength of generic documentation is precisely the failure §8.1.5 prohibits.
+
+The authority is **the Vercel dashboard for this project**, and that is where the
+`app` and `qa` targets should come from too. Related: a Route 53 **ALIAS** record
+cannot be used here at all — alias targets are AWS-only, and Vercel is not among
+them — so the plain A record is correct, not a workaround.
+
+| Host / name                                  | Type      | Value                                                                     | TTL at setup | Source of truth  | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| -------------------------------------------- | --------- | ------------------------------------------------------------------------- | ------------ | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@` (apex)                                   | A         | `216.150.1.1` — **live**                                                  | 300          | Vercel           | Already configured and serving. **Verify against Vercel's current recommended apex value** before treating as final; also check whether Vercel now prefers a Route 53 ALIAS at the apex                                                                                                                                                                                                                                                                                                                            |
+| `www`                                        | CNAME     | `2f1e3f86cb32a6a8.vercel-dns-016.com` — **live**                          | 300          | Vercel           | Already configured. Canonical-host decision (apex vs `www`) still open — plan §6.1 implies apex = marketing, so apex-canonical with `www` redirecting                                                                                                                                                                                                                                                                                                                                                              |
+| `app`                                        | CNAME     | `<target shown by Vercel>` — **absent, required**                         | 300          | Vercel           | Plan §8.1.6. The primary application hostname per plan §6.1                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `qa`                                         | CNAME     | `<target shown by Vercel>` — **absent, required**                         | 300          | Vercel           | Plan §8.1.6; maps to the Vercel Preview/QA environment                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `_vercel`                                    | TXT       | `<verification token from Vercel>`                                        | 3600         | Vercel           | Not currently present and apparently not needed — the apex already resolves and serves. Add only if Vercel asks when `app`/`qa` are attached                                                                                                                                                                                                                                                                                                                                                                       |
+| `<selector>._domainkey`                      | TXT       | `<issued by Resend>`                                                      | 3600         | Resend           | Confirmed 2026-08-26 as a **TXT** record, not a CNAME. Publish exactly what the Resend dashboard issues, including the selector subdomain — do not template it                                                                                                                                                                                                                                                                                                                                                     |
+| `send` (or Resend's stated return-path host) | TXT / MX  | `<issued by Resend>`                                                      | 3600         | Resend           | Custom return-path / MAIL FROM alignment, plan §8.2.4                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `@` (apex)                                   | TXT (SPF) | `v=spf1 include:<resend-issued-include> ~all`                             | 3600         | Hand-built       | **Exactly one SPF TXT record per name.** Two SPF records is a permanent hard failure. Merge all senders into one string. Stay within the 10-DNS-lookup limit. Start `~all` (softfail), not `-all`                                                                                                                                                                                                                                                                                                                  |
+| `_dmarc`                                     | TXT       | `v=DMARC1; p=none; rua=mailto:<analyzer>; fo=1; adkim=r; aspf=r; pct=100` | 3600         | Hand-built       | Plan §8.2.3 mandates `p=none` **and a report-review period** before tightening. Start relaxed alignment (`r`) to avoid false failures during setup; tighten to `s` alongside the move to quarantine                                                                                                                                                                                                                                                                                                                |
+| `@` and/or mail host                         | MX        | `<issued by the A6 mailbox provider>`                                     | 3600         | Mailbox provider | Required for inbound `support`/`privacy`/`legal`/`security@`. Resend does not receive mail                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `@`                                          | CAA       | `0 issue "<CA confirmed from the live cert>"`                             | 3600         | Hand-built       | **Add only after certificates have issued, and only once the real issuing CA is confirmed.** Documentation says Vercel uses Let's Encrypt and auto-creates this record — but no CAA exists in this zone, because Vercel can only manage CAA when Vercel manages the DNS. The issuing CA **cannot be read from the owner's workstation** (Zscaler TLS interception returns a corporate certificate); confirm externally via SSL Labs or a personal device first. A wrong value silently blocks issuance and renewal |
 
 ### D.1 TTL sequencing (plan §8.1.7)
 
@@ -456,12 +539,27 @@ is no reason to lower it unless the nameservers themselves are changing.
 how legitimate mail starts disappearing.
 
 1. Publish `p=none` with `rua` pointing at a DMARC analyzer.
-2. Collect **at least one full weekly reporting cycle**, and long enough to cover
-   every legitimate sender: Resend product mail, the mailbox provider, and any
-   Stripe/eBay/support tooling that sends as the domain.
+2. **Collect for 2–4 weeks minimum; 30 days is the realistic target.** Corrected
+   2026-08-26 — an earlier revision of this document said "one full weekly
+   reporting cycle", which is shorter than guidance supports. M3AAWG and the major
+   inbox providers treat `p=none` as a measurement phase with a **2–4 week
+   floor**, and commonly recommend **30–90 days** depending on how many systems
+   send as the domain. The period must in any case be long enough to cover every
+   legitimate sender: Resend product mail, the mailbox provider, and any
+   Stripe/eBay/support tooling.
 3. Confirm every legitimate source shows SPF **and** DKIM alignment passing.
 4. Only then move to `p=quarantine; pct=<ramp>`, ramping the percentage.
 5. Only then consider `p=reject`, and tighten `adkim`/`aspf` to `s`.
+
+Do not sit at `p=none` indefinitely either — Gmail and Yahoo apply increasingly
+strict expectations to bulk senders, so `p=none` is a transitional state in both
+directions.
+
+**Schedule consequence.** At a 30-day floor, publishing DMARC today puts
+`p=quarantine` in reach around late September. Publishing it a month from now puts
+it past any October cutover. This is the single longest fixed wait in Phase 1 and
+it is gated only on the Resend account decision (F.1) — which makes that decision
+more time-sensitive than its size suggests.
 
 ## Section E — Verification procedure
 
@@ -574,6 +672,47 @@ Two paths, owner's decision:
 
 Worth settling during 8.1 rather than at 8.2, because the answer determines the
 DKIM selector and SPF include that go into the zone.
+
+### F.1 Confirmed pricing changes the recommendation
+
+Verified 2026-08-26, confirming RBR-0031:
+
+|                          | Free tier | Pro           |
+| ------------------------ | --------- | ------------- |
+| Verified sending domains | **1**     | 10            |
+| Monthly volume           | 3,000     | 50,000        |
+| Daily cap                | 100       | —             |
+| Cost                     | $0        | **$20/month** |
+
+The shared account's single free-tier domain slot is **already consumed by
+`rankedceo.com`**. So the two options are not equally priced, which was not obvious
+before:
+
+- **Option 1, dedicated ListrAssistr Resend account: $0.** It gets its own free
+  tier and its own single domain slot, which `listrassistr.com` occupies.
+- **Option 2, upgrade the shared account: $20/month**, ongoing.
+
+Option 1 was already the better answer on the DEC-0027 precedent and on not
+inheriting the CRM's sending reputation. It is now also the cheaper one, which
+makes the recommendation fairly clear.
+
+**Two honest caveats before treating $0 as settled:**
+
+1. **Check Resend's terms on multiple free accounts.** A genuinely separate
+   business product with separate infrastructure, billing, and reputation is a
+   legitimate second account rather than an attempt to avoid a paid tier — but the
+   terms are worth reading rather than assumed, and $20/month is not a large sum to
+   pay for being unambiguously in the clear.
+2. **The free tier's caps may not fit.** 3,000 emails/month and **100/day** is the
+   real constraint, not the domain count. Transactional mail for a small user base
+   fits easily; password resets plus notifications plus any digest or marketing
+   send can reach 100/day faster than expected, and hitting a daily cap fails
+   customer-visible mail. Worth sizing against expected volume before committing,
+   because migrating sending domains later means re-verifying DNS and warming a new
+   reputation.
+
+Either way, this stays an owner decision — it is a provider account and a spend
+commitment.
 
 ## Section G — Boundary
 
@@ -726,7 +865,7 @@ reorders around two facts: **DNSSEC is safer to do now than later**, and the
 | 7     | Create `app` and `qa` records at TTL 300; certs issue                       | Vercel project identity (Group 3, open) | Minutes to hours                                                                                                                                |
 | 8     | Mailbox provider (A6) + MX; role mailboxes live                             | Group 4 decisions                       | Provider-dependent                                                                                                                              |
 | 9     | Deliverability tests to Gmail/Outlook/analyzer (§8.2.5, E.1)                | 5, 6, 8                                 | Immediate, but feeds 10                                                                                                                         |
-| 10    | **DMARC report-review period** before tightening (§8.2.3, D.2)              | 6, 9                                    | **At least one full weekly reporting cycle.** Longest fixed wait in Phase 1                                                                     |
+| 10    | **DMARC report-review period** before tightening (§8.2.3, D.2)              | 6, 9                                    | **2-4 weeks minimum, 30 days realistic.** Longest fixed wait in Phase 1; gated only on item 5                                                   |
 | 11    | CAA record                                                                  | 7                                       | After certs issue, never before                                                                                                                 |
 | 12    | §8.3 brand asset production                                                 | 2 (name cleared)                        | Your creative timeline                                                                                                                          |
 | 13    | Post-stabilization TTL raise (D.1)                                          | Cutover                                 | Post-cutover, not Phase 1                                                                                                                       |
@@ -754,9 +893,48 @@ it now, verifying externally via `dnsviz.net`, and leaving it verified for weeks
 before anything depends on it is strictly better than doing it late.
 
 No blocking dependency — root MFA is already on, so the account holding the zone's
-future cryptographic trust anchor is already protected. Exact Route 53 procedure is
-a queued verification item rather than something to improvise, because the DS step
-is the part that breaks resolution when done wrong.
+future cryptographic trust anchor is already protected.
+
+### I.2 DNSSEC on Route 53 — the DS step is manual
+
+Confirmed 2026-08-26, and it removes the simplification C.1 had hoped for:
+**Route 53 does not publish the DS record to the parent zone automatically, even
+though the domain is also registered at Route 53.** The KSK/ZSK are generated in
+the hosted zone; the DS must then be entered by hand in Registered domains.
+
+That makes this a two-system operation with a hand-copied cryptographic value in
+the middle, which is exactly where it goes wrong.
+
+**Enable, in order:**
+
+- [ ] Confirm current TTLs are low before starting. Apex and `www` are already at
+      300, which is what AWS recommends for this operation.
+- [ ] Route 53 → hosted zone `listrassistr.com` → **DNSSEC signing** tab → enable
+      signing. This creates a KSK (backed by a KMS key) and a ZSK.
+- [ ] Copy the **Key tag**, **Signing algorithm**, **Digest algorithm**, and
+      **Digest** exactly as shown.
+- [ ] Route 53 → **Domains → Registered domains** → `listrassistr.com` → add the
+      **DS record** using those four values.
+- [ ] **Verify externally before trusting it** — `dnsviz.net` for the full chain,
+      not the local machine (its DNS is filtered and its TLS is intercepted; see
+      the workstation section above). The chain must validate from the `.com`
+      parent down.
+- [ ] Only after external validation shows a complete chain, treat P1-05 as met.
+
+**Rollback, and the order matters more than anything else on this page:**
+
+1. Delete the **DS record at the registrar** first.
+2. **Wait for the parent DS TTL to expire.** This TTL is set by the `.com`
+   registry, not by you, so it cannot be shortened in advance — check what TTL the
+   published DS actually carries and wait past it.
+3. **Only then** disable DNSSEC signing in the hosted zone.
+
+Doing that sequence in the wrong order — disabling signing while the parent still
+publishes a DS — leaves validating resolvers holding a DS for a zone that no longer
+signs. They will treat every answer as bogus, and **the domain resolves nowhere**.
+Not slow, not degraded: absent. This is the failure mode that makes I.1's
+blast-radius argument worth acting on, since a coming-soon page is a far cheaper
+place to learn this than a live application.
 
 ## Section J — Plan §8 exit-gate tracking
 
@@ -777,7 +955,7 @@ rather than recollection. Statuses: `Not started`, `In progress`,
 | P1-06 | Vercel apex/`www`/`app`/`qa` resolving, certs issued | External resolver output; cert status                                           | **In progress** — apex and `www` live and verified. `app` and `qa` absent. Vercel project identity open (Group 3)                                                                                                                                                            |
 | P1-07 | Role mailboxes receiving                             | Inbound test result for every address                                           | **Not started** — no MX present. Address set itself unresolved (four vs five, §8.2.1 vs §6.1)                                                                                                                                                                                |
 | P1-08 | Branded email authenticates                          | Gmail/Outlook headers showing aligned SPF+DKIM+DMARC pass, `d=listrassistr.com` | **Not started** — no SPF, DKIM, or DMARC records present                                                                                                                                                                                                                     |
-| P1-09 | DMARC report-review period completed                 | Analyzer reports covering every legitimate sender, over at least one full cycle | **Not started** — longest fixed wait in the phase; clock has not begun                                                                                                                                                                                                       |
+| P1-09 | DMARC report-review period completed                 | Analyzer reports covering every legitimate sender, over 2-4 weeks minimum       | **Not started** — 30-day target per D.2; longest fixed wait in the phase, clock not begun                                                                                                                                                                                    |
 | P1-10 | Brand asset package produced                         | Full §8.3 deliverable list                                                      | **Not started**                                                                                                                                                                                                                                                              |
 | P1-11 | Design tokens pass WCAG AA                           | Measured contrast ratios; confirmation red is never the sole state indicator    | **Not started**                                                                                                                                                                                                                                                              |
 | P1-12 | Asset package approved                               | Owner sign-off, recorded as a DEC entry                                         | **Not started**                                                                                                                                                                                                                                                              |
