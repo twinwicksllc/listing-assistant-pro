@@ -20,7 +20,9 @@
    - `inventory-sync-cron` → repeatedly returns `{"success":true,"usersSynced":1,"totalListings":0,"totalEnded":0}`, **always the same user** (`a96bfdd8-cd02-40c3-8726-056c2c92bbfc`) — see Open Bug below.
 7. **Security incident, resolved:** the user pasted the actual `CRON_SECRET` value in plaintext into this chat while reporting curl results. Flagged immediately; user has since **rotated it** (new value set in both the `cron_secret` Vault secret and the `CRON_SECRET` Edge Function secret) and confirmed the new secret works. The old value in this transcript/doc is dead. **No further action needed on this**, just noting it happened.
 
-## Open bug — found, not yet fixed
+## Open bug — found, and now fixed and deployed (2026-08-25)
+
+**Update 2026-08-25:** option (a) below was implemented — migrations `20260819000000_add_profiles_last_ebay_sync_at.sql` and `20260819010000_fix_inventory_sync_cursor_starvation.sql`, plus the corresponding write in `ebayInventorySync.ts` (`profiles.last_ebay_sync_at` set unconditionally after every sync attempt, regardless of outcome). Both migrations sat unapplied in production for six days due to an unrelated CI bug (see `REBRAND_PHASE_0_EXCEPTION_LOG.md`'s RBR-0034) and were confirmed applied 2026-08-25T21:23:43Z. The two open sub-questions below (same account as the 539-listing backlog? real enumeration bug?) were never chased down, since the fix in step 3 makes them moot for the starvation symptom either way — worth revisiting only if a fresh, unrelated zero-listings anomaly shows up.
 
 **Symptom:** `inventory-sync-cron` keeps selecting the same single user (`a96bfdd8-cd02-40c3-8726-056c2c92bbfc`) every single invocation, and that user always returns `0 active, 0 ended` listings with no warning/error logged.
 
