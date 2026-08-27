@@ -65,19 +65,19 @@ earlier draft's assumption that nothing had been registered yet.
 
 ### Verified zone contents
 
-| Record                 | Type  | Value                                 | TTL    | State                                                                                                                                                      |
-| ---------------------- | ----- | ------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `listrassistr.com`     | A     | `216.150.1.1`                         | 300    | Live, and **confirmed a 308 redirect to `www`, not a serving host** (A.7). Value **leave as-is** — confirm against the Vercel dashboard, not documentation |
-| `www.listrassistr.com` | CNAME | `2f1e3f86cb32a6a8.vercel-dns-016.com` | 300    | Live — **and canonical**; the apex 308-redirects here (A.7)                                                                                                |
-| `listrassistr.com`     | NS    | 4× `awsdns-*`                         | 172800 | Route 53 default, correct                                                                                                                                  |
-| `listrassistr.com`     | SOA   | `ns-1068.awsdns-05.org`               | 900    | Route 53 default                                                                                                                                           |
-| `app`                  | —     | —                                     | —      | **Absent** — required by §8.1.6                                                                                                                            |
-| `qa`                   | —     | —                                     | —      | **Absent** — required by §8.1.6                                                                                                                            |
-| TXT / SPF              | —     | —                                     | —      | **Absent**                                                                                                                                                 |
-| MX                     | —     | —                                     | —      | **Absent**                                                                                                                                                 |
-| `_dmarc`               | —     | —                                     | —      | **Absent**                                                                                                                                                 |
-| DNSKEY / DS            | —     | —                                     | —      | **Absent** — DNSSEC not enabled                                                                                                                            |
-| CAA                    | —     | —                                     | —      | **Absent**                                                                                                                                                 |
+| Record                 | Type  | Value                                 | TTL    | State                                                                                                                                              |
+| ---------------------- | ----- | ------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `listrassistr.com`     | A     | `216.150.1.1`                         | 300    | Live and **canonical** — serves production as of 2026-08-27 (A.7d). Value **leave as-is**; confirm against the Vercel dashboard, not documentation |
+| `www.listrassistr.com` | CNAME | `2f1e3f86cb32a6a8.vercel-dns-016.com` | 300    | Live, and **308-redirects to the apex** as of 2026-08-27 (A.7d)                                                                                    |
+| `listrassistr.com`     | NS    | 4× `awsdns-*`                         | 172800 | Route 53 default, correct                                                                                                                          |
+| `listrassistr.com`     | SOA   | `ns-1068.awsdns-05.org`               | 900    | Route 53 default                                                                                                                                   |
+| `app`                  | —     | —                                     | —      | **Absent** — required by §8.1.6                                                                                                                    |
+| `qa`                   | —     | —                                     | —      | **Absent** — required by §8.1.6                                                                                                                    |
+| TXT / SPF              | —     | —                                     | —      | **Absent**                                                                                                                                         |
+| MX                     | —     | —                                     | —      | **Absent**                                                                                                                                         |
+| `_dmarc`               | —     | —                                     | —      | **Absent**                                                                                                                                         |
+| DNSKEY / DS            | —     | —                                     | —      | **Absent** — DNSSEC not enabled                                                                                                                    |
+| CAA                    | —     | —                                     | —      | **Absent**                                                                                                                                         |
 
 Two consequences worth stating plainly:
 
@@ -327,9 +327,15 @@ these hostnames work, and a hostname serving a placeholder demonstrates the DNS 
 path but not the application. The gate should close when both serve their intended
 content, not when the records merely exist.
 
-## A.7 Q-03 resolved — `www` is canonical, and two things are misconfigured
+## A.7 Q-03 resolved — apex is now canonical (both findings actioned)
 
-Vercel → Domains, captured 2026-08-27. All five entries show Valid Configuration:
+**Resolved 2026-08-27. Jump to A.7d for the current, verified state.** This section
+records the observation that prompted the change, and is kept because the two
+misconfigurations it found are the reason RB-01 and RB-02 exist.
+
+### A.7 (as observed, before the fix)
+
+Vercel → Domains, captured 2026-08-27. All five entries showed Valid Configuration:
 
 | Domain                             | Behaviour                                    |
 | ---------------------------------- | -------------------------------------------- |
@@ -339,9 +345,10 @@ Vercel → Domains, captured 2026-08-27. All five entries show Valid Configurati
 | `listerassistr.com`                | **308 → `listrassistr-official.vercel.app`** |
 | `www.listerassistr.com`            | **308 → `listrassistr-official.vercel.app`** |
 
-So **`www` is canonical and the apex redirects to it.** That answers Q-03 and resolves
-A.3a's ambiguity: the Overview widget was not truncating — the apex genuinely is a
-redirect, not a serving domain.
+So at that point **`www` was canonical and the apex redirected to it.** That answered
+Q-03 and resolved A.3a's ambiguity: the Overview widget was not truncating — the apex
+genuinely was a redirect rather than a serving domain. **This has since been flipped, see
+A.7d.**
 
 ### A.7a This contradicts plan §6.1, and the divergence needs closing
 
@@ -361,11 +368,15 @@ should change, and the choice is the owner's:
 | **A. Make the apex canonical** — matches plan §6.1   | Flip the Vercel config: apex becomes Production, `www` redirects to it | Plan and reality agree with no document edit. The already-recorded Supabase Auth Site URL (`https://listrassistr.com`) becomes correct as-is                                                                                                                                              |
 | **B. Keep `www` canonical** — matches the deployment | Update plan §6.1 to name `www.listrassistr.com` as the marketing site  | No change to working configuration. **Genuine technical benefit:** cookies set on `www` do not ride along to `app.` and `qa.`, whereas apex cookies are sent to every subdomain. Marketing and analytics scripts on the marketing site therefore cannot leak cookies into the application |
 
-Recommendation: **B, keep `www`.** It already works, the cookie-isolation argument is
-real, and the discipline applied to the apex A record in Section D applies here too —
-do not change working configuration without a reason. But the plan **must** be updated to
-match, because a plan that contradicts the deployment is how DEC-0033's "domain not yet
-registered" error happened. Silent divergence is the failure mode.
+Recommendation at the time was **B, keep `www`** — on the grounds that it already worked
+and that cookies on `www` do not ride along to subdomains.
+
+**Owner chose A, 2026-08-27: the apex is canonical.** Executed via RB-01 and verified in
+A.7d. That resolves the divergence in the plan's favour, so **plan §6.1 needs no edit** —
+it already names the apex as the marketing site. Option B's cookie-isolation benefit is
+given up, which is worth noting rather than forgetting: any marketing or analytics script
+that sets a cookie on the apex will have it sent to `app.` and `qa.` as well. Worth
+remembering when analytics is added, not a reason to revisit.
 
 ### A.7b The auth consequence — this one is functional, not cosmetic
 
@@ -375,7 +386,11 @@ configuration as:
 - Auth Site URL: `https://listrassistr.com` — **the apex**
 - Allowed callback: `https://listrassistr.com/auth/callback` — **the apex**
 
-With the apex 308-redirecting to `www`, that configuration is now inconsistent with the
+**Resolved by the flip to apex-canonical (A.7d): that recorded configuration is now
+correct as-is, and needs no change.** The reasoning is kept because it is the mechanism
+to re-check whenever a hostname changes again.
+
+While the apex was 308-redirecting to `www`, that configuration was inconsistent with the
 deployment, and it is the kind of inconsistency that breaks sign-in rather than merely
 looking untidy:
 
@@ -388,12 +403,15 @@ looking untidy:
   back to `www`. Either way the origins disagree.
 
 **Whichever canonical host is chosen, the Supabase Auth Site URL and the redirect
-allow-list must match it exactly.** This is the concrete reason A.7a needs deciding
-before any auth work, not after.
+allow-list must match it exactly.** With apex-canonical chosen and the recorded Site URL
+already `https://listrassistr.com`, they now match. Still to confirm against the live
+project rather than the inventory record — RB-05 step 5.
 
 ### A.7c The typo domains redirect to the wrong target
 
-`listerassistr.com` and `www.listerassistr.com` both 308 to
+**Fixed 2026-08-27 via RB-02 — both now 308 to `listrassistr.com`. See A.7d.**
+
+As found, `listerassistr.com` and `www.listerassistr.com` both 308'd to
 **`listrassistr-official.vercel.app`** — the Vercel technical hostname — rather than to
 the brand domain.
 
@@ -418,6 +436,42 @@ main concerns stand closed. But the target is wrong on three counts:
       domain, or redirect to the canonical host as well. Leaving a `.vercel.app` alias
       publicly serving production content is usually not what you want once a real domain
       exists.
+
+### A.7d Current state — verified 2026-08-27 after RB-01 and RB-02
+
+Vercel → Domains, second capture. All five entries show Valid Configuration:
+
+| Domain                             | Behaviour                    | Change                                     |
+| ---------------------------------- | ---------------------------- | ------------------------------------------ |
+| `listrassistr.com` (apex)          | **Production** — canonical   | flipped from a 308 to `www`                |
+| `www.listrassistr.com`             | **308 → `listrassistr.com`** | flipped from Production                    |
+| `listerassistr.com`                | **308 → `listrassistr.com`** | repointed from the `.vercel.app` host      |
+| `www.listerassistr.com`            | **308 → `listrassistr.com`** | repointed from the `.vercel.app` host      |
+| `listrassistr-official.vercel.app` | **Production**               | unchanged, per RB-02's O-36 recommendation |
+
+**All four intended changes are correct, and there is no redirect loop** — the apex
+terminates the chain by serving content rather than redirecting onward, which is the
+failure RB-01 warned about.
+
+Every redirect now lands on the brand apex. Consequences, closing three earlier items:
+
+- **Q-14 / Q-03 closed.** Canonical host is the apex, matching plan §6.1, so no plan edit.
+- **O-35 closed.** A.7c's brand, SEO, and legal-posture objections are all addressed: the
+  typo domains now terminate at the owner's own brand, which is the configuration A.1f's
+  defensive-registration argument depends on.
+- **A.7b closed.** The recorded Supabase Auth Site URL `https://listrassistr.com` matches
+  the canonical host, so no auth reconfiguration is needed. Still worth confirming against
+  the live project rather than the inventory (RB-05).
+
+**Verification limits, recorded honestly.** This rests on the owner's dashboard
+screenshot. Independent HTTP confirmation was attempted from the owner's workstation and
+returned **403 on all four hostnames** — the Zscaler interception documented earlier, not
+a fault in the configuration. DNS confirms both hostnames still resolve to Vercel, but DNS
+cannot show redirect direction. A genuine external check of the 308 chain still wants a
+personal device or an external tool, and is worth doing once for the record.
+
+- [ ] Confirm from a personal device: apex returns 200, the other three return 308 to the
+      apex, and no chain exceeds one hop.
 
 ## A.8 Q-13 decided — option C, with the destination recorded
 

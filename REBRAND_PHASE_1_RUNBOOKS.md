@@ -12,11 +12,14 @@ Step-by-step procedures for the Phase 1 items the owner executes. Companion to:
 Console navigation is described by label rather than exact path, because provider UIs
 move. Where a step is version-sensitive it says so.
 
-**Run RB-01 before RB-02.** Everything else is independent.
+**RB-01 and RB-02 are complete** (2026-08-27, verified in checklist A.7d). Remaining:
+**RB-03** DNSSEC, **RB-04** what the buttons do, **RB-05** verify the production Supabase
+project, **RB-06** target-repo staleness audit, **RB-07** place the DEC entries, **RB-08**
+qa — blocked pending a Phase 3 gate.
 
 ---
 
-## RB-01 — Make the apex canonical, `www` redirect (Q-14, O-34)
+## RB-01 — Make the apex canonical, `www` redirect (Q-14, O-34) — ✅ DONE 2026-08-27
 
 **Goal:** `https://listrassistr.com` serves production; `https://www.listrassistr.com`
 308-redirects to it. Matches plan §6.1 and the owner's decision of 2026-08-27.
@@ -67,7 +70,7 @@ Tell me when done and I will confirm the record state from here.
 
 ---
 
-## RB-02 — Repoint the typo domains (O-35), and the `.vercel.app` alias (O-36)
+## RB-02 — Repoint the typo domains (O-35), and the `.vercel.app` alias (O-36) — ✅ DONE 2026-08-27
 
 **Run after RB-01**, so the target host is final.
 
