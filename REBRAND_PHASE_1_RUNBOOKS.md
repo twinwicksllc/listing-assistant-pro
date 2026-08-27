@@ -12,6 +12,18 @@ Step-by-step procedures for the Phase 1 items the owner executes. Companion to:
 Console navigation is described by label rather than exact path, because provider UIs
 move. Where a step is version-sensitive it says so.
 
+**Which system each runbook lives in**, since they are easy to conflate:
+
+| Runbook      | System                                                                    |
+| ------------ | ------------------------------------------------------------------------- |
+| RB-01, RB-02 | **Vercel** — project `listrassistr-official` → Domains                    |
+| RB-03        | **AWS Route 53** — hosted zone, then Registered domains                   |
+| RB-04        | The **live site**, plus optionally Supabase logs                          |
+| RB-05        | **Supabase** dashboard — project `yqftpibxplachhwoclam`                   |
+| RB-06        | **GitHub** — `twinwicksllc/listrassistr-official`                         |
+| RB-07        | **This repository** — `REBRAND_PHASE_0_DECISION_LOG.md`, a markdown table |
+| RB-08        | Blocked; needs a Phase 3 gate before any system is touched                |
+
 **RB-01 to RB-04 are complete** (2026-08-27; verified in checklist A.7d and A.12).
 Remaining: **RB-04** what the buttons do, **RB-05** verify the production Supabase project,
 **RB-06** target-repo staleness audit, **RB-07** place the DEC entries, **RB-08** qa —
@@ -237,8 +249,49 @@ future **production** project — not staging, not qa. See checklist A.11.
 6. **API keys — format only, never values.** Note whether the project uses legacy JWT keys
    or the newer `sb_publishable_` / `sb_secret_` format, per DEC-0021.
 
-**Report:** name, region, project URL, organisation, empty or not, Site URL, allow-list,
-key format. **No key values, ever.**
+### Reporting template — fill in rather than screenshotting
+
+**Why a template rather than a screenshot.** The Supabase **API** page displays the
+`service_role` key, which is a full-access credential that bypasses RLS. That page should
+never be screenshotted. A template with only safe slots removes the need to judge what to
+crop.
+
+```
+PROJECT IDENTITY          Project Settings (gear) → General
+  Project name:
+  Region:
+  Organization name:
+  Plan tier:
+
+AUTH URLS                 Authentication → URL Configuration
+  Site URL:
+  Redirect URLs (list all):
+
+SIGN-UP POLICY            Authentication → Sign In / Providers → Email
+  "Allow new users to sign up":     enabled / disabled
+  "Confirm email" required:         yes / no
+
+CONTENTS                  Table Editor  +  Authentication → Users
+  Table names present (names only):
+  Number of users in auth:
+
+KEY FORMAT ONLY           Project Settings → API  (or "API Keys")
+  Tick what you SEE - do not copy any value:
+    [ ] legacy pair: "anon" and "service_role"  (JWT-style, begin eyJ...)
+    [ ] new pair:    "publishable" and "secret" (begin sb_publishable_ / sb_secret_)
+    [ ] both present
+```
+
+**Safe to report:** names, region, organisation, URLs, table names, counts, toggle states,
+and which key _format_ is in use.
+
+**Never report:** any key value, the JWT secret, the database password, or a connection
+string containing one. DEC-0021 only needs the format, never the keys.
+
+Two slots are newer than the original RB-05 list, both consequences of A.13: the **sign-up
+toggle**, because public sign-up is open on the production-intended project, and a **user
+count** rather than an empty yes/no, because the owner's test account means the honest
+answer is now a number.
 
 ---
 
@@ -256,9 +309,28 @@ not a conflict reconciliation.
    contradictions are what cause harm; staleness alone is just noise.
 4. Note whether the repo contains any **application code** yet, or only docs and scaffolding.
 
-I have no access to that repository, so this needs you — or read access granted. Either
-way, send me the file list and I will tell you which items conflict with the Phase 0
-record and draft the corrections.
+I have no access to that repository, so this needs you — or read access granted.
+
+### Reporting template
+
+Browser only, no clone needed: `github.com/twinwicksllc/listrassistr-official`
+
+```
+  Root files and folders (names only):
+  Contents of docs/ if it exists:
+  Branch list:
+  Application code present?  (is there a package.json / src/ ?)   yes / no
+  PR #14 - title + which files it changed:
+  PR #16 - title + which files it changed:
+  Anything secret-shaped committed? (.env, *.pem, keys pasted in code)
+      -> say IF and WHERE only. Do not paste contents.
+```
+
+For the PRs, the **Files changed** tab is enough — filenames alone serve the purpose, since
+this is a staleness and contradiction audit rather than a read of the prose.
+
+That last line is not a formality: if a `.env` or key-shaped file _is_ committed there, it is
+a finding to handle deliberately, not something to paste into a chat or a commit message.
 
 ---
 
