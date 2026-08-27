@@ -24,7 +24,8 @@ move. Where a step is version-sensitive it says so.
 | RB-07        | **This repository** — `REBRAND_PHASE_0_DECISION_LOG.md`, a markdown table |
 | RB-08        | Blocked; needs a Phase 3 gate before any system is touched                |
 
-**RB-01 to RB-07 are complete** (RB-05 fully so as of A.17b). Only **RB-08** (qa) remains, blocked pending a Phase 3 gate — see Q-15 (2026-08-27; verified in checklist A.7d and A.12).
+**RB-01 to RB-07 are complete** (RB-05 fully so as of A.17b). **RB-08** (qa environment) is blocked pending a Phase 3 gate — see Q-15. **RB-09** (IAM
+admin login) and **RB-10** (`app`/`qa` subdomains) are new and ready to run (2026-08-27; verified in checklist A.7d and A.12).
 Remaining: **RB-04** what the buttons do, **RB-05** verify the production Supabase project,
 **RB-06** target-repo staleness audit, **RB-07** place the DEC entries, **RB-08** qa —
 blocked pending a Phase 3 gate.
@@ -401,3 +402,108 @@ that record should follow the environment rather than precede it.
   for development.
 - The **`qa` DNS record row** for the checklist's Section D, once the Vercel target exists.
 - The **Vercel branch-and-domain assignment** steps from A.6.
+
+---
+
+## RB-09 — Stop using root: create an IAM admin login (O-01)
+
+Asked for by the owner 2026-08-27, who confirmed they normally sign in as root.
+
+**Why this matters more now than it did last week.** Root MFA is already on, which is the
+important half. But that single account now controls the domain registration, the
+authoritative DNS zone, **and** the KMS key backing DNSSEC — where losing access takes the
+domain dark for validating resolvers (A.12). Root should be the account you almost never use.
+
+**On least privilege, honestly:** `AdministratorAccess` is not least-privilege, and for a
+larger team the right answer would be scoped policies. For a solo operator, an IAM admin with
+MFA is a large improvement over daily root use, and scoping can come later. Do not let the
+perfect version block the useful one.
+
+### Steps
+
+1. Sign in as **root**. This is one of the few tasks root is for.
+2. **IAM → Users → Create user.** Name it for a person, e.g. `tom-admin`.
+3. Tick **Provide user access to the AWS Management Console**, and set a password. Uncheck
+   "users must create a new password" if you are setting your own.
+4. **Permissions → Attach policies directly → `AdministratorAccess`.**
+5. Create the user.
+6. **Enable MFA on the new user** — IAM → Users → `tom-admin` → **Security credentials** →
+   Multi-factor authentication → Assign MFA device. Use a passkey or TOTP, same as root.
+   **Do not skip this.** An admin IAM user without MFA is worse than root with MFA.
+7. **Optional but worth it — set an account alias.** IAM dashboard → Account Alias → Create.
+   Turns the sign-in URL into `https://<alias>.signin.aws.amazon.com/console`, which is much
+   easier than remembering the 12-digit account id.
+8. **Enable billing visibility for IAM users**, or you will end up back in root to check the
+   bill. As root: **Account → IAM user and role access to Billing information → Edit →
+   Activate.** This is a root-only setting, so do it while you are here.
+9. Sign out. Sign back in as `tom-admin` and confirm you can reach Route 53, KMS, and Billing.
+
+### Afterwards
+
+- [ ] Use `tom-admin` for all routine work — Route 53, SES when it happens, everything.
+- [ ] **Check root has no access keys.** IAM → Security credentials while signed in as root.
+      Root access keys should not exist at all; delete any that do.
+- [ ] Keep root's MFA and recovery contacts current, and reserve root for the handful of
+      things that require it: closing the account, changing support plan, some billing
+      settings, and the step 8 toggle above.
+- [ ] Record in the service inventory that day-to-day access is via an IAM principal with
+      MFA. Names and methods only, never credentials.
+
+---
+
+## RB-10 — Create the `app` and `qa` subdomains (O-06)
+
+Owner decided 2026-08-27: **`app` and `qa` should be subdomains, not paths.** That matches
+plan §6.1's two-host target, and it supersedes A.14's recommendation to defer — deferral was
+advice on the assumption the path layout would stand, and the owner has chosen otherwise.
+
+**One thing to be clear-eyed about before starting.** The application currently lives at
+`listrassistr.com/app/*`, and marketing at `/`. Both come from the same Vercel deployment. So
+adding `app.listrassistr.com` today gives you a working hostname that **serves the marketing
+page at its root**, until host-based routing exists in the application.
+
+That interim state is harmless pre-launch, and there is a real argument for doing it now: it
+proves the DNS and certificate path, reserves the hostname, and means nothing DNS-shaped is on
+the critical path later. Just do it knowing what it will show.
+
+**DNSSEC is not a complication.** Route 53 signs new records in a signed zone automatically —
+adding records needs no special handling now that A.12's chain is live.
+
+### `app.listrassistr.com` — can be done now
+
+1. Vercel → project **`listrassistr-official`** → **Domains** → **Add**.
+2. Enter `app.listrassistr.com`. Choose to serve production, **not** a redirect.
+3. Vercel will display the DNS record it wants — a **CNAME** to a per-project target.
+   **Use exactly what it shows**, per §8.1.5; do not reuse the `www` target from memory.
+4. Route 53 → hosted zone `listrassistr.com` → **Create record**:
+   - Record name: `app`
+   - Type: **CNAME**
+   - Value: the target Vercel displayed
+   - **TTL: 300**
+5. Back in Vercel, wait for **Valid Configuration** and for the certificate to issue.
+6. Tell me and I will verify resolution and the certificate chain from here.
+
+### `qa.listrassistr.com` — needs one thing first
+
+`qa` should track a branch, not production, or it is just a second production hostname with a
+misleading name. So:
+
+1. **Create a long-lived branch** in `listrassistr-official` — `qa` is the obvious name.
+2. Vercel → **Domains** → **Add** `qa.listrassistr.com`, and **assign it to that branch**
+   rather than to production.
+3. Add the CNAME Vercel displays in Route 53, again at **TTL 300**.
+4. Note the environment-variable question from A.6: `qa` should eventually point at a
+   **non-production** Supabase project per DEC-0005. That project does not exist yet (Q-15),
+   so until it does, `qa` will share the production project. Acceptable while there is no
+   schema and no customer data (A.17b), but it is the reason Q-15 exists.
+
+### What still needs application work
+
+Neither hostname behaves correctly until the app routes by host:
+
+- `app.listrassistr.com` → serve the authenticated product at `/`, not marketing.
+- `listrassistr.com` → serve marketing, and ideally redirect `/app/*` to the new host so old
+  links keep working.
+
+That is code in `listrassistr-official`, and it is what makes P1-06 genuinely closable rather
+than technically satisfied. Worth drafting the routing approach together when you are ready.
