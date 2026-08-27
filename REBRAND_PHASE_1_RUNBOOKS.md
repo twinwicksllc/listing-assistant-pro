@@ -114,31 +114,61 @@ embarrassment; the identical mistake after cutover is a customer outage.
 
 ### Stage 1 — Enable signing. Cannot break anything.
 
-1. Route 53 → **Hosted zones** → **`listrassistr.com`** → **DNSSEC signing** tab.
-2. **Enable DNSSEC signing.** Accept creating a KSK backed by a KMS key.
-3. Wait for it to report enabled.
+1. Route 53 → **Hosted zones** → **`listrassistr.com`** → **DNSSEC signing** tab →
+   **Enable DNSSEC signing**.
+2. **KSK name — mind the character set.** The field accepts only `_`, A-Z, a-z and 0-9:
+   **hyphens and dots are rejected**, so the obvious `listrassistr-ksk` will not be
+   accepted. Use **`listrassistr_ksk_1`**. The `_1` suffix is deliberate — KSK rotation
+   later means adding a second key alongside the first, and `_2` is then self-evident.
+3. **Choose "Create customer managed CMK", not the pre-selected "Choose customer managed
+   CMK".** The page defaults to selecting an existing KMS key, but Route 53 DNSSEC needs a
+   key with specific properties that an ordinary KMS key will not have:
+   - **Asymmetric**, key spec **ECC_NIST_P256**, key usage **SIGN_VERIFY**
+   - Located in **us-east-1** — Route 53 is anchored there for this purpose
+   - A key policy granting `dnssec-route53.amazonaws.com` permission to use it
+
+   Letting Route 53 create it produces all of the above correctly and removes the fiddliest
+   failure mode in the procedure. Expect the key to appear in **us-east-1** even if you
+   normally work in another region; that is required, not a mistake.
+
+4. **Cost:** the "Additional charges apply" note refers to the KMS key, roughly **1 USD per
+   month** plus negligible per-request charges at DNSSEC signing volumes. So DNSSEC here
+   costs about a dollar a month. Worth confirming against current KMS pricing.
+5. Click **Create KSK and enable signing**, and wait for it to report enabled.
+
+**Record afterwards:** the **KSK name** and the KMS key **alias**. Deliberately not the
+full key ARN — an ARN embeds the AWS account id, which adds nothing to this record and
+should not be published in the repository.
+
+**On AWS's own warning.** The page cautions that completing the steps out of order can make
+the domain unavailable. That is the same hazard this runbook is built around, and Route 53
+itself splits the flow at the same place: enabling signing here, then a separate
+"establish chain of trust" step that supplies the DS values. The Stage 1/Stage 2
+checkpoint below sits exactly on that boundary, so pausing there follows AWS's sequence
+rather than departing from it.
 
 **Why this is safe:** validating resolvers only validate a zone if the **parent** (`.com`)
 publishes a DS record. Until you publish the DS, the signatures are ignored entirely.
 
-4. **Stop here and tell me.** I will confirm the DNSKEY is live and well-formed before you
-   touch the DS. This checkpoint is the whole point of splitting the runbook.
+6. **Stop here and tell me.** Route 53 will offer an "establish chain of trust" step
+   showing the DS values — **do not complete it yet.** I will confirm the DNSKEY is live and
+   well-formed first. This checkpoint is the whole point of splitting the runbook.
 
 ### Stage 2 — Publish the DS. This is the part with teeth.
 
-5. Still on the **DNSSEC signing** tab, view the key and note four values: **Key tag**,
+7. Still on the **DNSSEC signing** tab, view the key and note four values: **Key tag**,
    **Signing algorithm**, **Digest algorithm**, **Digest**.
-6. Route 53 → **Domains → Registered domains** → **`listrassistr.com`** → **DNSSEC keys**
+8. Route 53 → **Domains → Registered domains** → **`listrassistr.com`** → **DNSSEC keys**
    → **Add key**.
-7. Enter the four values exactly. Double-check the **Key tag** matches before saving —
+9. Enter the four values exactly. Double-check the **Key tag** matches before saving —
    registrar and zone are the same console here, which is why transcription risk is low.
-8. Save.
+10. Save.
 
 ### Verify immediately
 
-9. Open **`dnsviz.net/d/listrassistr.com/analyze`** from a personal device. You want a
-   complete, unbroken chain from the `.com` parent down, with no red errors.
-10. Tell me and I will independently confirm DNSKEY and DS from here.
+11. Open **`dnsviz.net/d/listrassistr.com/analyze`** from a personal device. You want a
+    complete, unbroken chain from the `.com` parent down, with no red errors.
+12. Tell me and I will independently confirm DNSKEY and DS from here.
 
 **Abort condition:** if dnsviz shows a broken chain, **delete the DS record at the
 registrar immediately**. The sooner it goes, the fewer resolvers have cached it.
