@@ -1,0 +1,208 @@
+# Rebrand Phase 1 — Consolidated To-Do
+
+**Product:** ListrAssistr
+**Repository:** `twinwicksllc/listing-assistant-pro` (legacy; stays live per DEC-0003)
+**Scope:** `LISTRASSISTR_REBRAND_AND_MIGRATION_PLAN.md` §8 only, per DEC-0035.
+Repository code is §9/Phase 2 and **not** authorised.
+**Status date:** 2026-08-26
+
+## How this document relates to the other one
+
+`REBRAND_PHASE_1_DOMAIN_AND_DNS_CHECKLIST.md` is the **reference** — record shapes,
+verification procedures, reasoning, and the evidence behind each decision. It is long
+because the reasoning matters.
+
+**This document is the action list.** Every open item, with an ID, an owner, a
+dependency, and a priority. Where an item needs detail, it cites the checklist
+section rather than repeating it.
+
+Priorities: **P1** do next · **P2** soon · **P3** when convenient · **DEF** deferred
+by owner decision, with a stated trigger.
+
+## Where Phase 1 stands
+
+Plan §8's exit gate: "Domain ownership is secure, legal has approved the name,
+branded email can authenticate, and the asset package is approved."
+
+| Gate  | Item                                    | Status                                |
+| ----- | --------------------------------------- | ------------------------------------- |
+| P1-01 | Domain in legal business entity         | **Approved with recorded deviation**  |
+| P1-02 | Registrar hardened                      | **Evidence captured**                 |
+| P1-03 | Legal approval of the name              | **Approved**                          |
+| P1-04 | Authoritative DNS documented            | In progress — inventory entry missing |
+| P1-05 | DNSSEC enabled, DS chain verified       | Not started                           |
+| P1-06 | Apex/`www`/`app`/`qa` resolving + certs | In progress — `app`/`qa` absent       |
+| P1-07 | Role mailboxes receiving                | Deferred                              |
+| P1-08 | Branded email authenticates             | Deferred                              |
+| P1-09 | DMARC review period completed           | Deferred                              |
+| P1-10 | Brand asset package produced            | Not started                           |
+| P1-11 | Design tokens pass WCAG AA              | Not started                           |
+| P1-12 | Asset package approved                  | Not started                           |
+| P1-13 | Phase 2 entry decision                  | Not started — DEC-0035 does not grant |
+
+Three of thirteen are closed. **The two largest remaining blocks are email identity
+(§8.2) and brand assets (§8.3).**
+
+## Section 1 — Answers I am waiting on from you
+
+Decisions and facts only you hold. Each blocks work I cannot start without it.
+
+| ID   | Question                                                                                                                                                               | Blocks                                     | Priority |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | -------- |
+| Q-01 | **Which Vercel project serves the coming-soon page?** The existing `tom-fenwicks-projects/listing-assistant-pro`, or a separate one?                                   | `app`/`qa` record targets (O-06), P1-06    | **P1**   |
+| Q-02 | Does **`qa`** map to a Vercel **Preview environment** or its own project?                                                                                              | `qa` record shape                          | **P1**   |
+| Q-03 | **Canonical host: apex or `www`?** Plan §6.1 implies apex = marketing, `app` = product                                                                                 | Redirect config, canonical URLs, sitemap   | P2       |
+| Q-04 | **Which role-address set is authoritative?** §8.2.1 says `support`/`privacy`/`legal`/**`security`**; §6.1 says `support`/`privacy`/`legal`/**`alerts`**. Four or five? | MX + mailbox setup (O-12), P1-07           | P2       |
+| Q-05 | **Inbound mailbox provider.** Recommendation is Google Workspace, one seat, role addresses as free aliases (F.4)                                                       | O-12, SPF record, P1-07/P1-08              | P2       |
+| Q-06 | **DMARC `rua` destination.** Must be an analyzer service or an address at `listrassistr.com` — a `gmail.com` address silently fails (F.6)                              | O-14, P1-09 and its 30-day clock           | P2       |
+| Q-07 | **Auth `From` address** — `no-reply@`, `accounts@`, or other? Plan §6.1 names none                                                                                     | SES + Supabase Auth config (O-10)          | P2       |
+| Q-08 | Does the **"Join the preview" form send email** today, and where does **"Sign in"** point?                                                                             | Whether an unaligned sender already exists | P2       |
+| Q-09 | **Does the "drop the E's" tagline ship as written?** It is a good typo mnemonic but explicitly invokes a live competitor's name (A.1c)                                 | Brand copy, and the A.1e typo-domain case  | P3       |
+| Q-10 | **§8.3 brand direction** — confirm the concept PNG's black/red/white, or give a different direction                                                                    | T-01, T-02, T-03, P1-10/P1-11              | P2       |
+| Q-11 | **Buy the remaining typo variants?** `listrasistr.com`, `listassistr.com`, `listrassist.com`, and the `.net`/`.co`/`.app`/`.io` set (A.1e)                             | Nothing — pure spend decision              | P3       |
+| Q-12 | **May I correct the source-document discrepancies?** Four are recorded in the checklist and all sit in Phase 0 documents, which are yours (see T-10)                   | T-10                                       | P2       |
+
+## Section 2 — Yours offline
+
+Provider dashboards, legal, creative production, and anything requiring your
+credentials. I cannot do any of these.
+
+### 2a. AWS / Route 53
+
+| ID   | Item                                                                                                                                                         | Depends on | Priority |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- | -------- |
+| O-01 | **Confirm day-to-day AWS work is not done as the root user**, and that any IAM principal with Route 53 write access has its own MFA (B.1)                    | —          | **P1**   |
+| O-02 | **Enable DNSSEC** and publish the DS record. Full procedure and the critical rollback ordering are in **I.2** — the DS step is manual                        | O-01       | **P1**   |
+| O-03 | **Capture the exact `listrassister.com` error text** from Route 53. It distinguishes "retry" from "gone" (A.1g)                                              | —          | **P1**   |
+| O-04 | **Re-check `listrassister.com` availability** authoritatively via Route 53 domain search or WHOIS/RDAP. DNS cannot tell registered-but-undelegated from free | —          | P2       |
+| O-05 | **Confirm the registrant contact email is ICANN-verified.** An unverified contact can suspend `listrassistr.com` itself, not just block a new registration   | —          | **P1**   |
+| O-06 | Create **`app` and `qa` records at TTL 300**, using the targets Vercel's dashboard displays — never a value from documentation (§8.1.5)                      | Q-01, Q-02 | P2       |
+| O-07 | **CAA record** — only after certificates have issued, and only once the real issuing CA is confirmed externally. A wrong value silently blocks renewal       | O-06, O-18 | P3       |
+
+### 2b. Email — SES and mailboxes
+
+**Unblocked as of 2026-08-26:** you confirmed the AWS account stays, which was the
+only real gate on SES (F.6). SES work will persist rather than needing redoing.
+
+| ID   | Item                                                                                                                                                                                                                                                        | Depends on    | Priority |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | -------- |
+| O-08 | **Check Supabase Auth → SMTP settings** on the **live** project and report what is configured. Names only, never the credential (F.3)                                                                                                                       | —             | **P1**   |
+| O-09 | Same check on the **staging** project (`yqftpibxplachhwoclam`)                                                                                                                                                                                              | —             | P2       |
+| O-10 | **SES setup**, full step list in F.5: pick and record a region, verify the domain with Easy DKIM into Route 53, publish the SPF include, optional custom MAIL FROM, **Configuration Set with event destinations first**, generate SMTP credentials from IAM | Q-07          | P2       |
+| O-11 | **Request SES production access** (sandbox exit). Draft answers in F.5; T-06 offers to write the submission                                                                                                                                                 | O-10          | P2       |
+| O-12 | **Mailbox provider setup** + MX records, role addresses as aliases                                                                                                                                                                                          | Q-04, Q-05    | P2       |
+| O-13 | **Enter SES SMTP credentials** in Supabase Auth on both live and staging                                                                                                                                                                                    | O-10, O-08/09 | P2       |
+| O-14 | **Publish DMARC at `p=none`** with `rua`. Can be done before mailboxes exist if using an analyzer (F.6)                                                                                                                                                     | Q-06          | P2       |
+| O-15 | **Deliverability tests** — Gmail, Outlook, analyzer. Check aligned SPF+DKIM+DMARC and that DKIM `d=` is `listrassistr.com` (E.1)                                                                                                                            | O-10, O-14    | P3       |
+| O-16 | **Inbound tests** to every role mailbox, including that replies come from the correct address                                                                                                                                                               | O-12          | P3       |
+
+### 2c. Verification you must do off the corporate network
+
+Your workstation cannot verify external state: DNS is filtered to a single reachable
+public resolver, and TLS is intercepted by Zscaler, so certificates read as
+corporate-issued. Details in the checklist's workstation section.
+
+| ID   | Item                                                                                                               | Depends on | Priority |
+| ---- | ------------------------------------------------------------------------------------------------------------------ | ---------- | -------- |
+| O-17 | **Verify the DNSSEC chain externally** via `dnsviz.net`                                                            | O-02       | **P1**   |
+| O-18 | **Confirm the real issuing CA** via SSL Labs or a personal device, before any CAA record                           | —          | P3       |
+| O-19 | **External DNS propagation checks** via `dnschecker.org` or `whatsmydns.net` after each record change              | O-06       | P2       |
+| O-20 | Consider doing provider-dashboard and credential-entry work from a **personal device**, given the TLS interception | —          | P2       |
+
+### 2d. Legal, entity, and admin
+
+| ID   | Item                                                                                                                                                                                                                                                                       | Depends on | Priority |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | -------- |
+| O-21 | **LLC formation** — in progress. Front-load the _formation_; the registrant change is a separate later step, see O-32                                                                                                                                                      | —          | P2       |
+| O-32 | **Update the Route 53 registrant organisation** to the LLC — deliberately **not** done yet. Owner was advised to wait until the entity exists so no validation cycle runs against a non-existent company; correct on both ICANN-validation and data-accuracy grounds (A.2) | O-21       | P3       |
+| O-22 | **Place DEC-0036 and DEC-0037** into `REBRAND_PHASE_0_DECISION_LOG.md`. Draft text is in A.2 and A.1a — or hand it to me via T-05                                                                                                                                          | —          | P2       |
+| O-23 | **Read the LISTERASSISTER Office action in TSDR.** Roughly ten minutes; how-to and what to look for in **A.1h**. Informational now that the name is approved                                                                                                               | —          | P3       |
+| O-24 | **Remaining trademark searches** from the A.1b/A.1c list, if you want the record strengthened. Optional — the name is already approved                                                                                                                                     | —          | P3       |
+| O-25 | Add **Route 53, SES, and the mailbox provider** to `REBRAND_PHASE_0_SERVICE_INVENTORY.md`. T-04 offers to draft it                                                                                                                                                         | Q-05       | P2       |
+
+### 2e. Brand production (§8.3)
+
+All of this is genuinely creative work — I cannot produce artwork.
+
+| ID   | Item                                                                                                   | Depends on | Priority |
+| ---- | ------------------------------------------------------------------------------------------------------ | ---------- | -------- |
+| O-26 | **Editable vector master** and outlined-font export. The concept PNG cannot be used as-is per the plan | Q-10       | P2       |
+| O-27 | **Wordmark variants** — horizontal, compact, standalone mark                                           | O-26       | P2       |
+| O-28 | **Light-background, dark-background, and single-colour variants**                                      | O-26       | P2       |
+| O-29 | **Favicon** at 16/32/48, **Apple touch icon**, **maskable PWA icons** at 192/512                       | O-26       | P2       |
+| O-30 | **Social sharing image** at 1200×630, and an **email/header-safe raster**                              | O-26       | P3       |
+| O-31 | **Approve the asset package** and record it as a DEC entry (P1-12)                                     | O-26..O-30 | P3       |
+
+## Section 3 — Together
+
+I do the work; you execute or approve. Nothing here touches a provider or repository
+code.
+
+| ID   | Item                                                                                                                                                                                                        | Depends on | Priority |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | -------- |
+| T-01 | **Design tokens with computed WCAG AA contrast ratios** for every text and control pairing — primary red, black/charcoal, white, neutral greys, success, warning, destructive (P1-11)                       | Q-10       | P2       |
+| T-02 | **Brand usage sheet** — clear space, minimum sizes, prohibited variants. Draftable before the vector master exists, since it specifies rules the artwork must satisfy                                       | Q-10       | P2       |
+| T-03 | **Non-colour redundant indicators** for destructive, error, active, and required states. §8.3 requires red never be the sole indicator                                                                      | Q-10       | P2       |
+| T-04 | **Draft the service-inventory entries** for Route 53, SES, and the mailbox provider — names, owner, recovery path, MFA method; never secret values                                                          | Q-05       | P2       |
+| T-05 | **Draft a PR placing DEC-0036 and DEC-0037** into the decision log, if you would rather review a diff than paste text                                                                                       | Q-12       | P2       |
+| T-06 | **Write the SES sandbox-exit submission** — use case, bounce and complaint handling, unsubscribe posture, volume figures. Vague answers are the usual cause of a first refusal                              | O-10       | P2       |
+| T-07 | **Compose the exact SPF record string** once the SES and mailbox includes are known — merged into **one** `v=spf1` record, inside the 10-lookup limit                                                       | O-10, Q-05 | P2       |
+| T-08 | **Compose the exact DMARC record string** with your chosen `rua`, plus the ramp plan to quarantine and reject                                                                                               | Q-06       | P2       |
+| T-09 | **Write the follow-up research prompt** for the version-sensitive AWS/SES facts listed at the end of F.5                                                                                                    | —          | P2       |
+| T-10 | **Correct the four source-document discrepancies** — DEC-0033's "domain not yet registered", DEC-0035's RBR-0003 label, DEC-0035 vs the existing staging project, and the §8.2.1/§6.1 role-address conflict | Q-12       | P2       |
+| T-11 | **Verify DNS and records after each of your changes** — I can query and report, subject to the resolver limits                                                                                              | O-02, O-06 | P2       |
+| T-12 | **Phase 1 exit-gate review** — walk Section J and confirm each item has evidence before Phase 1 is declared closed                                                                                          | most above | P3       |
+| T-13 | **Draft the Phase 2 entry decision** for P1-13, once Phase 1 actually closes. DEC-0035 explicitly does not grant it                                                                                         | T-12       | P3       |
+
+## Section 4 — Deferred by decision, with triggers
+
+| Item                                         | Deferred because                                                                                                                                           | Trigger to revisit                                                      |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| **Trademark filing**                         | Owner defers until live with users; USPTO applications are public records and generate solicitation spam (A.1a)                                            | Live with paying users, or a conflict surfaces                          |
+| **§8.1.1 entity gate**                       | Twin Wicks Digital Solutions is not yet registered; deviation accepted and recorded (A.2)                                                                  | **Before Stripe onboarding** for the dedicated account (DEC-0027)       |
+| **Moving the domain to a business account**  | Owner confirmed the AWS account stays, so this may never be needed. No new 60-day lock is running either, since the registrant has not been changed (O-32) | Only if a separate AWS account or registrar move ever becomes necessary |
+| **Resend account**                           | SES carries auth mail, so no second Resend domain is needed (F.5)                                                                                          | When `alerts@listrassistr.com` is wired in Phase 2                      |
+| **Moving `cost-alert-cron` off Resend**      | It is repository code — §9/Phase 2, not authorised by DEC-0035                                                                                             | Phase 2 entry approval                                                  |
+| **Staging Supabase project verification**    | Four facts unconfirmed; project already exists so this is verify, not create                                                                               | Any time — it is independent of everything else                         |
+| **eBay API call-volume re-check (RBR-0036)** | Explicitly deferred to a later phase by DEC-0035                                                                                                           | Owner's call                                                            |
+
+## Section 5 — Suggested next actions
+
+Everything here is unblocked right now and independent of the LLC, mailboxes, or
+brand direction.
+
+1. **O-05** — confirm the registrant contact is ICANN-verified. Smallest item on the
+   page and the only one that is a standing risk to the domain you already own.
+2. **O-01 then O-02, verified by O-17** — DNSSEC, while only a coming-soon page sits
+   behind the domain. The blast-radius argument in I.1 does not improve with time.
+3. **O-08** — check the Supabase Auth SMTP setting. It may reveal that customer-facing
+   auth mail is currently unbranded and unaligned, which changes how much §8.2 work
+   remains.
+4. **Q-01** — tell me which Vercel project serves the coming-soon page, and `app`/`qa`
+   become straightforward.
+5. **O-03** — the `listrassister.com` error text, if you still want that domain.
+
+Then, when you have appetite for the larger blocks: **Q-10** unlocks all of §8.3's
+token and usage-sheet work, and **Q-04 plus Q-05** unlock the whole mailbox and SPF
+chain.
+
+## Section 6 — Explicitly not Phase 1
+
+Distinct from Section 4. Those items are Phase 1 work sequenced later; these are
+**outside §8 altogether**. Recorded so scope does not drift.
+
+- **Any repository code change.** §9/Phase 2, not authorised by DEC-0035. This
+  includes moving `cost-alert-cron` off Resend to `alerts@listrassistr.com`, and any
+  rebranding of strings, assets, or config inside the app.
+- **Cutover, migration execution, or DNS repointing of production.** Production
+  remains `lister.teckstart.com` until a separate approval. Plan §14's permanent
+  redirect from that hostname to `app.listrassistr.com` is part of that later work.
+- **The TTL raise after stabilisation, and the T-24h pre-cutover re-check.** Both
+  appear in D.1 and are post-cutover, not Phase 1.
+- **Trademark filing.** Deliberately deferred (A.1a); the clearance search that §8.1.3
+  actually requires is done and the name is approved.
+- **Acquiring `listerassister.com`.** Declined on UDRP/ACPA grounds (A.1d), not merely
+  deferred.
+- **Accepted risks, not reopened:** RBR-0004, RBR-0003, RBR-0030, RBR-0032, RBR-0036,
+  and P0-08's remaining roughly 190-object storage workstream. DEC-0035 names these as
+  carried forward.
