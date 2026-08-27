@@ -149,6 +149,183 @@ project — registrar, Resend, Supabase, Stripe — currently passes through cor
 TLS inspection on that network. That is a reason to do credential-entering work
 from a personal device, independent of any policy question.
 
+## Tier 1 verification results — 2026-08-27
+
+Owner-supplied, with a Vercel dashboard screenshot. Two of the answers turned out to
+matter more than the questions did; those are in A.3 and A.4 below.
+
+| Item          | Question                               | Result                                                                                                                                                                                                                            |
+| ------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **O-05**      | Registrant contact ICANN-verified?     | **Verified.** Closes the standing suspension risk to `listrassistr.com`                                                                                                                                                           |
+| **O-01**      | Root vs IAM, and MFA method            | **Root MFA enabled** — passkey on laptop, biometrics on mobile. Strong: both are phishing-resistant WebAuthn factors, which is the recommended tier rather than TOTP or SMS                                                       |
+| **O-03**      | `listrassister.com` error text         | Domain **is available**, but **AWS support says the account is restricted from registering new domains**. Anomalous: the same account registered `listerassistr.com` at essentially the same time. Owner has an open support case |
+| **Q-01/Q-02** | Which Vercel project                   | **`tom-fenwicks-projects/listrassistr-official`** — see A.3. Not the legacy project                                                                                                                                               |
+| **O-08**      | Supabase Auth SMTP on the live project | **No custom SMTP** on `wcednzaxmxwfiijzmjmx`. Confirms the F.3 hypothesis, with an important qualification in A.5                                                                                                                 |
+
+### On the O-01 result
+
+Passkey plus biometrics is better than what B.1 asked for. Both are WebAuthn
+authenticators, so the account is protected by phishing-resistant factors rather than
+TOTP codes or SMS. The remaining B.1 sub-question is unchanged and still worth a look:
+whether day-to-day Route 53 work happens **as root**, or as an IAM principal that has
+its own MFA. Root MFA does not help if root is also the daily driver.
+
+### On the O-03 restriction
+
+Worth raising explicitly in the open support case, because it is broader than one typo
+domain: **does the restriction affect renewals and registrar operations on domains the
+account already holds?** `listrassistr.com` renews 2027-08-06 with auto-renew on. A
+restriction scoped to _new registrations_ should not touch a renewal, but that is worth
+having in writing rather than assumed, since the alternative is discovering it at
+renewal time. Cheap to ask while the case is already open.
+
+## A.3 Q-01 answered — and the target repository is already live
+
+**The coming-soon page is not served by the legacy project.** Confirmed from the Vercel
+dashboard 2026-08-27:
+
+| Field                 | Value                                                                                                  |
+| --------------------- | ------------------------------------------------------------------------------------------------------ |
+| Vercel project        | **`tom-fenwicks-projects/listrassistr-official`**                                                      |
+| Production deployment | `listrassistr-official-8n97xmnnm-tom-fenwicks-projects.vercel.app`                                     |
+| Domains listed        | `www.listrassistr.com`, `listrassistr-official.vercel.app`                                             |
+| Status                | Ready, created **2026-08-10**                                                                          |
+| Source                | branch `main`, commit `a8d548a`, "Merge pull request #16 from twinwicksllc/docs/phase-0-target-status" |
+| Active branches seen  | `docs/phase-0-target-status` (#16), `docs/staging-rollback-runbook` (#14)                              |
+| Plan                  | Vercel **Pro**                                                                                         |
+
+The commit subject and branch names are the important part: they are **not from this
+repository**. This is the migration target repo, `twinwicksllc/listrassistr-official`
+(DEC-0002), already existing, already deployed, already accumulating its own
+documentation PRs.
+
+**This is expected rather than a surprise, and it is in scope.** RBR-0011 was superseded
+on 2026-08-19 when the owner confirmed the target repo exists, and its disposition says
+in terms: "reviewing its actual contents (if any exist yet) is **Phase 1**." So
+reviewing that repository is a Phase 1 task that had not yet been scheduled. Now it can
+be.
+
+It is also good news structurally: the ListrAssistr frontend is already separate from
+the legacy application, so there is no entanglement to unpick later.
+
+### A.3a Two things the screenshot leaves open
+
+**1. The apex is not in the listed domains.** Only `www.listrassistr.com` appears, yet
+DNS has an apex A record at `216.150.1.1` and the owner's earlier screenshot showed the
+page rendering at `listrassistr.com` with no `www` in the address bar. Three
+possibilities, and they have different consequences:
+
+- The Overview widget truncates the domain list and the apex is attached normally.
+- The apex is attached and **redirects to `www`** — which would make **`www` canonical**,
+  contradicting plan §6.1's implication that the apex is the marketing site.
+- The apex and `www` **both serve the same content** with no redirect — the split-canonical
+  problem flagged in A.1f for the typo domain, now applying to the primary domain.
+
+Needed: **Vercel → Domains** (left nav) for the full list, showing which domain is
+primary and whether any redirect is configured. That single screen resolves Q-03 as well
+as this.
+
+**2. "1 Recommendation" on Deployment Settings.** Unread. Worth opening, because F.5's
+apex-value question resolves to "use what the dashboard recommends" — and if Vercel is
+recommending a different apex A value, that recommendation is where it would appear.
+
+## A.4 Where Phase 1 documentation belongs — a control-document conflict
+
+Raised because it implicates the two documents in this pair, and because the finding in
+A.3 makes it concrete rather than theoretical.
+
+`REBRAND_PHASE_0_IMPLEMENTATION.md` §2 "Repository Transition Control" states that until
+cutover:
+
+> New ListrAssistr creation, migration tooling, **brand work**, infrastructure
+> configuration, and launch artifacts belong in `listrassistr-official`.
+
+and
+
+> Any code or document temporarily created in the current workspace must have a recorded
+> destination and migration step before Phase 0 closes.
+
+Both `REBRAND_PHASE_1_DOMAIN_AND_DNS_CHECKLIST.md` and `REBRAND_PHASE_1_TODO.md` were
+created in **this** repository, after Phase 0 closed, and **neither has a recorded
+destination**. Meanwhile A.3 shows the target repo is already running its own
+documentation branches. That is the "parallel-development risk" RBR-0011 originally
+named, re-emerging in a different form: two sets of rebrand documentation, in two
+repositories, able to diverge silently.
+
+**Three options, owner's decision:**
+
+| Option                                                                                  | For                                                                                                                                                                                                                                           | Against                                                                                                 |
+| --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| **A. Phase 1 planning docs stay here; brand _artifacts_ go to `listrassistr-official`** | These documents cite DEC-, RBR-, and P0- identifiers on almost every page, and that record lives here. Moving them makes the cross-references dangle. §8.3 artifacts are genuinely new-product material and belong in the new repo regardless | Partially at odds with the control document's wording, which says "brand work" broadly                  |
+| **B. Move Phase 1 docs to `listrassistr-official`**                                     | Literal compliance with the control document; keeps all go-forward material in one place                                                                                                                                                      | Breaks cross-references to the Phase 0 record; the decision log and exception log would still live here |
+| **C. Keep here, with an explicit recorded destination and migration step**              | Satisfies the control document's actual requirement, which is a _recorded destination_, not immediate relocation. Lowest disruption                                                                                                           | Requires the record to actually be written, or it is option A with extra words                          |
+
+Recommendation: **C**, naming the destination as `listrassistr-official` at cutover, with
+§8.3 artefacts going there immediately as produced. That satisfies the control document
+without breaking the cross-reference web while Phase 0's record still lives here.
+
+Either way this needs a DEC entry, and it should be settled before more Phase 1
+documentation accumulates in this repository.
+
+## A.5 O-08 answered, with a qualification that matters
+
+**No custom SMTP is configured on `wcednzaxmxwfiijzmjmx`.** So auth mail for the
+**legacy** application currently goes through Supabase's built-in mailer, from a
+Supabase-owned domain, rate-limited and not intended for production. That confirms F.3's
+hypothesis for the legacy app.
+
+**But that is not the project P1-08 depends on.** P1-08 requires branded mail
+authenticating for **`listrassistr.com`**, and `wcednzaxmxwfiijzmjmx` is the shared
+CRM/legacy project. The relevant project is whichever one **ListrAssistr** will actually
+use — most likely the staging project `yqftpibxplachhwoclam`, or a new one not yet
+created. So O-08's answer is useful migration context rather than a P1-08 input, and the
+P1-08 question stays open until the ListrAssistr Supabase project is identified.
+
+This connects directly to the still-unanswered staging-project questions and to Q-08
+(whether the coming-soon page's "Sign in" link points anywhere yet). If nothing in
+`listrassistr-official` talks to Supabase at all, then §8.2's auth-mail work has no
+target yet, and SES configuration should wait for one rather than being pointed at the
+legacy project.
+
+## A.6 Setting up `qa` — and why to defer the record
+
+Owner asked how a QA environment is set up, and noted nothing much is built in the
+project yet, with no `app` or `qa` today.
+
+**Three ways to do it on Vercel, in increasing isolation:**
+
+| Approach                           | How                                                                                                                    | Trade-off                                                                                                                            |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **Branch-assigned preview domain** | Create a long-lived branch (e.g. `qa`), then Vercel → Domains → add `qa.listrassistr.com` and assign it to that branch | Simplest, no second project. Preview-scoped environment variables apply to _all_ previews, not just that branch                      |
+| **Custom environment**             | Vercel Pro supports named environments beyond production and preview, each with its own domain and variables           | Cleanest separation of variables. Verify availability and current behaviour against Vercel's live documentation before relying on it |
+| **Separate Vercel project**        | Second project on the same repo, tracking a different branch                                                           | Strongest isolation, most overhead — two projects to configure and keep aligned                                                      |
+
+Recommended: the **branch-assigned preview domain**, unless per-environment variables
+turn out to matter, in which case a **custom environment** on Pro.
+
+**The environment-variable point is the one that actually matters.** DEC-0005 requires
+separate staging and production environments and credentials, so `qa.listrassistr.com`
+must point at the **staging** Supabase project (`yqftpibxplachhwoclam`), never
+production. With plain preview scope, every preview deployment would use staging — which
+is arguably the correct default anyway, but it should be a deliberate choice rather than
+a side effect.
+
+### Revising the earlier advice on creating the records now
+
+D.1 previously said to create `app` and `qa` at TTL 300 so they inherit the low TTL.
+Given that nothing is built yet, that should be split:
+
+- **`app.listrassistr.com` — create it now.** It will serve the coming-soon page, which
+  is harmless, and it proves the DNS and certificate path end to end while the stakes are
+  low. It also reserves the hostname.
+- **`qa.listrassistr.com` — defer** until a branch or environment exists to assign it to.
+  A record pointing at nothing proves nothing and only invites confusion.
+
+Recorded honestly: this means **P1-06 cannot fully close yet**. §8.1.6's purpose is that
+these hostnames work, and a hostname serving a placeholder demonstrates the DNS and cert
+path but not the application. The gate should close when both serve their intended
+content, not when the records merely exist.
+
 ## Section A — Pre-registration decisions, and their disposition
 
 Written before the domain's status was known. Most are now settled by events —
