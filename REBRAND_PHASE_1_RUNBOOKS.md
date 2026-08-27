@@ -24,7 +24,7 @@ move. Where a step is version-sensitive it says so.
 | RB-07        | **This repository** — `REBRAND_PHASE_0_DECISION_LOG.md`, a markdown table |
 | RB-08        | Blocked; needs a Phase 3 gate before any system is touched                |
 
-**RB-01 to RB-04 and RB-06 are complete, RB-05 mostly so** (2026-08-27; verified in checklist A.7d and A.12).
+**RB-01 to RB-07 are complete** (RB-05 fully so as of A.17b). Only **RB-08** (qa) remains, blocked pending a Phase 3 gate — see Q-15 (2026-08-27; verified in checklist A.7d and A.12).
 Remaining: **RB-04** what the buttons do, **RB-05** verify the production Supabase project,
 **RB-06** target-repo staleness audit, **RB-07** place the DEC entries, **RB-08** qa —
 blocked pending a Phase 3 gate.
@@ -334,7 +334,7 @@ a finding to handle deliberately, not something to paste into a chat or a commit
 
 ---
 
-## RB-07 — Place the three DEC entries (T-14, O-22)
+## RB-07 — Place the three DEC entries (T-14, O-22) — ✅ DONE 2026-08-27
 
 Draft text already exists in the checklist:
 

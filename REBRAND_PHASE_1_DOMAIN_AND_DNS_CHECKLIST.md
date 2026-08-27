@@ -931,20 +931,20 @@ mailboxes receiving") a live gap rather than a deferred nicety.
 Owner completed the RB-05 template on 2026-08-27. First confirmation of this project's
 configuration since it was owner-reported on 2026-08-10.
 
-| Field           | Value                                                                                                                                                      | Note                                                          |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| Project name    | **`listrassistr-official`**                                                                                                                                | Matches the Vercel project and target repo naming             |
-| Project ref     | `yqftpibxplachhwoclam`                                                                                                                                     | As recorded                                                   |
-| Region          | **`us-east-2`**                                                                                                                                            | Newly established; settles an open F.5 item, see below        |
-| Organisation    | **`twinwicksllc's Org`**                                                                                                                                   | **Separate from the shared CRM org** — good, see below        |
-| Plan            | **Pro**                                                                                                                                                    | Paid tier, already being incurred pre-launch                  |
-| Auth Site URL   | **`https://listrassistr.com`**                                                                                                                             | The apex — correct after RB-01                                |
-| Redirect URLs   | `https://listrassistr.com/auth/callback`, `https://listrassistr.com/auth/reset`, `http://localhost:5173/auth/reset`, `http://localhost:5173/auth/callback` | All apex, no `www` variants — see below                       |
-| Sign-up         | **Enabled**                                                                                                                                                | Public sign-up open on the production-intended project (A.13) |
-| Confirm email   | **Required**                                                                                                                                               | Reasonable mitigation while sign-up is open                   |
-| Users           | **2**, both the owner's                                                                                                                                    | So "empty" honestly means _no customer data_, not _no rows_   |
-| API key format  | **Both** legacy `anon`/`service_role` **and** new `sb_publishable_`/`sb_secret_`                                                                           | Live DEC-0021 finding, see below                              |
-| `public` schema | **No tables reported**                                                                                                                                     | Pending confirmation by query, see below                      |
+| Field           | Value                                                                                                                                                      | Note                                                                                                                                                                        |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Project name    | **`listrassistr-official`**                                                                                                                                | Matches the Vercel project and target repo naming                                                                                                                           |
+| Project ref     | `yqftpibxplachhwoclam`                                                                                                                                     | As recorded                                                                                                                                                                 |
+| Region          | **`us-east-2`**                                                                                                                                            | Newly established; settles an open F.5 item, see below                                                                                                                      |
+| Organisation    | **`twinwicksllc's Org`**                                                                                                                                   | **CORRECTED — see A.17a.** Recorded here as separate from the CRM org; it is not. It is the owner's single org holding every app, so RBR-0024's shared-login concern stands |
+| Plan            | **Pro**                                                                                                                                                    | Paid tier, already being incurred pre-launch                                                                                                                                |
+| Auth Site URL   | **`https://listrassistr.com`**                                                                                                                             | The apex — correct after RB-01                                                                                                                                              |
+| Redirect URLs   | `https://listrassistr.com/auth/callback`, `https://listrassistr.com/auth/reset`, `http://localhost:5173/auth/reset`, `http://localhost:5173/auth/callback` | All apex, no `www` variants — see below                                                                                                                                     |
+| Sign-up         | **Enabled**                                                                                                                                                | Public sign-up open on the production-intended project (A.13)                                                                                                               |
+| Confirm email   | **Required**                                                                                                                                               | Reasonable mitigation while sign-up is open                                                                                                                                 |
+| Users           | **2**, both the owner's                                                                                                                                    | So "empty" honestly means _no customer data_, not _no rows_                                                                                                                 |
+| API key format  | **Both** legacy `anon`/`service_role` **and** new `sb_publishable_`/`sb_secret_`                                                                           | Live DEC-0021 finding, see below                                                                                                                                            |
+| `public` schema | **No tables — confirmed by query**                                                                                                                         | **Settled in A.17b:** all 35 tables are Supabase system tables, so no application schema exists                                                                             |
 
 ### The organisation is separate — but that is not the same as a separate login
 
@@ -1191,6 +1191,135 @@ be assessed individually rather than deleted:
 I have no access to read these, so this is a disposition guess from filenames. Sending me the
 contents of the three overlapping ones — or granting read access — would let me say which
 statements actually conflict with the Phase 0 record rather than which titles look similar.
+
+## A.17 O-39 to O-41 — the production project is genuinely empty, and an org correction
+
+### A.17a Correction: the Supabase org is _not_ separate (O-40)
+
+**Owner clarification 2026-08-27: `yqftpibxplachhwoclam` is a different _project_ under the
+same Supabase _organisation_ as all the owner's other apps** — including the CRM.
+
+**A.15 got this wrong.** It recorded the organisation as "separate from the shared CRM org —
+good", inferring separation from the name `twinwicksllc's Org`. That inference was
+unjustified: the name describes the owner's general organisation, not a ListrAssistr-specific
+one. Corrected here rather than amended silently, since it changed an assessment.
+
+What actually holds:
+
+| Requirement                                             | Status                                                                                    |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **DEC-0004** — a ListrAssistr-only Supabase **project** | **Satisfied.** `yqftpibxplachhwoclam` is dedicated to ListrAssistr                        |
+| **RBR-0024** — shared admin **login**                   | **Unaddressed**, and now confirmed at organisation level. One org, one account, every app |
+| **DEC-0005** — separate staging and production          | **Unmet.** No non-production project exists                                               |
+
+Two consequences worth recording:
+
+- **Blast radius.** A compromise of that single Supabase login reaches the CRM project and the
+  ListrAssistr project together. That is precisely RBR-0024's concern, and having a separate
+  project does not reduce it.
+- **The Pro plan is probably org-level.** Supabase bills its paid tiers per organisation, so
+  the Pro plan reported in A.15 likely covers the whole org rather than being a ListrAssistr
+  cost. Worth knowing before attributing that spend to this product.
+
+Nothing here needs immediate action — RBR-0024 is an accepted exception, and DEC-0005 is
+tracked at Q-15. But A.15's "good news" framing was overstated and the record should not
+carry it.
+
+### A.17b The production project has no application schema at all (O-39)
+
+Both queries were run. The result is unambiguous and it settles A.15's open question.
+
+**35 tables exist, and every single one is a Supabase system table:**
+
+| Schema       | Tables | What it is                                                                              |
+| ------------ | ------ | --------------------------------------------------------------------------------------- |
+| `auth`       | 23     | Supabase Auth internals — `users`, `sessions`, `identities`, MFA, SAML, OAuth, WebAuthn |
+| `storage`    | 8      | Supabase Storage internals — `buckets`, `objects`, multipart upload bookkeeping         |
+| `realtime`   | 3      | Supabase Realtime internals                                                             |
+| `vault`      | 1      | `secrets`                                                                               |
+| **`public`** | **0**  | **Returned no rows at all — the application schema does not exist**                     |
+
+Row counts confirm it independently:
+
+- The only tables with data are Supabase's own migration bookkeeping — `realtime.schema_migrations` 81, `auth.schema_migrations` 77, `storage.migrations` 65.
+- `auth.users` **2**, with `identities`, `sessions`, `refresh_tokens` and `mfa_amr_claims` also at 2 — the owner's two test accounts, consistently.
+- **Everything else is zero.** No storage buckets, no objects, no vault secrets, no realtime subscriptions.
+
+**So the hypothesis in A.15 was right: the "lot of tables" was Supabase internals.** This
+project is not a copy of the legacy schema. It is a clean, empty project running Supabase
+Auth and nothing else — which matches the target repo's "authenticated staging shell" commit
+exactly. Auth works; there are no features behind it yet.
+
+Four things follow:
+
+1. **No data migration has begun.** Contrast the legacy project's `listing-images` bucket at
+   4,735 objects / 1,274 MB (RBR-0026): here storage holds **zero buckets**. Phase 4 (§11) is
+   genuinely untouched.
+2. **DEC-0034's migration cohort has nowhere to land.** Moving 4 of 9 profiles requires a
+   `profiles` table, which does not exist. Schema creation must precede data migration —
+   §10 then §11, in that order.
+3. **It is a clean slate, which is an advantage.** RLS policies, key format, and table design
+   can all be got right from the start rather than inherited. Worth noting given RBR-0027's
+   findings about owner-check gaps in the legacy project's storage policies — those mistakes
+   need not be repeated here.
+4. **"Is it empty" now has a precise answer** for the record: _no application schema, no
+   customer data, no storage; two owner test accounts in `auth.users`._
+
+### A.17c Terms and Privacy are empty pages (O-41)
+
+Owner confirmed the footer links resolve, but **both pages contain only a title and no
+content.**
+
+**The risk A.14 flagged does not exist** — no `@listrassistr.com` address is published, so
+nothing is silently discarding legal or privacy mail. That specific concern is closed, and the
+mailbox work stays deferred.
+
+**A different and arguably more real issue takes its place.** The live public site has:
+
+- **open sign-up** collecting email addresses and passwords (A.15: enabled),
+- **two accounts already created**, and
+- **no privacy policy and no terms**, while linking to both as though they exist.
+
+Collecting personal data without a privacy notice is the kind of gap that is cheap to close
+now and awkward to explain later, and a footer link to an empty page reads worse than no link
+at all — it suggests either something broken or something withheld.
+
+This is not a §8 item and not a blocker for any Phase 1 gate. But it is an owner decision that
+currently exists by default rather than by choice, and there are two straightforward ways to
+make it deliberate:
+
+- **Disable public sign-up** until the pages have content — Supabase's Auth settings expose
+  this directly, and it also addresses the A.13 question of whether open sign-up on the
+  production-intended project is intended.
+- **Or publish minimal content** on both pages before leaving sign-up open.
+
+Note the forward dependency: whenever a real privacy policy is written, it will need a contact
+address. That is normally `privacy@listrassistr.com` — which does not exist yet, and has no MX
+record. So the mailbox work (F.4) returns as a **dependency of the privacy policy**, not of the
+empty page. Sequencing to remember rather than act on now.
+
+### A.17d Forward reminder — DEC-0021 key migration (owner requested)
+
+The owner asked to be reminded in a later phase to check which API keys are in use and remove
+the legacy pair. Recorded here and in the to-do's deferred table so it survives this session.
+
+**What to do, when the trigger arrives:**
+
+1. Confirm which pair the application actually uses — legacy `anon`/`service_role`, or
+   `sb_publishable_`/`sb_secret_`. Both are currently active on `yqftpibxplachhwoclam` (A.15).
+2. Migrate the application to the newer pair if it is not already on it.
+3. **Then** revoke the legacy pair. Order matters: revoking first breaks the app.
+4. Confirm nothing else references the old keys — Vercel environment variables, any Edge
+   Function secrets, local `.env` files, and the `.env.example` template in the target repo.
+
+**Trigger:** at Phase 2 or Phase 3 entry, whichever comes first, and in any case **before the
+first real customer uses the product** — a key rotation is far cheaper with two test accounts
+than with live users holding sessions.
+
+**Why it matters rather than being housekeeping:** two live credential sets is twice the
+surface for no benefit, and the legacy `service_role` key in particular bypasses RLS entirely.
+Leaving a second unused full-access credential active is the kind of thing that is invisible
+until it is not.
 
 ## Section A — Pre-registration decisions, and their disposition
 
