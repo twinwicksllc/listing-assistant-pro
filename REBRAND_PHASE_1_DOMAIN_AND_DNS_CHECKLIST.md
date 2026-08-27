@@ -479,8 +479,12 @@ personal device or an external tool, and is worth doing once for the record.
 repository with a recorded destination; §8.3 artefacts go to `listrassistr-official` as
 they are produced.
 
-Owner also reports **no parallel development** — nothing beyond initial setup has been
-pushed to `listrassistr-official` across git, Vercel, or Supabase. Recorded with one
+**CORRECTED 2026-08-27 — see A.16.** Owner reported **no parallel development**, nothing
+beyond initial setup pushed to `listrassistr-official`. RB-06 found **40 commits across 16
+merged PRs**, a full application foundation, and **three forked copies of governance
+documents maintained here** — including the master plan and the control document. The
+assessment below was wrong and the conclusion it supported needs the revision in A.16.
+Original text, kept visible: Recorded with one
 observation rather than a contradiction: the Vercel deployment is built from commit
 `a8d548a`, "Merge pull request #16 from twinwicksllc/docs/phase-0-target-status", and
 branches `docs/phase-0-target-status` (#16) and `docs/staging-rollback-runbook` (#14) are
@@ -1023,6 +1027,170 @@ for the SQL Editor:
 Both return schema and table **names** plus row counts, never row contents.
 
 - [ ] Run both and report, so "is it empty" has a definitive answer rather than an impression.
+
+## A.16 RB-06 results — the target repo is substantial, and three governance documents are forked
+
+Owner completed the RB-06 template on 2026-08-27. This is the most consequential finding in
+Phase 1 so far, and it needs stating rather than filing.
+
+### It is not "initial setup"
+
+**40 commits across 16 merged pull requests**, on 13 branches, with a complete Vite / React /
+TypeScript foundation:
+
+| Category          | Contents                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Application       | `src/` ("feat: add authenticated staging shell"), `public/`, `index.html`                                                            |
+| Build and tooling | `package.json`, `package-lock.json`, `vite.config.ts`, three `tsconfig` files, `eslint.config.js`, `.prettierrc.json`, `vercel.json` |
+| Tests             | `vitest.config.ts`                                                                                                                   |
+| Environment       | `.env.example` ("Prepare staging Supabase environment contract"), `.gitignore`                                                       |
+| Docs              | `docs/` with six files, plus three root-level documents — see below                                                                  |
+
+Branch names show the shape of the work: `feat/listrassistr-app-foundation`,
+`docs/staging-auth-verification`, `docs/password-recovery-verification`,
+`docs/session-lifecycle-hardening`, `docs/auth-boundary-hardening`,
+`feat/accessibility-staging-plan`.
+
+The owner's earlier characterisation — "other than the initial setup I haven't pushed
+anything" — understates this considerably, and that is worth correcting in the record rather
+than letting the earlier note stand. A.8 recorded "no parallel development" on that basis;
+**that assessment was wrong**, and the correction follows.
+
+### Three governance documents are forked, including two that define scope
+
+The target repo's root holds copies of documents that are **actively maintained in this
+repository**:
+
+| Document in `listrassistr-official`          | Last touched there                       | Status here                                                                                            |
+| -------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `LISTRASSISTR_REBRAND_AND_MIGRATION_PLAN.md` | "Add files via upload", ~2 weeks ago     | **The master plan.** Actively referenced; every scope decision in Phase 1 cites its section numbers    |
+| `REBRAND_PHASE_0_IMPLEMENTATION.md`          | "docs: add phase 0 non secret inventory" | **The control document.** Its §2 is what defines where work belongs and requires recorded destinations |
+| `REBRAND_PHASE_0_REPOSITORY_DISCOVERY.md`    | "Add files via upload"                   | Maintained here                                                                                        |
+
+**This is RBR-0011's parallel-development risk realised, not hypothetical.** And it is worse
+than ordinary staleness for a specific reason: two of the three are the documents that
+_govern_ the work.
+
+- There are now **two copies of the master plan**. Phase 1 scope has been gated throughout on
+  "§8 only, per DEC-0035" — and §8 in one copy need not say what §8 says in the other.
+- There are **two copies of the control document** whose §2 dictates where brand work and
+  launch artefacts belong. Two copies can disagree about their own authority.
+
+Meanwhile this repository's copies have moved substantially in those two weeks: Phase 0
+closed, DEC-0034 and DEC-0035 were added, and the exception log grew to RBR-0036. So the
+forks are behind by exactly the period in which the governing decisions were made.
+
+**Recommendation: delete the three copies in `listrassistr-official`, do not sync them.**
+
+Syncing creates an obligation to keep syncing, and it will drift again. DEC-0038 already
+decided (option C) that planning documents live here until cutover, with a recorded
+destination. Deleting the forks and replacing them with a single README pointer — "rebrand
+planning and the Phase 0 record live in `twinwicksllc/listing-assistant-pro` until cutover;
+see DEC-0038" — makes that decision true in both repositories instead of only in this one.
+
+The `docs/` folder is a different case and should not be deleted wholesale; see below.
+
+### The plan describes a strategy that is not the one being executed
+
+Checked rather than assumed, and this is the finding with the longest reach.
+
+**Plan §9, "Phase 2: Repository Brand Foundation", is about _this_ repository.** It names
+specific legacy files:
+
+- `src/assets/teckstart-logo.png`
+- `src/v2/components/SideNav.tsx`
+- `src/pages/LandingPage.tsx`, `LoginPage.tsx`, `SignupPage.tsx`, `ForgotPasswordPage.tsx`,
+  `ResetPasswordPage.tsx`, `AuthCallbackPage.tsx`, `TermsPage.tsx`
+
+So the plan's strategy is **rebrand the legacy application in place, then migrate it**. What
+is actually happening is **a greenfield application being built in a new repository**, with
+the legacy app left alone until cutover.
+
+Those are different strategies, and the plan does not describe the second one:
+
+|                      | Plan's model (§9)            | What is happening                        |
+| -------------------- | ---------------------------- | ---------------------------------------- |
+| The ListrAssistr app | The legacy `src/`, rebranded | A new `src/` in `listrassistr-official`  |
+| Legacy repo's fate   | Becomes ListrAssistr         | Retired at cutover                       |
+| Phase 2's content    | Rebranding legacy surfaces   | Largely moot if legacy is being replaced |
+
+This is an owner-level strategic question, not something to resolve here. But it has concrete
+consequences worth recording:
+
+1. **Phase 2 as written may be unnecessary.** Rebranding surfaces on an application that is
+   being replaced is effort spent on something due for retirement — unless the legacy app must
+   look rebranded during a transition period, which is a real possibility and a reason to keep
+   some of §9.
+2. **The phase numbering that Phase 1 scope decisions rely on still holds**, because those
+   were about §8, §10 and §13, none of which changes. RB-08's "Supabase projects are Phase 3"
+   reasoning is unaffected.
+3. **The plan itself may need revision**, which is a larger correction than the individual
+   document fixes logged in T-15 so far. Recorded as a question rather than actioned.
+
+### The "staging" thread, now fully explained
+
+Several loose observations turn out to be one thing:
+
+| Observation                                                                                                                                 | Where                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| Three documents named `STAGING_AUTHENTICATION_PLAN`, `STAGING_AUTH_EVIDENCE`, `STAGING_ROLLBACK_RUNBOOK`                                    | `listrassistr-official/docs/` |
+| Branches `docs/staging-auth-verification`, `docs/staging-rollback-runbook`, `docs/staging-auth-evidence`, `feat/accessibility-staging-plan` | Same repo                     |
+| Commit "feat: add authenticated **staging** shell"                                                                                          | Same repo                     |
+| `.env.example` — "Prepare **staging** Supabase environment contract"                                                                        | Same repo                     |
+| UI copy: "Check your **staging** email", "a later **staging** slice"                                                                        | The live site (A.13, A.14)    |
+| Service inventory labelling `yqftpibxplachhwoclam` as "New **staging** Supabase"                                                            | This repo                     |
+
+**The entire body of work was built on the premise that this project and this app were
+staging.** A.11 recorded the owner's correction that `yqftpibxplachhwoclam` is the intended
+**production** project — and that redesignation has not propagated to the code, the copy, the
+branch names, or the documentation.
+
+So A.11 was not a one-line label fix. It reframes a substantial amount of existing work, and
+it explains every "staging" artefact seen so far as a single coherent cause rather than
+scattered untidiness. Nothing here is broken by it — but anyone reading those documents will
+be reading about a staging environment that is now production.
+
+### The secret-shaped files are very likely fine
+
+Reported: `.env.example`, `src/config/env.ts`, `src/vite-env.d.ts`. All three are the
+**expected names for safe files**, and the presence of a `.gitignore` is a good sign:
+
+- **`.env.example`** — committed deliberately by convention, holding placeholder keys so
+  others know which variables are needed. Correct practice.
+- **`src/config/env.ts`** — almost certainly reads `import.meta.env.*` and validates it.
+  Reading configuration is not storing it.
+- **`src/vite-env.d.ts`** — TypeScript declarations for Vite's env types. Contains type
+  information only; it cannot hold a value.
+
+One thing genuinely worth thirty seconds, because it is a common and quiet mistake: people
+sometimes create `.env.example` by copying a working `.env` and forget to scrub the values.
+
+- [ ] Open `.env.example` and confirm every value is a placeholder — empty, `xxx`,
+      `your-key-here` — and not a real key.
+- [ ] Confirm `.gitignore` actually lists `.env`, so a real one cannot be committed later.
+- [ ] Confirm `src/config/env.ts` reads from the environment rather than hardcoding any
+      fallback value.
+
+If all three hold, there is nothing to do. If `.env.example` holds a real Supabase key, that
+key should be rotated rather than merely deleted from the file, since git history keeps it.
+
+### What to do with `docs/`
+
+Unlike the three forked root documents, these six are **native to that repository** and should
+be assessed individually rather than deleted:
+
+| File                              | Overlaps                                    | Likely disposition                                                            |
+| --------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------- |
+| `PHASE_0_NON_SECRET_INVENTORY.md` | `REBRAND_PHASE_0_SERVICE_INVENTORY.md` here | Reconcile — two inventories of the same estate will diverge                   |
+| `PHASE_0_TARGET_STATUS.md`        | The closure checklist here                  | Likely superseded; Phase 0 is closed                                          |
+| `SESSION_HANDOFF.md`              | `REBRAND_PHASE_0_SESSION_HANDOFF.md` here   | Reconcile or retire                                                           |
+| `STAGING_AUTHENTICATION_PLAN.md`  | Nothing here                                | **Keep** — genuinely new, but retitle given the staging/production correction |
+| `STAGING_AUTH_EVIDENCE.md`        | Nothing here                                | **Keep** — evidence is worth preserving; note the premise                     |
+| `STAGING_ROLLBACK_RUNBOOK.md`     | Partially, DEC-0015's rollback plan         | **Keep**, cross-reference                                                     |
+
+I have no access to read these, so this is a disposition guess from filenames. Sending me the
+contents of the three overlapping ones — or granting read access — would let me say which
+statements actually conflict with the Phase 0 record rather than which titles look similar.
 
 ## Section A — Pre-registration decisions, and their disposition
 

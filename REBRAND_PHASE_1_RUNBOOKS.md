@@ -24,7 +24,7 @@ move. Where a step is version-sensitive it says so.
 | RB-07        | **This repository** — `REBRAND_PHASE_0_DECISION_LOG.md`, a markdown table |
 | RB-08        | Blocked; needs a Phase 3 gate before any system is touched                |
 
-**RB-01 to RB-04 are complete, RB-05 mostly so** (2026-08-27; verified in checklist A.7d and A.12).
+**RB-01 to RB-04 and RB-06 are complete, RB-05 mostly so** (2026-08-27; verified in checklist A.7d and A.12).
 Remaining: **RB-04** what the buttons do, **RB-05** verify the production Supabase project,
 **RB-06** target-repo staleness audit, **RB-07** place the DEC entries, **RB-08** qa —
 blocked pending a Phase 3 gate.
@@ -295,7 +295,7 @@ answer is now a number.
 
 ---
 
-## RB-06 — Review the target repository (O-33)
+## RB-06 — Review the target repository (O-33) — ✅ DONE 2026-08-27
 
 RBR-0011's disposition makes this an explicit Phase 1 task. The owner has since noted the
 repo is likely "wildly out of date", which changes the goal: this is a **staleness audit**,
