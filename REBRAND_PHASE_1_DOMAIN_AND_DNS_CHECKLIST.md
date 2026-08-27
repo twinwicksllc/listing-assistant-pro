@@ -751,6 +751,177 @@ commonly around 24 hours for `.com`. The same operation after cutover would have
 customer-facing outage risk instead of an embarrassment. It is now done, verified, and will
 simply be true when the application ships.
 
+## A.13 RB-04 results — the auth flow is live, and P1-08 is now precisely diagnosed
+
+Owner executed RB-04 on 2026-08-27. This answers Q-08 and closes the last of A.5's open
+questions.
+
+### What was found
+
+| Observation                                                                            | What it establishes                                                                                                   |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Sign-up screen asks for **email and password**                                         | A real auth flow, not a placeholder                                                                                   |
+| **"Forgot password" produced no email**                                                | **Expected behaviour, not a fault** — see below                                                                       |
+| **"Create Account" succeeded** and sent a confirmation                                 | The email path works                                                                                                  |
+| Sender was **`noreply@mail.app.supabase.io`**                                          | Supabase's **built-in shared mailer**. Confirms no custom SMTP, and this is why P1-08 is unmet                        |
+| Verify link pointed at **`https://yqftpibxplachhwoclam.supabase.co/auth/v1/verify?…`** | **The application is wired to `yqftpibxplachhwoclam`** — the project the owner identified as future production (A.11) |
+| The link's `redirect_to` was **`https://listrassistr.com/`**                           | The apex — which RB-01 made canonical. See below                                                                      |
+| UI copy read **"Check your _staging_ email to access your account"**                   | Minor, but the production-intended project is showing staging wording                                                 |
+
+### "Forgot password" sending nothing is correct
+
+Worth stating plainly, because it is easy to misread as a broken email path and chase the
+wrong problem. The owner also noted no users existed yet — and Supabase deliberately does
+**not** send a reset email for an address with no account, because doing so would confirm
+whether an address is registered. That is anti-account-enumeration behaviour working as
+designed.
+
+"Create Account" then sent mail because it created a user and issued a confirmation. The two
+results are consistent, and together they show the mail path is functioning.
+
+Related, worth knowing before the next test: Supabase's built-in mailer is **rate-limited to
+a small number of messages per hour**. A future "no email arrived" is at least as likely to
+be that limit as a misconfiguration.
+
+### This validates the RB-01 decision, concretely
+
+The verify link carries `redirect_to=https://listrassistr.com/` — the **apex**. RB-01 made
+the apex the serving host, so that redirect now lands on content directly.
+
+Had `www` been kept canonical (the option originally recommended in A.7a), this link would
+have 308'd from the apex to `www` **mid-authentication**, which is exactly the PKCE
+origin-mismatch failure A.7b described: the code verifier is stored per-origin, so a flow
+that starts on one host and completes on another cannot read its own state. The owner's
+choice of apex-canonical avoided that, and this is the evidence rather than the theory.
+
+### P1-08 is now exactly scoped
+
+Auth mail sends from `mail.app.supabase.io`, a Supabase-owned domain. So the DKIM `d=` can
+never be `listrassistr.com`, and **DMARC alignment is impossible while the built-in mailer
+is in use** — no DNS record can fix that. P1-08 requires "Gmail/Outlook headers showing
+aligned SPF+DKIM+DMARC pass, `d=listrassistr.com`".
+
+The remedy is exactly what F.3 and F.5 anticipated, and needs no repository change:
+
+1. Configure **SES** (F.5) and verify `listrassistr.com` as a sending identity.
+2. Point **Supabase Auth → SMTP** at SES, on the `yqftpibxplachhwoclam` project.
+3. Set the auth `From` to an address at `listrassistr.com` — still undecided, `no-reply@` or
+   `accounts@` (Q-07).
+4. Publish SPF and DKIM, then DMARC at `p=none`, and run the review period.
+
+All of that is Supabase and AWS dashboard work, so it sits inside §8.2 and is authorised.
+It remains **deferred by owner decision** (F.6), and this finding does not change that — it
+sharpens what "done" looks like.
+
+### Two things worth a deliberate decision
+
+**1. Sign-up appears to be open on the future production project.** A public "Coming Soon"
+page with a working Create Account flow means anyone who finds it can create an account in
+the project intended to become production. That may be the intent — an early-access list —
+but it should be a choice rather than a side effect. Supabase exposes a **disable signups**
+setting under Auth, and there is also the option of leaving it open but requiring
+confirmation, which is already the case.
+
+**2. The project is no longer empty.** RB-05's "is it empty" check now has a partial answer:
+it contains at least one test user, created 2026-08-27. Not a problem, but worth recording
+so that:
+
+- "no production data has reached it" is understood as "no _customer_ data", not "no rows";
+- the test account is not later mistaken for a migrated user from DEC-0034's cohort;
+- someone remembers to remove it before launch if a clean production user table is wanted.
+
+### On the token in the shared link
+
+The verify URL the owner pasted contained a single-use signup confirmation token. **It is
+deliberately not recorded here or anywhere in this repository**, per the standing rule on
+secret values. It is low-risk — single-use, scoped to the owner's own test account on a
+project holding no customer data — but if it has not been consumed, completing or discarding
+that signup closes it out.
+
+## A.14 The application surface — and a revision to the `app` record advice
+
+Second capture, 2026-08-27: the owner signed in and reached **`listrassistr.com/app/settings`**.
+
+### The app lives on a path, not a subdomain
+
+| Plan §6.1 target                              | Actual today                         |
+| --------------------------------------------- | ------------------------------------ |
+| Application at `https://app.listrassistr.com` | **`https://listrassistr.com/app/…`** |
+
+Plan §6.1 anticipated something like this, and it is worth quoting because it is nearly the
+current arrangement:
+
+> If marketing and app remain in the same Vite deployment for launch, route the apex to
+> `/landing` and the app subdomain to the authenticated product. Preserve the two-host target
+> in configuration so a dedicated marketing site can be split later without changing the
+> application identity again.
+
+So a single deployment serving both was contemplated. What exists is a **path-based** split
+(`/` marketing, `/app/*` product) rather than the **host-based** split the plan describes.
+`app.listrassistr.com` does not exist, which matches the DNS measurements.
+
+### This revises the O-06 advice, for the second time
+
+A.6 previously concluded: create `app.listrassistr.com` now, because it would serve the
+coming-soon page harmlessly while proving the DNS and certificate path. **That is no longer
+the right call**, now that the app's location is known.
+
+Adding `app.listrassistr.com` to the Vercel project would serve the _same_ deployment, so
+`app.listrassistr.com/` would land on the **marketing page**, not the application. A hostname
+named `app` that shows marketing is worse than no hostname at all — it invites exactly the
+confusion the two-host target exists to prevent.
+
+Making it behave correctly needs one of:
+
+- **Host-based routing** — middleware that serves the application when the host is `app.`,
+  and marketing otherwise. This is what §6.1 actually describes.
+- **A path rewrite** — `app.listrassistr.com/*` → `/app/*`. Note a Vercel _domain redirect_
+  cannot do this; it redirects host to host, so this also needs application-level routing.
+
+Either is **application code in `listrassistr-official`**, which is a separate scope question
+from §8.
+
+**Recommendation: defer `app.listrassistr.com` until that routing exists.** It is not needed
+for anything in Phase 1 — no §8 exit-gate item depends on it beyond §8.1.6 asking for the
+record, and a record pointing at the wrong content satisfies the letter while defeating the
+purpose. Recorded so P1-06 closes on the app actually being reachable at its intended host,
+not on a hostname existing.
+
+That makes both remaining §8.1.6 records — `app` and `qa` — deferred for the same underlying
+reason: **the DNS is ready before the things it should point at.**
+
+### Other observations from the app surface
+
+Recorded because they were visible, with scope stated rather than assumed. All three are
+application concerns in `listrassistr-official`, not §8 work.
+
+- **"Staging" appears twice in customer-facing copy** — "Check your _staging_ email to access
+  your account", and "Account preferences will be available here in a later _staging_ slice."
+  The public brand domain, on the production-intended project, is telling visitors about
+  staging. Cosmetic, but it is the kind of thing that reads as unfinished to an early-access
+  visitor.
+- **The header shows "Sign in" and "Create account" while signed in**, alongside the
+  signed-in email and a Sign out button. The header is not reflecting auth state.
+- **Sign-up is confirmed open**, and there is now a real signed-in account
+  (`twinwicksllc@gmail.com`) on the future production project. That firms up A.13's point:
+  whether public sign-up stays open before launch deserves to be a decision.
+
+### One thing worth checking now, because it interacts with a deferred item
+
+The footer carries **Terms** and **Privacy** links. If either page already cites contact
+addresses at `listrassistr.com` — `privacy@`, `legal@`, or `support@` — then **those
+addresses are unreachable today**, because the zone has no MX records at all (Section D).
+
+That matters more than it sounds. Privacy and legal pages are exactly where a data-subject
+request, a takedown notice, or an abuse report gets sent, and a published address that
+silently discards mail is worse than publishing no address. It would also make P1-07 ("role
+mailboxes receiving") a live gap rather than a deferred nicety.
+
+- [ ] Open the Terms and Privacy pages and check whether any `@listrassistr.com` address is
+      published. If one is, the mailbox work (F.4, currently deferred) should be reconsidered
+      as pre-launch rather than deferred — or the pages should point somewhere reachable in
+      the meantime.
+
 ## Section A — Pre-registration decisions, and their disposition
 
 Written before the domain's status was known. Most are now settled by events —

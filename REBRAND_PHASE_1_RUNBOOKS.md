@@ -12,7 +12,7 @@ Step-by-step procedures for the Phase 1 items the owner executes. Companion to:
 Console navigation is described by label rather than exact path, because provider UIs
 move. Where a step is version-sensitive it says so.
 
-**RB-01, RB-02 and RB-03 are complete** (2026-08-27; verified in checklist A.7d and A.12).
+**RB-01 to RB-04 are complete** (2026-08-27; verified in checklist A.7d and A.12).
 Remaining: **RB-04** what the buttons do, **RB-05** verify the production Supabase project,
 **RB-06** target-repo staleness audit, **RB-07** place the DEC entries, **RB-08** qa —
 blocked pending a Phase 3 gate.
@@ -185,7 +185,7 @@ unsigned zone, which is the failure above.
 
 ---
 
-## RB-04 — Find out what "Sign in" and "Join the preview" actually do (Q-08)
+## RB-04 — Find out what "Sign in" and "Join the preview" actually do (Q-08) — ✅ DONE 2026-08-27
 
 Three ways, cheapest first. Any one of them answers it.
 
