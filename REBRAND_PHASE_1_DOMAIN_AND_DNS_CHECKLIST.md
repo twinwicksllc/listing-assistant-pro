@@ -922,6 +922,108 @@ mailboxes receiving") a live gap rather than a deferred nicety.
       as pre-launch rather than deferred — or the pages should point somewhere reachable in
       the meantime.
 
+## A.15 RB-05 results — the production Supabase project, verified
+
+Owner completed the RB-05 template on 2026-08-27. First confirmation of this project's
+configuration since it was owner-reported on 2026-08-10.
+
+| Field           | Value                                                                                                                                                      | Note                                                          |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Project name    | **`listrassistr-official`**                                                                                                                                | Matches the Vercel project and target repo naming             |
+| Project ref     | `yqftpibxplachhwoclam`                                                                                                                                     | As recorded                                                   |
+| Region          | **`us-east-2`**                                                                                                                                            | Newly established; settles an open F.5 item, see below        |
+| Organisation    | **`twinwicksllc's Org`**                                                                                                                                   | **Separate from the shared CRM org** — good, see below        |
+| Plan            | **Pro**                                                                                                                                                    | Paid tier, already being incurred pre-launch                  |
+| Auth Site URL   | **`https://listrassistr.com`**                                                                                                                             | The apex — correct after RB-01                                |
+| Redirect URLs   | `https://listrassistr.com/auth/callback`, `https://listrassistr.com/auth/reset`, `http://localhost:5173/auth/reset`, `http://localhost:5173/auth/callback` | All apex, no `www` variants — see below                       |
+| Sign-up         | **Enabled**                                                                                                                                                | Public sign-up open on the production-intended project (A.13) |
+| Confirm email   | **Required**                                                                                                                                               | Reasonable mitigation while sign-up is open                   |
+| Users           | **2**, both the owner's                                                                                                                                    | So "empty" honestly means _no customer data_, not _no rows_   |
+| API key format  | **Both** legacy `anon`/`service_role` **and** new `sb_publishable_`/`sb_secret_`                                                                           | Live DEC-0021 finding, see below                              |
+| `public` schema | **No tables reported**                                                                                                                                     | Pending confirmation by query, see below                      |
+
+### The organisation is separate — but that is not the same as a separate login
+
+`twinwicksllc's Org` rather than the shared CRM organisation goes a long way toward
+**DEC-0004**'s requirement for a ListrAssistr-only project.
+
+Worth keeping the distinction sharp though: **an organisation is not a login.** Supabase
+allows one user account to own several organisations, and **RBR-0024**'s concern was the
+shared _admin account_, not the org boundary. If both orgs sit under the same Supabase user,
+that exception is unaddressed rather than resolved — different orgs, one credential.
+
+- [ ] Confirm whether the ListrAssistr org is owned by a **separate Supabase login**, or the
+      same account that administers the CRM org.
+
+### Every redirect URL is on the apex — RB-01 paying off a third time
+
+All four entries use `listrassistr.com`, with no `www` variants. That is correct **because**
+RB-01 made the apex canonical. Had `www` been kept — the option originally recommended in
+A.7a — all four would have needed rewriting, and both the callback and the password-reset
+flow would have broken on the PKCE origin mismatch described in A.7b.
+
+Three separate confirmations now: the signup verify link's `redirect_to` (A.13), the Auth
+Site URL, and this allow-list.
+
+### `us-east-2` settles the SES region question
+
+F.5 left "pick an SES region and record it" open. With Supabase in **`us-east-2`**, the
+recommendation is **SES in `us-east-2`** as well.
+
+The technical stakes are low — email latency is irrelevant here — but **SES verified
+identities and sandbox status are per-region**, so an identity verified in the wrong region
+looks like a verification failure. Picking one region and recording it avoids that.
+
+Note this does **not** conflict with DNSSEC: the KMS key backing the KSK is pinned to
+`us-east-1` because Route 53 requires it there (A.12). Two regions, each forced or chosen for
+its own reason, both recorded.
+
+### `localhost:5173` in a production project's allow-list
+
+Not a meaningful attack surface on its own — `localhost` resolves to the visitor's own
+machine, so there is little for an attacker to gain. But it is a **symptom of the underlying
+gap**: development and production share one Supabase project, which is exactly what
+**DEC-0005** exists to prevent. It resolves when a non-production project exists (Q-15,
+RB-08), at which point the localhost entries belong there rather than here.
+
+Also a small inventory drift: `REBRAND_PHASE_0_SERVICE_INVENTORY.md` records the dev callback
+as `localhost:3000`. It is **5173** — Vite's default port. Another line for the T-15
+corrections.
+
+### Both API key formats are active — DEC-0021 is available, not blocked
+
+The project exposes the legacy `anon`/`service_role` pair **and** the newer
+`sb_publishable_`/`sb_secret_` pair, so it sits in Supabase's transition state.
+
+DEC-0021 deferred this migration until the product runs in its ListrAssistr state, and that
+deferral remains sensible. What is now known is that the migration is **available whenever
+wanted rather than gated on anything**. Two notes for when it happens:
+
+- Whichever pair the application actually uses determines the order of work — the app must be
+  switched before the old pair is withdrawn.
+- **The legacy pair should be revoked once migrated, not left active.** Two live credential
+  sets is twice the surface for no benefit.
+
+### The schema question is not yet settled
+
+The owner reported "a lot of" tables in the schema browser but **no tables in `public`**.
+Those are almost certainly Supabase's own system schemas — `auth`, `storage`, `realtime`,
+`vault`, `extensions`, `supabase_migrations`, and similar — which ship with **every** project
+and are not application tables.
+
+If `public` is genuinely empty, this project has **no application schema at all** and is
+therefore **not** a copy of the legacy project's structure. That matters for the migration
+picture, so it is worth confirming rather than inferring. Two read-only queries were supplied
+for the SQL Editor:
+
+- `information_schema.tables` grouped by schema, with names — shows whether `public` holds
+  anything and what the system schemas contain.
+- `pg_stat_user_tables` with `n_live_tup` — shows which user tables hold rows at all.
+
+Both return schema and table **names** plus row counts, never row contents.
+
+- [ ] Run both and report, so "is it empty" has a definitive answer rather than an impression.
+
 ## Section A — Pre-registration decisions, and their disposition
 
 Written before the domain's status was known. Most are now settled by events —
