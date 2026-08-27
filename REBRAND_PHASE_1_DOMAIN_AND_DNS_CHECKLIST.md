@@ -8,6 +8,8 @@ including §8.3 brand assets, so Phase 1 can be closed on evidence. Repository c
 changes are §9/Phase 2 and out of scope here per DEC-0035.
 **Owner:** User (all registrar, DNS, Vercel, Resend, and legal actions)
 **AI role:** Drafting, record shapes, verification procedure. No provider action.
+**Action list:** `REBRAND_PHASE_1_TODO.md` holds every open item with an owner and a
+priority. This document is the reference behind those items.
 
 ## Gate status — read first
 
@@ -237,6 +239,38 @@ and the Route 53 registrant organisation is updated, that change **re-triggers t
 - Doing it **near cutover** injects 60 days into the critical path.
 
 If the LLC is going to happen, front-load it.
+
+**Owner status 2026-08-26: the registration has _not_ been changed, deliberately.**
+The owner was advised to wait until the LLC is actually formed, so that a
+registrant-validation cycle is not started against a company that does not yet exist.
+
+**That advice is correct, on two independent grounds:**
+
+1. **ICANN registrant validation can suspend the domain.** Changing registrant name,
+   email, or organisation triggers a verification cycle, and failure to complete it
+   within the allowed window can suspend the domain. Starting that cycle against an
+   entity that cannot be validated is an unnecessary risk to a domain that is
+   currently working.
+2. **ICANN requires registrant data to be accurate.** Section B already records that
+   false registrant data is itself a cancellation risk. Entering "Twin Wicks Digital
+   Solutions LLC" as the registrant organisation before that entity legally exists
+   would be inaccurate data, and asserting "LLC" specifically compounds it.
+
+**This refines rather than contradicts the front-loading advice above.** The sequence
+is: **form the LLC first, then update the registrant** — not both at once, and not the
+registrant change first. What should be front-loaded is the _formation_; the registrant
+change follows it.
+
+**And it changes the shape of the lock, favourably.** Because the registrant change
+has not happened, no new 60-day lock has started. A future one will begin whenever the
+registrant organisation is updated — so the lock clock is tied to LLC formation, not to
+today. Combined with the same-account decision in F.6, this matters much less than it
+did: the 60-day lock is a **transfer** lock, and with no account move planned there is
+nothing for it to block. It would only bite if a registrar or account move later became
+necessary.
+
+Recorded as O-21 and its follow-on registrant-change step in
+`REBRAND_PHASE_1_TODO.md`.
 
 ### A.2a The 60-day lock collides with DEC-0033's provisional window
 
@@ -1292,6 +1326,122 @@ and should be confirmed against live AWS documentation rather than taken from he
 - Whether SES can still write Easy DKIM records into a same-account Route 53 zone
   automatically.
 
+### F.6 Deferred — SES setup, and what actually gates it
+
+Owner decision 2026-08-26: **SES setup is deferred**, on the stated grounds that
+upstream dependencies are not ready — LLC formation, a new Gmail account, email
+aliasing, and possible Google Workspace setup.
+
+Deferring is reasonable. But the dependency graph is not quite what it looks like,
+and getting it right changes what has to wait for what.
+
+#### It stays a Phase 1 item
+
+To be precise about scope rather than quietly redefining it: email identity is
+**§8.2**, which DEC-0035 explicitly authorised, and two §8 exit-gate items depend on
+it — **P1-08** "branded email authenticates" and **P1-09** the DMARC report-review
+period. So this is not work moving _out_ of Phase 1; it is work sequenced _later
+within_ Phase 1.
+
+The practical consequence: **Phase 1 cannot close until this is done.** That is fine
+— §8.3 brand assets are also outstanding, so Phase 1 was never closing this week —
+but it belongs on the record as a deliberate deferral rather than an omission. Moving
+§8.2 out of Phase 1 would need its own owner decision, and that is not what has been
+decided here.
+
+#### What does not gate SES
+
+Three of the four stated dependencies do not block it:
+
+| Stated dependency      | Actually blocks SES?                                | Why                                                                                                               |
+| ---------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| New Gmail account      | **No**                                              | Independent. SES is _outbound_ sending; a Gmail account is _inbound_ mail. Neither needs the other to exist       |
+| Email aliasing         | **No**                                              | Same reason — aliases are a receiving concern                                                                     |
+| Google Workspace setup | **No**                                              | Independent of SES. They meet only in the SPF record and in DMARC alignment, and neither blocks the other's setup |
+| LLC formation          | **Indirectly, via one narrow question** — see below | Not the LLC itself                                                                                                |
+
+The two tracks touch only at the end: SES and the mailbox provider each need their
+SPF include merged into the **single** apex SPF TXT record, and both must show
+alignment before leaving `p=none`. Doing them close together saves one record edit.
+That is a convenience, not a dependency.
+
+#### The one thing that actually gates it, which was not on the list
+
+**Will this AWS account remain the ListrAssistr AWS account?**
+
+SES resources — domain verification, Easy DKIM, configuration sets, and critically
+the **sandbox exit** — are **per-AWS-account**. So:
+
+| Path                                                                                   | Effect on SES work                                                                                                 |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Keep this AWS account**, updating its ownership and billing details to the LLC later | SES work **persists**. Safe to do now                                                                              |
+| **Create a new AWS account** for the LLC and move the domain into it                   | SES verification, DKIM, config sets, and **a fresh sandbox-exit request** all have to be redone in the new account |
+
+The sandbox exit is the part that makes redoing it genuinely annoying — it is a
+judged support request with a turnaround, not a button.
+
+**This is answerable without deciding anything about the LLC.** The question is not
+"what entity structure" but the much narrower "does this AWS account stay, or does a
+new one get created". That single answer unblocks SES:
+
+- **Account stays** → SES can proceed whenever, independent of LLC timing, Gmail,
+  aliases, or Workspace.
+- **New account planned** → deferring SES is correct, and it should wait until that
+  account exists. Note A.2a: the ICANN 60-day lock runs to roughly **2026-10-05**, so
+  a domain move cannot complete before then anyway.
+
+**Answered by the owner 2026-08-26: the same AWS account will be kept.**
+
+So SES work **persists** and there is no risk of redoing verification, DKIM,
+configuration sets, or the sandbox exit. **SES is unblocked**, independent of LLC
+timing, Gmail, aliases, or Workspace. When the LLC exists, the account's ownership and
+billing details are updated in place rather than a new account being created — which
+also means A.2a's domain-move scenario may never arise.
+
+One thing that still applies from A.2a: changing the Route 53 **registrant
+organisation or name** re-triggers a fresh ICANN 60-day lock. That is a registrant-data
+change, not an account change, so it is unaffected by this answer and remains a reason
+to front-load the LLC paperwork rather than do it near a cutover.
+
+Recorded as the actual blocker in Section H.
+
+#### Genuinely unblocked right now, for whenever there is appetite
+
+None of this depends on the LLC, the AWS account question, Gmail, aliases, or
+Workspace:
+
+- **DNSSEC** (§8.1.8, I.2). Zero dependencies, and I.1's blast-radius argument still
+  favours doing it while only a coming-soon page sits behind the domain.
+- **The `listrassister.com` error text** (A.1g), plus confirming the registrant
+  contact is ICANN-verified — the latter is a standing risk to `listrassistr.com`
+  itself, not just to a new registration.
+- **The TSDR Office action** (A.1h). Informational, roughly ten minutes.
+- **Placing the DEC-0036 and DEC-0037 drafts** into the decision log.
+- **Publishing DMARC at `p=none`** — with one caveat below.
+
+#### DMARC can be published early, but `rua` cannot point at a Gmail address
+
+Worth flagging now because it interacts with the deferral, and it reliably catches
+people out.
+
+A DMARC `rua` address at a **different domain** from the one publishing the record
+requires that other domain to publish an authorisation record — roughly
+`listrassistr.com._report._dmarc.<their-domain> TXT "v=DMARC1"`. You cannot make
+`gmail.com` publish that. So:
+
+- `rua=mailto:someone@gmail.com` → **reports will not be delivered.**
+- `rua=mailto:...@listrassistr.com` → works, but needs a mailbox, which is deferred.
+- **A DMARC analyzer service** → works, and is built for exactly this: it issues an
+  address on its own domain and handles the external-destination authorisation.
+
+So the analyzer route allows DMARC to be published **before** any mailbox exists.
+Value of publishing early at `p=none`: it is a single reversible TXT record, it starts
+catching unauthorised senders immediately, and data begins accumulating the moment
+SES or Workspace comes online rather than starting from zero at that point.
+
+Recorded as available, not urged — the meaningful part of the 30-day window still
+needs real senders live.
+
 ## Section G — Boundary
 
 I can draft, specify, and verify-by-procedure. I cannot and will not: register or
@@ -1544,9 +1694,9 @@ rather than recollection. Statuses: `Not started`, `In progress`,
 | P1-04 | Authoritative DNS documented                                        | Provider, account owner, recovery path, added to the service inventory                        | **In progress** — provider confirmed (Route 53, verified via NS). Service-inventory entry not yet written                                                                                                                                                                            |
 | P1-05 | DNSSEC enabled and DS chain verified                                | External validator output (Section E)                                                         | **Not started** — no DNSKEY or DS present, confirmed 2026-08-26. Sequenced early per I.1                                                                                                                                                                                             |
 | P1-06 | Vercel apex/`www`/`app`/`qa` resolving, certs issued                | External resolver output; cert status                                                         | **In progress** — apex and `www` live and verified. `app` and `qa` absent. Vercel project identity open (Group 3)                                                                                                                                                                    |
-| P1-07 | Role mailboxes receiving                                            | Inbound test result for every address                                                         | **Not started** — no MX present. Address set itself unresolved (four vs five, §8.2.1 vs §6.1)                                                                                                                                                                                        |
-| P1-08 | Branded email authenticates                                         | Gmail/Outlook headers showing aligned SPF+DKIM+DMARC pass, `d=listrassistr.com`               | **Not started** — no SPF, DKIM, or DMARC records present. Note F.3: the mail that must pass here is Supabase **Auth** mail, not the internal cost alert; verify the Auth SMTP setting                                                                                                |
-| P1-09 | DMARC report-review period completed                                | Analyzer reports covering every legitimate sender, over 2-4 weeks minimum                     | **Not started** — 30-day target per D.2; longest fixed wait in the phase, clock not begun                                                                                                                                                                                            |
+| P1-07 | Role mailboxes receiving                                            | Inbound test result for every address                                                         | **Deferred (owner, 2026-08-26)** — no MX present. Mailbox provider decision not started (F.4/F.6). Address set also unresolved: §8.2.1 vs §6.1                                                                                                                                       |
+| P1-08 | Branded email authenticates                                         | Gmail/Outlook headers showing aligned SPF+DKIM+DMARC pass, `d=listrassistr.com`               | **Deferred (owner, 2026-08-26)** — no SPF, DKIM, or DMARC records present. Blocked on the AWS-account question in F.6, not on the LLC. Note F.3: the mail that must pass here is Supabase Auth mail, not the internal cost alert                                                     |
+| P1-09 | DMARC report-review period completed                                | Analyzer reports covering every legitimate sender, over 2-4 weeks minimum                     | **Deferred (owner, 2026-08-26)** — 30-day target per D.2, clock not begun. The `p=none` record itself can be published early via an analyzer `rua` (F.6); the meaningful window still needs live senders                                                                             |
 | P1-10 | Brand asset package produced                                        | Full §8.3 deliverable list                                                                    | **Not started**                                                                                                                                                                                                                                                                      |
 | P1-11 | Design tokens pass WCAG AA                                          | Measured contrast ratios; confirmation red is never the sole state indicator                  | **Not started**                                                                                                                                                                                                                                                                      |
 | P1-12 | Asset package approved                                              | Owner sign-off, recorded as a DEC entry                                                       | **Not started**                                                                                                                                                                                                                                                                      |
