@@ -9,7 +9,8 @@ changes are §9/Phase 2 and out of scope here per DEC-0035.
 **Owner:** User (all registrar, DNS, Vercel, Resend, and legal actions)
 **AI role:** Drafting, record shapes, verification procedure. No provider action.
 **Action list:** `REBRAND_PHASE_1_TODO.md` holds every open item with an owner and a
-priority. This document is the reference behind those items.
+priority. **Procedures:** `REBRAND_PHASE_1_RUNBOOKS.md` holds the step-by-step execution
+paths. This document is the reference behind both.
 
 ## Gate status — read first
 
@@ -90,12 +91,12 @@ Two consequences worth stating plainly:
 Recorded, not silently reconciled — correcting the source documents is the owner's
 call.
 
-| Document                                                    | Says                                                                                                 | Actually                                                                                                                                                                                                                                                                                                                       |
-| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `REBRAND_PHASE_0_DECISION_LOG.md` DEC-0033 (2026-08-19)     | "none of Phases 1–6 have started (domain not yet registered)"                                        | The domain was registered **2026-08-06**, 13 days before DEC-0033 was written. The broader point (no cutover date can be committed yet) still stands                                                                                                                                                                           |
-| `REBRAND_PHASE_0_DECISION_LOG.md` DEC-0035                  | Labels RBR-0003 as "no staging Supabase project yet"                                                 | RBR-0003's own row is "Function config has broad `verify_jwt = false` entries". The staging requirement traces to DEC-0005/DEC-0004                                                                                                                                                                                            |
-| DEC-0035, same clause                                       | "no staging Supabase project yet"                                                                    | `REBRAND_PHASE_0_SERVICE_INVENTORY.md:22` records staging project `yqftpibxplachhwoclam`, owner-reported 2026-08-10, with Auth Site URL already set to `https://listrassistr.com`. Its row still says "Confirm owner, region, empty status, and project URL" — so the prerequisite is a **verify** task, not a **create** task |
-| `LISTRASSISTR_REBRAND_AND_MIGRATION_PLAN.md` §8.2.1 vs §6.1 | §8.2.1 lists `support`/`privacy`/`legal`/`security`; §6.1 lists `support`/`privacy`/`legal`/`alerts` | Five distinct addresses across the two lists. Which set is authoritative is an open question (Group 4)                                                                                                                                                                                                                         |
+| Document                                                                      | Says                                                                                                 | Actually                                                                                                                                                                                                                                                                                                                                                                      |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `REBRAND_PHASE_0_DECISION_LOG.md` DEC-0033 (2026-08-19)                       | "none of Phases 1–6 have started (domain not yet registered)"                                        | The domain was registered **2026-08-06**, 13 days before DEC-0033 was written. The broader point (no cutover date can be committed yet) still stands                                                                                                                                                                                                                          |
+| `REBRAND_PHASE_0_DECISION_LOG.md` DEC-0035                                    | Labels RBR-0003 as "no staging Supabase project yet"                                                 | RBR-0003's own row is "Function config has broad `verify_jwt = false` entries". The staging requirement traces to DEC-0005/DEC-0004                                                                                                                                                                                                                                           |
+| DEC-0035, same clause — **REVERSED 2026-08-27, this row was wrong; see A.11** | "no staging Supabase project yet"                                                                    | **DEC-0035 was correct.** This row originally claimed the service inventory contradicted it by recording a staging project. The owner has since confirmed `yqftpibxplachhwoclam` is the intended **production** project, so there is no staging project and the **service inventory** carries the error, not DEC-0035. Kept rather than deleted so the reversal stays visible |
+| `LISTRASSISTR_REBRAND_AND_MIGRATION_PLAN.md` §8.2.1 vs §6.1                   | §8.2.1 lists `support`/`privacy`/`legal`/`security`; §6.1 lists `support`/`privacy`/`legal`/`alerts` | Five distinct addresses across the two lists. Which set is authoritative is an open question (Group 4)                                                                                                                                                                                                                                                                        |
 
 ### External verification — results, 2026-08-26
 
@@ -537,6 +538,68 @@ matters for P1-08 — which would be worth knowing explicitly rather than by inf
 
 - [ ] Confirm which Supabase project ref was checked for SMTP, and which project
       `listrassistr-official` is wired to today, if any.
+
+## A.11 Correction — `yqftpibxplachhwoclam` is the production project, not staging
+
+**Owner correction 2026-08-27:** `yqftpibxplachhwoclam` is **the official Supabase project
+for ListrAssistr — the future official production project. Not staging, not qa.**
+
+This supersedes A.9a and reverses an earlier finding in this document. Recorded plainly
+because the earlier version was wrong in a way that changed advice.
+
+### What the source documents say, and which is wrong
+
+| Source                                     | Says                                                                                                                                                | Status                                                                           |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `REBRAND_PHASE_0_SERVICE_INVENTORY.md:22`  | "New staging Supabase … Initial staging; no production data approved"                                                                               | **Wrong**, or superseded by a change of intent since 2026-08-10                  |
+| Same file, lines 74-79                     | "Initial staging confirmation … New staging project ref: `yqftpibxplachhwoclam`" and "Planned dedicated QA hostname: `https://qa.listrassistr.com`" | **Wrong** for this project — the QA-hostname line in particular is misattributed |
+| `REBRAND_PHASE_0_DECISION_LOG.md` DEC-0035 | RBR-0003 described as "no staging Supabase project yet"                                                                                             | **Correct after all**                                                            |
+
+**So an earlier entry in this document's own corrections table was itself mistaken.** It
+recorded DEC-0035's "no staging Supabase project yet" as contradicted by the service
+inventory. With `yqftpibxplachhwoclam` confirmed as production, **DEC-0035 was accurate and
+the service inventory carries the error.** The correction runs the opposite way to how it
+was first written.
+
+That is worth stating rather than quietly amending, because the earlier reading produced
+concrete bad advice: A.9a concluded qa was a "verify and configure" task inside Phase 1
+scope. It is not. See RB-08.
+
+### What actually follows
+
+1. **There is no staging project and no qa project.** Not a mislabelled one — none.
+2. **DEC-0005 is currently unmet.** It requires separate staging and production
+   environments and credentials. Plan §6.2 names `listrassistr-production` and
+   `listrassistr-staging` as the target shape.
+3. **Creating one is plan §10, Phase 3**, which DEC-0035 does not authorise. So qa needs
+   its own gate — drafted in RB-08 — rather than being absorbed into Phase 1.
+4. **`qa.listrassistr.com` does not exist**, and neither does a DNS record for it. Owner
+   recollection confirmed by measurement: NXDOMAIN, no delegation.
+5. **One thing improves.** `yqftpibxplachhwoclam`'s recorded Auth Site URL is
+   `https://listrassistr.com`. For a _staging_ project that was wrong twice over — pointing
+   at the apex, and at the production host. For the **production** project pointed at an
+   **apex-canonical** deployment, it is simply correct. RB-01 makes it so.
+
+### Still open on this project
+
+Its inventory row has asked for four confirmations since 2026-08-10 and none has been
+supplied. Those are unchanged in substance but now matter more, because this is the
+production project rather than a scratch environment: **owner/organisation, region, empty
+state, and project URL.** RB-05 is the procedure.
+
+Also unchanged: **no SMTP is configured anywhere for this application** (owner, 2026-08-27),
+so P1-08's "branded email authenticates" has no sender yet on any project. That closes
+O-38's ambiguity — the answer is "nowhere", not "a project I have not named".
+
+### Documents needing correction as a result
+
+- [ ] `REBRAND_PHASE_0_SERVICE_INVENTORY.md` — relabel `yqftpibxplachhwoclam` from staging
+      to **intended production**, and remove or reattribute the "Planned dedicated QA
+      hostname" line.
+- [ ] The same file's "Initial staging confirmation" heading and its
+      "no production data approved" note, which now describe something that does not exist.
+- [ ] This document's earlier corrections table, amended above rather than rewritten, so the
+      reversal stays visible.
 
 ## Section A — Pre-registration decisions, and their disposition
 
