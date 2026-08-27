@@ -66,8 +66,8 @@ earlier draft's assumption that nothing had been registered yet.
 
 | Record                 | Type  | Value                                 | TTL    | State                                                                                                                                                      |
 | ---------------------- | ----- | ------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `listrassistr.com`     | A     | `216.150.1.1`                         | 300    | Live — Vercel apex. **Leave as-is**; confirm against the Vercel dashboard for this project, not against documentation. See the external-verification table |
-| `www.listrassistr.com` | CNAME | `2f1e3f86cb32a6a8.vercel-dns-016.com` | 300    | Live                                                                                                                                                       |
+| `listrassistr.com`     | A     | `216.150.1.1`                         | 300    | Live, and **confirmed a 308 redirect to `www`, not a serving host** (A.7). Value **leave as-is** — confirm against the Vercel dashboard, not documentation |
+| `www.listrassistr.com` | CNAME | `2f1e3f86cb32a6a8.vercel-dns-016.com` | 300    | Live — **and canonical**; the apex 308-redirects here (A.7)                                                                                                |
 | `listrassistr.com`     | NS    | 4× `awsdns-*`                         | 172800 | Route 53 default, correct                                                                                                                                  |
 | `listrassistr.com`     | SOA   | `ns-1068.awsdns-05.org`               | 900    | Route 53 default                                                                                                                                           |
 | `app`                  | —     | —                                     | —      | **Absent** — required by §8.1.6                                                                                                                            |
@@ -325,6 +325,218 @@ Recorded honestly: this means **P1-06 cannot fully close yet**. §8.1.6's purpos
 these hostnames work, and a hostname serving a placeholder demonstrates the DNS and cert
 path but not the application. The gate should close when both serve their intended
 content, not when the records merely exist.
+
+## A.7 Q-03 resolved — `www` is canonical, and two things are misconfigured
+
+Vercel → Domains, captured 2026-08-27. All five entries show Valid Configuration:
+
+| Domain                             | Behaviour                                    |
+| ---------------------------------- | -------------------------------------------- |
+| `www.listrassistr.com`             | **Production** — the canonical host          |
+| `listrassistr.com` (apex)          | **308 → `www.listrassistr.com`**             |
+| `listrassistr-official.vercel.app` | **Production**                               |
+| `listerassistr.com`                | **308 → `listrassistr-official.vercel.app`** |
+| `www.listerassistr.com`            | **308 → `listrassistr-official.vercel.app`** |
+
+So **`www` is canonical and the apex redirects to it.** That answers Q-03 and resolves
+A.3a's ambiguity: the Overview widget was not truncating — the apex genuinely is a
+redirect, not a serving domain.
+
+### A.7a This contradicts plan §6.1, and the divergence needs closing
+
+Plan §6.1 specifies:
+
+| Purpose        | Plan §6.1 target               | Actual                             |
+| -------------- | ------------------------------ | ---------------------------------- |
+| Marketing site | `https://listrassistr.com`     | **`https://www.listrassistr.com`** |
+| Application    | `https://app.listrassistr.com` | Not yet created                    |
+| QA/staging     | `https://qa.listrassistr.com`  | Not yet created                    |
+
+The plan says the apex is the marketing site. The deployment says `www` is. One of them
+should change, and the choice is the owner's:
+
+| Option                                               | What it takes                                                          | For                                                                                                                                                                                                                                                                                       |
+| ---------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A. Make the apex canonical** — matches plan §6.1   | Flip the Vercel config: apex becomes Production, `www` redirects to it | Plan and reality agree with no document edit. The already-recorded Supabase Auth Site URL (`https://listrassistr.com`) becomes correct as-is                                                                                                                                              |
+| **B. Keep `www` canonical** — matches the deployment | Update plan §6.1 to name `www.listrassistr.com` as the marketing site  | No change to working configuration. **Genuine technical benefit:** cookies set on `www` do not ride along to `app.` and `qa.`, whereas apex cookies are sent to every subdomain. Marketing and analytics scripts on the marketing site therefore cannot leak cookies into the application |
+
+Recommendation: **B, keep `www`.** It already works, the cookie-isolation argument is
+real, and the discipline applied to the apex A record in Section D applies here too —
+do not change working configuration without a reason. But the plan **must** be updated to
+match, because a plan that contradicts the deployment is how DEC-0033's "domain not yet
+registered" error happened. Silent divergence is the failure mode.
+
+### A.7b The auth consequence — this one is functional, not cosmetic
+
+`REBRAND_PHASE_0_SERVICE_INVENTORY.md:76` records the staging Supabase project's
+configuration as:
+
+- Auth Site URL: `https://listrassistr.com` — **the apex**
+- Allowed callback: `https://listrassistr.com/auth/callback` — **the apex**
+
+With the apex 308-redirecting to `www`, that configuration is now inconsistent with the
+deployment, and it is the kind of inconsistency that breaks sign-in rather than merely
+looking untidy:
+
+- Supabase's client libraries use **PKCE** by default, and the code verifier is held in
+  browser storage **scoped to the origin**. A flow that begins on one origin and
+  completes on another cannot read its own verifier.
+- In practice a visitor never stays on the apex — they are redirected to `www`
+  immediately — so the flow runs on `www` while the allow-list names only the apex.
+  Either Supabase rejects the redirect, or it sends the browser to the apex which bounces
+  back to `www`. Either way the origins disagree.
+
+**Whichever canonical host is chosen, the Supabase Auth Site URL and the redirect
+allow-list must match it exactly.** This is the concrete reason A.7a needs deciding
+before any auth work, not after.
+
+### A.7c The typo domains redirect to the wrong target
+
+`listerassistr.com` and `www.listerassistr.com` both 308 to
+**`listrassistr-official.vercel.app`** — the Vercel technical hostname — rather than to
+the brand domain.
+
+The earlier confirmation that these "redirect rather than serve" was accurate, so A.1f's
+main concerns stand closed. But the target is wrong on three counts:
+
+1. **Brand.** Someone who mistypes lands on `listrassistr-official.vercel.app`, an
+   internal-looking URL that is not the product name. That defeats the point of owning
+   the typo domain.
+2. **SEO.** A redirect chain should terminate at the canonical brand host. Pointing it at
+   a `.vercel.app` alias splits signals and leaves that alias competing with the brand
+   domain, since it is also configured as Production.
+3. **Legal posture.** A.1f's argument was that redirecting to _your own brand_ is what
+   makes owning a one-character variant of a live competitor's domain unambiguously
+   defensive. "Redirects to my brand" is a materially cleaner story than "redirects to a
+   technical hostname". The core defence — that it serves no content — holds either way,
+   but this is free to fix.
+
+- [ ] Repoint `listerassistr.com` and `www.listerassistr.com` to **`www.listrassistr.com`**
+      (or whichever host A.7a settles on), not to the `.vercel.app` alias.
+- [ ] Consider whether `listrassistr-official.vercel.app` should remain a Production
+      domain, or redirect to the canonical host as well. Leaving a `.vercel.app` alias
+      publicly serving production content is usually not what you want once a real domain
+      exists.
+
+## A.8 Q-13 decided — option C, with the destination recorded
+
+**Owner decision 2026-08-27: option C.** Phase 1 planning documents stay in this
+repository with a recorded destination; §8.3 artefacts go to `listrassistr-official` as
+they are produced.
+
+Owner also reports **no parallel development** — nothing beyond initial setup has been
+pushed to `listrassistr-official` across git, Vercel, or Supabase. Recorded with one
+observation rather than a contradiction: the Vercel deployment is built from commit
+`a8d548a`, "Merge pull request #16 from twinwicksllc/docs/phase-0-target-status", and
+branches `docs/phase-0-target-status` (#16) and `docs/staging-rollback-runbook` (#14) are
+visible. Those are reasonably described as initial setup, but they are **documents**, and
+two of them sound like they overlap this repository's Phase 0 record. O-33's review should
+confirm they do not conflict with `REBRAND_PHASE_0_*` here — the divergence risk is low
+given the volume, not zero.
+
+Draft DEC entry, companion to DEC-0036 and DEC-0037:
+
+> **DEC-0038** — Resolves the `REBRAND_PHASE_0_IMPLEMENTATION.md` §2 requirement that any
+> document created in the legacy workspace have a recorded destination. **Phase 1 planning
+> documents — `REBRAND_PHASE_1_DOMAIN_AND_DNS_CHECKLIST.md` and
+> `REBRAND_PHASE_1_TODO.md` — remain in `twinwicksllc/listing-assistant-pro` for the
+> duration of Phase 1**, because they cross-reference the DEC-, RBR-, and P0- identifier
+> record that lives there. **Recorded destination: `twinwicksllc/listrassistr-official`,
+> migrated at cutover** alongside the Phase 0 record they depend on. **§8.3 brand
+> artefacts are exempt and go to `listrassistr-official` immediately as produced**, per
+> §2's "brand work and launch artifacts" clause. Reviewed 2026-08-27; owner confirmed no
+> parallel development beyond initial setup in the target repository.
+
+## A.9 The qa environment — what is in scope, and what is not
+
+Owner confirmed `qa.listrassistr.com` as the preferred QA hostname, with
+`app.listrassistr.com` or similar for the live application, and noted that a separate
+Supabase project for qa is **not** set up.
+
+**Scope check first, because this request spans three phases.** Verified against the plan's
+own structure:
+
+| Work                                     | Plan section | Phase       | Authorised by DEC-0035? |
+| ---------------------------------------- | ------------ | ----------- | ----------------------- |
+| The `qa` **DNS record**                  | §8.1.6       | **Phase 1** | **Yes**                 |
+| Creating a **new Supabase project**      | §10          | **Phase 3** | **No**                  |
+| Wiring **Vercel environments and CI/CD** | §13          | **Phase 6** | **No**                  |
+
+So the DNS record is in scope and the environment behind it is not. That is not a reason
+to stop — but standing up a qa Supabase project and wiring Vercel environment variables
+is Phase 3 and Phase 6 work, and doing it under the Phase 1 banner would be exactly the
+scope drift Section 6 of the to-do exists to prevent.
+
+### A.9a A project may already exist — check before creating
+
+`REBRAND_PHASE_0_SERVICE_INVENTORY.md:22` and lines 74-79 record, owner-reported
+2026-08-10:
+
+- Staging project ref **`yqftpibxplachhwoclam`**
+- Auth Site URL `https://listrassistr.com`
+- Allowed callbacks `https://listrassistr.com/auth/callback` and
+  `http://localhost:3000/auth/callback`
+- **Planned dedicated QA hostname: `https://qa.listrassistr.com`**
+
+That last line means this project was **already intended as the QA project**. So the
+question is not "create one" but "does the one from 2026-08-10 still exist and is it
+usable":
+
+- **If it exists and is empty** → qa is a **verify and configure** task, which sits inside
+  the staging prerequisite DEC-0035 already pulled into Phase 1. In scope.
+- **If it is gone or unusable** → creating a replacement is **§10/Phase 3** work and needs
+  its own gate, not a Phase 1 side effect.
+
+This is the same discrepancy recorded earlier — DEC-0035 describing the staging project as
+not existing while the inventory records one — now with a concrete consequence.
+
+Note also that its recorded Auth Site URL is wrong for a QA project on two counts: it
+names the **apex**, which now redirects (A.7b), and it names the **production** host rather
+than `qa.listrassistr.com`. Both need correcting whenever it is configured.
+
+### A.9b Split of work
+
+**Owner, and only owner:**
+
+- [ ] Confirm whether `yqftpibxplachhwoclam` still exists, its region, whether it is empty,
+      and its project URL. These are the four items its inventory row has always asked for.
+- [ ] Decide, once that is known, whether qa proceeds as configuration (in scope) or needs
+      a Phase 3 gate (not in scope).
+- [ ] Create the long-lived `qa` branch in `listrassistr-official`, if the
+      branch-assigned-domain approach from A.6 is used.
+- [ ] Assign `qa.listrassistr.com` in Vercel once that branch exists, and create the DNS
+      record at that point rather than in advance.
+- [ ] Set the environment variables. Never share their values here.
+
+**What I can do, and will once the above is answered:**
+
+- [ ] Draft the full **environment-variable matrix** — which variable belongs to which
+      environment, and which Supabase project each points at, with production and qa kept
+      separate per DEC-0005. Names and destinations only, never values.
+- [ ] Draft the **exact Supabase Auth configuration** for the qa project: Site URL,
+      redirect allow-list including `localhost` for development, and the corrections
+      A.7b requires.
+- [ ] Draft the `qa` DNS record row for Section D once the Vercel target is known.
+- [ ] Draft the **Phase 3 entry decision** if it turns out one is needed, so the gate is a
+      one-line approval rather than a drafting exercise.
+- [ ] Note the **DEC-0021 key-format** question against whichever project is used — legacy
+      JWT versus `sb_publishable_`/`sb_secret_` — as a fact to check rather than a value to
+      record.
+
+## A.10 O-08 follow-up — which Supabase project was checked?
+
+Owner reports SMTP is also not configured "in the new project (`listrassistr-official`)".
+Recorded with a clarification needed: `listrassistr-official` is the **GitHub and Vercel**
+project. SMTP is a **Supabase** setting, so the check must have been against a Supabase
+project — most likely `yqftpibxplachhwoclam`, but possibly a different one.
+
+Worth pinning down, because A.5's open question is precisely _which_ Supabase project
+ListrAssistr will use. If the answer is `yqftpibxplachhwoclam`, then that project is
+simultaneously the staging project, the intended qa project, and the one whose auth mail
+matters for P1-08 — which would be worth knowing explicitly rather than by inference.
+
+- [ ] Confirm which Supabase project ref was checked for SMTP, and which project
+      `listrassistr-official` is wired to today, if any.
 
 ## Section A — Pre-registration decisions, and their disposition
 
