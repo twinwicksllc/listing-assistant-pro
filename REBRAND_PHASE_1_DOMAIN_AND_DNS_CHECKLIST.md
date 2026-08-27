@@ -76,7 +76,7 @@ earlier draft's assumption that nothing had been registered yet.
 | TXT / SPF              | —     | —                                     | —      | **Absent**                                                                                                                                         |
 | MX                     | —     | —                                     | —      | **Absent**                                                                                                                                         |
 | `_dmarc`               | —     | —                                     | —      | **Absent**                                                                                                                                         |
-| DNSKEY / DS            | —     | —                                     | —      | **Absent** — DNSSEC not enabled                                                                                                                    |
+| DNSKEY / DS            | —     | see A.12                              | 3600   | **Present — DNSSEC live and validating** as of 2026-08-27 (A.12)                                                                                   |
 | CAA                    | —     | —                                     | —      | **Absent**                                                                                                                                         |
 
 Two consequences worth stating plainly:
@@ -654,6 +654,102 @@ O-38's ambiguity — the answer is "nowhere", not "a project I have not named".
       "no production data approved" note, which now describe something that does not exist.
 - [ ] This document's earlier corrections table, amended above rather than rewritten, so the
       reversal stays visible.
+
+## A.12 DNSSEC complete and validating — plan §8.1.8 satisfied (2026-08-27)
+
+RB-03 executed by the owner. **The chain of trust is live and independently verified.**
+This closes O-02, O-17, and **P1-05**.
+
+### What was created
+
+| Item                     | Value                                                              |
+| ------------------------ | ------------------------------------------------------------------ |
+| KSK name (Route 53)      | `listrassistr_ksk_1`                                               |
+| KMS backing key          | Route 53-created customer-managed key, **us-east-1**               |
+| Algorithm                | **13** — ECDSAP256SHA256                                           |
+| DNSKEY records published | **2** — ZSK (flags 256, tag 43388) and KSK (flags 257, tag 10716)  |
+| DS at the `.com` parent  | KeyTag **10716**, Alg **13**, DigestType **2**                     |
+| DS digest                | `E59E9D7FE7C9BDB9D91A245EDCA2AFE29DCE2B717D52C2298E673B79BE06BAAA` |
+| Registrar status         | DNSSEC status **Configured**; transfer lock On; auto-renew On      |
+
+### Verification evidence
+
+The DS digest was **computed independently from the published DNSKEY before the DS was
+submitted**, per RFC 4034 §5.1.4 — `sha256(canonical owner name ‖ DNSKEY RDATA)` — and the
+value Route 53 derived from the pasted public key matched it exactly. That is what confirms
+clean transcription: a single wrong character in the base64 public key would have produced a
+completely different digest.
+
+| Check                                                                  | Result                                  |
+| ---------------------------------------------------------------------- | --------------------------------------- |
+| Console Key tag equals computed KSK tag                                | **10716 = 10716** ✓                     |
+| Console digest equals independently computed digest                    | **exact match**, 64 hex chars ✓         |
+| DS published in the `.com` parent zone                                 | **present**, all three fields correct ✓ |
+| DS KeyTag references the KSK, not the ZSK                              | ✓                                       |
+| Apex, `www`, and the typo domain resolve through a validating resolver | ✓                                       |
+
+**The control test is what makes this proof rather than inference.** "It still resolves" is
+weak evidence on its own, because a non-validating resolver returns answers regardless. So a
+domain with a deliberately broken chain was queried against the same resolver:
+
+| Domain              | Result via `1.1.1.1` | Meaning                        |
+| ------------------- | -------------------- | ------------------------------ |
+| `dnssec-failed.org` | **SERVFAIL**         | The resolver **is** validating |
+| `listrassistr.com`  | **Answers normally** | Our chain validates against it |
+
+A resolver that rejects a knowingly-broken chain and accepts ours has validated ours. The
+DS/DNSKEY pair is therefore correct at the parent, not merely present.
+
+### Third-party confirmation — `dnsviz.net`, 2026-08-27
+
+Run by the owner after the DS went live. The graph shows a **complete, continuous chain of
+trust** with no errors or warnings, and every key tag matches the values computed here
+independently.
+
+| Zone                                   | Keys shown                                                                   | Signed onward                        |
+| -------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------ |
+| Root `.` (17:47 UTC capture)           | DNSKEY alg 8, id **20326** (trust anchor), plus id 57780 and 38696, 2048-bit | DS digest alg 2 → `com`              |
+| `com` (16:24 UTC capture)              | DNSKEY alg 13, id **19718** and id **41446**, 512-bit                        | DS digest alg 2 → `listrassistr.com` |
+| `listrassistr.com` (17:31 UTC capture) | DNSKEY alg 13, id **10716** (KSK) and id **43388** (ZSK), 512-bit            | Signs `A`, `NS`, and `SOA`           |
+
+Two things worth drawing out:
+
+- **The key tags match exactly what was computed before the DS was submitted** — 10716 for
+  the KSK and 43388 for the ZSK. Three independent sources now agree: the values derived
+  here from the published DNSKEY, the values Route 53 derived from the pasted public key, and
+  the values dnsviz reads from the live chain.
+- **The chain is unbroken from the root trust anchor down**, with each level's DS
+  authenticating the next. Nothing in the graph is flagged, which in dnsviz's rendering means
+  no errors and no warnings anywhere in the delegation path.
+
+That upgrades O-17 from "verified by reasoning and a control test" to "verified by an
+independent third-party validator as well", which is the strongest form the evidence for
+P1-05 can take.
+
+### Residual notes
+
+- **The KMS key must not be deleted, disabled, or have its policy changed.** Route 53 warned
+  about this at creation time, and it is now load-bearing: if Route 53 loses access to that
+  key, signing breaks — and with a DS published at the parent, that means the domain goes
+  dark for validating resolvers. Deletion carries a 7-30 day waiting period, but **disabling
+  takes effect immediately**. That key is not a candidate for any future AWS housekeeping.
+- **Rollback ordering, if DNSSEC is ever removed:** delete the DS at the registrar → wait out
+  the parent DS TTL → only then disable signing in the hosted zone. Reversing that leaves
+  resolvers holding a DS for an unsigned zone, which is the same domain-goes-dark failure.
+  Recorded in I.2 and unchanged.
+- ~~`dnsviz.net` is still worth running once~~ — **done, see above.** The chain validates
+  cleanly from the root trust anchor with no errors or warnings.
+- Route 53 reported the registry submission as "in progress, you will receive an email when
+  it is done". By the time it was checked, the DS was **already live at the parent**, so that
+  email is confirmation rather than something to wait on.
+
+### Why this was worth doing now
+
+I.1's blast-radius argument held. Only a coming-soon page sat behind the domain during a
+procedure whose failure mode is the domain resolving **nowhere** for up to the parent DS TTL —
+commonly around 24 hours for `.com`. The same operation after cutover would have been a
+customer-facing outage risk instead of an embarrassment. It is now done, verified, and will
+simply be true when the application ships.
 
 ## Section A — Pre-registration decisions, and their disposition
 
@@ -2192,21 +2288,21 @@ Mirrors the Phase 0 closure-checklist format so Phase 1 can be closed on evidenc
 rather than recollection. Statuses: `Not started`, `In progress`,
 `Evidence captured`, `Reviewed`, `Approved`, `Blocked`.
 
-| ID    | Exit-gate requirement                                               | Evidence needed                                                                               | Status                                                                                                                                                                                                                                                                               |
-| ----- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| P1-01 | Domain registered in the legal business entity (deviation accepted) | Registrar account owner, registration date, entity name; recorded DEC entry for the deviation | **Approved with recorded deviation (2026-08-26)** — registered 2026-08-06 via Route 53 in the owner's individual account. §8.1.1 knowingly unmet; owner accepted option B in A.2 and is beginning LLC formation. Draft DEC text in A.2                                               |
-| P1-02 | Registrar hardened                                                  | Section B checklist complete; MFA method; privacy state                                       | **Evidence captured** — transfer lock, auto-renew, recovery contacts, expiry alerts, root MFA, and WHOIS privacy on all four contacts, all confirmed 2026-08-26. Remaining: service-inventory write-up, root-vs-IAM check, CAA (sequenced late)                                      |
-| P1-03 | Legal approval of the stylized spelling                             | Recorded DEC entry per §8.1.3                                                                 | **Approved (2026-08-26)** — owner approved the name `ListrAssistr` under A.1a option 1, owner sign-off rather than counsel clearance. Draft DEC-0037 text in A.1a records the basis and its stated limitations. Satisfies the "legal has approved the name" half of the §8 exit gate |
-| P1-04 | Authoritative DNS documented                                        | Provider, account owner, recovery path, added to the service inventory                        | **In progress** — provider confirmed (Route 53, verified via NS). Service-inventory entry not yet written                                                                                                                                                                            |
-| P1-05 | DNSSEC enabled and DS chain verified                                | External validator output (Section E)                                                         | **Not started** — no DNSKEY or DS present, confirmed 2026-08-26. Sequenced early per I.1                                                                                                                                                                                             |
-| P1-06 | Vercel apex/`www`/`app`/`qa` resolving, certs issued                | External resolver output; cert status                                                         | **In progress** — apex and `www` live and verified. `app` and `qa` absent. Vercel project identity open (Group 3)                                                                                                                                                                    |
-| P1-07 | Role mailboxes receiving                                            | Inbound test result for every address                                                         | **Deferred (owner, 2026-08-26)** — no MX present. Mailbox provider decision not started (F.4/F.6). Address set also unresolved: §8.2.1 vs §6.1                                                                                                                                       |
-| P1-08 | Branded email authenticates                                         | Gmail/Outlook headers showing aligned SPF+DKIM+DMARC pass, `d=listrassistr.com`               | **Deferred (owner, 2026-08-26)** — no SPF, DKIM, or DMARC records present. Blocked on the AWS-account question in F.6, not on the LLC. Note F.3: the mail that must pass here is Supabase Auth mail, not the internal cost alert                                                     |
-| P1-09 | DMARC report-review period completed                                | Analyzer reports covering every legitimate sender, over 2-4 weeks minimum                     | **Deferred (owner, 2026-08-26)** — 30-day target per D.2, clock not begun. The `p=none` record itself can be published early via an analyzer `rua` (F.6); the meaningful window still needs live senders                                                                             |
-| P1-10 | Brand asset package produced                                        | Full §8.3 deliverable list                                                                    | **Not started**                                                                                                                                                                                                                                                                      |
-| P1-11 | Design tokens pass WCAG AA                                          | Measured contrast ratios; confirmation red is never the sole state indicator                  | **Not started**                                                                                                                                                                                                                                                                      |
-| P1-12 | Asset package approved                                              | Owner sign-off, recorded as a DEC entry                                                       | **Not started**                                                                                                                                                                                                                                                                      |
-| P1-13 | Phase 2 entry decision                                              | Explicit go/no-go for plan §9, which DEC-0035 does **not** grant                              | **Not started**                                                                                                                                                                                                                                                                      |
+| ID    | Exit-gate requirement                                               | Evidence needed                                                                               | Status                                                                                                                                                                                                                                                                                                                                         |
+| ----- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1-01 | Domain registered in the legal business entity (deviation accepted) | Registrar account owner, registration date, entity name; recorded DEC entry for the deviation | **Approved with recorded deviation (2026-08-26)** — registered 2026-08-06 via Route 53 in the owner's individual account. §8.1.1 knowingly unmet; owner accepted option B in A.2 and is beginning LLC formation. Draft DEC text in A.2                                                                                                         |
+| P1-02 | Registrar hardened                                                  | Section B checklist complete; MFA method; privacy state                                       | **Evidence captured** — transfer lock, auto-renew, recovery contacts, expiry alerts, root MFA, and WHOIS privacy on all four contacts, all confirmed 2026-08-26. Remaining: service-inventory write-up, root-vs-IAM check, CAA (sequenced late)                                                                                                |
+| P1-03 | Legal approval of the stylized spelling                             | Recorded DEC entry per §8.1.3                                                                 | **Approved (2026-08-26)** — owner approved the name `ListrAssistr` under A.1a option 1, owner sign-off rather than counsel clearance. Draft DEC-0037 text in A.1a records the basis and its stated limitations. Satisfies the "legal has approved the name" half of the §8 exit gate                                                           |
+| P1-04 | Authoritative DNS documented                                        | Provider, account owner, recovery path, added to the service inventory                        | **In progress** — provider confirmed (Route 53, verified via NS). Service-inventory entry not yet written                                                                                                                                                                                                                                      |
+| P1-05 | DNSSEC enabled and DS chain verified                                | External validator output (Section E)                                                         | **Evidence captured (2026-08-27)** — KSK `listrassistr_ksk_1`, alg 13, DS keytag 10716 live at the `.com` parent, digest matching one computed independently before submission. Chain confirmed by `dnsviz.net` root→com→listrassistr.com with no errors or warnings, and validation proved by control test against `dnssec-failed.org` (A.12) |
+| P1-06 | Vercel apex/`www`/`app`/`qa` resolving, certs issued                | External resolver output; cert status                                                         | **In progress** — apex and `www` live and verified. `app` and `qa` absent. Vercel project identity open (Group 3)                                                                                                                                                                                                                              |
+| P1-07 | Role mailboxes receiving                                            | Inbound test result for every address                                                         | **Deferred (owner, 2026-08-26)** — no MX present. Mailbox provider decision not started (F.4/F.6). Address set also unresolved: §8.2.1 vs §6.1                                                                                                                                                                                                 |
+| P1-08 | Branded email authenticates                                         | Gmail/Outlook headers showing aligned SPF+DKIM+DMARC pass, `d=listrassistr.com`               | **Deferred (owner, 2026-08-26)** — no SPF, DKIM, or DMARC records present. Blocked on the AWS-account question in F.6, not on the LLC. Note F.3: the mail that must pass here is Supabase Auth mail, not the internal cost alert                                                                                                               |
+| P1-09 | DMARC report-review period completed                                | Analyzer reports covering every legitimate sender, over 2-4 weeks minimum                     | **Deferred (owner, 2026-08-26)** — 30-day target per D.2, clock not begun. The `p=none` record itself can be published early via an analyzer `rua` (F.6); the meaningful window still needs live senders                                                                                                                                       |
+| P1-10 | Brand asset package produced                                        | Full §8.3 deliverable list                                                                    | **Not started**                                                                                                                                                                                                                                                                                                                                |
+| P1-11 | Design tokens pass WCAG AA                                          | Measured contrast ratios; confirmation red is never the sole state indicator                  | **Not started**                                                                                                                                                                                                                                                                                                                                |
+| P1-12 | Asset package approved                                              | Owner sign-off, recorded as a DEC entry                                                       | **Not started**                                                                                                                                                                                                                                                                                                                                |
+| P1-13 | Phase 2 entry decision                                              | Explicit go/no-go for plan §9, which DEC-0035 does **not** grant                              | **Not started**                                                                                                                                                                                                                                                                                                                                |
 
 Not part of §8's exit gate, tracked so it is not lost: the **staging-project
 prerequisite** DEC-0035 places inside Phase 1. Now believed to be a _verify_ task —
