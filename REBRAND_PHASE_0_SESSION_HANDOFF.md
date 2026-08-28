@@ -1,296 +1,188 @@
-# Rebrand Phase 0 Session Handoff
+# Rebrand Session Handoff
 
-**As of:** 2026-08-17
+**As of:** 2026-08-28
 **Repository:** `twinwicksllc/listing-assistant-pro`
-**Session output:** 23 PRs merged (#481–#503), 0 open
+**Session output:** PR #543 merged (7 commits), 0 open
 
-## Read this first — a new, unresolved auth mystery blocks live verification
+> **Note on this file's name.** This file predates Phase 1 and was last written for a
+> Phase 0 cron-auth investigation (2026-08-17) that has since been resolved and is no
+> longer relevant. Phase 0 closed 2026-08-25 (DEC-0035), and this handoff has been
+> rewritten in full to cover today's Phase 1 session rather than appended to. The
+> filename is kept as-is since other documents may reference it; treat everything below
+> as current and everything before today's rewrite as gone.
 
-**RBR-0028's fix (PR #503, merged and deployed) is code-complete but not yet
-verified live**, because manually invoking `competitor-prices-cron` with a
-confirmed-correct `service_role` key returns `401 Unauthorized` — and this is
-not a testing mistake. The owner confirmed: freshly copied from the
-`service_role` row (not `anon`) on Settings → API, no extra whitespace, sent
-as `Authorization: Bearer <key>` via the dashboard's function-test panel's
-manual-header option. Still 401.
+## Read this first — what's actually left open
 
-This function's auth check (`requireServiceRole` in `_helpers/authGuard.ts`)
-does a literal string comparison against `Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")`
-— nothing about it changed in today's RBR-0028 PR, and it is the exact same
-mechanism `cleanup-media-retention` and other functions use successfully via
-`requireCronSecret`'s service-role fallback. Two things make this worth
-treating as a real, unexplained finding rather than user error:
+Nothing from today is blocking. The one thing worth knowing before continuing:
 
-1. `competitor-prices-cron` has **never** been on a `cron.job` schedule (P0-09
-   inventory, 2026-08-14, found only two scheduled jobs, neither this one) —
-   so nothing has ever actually exercised this function's auth path
-   end-to-end before tonight. It is plausible this specific check has been
-   broken since the function was written, the same "built but never actually
-   invoked successfully" pattern already found twice this week for the other
-   crons (RBR-0025).
-2. The dashboard's own "Run Edge Function As A Role" → Postgres/Superuser
-   selector also returned 401 first, which is expected (it very likely
-   injects a signed role-claim JWT, not the literal static service-role key
-   string this check requires) — but the manual-header attempt with the
-   actual key should have worked and didn't.
+**A real inconsistency in `listrassistr-official` is unresolved, low-stakes.** The live
+sign-up form's own on-screen text says account creation "will open when the application
+shell is ready" — but the owner already holds a real Supabase auth record from signing up
+earlier, and a second test account exists too (A.17c). So either that copy is stale, or
+signup silently works regardless of what it says. This doesn't block anything and doesn't
+change any decision made today, but it's worth a look in `listrassistr-official`'s code
+when convenient — see A.18b/A.19 in the DNS checklist for full detail. Nobody has looked at
+the actual signup handler code to settle which is true.
 
-**Next session should start here.** Suggested first move: add a redacted
-diagnostic to this function's auth-rejection branch (booleans/lengths only,
-never the raw value — same pattern as `describeCronAuthEnv` for `CRON_SECRET`
-and the `EBAY_ENVIRONMENT` diagnostic from earlier this week), deploy, retry
-the manual invocation, and read the function log. That will show directly
-whether `SUPABASE_SERVICE_ROLE_KEY` is even set in this function's runtime
-environment, its length, and whether it matches what's being sent — the same
-"one log line would have identified the cause immediately" lesson from
-RBR-0025 applies here too.
+Otherwise: every item opened or reopened today is closed. See below.
 
 ## What happened today, roughly in order
 
-1. **Fixed a wave of real production bugs** surfaced by dashboard errors
-   after PR #480 merged over the weekend: an auth-init deadlock risk
-   (`getUser()` called near `onAuthStateChange`, #482), missing `EXECUTE`
-   grants on four listing-app RPC functions causing 403s on `org_members`
-   and `drafts` (#485 — traced to a security-hardening pass that granted CRM
-   functions but missed this product's four), `EBAY_ENVIRONMENT` defaulting
-   to `sandbox` instead of `production` across ten functions (#481), and a
-   storage-cleanup cron that had been built but never scheduled — fixed with
-   scheduling, dry-run mode, and `CRON_SECRET` auth (#483), then a second fix
-   for a fake `/storage/v1/bucket/{id}/stats` call that had been silently
-   404ing since it was written (#484).
-2. **Full capture → analyze → draft → eBay-publish flow review**, at the
-   owner's request, surfaced six more real findings, each shipped as its own
-   PR: SKU/offerId not persisted on partial publish failure, causing every
-   retry to orphan the prior inventory item on eBay instead of reusing it via
-   the existing idempotent PUT (#487); four defense-in-depth video-publish
-   hardening fixes — broadened endpoint-retry logic, an upload timeout, a
-   server-side re-verification of LIVE status before attaching a video to a
-   listing, and a client-side polling cap (#488); duplicate video-frame
-   storage, where extracted frames were being uploaded once by the edge
-   function and then re-uploaded a second time client-side (#489); a stale
-   "coming soon" UI caption for a feature that already shipped, plus removal
-   of one dead component (#491); and a SPA rewrite in `vercel.json` with no
-   exclusion for static files, which was serving `index.html` instead of
-   `manifest.webmanifest` (#490).
-3. **Resolved almost all of the open Phase 0 gates from the 2026-08-14
-   handoff.** P0-07 scope narrowed by owner decision (DEC-0026): CRM-side RLS
-   families explicitly out of this review's scope, with a standing rule that
-   any CRM-side gap found is flagged, never fixed by weakening RLS. P0-06
-   ownership classification drafted in full
-   (`REBRAND_PHASE_0_OWNERSHIP_CLASSIFICATION.md`, new) and all three open
-   questions resolved by the owner: the Stripe account is confirmed shared
-   with the CRM (dedicated new ListrAssistr account planned rather than
-   splitting it, DEC-0027), the CRM deploys no Edge Functions into the
-   shared project (DEC-0028), and `subscriptions`/`usage_tracking`/
-   `gemini_usage` are reclassified ListrAssistr-only after a confirmation
-   query returned zero cross-product rows (DEC-0030). P0-13's cohort
-   de-duplication rule is recorded (DEC-0029): identity lives in `profiles`,
-   not a separate `users` table; the owner's own duplicate profiles collapse
-   to one, QA/test profiles collapse to one, everyone else transfers — specific
-   account identifiers were confirmed directly with the owner and
-   deliberately not written into any repo file. P0-15's rollback plan turned
-   out to already exist in full in `LISTRASSISTR_REBRAND_AND_MIGRATION_PLAN.md`
-   §14–15, just never cross-referenced from Phase 0 before (DEC-0031) — and
-   its DNS/host-routing restore path was independently already consistent
-   with the no-database-restore constraint (RBR-0024), despite predating it.
-   P0-16 confirmed: the owner is sole operational owner of all ten roles,
-   with AI as proxy per the existing DEC-0008/DEC-0009 framework.
-4. **P0-08 storage reconciliation went from "bucket counts only" to nearly
-   fully evidenced.** Exact `pg_policies` expressions confirmed a real
-   anonymous-INSERT gap on the CRM-owned `client-uploads` bucket — the policy
-   named "Service role write" actually has `roles = {public}` with no
-   `auth.role() = 'service_role'` check anywhere, the same misnamed-policy
-   failure pattern already fixed once this week in `market_price_history`
-   (RBR-0017 update). A linkage query against `drafts`/`profiles` found only
-   19 of 4,735 `listing-images` objects (0.4%) actually referenced by a live
-   draft — **4,716 objects (99.6%) confirmed orphaned** (RBR-0026 update).
-   Root cause identified as RBR-0033: `removeDraft()` never deleted its own
-   draft's storage objects, and `cleanup-media-retention`'s three tracked
-   prefixes were never actually reachable for two of the three — a flat,
-   non-recursive `list()` call can't see into the per-user subfolder that
-   `listing-videos/` and `listing-video-frames/` both nest, so in practice
-   only `server-uploads/` was ever cleaned up. The full per-object manifest
-   needed two attempts: the SQL Editor's 100-row display cap silently
-   truncated the first try (same Defect 2 as the P0-12 rehearsal), resolved
-   by collapsing the whole result into one row via `jsonb_agg` to sidestep
-   the row-count cap entirely. Final manifest (4,737 objects, kept on local
-   disk only) matched the confirmed aggregate byte-for-byte with zero missing
-   checksums.
-5. **Shipped the fix for RBR-0033** (#500): `removeDraft` now best-effort
-   deletes its own storage objects before the row delete, and
-   `cleanup-media-retention` was rewritten from three flat prefix scans to a
-   single recursive, paginated walk of the entire bucket, applying the same
-   unchanged 15-day/60-day-active-draft policy to every file found regardless
-   of folder depth — closing the coverage gap that let 4,716 objects
-   accumulate. Shipped straight to production per owner decision (no extra
-   manual dry-run requested, since the ~4,716 count was already independently
-   confirmed via direct SQL) — the already-scheduled nightly cron
-   (`dryRun: false`, 05:23 UTC) picks this up on its first tick after deploy.
-   Not yet confirmed by the owner whether that first real run's numbers came
-   back as expected.
-6. **Incident: raw storage export data was committed to `main`.** A
-   Copilot-authored PR (#495) added a storage-export utility and, along with
-   it, committed `storage_objects.json` — 1,047 real object paths/owner UUIDs
-   (itself incomplete, undercounting the true 4,737 by 78% from the same
-   unpaginated-`list()`-call bug found elsewhere today). Caught immediately,
-   removed from the tree (#496), and guarded against recurrence with a
-   `.gitignore` entry and a README warning — this is the exact "keep exports
-   on local disk only" discipline already established for every other
-   export this week, just violated once by an automated PR before it was
-   caught. **Still an open, deliberately-deferred decision:** whether to
-   purge the old commit from git history (a force-push) or leave it in
-   history now that it's removed from HEAD — the owner has not yet said
-   which they want.
-7. **Fixed RBR-0028** (#503, this session's last code change): the cron only
-   ever selected users with a currently-unexpired eBay access token, so on
-   any real schedule it selected zero users and reported success — worse
-   than never scheduling it, since the failure never surfaces in
-   `cron.job_run_details`. Added `_helpers/ebayTokenRefresh.ts`, extracted
-   from `ebay-publish/auth.ts`'s `handleRefreshToken` minus the
-   `Request`/`Response` wrapping and caller-identity check a cron doesn't
-   have, with unit tests using an injected fake `fetch` (these actually run
-   and pass locally, unlike almost everything else touched this week). The
-   cron now selects by refresh-token presence and refreshes an
-   expired/missing access token before giving up on a user. Deliberately
-   left `ebay-publish/auth.ts`'s own two refresh call sites untouched (a
-   live user-facing path, not worth the risk for this fix) and left a
-   pre-existing, unrelated `deno check` generic-mismatch error on this same
-   file alone (confirmed pre-existing by diffing against the unmodified
-   file — not something this change introduced or is responsible for
-   fixing). **Blocked on the auth mystery above** before it can be verified
-   working end-to-end. Scheduling this cron (a new migration, mirroring
-   `20260817000000_schedule_cleanup_media_retention.sql`) is a deliberate,
-   separate follow-up not yet started — DEC-0018 already approved a daily
-   cadence once the fix is verified live.
-8. **Confirmed independently, not something to build:** the "eBay Listings"
-   dashboard page (540 live listings) pulls everything — including images —
-   fresh from eBay's Inventory/Trading API on every page load, with no
-   caching layer. Considered whether to cache the main image locally to cut
-   eBay API usage; the owner checked actual usage and found only 50 of 5,000
-   daily calls consumed. Caching would also not have reduced API call volume
-   anyway, since the image already comes bundled in the same response used
-   for price/status — there was no separate image-specific call to eliminate.
-   No action taken; correctly identified as a solved-problem-not-yet-a-problem.
+1. **Reconstructed the state of a wiped conversation from git history**, since a `/clear`
+   lost the prior session's context. Confirmed three real defects across the Phase 1 status
+   docs: `REBRAND_PHASE_1_RUNBOOKS.md`'s header claimed RB-04–RB-07 were still remaining
+   immediately after a status line saying they were complete; `REBRAND_PHASE_1_TODO.md`'s
+   "suggested next actions" section listed five items that were already finished, directly
+   contradicting the resume block 20 lines above; and `REBRAND_PHASE_0_DECISION_LOG.md`'s own
+   approval block still read "Pending / TBD" while every other reference in the repo recorded
+   Phase 0 closed 2026-08-25 as DEC-0035 — the single most consequential of the three, since
+   DEC-0035 is the authority every current Phase 1 item cites for scope. All three were
+   pre-existing staleness (completion recorded in item bodies but never propagated to the
+   summary surfaces people actually read first), not something introduced today. Fixed in
+   three commits (`d8cf0bb`, `a87009a`, `a8f9b09`), and Section 5 of the to-do was named the
+   one authoritative next-actions list going forward, so the resume block points at it instead
+   of duplicating it — the structural fix for why this kept happening.
+2. **RB-09 (IAM admin login) completed.** IAM user `twinwicksllc` created with MFA, sole
+   member of the Administrator group, `AdministratorAccess` attached. Account alias set,
+   billing visibility for IAM users enabled, root confirmed to have no access keys. The old
+   `tom_owner` user was removed — checked first that it wasn't backing anything: twin-wicks.com's
+   SES sending uses a separate dedicated `twin-wicks-smtp-user`, unaffected by the removal.
+3. **RB-10 completed for `app.listrassistr.com`** (DNS CNAME + Vercel domain), externally
+   verified: consistent DNS across five resolvers, a valid Let's Encrypt certificate,
+   HTTP/2 200 with no redirects, DNSSEC signed and validating end-to-end. `qa.listrassistr.com`
+   remains unstarted — it needs a branch prerequisite first.
+4. **A real discrepancy surfaced during that verification, then got resolved the same day.**
+   RB-10 predicted `app.listrassistr.com` would serve the marketing page at its root until
+   host-based routing exists in the app. A first external check instead described the page as
+   a working application interface — the opposite of the prediction. A second, deeper
+   follow-up check (fetching actual page content, forms, and API responses, not just headers)
+   resolved it: the page is exactly the predicted "coming soon" holding page, with no backend
+   API (every `/api/*` path returns the SPA shell, not JSON) and no reachable authenticated app
+   surface (`/dashboard`, `/listings` both 404). This **reinforces** rather than undercuts
+   A.17b's "no application schema, no customer data" finding on `yqftpibxplachhwoclam` — there's
+   no backend to have generated data with. Full evidence in A.18b of the DNS checklist.
+5. **Q-17 decided and closed: publish minimal Terms and Privacy, don't disable sign-up.**
+   Drafted in this repo from the legacy `TermsPage.tsx`/`PrivacyPage.tsx`, with the
+   Stripe-billing, eBay-integration, and content-upload sections removed since none of that
+   exists on `listrassistr.com` yet, and the Privacy draft written to stay accurate regardless
+   of which way the signup-copy inconsistency above resolves (it states plainly that signup can
+   create a real stored account "even where the page's own text suggests otherwise"). Both
+   drafts use `legal@twin-wicks.com` / `privacy@twin-wicks.com` as interim contact addresses,
+   since `listrassistr.com` has no working mailbox yet (Q-04/Q-05/Q-06 are still open) — swap
+   to `@listrassistr.com` addresses once that's resolved, not before. The owner copied both into
+   `listrassistr-official` directly (this session has no write access to that repo), committed,
+   merged, and confirmed the pages are live at real links. O-41 closed as a direct result.
+6. **PR #543 merged**, closing every item opened today.
 
-## Gate status: 15 of 18 have evidence or are substantially resolved
+## Gate status snapshot (Phase 1, plan §8)
 
-| Status                       | Gates                                                                                            |
-| ---------------------------- | ------------------------------------------------------------------------------------------------ |
-| Evidence captured / resolved | P0-01, P0-02, P0-03, P0-04, P0-05, P0-06, P0-07, P0-09, P0-10, P0-11, P0-12, P0-13, P0-15, P0-16 |
-| In progress                  | P0-08 (retention decision + migration path remain), P0-14, P0-17                                 |
-| Not started                  | P0-18                                                                                            |
+| Gate  | Item                                    | Status                                                                                                                               |
+| ----- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| P1-01 | Domain in legal business entity         | Approved with recorded deviation                                                                                                     |
+| P1-02 | Registrar hardened                      | Evidence captured                                                                                                                    |
+| P1-03 | Legal approval of the name              | Approved                                                                                                                             |
+| P1-04 | Authoritative DNS documented            | In progress — inventory entry missing                                                                                                |
+| P1-05 | DNSSEC enabled, DS chain verified       | Evidence captured                                                                                                                    |
+| P1-06 | Apex/`www`/`app`/`qa` resolving + certs | In progress — apex/`www`/`app` live, canonical, cert-verified, confirmed as the predicted holding page; `qa` needs a branch and Q-15 |
+| P1-07 | Role mailboxes receiving                | Deferred                                                                                                                             |
+| P1-08 | Branded email authenticates             | Deferred                                                                                                                             |
+| P1-09 | DMARC review period completed           | Deferred                                                                                                                             |
+| P1-10 | Brand asset package produced            | Not started                                                                                                                          |
+| P1-11 | Design tokens pass WCAG AA              | Not started                                                                                                                          |
+| P1-12 | Asset package approved                  | Not started                                                                                                                          |
+| P1-13 | Phase 2 entry decision                  | Not started — DEC-0035 does not grant                                                                                                |
 
-At the start of today's session, 9 gates had evidence and P0-06/07/13/15/16
-were all still open. Full detail and evidence locations are in
-`REBRAND_PHASE_0_CLOSURE_CHECKLIST.md`.
-
-**Exceptions:** 33 logged (up from 32), most newly-added or updated today
-carry confirmed hard numbers rather than estimates. **Decisions:** 31
-recorded (up from 25). Both logs are in `REBRAND_PHASE_0_EXCEPTION_LOG.md`
-and `REBRAND_PHASE_0_DECISION_LOG.md`.
+Full detail and evidence locations are in `REBRAND_PHASE_1_DOMAIN_AND_DNS_CHECKLIST.md`
+(reference/evidence) and `REBRAND_PHASE_1_TODO.md` (action list, with Section 5 as the
+authoritative next-actions list).
 
 ## The findings that matter most beyond today
 
-1. **The storage orphan problem was worse than suspected, and now has a
-   confirmed root cause and a shipped fix.** 99.6%, not "substantial" —
-   4,716 of 4,735 objects. RBR-0033's fix is live; whether it actually
-   cleared the backlog as expected needs the owner to check tomorrow's
-   `cron.job_run_details` for `cleanup-media-retention`.
-2. **A second cron (`competitor-prices-cron`) may have a broken
-   service-role auth check that has never been exercised until tonight.**
-   Same root pattern as RBR-0025 (a built-but-never-actually-invoked
-   integration point), but this one isn't diagnosed yet — see "Read this
-   first."
-3. **`REBRAND_PHASE_0_LIVE_SCHEMA_RECONCILIATION.md`'s original
-   classifications keep turning out to be more resolvable than they looked
-   when written under caution on 2026-08-10.** Three separate items
-   (Stripe account, `subscriptions`/`usage_tracking`/`gemini_usage`, the
-   rollback plan) all had a real, findable answer sitting either in a direct
-   owner confirmation or in a document that already existed but had never
-   been cross-referenced. Worth re-checking other "shared/ambiguous" items
-   the same way before assuming they need fresh discovery work.
-4. **A misnamed RLS policy is a repeatable failure class, not a one-off.**
-   Found and fixed once in `market_price_history` this week, found again
-   (unfixed, CRM-owned) in `client-uploads` today. Worth a deliberate sweep
-   of every policy's actual `qual`/`with_check` against its name at some
-   point, on both sides of the shared project.
+1. **Status-surface drift is a repeatable failure mode in these docs, not a one-off.** Three
+   separate documents disagreed with their own bodies today, all from the same cause: an item
+   gets marked done where the work happened, but the summary/resume text at the top of the
+   document never gets touched. Section 5 of the to-do is now the single authoritative
+   next-actions list specifically to stop this from recurring — anything added going forward
+   should update that list, not a separate summary paragraph.
+2. **A.17b's "empty project" finding is a dated observation, not a standing one**, and it
+   underwrites two live decisions at once: `qa` sharing the production Supabase project (RB-10)
+   and open sign-up staying acceptable (Q-17, now decided but sign-up itself remains open).
+   That justification lapses the moment either Phase 3 creates real schema or a real customer
+   signs up — and sign-up is open on the live site now, so the second trigger isn't under
+   anyone's direct control. Re-verify A.17b before relying on it again rather than assuming it
+   still holds.
+3. **This session had no web access**, and WebFetch could not resolve `app.listrassistr.com`
+   or reach crt.sh through the corporate TLS proxy. Both external verifications this session
+   (RB-10's DNS/cert check, and the follow-up that resolved the routing discrepancy) were done
+   by handing the owner a prompt to run in a separate web-enabled chat, then working from what
+   came back. That pattern worked well and is worth repeating rather than treating as a
+   blocker — see the prompts already used for RB-10 in the conversation history if a similar
+   check is needed again.
+4. **This repository cannot write to `listrassistr-official`.** Any Phase 1 work that involves
+   actually shipping code or content into the new app (this session's Terms/Privacy drafts
+   included) has to be drafted here and handed to the owner to place there directly. Don't
+   assume future sessions have access to that repo without the owner explicitly granting it
+   (see O-33, still open, asking for exactly that).
 
 ## Process lessons for whoever continues this
 
-- **A real "can't do X" constraint does not extend to adjacent things that
-  are actually still possible.** This environment genuinely can't run
-  `tsc`/`eslint`/`vitest` locally (no `node_modules`, `npx` blocked by a TLS
-  proxy) — but formatting _is_ checkable via the Deno-standalone-Prettier
-  fallback already documented in `CLAUDE.md`, for any file type, not just
-  markdown. Skipping that check on frontend `.ts`/`.tsx` files (while
-  correctly running it for docs and `deno fmt` for `supabase/functions/**`)
-  caused three avoidable CI failures today. Saved as a standing memory note
-  this session; run the matching check on every touched file, no exceptions.
-- **Verify a testing claim is actually testing the right thing before
-  trusting its result.** The dashboard's role-based function-test selector
-  looked like it should authenticate as service-role; it didn't, and the
-  first 401 from it very nearly got treated as "the fix doesn't work" before
-  checking a plain manual-header attempt too.
-- **Branch hygiene:** `git fetch && git merge-base --is-ancestor <branch>
-origin/main` before pushing more commits to a branch name, every time —
-  caught a Copilot-vs-manual duplicate-fix collision today (PR #501, closed
-  as redundant) that would otherwise have looked like a real conflict.
-- **Automated fix-it agents (Copilot) can commit things you didn't ask for.**
-  The storage-export incident (#495/#496) happened inside a PR whose stated
-  purpose was a utility script — the committed data export wasn't the
-  utility's point, just a side effect nobody reviewed closely before merge.
-  Worth a closer look at exactly what's in a Copilot-authored diff before
-  approving it, not just whether CI is green.
+- **Read the resume block skeptically, not just the item bodies.** Every defect found and
+  fixed today existed because a summary line went unchecked after the detailed work below it
+  was already done. Cross-check the top-of-document status claims against the actual item
+  entries before trusting either on its own.
+- **`npx prettier --write`/`--check` worked directly in this session's environment**, despite
+  `CLAUDE.md` documenting a TLS-proxy failure mode for `npm`/`npx` in some sandboxes. That
+  failure mode is environment-dependent, not universal — try the real CLI first, and only fall
+  back to the Deno-standalone-Prettier workaround in `CLAUDE.md` if it actually fails.
+- **`gh` is still not installed or authenticated in this environment.** PRs were opened by
+  handing the owner a prefilled `github.com/.../compare/...?quick_pull=1` URL to open
+  themselves, per the working agreement in `CLAUDE.md`. Continue doing this rather than
+  attempting to extract stored credentials.
+- **When a verification result contradicts a prediction, dig one level deeper before either
+  accepting it or dismissing it.** The first external check of `app.listrassistr.com`
+  described it as a working application, which looked alarming. Rather than either taking that
+  at face value or assuming the checker was simply wrong, a second, more specific check (actual
+  page content, form behavior, and API responses) resolved which reading was correct. Both
+  readings had been plausible going in.
 
 ## Next steps, cheapest and most decision-independent first
 
-1. **Diagnose the `competitor-prices-cron` 401.** Add a redacted auth
-   diagnostic (see "Read this first"), deploy, retry, read the log. Likely a
-   short investigation given how directly the CRON_SECRET/EBAY_ENVIRONMENT
-   precedents solved themselves once logged.
-2. **Once diagnosed and fixed if needed, verify RBR-0028 live**, then ship
-   the follow-up scheduling migration (DEC-0018 already approves daily
-   cadence) — mirrors `20260817000000_schedule_cleanup_media_retention.sql`.
-3. **Check tomorrow's `cleanup-media-retention` cron run** for sane
-   `deletedCount`/`bytesFreed`/`keptForDraft` numbers, closing out RBR-0033.
-4. **Decide on the storage-export git-history purge** — leave the old commit
-   in history, or force-push a rewrite. Explicit owner call, not something
-   to default on.
-5. **P0-08's two remaining items:** the retention decision on the (now
-   hopefully-cleared) orphaned objects, and a tested storage migration path
-   — the latter is a genuinely bigger, separate workstream.
-6. **P0-14 timed rehearsal re-run** — same 13-table export/import as P0-12,
-   this time with a stopwatch, using the kept schema script
-   (`C:\Users\fenwitr\phase0-restore-schema.sql`).
-7. **P0-06's `avatars` bucket owner-mapping** — the one small loose end left
-   in the otherwise-closed ownership classification (one stale orphaned
-   object, low stakes, not urgent).
-8. Once P0-08/P0-14/P0-17 settle, **P0-17** (exception disposition) and then
-   **P0-18** (Phase 1 entry decision) become realistic to approach.
+1. **The signup-copy inconsistency noted at the top of this file** — confirm in
+   `listrassistr-official`'s code whether the sign-up handler is actually wired to Supabase Auth
+   right now, or whether the UI's "not open yet" text is accurate and the existing accounts came
+   from some other path. Low stakes, but worth knowing before it's forgotten.
+2. **Q-15** — approve or decline a Phase 3 entry gate for a non-production Supabase project.
+   Now wanted rather than optional, since choosing subdomains gives `qa` a hostname with nothing
+   behind it yet. Draft gate text is in RB-08.
+3. **`qa.listrassistr.com`** — needs its branch prerequisite in `listrassistr-official` before
+   RB-10's second half can proceed, and needs Q-15 resolved for what it points at.
+4. **Q-16** — whether plan §9/Phase 2 still describes the right strategy now that a greenfield
+   app is being built in `listrassistr-official` instead of a rebrand-in-place. Owner-level call.
+5. **Q-10 (brand direction)** — unlocks all of §8.3's asset-package work, the largest remaining
+   block after email identity.
+6. **Q-04 / Q-05 / Q-06** — the mailbox/email-identity decisions. Unlocks P1-07/08/09, and is
+   also the trigger for swapping today's interim `@twin-wicks.com` contact addresses on the
+   Terms/Privacy pages to real `@listrassistr.com` addresses.
+7. **O-04 / O-03** — re-check `listrassister.com` authoritatively, and chase the AWS support
+   case on the registration restriction, if the owner still wants that domain.
+8. **Legal review of the published Terms/Privacy content** — drafted and adapted from the
+   legacy app's pages, not reviewed by counsel. Worth doing before real customer data
+   accumulates, not urgent while the project is still schema-empty.
+9. **DEC-0021 API key migration** — still deferred, trigger is Phase 2/3 entry or the first
+   real customer, whichever comes first (A.17d).
 
 ## Environment constraints that still apply
 
-- **No direct Postgres/Storage connectivity from this machine** — all
-  database and storage work goes through the Supabase Dashboard SQL Editor.
-  The SQL Editor's row-display cap (100 rows) has no visible "No limit"
-  toggle in the current dashboard version — for a result set that needs to
-  exceed it, collapse everything into a single row with `jsonb_agg(...)`
-  instead of fighting the pagination UI.
-- **`npx prettier`/`npx vitest` still fail on the TLS proxy issue.** Use the
-  Deno-standalone-Prettier fallback in `CLAUDE.md` for _any_ Prettier-covered
-  file type (markdown, `.ts`, `.tsx`, `.mjs`, JSON configs), not just docs —
-  see the process lesson above.
-- **`git config core.autocrlf=true`, no `.gitattributes`.** Same as before;
-  `deno fmt`/the Prettier fallback both need a CRLF-stripped copy to check
-  cleanly, then the fix gets applied to the real (CRLF) file directly.
-
-## Artifacts
-
-**Kept, local disk only, not in the repo:** the complete `storage_objects.json`
-manifest (4,737 objects, `C:\Users\fenwitr\Downloads\storage_objects.json`)
-— the real P0-08 evidence artifact, gitignored going forward.
-
-**Also still relevant from 2026-08-14:** `C:\Users\fenwitr\phase0-restore-schema.sql`,
-needed for the P0-14 timed rehearsal re-run.
+- **No web access in this session.** For anything requiring a live fetch (DNS, certificates,
+  page content, external APIs), draft a specific verification prompt and have the owner run it
+  in a separate web-enabled chat, then work from the result — this worked well today.
+- **`gh` CLI not installed, no stored GitHub auth.** Hand the owner a prefilled compare URL to
+  open PRs themselves.
+- **No write access to `listrassistr-official`.** Draft content/code here if asked, and hand it
+  to the owner to place in that repo directly.
+- **`git config core.autocrlf=true`, no `.gitattributes`** — same as before; this makes the
+  whole `supabase/functions/**` tree show as unformatted under `deno fmt --check` on this
+  machine. Pre-existing, not a real regression; don't try to fix it repo-wide.
 
 ## Safe resume
 
@@ -301,7 +193,8 @@ git pull --ff-only origin main
 git status --short --branch
 ```
 
-No open PRs as of this handoff. Start with the `competitor-prices-cron` 401
-investigation — it's the one active blocker. Review
-`REBRAND_PHASE_0_DECISION_LOG.md` and `REBRAND_PHASE_0_CLOSURE_CHECKLIST.md`
-for current status before any provider action, same as always.
+No open PRs as of this handoff. Two files remain intentionally uncommitted in the working
+tree — `REBRAND_PHASE_0_COHORT_QUERY.sql` (modified) and `PROGRESSIVE_AUTONOMY_AGENT_PLAN.md`
+(untracked) — leave them alone unless the owner says otherwise. Start with the signup-copy
+inconsistency noted at the top of this file if looking for something concrete and
+low-stakes, or with `REBRAND_PHASE_1_TODO.md` Section 5 for the full prioritized queue.
