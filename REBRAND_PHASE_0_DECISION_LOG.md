@@ -39,7 +39,7 @@ never be recorded here.
 | --------- | -------------------------------------------------------------------------------------------------------------------- | ----- | ------------------------------------------------ | ---------------------------------- |
 | PEND-0001 | Confirm whether Supabase project `wcednzaxmxwfiijzmjmx` is shared production infrastructure and identify its owners. | User  | Provider dashboard inventory                     | **Approved 2026-08-14**            |
 | PEND-0002 | Approve the live service, secret-name, schema, and exception inventories.                                            | User  | Dashboard reconciliation and review notes        | Pending                            |
-| PEND-0003 | Approve the ListrAssistr migration cohort and ambiguous/shared-resource classifications.                             | User  | Deterministic cohort query and ownership review  | Pending                            |
+| PEND-0003 | Approve the ListrAssistr migration cohort and ambiguous/shared-resource classifications.                             | User  | Deterministic cohort query and ownership review  | **Approved 2026-08-25 (DEC-0034)** |
 | PEND-0004 | Approve encrypted backup location, restore target, and retention period.                                             | User  | Backup and disposable restore evidence           | **Approved 2026-08-14**            |
 | PEND-0005 | Approve changes, if any, to production deployment gates, JWT settings, CORS, and migration automation.               | User  | GitHub/Supabase configuration review             | **Decided 2026-08-14**             |
 | PEND-0006 | Approve maintenance window, customer communication schedule, go/no-go meeting, and rollback deadline.                | User  | Cutover runbook and communication plan           | Pending                            |
@@ -51,12 +51,27 @@ never be recorded here.
 - **PEND-0004** — Approved 2026-08-14 by the owner. Accepts the backup posture as evidenced in P0-11 and `REBRAND_PHASE_0_RESTORE_REPORT.md`: Supabase-managed daily backups, latest 6 retained, no point-in-time recovery. Approval carries the consequences documented in RBR-0024 — up to 24h RPO, ~6-day recovery window, and no full-database restore usable as a rollback mechanism because the project is shared with the CRM. If PITR or a different retention window is wanted before cutover, that is a separate provider change, not implied by this approval.
 - **PEND-0005** — Decided 2026-08-14 by the owner: **no approval gate added** to `deploy-functions.yml`. Production deploys on merge to `main` remain immediate, with no manual click required before a migration or function change applies. This decision was made with the RBR-0023 incident in view — that incident happened precisely because merge-to-deploy is instant with no pause to catch a mistake — and the owner chose to accept that risk rather than add friction, relying instead on the fail-closed environment guards adopted in DEC-0014 as the more targeted mitigation. No GitHub environment protection rule change follows from this decision.
 
-Overall Phase 0 decision remains **Pending** — three of seven approvals/decisions are recorded; PEND-0002, 0003, 0006, 0007 are still open.
+- **PEND-0003** — Approved 2026-08-25 by the owner as **DEC-0034**. Final migration cohort: 4 of 9 profiles transfer; the owner's non-primary duplicates and all QA-shaped profiles are excluded. Row counts were reviewed together and signed off, closing P0-13's approval requirement. Excluded profile identifiers are deliberately not recorded here, per the secret and customer-data handling rule.
+- **PEND-0007** — Approved 2026-08-25 by the owner as **DEC-0035**: Phase 0 exit and Phase 1 entry, **GO**. Scope limited to plan §8. See DEC-0035 for the conditions carried forward and the accepted risks explicitly not reopened by it.
 
-- **Phase 0 decision:** `Pending`
-- **Approved by:** `TBD`
-- **Approval date:** `TBD`
-- **Notes:** Provider inventory (P0-01/02/03), migration cohort (P0-13), deployment-gate decision (PEND-0005), and maintenance/rollback plans (P0-14/P0-15) remain outstanding.
+Five of seven approvals/decisions are recorded. **PEND-0002** (inventory sign-off) and
+**PEND-0006** (maintenance window, customer communication, go/no-go, rollback deadline) remain
+open — deliberately so, and neither blocks Phase 1: PEND-0006 cannot be settled before a real
+cutover date exists, which DEC-0033 records as explicitly provisional pending a clean migration
+rehearsal.
+
+- **Phase 0 decision:** **Closed — GO**
+- **Approved by:** Operational owner (per DEC-0008)
+- **Approval date:** **2026-08-25**, recorded as **DEC-0035** (resolves PEND-0007, and P0-17/P0-18)
+- **Scope of that approval:** `LISTRASSISTR_REBRAND_AND_MIGRATION_PLAN.md` **§8 only** — domain
+  acquisition/security, email identity, brand asset production. §9/Phase 2 and beyond remain
+  separately gated. All standing `CLAUDE.md` rebrand conditions continue to apply, including
+  explicit owner approval before each individual provider, DNS, Stripe, eBay or Supabase change.
+- **Notes:** Corroborated by `REBRAND_PHASE_0_CLOSURE_CHECKLIST.md` (**Status: Closed**). The
+  items this block previously listed as outstanding are resolved: provider inventory
+  (P0-01/02/03), migration cohort (P0-13, DEC-0034), deployment-gate decision (PEND-0005,
+  decided 2026-08-14), maintenance plan (P0-14, DEC-0033) and rollback plan (P0-15, DEC-0031).
+  Accepted risks carried forward unresolved rather than closed are named in DEC-0035.
 
 ## Corrective controls adopted after the RBR-0023 incident
 

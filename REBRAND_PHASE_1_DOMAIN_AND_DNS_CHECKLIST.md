@@ -1321,6 +1321,102 @@ surface for no benefit, and the legacy `service_role` key in particular bypasses
 Leaving a second unused full-access credential active is the kind of thing that is invisible
 until it is not.
 
+## A.18 RB-09 and RB-10 results — IAM admin login created, `app.listrassistr.com` live
+
+### A.18a RB-09 — IAM admin login (O-01), done 2026-08-28
+
+IAM user `twinwicksllc` has MFA, belongs only to the Administrator group and is that group's
+only member, and carries `AdministratorAccess`. Account alias is set. Billing visibility for
+IAM users is enabled. Root confirmed to have no access keys. The prior user `tom_owner` was
+removed after confirming it is not what backs twin-wicks.com's SES sending — that uses a
+separate dedicated `twin-wicks-smtp-user`, unaffected by the removal.
+
+### A.18b RB-10 — `app.listrassistr.com` (O-06), done and externally verified 2026-08-28
+
+Vercel `listrassistr-official` → Domains → `app.listrassistr.com`, with the matching Route 53
+CNAME per RB-10's steps. External verification (from a web-enabled session, since this
+environment could not resolve or fetch the hostname directly — see RB-10 for why) confirmed:
+
+- **DNS:** CNAME resolves consistently across five resolvers to
+  `2f1e3f86cb32a6a8.vercel-dns-016.com`, matching the target Vercel displayed. That target
+  resolves to Vercel's anycast addresses (`216.150.1.193` / `216.150.16.193`). No `AAAA` record.
+- **Certificate:** Let's Encrypt issued, CN=YR2, single SAN `app.listrassistr.com`, valid
+  28 Aug 2026 – 26 Nov 2026. Chain verifies; no mismatch.
+- **HTTP:** HTTP/2 200, no redirects, served by Vercel. HSTS present. Other common security
+  headers (CSP, X-Content-Type-Options, etc.) are absent — a hardening opportunity, not a fault.
+- **Reference points:** `www`'s CNAME and the apex A record (`216.150.1.1`) match exactly, and
+  `app` points at the same Vercel project as both.
+- **DNSSEC:** the zone is signed (Route 53, ECDSA P-256), the DS record is published at the
+  `.com` registry, DNSKEY is present, the `app` CNAME carries a valid RRSIG, and NSEC denial
+  works. The AD bit is correctly unset on the full `app`/`www` A answer, because the CNAME
+  terminates in Vercel's own unsigned `vercel-dns-016.com` zone — that is expected validator
+  behavior for a CNAME into an unsigned zone, not a defect in this zone.
+
+**Resolved 2026-08-28, by a deeper follow-up check against the actual rendered pages and JS
+bundle, not just headers.** RB-10 predicted that `app.listrassistr.com` would serve the
+marketing page at its root until the application adds host-based routing (see A.14 and RB-10).
+A first external check described the page instead as a real application interface, which read
+as the opposite of that prediction. The follow-up confirmed the prediction was correct:
+
+- `app.listrassistr.com` and the apex `listrassistr.com` serve a byte-identical, 470-byte
+  static SPA shell — same ETag, same rendered content. Title `ListrAssistr`, meta description
+  `ListrAssistr listing workspace`. The only body copy anywhere on the site is a red
+  **COMING SOON** label and one line: "A focused workspace for creating, organizing, and
+  improving online listings is taking shape." No feature list, screenshots, demo, or pricing.
+- `/login`, `/signup`, and `/forgot-password` render real forms, but each carries its own text
+  saying the function isn't live: login's helper text reads "Authentication is being prepared
+  for the new ListrAssistr application"; signup's reads "Account creation will open when the
+  application shell is ready"; the reset flow explicitly says "a staging account."
+- `/dashboard` and `/listings` — the routes an authenticated app would need — return the site's
+  generic "Page not found" 404, meaning they are not even registered in the router yet, guarded
+  or otherwise.
+- `/api/health` and seven other `/api/*` and `/health*` paths tried all return `200 text/html`
+  with the same SPA shell body (`content-disposition: inline; filename="index.html"` — Vercel's
+  SPA catch-all, not a real handler). There is no backend API deployed on this project at all.
+- The JS bundle does contain Supabase auth wiring (`createClient`, `signInWithPassword`,
+  `getSession`, `onAuthStateChange`), so the intent is real, but none of it is reachable from a
+  working application surface today.
+
+**One loose end, not blocking, worth a look when convenient:** the signup page's own text says
+account creation isn't open yet, but the owner already holds a real Supabase auth record from
+signing up earlier (A.17b/A.17c). Either that copy is stale, or signup silently succeeds
+regardless of what the page says. Doesn't change Q-17's disposition — real credentials still
+land in `auth.users` either way — but the inconsistency is worth resolving in
+`listrassistr-official` at some point.
+
+**Net effect on A.17b:** this reinforces rather than undercuts the "no application schema, no
+customer data" finding — there is no backend API and no authenticated app surface to have
+generated data with. The finding stands.
+
+`qa.listrassistr.com` is unstarted — it still needs the branch prerequisite in RB-10 before it
+can be created.
+
+## A.19 Q-17 decided and closed — Terms and Privacy published (2026-08-28)
+
+Owner chose the second of the two options A.17c laid out: **publish minimal content** on
+both pages, leaving sign-up open, rather than disabling sign-up.
+
+Drafts were written in this repository 2026-08-28 — adapted from this repo's own legacy
+`TermsPage.tsx` and `PrivacyPage.tsx`, with the sections describing features
+`listrassistr.com` doesn't have yet (Stripe billing, eBay integration, uploaded listing
+content) removed rather than left describing capabilities that don't exist. The Privacy
+draft was written to stay accurate regardless of the A.18b copy inconsistency — it states
+plainly that signup can create a real stored account even where the page's own text suggests
+otherwise. The owner has since copied both into `listrassistr-official` directly; the drafts
+were then removed from this repo's working tree, since this session cannot write to that
+repository and there is no reason to keep a second copy here once they've moved.
+
+**Closed 2026-08-28.** Owner confirms the content is committed, merged, and live at real
+links in `listrassistr-official`. O-41 is fully closed as a result. The forward dependency
+A.17c flagged still stands as drafted: both pages use `legal@twin-wicks.com` /
+`privacy@twin-wicks.com` as interim contact addresses, since `listrassistr.com` still has no
+working mailbox (F.4, Q-04/Q-05/Q-06) — swap to `@listrassistr.com` addresses once that's
+resolved, not before. That's a follow-up, not a reason to reopen this.
+
+**These drafts are not legal advice** and haven't had a legal review; that's worth doing
+before they go live, particularly the GDPR/CCPA sections, since even this minimized scope
+carries real obligations tied to collecting email addresses and passwords.
+
 ## Section A — Pre-registration decisions, and their disposition
 
 Written before the domain's status was known. Most are now settled by events —
