@@ -1391,7 +1391,7 @@ generated data with. The finding stands.
 `qa.listrassistr.com` is unstarted — it still needs the branch prerequisite in RB-10 before it
 can be created.
 
-## A.19 Q-17 decided — publish minimized Terms and Privacy, not disable sign-up (2026-08-28)
+## A.19 Q-17 decided and closed — Terms and Privacy published (2026-08-28)
 
 Owner chose the second of the two options A.17c laid out: **publish minimal content** on
 both pages, leaving sign-up open, rather than disabling sign-up.
@@ -1406,12 +1406,12 @@ otherwise. The owner has since copied both into `listrassistr-official` directly
 were then removed from this repo's working tree, since this session cannot write to that
 repository and there is no reason to keep a second copy here once they've moved.
 
-**Not yet closed.** Copying the files into `listrassistr-official` is not the same as the
-pages being live with real content — O-41 stays open until that's confirmed. The forward
-dependency A.17c flagged also stands as drafted: both drafts use `legal@twin-wicks.com` /
+**Closed 2026-08-28.** Owner confirms the content is committed, merged, and live at real
+links in `listrassistr-official`. O-41 is fully closed as a result. The forward dependency
+A.17c flagged still stands as drafted: both pages use `legal@twin-wicks.com` /
 `privacy@twin-wicks.com` as interim contact addresses, since `listrassistr.com` still has no
 working mailbox (F.4, Q-04/Q-05/Q-06) — swap to `@listrassistr.com` addresses once that's
-resolved, not before.
+resolved, not before. That's a follow-up, not a reason to reopen this.
 
 **These drafts are not legal advice** and haven't had a legal review; that's worth doing
 before they go live, particularly the GDPR/CCPA sections, since even this minimized scope
