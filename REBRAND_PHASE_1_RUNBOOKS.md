@@ -26,11 +26,12 @@ move. Where a step is version-sensitive it says so.
 | RB-09        | **AWS** — IAM console, signed in as root for this one task                |
 | RB-10        | **Vercel** → Domains, then **AWS Route 53** — hosted zone                 |
 
-**Status as of 2026-08-27.** **RB-01 to RB-07 are all complete**, RB-05 fully so as of
-checklist A.17b; execution evidence is in A.7d, A.12, A.13, A.15, A.16 and A.17. **RB-08**
-(qa environment) is **blocked** pending a Phase 3 entry gate — see Q-15. **RB-09** (IAM admin
-login) and **RB-10** (`app`/`qa` subdomains) are **written and ready to run**, with nothing
-blocking either.
+**Status as of 2026-08-28.** **RB-01 to RB-07 are all complete**, RB-05 fully so as of
+checklist A.17b; execution evidence is in A.7d, A.12, A.13, A.15, A.16 and A.17. **RB-09**
+(IAM admin login) is **complete**. **RB-10** is **partially complete** —
+`app.listrassistr.com` is live and externally verified, `qa.listrassistr.com` still needs its
+branch prerequisite. **RB-08** (qa environment) remains **blocked** pending a Phase 3 entry
+gate — see Q-15.
 
 ---
 
@@ -411,7 +412,14 @@ that record should follow the environment rather than precede it.
 
 ---
 
-## RB-09 — Stop using root: create an IAM admin login (O-01)
+## RB-09 — Stop using root: create an IAM admin login (O-01) — ✅ DONE 2026-08-28
+
+**Completed.** IAM user `twinwicksllc` (named for the account rather than a person, per the
+owner's choice — functionally equivalent) has MFA, belongs only to the Administrator group and
+is its only member, and carries `AdministratorAccess`. Account alias is set. Billing visibility
+for IAM users is enabled. Root confirmed to have no access keys. The prior user `tom_owner` was
+removed — verified safe first, since twin-wicks.com's SES sending uses a separate dedicated
+`twin-wicks-smtp-user`, not `tom_owner`.
 
 Asked for by the owner 2026-08-27, who confirmed they normally sign in as root.
 
@@ -446,9 +454,9 @@ perfect version block the useful one.
 
 ### Afterwards
 
-- [ ] Use `tom-admin` for all routine work — Route 53, SES when it happens, everything.
-- [ ] **Check root has no access keys.** IAM → Security credentials while signed in as root.
-      Root access keys should not exist at all; delete any that do.
+- [x] Use `twinwicksllc` for all routine work — Route 53, SES when it happens, everything.
+- [x] **Check root has no access keys.** IAM → Security credentials while signed in as root.
+      Root access keys should not exist at all; delete any that do. — confirmed none exist.
 - [ ] Keep root's MFA and recovery contacts current, and reserve root for the handful of
       things that require it: closing the account, changing support plan, some billing
       settings, and the step 8 toggle above.
@@ -457,7 +465,26 @@ perfect version block the useful one.
 
 ---
 
-## RB-10 — Create the `app` and `qa` subdomains (O-06)
+## RB-10 — Create the `app` and `qa` subdomains (O-06) — `app` ✅ DONE 2026-08-28
+
+**`app.listrassistr.com` completed and externally verified 2026-08-28.** CNAME resolves
+consistently across five resolvers to `2f1e3f86cb32a6a8.vercel-dns-016.com`; Let's Encrypt
+issued a certificate (CN=YR2, single SAN `app.listrassistr.com`, valid 28 Aug 2026 –
+26 Nov 2026); the site answers HTTP/2 200 with no redirects; `www` and the apex resolve as
+expected and point at the same Vercel project; DNSSEC is signed end-to-end with RRSIG/NSEC
+validating correctly on in-zone records.
+
+**Open question, not yet resolved either way.** This runbook predicted `app.listrassistr.com`
+would serve the marketing page at its root until host-based routing exists (see below). The
+external check instead described the page as a working application interface rather than
+marketing. That is the opposite of the predicted interim state, and it has not been confirmed
+by inspecting the actual application code in `listrassistr-official` — it could mean routing
+already shipped, or it could mean the checker saw a login/signup shell and is not distinguishing
+that from "the app." Until confirmed, treat A.17b's "no schema, no customer data" finding as
+unverified rather than reconfirmed, since it is one of the two things resting on that finding
+(see the time-sensitive dependency note in the to-do).
+
+`qa.listrassistr.com` is unstarted — still needs the branch prerequisite below.
 
 Owner decided 2026-08-27: **`app` and `qa` should be subdomains, not paths.** That matches
 plan §6.1's two-host target, and it supersedes A.14's recommendation to defer — deferral was
@@ -465,8 +492,10 @@ advice on the assumption the path layout would stand, and the owner has chosen o
 
 **One thing to be clear-eyed about before starting.** The application currently lives at
 `listrassistr.com/app/*`, and marketing at `/`. Both come from the same Vercel deployment. So
-adding `app.listrassistr.com` today gives you a working hostname that **serves the marketing
-page at its root**, until host-based routing exists in the application.
+adding `app.listrassistr.com` today was expected to give a working hostname that **serves the
+marketing page at its root**, until host-based routing exists in the application. **That
+prediction did not match what was observed after the hostname went live — see the open question
+noted at the top of this runbook.**
 
 That interim state is harmless pre-launch, and there is a real argument for doing it now: it
 proves the DNS and certificate path, reserves the hostname, and means nothing DNS-shaped is on
@@ -487,7 +516,7 @@ adding records needs no special handling now that A.12's chain is live.
    - Value: the target Vercel displayed
    - **TTL: 300**
 5. Back in Vercel, wait for **Valid Configuration** and for the certificate to issue.
-6. Tell me and I will verify resolution and the certificate chain from here.
+6. ✅ Done — resolution, certificate chain, and DNSSEC all verified 2026-08-28 (evidence above).
 
 ### `qa.listrassistr.com` — needs one thing first
 

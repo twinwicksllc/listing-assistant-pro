@@ -1321,6 +1321,66 @@ surface for no benefit, and the legacy `service_role` key in particular bypasses
 Leaving a second unused full-access credential active is the kind of thing that is invisible
 until it is not.
 
+## A.18 RB-09 and RB-10 results — IAM admin login created, `app.listrassistr.com` live
+
+### A.18a RB-09 — IAM admin login (O-01), done 2026-08-28
+
+IAM user `twinwicksllc` has MFA, belongs only to the Administrator group and is that group's
+only member, and carries `AdministratorAccess`. Account alias is set. Billing visibility for
+IAM users is enabled. Root confirmed to have no access keys. The prior user `tom_owner` was
+removed after confirming it is not what backs twin-wicks.com's SES sending — that uses a
+separate dedicated `twin-wicks-smtp-user`, unaffected by the removal.
+
+### A.18b RB-10 — `app.listrassistr.com` (O-06), done and externally verified 2026-08-28
+
+Vercel `listrassistr-official` → Domains → `app.listrassistr.com`, with the matching Route 53
+CNAME per RB-10's steps. External verification (from a web-enabled session, since this
+environment could not resolve or fetch the hostname directly — see RB-10 for why) confirmed:
+
+- **DNS:** CNAME resolves consistently across five resolvers to
+  `2f1e3f86cb32a6a8.vercel-dns-016.com`, matching the target Vercel displayed. That target
+  resolves to Vercel's anycast addresses (`216.150.1.193` / `216.150.16.193`). No `AAAA` record.
+- **Certificate:** Let's Encrypt issued, CN=YR2, single SAN `app.listrassistr.com`, valid
+  28 Aug 2026 – 26 Nov 2026. Chain verifies; no mismatch.
+- **HTTP:** HTTP/2 200, no redirects, served by Vercel. HSTS present. Other common security
+  headers (CSP, X-Content-Type-Options, etc.) are absent — a hardening opportunity, not a fault.
+- **Reference points:** `www`'s CNAME and the apex A record (`216.150.1.1`) match exactly, and
+  `app` points at the same Vercel project as both.
+- **DNSSEC:** the zone is signed (Route 53, ECDSA P-256), the DS record is published at the
+  `.com` registry, DNSKEY is present, the `app` CNAME carries a valid RRSIG, and NSEC denial
+  works. The AD bit is correctly unset on the full `app`/`www` A answer, because the CNAME
+  terminates in Vercel's own unsigned `vercel-dns-016.com` zone — that is expected validator
+  behavior for a CNAME into an unsigned zone, not a defect in this zone.
+
+**Open question this verification raised, not yet resolved.** RB-10 predicted that
+`app.listrassistr.com` would serve the marketing page at its root until the application adds
+host-based routing (see A.14 and RB-10). The external check instead described the page as a
+real application interface — "the ListrAssistr listing workspace" — rather than marketing. That
+is the opposite of the prediction, and it has **not** been confirmed by reading the actual
+routing code in `listrassistr-official`, only observed externally. It also noted `/api/health`
+returns 200 with a body that looks like the SPA shell, which is worth confirming as a genuine
+endpoint versus the SPA's catch-all route.
+
+Two readings are both plausible and neither is confirmed:
+
+1. Host-based routing already shipped in `listrassistr-official` — in which case this closes
+   part of what RB-10's "what still needs application work" section called out, and the finding
+   is good news.
+2. The external checker saw a login/signup page — consistent with the owner's own description
+   of the app as "just a login page and somewhere for people to sign up for updates" — and
+   described that as "an application interface" without being able to see past the
+   unauthenticated shell to know whether it is actually the listing workspace.
+
+**Why this is worth resolving rather than filing away:** A.17b's finding that
+`yqftpibxplachhwoclam` has no application schema and no customer data is a dated observation,
+not a standing one (see the to-do's time-sensitive dependency note), and it underwrites both
+`qa` sharing the production project and open sign-up staying acceptable (Q-17). If the
+application is materially more built out than believed, that is a reason to re-verify A.17b
+directly rather than continuing to rely on it.
+
+`qa.listrassistr.com` is unstarted — it still needs the branch prerequisite in RB-10 before it
+can be created.
+
 ## Section A — Pre-registration decisions, and their disposition
 
 Written before the domain's status was known. Most are now settled by events —
