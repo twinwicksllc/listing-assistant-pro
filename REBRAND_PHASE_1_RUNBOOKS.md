@@ -474,15 +474,17 @@ issued a certificate (CN=YR2, single SAN `app.listrassistr.com`, valid 28 Aug 20
 expected and point at the same Vercel project; DNSSEC is signed end-to-end with RRSIG/NSEC
 validating correctly on in-zone records.
 
-**Open question, not yet resolved either way.** This runbook predicted `app.listrassistr.com`
-would serve the marketing page at its root until host-based routing exists (see below). The
-external check instead described the page as a working application interface rather than
-marketing. That is the opposite of the predicted interim state, and it has not been confirmed
-by inspecting the actual application code in `listrassistr-official` — it could mean routing
-already shipped, or it could mean the checker saw a login/signup shell and is not distinguishing
-that from "the app." Until confirmed, treat A.17b's "no schema, no customer data" finding as
-unverified rather than reconfirmed, since it is one of the two things resting on that finding
-(see the time-sensitive dependency note in the to-do).
+**Resolved 2026-08-28.** A first external check described the page as a working application
+interface, which read as the opposite of this runbook's prediction. A same-day, deeper follow-up
+check resolved it: `app.listrassistr.com` and the apex both serve an identical "COMING SOON"
+holding page — no functionality behind login/signup, no backend API on any `/api/*` path
+(each returns the SPA HTML shell, not JSON), and `/dashboard`/`/listings` both 404 rather than
+rendering a guarded view. The prediction below was correct. Full evidence in A.18b.
+
+One loose end worth naming, not blocking anything: the signup form's own on-page text says
+account creation "will open when the application shell is ready," yet the owner already holds
+a real Supabase auth record from an earlier signup. Either the copy is stale or signup quietly
+works despite what it says — worth a look when convenient, but it doesn't change Q-17.
 
 `qa.listrassistr.com` is unstarted — still needs the branch prerequisite below.
 
@@ -493,9 +495,8 @@ advice on the assumption the path layout would stand, and the owner has chosen o
 **One thing to be clear-eyed about before starting.** The application currently lives at
 `listrassistr.com/app/*`, and marketing at `/`. Both come from the same Vercel deployment. So
 adding `app.listrassistr.com` today was expected to give a working hostname that **serves the
-marketing page at its root**, until host-based routing exists in the application. **That
-prediction did not match what was observed after the hostname went live — see the open question
-noted at the top of this runbook.**
+marketing page at its root**, until host-based routing exists in the application. **Confirmed
+correct — see the resolution noted at the top of this runbook.**
 
 That interim state is harmless pre-launch, and there is a real argument for doing it now: it
 proves the DNS and certificate path, reserves the hostname, and means nothing DNS-shaped is on

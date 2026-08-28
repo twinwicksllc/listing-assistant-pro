@@ -14,13 +14,15 @@ RB-06 target repo audited · RB-07 DEC-0036/37/38 written into the decision log 
 O-41 O-42 O-43 O-05 O-08 O-34.
 
 **Closed 2026-08-28:** **RB-09** IAM admin login created, root access keys confirmed absent ·
-**RB-10** `app.listrassistr.com` live, DNS/certificate/DNSSEC externally verified.
+**RB-10** `app.listrassistr.com` live, DNS/certificate/DNSSEC externally verified, and a
+same-day follow-up check resolved a discrepancy in that first verification — confirmed a
+"coming soon" holding page as predicted, not a working application (see RB-10 and A.18b).
 
-**Open, needs attention:** a discrepancy surfaced verifying RB-10 — `app.listrassistr.com` was
-predicted to serve the marketing page until host-based routing exists, but external
-verification described it as a working application interface instead. Not yet confirmed by
-reading the `listrassistr-official` code; see RB-10 and Section 5 item 2 for why it matters.
-`qa.listrassistr.com` still needs its branch prerequisite (unstarted).
+**Worth knowing, not blocking:** the signup form's own on-page text claims account creation
+"will open when the application shell is ready," but the owner already holds a real Supabase
+auth record from signing up earlier — so either that text is stale or signup quietly works
+regardless of what it says. Doesn't change what Q-17 needs, just means the copy may not match
+reality. `qa.listrassistr.com` still needs its branch prerequisite (unstarted).
 
 Full reasoning and the rest of the queue are in **Section 5**, which is the authoritative
 next-actions list.
@@ -54,21 +56,21 @@ by owner decision, with a stated trigger.
 Plan §8's exit gate: "Domain ownership is secure, legal has approved the name,
 branded email can authenticate, and the asset package is approved."
 
-| Gate  | Item                                    | Status                                                                                                                                                                                                                                                                   |
-| ----- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| P1-01 | Domain in legal business entity         | **Approved with recorded deviation**                                                                                                                                                                                                                                     |
-| P1-02 | Registrar hardened                      | **Evidence captured**                                                                                                                                                                                                                                                    |
-| P1-03 | Legal approval of the name              | **Approved**                                                                                                                                                                                                                                                             |
-| P1-04 | Authoritative DNS documented            | In progress — inventory entry missing                                                                                                                                                                                                                                    |
-| P1-05 | DNSSEC enabled, DS chain verified       | **Evidence captured** (A.12)                                                                                                                                                                                                                                             |
-| P1-06 | Apex/`www`/`app`/`qa` resolving + certs | In progress — apex/`www`/`app` live, canonical, and certificate-verified (A.7d, RB-10, superseding A.14's deferral); `app`'s application-routing behavior is unexpectedly ahead of prediction and unconfirmed (see RB-10); `qa` needs a branch and an environment (Q-15) |
-| P1-07 | Role mailboxes receiving                | Deferred                                                                                                                                                                                                                                                                 |
-| P1-08 | Branded email authenticates             | Deferred                                                                                                                                                                                                                                                                 |
-| P1-09 | DMARC review period completed           | Deferred                                                                                                                                                                                                                                                                 |
-| P1-10 | Brand asset package produced            | Not started                                                                                                                                                                                                                                                              |
-| P1-11 | Design tokens pass WCAG AA              | Not started                                                                                                                                                                                                                                                              |
-| P1-12 | Asset package approved                  | Not started                                                                                                                                                                                                                                                              |
-| P1-13 | Phase 2 entry decision                  | Not started — DEC-0035 does not grant                                                                                                                                                                                                                                    |
+| Gate  | Item                                    | Status                                                                                                                                                                                                                                                  |
+| ----- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1-01 | Domain in legal business entity         | **Approved with recorded deviation**                                                                                                                                                                                                                    |
+| P1-02 | Registrar hardened                      | **Evidence captured**                                                                                                                                                                                                                                   |
+| P1-03 | Legal approval of the name              | **Approved**                                                                                                                                                                                                                                            |
+| P1-04 | Authoritative DNS documented            | In progress — inventory entry missing                                                                                                                                                                                                                   |
+| P1-05 | DNSSEC enabled, DS chain verified       | **Evidence captured** (A.12)                                                                                                                                                                                                                            |
+| P1-06 | Apex/`www`/`app`/`qa` resolving + certs | In progress — apex/`www`/`app` live, canonical, and certificate-verified (A.7d, RB-10, superseding A.14's deferral); `app` confirmed serving the predicted holding page, not the live app (RB-10, A.18b); `qa` needs a branch and an environment (Q-15) |
+| P1-07 | Role mailboxes receiving                | Deferred                                                                                                                                                                                                                                                |
+| P1-08 | Branded email authenticates             | Deferred                                                                                                                                                                                                                                                |
+| P1-09 | DMARC review period completed           | Deferred                                                                                                                                                                                                                                                |
+| P1-10 | Brand asset package produced            | Not started                                                                                                                                                                                                                                             |
+| P1-11 | Design tokens pass WCAG AA              | Not started                                                                                                                                                                                                                                             |
+| P1-12 | Asset package approved                  | Not started                                                                                                                                                                                                                                             |
+| P1-13 | Phase 2 entry decision                  | Not started — DEC-0035 does not grant                                                                                                                                                                                                                   |
 
 **Four of thirteen are closed** (P1-01, P1-02, P1-03, P1-05). The two largest remaining
 blocks are email identity (§8.2) and brand assets (§8.3).
@@ -224,13 +226,12 @@ is unblocked right now and independent of the LLC, mailboxes, and brand directio
 1. **O-01, via RB-09 — done 2026-08-28.** IAM admin login `twinwicksllc` created, MFA
    confirmed, root confirmed to have no access keys. Root is no longer used day-to-day.
 2. **O-06, via RB-10 — `app.listrassistr.com` done and verified 2026-08-28.** DNS, certificate,
-   and DNSSEC all confirmed. **Open question, not yet closed:** the runbook predicted the
-   hostname would serve the marketing page until host-based routing exists, but an external
-   check described it as a working application interface instead — the opposite of the
-   prediction. This has not been confirmed by inspecting the `listrassistr-official` code, and
-   it matters because A.17b's "no schema, no customer data" finding is one of two things this
-   discrepancy could undercut (see the time-sensitive dependency note below). `qa` still needs
-   its branch prerequisite before it can be created.
+   and DNSSEC all confirmed. A first external check described the page as a working application
+   interface, seemingly contradicting the runbook's prediction of a marketing/holding page — a
+   deeper follow-up check resolved this: it is a "coming soon" holding page as predicted, with
+   no backend API and no functioning app behind the login/signup forms (A.18b). A.17b's "no
+   schema, no customer data" finding is reinforced, not undercut. `qa` still needs its branch
+   prerequisite before it can be created.
 3. **Q-17** — decide the open sign-up question: disable public sign-up, or publish minimal
    Terms and Privacy content. Currently the live site collects credentials while linking to
    two empty pages, and that state exists by default rather than by choice (A.17c). A

@@ -1352,31 +1352,41 @@ environment could not resolve or fetch the hostname directly — see RB-10 for w
   terminates in Vercel's own unsigned `vercel-dns-016.com` zone — that is expected validator
   behavior for a CNAME into an unsigned zone, not a defect in this zone.
 
-**Open question this verification raised, not yet resolved.** RB-10 predicted that
-`app.listrassistr.com` would serve the marketing page at its root until the application adds
-host-based routing (see A.14 and RB-10). The external check instead described the page as a
-real application interface — "the ListrAssistr listing workspace" — rather than marketing. That
-is the opposite of the prediction, and it has **not** been confirmed by reading the actual
-routing code in `listrassistr-official`, only observed externally. It also noted `/api/health`
-returns 200 with a body that looks like the SPA shell, which is worth confirming as a genuine
-endpoint versus the SPA's catch-all route.
+**Resolved 2026-08-28, by a deeper follow-up check against the actual rendered pages and JS
+bundle, not just headers.** RB-10 predicted that `app.listrassistr.com` would serve the
+marketing page at its root until the application adds host-based routing (see A.14 and RB-10).
+A first external check described the page instead as a real application interface, which read
+as the opposite of that prediction. The follow-up confirmed the prediction was correct:
 
-Two readings are both plausible and neither is confirmed:
+- `app.listrassistr.com` and the apex `listrassistr.com` serve a byte-identical, 470-byte
+  static SPA shell — same ETag, same rendered content. Title `ListrAssistr`, meta description
+  `ListrAssistr listing workspace`. The only body copy anywhere on the site is a red
+  **COMING SOON** label and one line: "A focused workspace for creating, organizing, and
+  improving online listings is taking shape." No feature list, screenshots, demo, or pricing.
+- `/login`, `/signup`, and `/forgot-password` render real forms, but each carries its own text
+  saying the function isn't live: login's helper text reads "Authentication is being prepared
+  for the new ListrAssistr application"; signup's reads "Account creation will open when the
+  application shell is ready"; the reset flow explicitly says "a staging account."
+- `/dashboard` and `/listings` — the routes an authenticated app would need — return the site's
+  generic "Page not found" 404, meaning they are not even registered in the router yet, guarded
+  or otherwise.
+- `/api/health` and seven other `/api/*` and `/health*` paths tried all return `200 text/html`
+  with the same SPA shell body (`content-disposition: inline; filename="index.html"` — Vercel's
+  SPA catch-all, not a real handler). There is no backend API deployed on this project at all.
+- The JS bundle does contain Supabase auth wiring (`createClient`, `signInWithPassword`,
+  `getSession`, `onAuthStateChange`), so the intent is real, but none of it is reachable from a
+  working application surface today.
 
-1. Host-based routing already shipped in `listrassistr-official` — in which case this closes
-   part of what RB-10's "what still needs application work" section called out, and the finding
-   is good news.
-2. The external checker saw a login/signup page — consistent with the owner's own description
-   of the app as "just a login page and somewhere for people to sign up for updates" — and
-   described that as "an application interface" without being able to see past the
-   unauthenticated shell to know whether it is actually the listing workspace.
+**One loose end, not blocking, worth a look when convenient:** the signup page's own text says
+account creation isn't open yet, but the owner already holds a real Supabase auth record from
+signing up earlier (A.17b/A.17c). Either that copy is stale, or signup silently succeeds
+regardless of what the page says. Doesn't change Q-17's disposition — real credentials still
+land in `auth.users` either way — but the inconsistency is worth resolving in
+`listrassistr-official` at some point.
 
-**Why this is worth resolving rather than filing away:** A.17b's finding that
-`yqftpibxplachhwoclam` has no application schema and no customer data is a dated observation,
-not a standing one (see the to-do's time-sensitive dependency note), and it underwrites both
-`qa` sharing the production project and open sign-up staying acceptable (Q-17). If the
-application is materially more built out than believed, that is a reason to re-verify A.17b
-directly rather than continuing to rely on it.
+**Net effect on A.17b:** this reinforces rather than undercuts the "no application schema, no
+customer data" finding — there is no backend API and no authenticated app surface to have
+generated data with. The finding stands.
 
 `qa.listrassistr.com` is unstarted — it still needs the branch prerequisite in RB-10 before it
 can be created.
