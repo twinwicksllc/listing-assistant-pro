@@ -23,12 +23,14 @@ move. Where a step is version-sensitive it says so.
 | RB-06        | **GitHub** — `twinwicksllc/listrassistr-official`                         |
 | RB-07        | **This repository** — `REBRAND_PHASE_0_DECISION_LOG.md`, a markdown table |
 | RB-08        | Blocked; needs a Phase 3 gate before any system is touched                |
+| RB-09        | **AWS** — IAM console, signed in as root for this one task                |
+| RB-10        | **Vercel** → Domains, then **AWS Route 53** — hosted zone                 |
 
-**RB-01 to RB-07 are complete** (RB-05 fully so as of A.17b). **RB-08** (qa environment) is blocked pending a Phase 3 gate — see Q-15. **RB-09** (IAM
-admin login) and **RB-10** (`app`/`qa` subdomains) are new and ready to run (2026-08-27; verified in checklist A.7d and A.12).
-Remaining: **RB-04** what the buttons do, **RB-05** verify the production Supabase project,
-**RB-06** target-repo staleness audit, **RB-07** place the DEC entries, **RB-08** qa —
-blocked pending a Phase 3 gate.
+**Status as of 2026-08-27.** **RB-01 to RB-07 are all complete**, RB-05 fully so as of
+checklist A.17b; execution evidence is in A.7d, A.12, A.13, A.15, A.16 and A.17. **RB-08**
+(qa environment) is **blocked** pending a Phase 3 entry gate — see Q-15. **RB-09** (IAM admin
+login) and **RB-10** (`app`/`qa` subdomains) are **written and ready to run**, with nothing
+blocking either.
 
 ---
 
@@ -231,7 +233,11 @@ an answer.
 
 ---
 
-## RB-05 — Verify the production Supabase project (O-37, revised) — ✅ MOSTLY DONE 2026-08-27
+## RB-05 — Verify the production Supabase project (O-37, revised) — ✅ DONE 2026-08-27
+
+**Completed.** A.15 captured identity, region, auth URLs, sign-up state and key formats; A.17a
+corrected the organisation finding and A.17b answered the schema question, which were the two
+follow-ups this runbook was left open for.
 
 **Revised 2026-08-27** following the owner's correction that `yqftpibxplachhwoclam` is the
 future **production** project — not staging, not qa. See checklist A.11.
@@ -349,8 +355,8 @@ Draft text already exists in the checklist:
 2. Append the three rows, following the existing column format.
 3. Confirm the highest DEC id becomes **DEC-0038**.
 
-Or say the word and I will do it as a PR — it is a mechanical edit to a document you own,
-so I have not touched it unasked.
+**Done 2026-08-27** in commit `adee295`, on the owner's say-so — all three rows are in the
+decision log and DEC-0038 is the highest id.
 
 ---
 
