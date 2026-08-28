@@ -1391,6 +1391,32 @@ generated data with. The finding stands.
 `qa.listrassistr.com` is unstarted — it still needs the branch prerequisite in RB-10 before it
 can be created.
 
+## A.19 Q-17 decided — publish minimized Terms and Privacy, not disable sign-up (2026-08-28)
+
+Owner chose the second of the two options A.17c laid out: **publish minimal content** on
+both pages, leaving sign-up open, rather than disabling sign-up.
+
+Drafts were written in this repository 2026-08-28 — adapted from this repo's own legacy
+`TermsPage.tsx` and `PrivacyPage.tsx`, with the sections describing features
+`listrassistr.com` doesn't have yet (Stripe billing, eBay integration, uploaded listing
+content) removed rather than left describing capabilities that don't exist. The Privacy
+draft was written to stay accurate regardless of the A.18b copy inconsistency — it states
+plainly that signup can create a real stored account even where the page's own text suggests
+otherwise. The owner has since copied both into `listrassistr-official` directly; the drafts
+were then removed from this repo's working tree, since this session cannot write to that
+repository and there is no reason to keep a second copy here once they've moved.
+
+**Not yet closed.** Copying the files into `listrassistr-official` is not the same as the
+pages being live with real content — O-41 stays open until that's confirmed. The forward
+dependency A.17c flagged also stands as drafted: both drafts use `legal@twin-wicks.com` /
+`privacy@twin-wicks.com` as interim contact addresses, since `listrassistr.com` still has no
+working mailbox (F.4, Q-04/Q-05/Q-06) — swap to `@listrassistr.com` addresses once that's
+resolved, not before.
+
+**These drafts are not legal advice** and haven't had a legal review; that's worth doing
+before they go live, particularly the GDPR/CCPA sections, since even this minimized scope
+carries real obligations tied to collecting email addresses and passwords.
+
 ## Section A — Pre-registration decisions, and their disposition
 
 Written before the domain's status was known. Most are now settled by events —
