@@ -201,6 +201,23 @@ rewrite itself.
 
 ## Phase 6 — Promote gate 4 to enforcing (deferred / follow-up, not this pass)
 
+## Follow-up: capture eBay response body in verifyCategoryLeafActive
+
+Per user request (2026-08-31): the `verify` action's `verifyCategoryLeafActive()`
+helper only logs the HTTP status code on the `!resp.ok` branch, not eBay's
+response body. User wants the actual eBay error message captured so failed
+override-attempts are diagnosable from the function logs alone.
+
+- [x] 1. Edit `verifyCategoryLeafActive` in `supabase/functions/category-lookup/index.ts`
+      (lines ~483-494): on the `!resp.ok` branch, read `resp.text()` and include
+      `respText.slice(0, 200)` in the `console.warn`. Keep the 404 special-case
+      (clean miss, no body needed). Keep the pessimistic return unchanged.
+- [x] 2. Verify locally: `deno fmt --check` (84 files clean), `deno lint` clean,
+      `deno check` clean, `prettier --check todo.md` clean (format-and-lint parity)
+- [ ] 3. Branch off `main`, commit, push via x-access-token, open PR
+- [ ] 4. Confirm CI green (format-and-lint + Edge Functions Check are the
+      blocking ones for a functions-only change)
+
 ## Wrap-up (Phase 1+2 checkpoint)
 
 - [x] Push branch feat/category-resolver-v2-phase1-2, open PR
