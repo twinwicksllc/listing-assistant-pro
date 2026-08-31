@@ -485,10 +485,18 @@ async function verifyCategoryLeafActive(
       return { isLeaf: false, isActive: false, categoryName: null };
     }
     if (!resp.ok) {
-      // EA-P1-A: Pessimistic default — unknown API errors should NOT be treated as leaf
+      // EA-P1-A: Pessimistic default — unknown API errors should NOT be treated as leaf.
+      // Capture eBay's response body so the exact error (e.g. "Invalid category ID",
+      // errorId, wrong-tree rejection) is visible in the function logs, not just the
+      // HTTP status. Body may be empty or non-JSON for some 5xx; guard with try/catch.
+      let errBody = "";
+      try {
+        errBody = (await resp.text()).slice(0, 200);
+      } catch {
+        errBody = "<unreadable body>";
+      }
       console.warn(
-        `category-lookup: verifyCategoryLeafActive(${categoryId}) error`,
-        resp.status,
+        `category-lookup: verifyCategoryLeafActive(${categoryId}) error ${resp.status}: ${errBody}`,
       );
       return { isLeaf: false, isActive: false, categoryName: null };
     }
