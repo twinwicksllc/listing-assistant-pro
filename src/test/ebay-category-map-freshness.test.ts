@@ -1,0 +1,110 @@
+import { describe, expect, test } from "vitest";
+import { EBAY_CATEGORY_BREADCRUMBS } from "../lib/ebayCategoryMap";
+import snapshot from "../../corpus/ebay_taxonomy_snapshot.json";
+
+// Regression guard for the 2026-09-01 stale-coin-category-ID cleanup
+// (see todo.md's "Fix the stale/wrong-domain eBay coin-category IDs" entry).
+//
+// EBAY_CATEGORY_BREADCRUMBS is checked FIRST in CategoryConfirmDialog.tsx,
+// before any live category-lookup verification call — a hit there
+// short-circuits the real check entirely. The most dangerous class of bug
+// this file can carry is a key that is a genuine, LIVE eBay leaf, but in a
+// completely different domain than "Coins & Paper Money" (e.g. 40150, once
+// mapped here as "Roosevelt Dime," is now Toys & Hobbies > Action Figures).
+// A stale/absent key is comparatively harmless — nothing will ever look up
+// a category ID eBay has retired — so this test fails hard only on the
+// dangerous case and reports the harmless case as informational context.
+
+const byId = new Map(
+  (
+    snapshot as {
+      categories: Array<{
+        category_id: string;
+        breadcrumb: string;
+        is_leaf: boolean;
+      }>;
+    }
+  ).categories.map((c) => [c.category_id, c]),
+);
+
+// Categories intentionally kept as broad, non-leaf domain markers rather than
+// specific leaves — documented at the top of ebayCategoryMap.ts as the June
+// 2026 mandate parent IDs, plus a few long-standing broad groupings used
+// elsewhere in the codebase as deliberate non-leaf markers.
+const INTENTIONAL_NON_LEAF_MARKERS = new Set([
+  "253",
+  "256",
+  "3377",
+  "4733",
+  "18466",
+  "11118",
+]);
+
+const topLevel = (breadcrumb: string) => breadcrumb.split(" > ")[0];
+
+// This file covers many top-level categories (Coins, Trading Cards, Jewelry,
+// Electronics, Clothing, Books, ...) — it is NOT coins-only, despite most of
+// its entries being coin-related. Scope this regression guard to the domain
+// this cleanup actually audited and fixed (Coins & Paper Money); the other
+// domains' entries were spot-checked but not exhaustively audited the same
+// way, and asserting the same strictness on them risks false failures from
+// eBay's ordinary tree reorganizations in domains nobody has reviewed yet.
+// (Two real, separate issues were found while writing this test and are
+// tracked in todo.md rather than fixed here: 261328-261332 are labeled
+// sport-specific — "Baseball Cards" etc. — but are actually generic
+// format-type leaves ["Trading Card Singles/Lots/Sets/..."], not sport-
+// specific at all; and 25321/178893 have accurate labels but a stale parent
+// path, since eBay moved Projectors and Smart Watches to different top-level
+// categories.)
+const AUDITED_TOP_LEVEL = "Coins & Paper Money";
+
+describe("EBAY_CATEGORY_BREADCRUMBS freshness (Coins & Paper Money)", () => {
+  // Compare each entry's OWN claimed top-level category (the first breadcrumb
+  // segment already stored here) against the live taxonomy's top-level
+  // category for that same ID. A mismatch is exactly the dangerous pattern
+  // this cleanup fixed: a live leaf silently reassigned to a different
+  // top-level category than the one this map still claims for it.
+  test("no Coins & Paper Money key disagrees with its live top-level category", () => {
+    const mismatched: string[] = [];
+    for (const [id, storedBreadcrumb] of Object.entries(
+      EBAY_CATEGORY_BREADCRUMBS,
+    )) {
+      if (topLevel(storedBreadcrumb) !== AUDITED_TOP_LEVEL) continue;
+      const live = byId.get(id);
+      if (!live || !live.is_leaf) continue; // absent/non-leaf handled below
+      const liveTop = topLevel(live.breadcrumb);
+      if (liveTop !== AUDITED_TOP_LEVEL) {
+        mismatched.push(
+          `${id} -> live top-level is "${liveTop}" (${live.breadcrumb})`,
+        );
+      }
+    }
+    expect(mismatched, mismatched.join("\n")).toEqual([]);
+  });
+
+  test("no Coins & Paper Money key is a confirmed non-leaf unless intentionally allowlisted", () => {
+    const unexpectedNonLeaf: string[] = [];
+    for (const [id, storedBreadcrumb] of Object.entries(
+      EBAY_CATEGORY_BREADCRUMBS,
+    )) {
+      if (topLevel(storedBreadcrumb) !== AUDITED_TOP_LEVEL) continue;
+      if (INTENTIONAL_NON_LEAF_MARKERS.has(id)) continue;
+      const live = byId.get(id);
+      if (live && !live.is_leaf) {
+        unexpectedNonLeaf.push(`${id} -> non-leaf: "${live.breadcrumb}"`);
+      }
+    }
+    expect(unexpectedNonLeaf, unexpectedNonLeaf.join("\n")).toEqual([]);
+  });
+
+  test("informational: Coins & Paper Money keys absent from the live snapshot (not a failure)", () => {
+    const absent = Object.entries(EBAY_CATEGORY_BREADCRUMBS)
+      .filter(([, breadcrumb]) => topLevel(breadcrumb) === AUDITED_TOP_LEVEL)
+      .filter(([id]) => !byId.has(id));
+    // Absence in a leaf-focused sync doesn't prove an ID no longer exists —
+    // see leafCategoryGuard.ts's header for the full reasoning. This test
+    // exists purely to surface the count for a human to spot-check over
+    // time, not to fail the build.
+    expect(absent.length).toBeGreaterThanOrEqual(0);
+  });
+});

@@ -42,15 +42,23 @@ export const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
   "526": "Coins & Paper Money > Coins: US > Mint Sets", // ★ US Coin Mint Sets
 
   // --- US Coins (general + other series) ---
-  "11116":
-    "Coins & Paper Money > Coins: US > Pennies > Lincoln Memorial (1959-2008)",
+  // 11116/40150/40152 corrected 2026-09-01: 11116 is the domain ROOT (non-leaf),
+  // not a Lincoln Memorial leaf; 40150/40152 have been silently reassigned by
+  // eBay to Action Figures / Go-Karts (Recreational) respectively, and are the
+  // most dangerous class of stale entry here — a live leaf in the wrong domain
+  // is confirmed "valid" by this map with no verification call ever firing.
+  // 40151/40153/40158/40159/40160/41111 are simply dead (absent from the live
+  // tree); replaced with their live equivalents rather than deleted outright,
+  // matching the same corrections already applied in domainPrompts.ts.
+  "31373":
+    "Coins & Paper Money > Coins: US > Small Cents > Lincoln Memorial (1959-2008)",
   "11118": "Coins & Paper Money > Coins: US > Half Dollars",
   "40149":
     "Coins & Paper Money > Coins: US > Quarters > Washington (1932-1998)",
-  "40150": "Coins & Paper Money > Coins: US > Dimes > Roosevelt (1946-Now)",
-  "40151": "Coins & Paper Money > Coins: US > Dimes > Mercury (1916-1945)",
-  "40152": "Coins & Paper Money > Coins: US > Nickels > Jefferson (1938-Now)",
-  "40153": "Coins & Paper Money > Coins: US > Nickels > Buffalo (1913-1938)",
+  "39458": "Coins & Paper Money > Coins: US > Dimes > Roosevelt (1946-Now)",
+  "41090": "Coins & Paper Money > Coins: US > Dimes > Mercury (1916-1945)",
+  "41087": "Coins & Paper Money > Coins: US > Nickels > Jefferson (1938-Now)",
+  "139806": "Coins & Paper Money > Coins: US > Nickels > Buffalo (1913-1938)",
   "40154":
     "Coins & Paper Money > Coins: US > Pennies > Indian Head (1859-1909)",
   "40155":
@@ -59,11 +67,12 @@ export const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
     "Coins & Paper Money > Coins: US > Half Dollars > Kennedy (1964-Now)",
   "40157":
     "Coins & Paper Money > Coins: US > Half Dollars > Franklin (1948-1963)",
-  "40158":
-    "Coins & Paper Money > Coins: US > Dollars > Sacagawea/Native American",
-  "40159": "Coins & Paper Money > Coins: US > Dollars > Presidential",
-  "40160": "Coins & Paper Money > Coins: US > Dollars > Susan B. Anthony",
-  "41111": "Coins & Paper Money > Coins: US > Dollars > American Silver Eagle",
+  "11983":
+    "Coins & Paper Money > Coins: US > Dollars > Native American (2000-Now)",
+  "159713":
+    "Coins & Paper Money > Coins: US > Dollars > Presidential (2007-Now)",
+  "11982":
+    "Coins & Paper Money > Coins: US > Dollars > Susan B Anthony (1979-81,99)",
   "164743":
     "Coins & Paper Money > Coins: US > Quarters > 50 States & Territories",
   // US Quarters — early & classic type leaves (verified against live eBay browse nodes 2026-07)
@@ -81,24 +90,27 @@ export const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
     "Coins & Paper Money > Coins: US > Quarters > Washington (1932-1998)",
 
   // --- US Gold Coins ---
-  "40161": "Coins & Paper Money > Coins: US > Gold Coins > $20 Double Eagle",
-  "40162": "Coins & Paper Money > Coins: US > Gold Coins > $10 Eagle",
-  "40163": "Coins & Paper Money > Coins: US > Gold Coins > $5 Half Eagle",
+  // 40161/40162/40163/40166/40167 corrected 2026-09-01: all five were dead
+  // (absent from the live tree). 40166/40167 (American Gold Eagle/Buffalo)
+  // have no distinct live leaf and are not re-added — they already route to
+  // the generic bullion-gold-coin leaf 177652 below, same as domainPrompts.ts.
+  "39472":
+    "Coins & Paper Money > Coins: US > Gold (Pre-1933) > $20, Double Eagle",
+  "39471": "Coins & Paper Money > Coins: US > Gold (Pre-1933) > $10, Eagle",
+  "39470": "Coins & Paper Money > Coins: US > Gold (Pre-1933) > $5, Half Eagle",
   "40164": "Coins & Paper Money > Coins: US > Gold Coins > $2.50 Quarter Eagle",
   "40165": "Coins & Paper Money > Coins: US > Gold Coins > $1 Gold",
-  "40166": "Coins & Paper Money > Coins: US > Gold Coins > American Gold Eagle",
-  "40167":
-    "Coins & Paper Money > Coins: US > Gold Coins > American Gold Buffalo",
 
   // --- Bullion (other) ---
   "3360": "Coins & Paper Money > Bullion > Gold > Other", // For grain bars, flakes, nuggets
   "177652": "Coins & Paper Money > Bullion > Gold > Coins", // Gold bullion coins (AI prompt ID)
   "177653": "Coins & Paper Money > Bullion > Silver > Coins", // Silver bullion coins (AI prompt ID)
-  "261064": "Coins & Paper Money > Bullion > Gold > Coins",
-  "261068": "Coins & Paper Money > Bullion > Silver > Coins",
-  "261069": "Coins & Paper Money > Bullion > Silver > Bars & Rounds",
-  "261070": "Coins & Paper Money > Bullion > Platinum > Coins",
-  "261071": "Coins & Paper Money > Bullion > Gold > Bars & Rounds",
+  // 261064/261068/261069/261070/261071 removed 2026-09-01: all five are live
+  // leaves, but in the WRONG domain (Signs & Plaques and four Action Figures
+  // variants under Toys & Hobbies) — the most dangerous class of stale entry,
+  // since they'd confirm as "valid" with no live check ever firing. 261072
+  // onward are confirmed non-leaf/absent parent markers, same as 261074-076
+  // below, and are left as-is per the same precedent leafCategoryGuard.ts sets.
   "261072": "Coins & Paper Money > Bullion > Platinum > Bars & Rounds",
   "261073": "Coins & Paper Money > Bullion > Palladium",
   "261074": "Coins & Paper Money > Bullion > Silver",
@@ -107,17 +119,27 @@ export const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
 
   // --- Bullion > Other (copper, misc) ---
   "166679": "Coins & Paper Money > Bullion > Other",
-  "166680": "Coins & Paper Money > Bullion > Other > Copper > Bars & Rounds",
-  "166681": "Coins & Paper Money > Bullion > Other > Copper > Coins",
+  // 166680/166681 corrected 2026-09-01: were mislabeled as Copper Bullion
+  // (166679 above already correctly holds that); these two IDs are actually
+  // Paper Money: World > Asia > Cambodia / Hong Kong.
+  "166680": "Coins & Paper Money > Paper Money: World > Asia > Cambodia",
+  "166681": "Coins & Paper Money > Paper Money: World > Asia > Hong Kong",
 
   // --- World Coins ---
-  "45243": "Coins & Paper Money > Coins: World",
-  "40196": "Coins & Paper Money > Coins: World > Canada",
-  "40197": "Coins & Paper Money > Coins: World > Mexico",
-  "40198": "Coins & Paper Money > Coins: World > Great Britain",
-  "40199": "Coins & Paper Money > Coins: World > Australia",
-  "40200": "Coins & Paper Money > Coins: World > Germany",
-  "40201": "Coins & Paper Money > Coins: World > France",
+  // 45243/40196-40201 corrected 2026-09-01 (Finding B, already fixed in
+  // domainPrompts.ts and leafCategoryGuard.ts): all six were dead, replaced
+  // with their documented live equivalents.
+  "257": "Coins & Paper Money > Coins: World > Other Coins of the World",
+  "536": "Coins & Paper Money > Coins: Canada > Other Canadian Coins",
+  "173631":
+    "Coins & Paper Money > Coins: World > North & Central America > Mexico > Mexico (1905-Now)",
+  "3406":
+    "Coins & Paper Money > Coins: World > Europe > UK (Great Britain) > Crown",
+  "535":
+    "Coins & Paper Money > Coins: World > Australia & Oceania > Australia > Other Australian Coins",
+  "7955":
+    "Coins & Paper Money > Coins: World > Europe > Germany > West & Unified (1949-Now)",
+  "539": "Coins & Paper Money > Coins: World > Europe > France",
   "40202": "Coins & Paper Money > Coins: World > Other",
   "11063": "Coins & Paper Money > Coins: World > Asia",
 
