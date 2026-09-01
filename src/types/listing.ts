@@ -309,13 +309,17 @@ export function isBullionCategory(
     return true;
   return false;
 }
+// 19107 corrected 2026-09-01: was dead (absent from the live tree). Its
+// real live replacement is 183050 (Collectibles > Non-Sport Trading Cards
+// > Trading Card Singles) — matches the sibling fix in
+// ebay-publish/publish-helpers.ts's HARDCODED_TRADING_CARD_CATEGORY_IDS.
 export const TRADING_CARD_CATEGORY_IDS = new Set([
-  "261328",
-  "183454",
-  "2536",
-  "19107",
-  "64482",
-  "213",
+  "261328", // Sports Mem, Cards & Fan Shop > Sports Trading Cards > Trading Card Singles
+  "183454", // Toys & Hobbies > Collectible Card Games > CCG Individual Cards
+  "2536", // Toys & Hobbies > Collectible Card Games (parent)
+  "183050", // Collectibles > Non-Sport Trading Cards > Trading Card Singles
+  "64482", // absent from the live tree
+  "213", // absent from the live tree
 ]);
 
 const GENERAL_MARKETPLACE_CONDITION_OPTIONS: ConditionOption[] = [

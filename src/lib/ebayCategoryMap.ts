@@ -162,8 +162,11 @@ export const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
   "550": "Art",
 
   // ─── Trading Cards ───────────────────────────────────────────────────────
-  "183454":
-    "Toys & Hobbies > Collectible Card Games > Pokémon > Individual Cards",
+  // 183454 corrected 2026-09-01: previously labeled "Pokémon > Individual
+  // Cards" — the live taxonomy has no per-game leaf at all (game/franchise
+  // is an item aspect, not a category); this is the one generic leaf for
+  // any collectible card game.
+  "183454": "Toys & Hobbies > Collectible Card Games > CCG Individual Cards",
   "2536":
     "Toys & Hobbies > Collectible Card Games > Magic: The Gathering > Individual Cards",
   "61793":
@@ -171,11 +174,17 @@ export const EBAY_CATEGORY_BREADCRUMBS: Record<string, string> = {
   "45643": "Toys & Hobbies > Collectible Card Games > Other CCG Items",
   "213": "Sports Trading Cards > Mixed Sports Card Lots",
   "214": "Sports Trading Cards > Graded Cards",
-  "261328": "Sports Trading Cards > Baseball Cards",
-  "261329": "Sports Trading Cards > Football Cards",
-  "261330": "Sports Trading Cards > Basketball Cards",
-  "261331": "Sports Trading Cards > Hockey Cards",
-  "261332": "Sports Trading Cards > Soccer Cards",
+  // 261328-261332 corrected 2026-09-01: previously labeled sport-specific
+  // (Baseball/Football/Basketball/Hockey/Soccer Cards) — same reasoning as
+  // 183454 above, the live taxonomy captures sport as an item aspect, not
+  // a category; these five IDs are actually generic format leaves (already
+  // flagged as a known, deliberately-unfixed issue in
+  // ebay-category-map-freshness.test.ts's own comments until now).
+  "261328": "Sports Trading Cards > Trading Card Singles",
+  "261329": "Sports Trading Cards > Trading Card Lots",
+  "261330": "Sports Trading Cards > Trading Card Sets",
+  "261331": "Sports Trading Cards > Sealed Trading Card Packs",
+  "261332": "Sports Trading Cards > Sealed Trading Card Boxes",
   "98716": "Sports Trading Cards > Graded Cards > BGS",
 
   // ─── Jewelry & Watches ───────────────────────────────────────────────────

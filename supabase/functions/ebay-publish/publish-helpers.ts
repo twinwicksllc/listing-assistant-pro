@@ -456,13 +456,17 @@ export const HARDCODED_BULLION_CATEGORY_IDS = new Set([
   // this Set is checked before the coin Set in detectCategoryTree/
   // detectCategoryTreeSync. They remain correctly in HARDCODED_COIN_CATEGORY_IDS.
 ]);
+// 19107 corrected 2026-09-01: was dead (absent from the live tree). Its
+// real live replacement is 183050 (Collectibles > Non-Sport Trading Cards
+// > Trading Card Singles) — already used correctly in analyze-item's AI
+// prompt; only this fallback Set was stale.
 export const HARDCODED_TRADING_CARD_CATEGORY_IDS = new Set([
-  "261328",
-  "183454",
-  "2536",
-  "19107",
-  "64482",
-  "213",
+  "261328", // Sports Mem, Cards & Fan Shop > Sports Trading Cards > Trading Card Singles
+  "183454", // Toys & Hobbies > Collectible Card Games > CCG Individual Cards
+  "2536", // Toys & Hobbies > Collectible Card Games (parent — absent as its own row, confirmed live via its children)
+  "183050", // Collectibles > Non-Sport Trading Cards > Trading Card Singles
+  "64482", // absent from the live tree; its only two live children (Autographs-Reprints, Wholesale Lots) aren't trading cards either
+  "213", // absent from the live tree
 ]);
 export const HARDCODED_COLLECTIBLE_CATEGORY_IDS = new Set([
   "19203",
@@ -919,7 +923,10 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
     ],
     defaults: { Sport: "Baseball" },
   },
-  // Baseball Cards
+  // Comment corrected 2026-09-01: previously read "Baseball Cards", but
+  // 64482 is absent from the live tree, and its only two live children
+  // (Autographs-Reprints, Wholesale Lots) aren't trading cards at all —
+  // this ID's real identity is unconfirmed; kept as dead-but-harmless.
   "64482": {
     required: ["Sport"],
     preferred: [
@@ -938,7 +945,10 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
     preferred: ["Player/Athlete", "Card Manufacturer", "Year", "Team"],
     defaults: { Sport: "Baseball" },
   },
-  // Pokémon Trading Card Games
+  // CCG Individual Cards (comment corrected 2026-09-01: previously read
+  // "Pokémon Trading Card Games" — this is the one generic leaf for ANY
+  // collectible card game; the live taxonomy has no per-game leaf at all,
+  // game/franchise is an item aspect, not a category)
   "183454": {
     required: [],
     preferred: [
@@ -952,14 +962,19 @@ export const CATEGORY_ASPECT_RULES: Record<string, AspectRule> = {
     ],
     defaults: {},
   },
-  // Magic: The Gathering
+  // Collectible Card Games (parent) (comment corrected 2026-09-01:
+  // previously read "Magic: The Gathering" — 2536 is the CCG parent
+  // category itself, not a Magic-specific leaf; same "no per-game leaf"
+  // reasoning as 183454 above)
   "2536": {
     required: [],
     preferred: ["Card Name", "Set", "Rarity", "Language", "Features"],
     defaults: {},
   },
-  // Non-Sport Trading Cards
-  "19107": {
+  // Non-Sport Trading Cards (key corrected 2026-09-01: was keyed "19107",
+  // confirmed dead — this rule is now attached to its live replacement,
+  // 183050, so it actually applies to real listings)
+  "183050": {
     required: [],
     preferred: ["Card Manufacturer", "Year", "Set", "Features"],
     defaults: {},

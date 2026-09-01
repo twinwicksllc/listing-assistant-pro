@@ -44,18 +44,18 @@ const topLevel = (breadcrumb: string) => breadcrumb.split(" > ")[0];
 
 // This file covers many top-level categories (Coins, Trading Cards, Jewelry,
 // Electronics, Clothing, Books, ...) — it is NOT coins-only, despite most of
-// its entries being coin-related. Scope this regression guard to the domain
-// this cleanup actually audited and fixed (Coins & Paper Money); the other
-// domains' entries were spot-checked but not exhaustively audited the same
-// way, and asserting the same strictness on them risks false failures from
-// eBay's ordinary tree reorganizations in domains nobody has reviewed yet.
-// (Two real, separate issues were found while writing this test and are
-// tracked in todo.md rather than fixed here: 261328-261332 are labeled
-// sport-specific — "Baseball Cards" etc. — but are actually generic
-// format-type leaves ["Trading Card Singles/Lots/Sets/..."], not sport-
-// specific at all; and 25321/178893 have accurate labels but a stale parent
-// path, since eBay moved Projectors and Smart Watches to different top-level
-// categories.)
+// its entries being coin-related. Scope this regression guard to the domains
+// this cleanup actually audited and fixed (Coins & Paper Money, plus the 6
+// specific trading-card IDs checked below); the other domains' entries were
+// spot-checked but not exhaustively audited the same way, and asserting the
+// same strictness on them risks false failures from eBay's ordinary tree
+// reorganizations in domains nobody has reviewed yet. (One issue remains
+// deliberately unfixed and tracked in todo.md: 25321/178893 have accurate
+// labels but a stale parent path, since eBay moved Projectors and Smart
+// Watches to different top-level categories — cosmetic, not a wrong domain.
+// The sibling issue — 261328-261332 labeled sport-specific when they're
+// actually generic format-type leaves — was fixed 2026-09-01, see the
+// second describe block below.)
 const AUDITED_TOP_LEVEL = "Coins & Paper Money";
 
 describe("EBAY_CATEGORY_BREADCRUMBS freshness (Coins & Paper Money)", () => {
@@ -106,5 +106,41 @@ describe("EBAY_CATEGORY_BREADCRUMBS freshness (Coins & Paper Money)", () => {
     // exists purely to surface the count for a human to spot-check over
     // time, not to fail the build.
     expect(absent.length).toBeGreaterThanOrEqual(0);
+  });
+});
+
+// Narrowly-scoped regression guard for the specific trading-card mislabels
+// fixed 2026-09-01 — not a broader Toys-&-Hobbies-wide audit (that hasn't
+// been done). 261328-261332 were labeled sport-specific (Baseball/Football/
+// Basketball/Hockey/Soccer Cards); 183454 was labeled Pokémon-specific. The
+// live taxonomy has no per-sport/per-game leaf at all — sport/game is an
+// item aspect, not a category — so every one of these is actually a generic
+// format leaf. Asserts the exact corrected breadcrumb, not just top-level
+// domain, since these specific values are now fully known and verified.
+describe("EBAY_CATEGORY_BREADCRUMBS freshness (trading cards, 2026-09-01 fix)", () => {
+  test("previously sport/game-mislabeled trading-card IDs now match their live breadcrumb exactly", () => {
+    const expected: Record<string, string> = {
+      "261328": "Sports Trading Cards > Trading Card Singles",
+      "261329": "Sports Trading Cards > Trading Card Lots",
+      "261330": "Sports Trading Cards > Trading Card Sets",
+      "261331": "Sports Trading Cards > Sealed Trading Card Packs",
+      "261332": "Sports Trading Cards > Sealed Trading Card Boxes",
+      "183454":
+        "Toys & Hobbies > Collectible Card Games > CCG Individual Cards",
+    };
+    for (const [id, storedBreadcrumb] of Object.entries(expected)) {
+      expect(EBAY_CATEGORY_BREADCRUMBS[id], `${id} stored breadcrumb`).toBe(
+        storedBreadcrumb,
+      );
+      const live = byId.get(id);
+      expect(live?.is_leaf, `${id} should be a confirmed live leaf`).toBe(true);
+      // The live breadcrumb's leaf name (last segment) must match what's
+      // stored — the stored value here omits the top-level department
+      // segment eBay actually uses (verified separately, not this file's
+      // concern), so compare leaf names rather than full-string equality.
+      const liveLeafName = live!.breadcrumb.split(" > ").pop();
+      const storedLeafName = storedBreadcrumb.split(" > ").pop();
+      expect(liveLeafName, `${id} leaf name`).toBe(storedLeafName);
+    }
   });
 });
