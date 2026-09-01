@@ -214,9 +214,88 @@ override-attempts are diagnosable from the function logs alone.
       (clean miss, no body needed). Keep the pessimistic return unchanged.
 - [x] 2. Verify locally: `deno fmt --check` (84 files clean), `deno lint` clean,
       `deno check` clean, `prettier --check todo.md` clean (format-and-lint parity)
-- [ ] 3. Branch off `main`, commit, push via x-access-token, open PR
-- [ ] 4. Confirm CI green (format-and-lint + Edge Functions Check are the
-      blocking ones for a functions-only change)
+- [x] 3. Branch off `main`, commit, push via x-access-token, open PR
+      (PR #546, merged 2026-08-30)
+- [x] 4. Confirm CI green (format-and-lint + Edge Functions Check are the
+      blocking ones for a functions-only change) — merged green
+
+## Follow-up: consolidate the duplicated parent-category blocklists
+
+The other half of Phase 4's deferral (the AI-prompt allowlist half is still
+open — see below). Same concept was implemented four times, and the Phase 2/3
+fixes had only ever landed in one of them, so the other call sites were still
+persisting/selecting categories the guard was written to refuse.
+
+- [x] Made `leafCategoryGuard.ts`'s `KNOWN_PARENT_CATEGORY_IDS` the single
+      source of truth. It was already a strict superset of the other copies
+      (38 ids), so consolidating widened coverage at the two live call sites
+      rather than narrowing it: category-lookup's persist gate went 16 -> 35
+      ids, analyze-item's override 14 -> 35. That is what propagates 99, 256,
+      45243, the dead World Coin ids and the Phase 3 audit ids to those paths
+      for the first time.
+- [x] `category-lookup/index.ts` — deleted `BLOCKED_PARENT_CATEGORIES` (16
+      ids); gate 0 of `safePersistMapping` now calls
+      `isKnownParentCategoryId()`. Added the guard import (this function did
+      not import the guard before).
+- [x] `analyze-item/index.ts` — deleted the inline `KNOWN_PARENT_CATEGORIES`
+      (14 ids), which was declared _inside a function body_ and re-allocated
+      on every invocation; `aiCategoryIsParent` now calls the shared
+      predicate. Extended the existing `leafCategoryGuard.ts` import rather
+      than adding a line.
+- [x] Deleted `_helpers/categoryResolution.ts` (180 lines) — it held a fourth
+      copy of the list plus duplicate `COINS_PAPER_MONEY_IDS` /
+      `KNOWN_WRONG_DOMAIN_FOR_COINS`, and was **dead code**: nothing in the
+      repo imported it. Created by the 2026-04-19 "extract category
+      resolution policy helpers" refactor (`c275b85`) and never wired up, so
+      the inline copies stayed live for ~4 months.
+- [x] Fixed three real false positives found while auditing the merged list
+      against `corpus/ebay_taxonomy_snapshot.json`. Each was a **live leaf**
+      being blocked, and each carried a comment that misidentified it — which
+      is how they were added in the first place: - `3390` annotated "Coins: World > Africa (rollup)", actually
+      `Coins & Paper Money > Coins: World > Europe > Ireland`. Irish
+      coins could not resolve at all, in the app's primary vertical. - `20713` annotated "Home & Garden" (in all three copies), actually
+      `Home & Garden > ... > Refrigerators`. The H&G root is 11700. - `139971` annotated "Video Games & Consoles", actually
+      `Video Games & Consoles > Video Game Consoles`. Parent is 1249.
+      None of the three appear in the golden corpus, so no recorded
+      regression guarantee was weakened.
+- [x] Kept `88433` blocked, and corrected its comment. It is also a live leaf
+      and its old label ("Coins: US > Dimes") was wrong, but it is
+      `Everything Else > Every Other Thing` — the same junk-catch-all family
+      as 99, whose selection caused the Columbian Half Dollar incident. The
+      pre-existing frontend suite `src/test/leaf-category-guard.test.ts`
+      describes it as "the rollup category seen in the reported coin scans",
+      i.e. it was observed leaking into real scans, so the block is correct
+      on the merits even though the reason recorded for it was not.
+- [x] Hardened the guard's header against the CI coupling: two scripts
+      (`scripts/replay-corpus.mjs`, `scripts/refresh-taxonomy-snapshot.mjs`)
+      read this file as _text_, locating ids by constant name then scraping
+      the Set-literal bounds. Added an explicit warning not to convert the
+      literal to an import, rename it, or move the file. Worth knowing: the
+      first draft of that warning _itself_ broke the scrape to 0 ids by
+      repeating the constant name and bracket tokens above the real
+      declaration — the note is now phrased to avoid that.
+- [x] Tests — 6 new cases in `_helpers/leafCategoryGuard.test.ts` (24 -> 30):
+      the three unblocked leaves asserted individually, 88433 asserted still
+      blocked with the reason in the test name, and two coverage-guarantee
+      tests pinning every id the deleted copies used to block so a future
+      edit cannot silently narrow either call site.
+- [x] Verified: `deno test` leafCategoryGuard.test.ts (30/30),
+      `node scripts/replay-corpus.mjs` (18/18), scrape re-check yields 35
+      ids, `deno fmt --check` (83 files) and `deno lint` (80) clean,
+      `deno check` clean on category-lookup and analyze-item,
+      `npm run test` (118/118 — includes the frontend guard suite, which
+      imports the real module rather than duplicating the list).
+- [ ] Branch, commit, push, open PR; confirm CI green (`category-corpus-replay`
+      and `format-and-lint` are the blocking ones here).
+
+**Still deferred from Phase 4 (unchanged):** deleting the hardcoded
+category-ID allowlist baked into `analyze-item`'s tool-schema AI prompt (plan
+§2.2). That is the riskier half and still wants its own isolated validation
+pass.
+
+**Noted, not done:** `category-lookup/resolverCore.test.ts` (10 cases) is not
+wired into any CI workflow, and the two blocklist scrapers are byte-for-byte
+duplicate implementations. Both are real gaps deserving their own change.
 
 ## Wrap-up (Phase 1+2 checkpoint)
 
