@@ -134,10 +134,19 @@ export const CONDITION_LABELS: Record<string, string> = {
 export type ConditionOption = { value: string; label: string };
 
 // Category ID sets matching the publish function's detection logic.
-// NOTE: Only LEAF category IDs are included here (no parent IDs like 253, 256, 3377, 4733, 18466).
-// Parent categories are detected dynamically via breadcrumb patterns (e.g., "Coins: US", "Coins: World").
-// This ensures the category detection works with actual eBay leaf categories that can be published.
-const COIN_CATEGORY_IDS = new Set([
+// NOTE: Only LEAF category IDs are included here, with one deliberate
+// exception — five eBay June 2026 mandate top-level parent IDs (253=Coins:
+// US, 256=Coins: World, 3377=Coins: Canada, 4733=Coins: Ancient, 18466=
+// Coins: Medieval) are intentionally present as broad domain markers, same
+// justification as their twin lists in analyze-item's COINS_PAPER_MONEY_IDS
+// and ebay-publish/publish-helpers.ts's HARDCODED_COIN_CATEGORY_IDS. No
+// other parent/non-leaf ID belongs here — two were found and removed
+// 2026-09-01 (11116, the domain root; 11956, the bare "Dimes" parent) for
+// violating this invariant with no such justification, each with a real
+// leaf sibling already present elsewhere in this Set.
+// Parent categories outside that exception are detected dynamically via
+// breadcrumb patterns (e.g., "Coins: US", "Coins: World").
+export const COIN_CATEGORY_IDS = new Set([
   // Original set
   "11981",
   "39464",
@@ -145,7 +154,6 @@ const COIN_CATEGORY_IDS = new Set([
   "11980",
   "11949",
   "11971",
-  "11956",
   "41099",
   "41102",
   "11973",
@@ -165,9 +173,7 @@ const COIN_CATEGORY_IDS = new Set([
   "39475",
   // US Coins — Dimes (40149-40167 range includes Mercury dimes = 40151)
   "40149",
-  "40150",
   "40151",
-  "40152",
   "40153",
   "40154",
   "40155",
@@ -183,12 +189,31 @@ const COIN_CATEGORY_IDS = new Set([
   "40165",
   "40166",
   "40167",
+  // 40150/40152 removed 2026-09-01: confirmed LIVE LEAVES silently
+  // reassigned by eBay to Toys & Hobbies (Action Figures) / Sporting Goods
+  // (Go-Karts), not Coins & Paper Money — the most dangerous class of stale
+  // entry, since a false positive here makes isCoinConditionDetailRequired()
+  // hard-block publish of an unrelated item until the seller fills in a
+  // nonsensical Grade/PCGS field. Replacements added below.
+  "39458", // Roosevelt Dime (1946-Now) — replaces dead 40150's slot
+  "41087", // Jefferson Nickel (1938-Now) — replaces dead 40152's slot
+  "41090", // Mercury Dime (1916-45)
+  "139806", // Buffalo Nickel (1913-38)
+  "31373", // Lincoln Memorial Cent (1959-2008)
+  "11983", // Native American Dollar (2000-Now, was Sacagawea)
+  "159713", // Presidential Dollar (2007-Now)
+  "11982", // Susan B Anthony Dollar (1979-81, 99)
+  "39470", // $5, Half Eagle (Gold Pre-1933)
+  "179531", // US Commemorative Silver (1892-1954)
+  "179532", // US Commemorative Gold (1903-1926)
+  "179533", // US Commemorative Modern Silver/Clad (1982-Now)
+  "179534", // US Commemorative Modern Gold (1984-Now)
+  "529", // US Commemorative Mixed Lots
   // US Coins — parent/generic
-  "253",
-  "11116",
   "11118",
   "164743",
   // eBay mandate coin parent categories (253=US, 256=World, 3377=Canada, 4733=Ancient, 18466=Medieval)
+  "253",
   "256",
   "3377",
   "4733",
@@ -203,14 +228,14 @@ const COIN_CATEGORY_IDS = new Set([
   "177652",
   "177653",
   "178906",
-  "166680",
-  "166681",
-  // World Coins additional
-  "261064",
-  "261068",
-  "261069",
-  "261070",
-  "261071",
+  // 166680/166681 removed 2026-09-01: confirmed live leaves, but Paper
+  // Money: World > Cambodia/Hong Kong, not coins at all — same disease,
+  // wrong sub-type within the Coins & Paper Money department rather than
+  // outside it.
+  // World Coins additional (261064/261068-261071 removed 2026-09-01:
+  // confirmed LIVE LEAVES in Toys & Hobbies/Collectibles, not coins;
+  // 261072-261076 left as absent/harmless per leafCategoryGuard.ts's
+  // established precedent — see analyze-item/index.ts's identical treatment)
   "261072",
   "261073",
   "261074",
@@ -221,14 +246,16 @@ const COIN_CATEGORY_IDS = new Set([
   "19168",
   "19169",
   "11063",
-  // US Coins — additional subtypes
-  "40196",
-  "40197",
-  "40198",
-  "40199",
-  "40200",
-  "40201",
-  "40202",
+  // World Coins by country (40196-40202 removed 2026-09-01: confirmed dead,
+  // same Finding B already fixed elsewhere; replaced with live per-country
+  // leaves + the 257 catch-all)
+  "257", // Coins: World > Other Coins of the World
+  "536", // Coins: Canada > Other Canadian Coins
+  "173631", // Coins: World > North & Central America > Mexico (1905-Now)
+  "3406", // Coins: World > Europe > UK (Great Britain) > Crown
+  "535", // Coins: World > Australia & Oceania > Australia > Other
+  "7955", // Coins: World > Europe > Germany > West & Unified (1949-Now)
+  "539", // Coins: World > Europe > France
   // 2026+ America the Beautiful Quarters
   "171526", // America the Beautiful Quarters (2026)
   // US Quarters — early & classic type leaves (verified against live eBay browse nodes 2026-07).
@@ -250,23 +277,23 @@ const COIN_CATEGORY_IDS = new Set([
 // Verified against live eBay browse nodes (2026-07):
 //   39482 Bullion (parent) · 39489 Silver Bars & Rounds · 39487 Silver Bullion (lots)
 //   178906 Gold Bars & Rounds · 39488 Platinum Bullion · 3361 Silver: Other
-//   261068/261069 Bullion>Silver>Coins/Bars · 261071/178906 Gold · 166679 Other
-const BULLION_CATEGORY_IDS = new Set([
+//   166679 Other
+// 261068/261069/261070/261071 removed 2026-09-01: confirmed LIVE LEAVES in
+// Toys & Hobbies > Action Figures & Accessories, not Bullion — the same
+// wrong-domain bug already fixed in COIN_CATEGORY_IDS above. 166680/166681
+// also removed: confirmed live leaves, but Paper Money: World > Cambodia/
+// Hong Kong, not bullion at all. 34942/34943 added: confirmed live
+// Platinum/Palladium bullion leaves, previously unrepresented in either set.
+export const BULLION_CATEGORY_IDS = new Set([
   "39482",
   "39489",
   "39487",
   "178906",
   "39488",
   "3361",
-  "261068",
-  "261069",
-  "261070",
-  "261071",
-  "261072",
-  "261073",
+  "34942", // Bullion > Platinum > Other Platinum Bullion
+  "34943", // Bullion > Palladium
   "166679",
-  "166680",
-  "166681",
 ]);
 
 /**
@@ -282,7 +309,7 @@ export function isBullionCategory(
     return true;
   return false;
 }
-const TRADING_CARD_CATEGORY_IDS = new Set([
+export const TRADING_CARD_CATEGORY_IDS = new Set([
   "261328",
   "183454",
   "2536",
