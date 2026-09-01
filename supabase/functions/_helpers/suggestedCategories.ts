@@ -19,8 +19,16 @@
 // DEPRECATED: hardcoded map retained only as an emergency bootstrap reference.
 // After running sync-ebay-taxonomy at least once this entire object is unused.
 // DO NOT ADD NEW ENTRIES HERE — run the sync job instead.
+//
+// 2026-09-01: removed 10 confirmed live-leaf-wrong-domain entries (verified
+// against corpus/ebay_taxonomy_snapshot.json) rather than "correcting" them —
+// this map's own policy above is to shrink, not be maintained, and a deleted
+// entry makes Tier 4 return `null` (the caller renders a visible "Category
+// #<id>" placeholder) instead of a confidently wrong breadcrumb. Exported
+// (was module-private) purely so a test can iterate its keys directly; see
+// suggestedCategories.test.ts.
 // ---------------------------------------------------------------------------
-const _LEGACY_BOOTSTRAP_BREADCRUMBS: Record<string, string> = {
+export const _LEGACY_BOOTSTRAP_BREADCRUMBS: Record<string, string> = {
   // ── Coins & Bullion ──────────────────────────────────────────────────────
   "178906": "Coins & Paper Money > Bullion > Gold > Bars & Rounds",
   "39489": "Coins & Paper Money > Bullion > Silver > Bars & Rounds",
@@ -40,9 +48,10 @@ const _LEGACY_BOOTSTRAP_BREADCRUMBS: Record<string, string> = {
   "11116": "Coins & Paper Money > Coins: US > Pennies > Lincoln Memorial (1959-2008)",
   "11118": "Coins & Paper Money > Coins: US > Half Dollars",
   "40149": "Coins & Paper Money > Coins: US > Quarters > Washington (1932-1998)",
-  "40150": "Coins & Paper Money > Coins: US > Dimes > Roosevelt (1946-Now)",
+  // 40150/40152 removed 2026-09-01: confirmed LIVE LEAVES silently
+  // reassigned by eBay to Action Figures / Go-Karts (Recreational), not
+  // Roosevelt Dime / Jefferson Nickel.
   "40151": "Coins & Paper Money > Coins: US > Dimes > Mercury (1916-1945)",
-  "40152": "Coins & Paper Money > Coins: US > Nickels > Jefferson (1938-Now)",
   "40153": "Coins & Paper Money > Coins: US > Nickels > Buffalo (1913-1938)",
   "40154": "Coins & Paper Money > Coins: US > Pennies > Indian Head (1859-1909)",
   "40155": "Coins & Paper Money > Coins: US > Pennies > Lincoln Wheat (1909-1958)",
@@ -67,19 +76,17 @@ const _LEGACY_BOOTSTRAP_BREADCRUMBS: Record<string, string> = {
   "40165": "Coins & Paper Money > Coins: US > Gold Coins > $1 Gold",
   "40166": "Coins & Paper Money > Coins: US > Gold Coins > American Gold Eagle",
   "40167": "Coins & Paper Money > Coins: US > Gold Coins > American Gold Buffalo",
-  "261064": "Coins & Paper Money > Bullion > Gold > Coins",
-  "261068": "Coins & Paper Money > Bullion > Silver > Coins",
-  "261069": "Coins & Paper Money > Bullion > Silver > Bars & Rounds",
-  "261070": "Coins & Paper Money > Bullion > Platinum > Coins",
-  "261071": "Coins & Paper Money > Bullion > Gold > Bars & Rounds",
+  // 261064/261068/261069/261070/261071 removed 2026-09-01: confirmed LIVE
+  // LEAVES in Toys & Hobbies (Action Figures family) / Collectibles
+  // (Signs & Plaques), not Bullion.
   "261072": "Coins & Paper Money > Bullion > Platinum > Bars & Rounds",
   "261073": "Coins & Paper Money > Bullion > Palladium",
   "261074": "Coins & Paper Money > Bullion > Silver",
   "261075": "Coins & Paper Money > Bullion > Gold",
   "261076": "Coins & Paper Money > Bullion",
   "166679": "Coins & Paper Money > Bullion > Other",
-  "166680": "Coins & Paper Money > Bullion > Other > Copper > Bars & Rounds",
-  "166681": "Coins & Paper Money > Bullion > Other > Copper > Coins",
+  // 166680/166681 removed 2026-09-01: confirmed live leaves, but Paper
+  // Money: World > Cambodia/Hong Kong, not Copper Bullion.
   // 45243 and 40196-40200 were removed 2026-08-24: confirmed absent from the
   // live ebay_taxonomy_cache (Finding B, CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md).
   // eBay restructured World Coins into country-specific era/denomination leaves.
@@ -105,7 +112,8 @@ const _LEGACY_BOOTSTRAP_BREADCRUMBS: Record<string, string> = {
   "222": "Toys & Hobbies > Dolls & Bears > Dolls",
   "238": "Toys & Hobbies > Dolls & Bears > Bears",
   "220": "Toys & Hobbies > Dolls & Bears",
-  "182": "Toys & Hobbies > Building Toys > LEGO",
+  // 182 removed 2026-09-01: confirmed LIVE LEAF, but Computers/Tablets &
+  // Networking > Software > Other Computer Software, not LEGO.
   "19016": "Toys & Hobbies > Games > Board Games",
   "233": "Toys & Hobbies > Puzzles",
 
@@ -138,7 +146,8 @@ const _LEGACY_BOOTSTRAP_BREADCRUMBS: Record<string, string> = {
 
   // ── Clothing & Fashion ───────────────────────────────────────────────────
   "11450": "Clothing, Shoes & Accessories",
-  "15709": "Clothing, Shoes & Accessories > Men's Clothing > T-Shirts",
+  // 15709 removed 2026-09-01: confirmed LIVE LEAF, but Clothing, Shoes &
+  // Accessories > Men > Men's Shoes > Athletic Shoes, not T-Shirts.
   "15724": "Clothing, Shoes & Accessories > Women's Clothing",
   "93427": "Clothing, Shoes & Accessories > Men's Shoes",
 
@@ -159,7 +168,8 @@ const _LEGACY_BOOTSTRAP_BREADCRUMBS: Record<string, string> = {
   "237": "Collectibles > Decorative Collectibles",
   "870": "Collectibles > Militaria",
   "45": "Collectibles > Animation Art & Characters",
-  "40": "Collectibles > Autographs",
+  // 40 removed 2026-09-01: confirmed LIVE LEAF, but Collectibles >
+  // Advertising > Gas & Oil > Other Gas & Oil Collectibles, not Autographs.
   // "99" removed 2026-08-24: not a real eBay leaf category (confirmed absent
   // from live ebay_taxonomy_cache) and was mislabeled here as "Vintage Sports
   // Memorabilia" -- it is actually the "Everything Else" rollup ID. This was

@@ -352,6 +352,18 @@ export async function detectCategoryTree(
 // NOTE: Only LEAF categories are included here (no parent category IDs like 253, 256, 3377, 4733, 18466).
 // Parent categories are detected dynamically via breadcrumb patterns (e.g., "Coins: US", "Coins: World").
 // eBay Metadata API and descriptor fetching work with actual leaf category IDs.
+// 2026-09-01: corrected every wrong inline comment below using labels
+// verified against corpus/ebay_taxonomy_snapshot.json — comments are
+// text-only (the code below only ever checks Set membership), but a wrong
+// comment is exactly what let 7 confirmed live-leaf-wrong-domain IDs
+// (261064/261068/261069/261070/261071, plus 40150/40152 silently reassigned
+// by eBay to Action Figures/Go-Karts) go undetected here after being fixed
+// everywhere else in the AI-facing pipeline. Removed those 7, removed IDs
+// confirmed dead (absent from the live tree) where a correct live
+// replacement already exists elsewhere in this Set or has been added below,
+// and moved 532/173685 (real coin leaves) out of the bullion Set below,
+// where their presence was silently misclassifying them (bullion is checked
+// before coin in detectCategoryTree/detectCategoryTreeSync).
 export const HARDCODED_COIN_CATEGORY_IDS = new Set([
   // ── eBay June 2026 mandate top-level parent IDs (all descendants require conditionDescriptors) ──
   "253", // Coins: US (parent — all descendants are coins)
@@ -359,110 +371,90 @@ export const HARDCODED_COIN_CATEGORY_IDS = new Set([
   "3377", // Coins: Canada (eBay taxonomy parent)
   "4733", // Coins: Ancient (eBay taxonomy parent)
   "18466", // Coins: Medieval (eBay taxonomy parent)
-  // ── US Coin parent / top-level ─────────────────────────────────────────────
   // ── US Cents ───────────────────────────────────────────────────────────────
-  "11981", // Wheat Pennies
-  "39464", // Lincoln Cents (Memorial)
-  "39456", // Lincoln Cents (1959-Now, includes 2026 dual-date)
+  "11981", // Eisenhower Dollar (1971-78)
+  "39464", // Morgan Dollar (1878-1921)
+  "31373", // Lincoln Memorial Cent (1959-2008)
+  "39455", // Lincoln Wheat Small Cent (1909-1958)
+  "41084", // Indian Head Small Cent (1859-1909)
+  "11950", // Braided Hair Large Cent (1839-57)
+  "11949", // Coronet Head Large Cent (1816-39)
   // ── US Nickels ─────────────────────────────────────────────────────────────
-  "11980", // Jefferson Nickels
-  "11949", // Jefferson Nickels (1938-Now, includes 2026 dual-date)
-  "11116", // Buffalo Nickels
-  "11118", // Liberty Head Nickels
-  "11063", // Shield Nickels
+  "11980", // Peace Dollar (1921-35)
+  "41087", // Jefferson Nickel (1938-Now)
+  "139806", // Buffalo Nickel (1913-38)
   // ── US Dimes ───────────────────────────────────────────────────────────────
   "11958", // Seated Liberty Dimes (legacy leaf used in production payloads)
-  "11971", // Roosevelt Dimes
-  "11956", // Roosevelt Dimes (1946-Now, includes 2026 Emerging Liberty)
-  "40149", // Dimes (parent/generic)
-  "40150", // Dimes (type 2)
-  "40151", // Mercury Dimes (1916–1945)
-  "40152", // Barber Dimes (1892–1916)
-  "40153", // Seated Liberty Dimes (1837–1891)
-  "40154", // Early American Dimes
-  "40155", // Dimes (variant 5)
-  "40156", // Dimes (variant 6)
-  "40157", // Dimes (variant 7)
-  "40158", // Dimes (variant 8)
-  "40159", // Dimes (variant 9)
-  "40160", // Dimes (variant 10)
-  "40161", // Dimes (variant 11)
-  "40162", // Dimes (variant 12)
-  "40163", // Dimes (variant 13)
-  "40164", // Dimes (variant 14)
-  "40165", // Dimes (variant 15)
-  "40166", // Dimes (variant 16)
-  "40167", // Dimes (variant 17)
-  "41090", // Dimes (AI-resolved parent category — observed in Mercury dime listings)
+  "11971", // Barber Half Dollar (1892-1915)
+  "41090", // Mercury Dime (1916-45)
   // ── US Quarters ────────────────────────────────────────────────────────────
-  "41099", // Washington Quarters
-  "41102", // State Quarters
-  "40196", // Quarters (variant)
-  "40197", // Quarters (variant)
-  "40198", // Quarters (variant)
-  "40199", // Quarters (variant)
-  "40200", // Quarters (variant)
-  "40201", // Quarters (variant)
-  "40202", // Quarters (variant)
+  "41099", // Liberty Walking Half Dollar (1916-47)
+  "41102", // Kennedy Half Dollar (1964-Now)
   "171526", // America the Beautiful Quarters (2026)
   // ── US Half Dollars / Dollar Coins ─────────────────────────────────────────
-  "11973", // Kennedy Half Dollars
-  "41103", // Kennedy Half Dollars (1964-Now, includes 2026 Enduring Liberty)
-  "39455", // Dollar Coins
-  // ── US Gold / Silver ───────────────────────────────────────────────────────
-  "41084", // US Gold Coins
-  "11950", // US Silver Coins
-  "19167", // US Silver type
-  "19168", // US Silver type
-  "19169", // US Silver type
-  // ── US Coin Sets / Proof / Rolls ───────────────────────────────────────────
-  "41111", // Coin Sets
-  "166679", // US Coin Proof Sets
-  "41109", // US Coin Proof Sets (variant)
-  "3411", // Coin Rolls
-  // ── Paper Money ────────────────────────────────────────────────────────────
-  "526", // Paper Money: US
-  // ── World / Canadian / Ancient / Medieval / Commemorative / Exonumia ───────
-  "45243", // World Coins
-  "45244", // World Coins (variant)
-  "257", // Coins: World > Other Coins of the World (confirmed live LEAF;
-  // the graded-friendly catch-all analyze-item/ebay-publish route to
-  // instead of the non-leaf 45243/256 rollups — see Finding B)
-  "39471", // Canadian Coins
-  "39472", // Ancient Coins
-  "39473", // Medieval Coins
-  "39474", // Bullion Coins
-  "39475", // Commemorative Coins
-  "164743", // World Coins (extended)
-  "166680", // Proof Sets (variant)
-  "166681", // Proof Sets (variant)
+  "11973", // Franklin Half Dollar (1948-1963)
+  "11983", // Native American Dollar (2000-Now, was Sacagawea)
+  "159713", // Presidential Dollar (2007-Now)
+  "11982", // Susan B Anthony Dollar (1979-81, 99)
+  // ── US Gold ────────────────────────────────────────────────────────────────
+  "39471", // $10, Eagle (Gold Pre-1933)
+  "39472", // $20, Double Eagle (Gold Pre-1933)
+  "39473", // Fractional, Pioneer (Gold Pre-1933)
+  "39470", // $5, Half Eagle (Gold Pre-1933)
+  // ── US Coin Sets / Proof ────────────────────────────────────────────────────
+  "166679", // Other Bullion (also correct home for the generic bullion-coin fallback)
+  "41109", // US Coin Proof Sets
+  "526", // US Coin Mint Sets
+  // ── US Commemorative ────────────────────────────────────────────────────────
+  "179531", // Commemorative Silver (1892-1954)
+  "179532", // Commemorative Gold (1903-1926)
+  "179533", // Commemorative Modern Silver/Clad (1982-Now)
+  "179534", // Commemorative Modern Gold (1984-Now)
+  "529", // Commemorative Mixed Lots
+  // ── Ancient / Medieval (moved back from the bullion Set below 2026-09-01 —
+  // both are real coin leaves, not bullion; their comments were wrong too:
+  // "Silver Bars & Rounds" / "Platinum / Palladium Bullion") ────────────────
+  "532", // Coins: Ancient > Other Ancient Coins
+  "173685", // Coins: Medieval > Other Medieval Coins
+  // ── World Coins (45243/40196-40202 removed 2026-09-01: confirmed dead,
+  // same Finding B already fixed elsewhere; replaced with live per-country
+  // leaves + the 257 catch-all) ────────────────────────────────────────────
+  "257", // Coins: World > Other Coins of the World
+  "536", // Coins: Canada > Other Canadian Coins
+  "173631", // Coins: World > North & Central America > Mexico (1905-Now)
+  "3406", // Coins: World > Europe > UK (Great Britain) > Crown
+  "535", // Coins: World > Australia & Oceania > Australia > Other
+  "7955", // Coins: World > Europe > Germany > West & Unified (1949-Now)
+  "539", // Coins: World > Europe > France
   // ── Bullion Coins (overlap with bullion — conditionDescriptors fetched; 0 returned = mandate exempt) ─
-  "177652", // Bullion Coins
-  "177653", // Silver Bullion Coins
-  "178906", // Gold Bullion Coins / Bars
-  // ── Error Coins / Rolls / Collections ──────────────────────────────────────
-  "261064", // Error Coins
-  "261068", // Collectibles: Coins
-  "261069", // Collectibles: Coins variant
-  "261070", // Collectibles: Coins variant
-  "261071", // Collectibles: Coins variant
-  "261072", // Collectibles: Coins variant
-  "261073", // Collectibles: Coins variant
-  "261074", // Collectibles: Coins variant
-  "261075", // Collectibles: Coins variant
-  "261076", // Collectibles: Coins variant
-  // ── Silver/Gold Bars & Rounds (Certification aspect required) ─────────────
-  "532", // Silver Bars & Rounds
-  "3360", // Silver grain bars
-  "3361", // Gold Bars & Rounds
-  "173685", // Platinum / Palladium Bullion
+  "177652", // Bullion > Gold > Coins
+  "177653", // Bullion > Silver > Coins
+  "178906", // Bullion > Gold > Bars & Rounds
+  // ── Collectibles: Coins (dangerous wrong-domain range removed 2026-09-01 —
+  // 261064/261068/261069/261070/261071 are confirmed LIVE LEAVES in Toys &
+  // Hobbies / Collectibles: Animation Art, not Coins & Paper Money; 261072-
+  // 261076 are absent from the live tree, left as-is per leafCategoryGuard.ts's
+  // established precedent — absence doesn't prove an ID no longer exists) ──
+  "261072",
+  "261073",
+  "261074",
+  "261075",
+  "261076",
 ]);
 export const HARDCODED_BULLION_CATEGORY_IDS = new Set([
-  "178906",
-  "39489",
-  "3361",
-  "532",
-  "173685",
+  "178906", // Bullion > Gold > Bars & Rounds
+  "39489", // Bullion > Silver > Bars & Rounds
+  "3361", // Bullion > Silver > Other Silver Bullion
+  "3360", // Bullion > Gold > Other Gold Bullion (added 2026-09-01: confirmed
+  // live bullion leaf, was missing — meant this ID resolved "coin" instead
+  // of "bullion" via the coin Set below)
+  "34942", // Bullion > Platinum > Other Platinum Bullion
+  "34943", // Bullion > Palladium
+  // 532/173685 removed 2026-09-01: both are confirmed live COIN leaves
+  // (Coins: Ancient > Other Ancient Coins; Coins: Medieval > Other Medieval
+  // Coins), not bullion — their presence here was misclassifying them, since
+  // this Set is checked before the coin Set in detectCategoryTree/
+  // detectCategoryTreeSync. They remain correctly in HARDCODED_COIN_CATEGORY_IDS.
 ]);
 export const HARDCODED_TRADING_CARD_CATEGORY_IDS = new Set([
   "261328",
@@ -475,10 +467,12 @@ export const HARDCODED_TRADING_CARD_CATEGORY_IDS = new Set([
 export const HARDCODED_COLLECTIBLE_CATEGORY_IDS = new Set([
   "19203",
   "19209",
-  "261068",
+  "261068", // Toys & Hobbies > Action Figures & Accessories > Action Figures
   "246",
-  "182",
   "19016",
+  // "182" removed 2026-09-01: confirmed live leaf but wrong domain
+  // (Computers/Tablets & Networking > Software > Other Computer Software,
+  // not LEGO/collectible — same disease as the coin-category fixes above).
 ]);
 
 // ================================================================
@@ -1880,14 +1874,15 @@ export function detectCategoryTreeSync(
   }
   if (HARDCODED_COLLECTIBLE_CATEGORY_IDS.has(categoryId)) return "collectible";
 
-  // Also handle the legacy 261xxx range for silver/gold bullion coins/bars
-  if (
-    /^261[0-9]{3}$/.test(categoryId) &&
-    parseInt(categoryId) >= 261000 &&
-    parseInt(categoryId) <= 261076
-  ) {
-    return "bullion";
-  }
+  // 2026-09-01: removed a broad `/^261[0-9]{3}$/` catch-all that used to sit
+  // here and classify ANY category ID in the entire 261000-261076 range as
+  // bullion — a strictly more dangerous, open-ended version of the exact
+  // wrong-domain bug just fixed above (that range also contains, e.g., Toys
+  // & Hobbies > Action Figures leaves). Every confirmed-bullion ID in that
+  // range is now explicit in HARDCODED_BULLION_CATEGORY_IDS above, which is
+  // checked first in this function; an unknown ID in the range now correctly
+  // falls through to the item-type text hints below instead of being
+  // silently assumed bullion.
 
   // Item type text hints as last resort
   if (itemType) {

@@ -414,6 +414,96 @@ Each of these three is a genuinely separate file/subsystem from what this
 pass touched, with its own blast radius — flagged for a dedicated pass each,
 same treatment as `HARDCODED_COIN_CATEGORY_IDS` above.
 
+## Follow-up: cure the disease in the three flagged instances
+
+The previous entry flagged three more locations sharing the same
+stale/wrong-domain coin-category-ID disease as separate, unfixed follow-ups.
+This entry cures those three, using the same verified replacement table.
+
+- [x] **`ebay-publish/publish-helpers.ts`** — removed 7 confirmed
+      live-leaf-wrong-domain IDs from `HARDCODED_COIN_CATEGORY_IDS`
+      (`40150`/`40152` silently reassigned to Action Figures/Go-Karts;
+      `261064`/`261068`-`261071` to Toys & Hobbies/Collectibles). Found and
+      fixed a **4th bug class** not in the original flag: `532`/`173685`
+      (real coin leaves) were also wrongly in `HARDCODED_BULLION_CATEGORY_IDS`
+      — moved back to the coin set, since bullion is checked first and was
+      silently winning; `3360` (real bullion leaf) was missing from the
+      bullion set entirely, added. Removed a regex catch-all in
+      `detectCategoryTreeSync` (`/^261[0-9]{3}$/` → `"bullion"`) that
+      classified **any** ID in that whole numeric range as bullion — a
+      broader, open-ended version of the same landmine, not fixed by
+      correcting the Set alone. Also removed `182` from
+      `HARDCODED_COLLECTIBLE_CATEGORY_IDS` (confirmed live leaf, Computer
+      Software, not LEGO) while spot-checking that Set per the same
+      classification function. Corrected every wrong inline comment using
+      verified live labels, and backfilled the same corrected replacement
+      IDs already added elsewhere, so this fallback-of-a-fallback still
+      recognizes a listing's corrected category if the DB/breadcrumb lookup
+      is ever unavailable. Added `publish-helpers.test.ts` (none existed —
+      confirmed zero test coverage for this entire classification path).
+- [x] **`src/types/listing.ts`** — removed the same 7 wrong-domain IDs from
+      `COIN_CATEGORY_IDS`/`BULLION_CATEGORY_IDS`, plus two IDs (`11956`,
+      `11116`) that violated the file's own stated "leaf-only" invariant
+      with no such justification. Corrected that header comment to name the
+      5 legitimate June-2026-mandate parent markers as the deliberate
+      exception. This is the highest-severity of the three: a wrong
+      classification here makes `isCoinConditionDetailRequired()` return
+      `true` for a non-coin item, which **hard-blocks publish**
+      (`useAnalyzePublish.ts`) until the seller fills in a nonsensical
+      Grade/PCGS field. Backfilled the same corrected replacement IDs.
+      Exported the three sets (were module-private) and added
+      `listing-category-classification-freshness.test.ts` — zero test
+      coverage existed for the dangerous IDs or for `TRADING_CARD_CATEGORY_IDS`
+      at all.
+- [x] **`_helpers/suggestedCategories.ts`** — different treatment from the
+      other two: this map (`_LEGACY_BOOTSTRAP_BREADCRUMBS`) explicitly says
+      "DO NOT ADD NEW ENTRIES — run the sync job instead," so dangerous
+      entries were **deleted**, not corrected — a deleted entry makes Tier 4
+      return `null` (the caller renders a visible "Category #<id>"
+      placeholder) instead of a confidently wrong breadcrumb, consistent
+      with the file's own stated intent to shrink. Removed 10 confirmed
+      wrong-domain-live entries — 3 more than the coin-specific ones already
+      known, since this map spans every domain: `182` (labeled LEGO, is
+      Computer Software), `15709` (labeled T-Shirts, is Men's Athletic
+      Shoes), `40` (labeled Autographs, is Gas & Oil Collectibles). Did
+      **not** backfill new entries, per the file's own policy. Exported the
+      map (was module-private) purely for testability and extended the
+      existing `suggestedCategories.test.ts` with both a known-IDs check and
+      a full snapshot sweep.
+- [x] **Correction to the previous entry's own speculation:** git history
+      (`git log --follow` on both files) resolves which file is the
+      original — `src/lib/ebayCategoryMap.ts` (created 2026-03-10) is the
+      source; `suggestedCategories.ts`'s map was copy-pasted from it six days
+      later (commit `35e1c51`'s own message: "mirrors the frontend
+      ebayCategoryMap.ts"), not the other way around as guessed.
+- [x] **Correction to the previous entry's claimed importers:** only
+      `analyze-item/index.ts` actually imports `suggestedCategories.ts`.
+      `category-lookup/resolverCore.ts` and `leafCategoryGuard.ts`'s
+      `suggestedCategories` hits are a comment-only architectural comparison
+      and a reference to the unrelated `listing.suggestedCategories` data
+      field, respectively — not imports of the module. Checked both in this
+      pass; neither needed a fix.
+- [x] Verified: `npm run test` 121 -> 126, 4 Deno test files (30/2/10/8,
+      all pass), `node scripts/replay-corpus.mjs` 18/18 (unaffected),
+      `deno fmt`/`lint` clean across the whole `supabase/functions/` tree
+      (85/82 files), `deno check` clean on every touched backend file,
+      `npx eslint`/`npx tsc` clean on every touched frontend file.
+
+**Still flagged, not fixed — same disease, different vertical:**
+
+- `HARDCODED_TRADING_CARD_CATEGORY_IDS` (`publish-helpers.ts`) and
+  `TRADING_CARD_CATEGORY_IDS` (`listing.ts`) are byte-for-byte identical and
+  share their own staleness — a shell-script comment already documents
+  `19107` as stale with known live replacement `183050`, not in either set.
+  Trading cards, not coins/bullion — needs its own taxonomy verification
+  pass.
+- **The DB-persistence path** (`analyze-item/index.ts` ~line 2779-2804):
+  auto-persists `listing.suggestedCategories[0]`'s breadcrumb into
+  `category_mappings`, which is itself Tier 2 of `suggestedCategories.ts`'s
+  own lookup order — so a stale Tier-4-sourced label could in principle
+  become self-perpetuating in the DB. Touches write/persistence behavior, a
+  different risk category from correcting a data table.
+
 ## Wrap-up (Phase 1+2 checkpoint)
 
 - [x] Push branch feat/category-resolver-v2-phase1-2, open PR
