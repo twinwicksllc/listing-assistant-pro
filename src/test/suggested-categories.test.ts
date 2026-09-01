@@ -78,4 +78,32 @@ describe("buildSuggestedCategories helper", () => {
     const out = await buildSuggestedCategories(listing, svc as any);
     expect(out).toEqual([]);
   });
+
+  // Regression guard for the 2026-09-01 DB-persistence follow-up fix.
+  // fromLegacyBootstrap distinguishes a fresh, higher-confidence Tier-1/2/3
+  // breadcrumb from a Tier-4 _LEGACY_BOOTSTRAP_BREADCRUMBS emergency-fallback
+  // guess, so analyze-item's auto-persist can skip writing the latter into
+  // category_mappings (itself Tier 2 of this same lookup order) and never
+  // let a possibly-wrong emergency value become self-perpetuating.
+  it("marks a category_mappings-resolved (Tier 2) suggestion as NOT from the legacy bootstrap", async () => {
+    const listing: any = { ebayCategoryId: "123", suggestedCategories: [] };
+    const svc = makeSvcWithMappings({ "123": "Verified Cat" });
+    const out = await buildSuggestedCategories(listing, svc as any);
+    expect(out[0].categoryId).toBe("123");
+    expect(out[0].fromLegacyBootstrap).toBe(false);
+  });
+
+  it("marks a legacy-bootstrap-resolved (Tier 4) suggestion as fromLegacyBootstrap", async () => {
+    // "532" has no category_mappings entry in this mock (tier 1/2 miss), and
+    // the live eBay API is unreachable in the vitest/Node environment
+    // (tier 3 miss — see suggestedCategories.ts's getEbayAppToken), so this
+    // falls all the way through to _LEGACY_BOOTSTRAP_BREADCRUMBS's own "532"
+    // entry (tier 4) — confirmed still present in that map.
+    const listing: any = { ebayCategoryId: "532", suggestedCategories: [] };
+    const svc = makeSvcWithMappings({});
+    const out = await buildSuggestedCategories(listing, svc as any);
+    expect(out[0].categoryId).toBe("532");
+    expect(out[0].breadcrumb).toBe("Coins & Paper Money > Coins: Ancient");
+    expect(out[0].fromLegacyBootstrap).toBe(true);
+  });
 });

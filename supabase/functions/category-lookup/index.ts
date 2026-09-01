@@ -1644,24 +1644,30 @@ export async function handleRequest(req: Request): Promise<Response> {
       const breadcrumb = payload.breadcrumb || null;
       const normalized = deepNormalize(rawKey);
 
-      const authHeader = req.headers.get("authorization");
-      if (authHeader) {
-        const token = authHeader.replace(/^Bearer\s+/i, "");
-        const { data: userData, error: userErr } = await supabase.auth.getUser(token);
-        if (userErr || !userData?.user?.id) {
-          return new Response(
-            JSON.stringify({ error: "Invalid authorization token" }),
-            {
-              status: 401,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            },
-          );
-        }
-        const userId = userData.user.id;
+      // 2026-09-01: was `const authHeader = req.headers.get("authorization");
+      // if (authHeader) { ...call supabase.auth.getUser(token) again... }`.
+      // That re-derived auth from the raw header instead of using `auth`
+      // (already verified once by requireUserOrServiceRole at the top of
+      // handleRequest, in scope here — no function boundary between them),
+      // and reaching this action's body at all requires having already
+      // passed that top-level guard, which requires a Bearer token to
+      // exist — so `authHeader` was ALWAYS truthy here, and the `else`
+      // branch below ("no auth — internal auto-save") was unreachable dead
+      // code. Worse: analyze-item's auto-persist call always sends the
+      // service-role key as Bearer, and calling auth.getUser() directly on
+      // the service-role key doesn't work (this file's own
+      // requireUserOrServiceRole special-cases the exact same key via a
+      // literal string comparison specifically because of this) — so every
+      // "ai_auto" persist attempt from analyze-item silently 401'd here,
+      // before ever reaching the gated safePersistMapping path below that
+      // was written for exactly this caller.
+      if (auth.userId) {
+        // Real, authenticated user session — already verified once by
+        // requireUserOrServiceRole, not re-verified here.
         const { data: profile } = await supabase
           .from("profiles")
           .select("is_admin")
-          .eq("id", userId)
+          .eq("id", auth.userId)
           .maybeSingle();
         const isAdmin = profile?.is_admin === true;
         const source = isAdmin ? verificationSource || "user_verified" : "ai_auto";
@@ -1702,7 +1708,9 @@ export async function handleRequest(req: Request): Promise<Response> {
         );
       }
 
-      // No auth — internal auto-save (apply gates #2)
+      // Service-role / internal caller (e.g. analyze-item's auto-persist) —
+      // apply the gated path (leaf/active verification via safePersistMapping)
+      // rather than treating it as an unauthenticated request.
       if (!categoryId) throw new Error("categoryId required for store action");
 
       const ebayAuth = await getEbayAppToken();

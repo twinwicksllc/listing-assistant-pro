@@ -4,6 +4,7 @@ import {
   HARDCODED_BULLION_CATEGORY_IDS,
   HARDCODED_COIN_CATEGORY_IDS,
   HARDCODED_COLLECTIBLE_CATEGORY_IDS,
+  HARDCODED_TRADING_CARD_CATEGORY_IDS,
 } from "./publish-helpers.ts";
 
 // Regression guard for the 2026-09-01 stale-coin-category-ID cleanup (see
@@ -117,4 +118,32 @@ Deno.test("detectCategoryTreeSync: 532 and 173685 resolve as coin, not bullion",
 
 Deno.test("detectCategoryTreeSync: 3360 resolves as bullion (was missing, resolved coin before)", () => {
   assertEquals(detectCategoryTreeSync("3360", undefined), "bullion");
+});
+
+// Regression guard for the trading-card follow-up fix (same todo.md entry
+// as above, "smaller follow-ups" pass). No dangerous wrong-domain-live IDs
+// were found in this Set (lower severity than the coin cleanup — no
+// publish-blocking mechanism exists for trading cards anywhere), but 19107
+// was dead with a known live replacement (183050), already used correctly
+// in analyze-item's AI prompt; only this fallback Set was stale.
+Deno.test("HARDCODED_TRADING_CARD_CATEGORY_IDS: no confirmed live leaf outside trading cards/CCG", () => {
+  const snapshot = loadSnapshot();
+  const problems: string[] = [];
+  for (const id of HARDCODED_TRADING_CARD_CATEGORY_IDS) {
+    const cat = snapshot.get(id);
+    if (!cat || !cat.is_leaf) continue; // absent/non-leaf: harmless, see leafCategoryGuard.ts precedent
+    if (!/trading card|collectible card|toys & hobbies/i.test(cat.breadcrumb)) {
+      problems.push(`${id} is a live leaf but wrong domain: ${cat.breadcrumb}`);
+    }
+  }
+  assertEquals(problems, [], `\n${problems.join("\n")}`);
+});
+
+Deno.test("HARDCODED_TRADING_CARD_CATEGORY_IDS: dead 19107 is gone, replaced by live 183050", () => {
+  assertEquals(HARDCODED_TRADING_CARD_CATEGORY_IDS.has("19107"), false);
+  assertEquals(HARDCODED_TRADING_CARD_CATEGORY_IDS.has("183050"), true);
+});
+
+Deno.test("detectCategoryTreeSync: 183050 resolves as trading_card (19107 no longer does)", () => {
+  assertEquals(detectCategoryTreeSync("183050", undefined), "trading_card");
 });

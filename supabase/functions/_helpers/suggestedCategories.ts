@@ -356,6 +356,14 @@ function leafName(breadcrumb: string): string {
   return parts[parts.length - 1] || breadcrumb;
 }
 
+/** Which of lookupBreadcrumb's 4 resolution tiers actually supplied a breadcrumb. */
+export type BreadcrumbTier = 1 | 2 | 3 | 4;
+
+export interface BreadcrumbLookupResult {
+  breadcrumb: string;
+  tier: BreadcrumbTier;
+}
+
 /**
  * Resolve breadcrumb for a category ID.
  *
@@ -364,8 +372,16 @@ function leafName(breadcrumb: string): string {
  *  2. category_mappings    — legacy per-item-type records from category-lookup
  *  3. Live eBay API        — getCategorySubtree walk; result is auto-cached
  *  4. Legacy bootstrap map — only until the first sync has run (deprecated)
+ *
+ * Returns the tier alongside the breadcrumb (2026-09-01) so callers can tell
+ * a fresh, high-confidence Tier-1/2/3 result apart from a Tier-4 emergency-
+ * bootstrap guess before deciding whether to trust it for anything beyond
+ * display — e.g. analyze-item's auto-persist skips writing a Tier-4-sourced
+ * label into category_mappings, so a possibly-wrong emergency fallback value
+ * can never become self-perpetuating in the very table this function reads
+ * from at Tier 2.
  */
-async function lookupBreadcrumb(cid: string, svc: any): Promise<string | null> {
+async function lookupBreadcrumb(cid: string, svc: any): Promise<BreadcrumbLookupResult | null> {
   // Tier 1: taxonomy cache (primary source after first sync)
   if (svc) {
     try {
@@ -374,7 +390,7 @@ async function lookupBreadcrumb(cid: string, svc: any): Promise<string | null> {
         .select("breadcrumb")
         .eq("category_id", cid)
         .maybeSingle();
-      if (row?.breadcrumb) return row.breadcrumb as string;
+      if (row?.breadcrumb) return { breadcrumb: row.breadcrumb as string, tier: 1 };
     } catch (_) {
       /* ignore */
     }
@@ -386,8 +402,8 @@ async function lookupBreadcrumb(cid: string, svc: any): Promise<string | null> {
         .select("breadcrumb, category_name")
         .eq("ebay_category_id", cid)
         .maybeSingle();
-      if (row?.breadcrumb) return row.breadcrumb as string;
-      if (row?.category_name) return row.category_name as string;
+      if (row?.breadcrumb) return { breadcrumb: row.breadcrumb as string, tier: 2 };
+      if (row?.category_name) return { breadcrumb: row.category_name as string, tier: 2 };
     } catch (_) {
       /* ignore */
     }
@@ -395,10 +411,11 @@ async function lookupBreadcrumb(cid: string, svc: any): Promise<string | null> {
 
   // Tier 3: live eBay API (also seeds DB for next time)
   const live = await fetchLiveBreadcrumb(cid, svc);
-  if (live) return live;
+  if (live) return { breadcrumb: live, tier: 3 };
 
   // Tier 4: legacy bootstrap map (only fires before the first sync has ever run)
-  return _LEGACY_BOOTSTRAP_BREADCRUMBS[cid] ?? null;
+  const bootstrapped = _LEGACY_BOOTSTRAP_BREADCRUMBS[cid];
+  return bootstrapped ? { breadcrumb: bootstrapped, tier: 4 } : null;
 }
 
 export async function buildSuggestedCategories(listing: any, svc: any) {
@@ -410,12 +427,13 @@ export async function buildSuggestedCategories(listing: any, svc: any) {
   if (listing.ebayCategoryId) {
     const cid = normalizeId(listing.ebayCategoryId);
     seen.add(cid);
-    const breadcrumb = await lookupBreadcrumb(cid, svc);
+    const resolved = await lookupBreadcrumb(cid, svc);
     finalSuggestions.push({
       categoryId: cid,
-      categoryName: breadcrumb ? leafName(breadcrumb) : null,
-      breadcrumb,
+      categoryName: resolved ? leafName(resolved.breadcrumb) : null,
+      breadcrumb: resolved?.breadcrumb ?? null,
       reason: "Primary category from AI",
+      fromLegacyBootstrap: resolved?.tier === 4,
     });
   }
 
@@ -425,12 +443,13 @@ export async function buildSuggestedCategories(listing: any, svc: any) {
       const cid = normalizeId(altId);
       if (!cid || seen.has(cid)) continue;
       seen.add(cid);
-      const breadcrumb = await lookupBreadcrumb(cid, svc);
+      const resolved = await lookupBreadcrumb(cid, svc);
       finalSuggestions.push({
         categoryId: cid,
-        categoryName: breadcrumb ? leafName(breadcrumb) : null,
-        breadcrumb,
+        categoryName: resolved ? leafName(resolved.breadcrumb) : null,
+        breadcrumb: resolved?.breadcrumb ?? null,
         reason: "Alternative from AI",
+        fromLegacyBootstrap: resolved?.tier === 4,
       });
       if (finalSuggestions.length >= 3) break;
     }
@@ -443,12 +462,17 @@ export async function buildSuggestedCategories(listing: any, svc: any) {
       if (!cid || seen.has(cid)) continue;
       seen.add(cid);
       // Prefer live DB lookup, but accept any breadcrumb upstream already resolved
-      const breadcrumb = (await lookupBreadcrumb(cid, svc)) ?? s.breadcrumb ?? null;
+      const resolved = await lookupBreadcrumb(cid, svc);
+      const breadcrumb = resolved?.breadcrumb ?? s.breadcrumb ?? null;
       finalSuggestions.push({
         categoryId: cid,
-        categoryName: breadcrumb ? leafName(breadcrumb) : (s.categoryName ?? null),
+        categoryName: resolved ? leafName(resolved.breadcrumb) : (s.categoryName ?? null),
         breadcrumb,
         reason: s.reason ?? "AI suggestion",
+        // A value already on the listing (the s.breadcrumb fallback) didn't
+        // come from a fresh Tier-4 lookup just now, so it's not flagged —
+        // only a resolved.tier === 4 result from THIS lookup counts.
+        fromLegacyBootstrap: resolved?.tier === 4,
       });
       if (finalSuggestions.length >= 3) break;
     }

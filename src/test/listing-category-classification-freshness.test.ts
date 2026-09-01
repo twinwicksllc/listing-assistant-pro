@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { BULLION_CATEGORY_IDS, COIN_CATEGORY_IDS } from "../types/listing";
+import {
+  BULLION_CATEGORY_IDS,
+  COIN_CATEGORY_IDS,
+  TRADING_CARD_CATEGORY_IDS,
+} from "../types/listing";
 import snapshot from "../../corpus/ebay_taxonomy_snapshot.json";
 
 // Regression guard for the 2026-09-01 stale-coin-category-ID cleanup (see
@@ -102,5 +106,33 @@ describe("COIN_CATEGORY_IDS / BULLION_CATEGORY_IDS freshness", () => {
         `${id} should not be in BULLION_CATEGORY_IDS`,
       ).toBe(false);
     }
+  });
+});
+
+// Regression guard for the trading-card follow-up fix (same session,
+// "smaller follow-ups" pass). No dangerous wrong-domain-live IDs were found
+// here (lower severity than coins — no publish-blocking mechanism exists
+// for trading cards anywhere), but 19107 was dead with a known live
+// replacement (183050), already used correctly in analyze-item's AI prompt;
+// only this fallback Set was stale. TRADING_CARD_CATEGORY_IDS had zero test
+// coverage of any kind before this.
+describe("TRADING_CARD_CATEGORY_IDS freshness", () => {
+  test("no entry is a confirmed live leaf outside trading cards/CCG", () => {
+    const wrongDomain: string[] = [];
+    for (const id of TRADING_CARD_CATEGORY_IDS) {
+      const cat = byId.get(id);
+      if (!cat || !cat.is_leaf) continue;
+      if (
+        !/trading card|collectible card|toys & hobbies/i.test(cat.breadcrumb)
+      ) {
+        wrongDomain.push(`${id} -> live: "${cat.breadcrumb}"`);
+      }
+    }
+    expect(wrongDomain, wrongDomain.join("\n")).toEqual([]);
+  });
+
+  test("dead 19107 is gone, replaced by live 183050", () => {
+    expect(TRADING_CARD_CATEGORY_IDS.has("19107")).toBe(false);
+    expect(TRADING_CARD_CATEGORY_IDS.has("183050")).toBe(true);
   });
 });
