@@ -162,16 +162,17 @@ eslint src/ --max-warnings 0`, `node scripts/replay-corpus.mjs`
       confirmed CategoryConfirmDialog.tsx's separate `action: "verify"` path
       is unaffected.
 
-Deferred to a follow-up phase (not blocking Phase 4, tracked for later —
-same pattern as Phase 6's gate-4-enforcement deferral): deleting the
-hardcoded category-ID allowlist baked into analyze-item's tool-schema AI
-prompt (plan §2.2), and consolidating the three duplicate parent/blocklist
-mechanisms (leafCategoryGuard.ts's KNOWN_PARENT_CATEGORY_IDS,
-category-lookup's BLOCKED_PARENT_CATEGORIES, analyze-item's inline
-COINS_PAPER_MONEY_IDS/KNOWN_WRONG_DOMAIN_FOR_COINS/KNOWN_PARENT_CATEGORIES).
-Both are higher-risk, AI-prompt-adjacent changes that deserve their own
-isolated validation pass rather than being bundled into the resolver
-rewrite itself.
+~~Deferred to a follow-up phase~~ — **both done, across later sessions
+(this note was stale until 2026-09-01):** the three duplicate
+parent/blocklist mechanisms were consolidated into
+`leafCategoryGuard.ts`'s `KNOWN_PARENT_CATEGORY_IDS` (see the "consolidate
+the duplicated parent-category blocklists" entry below), and the
+hardcoded category-ID allowlist turned out to already be clean in
+`analyze-item`'s tool-schema prompt — the actual stale list was
+`domainPrompts.ts`'s `buildCoinBullionPrompt()`, found and fixed in the
+"fix the stale/wrong-domain eBay coin-category IDs" entry, which also
+cured the same disease in five more locations across two further
+sessions.
 
 ## Phase 5 — Harden crons
 
@@ -503,6 +504,114 @@ This entry cures those three, using the same verified replacement table.
   own lookup order — so a stale Tier-4-sourced label could in principle
   become self-perpetuating in the DB. Touches write/persistence behavior, a
   different risk category from correcting a data table.
+
+## Follow-up: trading-card IDs, and the category-lookup persist auth bug
+
+Two smaller items flagged in the previous entry. Investigating both turned
+up more than described.
+
+**Trading cards** (`HARDCODED_TRADING_CARD_CATEGORY_IDS`/
+`TRADING_CARD_CATEGORY_IDS`, byte-identical across `publish-helpers.ts`
+and `listing.ts`) — lower severity than coins: no dangerous wrong-domain
+IDs found, no publish-blocking mechanism exists for trading cards
+anywhere.
+
+- [x] `19107` (dead) replaced with its live equivalent `183050`
+      (Collectibles > Non-Sport Trading Cards > Trading Card Singles,
+      already used correctly in analyze-item's AI prompt — only these two
+      fallback Sets were stale) in both Sets, plus the corresponding
+      `CATEGORY_ASPECT_RULES` key in `publish-helpers.ts` (a separate
+      dictionary keyed by category ID — the Set fix alone wouldn't have
+      reattached the aspect rule to the ID that's actually live).
+- [x] Corrected wrong labels: `183454`/`2536` were commented
+      "Pokémon Trading Card Games"/"Magic: The Gathering" — the live
+      taxonomy has no per-game leaf at all (game is an item aspect, not a
+      category); `183454` is the one generic CCG-any-game leaf, `2536` is
+      the CCG parent category itself. `64482`'s comment ("Baseball Cards")
+      was corrected to note it's absent from the live tree and its only
+      two live children (Autographs-Reprints, Wholesale Lots) aren't
+      trading cards either — its real identity is unconfirmed.
+- [x] Closed the loop on a second, separate list found during
+      investigation: `src/lib/ebayCategoryMap.ts`'s own "Trading Cards"
+      section had the identical sport-mislabeling bug on `261328`-`261332`
+      (labeled Baseball/Football/Basketball/Hockey/Soccer Cards — actually
+      generic format leaves: Singles/Lots/Sets/Sealed Packs/Sealed Boxes)
+      plus `183454` (same Pokémon mislabel) — already found and explicitly
+      flagged as "deliberately not touched" in a comment in that file's
+      own freshness test last session. Fixed now; that test's comment and
+      scope updated to match, with a new narrowly-scoped assertion for the
+      exact 6 IDs (not a broader Toys-&-Hobbies-wide audit, which hasn't
+      been done).
+- [x] Added test coverage — zero existed for either Set, `CATEGORY_ASPECT_RULES`'s
+      card entries, or `EBAY_CATEGORY_BREADCRUMBS`'s trading-card block
+      before this.
+
+**The DB-persistence follow-up turned out to be a different, more
+consequential bug than described**, not just "a stale label might leak."
+`category-lookup/index.ts`'s `"store"` action has its own inner auth check
+(raw header → `supabase.auth.getUser(token)`) that ignores the
+already-correct service-role detection its own top-level
+`requireUserOrServiceRole(req)` call already computed (confirmed via grep:
+`auth.userId`/`auth.isServiceRole` were referenced nowhere else in the
+file). Since `analyze-item`'s auto-persist call always sends the
+service-role key as Bearer, and reaching this action's body at all
+requires already having passed the top-level guard (which requires a
+Bearer token to exist), the original `if (authHeader) {...} // else: no
+auth — internal auto-save` branching was based on a condition that could
+never be true — the gated `safePersistMapping` path has been unreachable
+dead code since `requireUserOrServiceRole` was introduced. This
+codebase's own `authGuard.ts` explicitly special-cases the service-role
+key elsewhere specifically because calling `getUser()` on it doesn't
+work, which is strong corroborating evidence (not verified via live
+execution) that every "ai_auto" persist attempt from `analyze-item` has
+silently 401'd.
+
+- [x] Fixed: the `"store"` action now branches on `auth.userId` (already
+      verified once at the top of `handleRequest`, in scope throughout —
+      no function boundary between them) instead of re-deriving auth from
+      the raw header. Real user sessions keep identical behavior (same
+      admin/non-admin upsert logic, just correctly reachable); service-role
+      callers now correctly route into the gated `safePersistMapping` path
+      instead of 401ing.
+- [x] **Correction made mid-fix**: fixing the auth routing does **not**
+      actually unlock any new writes today, contrary to what this entry
+      first assumed. `analyze-item`'s call never sends a confidence value,
+      and the `"store"` action's fallback branch hardcodes `confidence: 75`
+      — always below `AUTO_PERSIST_MIN_CONFIDENCE` (85) — so Gate 1 in
+      `safePersistMapping` rejects every call from this path regardless of
+      auth. That gate reads as a deliberate "never trust a bare AI guess"
+      design choice, not a bug, and wasn't touched. The auth fix is still
+      correct and worth having on its own merits (right HTTP semantics,
+      right routing, matters for any other service-role caller of
+      `"store"`) — it just doesn't change today's actual write behavior.
+- [x] Added tier provenance to `suggestedCategories.ts` anyway, as
+      cheap defense-in-depth rather than an active-risk fix (given the
+      confidence gate above): `lookupBreadcrumb` now returns
+      `{ breadcrumb, tier: 1|2|3|4 }` instead of a bare string (4 existing
+      return points, each already knew its own tier — no restructuring),
+      and `buildSuggestedCategories` threads a `fromLegacyBootstrap`
+      (`tier === 4`) field onto every suggestion. `analyze-item`'s
+      auto-persist block now skips the `"store"` call entirely when the
+      primary suggestion is `fromLegacyBootstrap` — so if the confidence
+      gate above ever loosens, this stays true without anyone having to
+      remember to add it then.
+- [x] **No test coverage added for the `"store"` action auth fix itself or
+      for `analyze-item`'s skip-guard** — confirmed no test infra exists
+      for either (no dedicated test file for `category-lookup`'s HTTP
+      handler needing a live Supabase instance, and zero `.test.ts` files
+      exist for `analyze-item/index.ts` at all). Flagging this gap
+      explicitly rather than skipping the disclosure. The tier-provenance
+      piece itself is tested (`suggested-categories.test.ts`).
+- [x] Verified: `npm run test` 126 -> 131, all 4 Deno test files green
+      (30/2/10/11), `node scripts/replay-corpus.mjs` 18/18 (unaffected),
+      `deno fmt`/`lint` clean across the whole `supabase/functions/` tree,
+      `deno check` clean on every touched backend file, `npx eslint`/`npx tsc`
+      clean on every touched frontend file.
+
+**Still open:** building test infrastructure for Deno HTTP handlers or for
+`analyze-item/index.ts` — a real, now twice-noted gap, but a much larger
+undertaking than either of these passes, and not something to improvise
+as a side effect of one fix.
 
 ## Wrap-up (Phase 1+2 checkpoint)
 
