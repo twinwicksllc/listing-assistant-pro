@@ -82,10 +82,15 @@ function resolveGradedFriendlyWorldCoinCategory(countryText?: string | null): {
       breadcrumb: "Coins & Paper Money > Coins: World > South Pacific",
     };
   }
+  // 256 corrected 2026-09-01: confirmed non-leaf (the "Coins: World" rollup
+  // itself), same bug class this whole file exists to prevent — it also
+  // rejects the Graded condition, exactly like 45243. The real production
+  // resolveGradedFriendlyWorldCoinCategory() (analyze-item/index.ts) already
+  // used 257; this mirror had fallen out of sync with it.
   return {
-    categoryId: "256",
-    categoryName: "World Coins (graded-friendly)",
-    breadcrumb: "Coins & Paper Money > Coins: World",
+    categoryId: "257",
+    categoryName: "Other Coins of the World",
+    breadcrumb: "Coins & Paper Money > Coins: World > Other Coins of the World",
   };
 }
 
@@ -150,21 +155,32 @@ function resolveDomainFallbackCategory(
     };
   }
 
-  if (metal === "platinum" || metal === "palladium") {
+  // 261070 corrected 2026-09-01: was a live leaf in the WRONG domain (Toys &
+  // Hobbies > Action Figures & Accessories > Action Figures Accessories).
+  if (metal === "platinum") {
     return {
-      categoryId: "261070",
-      categoryName: "Platinum & Palladium",
-      breadcrumb: "Coins & Paper Money > Bullion > Platinum & Palladium",
+      categoryId: "34942",
+      categoryName: "Other Platinum Bullion",
+      breadcrumb:
+        "Coins & Paper Money > Bullion > Platinum > Other Platinum Bullion",
+    };
+  }
+
+  if (metal === "palladium") {
+    return {
+      categoryId: "34943",
+      categoryName: "Palladium",
+      breadcrumb: "Coins & Paper Money > Bullion > Palladium",
     };
   }
 
   if (metal === "silver") {
+    // 41111 corrected 2026-09-01: was dead (absent from the live tree).
     if (/\bamerican\s+silver\s+eagles?\b|\bae\b/.test(combined)) {
       return {
-        categoryId: "41111",
-        categoryName: "American Silver Eagles",
-        breadcrumb:
-          "Coins & Paper Money > Coins: US > Silver > American Silver Eagles",
+        categoryId: "177653",
+        categoryName: "Silver Bullion Coins",
+        breadcrumb: "Coins & Paper Money > Bullion > Silver > Coins",
       };
     }
     if (/\bbar\b|\bingot\b|\bround\b/.test(combined)) {
@@ -179,10 +195,11 @@ function resolveDomainFallbackCategory(
         combined,
       )
     ) {
+      // 39465 corrected 2026-09-01: was dead (absent from the live tree).
       return {
-        categoryId: "39465",
-        categoryName: "US Silver Dollars",
-        breadcrumb: "Coins & Paper Money > Coins: US > Dollars > Silver",
+        categoryId: "176965",
+        categoryName: "US Dollars (mixed/unspecified type)",
+        breadcrumb: "Coins & Paper Money > Coins: US > Dollars > Mixed Lots",
       };
     }
     return {
@@ -198,10 +215,12 @@ function resolveDomainFallbackCategory(
     return resolveGradedFriendlyWorldCoinCategory(detectedCountry);
   }
 
+  // 45243 corrected 2026-09-01: dead (Finding B, fixed everywhere else on
+  // 2026-08-24; this mirror had never been updated).
   return {
-    categoryId: "45243",
-    categoryName: "World Coins",
-    breadcrumb: "Coins & Paper Money > Coins: World",
+    categoryId: "257",
+    categoryName: "Other Coins of the World",
+    breadcrumb: "Coins & Paper Money > Coins: World > Other Coins of the World",
   };
 }
 
@@ -281,15 +300,15 @@ describe("resolveGradedFriendlyWorldCoinCategory", () => {
     }
   });
 
-  it("routes unknown/other countries to 256 (graded-friendly default)", () => {
+  it("routes unknown/other countries to 257 (graded-friendly default, 256 is non-leaf)", () => {
     expect(resolveGradedFriendlyWorldCoinCategory("China").categoryId).toBe(
-      "256",
+      "257",
     );
-    expect(resolveGradedFriendlyWorldCoinCategory(null).categoryId).toBe("256");
+    expect(resolveGradedFriendlyWorldCoinCategory(null).categoryId).toBe("257");
     expect(resolveGradedFriendlyWorldCoinCategory(undefined).categoryId).toBe(
-      "256",
+      "257",
     );
-    expect(resolveGradedFriendlyWorldCoinCategory("").categoryId).toBe("256");
+    expect(resolveGradedFriendlyWorldCoinCategory("").categoryId).toBe("257");
   });
 
   it("NEVER returns 45243", () => {
@@ -311,14 +330,14 @@ describe("resolveGradedFriendlyWorldCoinCategory", () => {
 });
 
 describe("resolveDomainFallbackCategory (graded-aware)", () => {
-  it("still resolves ungraded/raw unknown-metal coin to 45243 (unchanged behavior)", () => {
+  it("still resolves ungraded/raw unknown-metal coin to 257 (45243 is dead)", () => {
     const result = resolveDomainFallbackCategory({
       domain: "coins_bullion",
       itemName: "old coin",
       keywords: ["collectible"],
       metalType: "none",
     });
-    expect(result?.categoryId).toBe("45243");
+    expect(result?.categoryId).toBe("257");
   });
 
   it("routes a graded Cook Islands coin (detected via keywords, no metal) to 3392 instead of 45243", () => {
@@ -331,13 +350,13 @@ describe("resolveDomainFallbackCategory (graded-aware)", () => {
     expect(result?.categoryId).not.toBe("45243");
   });
 
-  it("routes a graded coin with unknown country to 256 instead of 45243", () => {
+  it("routes a graded coin with unknown country to 257 instead of 45243/256", () => {
     const result = resolveDomainFallbackCategory({
       domain: "coins_bullion",
       itemName: "PCGS certified world coin",
       keywords: [],
     });
-    expect(result?.categoryId).toBe("256");
+    expect(result?.categoryId).toBe("257");
     expect(result?.categoryId).not.toBe("45243");
   });
 
@@ -350,7 +369,7 @@ describe("resolveDomainFallbackCategory (graded-aware)", () => {
       },
       { isSlabbed: true, grader: "NGC" },
     );
-    expect(result?.categoryId).toBe("256");
+    expect(result?.categoryId).toBe("257");
     expect(result?.categoryId).not.toBe("45243");
   });
 
@@ -367,24 +386,28 @@ describe("resolveDomainFallbackCategory (graded-aware)", () => {
     expect(result?.categoryId).not.toBe("177653");
   });
 
-  it("a graded American Silver Eagle still resolves to the named leaf (41111), not a World Coin leaf", () => {
+  it("a graded American Silver Eagle still resolves to a bullion leaf (177653, 41111 is dead), not a World Coin leaf", () => {
     const result = resolveDomainFallbackCategory({
       domain: "coins_bullion",
       itemName: "NGC MS 70 American Silver Eagle",
       keywords: ["graded"],
       metalType: "silver",
     });
-    expect(result?.categoryId).toBe("41111");
+    expect(result?.categoryId).toBe("177653");
+    expect(result?.categoryId).not.toBe("257");
+    expect(result?.categoryId).not.toBe("3392");
   });
 
-  it("a graded Morgan Dollar still resolves to the named US leaf (39465), not a World Coin leaf", () => {
+  it("a graded Morgan Dollar still resolves to a US leaf (176965, 39465 is dead), not a World Coin leaf", () => {
     const result = resolveDomainFallbackCategory({
       domain: "coins_bullion",
       itemName: "PCGS MS 65 Morgan Silver Dollar 1921",
       keywords: ["graded"],
       metalType: "silver",
     });
-    expect(result?.categoryId).toBe("39465");
+    expect(result?.categoryId).toBe("176965");
+    expect(result?.categoryId).not.toBe("257");
+    expect(result?.categoryId).not.toBe("3392");
   });
 
   it("does not affect known-metal branches (silver bullion still resolves normally)", () => {

@@ -60,22 +60,39 @@ function resolveDomainFallbackCategory(
     };
   }
 
-  if (metal === "platinum" || metal === "palladium") {
+  // 261070 corrected 2026-09-01: was a live leaf in the WRONG domain (Toys &
+  // Hobbies > Action Figures & Accessories > Action Figures Accessories), the
+  // same bug fixed in analyze-item/index.ts's real resolveDomainFallbackCategory.
+  // This test file duplicates that function's logic locally rather than
+  // importing it (analyze-item/index.ts is a Deno edge function, not a
+  // Node-importable module), so its expectations must be corrected in step
+  // with the real implementation or they silently assert stale values forever.
+  if (metal === "platinum") {
     return {
-      categoryId: "261070",
-      categoryName: "Platinum & Palladium",
-      breadcrumb: "Coins & Paper Money > Bullion > Platinum & Palladium",
+      categoryId: "34942",
+      categoryName: "Other Platinum Bullion",
+      breadcrumb:
+        "Coins & Paper Money > Bullion > Platinum > Other Platinum Bullion",
+    };
+  }
+
+  if (metal === "palladium") {
+    return {
+      categoryId: "34943",
+      categoryName: "Palladium",
+      breadcrumb: "Coins & Paper Money > Bullion > Palladium",
     };
   }
 
   if (metal === "silver") {
-    // American Silver Eagle is a named US bullion coin
+    // American Silver Eagle is a named US bullion coin. 41111 (removed
+    // 2026-09-01) was dead — route to the same generic silver-bullion leaf
+    // as the default case below, matching the real implementation.
     if (/\bamerican\s+silver\s+eagles?\b|\base\b/.test(combined)) {
       return {
-        categoryId: "41111",
-        categoryName: "American Silver Eagles",
-        breadcrumb:
-          "Coins & Paper Money > Coins: US > Silver > American Silver Eagles",
+        categoryId: "177653",
+        categoryName: "Silver Bullion Coins",
+        breadcrumb: "Coins & Paper Money > Bullion > Silver > Coins",
       };
     }
     if (/\bbar\b|\bingot\b|\bround\b/.test(combined)) {
@@ -90,10 +107,11 @@ function resolveDomainFallbackCategory(
         combined,
       )
     ) {
+      // 39465 corrected 2026-09-01: was dead (absent from the live tree).
       return {
-        categoryId: "39465",
-        categoryName: "US Silver Dollars",
-        breadcrumb: "Coins & Paper Money > Coins: US > Dollars > Silver",
+        categoryId: "176965",
+        categoryName: "US Dollars (mixed/unspecified type)",
+        breadcrumb: "Coins & Paper Money > Coins: US > Dollars > Mixed Lots",
       };
     }
     return {
@@ -103,11 +121,13 @@ function resolveDomainFallbackCategory(
     };
   }
 
-  // Domain is coins_bullion but metal unknown — safest general coin fallback
+  // Domain is coins_bullion but metal unknown — safest general coin fallback.
+  // 45243 corrected 2026-09-01: was already dead as of the 2026-08-24 Finding-B
+  // fix elsewhere in the codebase; this duplicate had never been updated.
   return {
-    categoryId: "45243",
-    categoryName: "World Coins",
-    breadcrumb: "Coins & Paper Money > Coins: World",
+    categoryId: "257",
+    categoryName: "Other Coins of the World",
+    breadcrumb: "Coins & Paper Money > Coins: World > Other Coins of the World",
   };
 }
 
@@ -135,15 +155,15 @@ describe("resolveDomainFallbackCategory", () => {
   });
 
   describe("Silver coins and bullion", () => {
-    it("should resolve American Silver Eagle to 41111", () => {
+    it("should resolve American Silver Eagle to 177653 (41111 is dead)", () => {
       const result = resolveDomainFallbackCategory({
         domain: "coins_bullion",
         itemName: "american silver eagle",
         keywords: ["bullion", "1 oz"],
         metalType: "silver",
       });
-      expect(result?.categoryId).toBe("41111");
-      expect(result?.categoryName).toBe("American Silver Eagles");
+      expect(result?.categoryId).toBe("177653");
+      expect(result?.categoryName).toBe("Silver Bullion Coins");
     });
 
     it("should resolve silver bar to 39489", () => {
@@ -167,25 +187,25 @@ describe("resolveDomainFallbackCategory", () => {
       expect(result?.categoryId).toBe("39489");
     });
 
-    it("should resolve Morgan dollar to 39465", () => {
+    it("should resolve Morgan dollar to 176965 (39465 is dead)", () => {
       const result = resolveDomainFallbackCategory({
         domain: "coins_bullion",
         itemName: "morgan dollar",
         keywords: ["1921", "silver"],
         metalType: "silver",
       });
-      expect(result?.categoryId).toBe("39465");
-      expect(result?.categoryName).toBe("US Silver Dollars");
+      expect(result?.categoryId).toBe("176965");
+      expect(result?.categoryName).toBe("US Dollars (mixed/unspecified type)");
     });
 
-    it("should resolve Peace dollar to 39465", () => {
+    it("should resolve Peace dollar to 176965 (39465 is dead)", () => {
       const result = resolveDomainFallbackCategory({
         domain: "coins_bullion",
         itemName: "peace dollar",
         keywords: ["1935"],
         metalType: "silver",
       });
-      expect(result?.categoryId).toBe("39465");
+      expect(result?.categoryId).toBe("176965");
     });
 
     it("should resolve generic silver to 177653", () => {
@@ -205,8 +225,8 @@ describe("resolveDomainFallbackCategory", () => {
         itemName: "2010 american silver eagle 1 oz",
         keywords: ["usa", "bullion"],
       });
-      expect(result?.categoryId).toBe("41111");
-      expect(result?.categoryName).toBe("American Silver Eagles");
+      expect(result?.categoryId).toBe("177653");
+      expect(result?.categoryName).toBe("Silver Bullion Coins");
     });
   });
 
@@ -245,46 +265,46 @@ describe("resolveDomainFallbackCategory", () => {
   });
 
   describe("Platinum and palladium", () => {
-    it("should resolve platinum to 261070", () => {
+    it("should resolve platinum to 34942 (261070 was wrong domain)", () => {
       const result = resolveDomainFallbackCategory({
         domain: "coins_bullion",
         itemName: "platinum coin",
         keywords: ["1 oz"],
         metalType: "platinum",
       });
-      expect(result?.categoryId).toBe("261070");
+      expect(result?.categoryId).toBe("34942");
     });
 
-    it("should resolve palladium to 261070", () => {
+    it("should resolve palladium to 34943 (261070 was wrong domain)", () => {
       const result = resolveDomainFallbackCategory({
         domain: "coins_bullion",
         itemName: "palladium round",
         keywords: ["bullion"],
         metalType: "palladium",
       });
-      expect(result?.categoryId).toBe("261070");
+      expect(result?.categoryId).toBe("34943");
     });
   });
 
   describe("Unknown metal or generic coins_bullion", () => {
-    it("should resolve unknown metal to World Coins (45243)", () => {
+    it("should resolve unknown metal to World Coins catch-all (257, 45243 is dead)", () => {
       const result = resolveDomainFallbackCategory({
         domain: "coins_bullion",
         itemName: "coin",
         keywords: ["collectible"],
         metalType: "none",
       });
-      expect(result?.categoryId).toBe("45243");
-      expect(result?.categoryName).toBe("World Coins");
+      expect(result?.categoryId).toBe("257");
+      expect(result?.categoryName).toBe("Other Coins of the World");
     });
 
-    it("should resolve missing metalType to World Coins", () => {
+    it("should resolve missing metalType to World Coins catch-all", () => {
       const result = resolveDomainFallbackCategory({
         domain: "coins_bullion",
         itemName: "antique coin",
         keywords: ["old"],
       });
-      expect(result?.categoryId).toBe("45243");
+      expect(result?.categoryId).toBe("257");
     });
   });
 
@@ -306,7 +326,7 @@ describe("resolveDomainFallbackCategory", () => {
         keywords: ["BULLION"],
         metalType: "silver",
       });
-      expect(result?.categoryId).toBe("41111");
+      expect(result?.categoryId).toBe("177653");
     });
 
     it("should handle null itemName gracefully", () => {
