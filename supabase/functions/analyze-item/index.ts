@@ -2775,7 +2775,21 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
             .ilike("item_type", `%${titleWords.split(" ")[0]}%`)
             .maybeSingle();
 
-          if (!existingCat) {
+          // 2026-09-01: skip persisting when the breadcrumb came from
+          // suggestedCategories.ts's Tier-4 emergency bootstrap map
+          // (_LEGACY_BOOTSTRAP_BREADCRUMBS) rather than the taxonomy cache,
+          // category_mappings, or a live eBay lookup — that map is
+          // explicitly not meant to be trusted or maintained, and
+          // category_mappings is itself Tier 2 of the same lookup order, so
+          // writing a possibly-wrong Tier-4 label here could make it
+          // self-perpetuating. Defense-in-depth: today's confidence gate in
+          // category-lookup's "store" action (AUTO_PERSIST_MIN_CONFIDENCE)
+          // already blocks this exact call from ever writing a row, but
+          // this guard means that stays true even if that gate's threshold
+          // ever changes.
+          const fromLegacyBootstrap = listing.suggestedCategories?.[0]?.fromLegacyBootstrap === true;
+
+          if (!existingCat && !fromLegacyBootstrap) {
             const catName = listing.suggestedCategories?.[0]?.categoryName ||
               listing.suggestedCategories?.[0]?.breadcrumb
                 ?.split(" > ")
