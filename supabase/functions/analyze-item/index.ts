@@ -3,7 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { captureException, initSentry } from "../_helpers/sentry.ts";
 import { GEMINI_HEAVY_MODEL } from "../_helpers/geminiModels.ts";
 import { applyVoiceNoteMetalFallback, runPass1Identification } from "../_helpers/pass1Identification.ts";
-import { enforceLeafCategory } from "../_helpers/leafCategoryGuard.ts";
+import { enforceLeafCategory, isKnownParentCategoryId } from "../_helpers/leafCategoryGuard.ts";
 import type { Identification } from "../_helpers/pass1Identification.ts";
 
 const corsHeaders = {
@@ -2403,23 +2403,12 @@ Seller's note: "${voiceNote}"`;
               // 3. DOMAIN MISMATCH: the identified domain is coins_bullion but the AI
               //    picked a category outside the Coins & Paper Money tree.
               //    In this case, ANY live lookup result is more trustworthy than the AI's pick.
-              const KNOWN_PARENT_CATEGORIES = new Set([
-                "253",
-                "11118",
-                "11233",
-                "261076",
-                "261074",
-                "261075",
-                "293",
-                "1",
-                "550",
-                "631",
-                "20713",
-                "11450",
-                "64482",
-                "220",
-              ]);
-              const aiCategoryIsParent = KNOWN_PARENT_CATEGORIES.has(
+              // Blocklist lives in _helpers/leafCategoryGuard.ts (single source of
+              // truth). This block previously declared its own 14-id copy inline,
+              // re-allocated on every invocation and missing every Phase 2/3
+              // addition — so an AI pick of e.g. 99 or 256 was not recognised as a
+              // parent here even after those fixes shipped.
+              const aiCategoryIsParent = isKnownParentCategoryId(
                 listing.ebayCategoryId,
               );
               // Any `found: true` resolver result is already leaf-verified and
