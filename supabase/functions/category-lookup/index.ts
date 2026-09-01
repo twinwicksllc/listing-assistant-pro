@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireUserOrServiceRole } from "../_helpers/authGuard.ts";
 import { GEMINI_FAST_MODEL } from "../_helpers/geminiModels.ts";
+import { isKnownParentCategoryId } from "../_helpers/leafCategoryGuard.ts";
 import { type CandidateSource, type GatedCandidate, selectWinner } from "./resolverCore.ts";
 
 const corsHeaders = {
@@ -699,26 +700,10 @@ async function persistAuditEntries(
 
 // ── Helper: Persist to category_mappings with gates (#2) ─────────────────────
 // RC-6: Known non-leaf parent categories that must NEVER be persisted to DB.
-// These are broad parent nodes in eBay's taxonomy that are not valid for listings.
-const BLOCKED_PARENT_CATEGORIES = new Set([
-  "253", // Coins & Paper Money > Coins: US (parent)
-  "11118", // Coins & Paper Money > Coins: US > Half Dollars (parent)
-  "11233", // Jewelry & Watches (parent)
-  "261076", // Coins & Paper Money > Bullion (parent)
-  "261074", // Coins & Paper Money > Bullion > Silver (parent)
-  "261075", // Coins & Paper Money > Bullion > Gold (parent)
-  "293", // Consumer Electronics (parent)
-  "1", // Collectibles (parent)
-  "550", // Art (parent)
-  "631", // Tools & Workshop Equipment (parent)
-  "20713", // Home & Garden (parent)
-  "11450", // Clothing, Shoes & Accessories (parent)
-  "220", // Toys & Hobbies > Dolls & Bears (parent)
-  "15032", // Cell Phones & Accessories (parent)
-  "139971", // Video Games & Consoles (parent)
-  "267", // Books & Magazines > Books (parent)
-]);
-
+// The list itself lives in _helpers/leafCategoryGuard.ts as the single source of
+// truth — this function used to carry its own 16-id copy, which had drifted and
+// was missing every Phase 2/3 addition (99, 256, 45243, the dead World Coin ids),
+// so parent categories the guard refuses were still being persisted here.
 async function safePersistMapping(
   supabase: any,
   normalizedKey: string,
@@ -730,7 +715,7 @@ async function safePersistMapping(
   ebayAuth: { token: string; base: string } | null,
 ): Promise<boolean> {
   // Gate 0: Block known parent categories (RC-6)
-  if (BLOCKED_PARENT_CATEGORIES.has(categoryId)) {
+  if (isKnownParentCategoryId(categoryId)) {
     console.warn(
       `category-lookup: BLOCKED auto-persist of known parent category ${categoryId} for "${normalizedKey}"`,
     );

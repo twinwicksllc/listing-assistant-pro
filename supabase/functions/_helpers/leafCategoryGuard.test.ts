@@ -233,3 +233,101 @@ Deno.test("enforceLeafCategory: category 19203 with no candidates and no coin-te
   assertEquals(result.changed, false);
   assertEquals(result.needsUserConfirmation, true);
 });
+
+// ── Blocklist consolidation (2026-08-31) ────────────────────────────────────
+//
+// Three duplicate copies of this blocklist were deleted and repointed at
+// isKnownParentCategoryId(): BLOCKED_PARENT_CATEGORIES in
+// category-lookup/index.ts (16 ids, gate 0 of safePersistMapping),
+// KNOWN_PARENT_CATEGORIES declared inline inside a function body in
+// analyze-item/index.ts (14 ids, the aiCategoryIsParent post-lookup override),
+// and a third copy in _helpers/categoryResolution.ts, which turned out to be
+// dead code — nothing in the repo imported it — and was removed outright.
+//
+// Auditing the merged list against corpus/ebay_taxonomy_snapshot.json found
+// four entries that are LIVE LEAVES, each carrying a comment that misidentified
+// it. Three were genuine false positives and are now unblocked; the fourth
+// (88433) is kept deliberately. These tests pin both halves of that decision,
+// since blocking a live leaf silently refuses a valid listing target and is not
+// otherwise covered anywhere — category-lookup/index.ts and analyze-item's
+// override path have no tests of their own.
+
+Deno.test("isKnownParentCategoryId: 3390 (Coins: World > Europe > Ireland) is a live leaf, NOT blocked", () => {
+  // Was annotated "Coins: World > Africa (rollup)". Blocking it meant Irish
+  // coins could not resolve at all, in this app's primary vertical.
+  assertEquals(isKnownParentCategoryId("3390"), false);
+});
+
+Deno.test("isKnownParentCategoryId: 20713 (Refrigerators) is a live leaf, NOT blocked", () => {
+  // Was annotated "Home & Garden" in all three copies; the Home & Garden root
+  // is actually 11700.
+  assertEquals(isKnownParentCategoryId("20713"), false);
+});
+
+Deno.test("isKnownParentCategoryId: 139971 (Video Game Consoles) is a live leaf, NOT blocked", () => {
+  // Was annotated "Video Games & Consoles"; that parent is actually 1249.
+  assertEquals(isKnownParentCategoryId("139971"), false);
+});
+
+Deno.test("isKnownParentCategoryId: 88433 (Everything Else > Every Other Thing) stays blocked despite being a live leaf", () => {
+  // Deliberate: same junk-catch-all family as 99, whose selection caused the
+  // Columbian Half Dollar incident. Its old comment ("Coins: US > Dimes") was
+  // wrong, but the block is correct on the merits.
+  assertEquals(isKnownParentCategoryId("88433"), true);
+});
+
+// Coverage guarantee for the consolidation: every id the two deleted call-site
+// copies used to block must still be blocked by the canonical list, so a future
+// edit here cannot silently narrow what those call sites refuse. The three
+// unblocked live leaves are excluded by construction — they are asserted false
+// above. 20713 appeared in both deleted copies and is intentionally absent.
+Deno.test("isKnownParentCategoryId: canonical list still covers every id the deleted category-lookup copy blocked", () => {
+  const formerlyBlockedByCategoryLookup = [
+    "253",
+    "11118",
+    "11233",
+    "261076",
+    "261074",
+    "261075",
+    "293",
+    "1",
+    "550",
+    "631",
+    "11450",
+    "220",
+    "15032",
+    "267",
+  ];
+  for (const id of formerlyBlockedByCategoryLookup) {
+    assertEquals(
+      isKnownParentCategoryId(id),
+      true,
+      `${id} was blocked by category-lookup's old BLOCKED_PARENT_CATEGORIES but is no longer blocked`,
+    );
+  }
+});
+
+Deno.test("isKnownParentCategoryId: canonical list still covers every id the deleted analyze-item copy blocked", () => {
+  const formerlyBlockedByAnalyzeItem = [
+    "253",
+    "11118",
+    "11233",
+    "261076",
+    "261074",
+    "261075",
+    "293",
+    "1",
+    "550",
+    "631",
+    "11450",
+    "64482",
+    "220",
+  ];
+  for (const id of formerlyBlockedByAnalyzeItem) {
+    assertEquals(
+      isKnownParentCategoryId(id),
+      true,
+      `${id} was blocked by analyze-item's old inline KNOWN_PARENT_CATEGORIES but is no longer blocked`,
+    );
+  }
+});

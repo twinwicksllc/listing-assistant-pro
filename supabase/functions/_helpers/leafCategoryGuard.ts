@@ -27,22 +27,61 @@
 /**
  * eBay parent/rollup category IDs that must NEVER be returned to the client.
  *
- * This list is intentionally a *superset* of the blocklists that previously
- * lived (duplicated, and slightly out of sync) in category-lookup/index.ts and
- * analyze-item/index.ts. It is a static backstop only — the authoritative
- * check is always the live `get_category_subtree` leaf verification. IDs here
- * are the ones we have observed leaking into production listings.
+ * THIS IS THE SINGLE SOURCE OF TRUTH for the parent/rollup blocklist. As of
+ * 2026-08-31 the three duplicate copies that used to shadow it are gone:
+ * `BLOCKED_PARENT_CATEGORIES` in category-lookup/index.ts and the in-function
+ * `KNOWN_PARENT_CATEGORIES` in analyze-item/index.ts both now call
+ * `isKnownParentCategoryId()` below, and _helpers/categoryResolution.ts (which
+ * held a third copy and was never imported by anything) was deleted. Add an ID
+ * here and every call site gets it — which is the point: the Phase 2/3 fixes
+ * (99, 256, 45243, the dead World Coin ids) had only ever landed in this copy,
+ * so the other two paths were still shipping categories this list refuses.
+ *
+ * It is a static backstop only — the authoritative check is always the live
+ * `get_category_subtree` / ebay_taxonomy_cache leaf verification (gates 1-2).
+ * IDs here are the ones we have observed leaking into production listings.
+ *
+ * ⚠ DO NOT convert the Set literal below into an import, and do not rename the
+ * exported constant or move this file. Two CI scripts —
+ * scripts/replay-corpus.mjs and scripts/refresh-taxonomy-snapshot.mjs — read
+ * this file as TEXT rather than importing it: they find the first occurrence of
+ * the exported constant's name, then scrape double-quoted digit strings out of
+ * the Set-literal bounds that follow it. Consequences to respect:
+ *   - Keep every id a double-quoted string literal. Unquoted or single-quoted
+ *     numbers scrape as zero ids.
+ *   - Do not repeat the constant's name, or the Set-literal opening/closing
+ *     token pair, anywhere ABOVE the real declaration — including in a comment
+ *     like this one. Doing so makes the scrapers match the prose instead of the
+ *     data and silently yield an empty id set. (This happened while writing
+ *     this very warning; the note is deliberately phrased to avoid it.)
+ * The corpus replay is a blocking CI gate, so a broken scrape fails the build.
  *
  * STALENESS NOTE (2026-08-24, CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md
- * Finding B): cross-referencing this entire set against the live
- * ebay_taxonomy_cache export (15,116 rows, synced 2026-08-23) found that only
- * 13 of these 33 IDs still resolve to a real node (as either a category_id or
- * a parent_category_id) in the current eBay tree; the other 20 IDs are
- * confirmed absent and may correspond to categories eBay has since removed or
- * merged. Absence from the cache does not prove an ID no longer needs
- * blocking, so this list is deliberately NOT pruned here -- removing entries
- * is only safe once Phase 4's live-cache-backed leaf check (which supersedes
- * this whole static list) is in place. "99" was added below after a live
+ * Finding B; re-verified 2026-08-31): cross-referencing this entire set against
+ * the live ebay_taxonomy_cache export (15,116 rows, synced 2026-08-23) found
+ * that most of these IDs are absent from the current eBay tree and may
+ * correspond to categories eBay has since removed or merged. Absence from the
+ * cache does not prove an ID no longer needs blocking, and blocking an absent
+ * ID is harmless because gate 1 rejects it anyway — so absent entries are
+ * deliberately NOT pruned. Of the 35 IDs below, exactly one (88433) is a
+ * confirmed live leaf, and it is kept deliberately; see its comment.
+ *
+ * REMOVED 2026-08-31 — three IDs in this list were confirmed LIVE LEAVES, so
+ * blocking them refused valid listing targets. Each had a comment that
+ * misidentified it, which is how they got here:
+ *   3390   annotated "Coins: World > Africa (rollup)", actually
+ *          "Coins & Paper Money > Coins: World > Europe > Ireland" (leaf).
+ *          The most consequential of the three — Irish coins could not resolve
+ *          at all, in this app's primary vertical.
+ *   20713  annotated "Home & Garden", actually "Home & Garden > Major
+ *          Appliances > Refrigerators & Freezers > Refrigerators" (leaf).
+ *          The Home & Garden root is 11700.
+ *   139971 annotated "Video Games & Consoles", actually "Video Games &
+ *          Consoles > Video Game Consoles" (leaf). The parent is 1249.
+ * None of the three appear in corpus/golden_corpus.json, so removing them does
+ * not weaken any recorded regression guarantee.
+ *
+ * "99" was added below after a live
  * incident (1893 Columbian Half Dollar routed to category 99): 99 is not a
  * real eBay leaf category, is absent from the live taxonomy cache, and was
  * previously unblocked here, allowing the `winner = allCandidates[0]`
@@ -69,7 +108,9 @@
  */
 export const KNOWN_PARENT_CATEGORY_IDS: ReadonlySet<string> = new Set([
   // ── Coins & Paper Money ────────────────────────────────────────────────
-  "11116", // Coins: US > Pennies (rollup)
+  "11116", // Coins & Paper Money (root) — confirmed is_leaf=false in the live
+  // snapshot. (Comment corrected 2026-08-31: previously read "Coins: US >
+  // Pennies", which is not what this id is.)
   "11118", // Coins: US > Half Dollars (rollup)
   "11951", // Coins: US > Nickels (rollup — verified parent of 11952/11953)
   "253", // Coins: US (rollup)
@@ -78,10 +119,13 @@ export const KNOWN_PARENT_CATEGORY_IDS: ReadonlySet<string> = new Set([
   "261076", // Bullion (rollup)
   "261074", // Bullion > Silver (rollup)
   "261075", // Bullion > Gold (rollup)
-  "3390", // Coins: World > Africa (rollup)
   "3394", // Coins: World (regional rollup)
   "45243", // Coins: World > Other — rollup that rejects graded coins
-  "88433", // Coins: US > Dimes / rollup node returning zero aspects
+  "88433", // Everything Else > Every Other Thing — this IS a live leaf, but is
+  // refused deliberately as a junk catch-all, same family as 99 below. Do not
+  // "fix" this by removing it. (Comment corrected 2026-08-31: previously read
+  // "Coins: US > Dimes / rollup node returning zero aspects", which is not
+  // what this id is — the mislabel is why it was originally added here.)
   "40196", // Coins: World > Canada — confirmed absent from live cache (Phase
   // 2 Finding B); removed from the AI prompt allowlist, added here too for
   // defense-in-depth. Live replacement: 536 (Other Canadian Coins).
@@ -101,9 +145,7 @@ export const KNOWN_PARENT_CATEGORY_IDS: ReadonlySet<string> = new Set([
   "11232", // Jewelry & Watches (rollup)
   "11233", // Jewelry & Watches
   "11450", // Clothing, Shoes & Accessories
-  "139971", // Video Games & Consoles
   "15032", // Cell Phones & Accessories
-  "20713", // Home & Garden
   "220", // Toys & Hobbies > Dolls & Bears
   "267", // Books & Magazines > Books
   "268", // Books & Magazines
