@@ -376,22 +376,22 @@ Set \`coinConditionDetail\` to a JSON object with:
 - Item Specifics: bare keys only (e.g., "Year", not "C:Year")
 
 ### CATEGORY IDs (use LEAF IDs only — never parent 253)
-US Dollars: Morgan=39464 | Peace=11980 | Eisenhower=11981 | Sacagawea/Native American=40158 | Presidential=40159 | Susan B. Anthony=40160
+US Dollars: Morgan=39464 | Peace=11980 | Eisenhower=11981 | Sacagawea/Native American=11983 | Presidential=159713 | Susan B. Anthony=11982
 US Halves: Barber=11971 | Liberty Walking=41099 | Franklin=11973 | Kennedy=41102
-US Dimes: Mercury=40151 | Roosevelt=40150
-US Nickels: Buffalo/Indian Head=40153 | Jefferson=40152
-US Cents: Indian Head=41084 | Lincoln Wheat=39455 | Lincoln Memorial=11116
-US Gold: American Gold Eagle=40166 | American Gold Buffalo=40167 | $20 Double Eagle=40161 | $10 Eagle=40162 | $5 Half Eagle=40163
-US Bullion: American Silver Eagle=41111 | Silver Bars/Rounds=39489 | Silver Coins (bullion)=177653 | Gold Bars/Rounds=178906 | Gold Coins (bullion)=177652 | Other Silver Bullion=3361 | Copper Rounds=166679
+US Dimes: Mercury=41090 | Roosevelt=39458
+US Nickels: Buffalo/Indian Head=139806 | Jefferson=41087
+US Cents: Indian Head=41084 | Lincoln Wheat=39455 | Lincoln Memorial=31373
+US Gold: Modern Gold Bullion Coins (Eagle/Buffalo)=177652 | $20 Double Eagle=39472 | $10 Eagle=39471 | $5 Half Eagle=39470
+US Bullion: Silver Bars/Rounds=39489 | Silver Coins (bullion, incl. American Silver Eagle)=177653 | Gold Bars/Rounds=178906 | Gold Coins (bullion)=177652 | Other Silver Bullion=3361 | Copper Rounds=166679
 Sets: US Proof Sets=41109 | US Mint Sets=526
-World Coins: Canada=40196 | Mexico=40197 | Great Britain=40198 | Australia=40199 | Germany=40200 | France=40201 | South Pacific (Cook Islands, Fiji, Niue, Tokelau, Palau, Tuvalu, Solomon Islands)=3392 | World Commemorative Coins=546 | Other World Coins=45243
+World Coins: Canada=536 | Mexico=173631 | Great Britain=3406 | Australia=535 | Germany=7955 | France=539 | South Pacific (Cook Islands, Fiji, Niue, Tokelau, Palau, Tuvalu, Solomon Islands)=3392 | World Commemorative Coins=546 | Other World Coins=257
 Other: Ancient Coins=532 | Medieval Coins=173685
-- **GRADED / SLABBED COINS RULE (CRITICAL)**: If the coin is in a professional grading slab (PCGS, NGC, ANACS, ICG, CAC, ICCS) it is a NUMISMATIC collectible and MUST be listed in a COIN category that supports the Grade item specific — NEVER a Bullion category. Bullion categories (39489, 39487, 178906, 3361, 261068, 261069, etc.) DO NOT accept the Grade item specific, so a graded coin cannot be listed there. Route graded WORLD coins to the correct World Coin leaf (country-specific such as 3392 South Pacific for Cook Islands/Fiji/Niue/Palau/Tuvalu, or 546 World Commemorative, else 45243). Route graded US coins to the correct US leaf. Only route to Bullion when the item is an UNGRADED/RAW generic bullion bar, round, or coin sold for melt/metal value.
-- **COMMEMORATIVE / COLORIZED / PROOF NON-CIRCULATING COINS**: Colorized, high-relief, proof, or commemorative non-circulating legal tender (NCLT) issues (common from Cook Islands, Niue, Palau, Tuvalu, Fiji, Perth Mint, etc.) are COLLECTIBLE WORLD COINS, not bullion — even when struck in .999 silver or gold. Use the country/commemorative World Coin leaf (e.g., 3392, 546, 45243), NOT a bullion category.
-- Cook Islands, Fiji, Niue, Tokelau, Palau, Tuvalu, and Solomon Islands issues → use 3392 (Coins: World > South Pacific). If unsure of the exact regional leaf, use 45243 (Other World Coins). Both support Grade for slabbed coins.
-- World coins (World Coins sub-categories, 3392, 546, or 45243): REQUIRED aspect "Materials sourced from" = issuing country (e.g., "Cook Islands", "Australia", "Canada")
-- **CRITICAL METAL TYPE RULE**: NEVER assign a GOLD item to a SILVER category, or a SILVER item to a GOLD category. If metalType="gold" → must use gold categories (177652, 178906, 40161–40167, or World Coin categories). If metalType="silver" → must use silver categories (177653, 39489, 41111, or World Coin categories). The Composition item specific MUST match the coin's actual metal.
-- Always provide 1–2 alternativeCategoryIds. For UNGRADED/RAW bullion-adjacent coins you MAY offer a bullion alt (e.g., Morgan → alt: 39489 Silver Bars if unsure collector vs bullion). For GRADED/SLABBED coins, alternatives MUST also be graded-friendly coin categories (e.g., 3392 South Pacific, 546 World Commemorative, 45243 Other World Coins) — NEVER a bullion category, since bullion has no Grade item specific.
+- **GRADED / SLABBED COINS RULE (CRITICAL)**: If the coin is in a professional grading slab (PCGS, NGC, ANACS, ICG, CAC, ICCS) it is a NUMISMATIC collectible and MUST be listed in a COIN category that supports the Grade item specific — NEVER a Bullion category. Bullion categories (39489, 178906, 3361, 177652, 177653, etc.) DO NOT accept the Grade item specific, so a graded coin cannot be listed there. Route graded WORLD coins to the correct World Coin leaf (country-specific such as 3392 South Pacific for Cook Islands/Fiji/Niue/Palau/Tuvalu, or 546 World Commemorative, else 257). Route graded US coins to the correct US leaf. Only route to Bullion when the item is an UNGRADED/RAW generic bullion bar, round, or coin sold for melt/metal value.
+- **COMMEMORATIVE / COLORIZED / PROOF NON-CIRCULATING COINS**: Colorized, high-relief, proof, or commemorative non-circulating legal tender (NCLT) issues (common from Cook Islands, Niue, Palau, Tuvalu, Fiji, Perth Mint, etc.) are COLLECTIBLE WORLD COINS, not bullion — even when struck in .999 silver or gold. Use the country/commemorative World Coin leaf (e.g., 3392, 546, 257), NOT a bullion category.
+- Cook Islands, Fiji, Niue, Tokelau, Palau, Tuvalu, and Solomon Islands issues → use 3392 (Coins: World > South Pacific). If unsure of the exact regional leaf, use 257 (Other Coins of the World). Both support Grade for slabbed coins.
+- World coins (World Coins sub-categories, 3392, 546, or 257): REQUIRED aspect "Materials sourced from" = issuing country (e.g., "Cook Islands", "Australia", "Canada")
+- **CRITICAL METAL TYPE RULE**: NEVER assign a GOLD item to a SILVER category, or a SILVER item to a GOLD category. If metalType="gold" → must use gold categories (177652, 178906, 39470–39472, or World Coin categories). If metalType="silver" → must use silver categories (177653, 39489, or World Coin categories). The Composition item specific MUST match the coin's actual metal.
+- Always provide 1–2 alternativeCategoryIds. For UNGRADED/RAW bullion-adjacent coins you MAY offer a bullion alt (e.g., Morgan → alt: 39489 Silver Bars if unsure collector vs bullion). For GRADED/SLABBED coins, alternatives MUST also be graded-friendly coin categories (e.g., 3392 South Pacific, 546 World Commemorative, 257 Other Coins of the World) — NEVER a bullion category, since bullion has no Grade item specific.
 ${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}
 
 ### MINT MARK LOCATIONS (examine these EXACT spots on the coin image)

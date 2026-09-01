@@ -91,6 +91,9 @@ jobs:
       - name: Run leafCategoryGuard unit tests
         run: deno test --allow-net --allow-env supabase/functions/_helpers/leafCategoryGuard.test.ts
 
+      - name: Run domainPrompts freshness test
+        run: deno test --allow-read=corpus/ebay_taxonomy_snapshot.json --allow-net --allow-env supabase/functions/_helpers/domainPrompts.test.ts
+
       - name: Run golden-corpus replay harness
         run: node scripts/replay-corpus.mjs
 

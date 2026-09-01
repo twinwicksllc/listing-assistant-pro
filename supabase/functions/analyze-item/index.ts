@@ -251,7 +251,7 @@ function resolveDomainFallbackCategory(
   // Grade item specific, so graded examples of these are fine to route
   // normally below. Anything else — a generic "silver"/"gold" mention with no
   // recognized US named-coin match — is NOT safe to send to a Bullion bucket
-  // (166679/3361/177652/177653/178906/261070/39489) if the coin is graded,
+  // (166679/3361/177652/177653/178906/34942/34943/39489) if the coin is graded,
   // because Bullion categories do not support the Grade item specific either.
   // In that case, escape to a graded-friendly World Coin leaf (3392/256)
   // instead of guessing a bullion category for what is likely a graded
@@ -288,21 +288,36 @@ function resolveDomainFallbackCategory(
     };
   }
 
-  if (metal === "platinum" || metal === "palladium") {
+  // 261070 corrected 2026-09-01: was a live leaf in the WRONG domain (Toys &
+  // Hobbies > Action Figures & Accessories > Action Figures Accessories) —
+  // this branch was actively assigning bullion listings to an Action Figures
+  // category whenever the Taxonomy API lookup failed or was suppressed. Split
+  // into separate platinum/palladium leaves since no single ID covers both.
+  if (metal === "platinum") {
     return {
-      categoryId: "261070",
-      categoryName: "Platinum & Palladium",
-      breadcrumb: "Coins & Paper Money > Bullion > Platinum & Palladium",
+      categoryId: "34942",
+      categoryName: "Other Platinum Bullion",
+      breadcrumb: "Coins & Paper Money > Bullion > Platinum > Other Platinum Bullion",
+    };
+  }
+
+  if (metal === "palladium") {
+    return {
+      categoryId: "34943",
+      categoryName: "Palladium",
+      breadcrumb: "Coins & Paper Money > Bullion > Palladium",
     };
   }
 
   if (metal === "silver") {
-    // American Silver Eagle is a named US bullion coin
+    // American Silver Eagle is a named US bullion coin. 41111 (removed
+    // 2026-09-01) was dead — American Silver Eagles are bullion, so route to
+    // the same generic silver-bullion leaf as the default case below.
     if (/\bamerican\s+silver\s+eagles?\b|\base\b/.test(combined)) {
       return {
-        categoryId: "41111",
-        categoryName: "American Silver Eagles",
-        breadcrumb: "Coins & Paper Money > Coins: US > Silver > American Silver Eagles",
+        categoryId: "177653",
+        categoryName: "Silver Bullion Coins",
+        breadcrumb: "Coins & Paper Money > Bullion > Silver > Coins",
       };
     }
     if (/\bbar\b|\bingot\b|\bround\b/.test(combined)) {
@@ -317,10 +332,11 @@ function resolveDomainFallbackCategory(
         combined,
       )
     ) {
+      // 39465 corrected 2026-09-01: was dead (absent from the live tree).
       return {
-        categoryId: "39465",
-        categoryName: "US Silver Dollars",
-        breadcrumb: "Coins & Paper Money > Coins: US > Dollars > Silver",
+        categoryId: "176965",
+        categoryName: "US Dollars (mixed/unspecified type)",
+        breadcrumb: "Coins & Paper Money > Coins: US > Dollars > Mixed Lots",
       };
     }
     return {
@@ -1349,86 +1365,6 @@ serve(async (req: Request) => {
     }
     // ─── END Slab OCR injection ──────────────────────────────────────────────────────────────────
 
-    // DUMMY_PLACEHOLDER — remove this line (keeps template literal parser happy)
-    const _promoteSystemPrompt =
-      `You are a professional eBay Listing Expert and item identifier. Your task is to analyze item photos and generate a complete listing via the \`create_listing\` tool.
-
-### WHAT YOU SELL
-You handle ALL types of items: coins, bullion, precious metals, collectibles, toys, plushies, stuffed animals, trading cards, sports memorabilia, Funko Pops, action figures, LEGO, jewelry, electronics, clothing, books, tools, art, and anything else. Always identify the item TYPE first, then apply the appropriate eBay category.
-
-### CORE OPERATING RULES
-1. HOLISTIC ANALYSIS: Treat all uploaded images as a single item.
-2. ZERO SPECULATION: Use ONLY visible evidence + factual data. If details are not visible, state "uncertain" or "not visible."
-3. NO NUMERICAL GRADING for coins unless in a certified slab (PCGS, NGC, ANACS, ICG, CAC, ICCS).
-4. EBAY COMPLIANCE: Title must be ≤ 80 chars. No hype words like "L@@K."
-5. SELLER VOICE NOTE: If provided, treat as authoritative — override visual assessment where applicable.
-
-### CATEGORY SELECTION
-You MUST select the correct eBay **leaf** category ID for every item.
-
-**CRITICAL: If a LOCKED CATEGORY is specified below, you MUST use that exact category ID. Do NOT override it.**
-
-Use these resources in order:
-1. **LOCKED CATEGORY** (below): If present, use this category ID unconditionally. It has been verified as a leaf category from eBay's official taxonomy.
-2. **BEST MATCH / SUGGESTIONS** (below): If no lock, use the highest-scored suggestion as your primary category.
-3. **Your knowledge + the category IDs in the tool schema**: Use when no suggestions are available.
-${categoryHints}
-
-**CRITICAL RULES FOR SPECIFIC CATEGORIES:**
-- Sports Trading Cards: ALWAYS include **Sport** in itemSpecifics (Baseball/Basketball/Football/Hockey/Soccer). eBay WILL REJECT the listing without it.
-- Coins: Include Certification, Year, Denomination, Mint Location, Composition, Fineness where applicable.
-- Bullion: Include Shape, Precious Metal Content per Unit, Brand/Mint, Fineness.
-
-**ALWAYS provide 1-2 alternative category IDs** (alternativeCategoryIds) for fallback options.
-
-**CRITICAL: NEVER use parent/broad category IDs.** Always drill down to the most specific LEAF category. Examples of PARENT categories you must NEVER use:
-- 253 (Coins: US) — use specific subcategory like 39464 (Morgan Dollars), 41109 (Proof Sets), etc.
-- 11118 (Half Dollars) — use 41102 (Kennedy), 11973 (Franklin), 41099 (Walking Liberty), etc.
-- 64482 (Sports Trading Cards) — use 213 (Baseball Cards), 261328 (Basketball Cards), etc.
-- 1 (Collectibles) — use specific subcategory like 19203 (Beanie Babies), 237 (Decorative), etc.
-
-### IDENTIFICATION & DESCRIPTION
-- Identify: Item type, brand/maker, year (if applicable), condition, materials, notable features.
-- For coins: Year, Series, Denomination, Mint Mark, Metal, Weight (Troy Oz), Producer.
-- Key items: Highlight rarity, limited editions, special variants.
-- Condition Mapping:
-  - Mint/New in box -> NEW
-  - Excellent, like new -> USED_EXCELLENT
-  - Good, light wear -> USED_VERY_GOOD
-  - Noticeable wear, functional -> USED_GOOD
-  - Heavy wear, still functional -> USED_ACCEPTABLE
-  - Damaged/non-functional -> FOR_PARTS_OR_NOT_WORKING
-
-### PRICING LOGIC
-- Research recent sold comps on eBay for this item type.
-- For precious metals: Floor = (Melt Value * 1.19) to cover eBay fees (~16%).
-- For collectibles/toys: Use market demand, rarity, and condition.
-- metalWeightOz: Express in TROY OUNCES only (for precious metals).
-- Current spot prices: Gold $${spotGold.toFixed(2)}/oz | Silver $${spotSilver.toFixed(2)}/oz | Platinum $${
-        spotPlatinum.toFixed(
-          2,
-        )
-      }/oz
-${
-        competitorData && !competitorData.error
-          ? `- MARKET DATA (${competitorData.competitorCount || 0} similar sold): avg $${
-            (
-              competitorData.avgPrice || 0
-            ).toFixed(2)
-          }, range $${(competitorData.minPrice || 0).toFixed(2)}-$${
-            (
-              competitorData.maxPrice || 0
-            ).toFixed(
-              2,
-            )
-          }, median $${(competitorData.medianPrice || 0).toFixed(2)}. USE AS PRIMARY PRICING REFERENCE.`
-          : `- No recent sold comps available. Use category knowledge and condition to price appropriately.`
-      }
-
-Use the \`create_listing\` tool to return the final structured data.`;
-    // The _promoteSystemPrompt above is the fallback template — actual systemPrompt is built above.
-    void _promoteSystemPrompt;
-
     // Build content array with all images + text prompt
     const contentParts: any[] = imageList.map((img) => {
       const { base64Data, mimeType } = parseImageDataUrl(img);
@@ -2285,6 +2221,18 @@ Seller's note: "${voiceNote}"`;
               // ── Define known Coins & Paper Money leaf IDs (and their tree prefix) ──
               // Any category that starts with these IDs or whose breadcrumb contains
               // "Coins & Paper Money" is in the right domain for coins_bullion items.
+              //
+              // 2026-09-01: 261064/261068/261069/261070/261071 removed — all five
+              // are confirmed LIVE LEAVES in a completely different domain (Signs &
+              // Plaques, four Action Figures variants), so their presence here was
+              // a false-negative risk: an AI pick of one of these would have been
+              // wrongly treated as coins-domain-compatible instead of the mismatch
+              // it actually is. 40150/40152 (also silently reassigned to Action
+              // Figures/Go-Karts) and the dead 40151/40153/40158-40163/40166/40167/
+              // 41111 are replaced with their live equivalents rather than dropped
+              // outright, and every new ID domainPrompts.ts now recommends (see that
+              // file's 2026-09-01 correction) is added so a corrected AI pick isn't
+              // wrongly flagged as a mismatch.
               const COINS_PAPER_MONEY_IDS = new Set([
                 // Bullion
                 "178906",
@@ -2294,11 +2242,8 @@ Seller's note: "${voiceNote}"`;
                 "166679",
                 "3361",
                 "3360",
-                "261064",
-                "261068",
-                "261069",
-                "261070",
-                "261071",
+                "34942",
+                "34943",
                 "261072",
                 "261073",
                 "261074",
@@ -2311,29 +2256,30 @@ Seller's note: "${voiceNote}"`;
                 "39464",
                 "11980",
                 "11981",
+                "11983",
+                "159713",
+                "11982",
                 "41102",
                 "11973",
                 "41099",
                 "11971",
                 "39455",
+                "31373",
                 "41084",
                 "41109",
                 "526",
                 "11116",
                 "11118",
                 "40149",
-                "40150",
-                "40151",
-                "40152",
-                "40153",
+                "39458",
+                "41090",
+                "41087",
+                "139806",
                 "40154",
                 "40155",
                 "40156",
                 "40157",
-                "40158",
-                "40159",
-                "40160",
-                "41111",
+                "176965",
                 "164743",
                 // US Commemorative
                 "179531",
@@ -2342,16 +2288,15 @@ Seller's note: "${voiceNote}"`;
                 "179534",
                 "529",
                 // US Gold Coins
-                "40161",
-                "40162",
-                "40163",
+                "39472",
+                "39471",
+                "39470",
                 "40164",
                 "40165",
-                "40166",
-                "40167",
                 // World Coins (45243/40196-40200 removed 2026-08-24: confirmed dead,
                 // see Finding B in CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md.
-                // Replaced with live per-country leaves + the 257 catch-all.)
+                // Replaced with live per-country leaves + the 257 catch-all. 539
+                // (France) added 2026-09-01, alongside the domainPrompts.ts fix.)
                 "257",
                 "546",
                 "536",
@@ -2366,6 +2311,7 @@ Seller's note: "${voiceNote}"`;
                 "535",
                 "3375",
                 "7955",
+                "539",
                 "173620",
                 "173694",
                 "173597",

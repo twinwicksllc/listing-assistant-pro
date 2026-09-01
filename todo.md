@@ -285,8 +285,8 @@ persisting/selecting categories the guard was written to refuse.
       `deno check` clean on category-lookup and analyze-item,
       `npm run test` (118/118 — includes the frontend guard suite, which
       imports the real module rather than duplicating the list).
-- [ ] Branch, commit, push, open PR; confirm CI green (`category-corpus-replay`
-      and `format-and-lint` are the blocking ones here).
+- [x] Branch, commit, push, open PR; confirm CI green (`category-corpus-replay`
+      and `format-and-lint` are the blocking ones here) — PR #547, merged 2026-08-31.
 
 **Still deferred from Phase 4 (unchanged):** deleting the hardcoded
 category-ID allowlist baked into `analyze-item`'s tool-schema AI prompt (plan
@@ -296,6 +296,123 @@ pass.
 **Noted, not done:** `category-lookup/resolverCore.test.ts` (10 cases) is not
 wired into any CI workflow, and the two blocklist scrapers are byte-for-byte
 duplicate implementations. Both are real gaps deserving their own change.
+
+## Follow-up: fix the stale/wrong-domain eBay coin-category IDs
+
+The Phase 4 deferral named "the hardcoded category-ID allowlist baked into
+analyze-item's tool-schema AI prompt" as a follow-up. Investigating it found
+that list (`analyze-item/index.ts`'s `categoryId` tool-schema description) was
+already fixed in Phase 2 — the actual problem was a different, un-audited list
+Finding B never looked at.
+
+- [x] Found the real target: `_helpers/domainPrompts.ts`'s
+      `buildCoinBullionPrompt()`, the text that actually reaches Gemini as the
+      real system prompt for `coins_bullion` items whenever no deterministic
+      category is locked. Confirmed via the Gemini call itself (`index.ts`:
+      OpenAI-shim function calling, `categoryId` is a plain `string` with no
+      `enum`) that this text is advisory only, not schema-enforced — so this
+      prompt is the sole guidance, not a validated constraint.
+- [x] Rewrote its `### CATEGORY IDs` block and every downstream mention
+      (14 corrected IDs total): the Finding-B dead IDs (already fixed
+      elsewhere but not here), plus two IDs that are worse than dead — LIVE
+      leaves silently reassigned to a different domain (`40150` -> Action
+      Figures, `40152` -> Go-Karts), plus `11116` (labeled "Lincoln Memorial"
+      but is the domain ROOT, non-leaf). Every replacement verified against
+      `corpus/ebay_taxonomy_snapshot.json`.
+- [x] Found the same stale IDs duplicated in `src/lib/ebayCategoryMap.ts`, a
+      frontend breadcrumb map `CategoryConfirmDialog.tsx` checks FIRST,
+      short-circuiting before any live verification call — the most
+      dangerous form of this bug, since a stale hit means "valid" is reported
+      with no real check ever firing. Fixed the same 14+ IDs there (deleting
+      wrong keys, adding correct ones), plus two bonus mislabels found during
+      verification: `166680`/`166681` were labeled "Copper Bullion" but are
+      actually Paper Money: World > Cambodia/Hong Kong.
+- [x] Fixed `analyze-item/index.ts`'s `COINS_PAPER_MONEY_IDS` (the
+      domain-mismatch check's membership set): removed 5 confirmed
+      live-leaf-wrong-domain entries (four Action Figures variants + one
+      Signs & Plaques) and added every new ID `domainPrompts.ts` now
+      recommends, so a corrected AI pick isn't wrongly flagged as a mismatch.
+      Left every merely-absent entry untouched, per `leafCategoryGuard.ts`'s
+      own established precedent.
+- [x] Deleted the dead `_promoteSystemPrompt` block (`index.ts`, ~80 lines) —
+      built, never assigned to the real `systemPrompt`, referenced only via
+      `void _promoteSystemPrompt;` to silence a lint warning. Confirmed dead
+      by checking every reference to the identifier.
+- [x] (found mid-implementation, same file/root-cause)
+      `resolveDomainFallbackCategory()` — the deterministic fallback used
+      when the Taxonomy API lookup fails or is suppressed — had the SAME bug,
+      but as an ACTIVE ASSIGNMENT, not just a membership check:
+      platinum/palladium items were being assigned `261070` (confirmed live
+      leaf, but Action Figures Accessories, not Bullion), with no safety net
+      catching it since it's a genuine leaf. Split into separate platinum
+      (`34942`) / palladium (`34943`) leaves; fixed the dead `41111`
+      (American Silver Eagle) -> `177653` and dead `39465` (named US silver
+      dollar fallback) -> `176965`.
+- [x] (found while running the test suite) Two test files duplicate
+      `resolveDomainFallbackCategory()`'s logic locally rather than importing
+      it (Deno edge functions aren't Node-importable), so they were asserting
+      the OLD wrong IDs as correct — meaning they'd have provided zero
+      regression protection and actively misled a future reader.
+      `analyze-item-category-fallback.test.ts` and
+      `analyze-item-graded-coin-routing.test.ts` both updated in step; the
+      latter's `resolveGradedFriendlyWorldCoinCategory()` mirror was ALSO
+      still using dead `256`, predating even the 2026-08-24 Finding-B fix.
+- [x] Added two regression tests closing the blind spot Finding B never had
+      a guard for (zero prior tests imported `domainPrompts.ts` or asserted
+      on its content): `src/test/ebay-category-map-freshness.test.ts`
+      (vitest, scoped to the Coins & Paper Money entries this pass actually
+      audited — the file also covers Trading Cards/Jewelry/Electronics/
+      Clothing/Books, which were spot-checked but not exhaustively audited)
+      and `supabase/functions/_helpers/domainPrompts.test.ts` (Deno, extracts
+      every `Label=ID` pair from the real
+      `buildSystemPrompt("coins_bullion", ...)` output and cross-checks
+      against the snapshot). Wired the Deno test into `category-corpus-replay`'s
+      CI job alongside `leafCategoryGuard.test.ts`.
+- [x] Verified: `npm run test` 118 -> 121, `deno test` on both guard suites
+      (30/30, 2/2), `node scripts/replay-corpus.mjs` 18/18, `deno fmt`/`lint`
+      clean across the whole `supabase/functions/` tree (84/81 files),
+      `deno check` clean on `analyze-item/index.ts`, `npx eslint`/`npx tsc`
+      clean on every touched frontend file.
+
+**Confirmed NOT affected (checked, not assumed):** every other domain builder
+in `domainPrompts.ts` (trading cards, jewelry, electronics, sneakers, auto
+parts, luxury handbags, vintage clothing, general) has zero hardcoded
+category IDs — confirmed by grep across the whole 931-line file. They rely
+entirely on the live `categoryBlock()` injection, so this exact bug class
+cannot occur there. The Category Resolver v2 rewrite (filter-then-rank, live
+taxonomy checks) already protects every domain equally; today's fix closes a
+legacy hole that happened to exist only in coins/bullion.
+
+**New findings, deliberately NOT fixed here — same disease, different organs:**
+
+1. `ebay-publish/publish-helpers.ts`'s `HARDCODED_COIN_CATEGORY_IDS`
+   (~line 355-460, live in the publish pipeline via `publish-create-draft.ts`)
+   has comments spanning dozens of entries that are flatly wrong — IDs for
+   Dollars and Gold coins are all labeled "Dimes (variant N)", `41099` is
+   labeled "Washington Quarters" but is Liberty Walking Half Dollar. The code
+   only checks Set membership, not comments, so this doesn't break at
+   runtime by itself, but it's a strong signal the membership needs the same
+   audit.
+2. `src/types/listing.ts`'s `COIN_CATEGORY_IDS`/`BULLION_CATEGORY_IDS` —
+   module-private but consumed by exported `isBullionCategory()` and
+   `deriveDomainFromCategory()`, imported by 10+ frontend
+   components/hooks. Contains the same wrong-domain `261070` and the dead-ID
+   family. This is user-facing: if a seller manually selects/types category
+   `261070`, the UI would incorrectly show coin/bullion fields (Grade,
+   precious-metal weight) for what's actually an Action Figures Accessories
+   listing.
+3. `supabase/functions/_helpers/suggestedCategories.ts` — a server-side
+   breadcrumb map imported by `analyze-item`, `category-lookup/resolverCore.ts`,
+   and `leafCategoryGuard.ts`. Its own header explicitly says "no hardcoded
+   maps — ever" (breadcrumbs should come from `ebay_taxonomy_cache` /
+   `category_mappings` / the live API), yet it contains the same
+   `41111`/`261070`/etc. stale entries — contradicting its own design intent.
+   Possibly the oldest instance of this pattern, and a plausible source the
+   others were copied from.
+
+Each of these three is a genuinely separate file/subsystem from what this
+pass touched, with its own blast radius — flagged for a dedicated pass each,
+same treatment as `HARDCODED_COIN_CATEGORY_IDS` above.
 
 ## Wrap-up (Phase 1+2 checkpoint)
 
