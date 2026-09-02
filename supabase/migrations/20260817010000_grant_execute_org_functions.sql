@@ -47,13 +47,16 @@
 -- owner to fix (RBR-0027). This is very likely a live bug for the CRM
 -- product too and is worth flagging to its owner separately.
 
+-- The CRM-table guard this DO block originally had (refusing to run unless
+-- public.accounts existed) was dropped 2026-09-02. It was meant to stop this
+-- from ever running against an unintended database, but the grant itself
+-- isn't CRM-conditional -- these four functions are confirmed to be this
+-- app's own (see the scope note above), so any standalone deployment of this
+-- app needs the same grant. The guard instead blocked every legitimate
+-- non-CRM-shared deployment forever, found when setting up the
+-- listrassistr-qa Supabase project, which correctly has no CRM tables at all.
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM information_schema.tables
-                 WHERE table_schema = 'public' AND table_name = 'accounts') THEN
-    RAISE EXCEPTION 'Refusing to run: CRM tables absent, so this is NOT the production project';
-  END IF;
-
   GRANT EXECUTE ON FUNCTION public.is_org_member(uuid, uuid) TO authenticated;
   GRANT EXECUTE ON FUNCTION public.is_org_owner(uuid, uuid) TO authenticated;
   GRANT EXECUTE ON FUNCTION public.get_user_org_id(uuid) TO authenticated;
