@@ -14,24 +14,31 @@ move. Where a step is version-sensitive it says so.
 
 **Which system each runbook lives in**, since they are easy to conflate:
 
-| Runbook      | System                                                                    |
-| ------------ | ------------------------------------------------------------------------- |
-| RB-01, RB-02 | **Vercel** — project `listrassistr-official` → Domains                    |
-| RB-03        | **AWS Route 53** — hosted zone, then Registered domains                   |
-| RB-04        | The **live site**, plus optionally Supabase logs                          |
-| RB-05        | **Supabase** dashboard — project `yqftpibxplachhwoclam`                   |
-| RB-06        | **GitHub** — `twinwicksllc/listrassistr-official`                         |
-| RB-07        | **This repository** — `REBRAND_PHASE_0_DECISION_LOG.md`, a markdown table |
-| RB-08        | Blocked; needs a Phase 3 gate before any system is touched                |
-| RB-09        | **AWS** — IAM console, signed in as root for this one task                |
-| RB-10        | **Vercel** → Domains, then **AWS Route 53** — hosted zone                 |
+| Runbook      | System                                                                       |
+| ------------ | ---------------------------------------------------------------------------- |
+| RB-01, RB-02 | **Vercel** — project `listrassistr-official` → Domains                       |
+| RB-03        | **AWS Route 53** — hosted zone, then Registered domains                      |
+| RB-04        | The **live site**, plus optionally Supabase logs                             |
+| RB-05        | **Supabase** dashboard — project `yqftpibxplachhwoclam`                      |
+| RB-06        | **GitHub** — `twinwicksllc/listrassistr-official`                            |
+| RB-07        | **This repository** — `REBRAND_PHASE_0_DECISION_LOG.md`, a markdown table    |
+| RB-08        | **Supabase** dashboard (`majmvgakczrpcwgxgulj`) + **Vercel** env vars — done |
+| RB-09        | **AWS** — IAM console, signed in as root for this one task                   |
+| RB-10        | **Vercel** → Domains, then **AWS Route 53** — hosted zone                    |
 
-**Status as of 2026-08-28.** **RB-01 to RB-07 are all complete**, RB-05 fully so as of
+**Status as of 2026-09-02.** **RB-01 to RB-07 are all complete**, RB-05 fully so as of
 checklist A.17b; execution evidence is in A.7d, A.12, A.13, A.15, A.16 and A.17. **RB-09**
-(IAM admin login) is **complete**. **RB-10** is **partially complete** —
-`app.listrassistr.com` is live and externally verified, `qa.listrassistr.com` still needs its
-branch prerequisite. **RB-08** (qa environment) remains **blocked** pending a Phase 3 entry
-gate — see Q-15.
+(IAM admin login) is **complete**. **RB-08** (qa environment) is now **complete** — the
+non-production project (`listrassistr-qa`, `majmvgakczrpcwgxgulj`) exists, its Edge Function
+secrets and Auth URL config are set, and the frontend env vars are scoped to the `qa`
+branch in Vercel. **RB-10** is now also **complete** as a result — `app.listrassistr.com`
+was already live and externally verified, and `qa.listrassistr.com` now resolves with a
+valid certificate on the `qa` branch. **Verification, 2026-09-02: sign-up/sign-in against
+`qa`'s own Supabase project confirmed working** — new account visible in
+`majmvgakczrpcwgxgulj`'s Auth Users, not production's. Still outstanding: a sandbox eBay
+OAuth connect (confirming `EBAY_ENVIRONMENT`/`EBAY_RUNAME` route to sandbox and the token
+lands encrypted) and a test-mode Stripe checkout (confirming the webhook fires and
+`subscriptions` updates).
 
 ---
 
@@ -361,7 +368,14 @@ decision log and DEC-0038 is the highest id.
 
 ---
 
-## RB-08 — The qa environment: blocked, and it needs a Phase 3 gate
+## RB-08 — The qa environment: fully wired up 2026-09-02
+
+**Closed 2026-09-01: the Phase 3 entry gate below is approved as DEC-0039** (owner: "1.
+approved", recorded in `REBRAND_PHASE_0_DECISION_LOG.md`). Scope is exactly what the draft
+below describes — creating the non-production Supabase project only. Data migration,
+cutover, and repository code changes remain explicitly out of scope. What follows is the
+original blocked-state analysis (kept for the rationale) plus, at the bottom, the now-actionable
+follow-on work.
 
 **This changed materially with the A.11 correction.** The earlier plan assumed
 `yqftpibxplachhwoclam` was the staging/qa project, so qa looked like a configuration task
@@ -387,9 +401,9 @@ Phase 1 banner would be exactly the scope drift the to-do's Section 6 exists to 
 in Phase 1 — no §8 exit-gate item depends on qa existing, only on the record existing, and
 that record should follow the environment rather than precede it.
 
-### Draft Phase 3 entry decision, so the gate is a one-line approval
+### Phase 3 entry decision — approved as DEC-0039, 2026-09-01
 
-> **DEC-00xx** — Approves entry to plan §10, Phase 3: New Supabase Projects, **scoped to
+> **DEC-0039** — Approves entry to plan §10, Phase 3: New Supabase Projects, **scoped to
 > creating the non-production environment only**. Rationale: `yqftpibxplachhwoclam` is
 > confirmed as the intended **production** project (A.11), so DEC-0005's requirement for
 > separate staging and production environments is currently unmet, and Phase 1's
@@ -401,14 +415,79 @@ that record should follow the environment rather than precede it.
 > 2). Conditions: no production data reaches the non-production project, and the shared
 > CRM admin login is not reused for it (RBR-0024, DEC-0004).
 
-### What I will draft once that gate exists
+### Done 2026-09-01 — the non-production project exists
 
-- The full **environment-variable matrix** — which variable belongs to which environment
-  and which project it points at. Names and destinations only, never values.
-- The exact **Supabase Auth URL configuration** for the qa project, including `localhost`
-  for development.
-- The **`qa` DNS record row** for the checklist's Section D, once the Vercel target exists.
-- The **Vercel branch-and-domain assignment** steps from A.6.
+Owner created it: **`listrassistr-qa`**, project ref **`majmvgakczrpcwgxgulj`**, pointed at
+the existing `listrassistr-official` GitHub repo (confirming Q-15's answer — no second repo).
+This satisfies DEC-0039's scope exactly (project creation only) and, together with A.17b's
+"no schema, no customer data" finding on `yqftpibxplachhwoclam`, means DEC-0005's
+separate-staging-and-production requirement is now satisfiable rather than blocked.
+
+### Done 2026-09-02 — all four items below are wired up
+
+Vercel env vars scoped to the `qa` branch, all backend Edge Function secrets set on
+`majmvgakczrpcwgxgulj` (including a **new, separate Sentry project** for QA error tracking
+rather than sharing production's DSN — a better outcome than this runbook's own
+"owner's call" framing below implied was likely), the Supabase Auth URL configuration, the
+`qa` branch/domain/DNS in Vercel and Route 53 (confirmed **Valid Configuration** with a
+certificate issued). What follows is kept as the reference record of exactly what was set
+and why, not a still-open checklist.
+
+### 1. Environment-variable matrix (names/destinations only, never values)
+
+**Vercel — frontend, `.env.example`'s three `VITE_SUPABASE_*` vars, scoped per branch:**
+
+| Variable                        | Production (main branch)                   | `qa` branch                                |
+| ------------------------------- | ------------------------------------------ | ------------------------------------------ |
+| `VITE_SUPABASE_PROJECT_ID`      | `yqftpibxplachhwoclam`                     | `majmvgakczrpcwgxgulj`                     |
+| `VITE_SUPABASE_URL`             | `https://yqftpibxplachhwoclam.supabase.co` | `https://majmvgakczrpcwgxgulj.supabase.co` |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | production project's anon/publishable key  | qa project's own anon/publishable key      |
+
+Vercel supports per-branch env var scoping (Project → Settings → Environment Variables →
+add the `qa` branch as a target alongside/instead of the default Preview scope) — this is
+what actually makes the `qa` branch/domain point at the new project instead of silently
+inheriting production's values via the default Preview environment.
+
+**Supabase Edge Function secrets — set separately on `majmvgakczrpcwgxgulj`** (`supabase
+secrets set --project-ref majmvgakczrpcwgxgulj`, or the dashboard's Edge Functions →
+Secrets page). `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are
+auto-injected per-project by Supabase at runtime — nothing to set for those three. Everything
+else the functions read via `Deno.env.get(...)` needs its own qa-appropriate value, distinct
+from production's:
+
+| Variable                                                                                                                                                                   | Note                                                                                                                                                        |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EBAY_CLIENT_ID` / `EBAY_CLIENT_SECRET` / `EBAY_RUNAME` / `EBAY_REDIRECT_URI`                                                                                              | Use eBay's **sandbox** app credentials, not the production app                                                                                              |
+| `EBAY_ENVIRONMENT`                                                                                                                                                         | Set to whichever value `ebay-publish/constants.ts` uses for sandbox — grep it before setting, don't guess                                                   |
+| `EBAY_TOKEN_ENCRYPTION_KEY`                                                                                                                                                | Generate a **new** key, never reuse production's                                                                                                            |
+| `GEMINI_API_KEY`                                                                                                                                                           | Own key, or a shared key with its own budget/quota if the owner prefers                                                                                     |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET`                                                                                                                              | Use Stripe **test-mode** keys                                                                                                                               |
+| `RESEND_API_KEY`, `SENTRY_DSN`, `CRON_SECRET`, `DATABASE_URL`                                                                                                              | Own values; `DATABASE_URL` in particular must point at `majmvgakczrpcwgxgulj`, never production                                                             |
+| `APP_URL`                                                                                                                                                                  | `https://qa.listrassistr.com`                                                                                                                               |
+| `ENVIRONMENT`                                                                                                                                                              | Whatever this app's code checks for a non-production branch (grep `Deno.env.get("ENVIRONMENT")` before setting — don't invent a value it doesn't recognize) |
+| `GEMINI_EMBEDDING_MODEL` / `GEMINI_FAST_MODEL` / `GEMINI_HEAVY_MODEL` / `CATEGORY_GATE4_ENFORCE` / `NEW_OPENAI_API_KEY` / `OPENAI_PROXY_URL` / `VIDEO_FRAME_EXTRACT_DEBUG` | Not secrets tied to an environment — can likely be copied from production as-is, owner's call                                                               |
+
+### 2. Supabase Auth URL configuration — on `majmvgakczrpcwgxgulj` — ✅ done
+
+Dashboard → Authentication → URL Configuration:
+
+- **Site URL:** `https://qa.listrassistr.com`
+- **Redirect URLs:** `https://qa.listrassistr.com/**` and `http://localhost:5173/**` (the
+  dev port confirmed in T-15, not the stale `3000` the service inventory had recorded)
+
+### 3. `qa` DNS record — checklist Section D — ✅ done
+
+Added per RB-10's `app` sequencing (add the domain in Vercel first, then use the CNAME
+target it displays). Vercel's Domains page confirms **Valid Configuration** with a
+certificate issued for `qa.listrassistr.com`.
+
+### 4. Vercel branch-and-domain assignment — ✅ done
+
+Per RB-10's `qa.listrassistr.com` checklist (steps 1–4 there): the `qa` branch exists,
+`qa.listrassistr.com` is assigned to it (not Production), and a deploy from that branch
+shows green. RB-10 step 4's original note — "that project does not exist yet (Q-15) ...
+`qa` will share the production project" — is superseded; `qa` now uses its own
+branch-scoped env vars from §1, not production's.
 
 ---
 
@@ -465,7 +544,7 @@ perfect version block the useful one.
 
 ---
 
-## RB-10 — Create the `app` and `qa` subdomains (O-06) — `app` ✅ DONE 2026-08-28
+## RB-10 — Create the `app` and `qa` subdomains (O-06) — ✅ BOTH DONE, `qa` 2026-09-02
 
 **`app.listrassistr.com` completed and externally verified 2026-08-28.** CNAME resolves
 consistently across five resolvers to `2f1e3f86cb32a6a8.vercel-dns-016.com`; Let's Encrypt
@@ -486,7 +565,10 @@ account creation "will open when the application shell is ready," yet the owner 
 a real Supabase auth record from an earlier signup. Either the copy is stale or signup quietly
 works despite what it says — worth a look when convenient, but it doesn't change Q-17.
 
-`qa.listrassistr.com` is unstarted — still needs the branch prerequisite below.
+`qa.listrassistr.com` completed 2026-09-02 — `qa` branch created, domain assigned to it in
+Vercel (not Production), CNAME added in Route 53, and the domain row shows Valid
+Configuration with a certificate issued. Full detail in **RB-08**, which also covers the
+non-production Supabase project it now points at.
 
 Owner decided 2026-08-27: **`app` and `qa` should be subdomains, not paths.** That matches
 plan §6.1's two-host target, and it supersedes A.14's recommendation to defer — deferral was
@@ -528,10 +610,10 @@ misleading name. So:
 2. Vercel → **Domains** → **Add** `qa.listrassistr.com`, and **assign it to that branch**
    rather than to production.
 3. Add the CNAME Vercel displays in Route 53, again at **TTL 300**.
-4. Note the environment-variable question from A.6: `qa` should eventually point at a
-   **non-production** Supabase project per DEC-0005. That project does not exist yet (Q-15),
-   so until it does, `qa` will share the production project. Acceptable while there is no
-   schema and no customer data (A.17b), but it is the reason Q-15 exists.
+4. **Superseded 2026-09-01.** This step originally said the non-production project didn't
+   exist yet and `qa` would have to share production's in the meantime. It now exists —
+   `listrassistr-qa`, ref `majmvgakczrpcwgxgulj` — so skip the interim sharing and go
+   straight to branch-scoped env vars pointing at it. Full variable list in **RB-08**.
 
 ### What still needs application work
 
