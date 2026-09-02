@@ -1,0 +1,11 @@
+-- Enables pg_trgm ahead of when it's first used.
+--
+-- 20260327000000_generalize_category_mappings.sql (the next migration) creates
+-- a gin(... gin_trgm_ops) index before its own CREATE EXTENSION IF NOT EXISTS
+-- pg_trgm statement, which only ran without error because pg_trgm was already
+-- enabled out-of-band on every environment that migration ever actually ran
+-- against. A database replaying every migration from scratch fails there
+-- (2026-09-02, found while setting up the listrassistr-qa Supabase project).
+-- That file is left as-is (its own enable statement becomes a harmless no-op)
+-- rather than reordering an already-applied migration's contents.
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
