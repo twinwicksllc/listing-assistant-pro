@@ -1,0 +1,99 @@
+name: Deploy Supabase Edge Functions (QA)
+
+# Manual-only, deliberately. Unlike deploy-functions.yml this has no push
+# trigger -- the qa Supabase project (majmvgakczrpcwgxgulj, see
+# REBRAND_PHASE_1_RUNBOOKS.md's RB-08) is meant to be a deliberately-updated
+# non-production environment, not something that silently redeploys on every
+# push to main. Added 2026-09-02 specifically to route around a local
+# corporate-network TLS issue that blocked running the Supabase CLI directly
+# from a workstation (Go's certificate trust store on Windows did not pick up
+# the corporate proxy's root CA, even though the OS and browser did) --
+# GitHub's runners have no such local network to fight, so this sidesteps the
+# problem entirely rather than solving it.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: QA
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v3
+        with:
+          version: latest
+
+      # Same invariant this codebase already enforces for production (see the
+      # script's own header) -- config.toml drifting from the --no-verify-jwt
+      # list below is the RBR-0028 failure class. This checks config.toml
+      # against deploy-functions.yml (production's workflow, hardcoded in the
+      # script), not against this file -- still a meaningful check today,
+      # since both workflows deploy the exact same function list from the
+      # same config.toml, but it will not catch this file's list drifting
+      # from production's independently of config.toml. Worth revisiting if
+      # that ever actually happens.
+      - name: Verify function auth config
+        run: bash scripts/verify-function-auth-config.sh
+
+      - name: Report pending migrations
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          supabase link --project-ref majmvgakczrpcwgxgulj
+          echo "── Migration state BEFORE push (Local = in repo, Remote = applied) ──"
+          supabase migration list --linked
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Push Database Migrations
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          supabase db push --yes --include-all
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Confirm migration state after push
+        if: always()
+        timeout-minutes: 5
+        run: |
+          echo "── Migration state AFTER push ──"
+          supabase migration list --linked || true
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Deploy Edge Functions
+        run: |
+          # Deploy all functions with JWT verification enabled by default
+          supabase functions deploy --project-ref majmvgakczrpcwgxgulj
+
+          # Mirrors deploy-functions.yml's explicit --no-verify-jwt list
+          # exactly -- see that file's own comment for why the bulk deploy
+          # above does not reliably apply config.toml's per-function setting.
+          supabase functions deploy analyze-item --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+          supabase functions deploy ebay-publish --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+          supabase functions deploy ebay-pricing --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+          supabase functions deploy spot-prices --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+          supabase functions deploy transcribe-voice --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+          supabase functions deploy ebay-user --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+          supabase functions deploy ebay-listings --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+          supabase functions deploy create-checkout --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+          supabase functions deploy check-subscription --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+          supabase functions deploy customer-portal --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+          supabase functions deploy ebay-competitor-search --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+          supabase functions deploy category-lookup --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+          supabase functions deploy sync-ebay-taxonomy --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+          supabase functions deploy competitor-prices-cron --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+          supabase functions deploy inventory-sync-cron --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+          supabase functions deploy cost-alert-cron --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+          supabase functions deploy cleanup-media-retention --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+          supabase functions deploy category-hygiene-cron --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+          supabase functions deploy backfill-ebay-token-encryption --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+          supabase functions deploy backfill-knowledge-base-embeddings --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+          supabase functions deploy stripe-webhook --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}

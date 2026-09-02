@@ -6,7 +6,7 @@
 Repository code is §9/Phase 2 and **not** authorised.
 **Status date:** 2026-08-28
 
-## Resuming — session state as of 2026-08-28
+## Resuming — session state as of 2026-09-01
 
 **Closed 2026-08-27:** RB-01 apex canonical · RB-02 typo domains repointed · **RB-03 DNSSEC
 live and validating** · RB-04 auth flow traced · RB-05 production project characterised ·
@@ -28,14 +28,27 @@ reality. `qa.listrassistr.com` still needs its branch prerequisite (unstarted).
 `listrassistr-official`, committed, merged, and confirmed live at real links; sign-up stays
 open (A.19). O-41 is fully closed as a result — see its row in Section 2.
 
+**Closed 2026-09-01: Q-15** — owner approved the Phase 3 entry gate for a non-production
+Supabase project (**DEC-0039**, recorded in `REBRAND_PHASE_0_DECISION_LOG.md`), using the
+draft gate text already prepared in RB-08.
+
+**Closed 2026-09-02: RB-08 and RB-10 fully wired up.** Owner created `listrassistr-qa`
+(`majmvgakczrpcwgxgulj`), pointed at the existing `listrassistr-official` repo — no second
+repo, per Q-15's answer. All four RB-08 items are done: Vercel env vars scoped to the `qa`
+branch, backend Edge Function secrets set (eBay sandbox app, a fresh token-encryption key,
+Stripe test-mode keys and its own restricted-key permission set, a separate Sentry project
+for QA, etc.), the Supabase Auth URL configuration, and the `qa` branch/domain/DNS (Valid
+Configuration, certificate issued). `P1-06` is now done. Still outstanding: a live
+end-to-end verification pass (sign-up/sign-in, sandbox eBay OAuth connect, test-mode Stripe
+checkout) — see RB-08's closing note.
+
 Full reasoning and the rest of the queue are in **Section 5**, which is the authoritative
 next-actions list.
 
 **Waiting on others:** O-03, the AWS domain-registration restriction, is with AWS support.
 
-**Owner decisions outstanding:** Q-04 Q-05 Q-06 Q-10 Q-15 Q-16. Q-10 (brand direction)
-unlocks the most assistant-side work; Q-15 (Phase 3 gate) is now wanted, since the owner has
-chosen subdomains over paths.
+**Owner decisions outstanding:** Q-04 Q-05 Q-06 Q-10 Q-16 (Q-15 closed 2026-09-01). Q-10
+(brand direction) unlocks the most assistant-side work.
 
 **Long-running, not blocking:** LLC formation, then the registrant change (O-32), then
 DEC-0021's key migration. Trademark filing deferred.
@@ -60,21 +73,21 @@ by owner decision, with a stated trigger.
 Plan §8's exit gate: "Domain ownership is secure, legal has approved the name,
 branded email can authenticate, and the asset package is approved."
 
-| Gate  | Item                                    | Status                                                                                                                                                                                                                                                  |
-| ----- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P1-01 | Domain in legal business entity         | **Approved with recorded deviation**                                                                                                                                                                                                                    |
-| P1-02 | Registrar hardened                      | **Evidence captured**                                                                                                                                                                                                                                   |
-| P1-03 | Legal approval of the name              | **Approved**                                                                                                                                                                                                                                            |
-| P1-04 | Authoritative DNS documented            | In progress — inventory entry missing                                                                                                                                                                                                                   |
-| P1-05 | DNSSEC enabled, DS chain verified       | **Evidence captured** (A.12)                                                                                                                                                                                                                            |
-| P1-06 | Apex/`www`/`app`/`qa` resolving + certs | In progress — apex/`www`/`app` live, canonical, and certificate-verified (A.7d, RB-10, superseding A.14's deferral); `app` confirmed serving the predicted holding page, not the live app (RB-10, A.18b); `qa` needs a branch and an environment (Q-15) |
-| P1-07 | Role mailboxes receiving                | Deferred                                                                                                                                                                                                                                                |
-| P1-08 | Branded email authenticates             | Deferred                                                                                                                                                                                                                                                |
-| P1-09 | DMARC review period completed           | Deferred                                                                                                                                                                                                                                                |
-| P1-10 | Brand asset package produced            | Not started                                                                                                                                                                                                                                             |
-| P1-11 | Design tokens pass WCAG AA              | Not started                                                                                                                                                                                                                                             |
-| P1-12 | Asset package approved                  | Not started                                                                                                                                                                                                                                             |
-| P1-13 | Phase 2 entry decision                  | Not started — DEC-0035 does not grant                                                                                                                                                                                                                   |
+| Gate  | Item                                    | Status                                                                                                                                                                                                                                                                                                                                                    |
+| ----- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1-01 | Domain in legal business entity         | **Approved with recorded deviation**                                                                                                                                                                                                                                                                                                                      |
+| P1-02 | Registrar hardened                      | **Evidence captured**                                                                                                                                                                                                                                                                                                                                     |
+| P1-03 | Legal approval of the name              | **Approved**                                                                                                                                                                                                                                                                                                                                              |
+| P1-04 | Authoritative DNS documented            | In progress — inventory entry missing                                                                                                                                                                                                                                                                                                                     |
+| P1-05 | DNSSEC enabled, DS chain verified       | **Evidence captured** (A.12)                                                                                                                                                                                                                                                                                                                              |
+| P1-06 | Apex/`www`/`app`/`qa` resolving + certs | **Done 2026-09-02** — apex/`www`/`app`/`qa` all live, canonical, and certificate-verified (A.7d, RB-10); `app` confirmed serving the predicted holding page, not the live app (RB-10, A.18b); `qa` now points at its own non-production Supabase project (Q-15/RB-08, `majmvgakczrpcwgxgulj`), fully wired up — end-to-end verification still outstanding |
+| P1-07 | Role mailboxes receiving                | Deferred                                                                                                                                                                                                                                                                                                                                                  |
+| P1-08 | Branded email authenticates             | Deferred                                                                                                                                                                                                                                                                                                                                                  |
+| P1-09 | DMARC review period completed           | Deferred                                                                                                                                                                                                                                                                                                                                                  |
+| P1-10 | Brand asset package produced            | Not started                                                                                                                                                                                                                                                                                                                                               |
+| P1-11 | Design tokens pass WCAG AA              | Not started                                                                                                                                                                                                                                                                                                                                               |
+| P1-12 | Asset package approved                  | Not started                                                                                                                                                                                                                                                                                                                                               |
+| P1-13 | Phase 2 entry decision                  | Not started — DEC-0035 does not grant                                                                                                                                                                                                                                                                                                                     |
 
 **Four of thirteen are closed** (P1-01, P1-02, P1-03, P1-05). The two largest remaining
 blocks are email identity (§8.2) and brand assets (§8.3).
@@ -240,9 +253,13 @@ is unblocked right now and independent of the LLC, mailboxes, and brand directio
    than disable sign-up. Drafted here, copied into `listrassistr-official`, committed, merged,
    and confirmed live at real links (A.19). See the note below on why open sign-up staying
    open is still worth tracking, independent of this closure.
-4. **Q-15** — approve or decline a Phase 3 entry gate for a non-production Supabase project.
-   Now wanted rather than optional, since choosing subdomains gives `qa` a hostname with no
-   environment behind it. Draft gate text is in **RB-08**.
+4. **Q-15 — closed 2026-09-01, fully wired up 2026-09-02.** Owner approved the Phase 3 entry
+   gate (**DEC-0039**), created the non-production project — `listrassistr-qa`, ref
+   `majmvgakczrpcwgxgulj`, pointed at the existing `listrassistr-official` repo — and has now
+   completed all four RB-08 items: branch-scoped Vercel env vars, backend Edge Function
+   secrets (including a separate Sentry project for QA), Auth URL config, and the `qa`
+   branch/domain/DNS (Valid Configuration, certificate issued). Still to do: a live
+   end-to-end verification pass — see RB-08's closing note.
 5. **O-04 / O-03** — re-check `listrassister.com` authoritatively, and chase the AWS support
    case on the registration restriction, if you still want that domain.
 
