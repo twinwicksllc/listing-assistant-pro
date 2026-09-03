@@ -1,19 +1,13 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { selectValidPrices } from "./prices.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
-
-// ─── Valid Stripe price IDs (4-tier: Starter / Pro / Shop) ─────────────────
-const VALID_PRICES = [
-  "price_1T8lVU4bX0d1SiThMDayhDj5", // Starter $19/mo
-  "price_1T8mZ84bX0d1SiThFgvRubiN", // Pro $49/mo
-  "price_1TXYjd4bX0d1SiThDb4YQhjR", // Shop $99/mo
-];
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -39,9 +33,22 @@ serve(async (req) => {
     if (userError || !user?.email) throw new Error("User not authenticated");
 
     const body = await req.json().catch(() => ({}));
-    const priceId = body.priceId || VALID_PRICES[0];
-    if (!VALID_PRICES.includes(priceId)) {
-      throw new Error("Invalid price selected");
+    const priceId = body.priceId;
+    if (!priceId) {
+      return new Response(JSON.stringify({ error: "priceId is required" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
+    }
+    const validPrices = selectValidPrices({
+      STRIPE_PRICE_IDS: Deno.env.get("STRIPE_PRICE_IDS") ?? undefined,
+      STRIPE_SECRET_KEY: Deno.env.get("STRIPE_SECRET_KEY") ?? undefined,
+    });
+    if (!validPrices.includes(priceId)) {
+      return new Response(JSON.stringify({ error: "Invalid price selected" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
     }
 
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
