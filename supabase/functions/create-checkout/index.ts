@@ -35,11 +35,20 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const priceId = body.priceId;
     if (!priceId) {
-      throw new Error("priceId is required");
+      return new Response(JSON.stringify({ error: "priceId is required" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
     }
-    const validPrices = selectValidPrices(Deno.env.toObject());
+    const validPrices = selectValidPrices({
+      STRIPE_PRICE_IDS: Deno.env.get("STRIPE_PRICE_IDS") ?? undefined,
+      STRIPE_SECRET_KEY: Deno.env.get("STRIPE_SECRET_KEY") ?? undefined,
+    });
     if (!validPrices.includes(priceId)) {
-      throw new Error("Invalid price selected");
+      return new Response(JSON.stringify({ error: "Invalid price selected" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
     }
 
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
