@@ -423,6 +423,14 @@ This satisfies DEC-0039's scope exactly (project creation only) and, together wi
 "no schema, no customer data" finding on `yqftpibxplachhwoclam`, means DEC-0005's
 separate-staging-and-production requirement is now satisfiable rather than blocked.
 
+**Note (2026-09-08): this same Supabase project (`majmvgakczrpcwgxgulj`) is
+now also reused as the QA backend for `listing-assistant-pro` itself** — the
+current live app, distinct from the `listrassistr-official` frontend this
+runbook covers. See `LISTING_ASSISTANT_PRO_QA_SETUP.md`. Both apps' QA
+environments share this one non-production database; that was a deliberate
+choice to avoid standing up a third project and to avoid re-wiring at
+migration time, not an accident.
+
 ### Done 2026-09-02 — all four items below are wired up
 
 Vercel env vars scoped to the `qa` branch, all backend Edge Function secrets set on

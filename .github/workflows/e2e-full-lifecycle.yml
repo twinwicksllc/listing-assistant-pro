@@ -10,6 +10,10 @@ jobs:
   full-lifecycle:
     name: Full Lifecycle Tests
     runs-on: ubuntu-latest
+    # Pulls Supabase secrets from the QA environment (majmvgakczrpcwgxgulj)
+    # rather than the repo-level secrets, which point at production. See
+    # deploy-functions-qa.yml for the same pattern.
+    environment: QA
     permissions:
       contents: read
     # NOTE: this job previously ran in the mcr.microsoft.com/playwright:v1.48-jammy
@@ -45,6 +49,19 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+
+      # This suite is meant to exercise a real deployed QA build, not the
+      # local dev server. Playwright's webServer config in playwright.config.ts
+      # silently falls back to `npm run dev` on localhost when BASE_URL is
+      # unset -- which is exactly what happened every run until now (the
+      # QA_BASE_URL secret never existed). Fail loudly instead of testing the
+      # wrong thing without anyone noticing.
+      - name: Verify QA_BASE_URL is set
+        run: |
+          if [ -z "${{ secrets.QA_BASE_URL }}" ]; then
+            echo "::error::QA_BASE_URL secret is not set on the QA environment -- this suite is meant to test a real deployed QA build, not localhost. See LISTING_ASSISTANT_PRO_QA_SETUP.md."
+            exit 1
+          fi
 
       - name: Run full lifecycle tests
         run: npx playwright test e2e/tests/full-lifecycle.spec.ts
