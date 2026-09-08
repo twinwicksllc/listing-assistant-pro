@@ -112,6 +112,8 @@ Two logical groups live in the **same live Supabase project** historically share
 
 `deploy-functions.yml` pushes DB migrations (`supabase db push --yes --include-all`) and deploys functions to the `Production` GitHub environment on push to `main` — there is currently no manual approval gate on this, and several functions deploy with `--no-verify-jwt`. Treat changes that touch migrations or function config as higher-risk than pure frontend changes for this reason.
 
+**This app finally has a real QA environment (2026-09-08) — see `LISTING_ASSISTANT_PRO_QA_SETUP.md`.** Before that date, `e2e-pr-smoke.yml`/`e2e-full-lifecycle.yml` ran against repo-level secrets that pointed at production, and `full-lifecycle.spec.ts` silently fell back to testing a local `npm run dev` build whenever `QA_BASE_URL` was unset (it always was) — so "weekly E2E" was never actually testing a deployed environment. Both workflows now declare `environment: QA` and pull credentials for `majmvgakczrpcwgxgulj` (the `listrassistr-qa` Supabase project, reused as this app's QA backend — see the setup doc for why), and `e2e-full-lifecycle.yml` fails loudly instead of silently defaulting to localhost if `QA_BASE_URL` is missing. `deploy-functions-qa.yml` (manual-only, `workflow_dispatch`) deploys this repo's Edge Functions to that same QA project and needs a manual trigger after backend changes land on `main`.
+
 ## Rebrand & migration in progress — read before touching infra or auth
 
 This repo ("Sovereign Listing Suite" internally, eBay listing app externally) is mid-migration to a new product, **ListrAssistr**, moving to a separate private repo (`twinwicksllc/listrassistr-official`). Full plan: `LISTRASSISTR_REBRAND_AND_MIGRATION_PLAN.md`.
