@@ -66,8 +66,14 @@ export async function login(page: Page, user: TestUser) {
       'input[type="email"], input[placeholder*="email" i], input[name="email"]',
     )
     .first();
+  // Locator.isVisible() checks the DOM immediately and does not poll, even
+  // with a `timeout` option -- only waitFor()/expect().toBeVisible() poll.
+  // Against a real network deployment (cold-starting Edge Functions, actual
+  // JS bundle parse/execute time) the form frequently isn't rendered yet by
+  // the time this line runs, so use waitFor() instead, which does poll.
   let hasEmailInput = await emailInput
-    .isVisible({ timeout: 10_000 })
+    .waitFor({ state: "visible", timeout: 10_000 })
+    .then(() => true)
     .catch(() => false);
 
   // Some CI runs can land on /landing due route timing. Click any visible sign-in CTA, then retry /login.
@@ -79,7 +85,8 @@ export async function login(page: Page, user: TestUser) {
       .first();
 
     const hasLandingSignIn = await landingSignIn
-      .isVisible({ timeout: 5_000 })
+      .waitFor({ state: "visible", timeout: 5_000 })
+      .then(() => true)
       .catch(() => false);
     if (hasLandingSignIn) {
       await landingSignIn.click({ timeout: 5_000 });
@@ -87,7 +94,8 @@ export async function login(page: Page, user: TestUser) {
 
     await page.goto("/login", { waitUntil: "domcontentloaded" });
     hasEmailInput = await emailInput
-      .isVisible({ timeout: 10_000 })
+      .waitFor({ state: "visible", timeout: 10_000 })
+      .then(() => true)
       .catch(() => false);
 
     if (
