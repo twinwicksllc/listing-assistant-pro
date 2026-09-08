@@ -73,6 +73,7 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           EBAY_SANDBOX_API_KEY: ${{ secrets.EBAY_SANDBOX_API_KEY }}
           STRIPE_TEST_CARD: "4242424242424242"
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 
       - name: Upload test report
         if: always()

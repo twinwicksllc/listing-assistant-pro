@@ -16,6 +16,16 @@ export default defineConfig({
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
+    // Vercel's Deployment Protection puts an SSO wall in front of every
+    // Preview deployment (including the qa branch) by default -- without
+    // this header, every request gets redirected to vercel.com/login instead
+    // of reaching the app. See LISTING_ASSISTANT_PRO_QA_SETUP.md.
+    ...(process.env.VERCEL_AUTOMATION_BYPASS_SECRET && {
+      extraHTTPHeaders: {
+        "x-vercel-protection-bypass":
+          process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
+      },
+    }),
   },
   projects: [
     {

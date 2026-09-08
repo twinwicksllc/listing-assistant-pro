@@ -73,12 +73,39 @@ the other repo.
 
 3. **Repo secret** `QA_BASE_URL` — set to the `qa` branch URL from step 1.
    `e2e-full-lifecycle.yml` now fails loudly (rather than silently testing
-   localhost) if this is unset.
+   localhost) if this is unset. In practice this is a Vercel-issued preview
+   alias like `https://listing-assistant-pro-git-qa-tom-fenwicks-projects.vercel.app`
+   — Vercel's GitHub integration auto-opens a draft PR the first time a
+   non-`main`/`develop` branch is pushed and posts this URL as a PR comment;
+   check there if you don't already have it.
 
-4. **Confirm QA is caught up to `main`** — `deploy-functions-qa.yml` is
+4. **Vercel Deployment Protection bypass — required, found 2026-09-08.**
+   Vercel puts an SSO login wall in front of every Preview deployment by
+   default (including `qa`), which silently redirects Playwright's headless
+   browser to `vercel.com/login` on every request — every E2E test failed
+   with "Login form not found" until this was added. Vercel → Project
+   Settings → **Deployment Protection** → **Protection Bypass for
+   Automation** → generate a secret. Add it as GitHub QA environment secret
+   `VERCEL_AUTOMATION_BYPASS_SECRET`. `playwright.config.ts` sends it as an
+   `x-vercel-protection-bypass` header on every request when the env var is
+   set — public visitors are unaffected, only requests carrying this header
+   skip the wall.
+
+5. **Confirm QA is caught up to `main`** — `deploy-functions-qa.yml` is
    manual-only (`workflow_dispatch`) by design (see its own header comment).
    Trigger it after any backend change lands on `main` that QA should
    reflect, or before relying on a QA test run to validate one.
+
+## Remember to do this for `listrassistr-official` too
+
+This same Vercel Deployment Protection wall almost certainly also blocks any
+automated testing against `qa.listrassistr.com` — that project's Preview
+deployments are subject to the identical default. Nothing in
+`REBRAND_PHASE_1_RUNBOOKS.md`'s RB-08 mentions checking or disabling it, and
+that repo has no E2E suite yet to have surfaced the problem the way this
+one did. Flagged here so it isn't rediscovered the hard way — check
+Deployment Protection settings on the `listrassistr-official` Vercel project
+before wiring up any automated testing against `qa.listrassistr.com`.
 
 ## What changed in this repo (2026-09-08)
 
