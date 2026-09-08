@@ -10,21 +10,35 @@ jobs:
   full-lifecycle:
     name: Full Lifecycle Tests
     runs-on: ubuntu-latest
-    container:
-      image: mcr.microsoft.com/playwright:v1.48-jammy
-
+    permissions:
+      contents: read
+    # NOTE: this job previously ran in the mcr.microsoft.com/playwright:v1.48-jammy
+    # container image. MCR purged that tag (all five weekly runs since 2026-08-10
+    # failed with "manifest unknown" before any test ran), and the tag never matched
+    # the lockfile anyway (@playwright/test is pinned to 1.60.0). The smoke workflow
+    # (e2e-pr-smoke.yml, green on every push) proves the host-runner +
+    # `npx playwright install --with-deps chromium` + cache pattern works for this
+    # repo, so this now mirrors that pattern instead of pinning a container image
+    # that goes stale the moment Microsoft rotates tags.
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('**/package-lock.json') }}
 
       - name: Install dependencies
         run: npm ci
 
-      # Use Playwright container image which includes browsers and deps.
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
 
       - name: Setup test user in Supabase
         run: node scripts/setup-test-user.js
@@ -61,6 +75,11 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
 
+      # NOTE: the original notify step called issues.createComment with
+      # context.issue.number, which is undefined on schedule/workflow_dispatch
+      # runs -- the step itself errored whenever tests failed. Use a commit
+      # comment instead (same pattern as e2e-pr-smoke.yml's comment-push job);
+      # it works without PR context because it targets github.sha directly.
       - name: Notify on failure
         if: failure()
         uses: actions/github-script@v7
@@ -68,9 +87,9 @@ jobs:
           script: |
             const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
 
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
+            github.rest.repos.createCommitComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
+              commit_sha: process.env.GITHUB_SHA,
               body: `❌ **Full Lifecycle E2E Tests Failed** - [View Report](${runUrl})`
-            })
+            });

@@ -92,6 +92,15 @@ jobs:
     name: Refresh Golden-Corpus Taxonomy Snapshot
     runs-on: ubuntu-latest
     needs: sync-taxonomy
+    # Added 2026-09-08: the 2026-08-30 and 2026-09-06 scheduled runs failed at the
+    # git-push step with HTTP 403. The workflow had no permissions block, so the
+    # GITHUB_TOKEN in scheduled runs defaulted to read-only. Earlier runs looked
+    # green only because the snapshot diff was quiet (changed=false -> push step
+    # skipped). contents:write is needed for the branch push; pull-requests:write
+    # for the `gh pr create` in the same step.
+    permissions:
+      contents: write
+      pull-requests: write
     # 'skipped' is the normal path on the weekly schedule: pg_cron already ran
     # the sync at 03:11, so sync-taxonomy above is manual-only and does not run
     # here. On a workflow_dispatch run it DOES run, and must succeed first so the
