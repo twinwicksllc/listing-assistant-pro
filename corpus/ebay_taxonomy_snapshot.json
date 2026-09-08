@@ -1,9 +1,9 @@
 {
   "snapshot_meta": {
-    "source": "ebay_taxonomy_cache_rows.csv export",
-    "synced_at": "2026-08-23T03:11:01.703Z (majority of rows; 5 stale rows have older synced_at, see CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md Finding A)",
+    "source": "ebay_taxonomy_cache (live Supabase REST fetch)",
+    "synced_at": "2026-09-08T13:22:03.964Z",
     "row_count": 15116,
-    "purpose": "Deterministic snapshot for the Phase 3 golden-corpus replay harness. Using this frozen snapshot (instead of live DB/API calls) means corpus results never change unless the snapshot is intentionally refreshed, so CI/local replay runs are 100% reproducible."
+    "purpose": "Deterministic snapshot for the Phase 3 golden-corpus replay harness. Refreshed automatically by scripts/refresh-taxonomy-snapshot.mjs after each sync-ebay-taxonomy-weekly run."
   },
   "categories": [
     {
@@ -128,7 +128,7 @@
     {
       "category_id": "10025",
       "category_name": "Sundials",
-      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > D\u00e9cor > Sundials",
+      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > Décor > Sundials",
       "parent_category_id": "20498",
       "is_leaf": true
     },
@@ -141,8 +141,8 @@
     },
     {
       "category_id": "10034",
-      "category_name": "Other Home D\u00e9cor",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Other Home D\u00e9cor",
+      "category_name": "Other Home Décor",
+      "breadcrumb": "Home & Garden > Home Décor > Other Home Décor",
       "parent_category_id": "10033",
       "is_leaf": true
     },
@@ -268,14 +268,14 @@
     {
       "category_id": "101408",
       "category_name": "Replacement Parts & Tools",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Clocks > Replacement Parts & Tools",
+      "breadcrumb": "Home & Garden > Home Décor > Clocks > Replacement Parts & Tools",
       "parent_category_id": "258031",
       "is_leaf": true
     },
     {
       "category_id": "101415",
       "category_name": "Vases",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Vases",
+      "breadcrumb": "Home & Garden > Home Décor > Vases",
       "parent_category_id": "10033",
       "is_leaf": true
     },
@@ -2683,21 +2683,21 @@
     {
       "category_id": "104964",
       "category_name": "Apparel",
-      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists M > M\u00f6tley Cr\u00fce > Apparel",
+      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists M > Mötley Crüe > Apparel",
       "parent_category_id": "104963",
       "is_leaf": true
     },
     {
       "category_id": "104965",
       "category_name": "Concert Memorabilia",
-      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists M > M\u00f6tley Cr\u00fce > Concert Memorabilia",
+      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists M > Mötley Crüe > Concert Memorabilia",
       "parent_category_id": "104963",
       "is_leaf": true
     },
     {
       "category_id": "104966",
       "category_name": "Posters",
-      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists M > M\u00f6tley Cr\u00fce > Posters",
+      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists M > Mötley Crüe > Posters",
       "parent_category_id": "104963",
       "is_leaf": true
     },
@@ -3641,8 +3641,8 @@
     },
     {
       "category_id": "10783",
-      "category_name": "Hershey & Reese\u2019s",
-      "breadcrumb": "Collectibles > Advertising > Food & Beverage > Candy & Nuts > Hershey & Reese\u2019s",
+      "category_name": "Hershey & Reese’s",
+      "breadcrumb": "Collectibles > Advertising > Food & Beverage > Candy & Nuts > Hershey & Reese’s",
       "parent_category_id": "872",
       "is_leaf": true
     },
@@ -3928,8 +3928,8 @@
     },
     {
       "category_id": "10827",
-      "category_name": "Bichon Fris\u00e9",
-      "breadcrumb": "Collectibles > Animals > Dogs > Bichon Fris\u00e9",
+      "category_name": "Bichon Frisé",
+      "breadcrumb": "Collectibles > Animals > Dogs > Bichon Frisé",
       "parent_category_id": "10823",
       "is_leaf": true
     },
@@ -4090,14 +4090,14 @@
     {
       "category_id": "108424",
       "category_name": "Height Charts",
-      "breadcrumb": "Home & Garden > Kids & Teens at Home > Home D\u00e9cor & Organization > Height Charts",
+      "breadcrumb": "Home & Garden > Kids & Teens at Home > Home Décor & Organization > Height Charts",
       "parent_category_id": "259328",
       "is_leaf": true
     },
     {
       "category_id": "108426",
       "category_name": "Wall Decals & Stickers",
-      "breadcrumb": "Home & Garden > Kids & Teens at Home > Home D\u00e9cor & Organization > Wall Decals & Stickers",
+      "breadcrumb": "Home & Garden > Kids & Teens at Home > Home Décor & Organization > Wall Decals & Stickers",
       "parent_category_id": "259328",
       "is_leaf": true
     },
@@ -4790,7 +4790,7 @@
     {
       "category_id": "108866",
       "category_name": "Wood Items",
-      "breadcrumb": "Crafts > Handcrafted & Finished Pieces > Home D\u00e9cor & Accents > Wood Items",
+      "breadcrumb": "Crafts > Handcrafted & Finished Pieces > Home Décor & Accents > Wood Items",
       "parent_category_id": "160656",
       "is_leaf": true
     },
@@ -5420,7 +5420,7 @@
     {
       "category_id": "10964",
       "category_name": "1962 Seattle",
-      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World\u2019s Fairs > 1962 Seattle",
+      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World’s Fairs > 1962 Seattle",
       "parent_category_id": "4162",
       "is_leaf": true
     },
@@ -6609,8 +6609,8 @@
     },
     {
       "category_id": "115623",
-      "category_name": "Rename Category For Internal Use with Max Chars \u00ae\u2122",
-      "breadcrumb": "Everything Else > Test Category For Internal Use Only Parent Level 2 > Test Category For Internal Use Only Parent Level 3 > Test Category for Internal Use Only Parent Level 4 > Test Category for Internal Use Only Parent Level 5 > Rename Category For Internal Use with Max Chars \u00ae\u2122",
+      "category_name": "Rename Category For Internal Use with Max Chars ®™",
+      "breadcrumb": "Everything Else > Test Category For Internal Use Only Parent Level 2 > Test Category For Internal Use Only Parent Level 3 > Test Category for Internal Use Only Parent Level 4 > Test Category for Internal Use Only Parent Level 5 > Rename Category For Internal Use with Max Chars ®™",
       "parent_category_id": "184464",
       "is_leaf": true
     },
@@ -6680,7 +6680,7 @@
     {
       "category_id": "115772",
       "category_name": "Windmills & Wind Spinners",
-      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > D\u00e9cor > Windmills & Wind Spinners",
+      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > Décor > Windmills & Wind Spinners",
       "parent_category_id": "20498",
       "is_leaf": true
     },
@@ -7891,7 +7891,7 @@
     {
       "category_id": "117398",
       "category_name": "Boxes & Storage",
-      "breadcrumb": "Baby > Nursery D\u00e9cor > Boxes & Storage",
+      "breadcrumb": "Baby > Nursery Décor > Boxes & Storage",
       "parent_category_id": "66697",
       "is_leaf": true
     },
@@ -7933,21 +7933,21 @@
     {
       "category_id": "117413",
       "category_name": "Figurines",
-      "breadcrumb": "Home & Garden > Holiday & Seasonal D\u00e9cor > Figurines",
+      "breadcrumb": "Home & Garden > Holiday & Seasonal Décor > Figurines",
       "parent_category_id": "170090",
       "is_leaf": true
     },
     {
       "category_id": "117414",
       "category_name": "Christmas Trees",
-      "breadcrumb": "Home & Garden > Holiday & Seasonal D\u00e9cor > Christmas Trees",
+      "breadcrumb": "Home & Garden > Holiday & Seasonal Décor > Christmas Trees",
       "parent_category_id": "170090",
       "is_leaf": true
     },
     {
       "category_id": "117419",
       "category_name": "Wreaths, Garlands & Plants",
-      "breadcrumb": "Home & Garden > Holiday & Seasonal D\u00e9cor > Wreaths, Garlands & Plants",
+      "breadcrumb": "Home & Garden > Holiday & Seasonal Décor > Wreaths, Garlands & Plants",
       "parent_category_id": "170090",
       "is_leaf": true
     },
@@ -8444,7 +8444,7 @@
     {
       "category_id": "11883",
       "category_name": "Restaurant Tables",
-      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & D\u00e9cor > Restaurant Tables",
+      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & Décor > Restaurant Tables",
       "parent_category_id": "57093",
       "is_leaf": true
     },
@@ -8486,7 +8486,7 @@
     {
       "category_id": "118863",
       "category_name": "Pebbles, Stones & Step Stones",
-      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > D\u00e9cor > Pebbles, Stones & Step Stones",
+      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > Décor > Pebbles, Stones & Step Stones",
       "parent_category_id": "20498",
       "is_leaf": true
     },
@@ -9116,7 +9116,7 @@
     {
       "category_id": "121153",
       "category_name": "Night Lights",
-      "breadcrumb": "Baby > Nursery D\u00e9cor > Night Lights",
+      "breadcrumb": "Baby > Nursery Décor > Night Lights",
       "parent_category_id": "66697",
       "is_leaf": true
     },
@@ -9186,7 +9186,7 @@
     {
       "category_id": "121831",
       "category_name": "Candles & Holders",
-      "breadcrumb": "Crafts > Handcrafted & Finished Pieces > Home D\u00e9cor & Accents > Candles & Holders",
+      "breadcrumb": "Crafts > Handcrafted & Finished Pieces > Home Décor & Accents > Candles & Holders",
       "parent_category_id": "160656",
       "is_leaf": true
     },
@@ -9382,7 +9382,7 @@
     {
       "category_id": "122769",
       "category_name": "Plaques, Signs & Letters",
-      "breadcrumb": "Home & Garden > Kids & Teens at Home > Home D\u00e9cor & Organization > Plaques, Signs & Letters",
+      "breadcrumb": "Home & Garden > Kids & Teens at Home > Home Décor & Organization > Plaques, Signs & Letters",
       "parent_category_id": "259328",
       "is_leaf": true
     },
@@ -10026,7 +10026,7 @@
     {
       "category_id": "125072",
       "category_name": "Baskets",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Baskets",
+      "breadcrumb": "Home & Garden > Home Décor > Baskets",
       "parent_category_id": "10033",
       "is_leaf": true
     },
@@ -11272,7 +11272,7 @@
     {
       "category_id": "134306",
       "category_name": "Baskets",
-      "breadcrumb": "Crafts > Handcrafted & Finished Pieces > Home D\u00e9cor & Accents > Baskets",
+      "breadcrumb": "Crafts > Handcrafted & Finished Pieces > Home Décor & Accents > Baskets",
       "parent_category_id": "160656",
       "is_leaf": true
     },
@@ -14407,8 +14407,8 @@
     },
     {
       "category_id": "1422",
-      "category_name": "Other Hard Rock Caf\u00e9 Mem",
-      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists H > Hard Rock Caf\u00e9 > Other Hard Rock Caf\u00e9 Mem",
+      "category_name": "Other Hard Rock Café Mem",
+      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists H > Hard Rock Café > Other Hard Rock Café Mem",
       "parent_category_id": "29905",
       "is_leaf": true
     },
@@ -15248,7 +15248,7 @@
     {
       "category_id": "146534",
       "category_name": "Wall Letters",
-      "breadcrumb": "Baby > Nursery D\u00e9cor > Wall Letters",
+      "breadcrumb": "Baby > Nursery Décor > Wall Letters",
       "parent_category_id": "66697",
       "is_leaf": true
     },
@@ -16312,7 +16312,7 @@
     {
       "category_id": "150123",
       "category_name": "1982 Knoxville",
-      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World\u2019s Fairs > 1982 Knoxville",
+      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World’s Fairs > 1982 Knoxville",
       "parent_category_id": "4162",
       "is_leaf": true
     },
@@ -17410,8 +17410,8 @@
     },
     {
       "category_id": "155640",
-      "category_name": "Pok\u00e9mon TFG",
-      "breadcrumb": "Toys & Hobbies > Games > Miniatures, War Games > Pok\u00e9mon TFG",
+      "category_name": "Pokémon TFG",
+      "breadcrumb": "Toys & Hobbies > Games > Miniatures, War Games > Pokémon TFG",
       "parent_category_id": "16486",
       "is_leaf": true
     },
@@ -18950,29 +18950,29 @@
     },
     {
       "category_id": "156812",
-      "category_name": "Yard D\u00e9cor",
-      "breadcrumb": "Home & Garden > Holiday & Seasonal D\u00e9cor > Yard D\u00e9cor",
+      "category_name": "Yard Décor",
+      "breadcrumb": "Home & Garden > Holiday & Seasonal Décor > Yard Décor",
       "parent_category_id": "170090",
       "is_leaf": true
     },
     {
       "category_id": "156813",
       "category_name": "Advent Calendars",
-      "breadcrumb": "Home & Garden > Holiday & Seasonal D\u00e9cor > Advent Calendars",
+      "breadcrumb": "Home & Garden > Holiday & Seasonal Décor > Advent Calendars",
       "parent_category_id": "170090",
       "is_leaf": true
     },
     {
       "category_id": "156844",
       "category_name": "Window Decorations",
-      "breadcrumb": "Home & Garden > Holiday & Seasonal D\u00e9cor > Window Decorations",
+      "breadcrumb": "Home & Garden > Holiday & Seasonal Décor > Window Decorations",
       "parent_category_id": "170090",
       "is_leaf": true
     },
     {
       "category_id": "156862",
       "category_name": "Nativity Items",
-      "breadcrumb": "Home & Garden > Holiday & Seasonal D\u00e9cor > Nativity Items",
+      "breadcrumb": "Home & Garden > Holiday & Seasonal Décor > Nativity Items",
       "parent_category_id": "170090",
       "is_leaf": true
     },
@@ -18993,7 +18993,7 @@
     {
       "category_id": "156890",
       "category_name": "Snow Globes",
-      "breadcrumb": "Home & Garden > Holiday & Seasonal D\u00e9cor > Snow Globes",
+      "breadcrumb": "Home & Garden > Holiday & Seasonal Décor > Snow Globes",
       "parent_category_id": "170090",
       "is_leaf": true
     },
@@ -21464,7 +21464,7 @@
     {
       "category_id": "159889",
       "category_name": "Decals, Stickers & Vinyl Art",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Decals, Stickers & Vinyl Art",
+      "breadcrumb": "Home & Garden > Home Décor > Decals, Stickers & Vinyl Art",
       "parent_category_id": "10033",
       "is_leaf": true
     },
@@ -21568,8 +21568,8 @@
     },
     {
       "category_id": "159928",
-      "category_name": "Centerpieces & Table D\u00e9cor",
-      "breadcrumb": "Home & Garden > Wedding Supplies > Centerpieces & Table D\u00e9cor",
+      "category_name": "Centerpieces & Table Décor",
+      "breadcrumb": "Home & Garden > Wedding Supplies > Centerpieces & Table Décor",
       "parent_category_id": "11827",
       "is_leaf": true
     },
@@ -21835,7 +21835,7 @@
     {
       "category_id": "160657",
       "category_name": "Other Handcrafted Home Accents",
-      "breadcrumb": "Crafts > Handcrafted & Finished Pieces > Home D\u00e9cor & Accents > Other Handcrafted Home Accents",
+      "breadcrumb": "Crafts > Handcrafted & Finished Pieces > Home Décor & Accents > Other Handcrafted Home Accents",
       "parent_category_id": "160656",
       "is_leaf": true
     },
@@ -25341,8 +25341,8 @@
     },
     {
       "category_id": "164052",
-      "category_name": "Mot\u00f6rhead",
-      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists M > Mot\u00f6rhead",
+      "category_name": "Motörhead",
+      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists M > Motörhead",
       "parent_category_id": "104949",
       "is_leaf": true
     },
@@ -25425,8 +25425,8 @@
     },
     {
       "category_id": "164064",
-      "category_name": "O'Connor, Sin\u00e9ad",
-      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists O > O'Connor, Sin\u00e9ad",
+      "category_name": "O'Connor, Sinéad",
+      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists O > O'Connor, Sinéad",
       "parent_category_id": "104969",
       "is_leaf": true
     },
@@ -26349,8 +26349,8 @@
     },
     {
       "category_id": "165216",
-      "category_name": "Brach\u2019s",
-      "breadcrumb": "Collectibles > Advertising > Food & Beverage > Candy & Nuts > Brach\u2019s",
+      "category_name": "Brach’s",
+      "breadcrumb": "Collectibles > Advertising > Food & Beverage > Candy & Nuts > Brach’s",
       "parent_category_id": "872",
       "is_leaf": true
     },
@@ -26363,8 +26363,8 @@
     },
     {
       "category_id": "165218",
-      "category_name": "Folger\u2019s",
-      "breadcrumb": "Collectibles > Advertising > Food & Beverage > Coffee & Tea > Folger\u2019s",
+      "category_name": "Folger’s",
+      "breadcrumb": "Collectibles > Advertising > Food & Beverage > Coffee & Tea > Folger’s",
       "parent_category_id": "10793",
       "is_leaf": true
     },
@@ -26377,8 +26377,8 @@
     },
     {
       "category_id": "165220",
-      "category_name": "Tim Horton\u2019s",
-      "breadcrumb": "Collectibles > Advertising > Food & Beverage > Coffee & Tea > Tim Horton\u2019s",
+      "category_name": "Tim Horton’s",
+      "breadcrumb": "Collectibles > Advertising > Food & Beverage > Coffee & Tea > Tim Horton’s",
       "parent_category_id": "10793",
       "is_leaf": true
     },
@@ -26426,8 +26426,8 @@
     },
     {
       "category_id": "165227",
-      "category_name": "Gilbey\u2019s",
-      "breadcrumb": "Collectibles > Advertising > Food & Beverage > Distillery > Gilbey\u2019s",
+      "category_name": "Gilbey’s",
+      "breadcrumb": "Collectibles > Advertising > Food & Beverage > Distillery > Gilbey’s",
       "parent_category_id": "820",
       "is_leaf": true
     },
@@ -26594,8 +26594,8 @@
     },
     {
       "category_id": "165253",
-      "category_name": "Home D\u00e9cor",
-      "breadcrumb": "Collectibles > Advertising > Household > Home D\u00e9cor",
+      "category_name": "Home Décor",
+      "breadcrumb": "Collectibles > Advertising > Household > Home Décor",
       "parent_category_id": "13595",
       "is_leaf": true
     },
@@ -26671,8 +26671,8 @@
     },
     {
       "category_id": "165264",
-      "category_name": "Vernor\u2019s",
-      "breadcrumb": "Collectibles > Advertising > Soda > Vernor\u2019s",
+      "category_name": "Vernor’s",
+      "breadcrumb": "Collectibles > Advertising > Soda > Vernor’s",
       "parent_category_id": "36",
       "is_leaf": true
     },
@@ -26790,8 +26790,8 @@
     },
     {
       "category_id": "165282",
-      "category_name": "Petit Basset Griffon Vend\u00e9en",
-      "breadcrumb": "Collectibles > Animals > Dogs > Petit Basset Griffon Vend\u00e9en",
+      "category_name": "Petit Basset Griffon Vendéen",
+      "breadcrumb": "Collectibles > Animals > Dogs > Petit Basset Griffon Vendéen",
       "parent_category_id": "10823",
       "is_leaf": true
     },
@@ -26881,8 +26881,8 @@
     },
     {
       "category_id": "165295",
-      "category_name": "Garden D\u00e9cor",
-      "breadcrumb": "Collectibles > Animals > Amphibians & Reptiles > Frogs > Garden D\u00e9cor",
+      "category_name": "Garden Décor",
+      "breadcrumb": "Collectibles > Animals > Amphibians & Reptiles > Frogs > Garden Décor",
       "parent_category_id": "37869",
       "is_leaf": true
     },
@@ -27253,21 +27253,21 @@
     {
       "category_id": "165495",
       "category_name": "1939-40 San Francisco",
-      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World\u2019s Fairs > 1939-40 San Francisco",
+      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World’s Fairs > 1939-40 San Francisco",
       "parent_category_id": "4162",
       "is_leaf": true
     },
     {
       "category_id": "165496",
       "category_name": "1967 Montreal",
-      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World\u2019s Fairs > 1967 Montreal",
+      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World’s Fairs > 1967 Montreal",
       "parent_category_id": "4162",
       "is_leaf": true
     },
     {
       "category_id": "165497",
       "category_name": "1986 Vancouver",
-      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World\u2019s Fairs > 1986 Vancouver",
+      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World’s Fairs > 1986 Vancouver",
       "parent_category_id": "4162",
       "is_leaf": true
     },
@@ -27574,8 +27574,8 @@
     },
     {
       "category_id": "165590",
-      "category_name": "Women\u2019s Apparel",
-      "breadcrumb": "Collectibles > Militaria > Civil War (1861-65) > Reenactment & Reproductions > Women\u2019s Apparel",
+      "category_name": "Women’s Apparel",
+      "breadcrumb": "Collectibles > Militaria > Civil War (1861-65) > Reenactment & Reproductions > Women’s Apparel",
       "parent_category_id": "36040",
       "is_leaf": true
     },
@@ -29717,14 +29717,14 @@
     {
       "category_id": "166673",
       "category_name": "Restaurant Menu Boards",
-      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & D\u00e9cor > Restaurant Menu Boards",
+      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & Décor > Restaurant Menu Boards",
       "parent_category_id": "57093",
       "is_leaf": true
     },
     {
       "category_id": "166674",
       "category_name": "Restaurant Sign Holders",
-      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & D\u00e9cor > Restaurant Sign Holders",
+      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & Décor > Restaurant Sign Holders",
       "parent_category_id": "57093",
       "is_leaf": true
     },
@@ -29829,21 +29829,21 @@
     {
       "category_id": "166725",
       "category_name": "Ornaments",
-      "breadcrumb": "Home & Garden > Holiday & Seasonal D\u00e9cor > Ornaments",
+      "breadcrumb": "Home & Garden > Holiday & Seasonal Décor > Ornaments",
       "parent_category_id": "170090",
       "is_leaf": true
     },
     {
       "category_id": "166726",
       "category_name": "Tree Stands & Skirts",
-      "breadcrumb": "Home & Garden > Holiday & Seasonal D\u00e9cor > Tree Stands & Skirts",
+      "breadcrumb": "Home & Garden > Holiday & Seasonal Décor > Tree Stands & Skirts",
       "parent_category_id": "170090",
       "is_leaf": true
     },
     {
       "category_id": "166727",
-      "category_name": "Wall D\u00e9cor",
-      "breadcrumb": "Home & Garden > Holiday & Seasonal D\u00e9cor > Wall D\u00e9cor",
+      "category_name": "Wall Décor",
+      "breadcrumb": "Home & Garden > Holiday & Seasonal Décor > Wall Décor",
       "parent_category_id": "170090",
       "is_leaf": true
     },
@@ -30368,7 +30368,7 @@
     {
       "category_id": "167986",
       "category_name": "1915 San Francisco PPIE",
-      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World\u2019s Fairs > 1915 San Francisco PPIE",
+      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World’s Fairs > 1915 San Francisco PPIE",
       "parent_category_id": "4162",
       "is_leaf": true
     },
@@ -30507,8 +30507,8 @@
     },
     {
       "category_id": "168075",
-      "category_name": "Table D\u00e9cor",
-      "breadcrumb": "Crafts > Handcrafted & Finished Pieces > Home D\u00e9cor & Accents > Table D\u00e9cor",
+      "category_name": "Table Décor",
+      "breadcrumb": "Crafts > Handcrafted & Finished Pieces > Home Décor & Accents > Table Décor",
       "parent_category_id": "160656",
       "is_leaf": true
     },
@@ -30711,7 +30711,7 @@
     {
       "category_id": "168138",
       "category_name": "Candles",
-      "breadcrumb": "Home & Garden > Holiday & Seasonal D\u00e9cor > Candles",
+      "breadcrumb": "Home & Garden > Holiday & Seasonal Décor > Candles",
       "parent_category_id": "170090",
       "is_leaf": true
     },
@@ -31474,7 +31474,7 @@
     {
       "category_id": "170091",
       "category_name": "Stockings & Hangers",
-      "breadcrumb": "Home & Garden > Holiday & Seasonal D\u00e9cor > Stockings & Hangers",
+      "breadcrumb": "Home & Garden > Holiday & Seasonal Décor > Stockings & Hangers",
       "parent_category_id": "170090",
       "is_leaf": true
     },
@@ -33371,7 +33371,7 @@
     {
       "category_id": "175753",
       "category_name": "Desk, Mantel & Shelf Clocks",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Clocks > Desk, Mantel & Shelf Clocks",
+      "breadcrumb": "Home & Garden > Home Décor > Clocks > Desk, Mantel & Shelf Clocks",
       "parent_category_id": "258031",
       "is_leaf": true
     },
@@ -34189,15 +34189,15 @@
     },
     {
       "category_id": "177050",
-      "category_name": "Tabletop & Shelf D\u00e9cor",
-      "breadcrumb": "Home & Garden > Kids & Teens at Home > Home D\u00e9cor & Organization > Tabletop & Shelf D\u00e9cor",
+      "category_name": "Tabletop & Shelf Décor",
+      "breadcrumb": "Home & Garden > Kids & Teens at Home > Home Décor & Organization > Tabletop & Shelf Décor",
       "parent_category_id": "259328",
       "is_leaf": true
     },
     {
       "category_id": "177051",
       "category_name": "Posters & Wall Hangings",
-      "breadcrumb": "Home & Garden > Kids & Teens at Home > Home D\u00e9cor & Organization > Posters & Wall Hangings",
+      "breadcrumb": "Home & Garden > Kids & Teens at Home > Home Décor & Organization > Posters & Wall Hangings",
       "parent_category_id": "259328",
       "is_leaf": true
     },
@@ -34246,7 +34246,7 @@
     {
       "category_id": "177062",
       "category_name": "Rugs & Carpets",
-      "breadcrumb": "Home & Garden > Kids & Teens at Home > Home D\u00e9cor & Organization > Rugs & Carpets",
+      "breadcrumb": "Home & Garden > Kids & Teens at Home > Home Décor & Organization > Rugs & Carpets",
       "parent_category_id": "259328",
       "is_leaf": true
     },
@@ -34526,7 +34526,7 @@
     {
       "category_id": "177743",
       "category_name": "Nutcrackers",
-      "breadcrumb": "Home & Garden > Holiday & Seasonal D\u00e9cor > Nutcrackers",
+      "breadcrumb": "Home & Garden > Holiday & Seasonal Décor > Nutcrackers",
       "parent_category_id": "170090",
       "is_leaf": true
     },
@@ -34588,8 +34588,8 @@
     },
     {
       "category_id": "177760",
-      "category_name": "Pi\u00f1atas",
-      "breadcrumb": "Home & Garden > Greeting Cards & Party Supply > Party Supplies > Pi\u00f1atas",
+      "category_name": "Piñatas",
+      "breadcrumb": "Home & Garden > Greeting Cards & Party Supply > Party Supplies > Piñatas",
       "parent_category_id": "3205",
       "is_leaf": true
     },
@@ -37010,8 +37010,8 @@
     },
     {
       "category_id": "179251",
-      "category_name": "Dollhouse D\u00e9cor & Accessories",
-      "breadcrumb": "Dolls & Bears > Dollhouse Miniatures > Dollhouse D\u00e9cor & Accessories",
+      "category_name": "Dollhouse Décor & Accessories",
+      "breadcrumb": "Dolls & Bears > Dollhouse Miniatures > Dollhouse Décor & Accessories",
       "parent_category_id": "1202",
       "is_leaf": true
     },
@@ -38558,7 +38558,7 @@
     {
       "category_id": "180505",
       "category_name": "Wall Decals & Vinyl Art",
-      "breadcrumb": "Baby > Nursery D\u00e9cor > Wall D\u00e9cor > Wall Decals & Vinyl Art",
+      "breadcrumb": "Baby > Nursery Décor > Wall Décor > Wall Decals & Vinyl Art",
       "parent_category_id": "37633",
       "is_leaf": true
     },
@@ -39544,8 +39544,8 @@
     },
     {
       "category_id": "181121",
-      "category_name": "Pond D\u00e9cor",
-      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > Ponds & Water Features > Pond D\u00e9cor",
+      "category_name": "Pond Décor",
+      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > Ponds & Water Features > Pond Décor",
       "parent_category_id": "93632",
       "is_leaf": true
     },
@@ -44872,7 +44872,7 @@
     {
       "category_id": "183208",
       "category_name": "Patterns & Instructional Media",
-      "breadcrumb": "Crafts > Needlecrafts & Yarn > Macram\u00e9 > Patterns & Instructional Media",
+      "breadcrumb": "Crafts > Needlecrafts & Yarn > Macramé > Patterns & Instructional Media",
       "parent_category_id": "183205",
       "is_leaf": true
     },
@@ -47006,15 +47006,15 @@
     },
     {
       "category_id": "183700",
-      "category_name": "Macram\u00e9 Kits",
-      "breadcrumb": "Crafts > Needlecrafts & Yarn > Macram\u00e9 > Macram\u00e9 Kits",
+      "category_name": "Macramé Kits",
+      "breadcrumb": "Crafts > Needlecrafts & Yarn > Macramé > Macramé Kits",
       "parent_category_id": "183205",
       "is_leaf": true
     },
     {
       "category_id": "183701",
-      "category_name": "Macram\u00e9 Tools & Accs",
-      "breadcrumb": "Crafts > Needlecrafts & Yarn > Macram\u00e9 > Macram\u00e9 Tools & Accs",
+      "category_name": "Macramé Tools & Accs",
+      "breadcrumb": "Crafts > Needlecrafts & Yarn > Macramé > Macramé Tools & Accs",
       "parent_category_id": "183205",
       "is_leaf": true
     },
@@ -50821,8 +50821,8 @@
     },
     {
       "category_id": "184567",
-      "category_name": "Papier M\u00e2ch\u00e9 Pieces",
-      "breadcrumb": "Crafts > Multi-Purpose Craft Supplies > Crafting Pieces > Papier M\u00e2ch\u00e9 Pieces",
+      "category_name": "Papier Mâché Pieces",
+      "breadcrumb": "Crafts > Multi-Purpose Craft Supplies > Crafting Pieces > Papier Mâché Pieces",
       "parent_category_id": "160704",
       "is_leaf": true
     },
@@ -53775,8 +53775,8 @@
     },
     {
       "category_id": "2034",
-      "category_name": "Other Outdoor D\u00e9cor",
-      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > D\u00e9cor > Other Outdoor D\u00e9cor",
+      "category_name": "Other Outdoor Décor",
+      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > Décor > Other Outdoor Décor",
       "parent_category_id": "20498",
       "is_leaf": true
     },
@@ -53930,28 +53930,28 @@
     {
       "category_id": "20428",
       "category_name": "Lamps & Shades",
-      "breadcrumb": "Baby > Nursery D\u00e9cor > Lamps & Shades",
+      "breadcrumb": "Baby > Nursery Décor > Lamps & Shades",
       "parent_category_id": "66697",
       "is_leaf": true
     },
     {
       "category_id": "20429",
       "category_name": "Mobiles",
-      "breadcrumb": "Baby > Nursery D\u00e9cor > Mobiles",
+      "breadcrumb": "Baby > Nursery Décor > Mobiles",
       "parent_category_id": "66697",
       "is_leaf": true
     },
     {
       "category_id": "20430",
-      "category_name": "Other Nursery Wall D\u00e9cor",
-      "breadcrumb": "Baby > Nursery D\u00e9cor > Wall D\u00e9cor > Other Nursery Wall D\u00e9cor",
+      "category_name": "Other Nursery Wall Décor",
+      "breadcrumb": "Baby > Nursery Décor > Wall Décor > Other Nursery Wall Décor",
       "parent_category_id": "37633",
       "is_leaf": true
     },
     {
       "category_id": "20431",
       "category_name": "Window Treatments",
-      "breadcrumb": "Baby > Nursery D\u00e9cor > Window Treatments",
+      "breadcrumb": "Baby > Nursery Décor > Window Treatments",
       "parent_category_id": "66697",
       "is_leaf": true
     },
@@ -54091,14 +54091,14 @@
     {
       "category_id": "20512",
       "category_name": "Weathervanes",
-      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > D\u00e9cor > Weathervanes",
+      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > Décor > Weathervanes",
       "parent_category_id": "20498",
       "is_leaf": true
     },
     {
       "category_id": "20513",
       "category_name": "Wind Chimes",
-      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > D\u00e9cor > Wind Chimes",
+      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > Décor > Wind Chimes",
       "parent_category_id": "20498",
       "is_leaf": true
     },
@@ -54140,14 +54140,14 @@
     {
       "category_id": "20549",
       "category_name": "Afghans & Throw Blankets",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Afghans & Throw Blankets",
+      "breadcrumb": "Home & Garden > Home Décor > Afghans & Throw Blankets",
       "parent_category_id": "10033",
       "is_leaf": true
     },
     {
       "category_id": "20551",
       "category_name": "Bookends",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Decorative Accessories > Bookends",
+      "breadcrumb": "Home & Garden > Home Décor > Decorative Accessories > Bookends",
       "parent_category_id": "262984",
       "is_leaf": true
     },
@@ -54161,21 +54161,21 @@
     {
       "category_id": "20559",
       "category_name": "Grandfather Clocks",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Clocks > Grandfather Clocks",
+      "breadcrumb": "Home & Garden > Home Décor > Clocks > Grandfather Clocks",
       "parent_category_id": "258031",
       "is_leaf": true
     },
     {
       "category_id": "20561",
       "category_name": "Wall Clocks",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Clocks > Wall Clocks",
+      "breadcrumb": "Home & Garden > Home Décor > Clocks > Wall Clocks",
       "parent_category_id": "258031",
       "is_leaf": true
     },
     {
       "category_id": "20562",
-      "category_name": "Other Home D\u00e9cor Clocks",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Clocks > Other Home D\u00e9cor Clocks",
+      "category_name": "Other Home Décor Clocks",
+      "breadcrumb": "Home & Garden > Home Décor > Clocks > Other Home Décor Clocks",
       "parent_category_id": "258031",
       "is_leaf": true
     },
@@ -54196,7 +54196,7 @@
     {
       "category_id": "20569",
       "category_name": "Indoor Fountains",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Decorative Accessories > Indoor Fountains",
+      "breadcrumb": "Home & Garden > Home Décor > Decorative Accessories > Indoor Fountains",
       "parent_category_id": "262984",
       "is_leaf": true
     },
@@ -54217,14 +54217,14 @@
     {
       "category_id": "20578",
       "category_name": "Suncatchers & Mobiles",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Decorative Accessories > Suncatchers & Mobiles",
+      "breadcrumb": "Home & Garden > Home Décor > Decorative Accessories > Suncatchers & Mobiles",
       "parent_category_id": "262984",
       "is_leaf": true
     },
     {
       "category_id": "20580",
       "category_name": "Mirrors",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Mirrors",
+      "breadcrumb": "Home & Garden > Home Décor > Mirrors",
       "parent_category_id": "10033",
       "is_leaf": true
     },
@@ -55105,8 +55105,8 @@
     },
     {
       "category_id": "21101",
-      "category_name": "Hard Rock Caf\u00e9",
-      "breadcrumb": "Collectibles > Advertising > Restaurants & Fast Food > Hard Rock Caf\u00e9",
+      "category_name": "Hard Rock Café",
+      "breadcrumb": "Collectibles > Advertising > Restaurants & Fast Food > Hard Rock Café",
       "parent_category_id": "849",
       "is_leaf": true
     },
@@ -55231,8 +55231,8 @@
     },
     {
       "category_id": "21210",
-      "category_name": "Other Billiards Accs & D\u00e9cor",
-      "breadcrumb": "Sporting Goods > Indoor Games > Billiards > Accessories & D\u00e9cor > Other Billiards Accs & D\u00e9cor",
+      "category_name": "Other Billiards Accs & Décor",
+      "breadcrumb": "Sporting Goods > Indoor Games > Billiards > Accessories & Décor > Other Billiards Accs & Décor",
       "parent_category_id": "75184",
       "is_leaf": true
     },
@@ -61238,77 +61238,77 @@
     {
       "category_id": "258646",
       "category_name": "Air Curtains",
-      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & D\u00e9cor > Air Curtains",
+      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & Décor > Air Curtains",
       "parent_category_id": "57093",
       "is_leaf": true
     },
     {
       "category_id": "258648",
       "category_name": "Auditorium & Church Chairs",
-      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & D\u00e9cor > Restaurant Chairs & Seating > Auditorium & Church Chairs",
+      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & Décor > Restaurant Chairs & Seating > Auditorium & Church Chairs",
       "parent_category_id": "258647",
       "is_leaf": true
     },
     {
       "category_id": "258649",
       "category_name": "Banquet Chairs",
-      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & D\u00e9cor > Restaurant Chairs & Seating > Banquet Chairs",
+      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & Décor > Restaurant Chairs & Seating > Banquet Chairs",
       "parent_category_id": "258647",
       "is_leaf": true
     },
     {
       "category_id": "258650",
       "category_name": "Restaurant Bar Stools",
-      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & D\u00e9cor > Restaurant Chairs & Seating > Restaurant Bar Stools",
+      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & Décor > Restaurant Chairs & Seating > Restaurant Bar Stools",
       "parent_category_id": "258647",
       "is_leaf": true
     },
     {
       "category_id": "258651",
       "category_name": "Restaurant Booster Seats & High Chairs",
-      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & D\u00e9cor > Restaurant Chairs & Seating > Restaurant Booster Seats & High Chairs",
+      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & Décor > Restaurant Chairs & Seating > Restaurant Booster Seats & High Chairs",
       "parent_category_id": "258647",
       "is_leaf": true
     },
     {
       "category_id": "258652",
       "category_name": "Restaurant Booths",
-      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & D\u00e9cor > Restaurant Chairs & Seating > Restaurant Booths",
+      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & Décor > Restaurant Chairs & Seating > Restaurant Booths",
       "parent_category_id": "258647",
       "is_leaf": true
     },
     {
       "category_id": "258653",
       "category_name": "Restaurant Dining Chairs",
-      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & D\u00e9cor > Restaurant Chairs & Seating > Restaurant Dining Chairs",
+      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & Décor > Restaurant Chairs & Seating > Restaurant Dining Chairs",
       "parent_category_id": "258647",
       "is_leaf": true
     },
     {
       "category_id": "258654",
       "category_name": "Restaurant Folding Chairs",
-      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & D\u00e9cor > Restaurant Chairs & Seating > Restaurant Folding Chairs",
+      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & Décor > Restaurant Chairs & Seating > Restaurant Folding Chairs",
       "parent_category_id": "258647",
       "is_leaf": true
     },
     {
       "category_id": "258655",
       "category_name": "Restaurant Table Sets",
-      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & D\u00e9cor > Restaurant Chairs & Seating > Restaurant Table Sets",
+      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & Décor > Restaurant Chairs & Seating > Restaurant Table Sets",
       "parent_category_id": "258647",
       "is_leaf": true
     },
     {
       "category_id": "258656",
       "category_name": "Restaurant Doors",
-      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & D\u00e9cor > Restaurant Doors",
+      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & Décor > Restaurant Doors",
       "parent_category_id": "57093",
       "is_leaf": true
     },
     {
       "category_id": "258657",
       "category_name": "Restaurant Furniture Parts & Accessories",
-      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & D\u00e9cor > Restaurant Furniture Parts & Accessories",
+      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & Décor > Restaurant Furniture Parts & Accessories",
       "parent_category_id": "57093",
       "is_leaf": true
     },
@@ -62099,7 +62099,7 @@
     {
       "category_id": "259011",
       "category_name": "Restaurant Signs",
-      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & D\u00e9cor > Restaurant Signs",
+      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & Décor > Restaurant Signs",
       "parent_category_id": "57093",
       "is_leaf": true
     },
@@ -63583,7 +63583,7 @@
     {
       "category_id": "259326",
       "category_name": "Pillows & Covers",
-      "breadcrumb": "Home & Garden > Kids & Teens at Home > Home D\u00e9cor & Organization > Pillows & Covers",
+      "breadcrumb": "Home & Garden > Kids & Teens at Home > Home Décor & Organization > Pillows & Covers",
       "parent_category_id": "259328",
       "is_leaf": true
     },
@@ -63975,14 +63975,14 @@
     {
       "category_id": "259702",
       "category_name": "Candle Holders",
-      "breadcrumb": "Home & Garden > Holiday & Seasonal D\u00e9cor > Candle Holders",
+      "breadcrumb": "Home & Garden > Holiday & Seasonal Décor > Candle Holders",
       "parent_category_id": "170090",
       "is_leaf": true
     },
     {
       "category_id": "259703",
       "category_name": "Linens & Textiles",
-      "breadcrumb": "Home & Garden > Holiday & Seasonal D\u00e9cor > Linens & Textiles",
+      "breadcrumb": "Home & Garden > Holiday & Seasonal Décor > Linens & Textiles",
       "parent_category_id": "170090",
       "is_leaf": true
     },
@@ -67818,7 +67818,7 @@
     {
       "category_id": "260926",
       "category_name": "Planters & Vases",
-      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > D\u00e9cor > Planters & Vases",
+      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > Décor > Planters & Vases",
       "parent_category_id": "20498",
       "is_leaf": true
     },
@@ -69301,8 +69301,8 @@
     },
     {
       "category_id": "261644",
-      "category_name": "Table D\u00e9cor & Serving Pieces",
-      "breadcrumb": "Collectibles > Holiday & Seasonal > Table D\u00e9cor & Serving Pieces",
+      "category_name": "Table Décor & Serving Pieces",
+      "breadcrumb": "Collectibles > Holiday & Seasonal > Table Décor & Serving Pieces",
       "parent_category_id": "907",
       "is_leaf": true
     },
@@ -69322,8 +69322,8 @@
     },
     {
       "category_id": "261647",
-      "category_name": "Wall D\u00e9cor",
-      "breadcrumb": "Collectibles > Holiday & Seasonal > Wall D\u00e9cor",
+      "category_name": "Wall Décor",
+      "breadcrumb": "Collectibles > Holiday & Seasonal > Wall Décor",
       "parent_category_id": "907",
       "is_leaf": true
     },
@@ -69336,8 +69336,8 @@
     },
     {
       "category_id": "261649",
-      "category_name": "Yard D\u00e9cor",
-      "breadcrumb": "Collectibles > Holiday & Seasonal > Yard D\u00e9cor",
+      "category_name": "Yard Décor",
+      "breadcrumb": "Collectibles > Holiday & Seasonal > Yard Décor",
       "parent_category_id": "907",
       "is_leaf": true
     },
@@ -72080,8 +72080,8 @@
     },
     {
       "category_id": "262973",
-      "category_name": "New Category For Internal Use spec char \u00ae\u2122",
-      "breadcrumb": "Everything Else > Test Category For Internal Use Only Parent Level 2 > Test Category For Internal Use Only Parent Level 3 > Test Category for Internal Use Only Parent Level 4 > Test Category for Internal Use Only Parent Level 5 > New Category For Internal Use spec char \u00ae\u2122",
+      "category_name": "New Category For Internal Use spec char ®™",
+      "breadcrumb": "Everything Else > Test Category For Internal Use Only Parent Level 2 > Test Category For Internal Use Only Parent Level 3 > Test Category for Internal Use Only Parent Level 4 > Test Category for Internal Use Only Parent Level 5 > New Category For Internal Use spec char ®™",
       "parent_category_id": "184464",
       "is_leaf": true
     },
@@ -73102,8 +73102,8 @@
     },
     {
       "category_id": "28151",
-      "category_name": "Other Macram\u00e9",
-      "breadcrumb": "Crafts > Needlecrafts & Yarn > Macram\u00e9 > Other Macram\u00e9",
+      "category_name": "Other Macramé",
+      "breadcrumb": "Crafts > Needlecrafts & Yarn > Macramé > Other Macramé",
       "parent_category_id": "183205",
       "is_leaf": true
     },
@@ -73831,14 +73831,14 @@
     {
       "category_id": "29511",
       "category_name": "Ornaments & Statues",
-      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > D\u00e9cor > Ornaments & Statues",
+      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > Décor > Ornaments & Statues",
       "parent_category_id": "20498",
       "is_leaf": true
     },
     {
       "category_id": "29514",
       "category_name": "Plant Stands",
-      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > D\u00e9cor > Plant Stands",
+      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > Décor > Plant Stands",
       "parent_category_id": "20498",
       "is_leaf": true
     },
@@ -74167,7 +74167,7 @@
     {
       "category_id": "29909",
       "category_name": "Apparel",
-      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists H > Hard Rock Caf\u00e9 > Apparel",
+      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists H > Hard Rock Café > Apparel",
       "parent_category_id": "29905",
       "is_leaf": true
     },
@@ -74202,14 +74202,14 @@
     {
       "category_id": "29915",
       "category_name": "Glassware",
-      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists H > Hard Rock Caf\u00e9 > Glassware",
+      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists H > Hard Rock Café > Glassware",
       "parent_category_id": "29905",
       "is_leaf": true
     },
     {
       "category_id": "29916",
       "category_name": "Pins",
-      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists H > Hard Rock Caf\u00e9 > Pins",
+      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists H > Hard Rock Café > Pins",
       "parent_category_id": "29905",
       "is_leaf": true
     },
@@ -75203,21 +75203,21 @@
     {
       "category_id": "31586",
       "category_name": "Key & Letter Holders",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Decorative Accessories > Key & Letter Holders",
+      "breadcrumb": "Home & Garden > Home Décor > Decorative Accessories > Key & Letter Holders",
       "parent_category_id": "262984",
       "is_leaf": true
     },
     {
       "category_id": "31587",
       "category_name": "Plaques & Signs",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Plaques & Signs",
+      "breadcrumb": "Home & Garden > Home Décor > Plaques & Signs",
       "parent_category_id": "10033",
       "is_leaf": true
     },
     {
       "category_id": "31588",
       "category_name": "Plate Racks & Hangers",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Decorative Accessories > Plate Racks & Hangers",
+      "breadcrumb": "Home & Garden > Home Décor > Decorative Accessories > Plate Racks & Hangers",
       "parent_category_id": "262984",
       "is_leaf": true
     },
@@ -76232,7 +76232,7 @@
     {
       "category_id": "33235",
       "category_name": "Picture Frames",
-      "breadcrumb": "Baby > Nursery D\u00e9cor > Picture Frames",
+      "breadcrumb": "Baby > Nursery Décor > Picture Frames",
       "parent_category_id": "66697",
       "is_leaf": true
     },
@@ -77372,8 +77372,8 @@
     },
     {
       "category_id": "35655",
-      "category_name": "Dewar\u2019s",
-      "breadcrumb": "Collectibles > Advertising > Food & Beverage > Distillery > Dewar\u2019s",
+      "category_name": "Dewar’s",
+      "breadcrumb": "Collectibles > Advertising > Food & Beverage > Distillery > Dewar’s",
       "parent_category_id": "820",
       "is_leaf": true
     },
@@ -78801,42 +78801,42 @@
     {
       "category_id": "36016",
       "category_name": "Bottles",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Decorative Accessories > Bottles",
+      "breadcrumb": "Home & Garden > Home Décor > Decorative Accessories > Bottles",
       "parent_category_id": "262984",
       "is_leaf": true
     },
     {
       "category_id": "36017",
       "category_name": "Boxes, Jars & Tins",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Decorative Accessories > Boxes, Jars & Tins",
+      "breadcrumb": "Home & Garden > Home Décor > Decorative Accessories > Boxes, Jars & Tins",
       "parent_category_id": "262984",
       "is_leaf": true
     },
     {
       "category_id": "36018",
       "category_name": "Decorative Fruit & Vegetables",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Decorative Accessories > Decorative Fruit & Vegetables",
+      "breadcrumb": "Home & Garden > Home Décor > Decorative Accessories > Decorative Fruit & Vegetables",
       "parent_category_id": "262984",
       "is_leaf": true
     },
     {
       "category_id": "36019",
       "category_name": "Decorative Plates & Bowls",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Decorative Accessories > Decorative Plates & Bowls",
+      "breadcrumb": "Home & Garden > Home Décor > Decorative Accessories > Decorative Plates & Bowls",
       "parent_category_id": "262984",
       "is_leaf": true
     },
     {
       "category_id": "36022",
       "category_name": "Doorstops",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Decorative Accessories > Doorstops",
+      "breadcrumb": "Home & Garden > Home Décor > Decorative Accessories > Doorstops",
       "parent_category_id": "262984",
       "is_leaf": true
     },
     {
       "category_id": "36023",
       "category_name": "Globes",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Decorative Accessories > Globes",
+      "breadcrumb": "Home & Garden > Home Décor > Decorative Accessories > Globes",
       "parent_category_id": "262984",
       "is_leaf": true
     },
@@ -78850,7 +78850,7 @@
     {
       "category_id": "36025",
       "category_name": "Sculptures & Figurines",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Sculptures & Figurines",
+      "breadcrumb": "Home & Garden > Home Décor > Sculptures & Figurines",
       "parent_category_id": "10033",
       "is_leaf": true
     },
@@ -79851,28 +79851,28 @@
     {
       "category_id": "37632",
       "category_name": "Mats & Rugs",
-      "breadcrumb": "Baby > Nursery D\u00e9cor > Mats & Rugs",
+      "breadcrumb": "Baby > Nursery Décor > Mats & Rugs",
       "parent_category_id": "66697",
       "is_leaf": true
     },
     {
       "category_id": "37634",
       "category_name": "Art & Prints",
-      "breadcrumb": "Baby > Nursery D\u00e9cor > Wall D\u00e9cor > Art & Prints",
+      "breadcrumb": "Baby > Nursery Décor > Wall Décor > Art & Prints",
       "parent_category_id": "37633",
       "is_leaf": true
     },
     {
       "category_id": "37635",
       "category_name": "Wall Hangings",
-      "breadcrumb": "Baby > Nursery D\u00e9cor > Wall D\u00e9cor > Wall Hangings",
+      "breadcrumb": "Baby > Nursery Décor > Wall Décor > Wall Hangings",
       "parent_category_id": "37633",
       "is_leaf": true
     },
     {
       "category_id": "37636",
       "category_name": "Wallpaper Borders",
-      "breadcrumb": "Baby > Nursery D\u00e9cor > Wall D\u00e9cor > Wallpaper Borders",
+      "breadcrumb": "Baby > Nursery Décor > Wall Décor > Wallpaper Borders",
       "parent_category_id": "37633",
       "is_leaf": true
     },
@@ -81146,28 +81146,28 @@
     {
       "category_id": "38225",
       "category_name": "Display Easels",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Decorative Accessories > Display Easels",
+      "breadcrumb": "Home & Garden > Home Décor > Decorative Accessories > Display Easels",
       "parent_category_id": "262984",
       "is_leaf": true
     },
     {
       "category_id": "38229",
       "category_name": "String Lights",
-      "breadcrumb": "Home & Garden > Holiday & Seasonal D\u00e9cor > String Lights",
+      "breadcrumb": "Home & Garden > Holiday & Seasonal Décor > String Lights",
       "parent_category_id": "170090",
       "is_leaf": true
     },
     {
       "category_id": "38235",
       "category_name": "Masks",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Decorative Accessories > Masks",
+      "breadcrumb": "Home & Garden > Home Décor > Decorative Accessories > Masks",
       "parent_category_id": "262984",
       "is_leaf": true
     },
     {
       "category_id": "38237",
       "category_name": "Tapestries",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Tapestries",
+      "breadcrumb": "Home & Garden > Home Décor > Tapestries",
       "parent_category_id": "10033",
       "is_leaf": true
     },
@@ -82650,8 +82650,8 @@
     },
     {
       "category_id": "4013",
-      "category_name": "D\u00e9cor",
-      "breadcrumb": "Collectibles > Cultures & Ethnicities > Western Americana > D\u00e9cor",
+      "category_name": "Décor",
+      "breadcrumb": "Collectibles > Cultures & Ethnicities > Western Americana > Décor",
       "parent_category_id": "4007",
       "is_leaf": true
     },
@@ -82896,7 +82896,7 @@
     {
       "category_id": "40623",
       "category_name": "Racks & Hooks",
-      "breadcrumb": "Home & Garden > Kids & Teens at Home > Home D\u00e9cor & Organization > Racks & Hooks",
+      "breadcrumb": "Home & Garden > Kids & Teens at Home > Home Décor & Organization > Racks & Hooks",
       "parent_category_id": "259328",
       "is_leaf": true
     },
@@ -83911,7 +83911,7 @@
     {
       "category_id": "41509",
       "category_name": "Decorative Fans",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Decorative Accessories > Decorative Fans",
+      "breadcrumb": "Home & Garden > Home Décor > Decorative Accessories > Decorative Fans",
       "parent_category_id": "262984",
       "is_leaf": true
     },
@@ -83925,14 +83925,14 @@
     {
       "category_id": "41510",
       "category_name": "Message Boards & Holders",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Decorative Accessories > Message Boards & Holders",
+      "breadcrumb": "Home & Garden > Home Décor > Decorative Accessories > Message Boards & Holders",
       "parent_category_id": "262984",
       "is_leaf": true
     },
     {
       "category_id": "41511",
       "category_name": "Posters & Prints",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Posters & Prints",
+      "breadcrumb": "Home & Garden > Home Décor > Posters & Prints",
       "parent_category_id": "10033",
       "is_leaf": true
     },
@@ -84002,35 +84002,35 @@
     {
       "category_id": "4163",
       "category_name": "1876 Philadelphia",
-      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World\u2019s Fairs > 1876 Philadelphia",
+      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World’s Fairs > 1876 Philadelphia",
       "parent_category_id": "4162",
       "is_leaf": true
     },
     {
       "category_id": "4164",
       "category_name": "1893 Chicago",
-      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World\u2019s Fairs > 1893 Chicago",
+      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World’s Fairs > 1893 Chicago",
       "parent_category_id": "4162",
       "is_leaf": true
     },
     {
       "category_id": "4165",
       "category_name": "1901 Buffalo",
-      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World\u2019s Fairs > 1901 Buffalo",
+      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World’s Fairs > 1901 Buffalo",
       "parent_category_id": "4162",
       "is_leaf": true
     },
     {
       "category_id": "4166",
       "category_name": "1904 St Louis",
-      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World\u2019s Fairs > 1904 St Louis",
+      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World’s Fairs > 1904 St Louis",
       "parent_category_id": "4162",
       "is_leaf": true
     },
     {
       "category_id": "4167",
       "category_name": "1933-34 Chicago",
-      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World\u2019s Fairs > 1933-34 Chicago",
+      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World’s Fairs > 1933-34 Chicago",
       "parent_category_id": "4162",
       "is_leaf": true
     },
@@ -84044,14 +84044,14 @@
     {
       "category_id": "4168",
       "category_name": "1939-40 New York",
-      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World\u2019s Fairs > 1939-40 New York",
+      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World’s Fairs > 1939-40 New York",
       "parent_category_id": "4162",
       "is_leaf": true
     },
     {
       "category_id": "4169",
       "category_name": "1964-65 New York",
-      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World\u2019s Fairs > 1964-65 New York",
+      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World’s Fairs > 1964-65 New York",
       "parent_category_id": "4162",
       "is_leaf": true
     },
@@ -84618,7 +84618,7 @@
     {
       "category_id": "426",
       "category_name": "Other World Fair Collectibles",
-      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World\u2019s Fairs > Other World Fair Collectibles",
+      "breadcrumb": "Collectibles > Historical Memorabilia > Fairs, Parks & Architecture > Fairs & Expositions > World’s Fairs > Other World Fair Collectibles",
       "parent_category_id": "4162",
       "is_leaf": true
     },
@@ -85052,14 +85052,14 @@
     {
       "category_id": "43533",
       "category_name": "Flags",
-      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > D\u00e9cor > Flags",
+      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > Décor > Flags",
       "parent_category_id": "20498",
       "is_leaf": true
     },
     {
       "category_id": "43536",
       "category_name": "Flag Poles & Parts",
-      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > D\u00e9cor > Flag Poles & Parts",
+      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > Décor > Flag Poles & Parts",
       "parent_category_id": "20498",
       "is_leaf": true
     },
@@ -88068,8 +88068,8 @@
     },
     {
       "category_id": "4959",
-      "category_name": "Floral D\u00e9cor",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Floral D\u00e9cor",
+      "category_name": "Floral Décor",
+      "breadcrumb": "Home & Garden > Home Décor > Floral Décor",
       "parent_category_id": "10033",
       "is_leaf": true
     },
@@ -89504,14 +89504,14 @@
     {
       "category_id": "52346",
       "category_name": "Pillows",
-      "breadcrumb": "Home & Garden > Holiday & Seasonal D\u00e9cor > Pillows",
+      "breadcrumb": "Home & Garden > Holiday & Seasonal Décor > Pillows",
       "parent_category_id": "170090",
       "is_leaf": true
     },
     {
       "category_id": "52347",
-      "category_name": "Table D\u00e9cor",
-      "breadcrumb": "Home & Garden > Holiday & Seasonal D\u00e9cor > Table D\u00e9cor",
+      "category_name": "Table Décor",
+      "breadcrumb": "Home & Garden > Holiday & Seasonal Décor > Table Décor",
       "parent_category_id": "170090",
       "is_leaf": true
     },
@@ -91183,15 +91183,15 @@
     },
     {
       "category_id": "57096",
-      "category_name": "Other Restaurant D\u00e9cor",
-      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & D\u00e9cor > Other Restaurant D\u00e9cor",
+      "category_name": "Other Restaurant Décor",
+      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & Décor > Other Restaurant Décor",
       "parent_category_id": "57093",
       "is_leaf": true
     },
     {
       "category_id": "57098",
-      "category_name": "Restaurant D\u00e9cor",
-      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & D\u00e9cor > Restaurant D\u00e9cor",
+      "category_name": "Restaurant Décor",
+      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & Décor > Restaurant Décor",
       "parent_category_id": "57093",
       "is_leaf": true
     },
@@ -92346,7 +92346,7 @@
     {
       "category_id": "60096",
       "category_name": "Display Food",
-      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & D\u00e9cor > Display Food",
+      "breadcrumb": "Business & Industrial > Restaurant & Food Service > Furniture, Signs & Décor > Display Food",
       "parent_category_id": "57093",
       "is_leaf": true
     },
@@ -95145,8 +95145,8 @@
     },
     {
       "category_id": "66722",
-      "category_name": "Non-slip Appliqu\u00e9s & Mats",
-      "breadcrumb": "Home & Garden > Bath > Shower & Bathtub Accessories > Non-slip Appliqu\u00e9s & Mats",
+      "category_name": "Non-slip Appliqués & Mats",
+      "breadcrumb": "Home & Garden > Bath > Shower & Bathtub Accessories > Non-slip Appliqués & Mats",
       "parent_category_id": "260560",
       "is_leaf": true
     },
@@ -97812,8 +97812,8 @@
     },
     {
       "category_id": "7175",
-      "category_name": "Seagram\u2019s",
-      "breadcrumb": "Collectibles > Advertising > Food & Beverage > Distillery > Seagram\u2019s",
+      "category_name": "Seagram’s",
+      "breadcrumb": "Collectibles > Advertising > Food & Beverage > Distillery > Seagram’s",
       "parent_category_id": "820",
       "is_leaf": true
     },
@@ -98394,7 +98394,7 @@
     {
       "category_id": "73181",
       "category_name": "Chalk",
-      "breadcrumb": "Sporting Goods > Indoor Games > Billiards > Accessories & D\u00e9cor > Chalk",
+      "breadcrumb": "Sporting Goods > Indoor Games > Billiards > Accessories & Décor > Chalk",
       "parent_category_id": "75184",
       "is_leaf": true
     },
@@ -99738,7 +99738,7 @@
     {
       "category_id": "74316",
       "category_name": "Ashtrays",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Decorative Accessories > Ashtrays",
+      "breadcrumb": "Home & Garden > Home Décor > Decorative Accessories > Ashtrays",
       "parent_category_id": "262984",
       "is_leaf": true
     },
@@ -100081,35 +100081,35 @@
     {
       "category_id": "75185",
       "category_name": "Ball & Cue Racks",
-      "breadcrumb": "Sporting Goods > Indoor Games > Billiards > Accessories & D\u00e9cor > Ball & Cue Racks",
+      "breadcrumb": "Sporting Goods > Indoor Games > Billiards > Accessories & Décor > Ball & Cue Racks",
       "parent_category_id": "75184",
       "is_leaf": true
     },
     {
       "category_id": "75187",
       "category_name": "Cue Care & Tip Tools",
-      "breadcrumb": "Sporting Goods > Indoor Games > Billiards > Accessories & D\u00e9cor > Cue Care & Tip Tools",
+      "breadcrumb": "Sporting Goods > Indoor Games > Billiards > Accessories & Décor > Cue Care & Tip Tools",
       "parent_category_id": "75184",
       "is_leaf": true
     },
     {
       "category_id": "75188",
       "category_name": "Cue Tips",
-      "breadcrumb": "Sporting Goods > Indoor Games > Billiards > Accessories & D\u00e9cor > Cue Tips",
+      "breadcrumb": "Sporting Goods > Indoor Games > Billiards > Accessories & Décor > Cue Tips",
       "parent_category_id": "75184",
       "is_leaf": true
     },
     {
       "category_id": "75189",
       "category_name": "Table Lights & Lamps",
-      "breadcrumb": "Sporting Goods > Indoor Games > Billiards > Accessories & D\u00e9cor > Table Lights & Lamps",
+      "breadcrumb": "Sporting Goods > Indoor Games > Billiards > Accessories & Décor > Table Lights & Lamps",
       "parent_category_id": "75184",
       "is_leaf": true
     },
     {
       "category_id": "75190",
       "category_name": "Posters & Signs",
-      "breadcrumb": "Sporting Goods > Indoor Games > Billiards > Accessories & D\u00e9cor > Posters & Signs",
+      "breadcrumb": "Sporting Goods > Indoor Games > Billiards > Accessories & Décor > Posters & Signs",
       "parent_category_id": "75184",
       "is_leaf": true
     },
@@ -100283,8 +100283,8 @@
     },
     {
       "category_id": "75575",
-      "category_name": "Wall D\u00e9cor & Tatouage",
-      "breadcrumb": "Crafts > Home Arts & Crafts > Wall D\u00e9cor & Tatouage",
+      "category_name": "Wall Décor & Tatouage",
+      "breadcrumb": "Crafts > Home Arts & Crafts > Wall Décor & Tatouage",
       "parent_category_id": "160667",
       "is_leaf": true
     },
@@ -100305,21 +100305,21 @@
     {
       "category_id": "75592",
       "category_name": "Plaques & Signs",
-      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > D\u00e9cor > Plaques & Signs",
+      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > Décor > Plaques & Signs",
       "parent_category_id": "20498",
       "is_leaf": true
     },
     {
       "category_id": "75593",
       "category_name": "Rain Gauges",
-      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > D\u00e9cor > Rain Gauges",
+      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > Décor > Rain Gauges",
       "parent_category_id": "20498",
       "is_leaf": true
     },
     {
       "category_id": "75601",
       "category_name": "Thermometers",
-      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > D\u00e9cor > Thermometers",
+      "breadcrumb": "Home & Garden > Yard, Garden & Outdoor Living > Décor > Thermometers",
       "parent_category_id": "20498",
       "is_leaf": true
     },
@@ -100423,8 +100423,8 @@
     },
     {
       "category_id": "77488",
-      "category_name": "Tile D\u00e9cor",
-      "breadcrumb": "Home & Garden > Bath > Bathroom Accessories > Tile D\u00e9cor",
+      "category_name": "Tile Décor",
+      "breadcrumb": "Home & Garden > Bath > Bathroom Accessories > Tile Décor",
       "parent_category_id": "260590",
       "is_leaf": true
     },
@@ -100802,7 +100802,7 @@
     {
       "category_id": "79643",
       "category_name": "Alarm Clocks & Clock Radios",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Clocks > Alarm Clocks & Clock Radios",
+      "breadcrumb": "Home & Garden > Home Décor > Clocks > Alarm Clocks & Clock Radios",
       "parent_category_id": "258031",
       "is_leaf": true
     },
@@ -100830,7 +100830,7 @@
     {
       "category_id": "79654",
       "category_name": "Frames",
-      "breadcrumb": "Home & Garden > Home D\u00e9cor > Frames",
+      "breadcrumb": "Home & Garden > Home Décor > Frames",
       "parent_category_id": "10033",
       "is_leaf": true
     },
@@ -101585,8 +101585,8 @@
     },
     {
       "category_id": "822",
-      "category_name": "Jack Daniel\u2019s",
-      "breadcrumb": "Collectibles > Advertising > Food & Beverage > Distillery > Jack Daniel\u2019s",
+      "category_name": "Jack Daniel’s",
+      "breadcrumb": "Collectibles > Advertising > Food & Beverage > Distillery > Jack Daniel’s",
       "parent_category_id": "820",
       "is_leaf": true
     },
@@ -101872,8 +101872,8 @@
     },
     {
       "category_id": "83180",
-      "category_name": "Beyonc\u00e9",
-      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists B > Beyonc\u00e9",
+      "category_name": "Beyoncé",
+      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists B > Beyoncé",
       "parent_category_id": "104673",
       "is_leaf": true
     },
@@ -102083,14 +102083,14 @@
     {
       "category_id": "83902",
       "category_name": "Pillows",
-      "breadcrumb": "Crafts > Handcrafted & Finished Pieces > Home D\u00e9cor & Accents > Pillows",
+      "breadcrumb": "Crafts > Handcrafted & Finished Pieces > Home Décor & Accents > Pillows",
       "parent_category_id": "160656",
       "is_leaf": true
     },
     {
       "category_id": "83904",
       "category_name": "Wall Hangings",
-      "breadcrumb": "Crafts > Handcrafted & Finished Pieces > Home D\u00e9cor & Accents > Wall Hangings",
+      "breadcrumb": "Crafts > Handcrafted & Finished Pieces > Home Décor & Accents > Wall Hangings",
       "parent_category_id": "160656",
       "is_leaf": true
     },
@@ -102747,8 +102747,8 @@
     },
     {
       "category_id": "85967",
-      "category_name": "Bj\u00f6rk",
-      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists B > Bj\u00f6rk",
+      "category_name": "Björk",
+      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists B > Björk",
       "parent_category_id": "104673",
       "is_leaf": true
     },
@@ -102887,8 +102887,8 @@
     },
     {
       "category_id": "85987",
-      "category_name": "Other M\u00f6tley Cr\u00fce Memorabilia",
-      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists M > M\u00f6tley Cr\u00fce > Other M\u00f6tley Cr\u00fce Memorabilia",
+      "category_name": "Other Mötley Crüe Memorabilia",
+      "breadcrumb": "Entertainment Memorabilia > Music Memorabilia > Rock & Pop > Artists M > Mötley Crüe > Other Mötley Crüe Memorabilia",
       "parent_category_id": "104963",
       "is_leaf": true
     },
@@ -104106,7 +104106,7 @@
     {
       "category_id": "91330",
       "category_name": "Christmas Crackers",
-      "breadcrumb": "Home & Garden > Holiday & Seasonal D\u00e9cor > Christmas Crackers",
+      "breadcrumb": "Home & Garden > Holiday & Seasonal Décor > Christmas Crackers",
       "parent_category_id": "170090",
       "is_leaf": true
     },
@@ -104169,7 +104169,7 @@
     {
       "category_id": "91569",
       "category_name": "Table Covers",
-      "breadcrumb": "Sporting Goods > Indoor Games > Billiards > Accessories & D\u00e9cor > Table Covers",
+      "breadcrumb": "Sporting Goods > Indoor Games > Billiards > Accessories & Décor > Table Covers",
       "parent_category_id": "75184",
       "is_leaf": true
     },
@@ -104378,8 +104378,8 @@
     },
     {
       "category_id": "93771",
-      "category_name": "Bodhr\u00e1ns/Irish Drums",
-      "breadcrumb": "Musical Instruments & Gear > Percussion > Folk & World Drums > Bodhr\u00e1ns/Irish Drums",
+      "category_name": "Bodhráns/Irish Drums",
+      "breadcrumb": "Musical Instruments & Gear > Percussion > Folk & World Drums > Bodhráns/Irish Drums",
       "parent_category_id": "181228",
       "is_leaf": true
     },
@@ -104442,14 +104442,14 @@
     {
       "category_id": "94932",
       "category_name": "Toy Boxes",
-      "breadcrumb": "Home & Garden > Kids & Teens at Home > Home D\u00e9cor & Organization > Toy Boxes",
+      "breadcrumb": "Home & Garden > Kids & Teens at Home > Home Décor & Organization > Toy Boxes",
       "parent_category_id": "259328",
       "is_leaf": true
     },
     {
       "category_id": "94935",
       "category_name": "Clocks",
-      "breadcrumb": "Home & Garden > Kids & Teens at Home > Home D\u00e9cor & Organization > Clocks",
+      "breadcrumb": "Home & Garden > Kids & Teens at Home > Home Décor & Organization > Clocks",
       "parent_category_id": "259328",
       "is_leaf": true
     },
@@ -105414,8 +105414,8 @@
     },
     {
       "category_id": "98473",
-      "category_name": "Other Nursery D\u00e9cor",
-      "breadcrumb": "Baby > Nursery D\u00e9cor > Other Nursery D\u00e9cor",
+      "category_name": "Other Nursery Décor",
+      "breadcrumb": "Baby > Nursery Décor > Other Nursery Décor",
       "parent_category_id": "66697",
       "is_leaf": true
     },
