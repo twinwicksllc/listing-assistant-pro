@@ -140,6 +140,20 @@ before wiring up any automated testing against `qa.listrassistr.com`.
       QA test user's last login matched the run time, confirming test
       traffic reached this project, not production.
 
+## Found while verifying: a second, always-green "E2E Smoke Tests" job
+
+`.github/workflows/test.yml` (the "Test & Lint CI/CD" workflow) had its own
+`e2e-smoke-tests` job — same display name as the real one in
+`e2e-pr-smoke.yml`, which made PR checks show two identically-named "E2E
+Smoke Tests" rows. This one was never wired to `QA_BASE_URL`, so it ran
+against `localhost:8080` and failed the same "Login form not found" error
+every single time (all 3 attempts, retries included) — but
+`continue-on-error: true` on the step, plus a "non-blocking" carve-out in
+`test-summary`, meant it always reported green regardless. Removed the job
+entirely (2026-09-08) rather than fix it forward, since `e2e-pr-smoke.yml`
+already covers real smoke testing against the QA deployment and this one
+added nothing but a silently-failing duplicate.
+
 ## Known gap: `full-lifecycle.spec.ts` doesn't exercise generate/publish
 
 The owner's dashboard check above also found `public.drafts` empty on
