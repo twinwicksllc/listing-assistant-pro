@@ -1,187 +1,299 @@
 # Rebrand Session Handoff
 
-**As of:** 2026-08-28
+**As of:** 2026-09-08
 **Repository:** `twinwicksllc/listing-assistant-pro`
-**Session output:** PR #543 merged (7 commits), 0 open
+**Session output:** PRs #556, #557, #558, #559, #560, #561 merged (6 total), 0 open
 
-> **Note on this file's name.** This file predates Phase 1 and was last written for a
-> Phase 0 cron-auth investigation (2026-08-17) that has since been resolved and is no
-> longer relevant. Phase 0 closed 2026-08-25 (DEC-0035), and this handoff has been
-> rewritten in full to cover today's Phase 1 session rather than appended to. The
-> filename is kept as-is since other documents may reference it; treat everything below
-> as current and everything before today's rewrite as gone.
+> **Note on this file's name.** Rewritten in full again today rather than appended to,
+> per this file's own established convention (see the previous rewrite's note, now
+> superseded). Treat everything below as current and everything before today's rewrite
+> as gone, except where a prior handoff's content is restated here because it's still
+> relevant (the signup-copy inconsistency, still unresolved, carried forward below).
 
 ## Read this first — what's actually left open
 
-Nothing from today is blocking. The one thing worth knowing before continuing:
+Nothing from today is blocking, and nothing is broken. Two things worth knowing before
+continuing:
 
-**A real inconsistency in `listrassistr-official` is unresolved, low-stakes.** The live
-sign-up form's own on-screen text says account creation "will open when the application
-shell is ready" — but the owner already holds a real Supabase auth record from signing up
-earlier, and a second test account exists too (A.17c). So either that copy is stale, or
-signup silently works regardless of what it says. This doesn't block anything and doesn't
-change any decision made today, but it's worth a look in `listrassistr-official`'s code
-when convenient — see A.18b/A.19 in the DNS checklist for full detail. Nobody has looked at
-the actual signup handler code to settle which is true.
+1. **The signup-copy inconsistency from the 2026-08-28 handoff is still unresolved.**
+   `listrassistr-official`'s sign-up form still claims account creation "will open when
+   the application shell is ready," but real Supabase auth records exist from testing.
+   Nobody has looked at the actual signup handler code to settle which is true. Low
+   stakes, carried forward again, not touched this session.
+2. **Q-10 (brand direction) is explicitly on hold.** The owner is having a larger
+   brand-direction discussion in another session. **Do not restart or duplicate that
+   discussion here** — wait for the owner to bring a decision back to this thread. This
+   is the single largest remaining unlock (all of §8.3's token/asset-package work), so
+   it's worth flagging prominently rather than letting a future session re-open it.
 
-Otherwise: every item opened or reopened today is closed. See below.
+Otherwise: everything opened or reopened today is closed, and today's work also
+confirmed (for the first time) that this app's own QA E2E suite is now catching real
+issues automatically — see below.
 
 ## What happened today, roughly in order
 
-1. **Reconstructed the state of a wiped conversation from git history**, since a `/clear`
-   lost the prior session's context. Confirmed three real defects across the Phase 1 status
-   docs: `REBRAND_PHASE_1_RUNBOOKS.md`'s header claimed RB-04–RB-07 were still remaining
-   immediately after a status line saying they were complete; `REBRAND_PHASE_1_TODO.md`'s
-   "suggested next actions" section listed five items that were already finished, directly
-   contradicting the resume block 20 lines above; and `REBRAND_PHASE_0_DECISION_LOG.md`'s own
-   approval block still read "Pending / TBD" while every other reference in the repo recorded
-   Phase 0 closed 2026-08-25 as DEC-0035 — the single most consequential of the three, since
-   DEC-0035 is the authority every current Phase 1 item cites for scope. All three were
-   pre-existing staleness (completion recorded in item bodies but never propagated to the
-   summary surfaces people actually read first), not something introduced today. Fixed in
-   three commits (`d8cf0bb`, `a87009a`, `a8f9b09`), and Section 5 of the to-do was named the
-   one authoritative next-actions list going forward, so the resume block points at it instead
-   of duplicating it — the structural fix for why this kept happening.
-2. **RB-09 (IAM admin login) completed.** IAM user `twinwicksllc` created with MFA, sole
-   member of the Administrator group, `AdministratorAccess` attached. Account alias set,
-   billing visibility for IAM users enabled, root confirmed to have no access keys. The old
-   `tom_owner` user was removed — checked first that it wasn't backing anything: twin-wicks.com's
-   SES sending uses a separate dedicated `twin-wicks-smtp-user`, unaffected by the removal.
-3. **RB-10 completed for `app.listrassistr.com`** (DNS CNAME + Vercel domain), externally
-   verified: consistent DNS across five resolvers, a valid Let's Encrypt certificate,
-   HTTP/2 200 with no redirects, DNSSEC signed and validating end-to-end. `qa.listrassistr.com`
-   remains unstarted — it needs a branch prerequisite first.
-4. **A real discrepancy surfaced during that verification, then got resolved the same day.**
-   RB-10 predicted `app.listrassistr.com` would serve the marketing page at its root until
-   host-based routing exists in the app. A first external check instead described the page as
-   a working application interface — the opposite of the prediction. A second, deeper
-   follow-up check (fetching actual page content, forms, and API responses, not just headers)
-   resolved it: the page is exactly the predicted "coming soon" holding page, with no backend
-   API (every `/api/*` path returns the SPA shell, not JSON) and no reachable authenticated app
-   surface (`/dashboard`, `/listings` both 404). This **reinforces** rather than undercuts
-   A.17b's "no application schema, no customer data" finding on `yqftpibxplachhwoclam` — there's
-   no backend to have generated data with. Full evidence in A.18b of the DNS checklist.
-5. **Q-17 decided and closed: publish minimal Terms and Privacy, don't disable sign-up.**
-   Drafted in this repo from the legacy `TermsPage.tsx`/`PrivacyPage.tsx`, with the
-   Stripe-billing, eBay-integration, and content-upload sections removed since none of that
-   exists on `listrassistr.com` yet, and the Privacy draft written to stay accurate regardless
-   of which way the signup-copy inconsistency above resolves (it states plainly that signup can
-   create a real stored account "even where the page's own text suggests otherwise"). Both
-   drafts use `legal@twin-wicks.com` / `privacy@twin-wicks.com` as interim contact addresses,
-   since `listrassistr.com` has no working mailbox yet (Q-04/Q-05/Q-06 are still open) — swap
-   to `@listrassistr.com` addresses once that's resolved, not before. The owner copied both into
-   `listrassistr-official` directly (this session has no write access to that repo), committed,
-   merged, and confirmed the pages are live at real links. O-41 closed as a direct result.
-6. **PR #543 merged**, closing every item opened today.
+This session had two largely independent threads: (A) building this app's own QA
+environment from scratch, and (B) closing out several open Phase 1 rebrand decisions.
+They're unrelated except that both touch `majmvgakczrpcwgxgulj` (see thread A).
+
+### Thread A — `listing-assistant-pro` finally has a working QA environment
+
+1. **Diagnosed why this app's E2E suite had never actually tested a real deployment.**
+   `e2e-pr-smoke.yml`/`e2e-full-lifecycle.yml` had always run against repo-level secrets
+   pointing at production, and `QA_BASE_URL` was never set, so the weekly full-lifecycle
+   suite silently fell back to testing `localhost:8080` via Playwright's `webServer`
+   config — confirmed directly in a run log (`BASE_URL:` blank).
+2. **Decided the architecture** (user confirmed via AskUserQuestion): reuse the existing
+   `listrassistr-qa` Supabase project (`majmvgakczrpcwgxgulj`, already built for the
+   future `listrassistr-official` frontend) as this app's QA backend too, rather than
+   stand up a third project. New Vercel `qa` branch/preview deployment as the frontend.
+3. **PR #556**: wired `e2e-pr-smoke.yml`/`e2e-full-lifecycle.yml` to `environment: QA`,
+   added a loud failure guard if `QA_BASE_URL` is unset, wrote
+   `LISTING_ASSISTANT_PRO_QA_SETUP.md` as the setup runbook. Owner did the actual
+   Vercel/GitHub dashboard work (env vars, secrets) over several back-and-forth turns.
+4. **PR #557**: Vercel's own auto-opened draft PR for the new `qa` branch (bot-generated,
+   just a trigger commit). Already merged, nothing to do with it.
+5. **Found and fixed two real, previously-hidden bugs** — this is the concrete proof the
+   new QA environment already earned its cost:
+   - **Vercel Deployment Protection SSO wall** blocked all automated test traffic to the
+     `qa` Preview deployment (every test failed with "Login form not found at
+     `vercel.com/login`"). Fixed with a Protection Bypass for Automation secret, sent as
+     an `x-vercel-protection-bypass` header (`playwright.config.ts`, PR #558).
+   - **`e2e/fixtures/helpers.ts`'s `login()` used `Locator.isVisible({ timeout })`**,
+     which does not actually poll (only `waitFor()`/`expect().toBeVisible()` do). This
+     had been silently masked for the suite's entire lifetime because it only ever ran
+     against a fast local dev server; against a real network deployment the check could
+     fire before the page finished rendering. Fixed by switching to `waitFor()` (PR #558).
+6. **Found a second, unrelated bug while verifying**: `.github/workflows/test.yml` had
+   its own **separate, always-green** `e2e-smoke-tests` job — same display name as the
+   real one in `e2e-pr-smoke.yml` (causing two identically-named "E2E Smoke Tests" rows
+   in PR checks), never wired to `QA_BASE_URL`, so it silently failed against localhost
+   on every run — but `continue-on-error: true` plus a non-blocking carve-out in
+   `test-summary` made it always report green. **Removed entirely** (PR #559) rather than
+   fixed forward, since `e2e-pr-smoke.yml` already covers this and the duplicate added
+   nothing but false confidence.
+7. **PR #559 also merged.** Confirmed end-to-end: `e2e-pr-smoke.yml`'s 4 smoke tests and
+   `e2e-full-lifecycle.yml`'s 6 tests both pass cleanly (no retries) against the real `qa`
+   deployment. Owner spot-checked `majmvgakczrpcwgxgulj`'s `auth.users` table — the QA
+   test user's last login timestamp matched the run, confirming test traffic actually
+   reached that project, not production.
+8. **One real, documented test-coverage gap found in the process, not fixed**: despite
+   its name, `full-lifecycle.spec.ts`'s "upload coin → generate → publish → verify on
+   ebay" test only uploads a photo and clicks "Process Now" — it never calls the
+   `generateListing()`/`publishListing()` helpers already defined in `helpers.ts`, and
+   asserts nothing about a `drafts` row actually being created. `public.drafts` was
+   empty on `majmvgakczrpcwgxgulj` after a passing run, which is why this was caught.
+   Documented in `LISTING_ASSISTANT_PRO_QA_SETUP.md` as a known gap, not fixed this
+   session — deepening these tests is real, separate follow-up work.
+9. **Deferred, don't start yet**: applying the same Vercel Protection Bypass fix to
+   `listrassistr-official`'s `qa.listrassistr.com`. That repo has **no E2E suite, no
+   Playwright dependency, no `QA` GitHub environment secrets, and no CI workflow beyond a
+   branch-sync job** — confirmed by direct inspection, not assumed. Adding just the bypass
+   secret there now would be inert (nothing generates automated traffic against it yet).
+   Building real E2E infrastructure there first is comparable in size to everything done
+   in thread A above — a full session's work, not a quick add-on. Recorded in memory
+   (`project_vercel_protection_bypass_needed_for_qa.md`) with this finding, and the
+   owner explicitly deferred it (2026-09-08) rather than build scaffolding with no
+   near-term payoff.
+
+### Thread B — Phase 1 rebrand: source-doc corrections and two owner decisions
+
+10. **Q-12 approved and executed same-day (PR #560).** Four known-stale/incorrect lines,
+    already diagnosed in `REBRAND_PHASE_1_DOMAIN_AND_DNS_CHECKLIST.md` but never folded
+    back into the source documents, corrected with dated in-place notes (this repo's
+    established convention — visible correction, not silent rewrite): DEC-0033's "domain
+    not yet registered" (it was registered 2026-08-06, 13 days before that entry was
+    written); DEC-0035's mislabeled RBR-0003 reference; the service inventory's stale
+    "New staging Supabase" row (relabeled to production, dev callback port corrected
+    `3000`→`5173`, region/org/plan facts added); and the plan's §8.2.1-vs-§6.1
+    role-address conflict (documented at both locations, left unresolved pending Q-04
+    at the time — see next item).
+11. **Q-04/Q-05 decided in conversation, recorded as DEC-0040 (PR #561, stacked on
+    #560).** Role-address set: `support`/`privacy`/`legal`/`alerts` (plan §6.1's set,
+    not §8.2.1's `security` — `alerts@` already has code precedent via
+    `cost-alert-cron`, nothing references `security@`). Mailbox provider: **Forward
+    Email**, chosen over Google Workspace and ImprovMX specifically because its own SMTP
+    sending avoids the DMARC-alignment weak spot the checklist (F.4) flagged for
+    Gmail-relayed replies, at free/open-source cost. Unlocks O-10 (SES setup), O-12
+    (mailbox provider setup + MX records), T-07/T-08 (SPF/DMARC record strings), and the
+    P1-07/08/09 email-identity gates — **none of that provider-dashboard work has
+    started yet**, it's just unblocked now.
+12. **A real merge-sequencing lesson from building PR #561**: it was drafted against
+    `main` first, which meant it silently reverted PR #560's still-unmerged RBR-0003
+    correction wherever git's auto-merge picked the wrong side of an overlapping hunk
+    (not flagged as a conflict, since only _some_ of the overlapping lines conflicted).
+    Caught by diffing the finished branch against `main` before pushing, not by the merge
+    tooling itself. Fixed by rebasing PR #561 onto PR #560's branch instead of `main`, so
+    it only carried the true net-new diff. **Lesson for future stacked-PR work in this
+    repo:** when two PRs touch the same long table/row-based document, diff the finished
+    branch against the _other open PR's branch_, not just against `main`, before trusting
+    an auto-merge resolved cleanly — a clean rebase/merge with no conflict markers is not
+    proof that every line survived correctly.
+13. **A separate GitHub Copilot Autofix commit landed on PR #560's branch mid-session**
+    (a legitimate one-line cross-reference cleanup in `REBRAND_PHASE_1_TODO.md`, adding
+    "T-15" to a "Depends on" column) — confirmed benign by inspection, not something this
+    session created. Matches the known pattern in memory
+    (`project_copilot_autofix_on_prs.md`): this repo's Copilot Code Review can commit
+    directly onto open PR branches; review and accept rather than being alarmed by it.
+
+### Also touched this session, not part of either thread
+
+14. **User's team added `LISTRASSISTR_LAUNCH_STRATEGY.md`** (committed 2026-09-08,
+    `6036192`, before this session started) — a full launch/marketing/positioning
+    strategy referencing a competitor ("ListEasier"). Part 1 proposes adopting six of
+    their ideas; three are real engineering work (a $14.99/100 one-time credit-pack
+    purchase system, relaxed multi-account eBay limits, catalog backup/restore). A
+    feasibility pass against the actual codebase found the doc **understates effort on
+    two of the three**:
+    - **Credits**: Medium-Large. Billing today is 100% subscription
+      (`create-checkout` hardcodes `mode: "subscription"`; the webhook never handles a
+      one-time payment). Usage limits are enforced by counting rows in a time window,
+      not a balance ledger — credits need a real new ledger table with decrement-on-use,
+      not a reuse of what exists.
+    - **Multi-account eBay support**: **Large**. eBay tokens live as flat columns
+      directly on `profiles` — a single-row-per-user assumption baked into the schema
+      itself, not a join table, touched by 11+ Edge Functions. This is schema surgery
+      (a new `ebay_accounts` table, rewriting every call site to resolve "which account
+      applies here"), not a tier-flag relaxation.
+    - **Backup/restore ("ListVault")**: **Large**. The launch doc's claimed "existing
+      ingredients" (`inventory-sync-cron`/`user_active_listings`) only store
+      `listing_id, title, price, category_id` — a price cache, not backup-fidelity
+      content (no images, description, item specifics, condition). No
+      re-list-from-stored-data path exists anywhere in the codebase. Real backup/restore
+      also has to survive eBay category/policy staleness, which per `CLAUDE.md` is a
+      recurring, painful bug class already found repeatedly in this exact codebase.
+    - **Recommendation given to the owner, not yet acted on**: don't build any of the
+      three before the `listrassistr-official` migration — they're all real
+      architecture changes to the eBay integration surface, expensive to build twice
+      (here, then re-port). The launch doc's cheaper items (positioning copy, pricing
+      page math, legal-page checklist, in-app brand cleanup) are pure marketing/copy
+      work, not blocked by the migration question, and can proceed independently
+      whenever the owner wants.
 
 ## Gate status snapshot (Phase 1, plan §8)
 
-| Gate  | Item                                    | Status                                                                                                                               |
-| ----- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| P1-01 | Domain in legal business entity         | Approved with recorded deviation                                                                                                     |
-| P1-02 | Registrar hardened                      | Evidence captured                                                                                                                    |
-| P1-03 | Legal approval of the name              | Approved                                                                                                                             |
-| P1-04 | Authoritative DNS documented            | In progress — inventory entry missing                                                                                                |
-| P1-05 | DNSSEC enabled, DS chain verified       | Evidence captured                                                                                                                    |
-| P1-06 | Apex/`www`/`app`/`qa` resolving + certs | In progress — apex/`www`/`app` live, canonical, cert-verified, confirmed as the predicted holding page; `qa` needs a branch and Q-15 |
-| P1-07 | Role mailboxes receiving                | Deferred                                                                                                                             |
-| P1-08 | Branded email authenticates             | Deferred                                                                                                                             |
-| P1-09 | DMARC review period completed           | Deferred                                                                                                                             |
-| P1-10 | Brand asset package produced            | Not started                                                                                                                          |
-| P1-11 | Design tokens pass WCAG AA              | Not started                                                                                                                          |
-| P1-12 | Asset package approved                  | Not started                                                                                                                          |
-| P1-13 | Phase 2 entry decision                  | Not started — DEC-0035 does not grant                                                                                                |
+| Gate  | Item                                    | Status                                                                                                                                           |
+| ----- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| P1-01 | Domain in legal business entity         | Approved with recorded deviation                                                                                                                 |
+| P1-02 | Registrar hardened                      | Evidence captured                                                                                                                                |
+| P1-03 | Legal approval of the name              | Approved                                                                                                                                         |
+| P1-04 | Authoritative DNS documented            | In progress — inventory entry missing                                                                                                            |
+| P1-05 | DNSSEC enabled, DS chain verified       | Evidence captured                                                                                                                                |
+| P1-06 | Apex/`www`/`app`/`qa` resolving + certs | **Done** — all four live, canonical, cert-verified; `qa` points at its own non-production Supabase project (`majmvgakczrpcwgxgulj`), fully wired |
+| P1-07 | Role mailboxes receiving                | Unblocked by DEC-0040 (Q-04/Q-05 decided) — provider-dashboard setup (O-10/O-12) not started yet                                                 |
+| P1-08 | Branded email authenticates             | Same as P1-07                                                                                                                                    |
+| P1-09 | DMARC review period completed           | Blocked on Q-06 (`rua` destination) plus the P1-07/08 setup work                                                                                 |
+| P1-10 | Brand asset package produced            | Not started — blocked on Q-10, on hold in another session                                                                                        |
+| P1-11 | Design tokens pass WCAG AA              | Not started — same block                                                                                                                         |
+| P1-12 | Asset package approved                  | Not started — same block                                                                                                                         |
+| P1-13 | Phase 2 entry decision                  | Not started — DEC-0035 does not grant                                                                                                            |
 
 Full detail and evidence locations are in `REBRAND_PHASE_1_DOMAIN_AND_DNS_CHECKLIST.md`
-(reference/evidence) and `REBRAND_PHASE_1_TODO.md` (action list, with Section 5 as the
-authoritative next-actions list).
+(reference/evidence) and `REBRAND_PHASE_1_TODO.md` (action list, Section 5 is the
+authoritative next-actions list — already updated today, don't re-summarize it here).
 
 ## The findings that matter most beyond today
 
-1. **Status-surface drift is a repeatable failure mode in these docs, not a one-off.** Three
-   separate documents disagreed with their own bodies today, all from the same cause: an item
-   gets marked done where the work happened, but the summary/resume text at the top of the
-   document never gets touched. Section 5 of the to-do is now the single authoritative
-   next-actions list specifically to stop this from recurring — anything added going forward
-   should update that list, not a separate summary paragraph.
-2. **A.17b's "empty project" finding is a dated observation, not a standing one**, and it
-   underwrites two live decisions at once: `qa` sharing the production Supabase project (RB-10)
-   and open sign-up staying acceptable (Q-17, now decided but sign-up itself remains open).
-   That justification lapses the moment either Phase 3 creates real schema or a real customer
-   signs up — and sign-up is open on the live site now, so the second trigger isn't under
-   anyone's direct control. Re-verify A.17b before relying on it again rather than assuming it
-   still holds.
-3. **This session had no web access**, and WebFetch could not resolve `app.listrassistr.com`
-   or reach crt.sh through the corporate TLS proxy. Both external verifications this session
-   (RB-10's DNS/cert check, and the follow-up that resolved the routing discrepancy) were done
-   by handing the owner a prompt to run in a separate web-enabled chat, then working from what
-   came back. That pattern worked well and is worth repeating rather than treating as a
-   blocker — see the prompts already used for RB-10 in the conversation history if a similar
-   check is needed again.
-4. **This repository cannot write to `listrassistr-official`.** Any Phase 1 work that involves
-   actually shipping code or content into the new app (this session's Terms/Privacy drafts
-   included) has to be drafted here and handed to the owner to place there directly. Don't
-   assume future sessions have access to that repo without the owner explicitly granting it
-   (see O-33, still open, asking for exactly that).
+1. **The QA environment is now a real signal, not a rubber stamp.** It found two genuine
+   bugs (Vercel's SSO wall, the `isVisible` polling bug) in its very first real run, plus
+   a third unrelated always-green CI job elsewhere in the repo. This validates the
+   original goal stated at the start of this session ("find issues automatically going
+   forward") — the environment is doing exactly that, immediately.
+2. **A clean git rebase/merge with no conflict markers is not proof every line survived
+   correctly**, when two branches touch the same long table-formatted document (see
+   thread B, item 12 above). Always diff the finished branch against the _other_ branch
+   before trusting it, not just check for the absence of `<<<<<<<` markers.
+3. **`listrassistr-official`'s CI/testing maturity is much lower than this repo's** —
+   confirmed by direct inspection this session (no Playwright, no E2E, no QA environment
+   secrets, only a branch-sync workflow). Don't assume parity between the two repos when
+   planning follow-on work; check each one's actual state before estimating effort there.
+4. **The competitor-feature sizing (thread B/14) is a real input for a future planning
+   session, not a decision.** The owner hasn't yet decided whether/when to build any of
+   the three larger ListEasier-inspired features — this session only sized them and gave
+   a timing recommendation (wait for migration). Don't treat the recommendation as
+   already-approved scope.
 
 ## Process lessons for whoever continues this
 
-- **Read the resume block skeptically, not just the item bodies.** Every defect found and
-  fixed today existed because a summary line went unchecked after the detailed work below it
-  was already done. Cross-check the top-of-document status claims against the actual item
-  entries before trusting either on its own.
-- **`npx prettier --write`/`--check` worked directly in this session's environment**, despite
-  `CLAUDE.md` documenting a TLS-proxy failure mode for `npm`/`npx` in some sandboxes. That
-  failure mode is environment-dependent, not universal — try the real CLI first, and only fall
-  back to the Deno-standalone-Prettier workaround in `CLAUDE.md` if it actually fails.
-- **`gh` is still not installed or authenticated in this environment.** PRs were opened by
-  handing the owner a prefilled `github.com/.../compare/...?quick_pull=1` URL to open
-  themselves, per the working agreement in `CLAUDE.md`. Continue doing this rather than
-  attempting to extract stored credentials.
-- **When a verification result contradicts a prediction, dig one level deeper before either
-  accepting it or dismissing it.** The first external check of `app.listrassistr.com`
-  described it as a working application, which looked alarming. Rather than either taking that
-  at face value or assuming the checker was simply wrong, a second, more specific check (actual
-  page content, form behavior, and API responses) resolved which reading was correct. Both
-  readings had been plausible going in.
+- **Diff stacked PR branches against each other, not just against `main`**, before
+  pushing — see the RBR-0003 near-miss in thread B.
+- **A "cancelled" CI run status is not a failure and not a pass — it's no signal at
+  all.** GitHub Actions' `concurrency: cancel-in-progress: true` cancels an in-flight run
+  whenever a new push lands on the same branch; don't report on a cancelled run's
+  outcome, wait for the run that actually supersedes it to complete.
+- **Two CI jobs can share a display name across different workflow files** and look like
+  duplicates or retries in the PR checks list when they're actually two entirely
+  different jobs with different wiring, different auth, and different reliability. If a
+  "the same check is failing and passing" situation looks confusing in the checks list,
+  check which _workflow file_ each row actually belongs to before assuming it's the same
+  job retrying.
+- **Playwright's `Locator.isVisible({ timeout })` does not poll** — this is a real,
+  well-known gotcha, not specific to this repo. Only `waitFor({ state })` and
+  `expect(locator).toBeVisible({ timeout })` actually retry. Grep for this pattern if
+  writing new E2E helpers here.
+- **When a memory or a launch/strategy doc names a specific file, function, or existing
+  "ingredient" as reusable, verify it against the actual code before repeating the
+  claim** — the launch strategy doc's claim about `inventory-sync-cron`/
+  `user_active_listings` being reusable backup ingredients didn't hold up under a real
+  read of what that table actually stores.
 
 ## Next steps, cheapest and most decision-independent first
 
-1. **The signup-copy inconsistency noted at the top of this file** — confirm in
-   `listrassistr-official`'s code whether the sign-up handler is actually wired to Supabase Auth
-   right now, or whether the UI's "not open yet" text is accurate and the existing accounts came
-   from some other path. Low stakes, but worth knowing before it's forgotten.
-2. **Q-15** — approve or decline a Phase 3 entry gate for a non-production Supabase project.
-   Now wanted rather than optional, since choosing subdomains gives `qa` a hostname with nothing
-   behind it yet. Draft gate text is in RB-08.
-3. **`qa.listrassistr.com`** — needs its branch prerequisite in `listrassistr-official` before
-   RB-10's second half can proceed, and needs Q-15 resolved for what it points at.
-4. **Q-16** — whether plan §9/Phase 2 still describes the right strategy now that a greenfield
-   app is being built in `listrassistr-official` instead of a rebrand-in-place. Owner-level call.
-5. **Q-10 (brand direction)** — unlocks all of §8.3's asset-package work, the largest remaining
-   block after email identity.
-6. **Q-04 / Q-05 / Q-06** — the mailbox/email-identity decisions. Unlocks P1-07/08/09, and is
-   also the trigger for swapping today's interim `@twin-wicks.com` contact addresses on the
-   Terms/Privacy pages to real `@listrassistr.com` addresses.
-7. **O-04 / O-03** — re-check `listrassister.com` authoritatively, and chase the AWS support
-   case on the registration restriction, if the owner still wants that domain.
-8. **Legal review of the published Terms/Privacy content** — drafted and adapted from the
-   legacy app's pages, not reviewed by counsel. Worth doing before real customer data
-   accumulates, not urgent while the project is still schema-empty.
-9. **DEC-0021 API key migration** — still deferred, trigger is Phase 2/3 entry or the first
-   real customer, whichever comes first (A.17d).
+1. **Owner-side, no decision needed:** O-10 (SES setup) and O-12 (Forward Email setup +
+   MX records) — both unblocked by DEC-0040, both provider-dashboard work only the owner
+   can do. See `REBRAND_PHASE_1_TODO.md` Section 2b for the step list.
+2. **Owner-side, no decision needed:** trigger `deploy-functions-qa.yml`
+   (`workflow_dispatch`) the next time a backend change lands on `main`, to keep
+   `majmvgakczrpcwgxgulj` current — it's manual-only by design. As of this handoff it's
+   already current with `main` (checked directly, no `supabase/` changes since its last
+   successful run).
+3. **Q-06** — DMARC `rua` destination. Must be an analyzer service or a real
+   `@listrassistr.com` address; a `gmail.com` address silently fails. Small decision,
+   unlocks O-14 and P1-09's 30-day clock.
+4. **Q-16** — whether plan §9/Phase 2 still describes the right strategy now that a
+   greenfield app is being built in `listrassistr-official` instead of a
+   rebrand-in-place. Owner-level call, not urgent.
+5. **When Q-10 resolves** (owner-driven, in another session — do not chase this): it
+   unlocks all of §8.3's brand-asset/token work, the largest remaining Phase 1 block.
+6. **The signup-copy inconsistency** (carried forward from 2026-08-28, still
+   unresolved) — confirm in `listrassistr-official`'s code whether the sign-up handler
+   is actually wired to Supabase Auth, or whether the UI's "not open yet" text is
+   accurate. Low stakes, cheap to check whenever convenient.
+7. **`full-lifecycle.spec.ts`'s test-coverage gap** (thread A, item 8) — deepen the
+   coin/electronics tests to actually call `generateListing()`/`publishListing()` and
+   assert a `drafts` row appears. Real work, not urgent — the QA environment itself is
+   proven working without this.
+8. **The three ListEasier-inspired features** (thread B/14) — no action expected before
+   the `listrassistr-official` migration decision. Revisit sizing if the owner wants to
+   move on any of them sooner.
+9. **`listrassistr-official`'s missing E2E/Vercel-bypass setup** (thread A, item 9) —
+   deferred, revisit only once that repo has (or is getting) a real E2E suite worth
+   protecting.
+10. **O-04 / O-03** — re-check `listrassister.com` availability and chase the AWS
+    support case, only if/when that domain is still wanted. Owner is already working
+    with AWS support on the underlying restriction; not blocking anything.
 
 ## Environment constraints that still apply
 
-- **No web access in this session.** For anything requiring a live fetch (DNS, certificates,
-  page content, external APIs), draft a specific verification prompt and have the owner run it
-  in a separate web-enabled chat, then work from the result — this worked well today.
-- **`gh` CLI not installed, no stored GitHub auth.** Hand the owner a prefilled compare URL to
-  open PRs themselves.
-- **No write access to `listrassistr-official`.** Draft content/code here if asked, and hand it
-  to the owner to place in that repo directly.
-- **`git config core.autocrlf=true`, no `.gitattributes`** — same as before; this makes the
-  whole `supabase/functions/**` tree show as unformatted under `deno fmt --check` on this
+- **`gh` CLI IS installed and authenticated in this specific environment** (confirmed
+  `gh auth status`: logged in as `twinwicksllc`, scopes `gist, read:org, repo,
+workflow`) — this can create/merge PRs, trigger workflows, query the GitHub API
+  directly. This contrasts with `CLAUDE.md`'s general note that `gh` may not be
+  available in all sandboxes, and with the 2026-08-28 handoff's note that it wasn't
+  available then. Don't assume either way in a fresh session — run `gh auth status`
+  first.
+- **This session has both repos cloned as sibling directories** and can read/write
+  `listrassistr-official` directly (confirmed this session by inspecting its
+  `.github/workflows/`, `package.json`, and `src/integrations/supabase/` directly) —
+  contrasts with the 2026-08-28 handoff's "no write access" note. Verify with `ls
+../listrassistr-official` at the start of a fresh session rather than assuming either
+  way.
+- **Never request, print, or write secret values into chat, commits, or docs** — only
+  names/locations. This was followed throughout; e.g. Supabase key-type confusion during
+  QA setup was resolved by asking the owner to re-verify and re-paste directly into the
+  GitHub dashboard, never by asking for the value itself.
+- **`git config core.autocrlf=true`, no `.gitattributes`** — makes the whole
+  `supabase/functions/**` tree show as unformatted under `deno fmt --check` on this
   machine. Pre-existing, not a real regression; don't try to fix it repo-wide.
 
 ## Safe resume
@@ -191,10 +303,12 @@ git fetch origin
 git switch main
 git pull --ff-only origin main
 git status --short --branch
+gh auth status
 ```
 
-No open PRs as of this handoff. Two files remain intentionally uncommitted in the working
-tree — `REBRAND_PHASE_0_COHORT_QUERY.sql` (modified) and `PROGRESSIVE_AUTONOMY_AGENT_PLAN.md`
-(untracked) — leave them alone unless the owner says otherwise. Start with the signup-copy
-inconsistency noted at the top of this file if looking for something concrete and
-low-stakes, or with `REBRAND_PHASE_1_TODO.md` Section 5 for the full prioritized queue.
+No open PRs as of this handoff (confirmed via `gh pr list --state open`). Working tree
+is clean. Start with `REBRAND_PHASE_1_TODO.md` Section 5 for the full prioritized Phase 1
+queue, or `LISTING_ASSISTANT_PRO_QA_SETUP.md` for the QA-environment thread's current
+state and its one remaining documented gap (full-lifecycle test coverage). Do not start
+or continue the Q-10 brand-direction discussion — that's explicitly running in a
+different session.
