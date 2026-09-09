@@ -120,15 +120,50 @@ before wiring up any automated testing against `qa.listrassistr.com`.
   fallback — smoke tests are meant to be fast and don't need a live QA
   deploy, so this is intentional, not a bug.
 
-## Next steps
+## Status: confirmed working end-to-end (2026-09-08)
 
-- [ ] Owner completes the Vercel/GitHub setup above.
-- [ ] Trigger `deploy-functions-qa.yml` to make sure QA's Edge Functions
-      reflect current `main` (in particular the `create-checkout`
-      env-aware-price fix merged 2026-09-03, PR #554).
-- [ ] Manually run `e2e-full-lifecycle.yml` (`workflow_dispatch`) and confirm
-      from the log that `BASE_URL` resolves to the real `qa` branch URL, and
-      that the test user lands in `majmvgakczrpcwgxgulj`'s `auth.users`, not
-      production's.
-- [ ] Spot-check `majmvgakczrpcwgxgulj`'s `drafts`/`auth.users` tables after
-      a run to confirm QA data lands there, not in production.
+- [x] Owner completed the Vercel/GitHub setup above.
+- [x] `deploy-functions-qa.yml` confirmed current with `main` (last
+      successful run at commit `085cf8a`, which already includes the
+      `create-checkout` env-aware-price fix from PR #554; no `supabase/`
+      changes have landed on `main` since).
+- [x] `e2e-pr-smoke.yml` green against the real `qa` deployment (PR #558) —
+      required a Vercel Deployment Protection bypass fix (see step 4 above)
+      and a Playwright `login()` helper fix
+      (`Locator.isVisible({ timeout })` doesn't poll; switched to
+      `waitFor({ state: "visible" })`) that only surfaced once tests ran
+      against a real network deployment instead of localhost.
+- [x] Manually ran `e2e-full-lifecycle.yml` (`workflow_dispatch`, run 34292767199) — all 6 tests passed in 22.7s against the real `qa`
+      deployment; `BASE_URL` resolved (the "Verify QA_BASE_URL is set" guard
+      didn't fire) and `SUPABASE_URL` came from the QA environment secrets.
+- [x] Owner spot-checked `majmvgakczrpcwgxgulj`'s `auth.users` table —
+      QA test user's last login matched the run time, confirming test
+      traffic reached this project, not production.
+
+## Found while verifying: a second, always-green "E2E Smoke Tests" job
+
+`.github/workflows/test.yml` (the "Test & Lint CI/CD" workflow) had its own
+`e2e-smoke-tests` job — same display name as the real one in
+`e2e-pr-smoke.yml`, which made PR checks show two identically-named "E2E
+Smoke Tests" rows. This one was never wired to `QA_BASE_URL`, so it ran
+against `localhost:8080` and failed the same "Login form not found" error
+every single time (all 3 attempts, retries included) — but
+`continue-on-error: true` on the step, plus a "non-blocking" carve-out in
+`test-summary`, meant it always reported green regardless. Removed the job
+entirely (2026-09-08) rather than fix it forward, since `e2e-pr-smoke.yml`
+already covers real smoke testing against the QA deployment and this one
+added nothing but a silently-failing duplicate.
+
+## Known gap: `full-lifecycle.spec.ts` doesn't exercise generate/publish
+
+The owner's dashboard check above also found `public.drafts` empty on
+`majmvgakczrpcwgxgulj` after a passing run. This is expected, not a bug in
+the QA wiring: despite its name, the "upload coin → generate → publish →
+verify on ebay" test (`e2e/tests/full-lifecycle.spec.ts:14`) only uploads a
+photo and clicks "Process Now", then asserts the URL changed — it never
+calls the `generateListing()`/`publishListing()` helpers already defined in
+`e2e/fixtures/helpers.ts`, and asserts nothing about a `drafts` row. Same
+shape for the "electronics listing" test. Deepening these tests to actually
+exercise the AI analysis pipeline and eBay publish flow, and assert a draft
+lands in the database, is real but separate follow-up work — noted here so
+it isn't mistaken for a QA environment problem.
