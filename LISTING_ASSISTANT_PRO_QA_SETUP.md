@@ -120,15 +120,22 @@ before wiring up any automated testing against `qa.listrassistr.com`.
   fallback — smoke tests are meant to be fast and don't need a live QA
   deploy, so this is intentional, not a bug.
 
-## Next steps
+## Status: confirmed working end-to-end (2026-09-08)
 
-- [ ] Owner completes the Vercel/GitHub setup above.
-- [ ] Trigger `deploy-functions-qa.yml` to make sure QA's Edge Functions
-      reflect current `main` (in particular the `create-checkout`
-      env-aware-price fix merged 2026-09-03, PR #554).
-- [ ] Manually run `e2e-full-lifecycle.yml` (`workflow_dispatch`) and confirm
-      from the log that `BASE_URL` resolves to the real `qa` branch URL, and
-      that the test user lands in `majmvgakczrpcwgxgulj`'s `auth.users`, not
-      production's.
-- [ ] Spot-check `majmvgakczrpcwgxgulj`'s `drafts`/`auth.users` tables after
-      a run to confirm QA data lands there, not in production.
+- [x] Owner completed the Vercel/GitHub setup above.
+- [x] `deploy-functions-qa.yml` confirmed current with `main` (last
+      successful run at commit `085cf8a`, which already includes the
+      `create-checkout` env-aware-price fix from PR #554; no `supabase/`
+      changes have landed on `main` since).
+- [x] `e2e-pr-smoke.yml` green against the real `qa` deployment (PR #558) —
+      required a Vercel Deployment Protection bypass fix (see step 4 above)
+      and a Playwright `login()` helper fix
+      (`Locator.isVisible({ timeout })` doesn't poll; switched to
+      `waitFor({ state: "visible" })`) that only surfaced once tests ran
+      against a real network deployment instead of localhost.
+- [x] Manually ran `e2e-full-lifecycle.yml` (`workflow_dispatch`, run 34292767199) — all 6 tests passed in 22.7s against the real `qa`
+      deployment; `BASE_URL` resolved (the "Verify QA_BASE_URL is set" guard
+      didn't fire) and `SUPABASE_URL` came from the QA environment secrets.
+- [ ] **Owner action:** spot-check `majmvgakczrpcwgxgulj`'s
+      `drafts`/`auth.users` tables in the Supabase dashboard to visually
+      confirm this run's test data landed there, not in production.
