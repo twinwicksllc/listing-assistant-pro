@@ -6,6 +6,16 @@
 Repository code is §9/Phase 2 and **not** authorised.
 **Status date:** 2026-08-28
 
+## Resuming — session state as of 2026-09-08
+
+**Closed 2026-09-08:** **Q-12** approved and executed same-day — four source-document
+discrepancies corrected (see T-10/T-15, PR #560). **Q-04/Q-05** decided as **DEC-0040**:
+role-address set is `support`/`privacy`/`legal`/`alerts`; mailbox provider is Forward
+Email. Unlocks O-10, O-12, T-07, T-08 and the P1-07/08/09 email-identity gates — none
+yet started, tracked below. **RB-08's live end-to-end verification pass** (a separate,
+adjacent effort — this app's own QA E2E suite, not the `listrassistr-official` frontend
+RB-08 covers) also completed this session: see `LISTING_ASSISTANT_PRO_QA_SETUP.md`.
+
 ## Resuming — session state as of 2026-09-01
 
 **Closed 2026-08-27:** RB-01 apex canonical · RB-02 typo domains repointed · **RB-03 DNSSEC
@@ -47,8 +57,9 @@ next-actions list.
 
 **Waiting on others:** O-03, the AWS domain-registration restriction, is with AWS support.
 
-**Owner decisions outstanding:** Q-04 Q-05 Q-06 Q-10 Q-16 (Q-15 closed 2026-09-01). Q-10
-(brand direction) unlocks the most assistant-side work.
+**Owner decisions outstanding:** Q-06 Q-10 Q-16 (Q-04/Q-05 closed 2026-09-08 via DEC-0040;
+Q-12 closed 2026-09-08; Q-15 closed 2026-09-01). Q-10 (brand direction) unlocks the most
+assistant-side work; Q-10 itself is on hold pending a discussion in another session.
 
 **Long-running, not blocking:** LLC formation, then the registrant change (O-32), then
 DEC-0021's key migration. Trademark filing deferred.
@@ -102,8 +113,8 @@ Decisions and facts only you hold. Each blocks work I cannot start without it.
 | Q-02 | **How should `qa` be set up?** Options and the environment-variable constraint are in A.6. Nothing is built yet, so the record is deferred rather than created                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `qa` record (O-06)                        | P2       |
 | Q-14 | ~~Canonical host~~ **Decided 2026-08-27: flip to the apex.** `listrassistr.com` becomes Production, `www` redirects — matching plan §6.1, so no plan edit needed. Procedure in **RB-01**. Original question: Resolved _what it is_ — `www` is canonical, apex 308-redirects to it (A.7). Now a decision: keep `www` and update plan §6.1, or flip to apex to match the plan. Recommendation is keep `www`. **Whichever is chosen, Supabase Auth Site URL and the redirect allow-list must match it exactly** or sign-in breaks on PKCE origin mismatch (A.7b)                                                                                                                                                                     | Supabase auth config, P1-08               | **P1**   |
 | Q-03 | ~~Canonical host: apex or `www`?~~ Now urgent rather than cosmetic — Vercel lists only `www.listrassistr.com`, so the apex may be redirecting to `www`, which would contradict plan §6.1. **Send the Vercel → Domains screen** (A.3a)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | —                                         | Closed   |
-| Q-04 | **Which role-address set is authoritative?** §8.2.1 says `support`/`privacy`/`legal`/**`security`**; §6.1 says `support`/`privacy`/`legal`/**`alerts`**. Four or five?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | MX + mailbox setup (O-12), P1-07          | P2       |
-| Q-05 | **Inbound mailbox provider.** Recommendation is Google Workspace, one seat, role addresses as free aliases (F.4)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | O-12, SPF record, P1-07/P1-08             | P2       |
+| Q-04 | ~~Which role-address set is authoritative?~~ **Decided 2026-09-08 (DEC-0040): `support`/`privacy`/`legal`/`alerts`** — plan §6.1's set, not §8.2.1's `security`. `alerts@` has existing code precedent (`cost-alert-cron`); nothing references `security@`                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | MX + mailbox setup (O-12), P1-07          | Closed   |
+| Q-05 | ~~Inbound mailbox provider.~~ **Decided 2026-09-08 (DEC-0040): Forward Email**, over Google Workspace and ImprovMX — its own SMTP sending avoids the DMARC-alignment weak spot F.4 flagged for Gmail-relayed replies, at free/open-source cost. Workspace remains the fallback if alignment/deliverability proves inadequate                                                                                                                                                                                                                                                                                                                                                                                                      | O-12, SPF record, P1-07/P1-08             | Closed   |
 | Q-06 | **DMARC `rua` destination.** Must be an analyzer service or an address at `listrassistr.com` — a `gmail.com` address silently fails (F.6)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | O-14, P1-09 and its 30-day clock          | P2       |
 | Q-07 | ~~Auth `From` address~~ **Owner preference 2026-08-27: `support@listrassistr.com`**, once it exists. Defensible — replies reach a human rather than bouncing off `no-reply@` — with the tradeoff that automated and human mail share one inbox. Depends on the mailbox work (F.4). Original: — `no-reply@`, `accounts@`, or other? Plan §6.1 names none                                                                                                                                                                                                                                                                                                                                                                           | SES + Supabase Auth config (O-10)         | P2       |
 | Q-08 | ~~Where does Sign in point, and does anything send email?~~ **Answered 2026-08-27 (RB-04, A.13): the app is wired to `yqftpibxplachhwoclam`** — with a live auth flow, and auth mail sends from `noreply@mail.app.supabase.io`, Supabase's built-in mailer. Original: Now tied to A.5 — if nothing in the new repo talks to Supabase, §8.2 has no target yet                                                                                                                                                                                                                                                                                                                                                                      | SES target, P1-08                         | **P1**   |
@@ -111,7 +122,7 @@ Decisions and facts only you hold. Each blocks work I cannot start without it.
 | Q-10 | **§8.3 brand direction** — confirm the concept PNG's black/red/white, or give a different direction                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | T-01, T-02, T-03, P1-10/P1-11             | P2       |
 | Q-11 | **Buy the remaining typo variants?** `listrasistr.com`, `listassistr.com`, `listrassist.com`, and the `.net`/`.co`/`.app`/`.io` set (A.1e)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Nothing — pure spend decision             | P3       |
 | Q-13 | ~~Where do Phase 1 documents belong?~~ **Decided 2026-08-27: option C** — planning docs stay here with a recorded destination of `listrassistr-official` at cutover; §8.3 artefacts go there immediately. Draft DEC-0038 in A.8. Original question: `REBRAND_PHASE_0_IMPLEMENTATION.md` §2 says brand work and launch artifacts belong in `listrassistr-official`, and requires any document created in this workspace to have a recorded destination. Neither Phase 1 document has one, and the target repo is already running its own doc branches. Three options in A.4. Owner also notes the target repo is likely well out of date, making O-33 a staleness audit rather than a conflict reconciliation; recommendation is C | T-14                                      | Closed   |
-| Q-12 | ~~May I correct the source-document discrepancies?~~ **Approved 2026-09-08. Done same day** — see T-10/T-15                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | T-10, T-15                                 | Closed   |
+| Q-12 | ~~May I correct the source-document discrepancies?~~ **Approved 2026-09-08. Done same day** — see T-10/T-15                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | T-10, T-15                                | Closed   |
 
 ## Section 2 — Yours offline
 
@@ -237,8 +248,10 @@ code.
 ## Section 5 — Suggested next actions
 
 **This is the authoritative next-actions list** — the resume block at the top of this
-document summarises it rather than duplicating it. Updated **2026-08-28**. Everything here
-is unblocked right now and independent of the LLC, mailboxes, and brand direction.
+document summarises it rather than duplicating it. Updated **2026-09-08**. Everything here
+is unblocked right now and independent of the LLC and brand direction (mailboxes are no
+longer undecided as of DEC-0040, but the provider-dashboard setup work itself — O-10/O-12 —
+hasn't started yet; see Section 2b).
 
 1. **O-01, via RB-09 — done 2026-08-28.** IAM admin login `twinwicksllc` created, MFA
    confirmed, root confirmed to have no access keys. Root is no longer used day-to-day.
@@ -258,14 +271,25 @@ is unblocked right now and independent of the LLC, mailboxes, and brand directio
    `majmvgakczrpcwgxgulj`, pointed at the existing `listrassistr-official` repo — and has now
    completed all four RB-08 items: branch-scoped Vercel env vars, backend Edge Function
    secrets (including a separate Sentry project for QA), Auth URL config, and the `qa`
-   branch/domain/DNS (Valid Configuration, certificate issued). Still to do: a live
-   end-to-end verification pass — see RB-08's closing note.
-5. **O-04 / O-03** — re-check `listrassister.com` authoritatively, and chase the AWS support
-   case on the registration restriction, if you still want that domain.
+   branch/domain/DNS (Valid Configuration, certificate issued).
+5. **Q-12 — approved and done 2026-09-08.** Four source-document discrepancies corrected
+   (T-10/T-15, PR #560).
+6. **Q-04/Q-05 — decided 2026-09-08 as DEC-0040.** Role addresses: `support`/`privacy`/
+   `legal`/`alerts`. Mailbox provider: Forward Email. Unlocks O-10 (SES setup), O-12
+   (mailbox provider setup + MX records), T-07/T-08 (SPF/DMARC record strings), and
+   P1-07/08/09 generally — none of that provider-dashboard work has started yet.
 
-Then, when you have appetite for the larger blocks: **Q-10** unlocks all of §8.3's
-token and usage-sheet work, and **Q-04 plus Q-05** unlock the whole mailbox and SPF
-chain — which is also what P1-07, P1-08 and P1-09 are waiting on.
+**O-04/O-03 explicitly skipped for now** (owner: still working with AWS support on the
+underlying restriction; not blocking anything else) — re-check `listrassister.com`
+availability and chase the support case only if/when that domain is still wanted.
+
+**Q-10 explicitly on hold** — owner is having a larger brand-direction discussion in
+another session; do not restart or duplicate that discussion here. Revisit only when the
+owner brings a decision back to this thread.
+
+Then, when Q-10 resolves: it unlocks all of §8.3's token and usage-sheet work. Separately,
+**O-10/O-12** (the mailbox/SPF provider-dashboard setup DEC-0040 unlocked) can proceed
+independent of Q-10 whenever the owner has bandwidth — see item 6 above.
 
 **One time-sensitive dependency worth naming.** Two open items currently rest on the same
 justification — that `yqftpibxplachhwoclam` holds no schema and no customer data (A.17b):
