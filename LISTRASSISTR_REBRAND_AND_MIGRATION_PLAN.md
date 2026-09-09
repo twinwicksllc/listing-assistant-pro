@@ -145,17 +145,17 @@ references. This is not a logo-only change.
 
 ### 6.1 Public endpoints
 
-| Purpose            | Target                                  |
-| ------------------ | --------------------------------------- |
-| Marketing site     | `https://listrassistr.com`              |
-| Application        | `https://app.listrassistr.com`          |
-| QA/staging         | `https://qa.listrassistr.com`           |
-| Supabase API       | New project URL supplied by Supabase    |
-| Supabase functions | New project `/functions/v1/*` endpoints |
-| Support            | `support@listrassistr.com`              |
-| Privacy            | `privacy@listrassistr.com`              |
-| Legal              | `legal@listrassistr.com`                |
-| Automated alerts   | `alerts@listrassistr.com`               |
+| Purpose                                                     | Target                                  |
+| ----------------------------------------------------------- | --------------------------------------- |
+| Marketing site                                              | `https://listrassistr.com`              |
+| Application                                                 | `https://app.listrassistr.com`          |
+| QA/staging                                                  | `https://qa.listrassistr.com`           |
+| Supabase API                                                | New project URL supplied by Supabase    |
+| Supabase functions                                          | New project `/functions/v1/*` endpoints |
+| Support                                                     | `support@listrassistr.com`              |
+| Privacy                                                     | `privacy@listrassistr.com`              |
+| Legal                                                       | `legal@listrassistr.com`                |
+| Automated alerts (see §8.2's role-address discrepancy note) | `alerts@listrassistr.com`               |
 
 If marketing and app remain in the same Vite deployment for launch, route the
 apex to `/landing` and the app subdomain to the authenticated product. Preserve
@@ -229,6 +229,11 @@ for; no migration object remains "probably ours."
 ### 8.2 Email identity
 
 **Owner:** Integrations owner
+
+**Discrepancy noted 2026-09-08 (`REBRAND_PHASE_1_TODO.md` Q-04): this list
+names `security` as the fourth role address; §6.1's table names `alerts`
+instead.** Neither has been corrected — which set is authoritative is an
+open owner decision (Q-04), not resolved by this note.
 
 1. Create role mailboxes or aliases for `support`, `privacy`, `legal`, and
    `security` at `listrassistr.com`.
