@@ -136,6 +136,20 @@ before wiring up any automated testing against `qa.listrassistr.com`.
 - [x] Manually ran `e2e-full-lifecycle.yml` (`workflow_dispatch`, run 34292767199) — all 6 tests passed in 22.7s against the real `qa`
       deployment; `BASE_URL` resolved (the "Verify QA_BASE_URL is set" guard
       didn't fire) and `SUPABASE_URL` came from the QA environment secrets.
-- [ ] **Owner action:** spot-check `majmvgakczrpcwgxgulj`'s
-      `drafts`/`auth.users` tables in the Supabase dashboard to visually
-      confirm this run's test data landed there, not in production.
+- [x] Owner spot-checked `majmvgakczrpcwgxgulj`'s `auth.users` table —
+      QA test user's last login matched the run time, confirming test
+      traffic reached this project, not production.
+
+## Known gap: `full-lifecycle.spec.ts` doesn't exercise generate/publish
+
+The owner's dashboard check above also found `public.drafts` empty on
+`majmvgakczrpcwgxgulj` after a passing run. This is expected, not a bug in
+the QA wiring: despite its name, the "upload coin → generate → publish →
+verify on ebay" test (`e2e/tests/full-lifecycle.spec.ts:14`) only uploads a
+photo and clicks "Process Now", then asserts the URL changed — it never
+calls the `generateListing()`/`publishListing()` helpers already defined in
+`e2e/fixtures/helpers.ts`, and asserts nothing about a `drafts` row. Same
+shape for the "electronics listing" test. Deepening these tests to actually
+exercise the AI analysis pipeline and eBay publish flow, and assert a draft
+lands in the database, is real but separate follow-up work — noted here so
+it isn't mistaken for a QA environment problem.
