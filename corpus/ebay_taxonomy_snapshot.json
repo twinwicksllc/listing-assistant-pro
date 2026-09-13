@@ -1,7 +1,7 @@
 {
   "snapshot_meta": {
     "source": "ebay_taxonomy_cache (live Supabase REST fetch)",
-    "synced_at": "2026-09-08T13:22:03.964Z",
+    "synced_at": "2026-09-13T05:49:30.252Z",
     "row_count": 15116,
     "purpose": "Deterministic snapshot for the Phase 3 golden-corpus replay harness. Refreshed automatically by scripts/refresh-taxonomy-snapshot.mjs after each sync-ebay-taxonomy-weekly run."
   },
