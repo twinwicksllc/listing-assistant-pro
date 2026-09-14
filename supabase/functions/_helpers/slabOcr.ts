@@ -15,6 +15,10 @@
  * Gemini the correct data from the start.
  */
 
+// Shared helper: its timeout also covers reading the response body, which a
+// bare fetch() ceiling does not -- fetch() resolves on headers alone.
+import { fetchWithTimeout } from "./fetchWithTimeout.ts";
+
 export interface SlabOcrResult {
   isSlabbed: boolean; // Was a grading slab detected in the images?
   grader: string | null; // "PCGS", "NGC", "ANACS", "ICG", "CAC", etc.
@@ -29,20 +33,6 @@ export interface SlabOcrResult {
 }
 
 const OCR_TIMEOUT_MS = 20_000;
-
-async function fetchWithTimeout(
-  url: string,
-  options: RequestInit,
-  timeoutMs: number,
-): Promise<Response> {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } finally {
-    clearTimeout(id);
-  }
-}
 
 /**
  * Run GPT-4o Vision OCR on slab label(s) in the provided images.

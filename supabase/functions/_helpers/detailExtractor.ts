@@ -155,23 +155,20 @@ export interface DetailExtractionResult {
 }
 
 import { GEMINI_FAST_MODEL } from "./geminiModels.ts";
+// Shared helper: its timeout also covers reading the response body, which a
+// bare fetch() ceiling does not -- fetch() resolves on headers alone.
+import { fetchWithTimeout } from "./fetchWithTimeout.ts";
 
 const DETAIL_MODEL = GEMINI_FAST_MODEL;
 const DETAIL_TIMEOUT_MS = 15_000; // 15 seconds
 
-async function fetchWithTimeout(
-  url: string,
-  init: RequestInit,
-  timeoutMs: number,
-): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
+/**
+ * Output cap for the extraction call. Generous relative to the ~200-400 tokens a
+ * well-formed single-item response needs, because the failure mode is asymmetric:
+ * an unused ceiling costs nothing (output tokens bill only as generated) while
+ * exceeding it discards the entire extraction.
+ */
+const DETAIL_MAX_OUTPUT_TOKENS = 2_000;
 
 function extractJson(raw: string): string {
   let text = raw
@@ -657,7 +654,11 @@ export async function extractKeyDetails(
     ],
     generationConfig: {
       temperature: 0.1,
-      maxOutputTokens: 800,
+      // 800 truncated real responses mid-string: a multi-image coin extraction
+      // emitting per-image objects ran past the cap and the JSON never closed,
+      // so JSON.parse threw and the whole extraction returned null. Observed
+      // 2026-09-14, twice in three attempts.
+      maxOutputTokens: DETAIL_MAX_OUTPUT_TOKENS,
       responseMimeType: "application/json",
     },
   };
@@ -697,12 +698,28 @@ export async function extractKeyDetails(
       return null;
     }
 
+    // Gemini reports WHY it stopped. MAX_TOKENS means the JSON was cut mid-emit,
+    // so the parse below is guaranteed to fail -- distinguish that from a model
+    // that returned genuinely malformed JSON, because the two have different
+    // fixes (raise the cap vs. correct the prompt) and previously looked
+    // identical in the log.
+    const finishReason = data.candidates?.[0]?.finishReason;
+    const truncated = finishReason === "MAX_TOKENS";
+    if (truncated) {
+      console.error(
+        `${label} Response TRUNCATED by maxOutputTokens (${DETAIL_MAX_OUTPUT_TOKENS}) -- ` +
+          `finishReason=MAX_TOKENS, chars=${rawText.length}. Detail extraction is ` +
+          `being silently skipped for this item; raise DETAIL_MAX_OUTPUT_TOKENS.`,
+      );
+    }
+
     let parsed: any;
     try {
       parsed = JSON.parse(extractJson(rawText));
     } catch (e) {
       console.warn(
-        `${label} JSON parse failed: ${String(e)}. Raw: ${rawText.slice(0, 300)}`,
+        `${label} JSON parse failed${truncated ? " (response was truncated -- see above)" : ""}: ` +
+          `${String(e)}. finishReason=${finishReason ?? "unknown"}. Raw: ${rawText.slice(0, 300)}`,
       );
       return null;
     }
