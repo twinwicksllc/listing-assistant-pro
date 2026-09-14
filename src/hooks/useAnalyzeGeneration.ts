@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -24,8 +24,29 @@ export function useAnalyzeGeneration({
   onSuccess,
 }: UseAnalyzeGenerationParams) {
   const [generating, setGenerating] = useState(false);
+  /**
+   * In-flight guard. `generating` is React state, so it does not update until
+   * the next render -- two calls to handleGenerate() in the same tick both read
+   * `generating === false` and both fire. A ref updates synchronously and so
+   * actually blocks the second call.
+   *
+   * This is not theoretical: on 2026-09-14 production logs showed analyze-item
+   * booting four times for a single analysis (pairs ~27ms apart), each pair
+   * running a full Gemini pipeline -- double AI spend and double pressure on
+   * the same upstream rate limits the real request needs. AnalyzePage.tsx
+   * auto-fires this on mount AND exposes a Retry button, so a remount, a
+   * double-click, or any future StrictMode adoption can all double-fire it.
+   */
+  const inFlightRef = useRef(false);
 
   const handleGenerate = useCallback(async () => {
+    if (inFlightRef.current) {
+      console.warn(
+        "[useAnalyzeGeneration] Analysis already in flight — ignoring duplicate trigger",
+      );
+      return;
+    }
+
     if (!canAnalyze) {
       toast.error(
         `Monthly analysis limit reached (${analysisLimit}). Upgrade for more listings.`,
@@ -34,6 +55,7 @@ export function useAnalyzeGeneration({
       return;
     }
 
+    inFlightRef.current = true;
     setGenerating(true);
     try {
       const { data, error } = await supabase.functions.invoke("analyze-item", {
@@ -84,6 +106,7 @@ export function useAnalyzeGeneration({
       console.error("Analysis error:", err);
       toast.error(err.message || "Failed to analyze item. Please try again.");
     } finally {
+      inFlightRef.current = false;
       setGenerating(false);
     }
   }, [

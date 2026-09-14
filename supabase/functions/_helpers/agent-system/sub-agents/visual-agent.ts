@@ -9,6 +9,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { getEmbedding } from "../../rag/embedding.ts";
 import { findSimilarContext, formatRagResults } from "../../rag/retriever.ts";
 import { GEMINI_FAST_MODEL, GEMINI_HEAVY_MODEL } from "../../geminiModels.ts";
+import { fetchWithTimeout, PIPELINE_TIMEOUTS_MS } from "../../fetchWithTimeout.ts";
 
 export async function runAgenticVisualAgent(
   apiKey: string,
@@ -107,7 +108,7 @@ You must return your findings in JSON format:
   const visualModel = domainDef.domain === "coins_bullion" ? GEMINI_HEAVY_MODEL : GEMINI_FAST_MODEL;
 
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `https://generativelanguage.googleapis.com/v1beta/models/${visualModel}:generateContent?key=${apiKey}`,
       {
         method: "POST",
@@ -121,6 +122,12 @@ You must return your findings in JSON format:
           tools: [{ codeExecution: {} }],
         }),
       },
+      // Largest budget in the pipeline by design: the heavy model plus the
+      // codeExecution crop/zoom loop IS the accuracy mechanism here, so this
+      // ceiling exists only to stop a hung call from eating the gateway's
+      // 150s, not to trim legitimate inspection time.
+      PIPELINE_TIMEOUTS_MS.visualAgent,
+      "VisualAgent precision inspection",
     );
 
     if (!response.ok) throw new Error(`Gemini API error: ${response.status}`);
