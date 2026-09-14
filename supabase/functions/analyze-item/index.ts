@@ -1,5 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { fetchWithTimeout, PIPELINE_TIMEOUTS_MS } from "../_helpers/fetchWithTimeout.ts";
+import {
+  createRequestDeadline,
+  fetchWithTimeout,
+  PIPELINE_TIMEOUTS_MS,
+  withDeadline,
+} from "../_helpers/fetchWithTimeout.ts";
 import { decideSlabOcr } from "../_helpers/slabOcrGate.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { captureException, initSentry } from "../_helpers/sentry.ts";
@@ -388,6 +393,13 @@ serve(async (req: Request) => {
   const invocationId = crypto.randomUUID().slice(0, 8);
   console.log(`[${invocationId}] ▶️ analyze-item STARTED`);
 
+  // Request-scoped wall clock. Every outbound budget below is clamped to the
+  // time actually remaining, so a late stage cannot be handed its full budget
+  // when the request has already spent most of the gateway's 150s. Per-call
+  // ceilings alone catch one hung upstream; this catches death by a dozen
+  // merely-slow ones -- the shape of the 2026-09-14 504.
+  const deadline = createRequestDeadline(startTime);
+
   initSentry();
 
   // IMPORTANT: Handle OPTIONS preflight first, before anything else
@@ -640,7 +652,7 @@ serve(async (req: Request) => {
               },
               body: JSON.stringify({}),
             },
-            PIPELINE_TIMEOUTS_MS.internalFunction,
+            withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
             "spot-prices",
           );
           if (spotResp.ok) {
@@ -718,6 +730,7 @@ serve(async (req: Request) => {
       userId,
       imageList,
       voiceNote,
+      deadline,
     });
 
     let identification = agentResult.identification;
@@ -917,7 +930,7 @@ serve(async (req: Request) => {
                 categoryId: prePassResult.groundedCategoryId,
               }),
             },
-            PIPELINE_TIMEOUTS_MS.internalFunction,
+            withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
             "category-lookup (grounded verify)",
           );
           if (groundedVerifyResp.ok) {
@@ -1007,7 +1020,7 @@ serve(async (req: Request) => {
                   itemType: searchQuery,
                 }),
               },
-              PIPELINE_TIMEOUTS_MS.internalFunction,
+              withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
               "category-lookup (primary)",
             );
             if (lookupResp.ok) {
@@ -1146,7 +1159,7 @@ serve(async (req: Request) => {
                   categoryId: targetCategoryId,
                 }),
               },
-              PIPELINE_TIMEOUTS_MS.ebayMetadata,
+              withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
               "category-lookup aspects",
             );
             if (aspectsResp.ok) {
@@ -1178,7 +1191,7 @@ serve(async (req: Request) => {
                   categoryId: targetCategoryId,
                 }),
               },
-              PIPELINE_TIMEOUTS_MS.ebayMetadata,
+              withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
               "category-lookup conditions",
             );
             if (conditionsResp.ok) {
@@ -1220,7 +1233,7 @@ serve(async (req: Request) => {
               },
               body: JSON.stringify({ userId, title: compQuery, yourPrice: 0 }),
             },
-            PIPELINE_TIMEOUTS_MS.internalFunction,
+            withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
             "ebay-competitor-search (pre-AI)",
           );
           if (compResp.ok) {
@@ -1846,7 +1859,7 @@ Seller's note: "${voiceNote}"`;
           },
         }),
       },
-      PIPELINE_TIMEOUTS_MS.listingGeneration,
+      withDeadline(PIPELINE_TIMEOUTS_MS.listingGeneration, deadline),
       "listing generation (Pass 2)",
     );
 
@@ -2121,7 +2134,7 @@ Seller's note: "${voiceNote}"`;
                   categoryId: listing.ebayCategoryId,
                 }),
               },
-              PIPELINE_TIMEOUTS_MS.internalFunction,
+              withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
               "category-lookup (verify)",
             );
             if (verifyResp.ok) {
@@ -2229,7 +2242,7 @@ Seller's note: "${voiceNote}"`;
                 itemType: _lookupQuery,
               }),
             },
-            PIPELINE_TIMEOUTS_MS.internalFunction,
+            withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
             "category-lookup (post-lookup)",
           );
           if (postLookupResp.ok) {
@@ -2585,7 +2598,7 @@ Seller's note: "${voiceNote}"`;
                 categoryId: listing.ebayCategoryId,
               }),
             },
-            PIPELINE_TIMEOUTS_MS.ebayMetadata,
+            withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
             "category-lookup aspects (post-change)",
           );
           if (aspectsResp.ok) {
@@ -2612,7 +2625,7 @@ Seller's note: "${voiceNote}"`;
                 categoryId: listing.ebayCategoryId,
               }),
             },
-            PIPELINE_TIMEOUTS_MS.ebayMetadata,
+            withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
             "category-lookup conditions (post-change)",
           );
           if (conditionsResp.ok) {
@@ -2728,7 +2741,7 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
                   temperature: 0.1,
                 }),
               },
-              PIPELINE_TIMEOUTS_MS.listingGeneration,
+              withDeadline(PIPELINE_TIMEOUTS_MS.listingGeneration, deadline),
               "item-specifics regeneration",
             );
 
@@ -2854,7 +2867,7 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
                     verificationSource: "ai_auto",
                   }),
                 },
-                PIPELINE_TIMEOUTS_MS.internalFunction,
+                withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
                 "category-lookup (store)",
               );
               console.log(
@@ -2945,7 +2958,7 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
                 yourPrice: listing.priceMin || listing.price?.amount || 0,
               }),
             },
-            PIPELINE_TIMEOUTS_MS.internalFunction,
+            withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
             "ebay-competitor-search (post-AI)",
           );
 

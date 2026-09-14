@@ -28,8 +28,13 @@ export interface SlabOcrGateEvidence {
   keyFindings?: string | null;
   /** Attributes the VisualAgent was >=90% confident in. */
   capturedAttributes?: Record<string, string> | null;
-  /** VisualAgent self-reported confidence (0-100). */
-  confidenceBoost?: number | null;
+  /**
+   * VisualAgent self-reported confidence (0-100). Typed loosely on purpose --
+   * this arrives from a model, and visual-agent.ts passes `parsed.confidenceBoost`
+   * through with only a `|| 50` fallback, so a non-numeric value like "high"
+   * reaches us intact. See coerceConfidence().
+   */
+  confidenceBoost?: unknown;
 }
 
 export interface SlabOcrGateDecision {
@@ -64,6 +69,21 @@ const EXPLICIT_RAW_RE =
   /\b(raw|ungraded|not\s+(?:graded|slabbed|certified|encapsulated)|no\s+(?:slab|holder|grading\s+label|certification)|loose\s+coin|without\s+(?:a\s+)?(?:slab|holder))\b/i;
 
 /**
+ * Normalize the model-supplied confidence to a trustworthy number.
+ *
+ * This is a fail-open guard, not tidying. `confidenceBoost` is model-derived
+ * and reaches us unvalidated, and JavaScript's relational operators return
+ * false for NaN: a string like "high" makes `confidence < SLAB_GATE_MIN_CONFIDENCE`
+ * evaluate to false, silently skipping the low-confidence check and letting an
+ * explicit "raw" claim skip OCR on confidence we never actually established.
+ * That inverts the gate's whole bias. Anything not a finite number is therefore
+ * treated as zero confidence, which routes to RUN.
+ */
+export function coerceConfidence(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+/**
  * Decide whether to run the Slab OCR pre-pass.
  *
  * Precedence is intentional and ordered strongest-evidence-first:
@@ -89,7 +109,7 @@ export function decideSlabOcr(
     };
   }
 
-  const confidence = evidence.confidenceBoost ?? 0;
+  const confidence = coerceConfidence(evidence.confidenceBoost);
   const findings = (evidence.keyFindings ?? "").trim();
   const attrs = evidence.capturedAttributes ?? {};
   const attrText = Object.entries(attrs)

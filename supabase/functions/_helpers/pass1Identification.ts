@@ -1,5 +1,5 @@
 import { GEMINI_HEAVY_MODEL } from "./geminiModels.ts";
-import { fetchWithTimeout, PIPELINE_TIMEOUTS_MS } from "./fetchWithTimeout.ts";
+import { fetchWithTimeout, PIPELINE_TIMEOUTS_MS, type RequestDeadline, withDeadline } from "./fetchWithTimeout.ts";
 
 // Canonical 12-domain type lives in agent-system/pipelineContracts.ts.
 // Re-export it so there is a single source of truth for Domain across the
@@ -72,6 +72,7 @@ export async function runPass1Identification(
   imageList: string[],
   voiceNote: string,
   invocationId: string,
+  deadline?: RequestDeadline | null,
 ): Promise<Identification> {
   let identification: Identification = { ...DEFAULT_IDENTIFICATION };
 
@@ -125,7 +126,7 @@ export async function runPass1Identification(
           max_tokens: 150,
         }),
       },
-      PIPELINE_TIMEOUTS_MS.pass1,
+      withDeadline(PIPELINE_TIMEOUTS_MS.pass1, deadline),
       "Pass 1 identification",
     );
 

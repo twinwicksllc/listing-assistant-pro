@@ -12,6 +12,7 @@ import { fetchWithTimeout, PIPELINE_TIMEOUTS_MS } from "../fetchWithTimeout.ts";
 export async function getEmbedding(
   apiKey: string,
   text: string,
+  timeoutMs: number = PIPELINE_TIMEOUTS_MS.embedding,
 ): Promise<number[]> {
   const response = await fetchWithTimeout(
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_EMBEDDING_MODEL}:embedContent?key=${apiKey}`,
@@ -24,7 +25,7 @@ export async function getEmbedding(
         outputDimensionality: 768,
       }),
     },
-    PIPELINE_TIMEOUTS_MS.embedding,
+    timeoutMs,
     "RAG embedding",
   );
 

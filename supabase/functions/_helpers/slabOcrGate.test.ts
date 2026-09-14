@@ -1,5 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
-import { decideSlabOcr, SLAB_GATE_MIN_CONFIDENCE, type SlabOcrGateEvidence } from "./slabOcrGate.ts";
+import { coerceConfidence, decideSlabOcr, SLAB_GATE_MIN_CONFIDENCE, type SlabOcrGateEvidence } from "./slabOcrGate.ts";
 
 // Regression coverage for the Slab OCR cost/latency gate (2026-09-14).
 //
@@ -169,4 +169,62 @@ Deno.test("every decision carries a non-empty reason for log auditing", () => {
   for (const c of cases) {
     assertEquals(decideSlabOcr(c).reason.length > 0, true);
   }
+});
+
+// ── Unvalidated model confidence (Copilot review, PR #564) ───────────────────
+//
+// `confidenceBoost` is model-derived and reached this gate unvalidated:
+// visual-agent.ts passed `parsed.confidenceBoost || 50` straight through, so a
+// non-numeric value like "high" arrived intact. NaN comparisons are ALWAYS
+// false, so `confidence < SLAB_GATE_MIN_CONFIDENCE` silently evaluated false and
+// an explicit raw claim could skip OCR on confidence never actually
+// established -- inverting the gate's entire fail-open bias.
+
+Deno.test("coerceConfidence keeps genuine numbers, including the boundary", () => {
+  assertEquals(coerceConfidence(85), 85);
+  assertEquals(coerceConfidence(SLAB_GATE_MIN_CONFIDENCE), SLAB_GATE_MIN_CONFIDENCE);
+  assertEquals(coerceConfidence(0), 0);
+});
+
+Deno.test("coerceConfidence treats every non-finite value as zero confidence", () => {
+  // Zero routes to RUN, which is the safe direction.
+  assertEquals(coerceConfidence("high"), 0);
+  assertEquals(coerceConfidence("85"), 0); // numeric STRING is still not a number
+  assertEquals(coerceConfidence(NaN), 0);
+  assertEquals(coerceConfidence(Infinity), 0);
+  assertEquals(coerceConfidence(-Infinity), 0);
+  assertEquals(coerceConfidence(null), 0);
+  assertEquals(coerceConfidence(undefined), 0);
+  assertEquals(coerceConfidence({ boost: 85 }), 0);
+  assertEquals(coerceConfidence(true), 0);
+});
+
+Deno.test("a string confidence cannot buy a skip on an explicit raw claim", () => {
+  // The exact bug. Pre-fix this returned runOcr:false — skipping the accuracy
+  // pass on the strength of a confidence value that was never a number.
+  const d = decideSlabOcr(ev({ confidenceBoost: "high" as unknown as number }));
+  assertEquals(d.runOcr, true);
+  assertEquals(d.reason.includes("fail open"), true);
+});
+
+Deno.test("NaN confidence fails open rather than slipping past the threshold", () => {
+  assertEquals(decideSlabOcr(ev({ confidenceBoost: NaN })).runOcr, true);
+});
+
+Deno.test("Infinity confidence fails open instead of trivially clearing the bar", () => {
+  // Infinity >= 70 is true, so an unvalidated value would have been *trusted*.
+  assertEquals(decideSlabOcr(ev({ confidenceBoost: Infinity })).runOcr, true);
+});
+
+Deno.test("an object confidence fails open", () => {
+  const d = decideSlabOcr(
+    ev({ confidenceBoost: { value: 90 } as unknown as number }),
+  );
+  assertEquals(d.runOcr, true);
+});
+
+Deno.test("coercion did not break the legitimate skip path", () => {
+  // Guard against over-correcting: a real numeric high confidence with an
+  // explicit raw claim must still skip, or the cost fix is undone.
+  assertEquals(decideSlabOcr(ev({ confidenceBoost: 85 })).runOcr, false);
 });

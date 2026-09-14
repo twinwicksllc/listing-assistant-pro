@@ -10,6 +10,7 @@ import { runPass1Identification } from "../pass1Identification.ts";
 import { runAgenticVisualAgent } from "./sub-agents/visual-agent.ts";
 import { runMarketAgent } from "./sub-agents/market-agent.ts";
 import { getEmbedding } from "../rag/embedding.ts";
+import { PIPELINE_TIMEOUTS_MS, withDeadline } from "../fetchWithTimeout.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 
 export class ListingAgentController {
@@ -26,7 +27,7 @@ export class ListingAgentController {
     visualFindings: VisualInspectionResult | null;
     marketReport: MarketDataReport | null;
   }> {
-    const { invocationId, imageList, voiceNote } = context;
+    const { invocationId, imageList, voiceNote, deadline } = context;
 
     // --- STEP 1: Sequential Identification (Runner) ---
     console.log(
@@ -37,6 +38,7 @@ export class ListingAgentController {
       imageList,
       voiceNote || "",
       invocationId,
+      deadline,
     );
 
     // Cast and normalize the identification
@@ -56,7 +58,11 @@ export class ListingAgentController {
     // to avoid duplicate embedding API calls (would otherwise be identical for both).
     let queryEmbedding: number[] | undefined;
     try {
-      queryEmbedding = await getEmbedding(this.apiKey, identification.itemName);
+      queryEmbedding = await getEmbedding(
+        this.apiKey,
+        identification.itemName,
+        withDeadline(PIPELINE_TIMEOUTS_MS.embedding, deadline),
+      );
       console.log(
         `[${invocationId}] Controller: Embedding pre-computed for "${identification.itemName}"`,
       );
