@@ -1,4 +1,5 @@
 import { GEMINI_HEAVY_MODEL } from "./geminiModels.ts";
+import { fetchWithTimeout, PIPELINE_TIMEOUTS_MS, type RequestDeadline, withDeadline } from "./fetchWithTimeout.ts";
 
 // Canonical 12-domain type lives in agent-system/pipelineContracts.ts.
 // Re-export it so there is a single source of truth for Domain across the
@@ -40,11 +41,38 @@ const DEFAULT_IDENTIFICATION: Identification = {
   metalType: "none",
 };
 
+/**
+ * Unwrap a single-element array into the object inside it.
+ *
+ * Despite `response_format: { type: "json_object" }`, the model intermittently
+ * returns its result wrapped in an array: `[{ "domain": ..., "itemName": ... }]`.
+ * Both parse paths below then failed the `parsed.domain && parsed.itemName`
+ * check and silently fell through to DEFAULT_IDENTIFICATION's domain="general",
+ * which sends the whole downstream pipeline (RAG category, prompt selection,
+ * Slab OCR eligibility, category resolution) down the wrong domain's branch --
+ * with the correct identification sitting right there in the payload.
+ *
+ * Observed 2026-09-14 on a Standing Liberty quarter: Pass 1 returned
+ * domain="coins_bullion" inside an array and the run proceeded as "general".
+ */
+export function unwrapIdentificationPayload(parsed: unknown): unknown {
+  if (Array.isArray(parsed)) {
+    // Prefer the first element that actually looks like an identification,
+    // rather than blindly taking [0] -- guards against a leading null/string.
+    const candidate = parsed.find(
+      (el) => el && typeof el === "object" && "domain" in el && "itemName" in el,
+    );
+    return candidate ?? parsed[0];
+  }
+  return parsed;
+}
+
 export async function runPass1Identification(
   apiKey: string,
   imageList: string[],
   voiceNote: string,
   invocationId: string,
+  deadline?: RequestDeadline | null,
 ): Promise<Identification> {
   let identification: Identification = { ...DEFAULT_IDENTIFICATION };
 
@@ -67,7 +95,7 @@ export async function runPass1Identification(
       .filter((y) => y >= 2020)
       .join(", ");
 
-    const pass1Resp = await fetch(
+    const pass1Resp = await fetchWithTimeout(
       "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
       {
         method: "POST",
@@ -98,6 +126,8 @@ export async function runPass1Identification(
           max_tokens: 150,
         }),
       },
+      withDeadline(PIPELINE_TIMEOUTS_MS.pass1, deadline),
+      "Pass 1 identification",
     );
 
     if (pass1Resp.ok) {
@@ -112,7 +142,9 @@ export async function runPass1Identification(
         console.warn(`[${invocationId}] ⚠️  Pass 1 returned empty response`);
       } else {
         try {
-          const parsed = JSON.parse(pass1Text);
+          const parsed = unwrapIdentificationPayload(
+            JSON.parse(pass1Text),
+          ) as Record<string, unknown>;
           if (parsed.domain && parsed.itemName) {
             identification = {
               domain: parsed.domain as Domain,
@@ -137,7 +169,9 @@ export async function runPass1Identification(
           const jsonMatch = pass1Text.match(/\{[\s\S]*"domain"[\s\S]*\}/);
           if (jsonMatch) {
             try {
-              const parsed = JSON.parse(jsonMatch[0]);
+              const parsed = unwrapIdentificationPayload(
+                JSON.parse(jsonMatch[0]),
+              ) as Record<string, unknown>;
               if (parsed.domain && parsed.itemName) {
                 identification = {
                   domain: parsed.domain as Domain,

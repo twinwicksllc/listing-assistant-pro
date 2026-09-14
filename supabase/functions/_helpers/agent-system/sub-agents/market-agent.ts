@@ -9,6 +9,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { getEmbedding } from "../../rag/embedding.ts";
 import { findSimilarContext, formatRagResults } from "../../rag/retriever.ts";
 import { GEMINI_FAST_MODEL } from "../../geminiModels.ts";
+import { fetchWithTimeout, PIPELINE_TIMEOUTS_MS, withDeadline } from "../../fetchWithTimeout.ts";
 
 export async function runMarketAgent(
   apiKey: string,
@@ -32,6 +33,9 @@ export async function runMarketAgent(
       supabase,
       embedding,
       "sales_history",
+      undefined,
+      undefined,
+      withDeadline(PIPELINE_TIMEOUTS_MS.ragRetrieval, context.deadline),
     );
     ragContext = formatRagResults(results);
     if (ragContext) {
@@ -69,7 +73,7 @@ Return your report in JSON format:
 }`;
 
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_FAST_MODEL}:generateContent?key=${apiKey}`,
       {
         method: "POST",
@@ -83,6 +87,8 @@ Return your report in JSON format:
           tools: [{ googleSearch: {} }],
         }),
       },
+      withDeadline(PIPELINE_TIMEOUTS_MS.marketAgent, context.deadline),
+      "MarketAgent grounding",
     );
 
     if (!response.ok) throw new Error(`Gemini API error: ${response.status}`);

@@ -7,12 +7,14 @@
  */
 
 import { GEMINI_EMBEDDING_MODEL } from "../geminiModels.ts";
+import { fetchWithTimeout, PIPELINE_TIMEOUTS_MS } from "../fetchWithTimeout.ts";
 
 export async function getEmbedding(
   apiKey: string,
   text: string,
+  timeoutMs: number = PIPELINE_TIMEOUTS_MS.embedding,
 ): Promise<number[]> {
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_EMBEDDING_MODEL}:embedContent?key=${apiKey}`,
     {
       method: "POST",
@@ -23,6 +25,8 @@ export async function getEmbedding(
         outputDimensionality: 768,
       }),
     },
+    timeoutMs,
+    "RAG embedding",
   );
 
   if (!response.ok) {

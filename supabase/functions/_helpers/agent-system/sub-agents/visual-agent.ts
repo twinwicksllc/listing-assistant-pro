@@ -9,6 +9,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { getEmbedding } from "../../rag/embedding.ts";
 import { findSimilarContext, formatRagResults } from "../../rag/retriever.ts";
 import { GEMINI_FAST_MODEL, GEMINI_HEAVY_MODEL } from "../../geminiModels.ts";
+import { fetchWithTimeout, PIPELINE_TIMEOUTS_MS, withDeadline } from "../../fetchWithTimeout.ts";
 
 export async function runAgenticVisualAgent(
   apiKey: string,
@@ -37,7 +38,14 @@ export async function runAgenticVisualAgent(
           context.identification?.itemName || domainDef.domain,
         ));
       for (const category of ragCategories) {
-        const results = await findSimilarContext(supabase, embedding, category);
+        const results = await findSimilarContext(
+          supabase,
+          embedding,
+          category,
+          undefined,
+          undefined,
+          withDeadline(PIPELINE_TIMEOUTS_MS.ragRetrieval, context.deadline),
+        );
         if (results.length > 0) {
           ragContext = formatRagResults(results);
           console.log(
@@ -107,7 +115,7 @@ You must return your findings in JSON format:
   const visualModel = domainDef.domain === "coins_bullion" ? GEMINI_HEAVY_MODEL : GEMINI_FAST_MODEL;
 
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `https://generativelanguage.googleapis.com/v1beta/models/${visualModel}:generateContent?key=${apiKey}`,
       {
         method: "POST",
@@ -121,6 +129,14 @@ You must return your findings in JSON format:
           tools: [{ codeExecution: {} }],
         }),
       },
+      // Largest budget in the pipeline by design: the heavy model plus the
+      // codeExecution crop/zoom loop IS the accuracy mechanism here, so this
+      // ceiling exists only to stop a hung call from eating the gateway's
+      // 150s, not to trim legitimate inspection time. Clamped to the remaining
+      // wall clock: if earlier stages already burned the budget, this call gets
+      // what is actually left rather than a ceiling the request cannot honor.
+      withDeadline(PIPELINE_TIMEOUTS_MS.visualAgent, context.deadline),
+      "VisualAgent precision inspection",
     );
 
     if (!response.ok) throw new Error(`Gemini API error: ${response.status}`);
@@ -150,10 +166,20 @@ You must return your findings in JSON format:
               .map(([k, v]) => [k.trim(), v.trim()]),
           )
           : undefined;
+        // Validate confidence at the boundary rather than trusting the model.
+        // `parsed.confidenceBoost || 50` used to pass a non-numeric value like
+        // "high" straight through, and every downstream consumer compares it
+        // numerically (controller.ts gates identificationCorrection on >= 70,
+        // slabOcrGate on < 70). NaN comparisons are always false, so a garbage
+        // value silently defeated both guards. Fall back to the neutral 50,
+        // which sits below every threshold and so fails safe.
+        const rawBoost = parsed.confidenceBoost;
+        const confidenceBoost = typeof rawBoost === "number" && Number.isFinite(rawBoost) ? rawBoost : 50;
+
         return {
           zoomRegionsExamined: parsed.zoomRegionsExamined || [],
           keyFindings: parsed.keyFindings || "Incomplete findings provided.",
-          confidenceBoost: parsed.confidenceBoost || 50,
+          confidenceBoost,
           identificationCorrection: parsed.identificationCorrection || null,
           capturedAttributes,
         };

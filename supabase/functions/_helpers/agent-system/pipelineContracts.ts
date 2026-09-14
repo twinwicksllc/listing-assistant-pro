@@ -3,6 +3,8 @@
  * Shared interfaces and types for the modular agent architecture.
  */
 
+import type { RequestDeadline } from "../fetchWithTimeout.ts";
+
 export type Domain =
   | "coins_bullion"
   | "trading_cards"
@@ -51,4 +53,11 @@ export interface AgentContext {
   identification?: Identification;
   /** Pre-computed item embedding — generated once in controller and shared by sub-agents to avoid duplicate API calls. */
   queryEmbedding?: number[];
+  /**
+   * Request-scoped wall clock from the invoking handler. Sub-agents clamp their
+   * own budgets to whatever time is left, so the accuracy-critical visual stage
+   * is not handed its full 110s when only 30s remains before the gateway kill.
+   * Optional: absent means "use the static budget", which is the prior behavior.
+   */
+  deadline?: RequestDeadline | null;
 }

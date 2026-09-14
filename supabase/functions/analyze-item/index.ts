@@ -1,4 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import {
+  createRequestDeadline,
+  fetchWithTimeout,
+  PIPELINE_TIMEOUTS_MS,
+  withDeadline,
+} from "../_helpers/fetchWithTimeout.ts";
+import { decideSlabOcr } from "../_helpers/slabOcrGate.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { captureException, initSentry } from "../_helpers/sentry.ts";
 import { GEMINI_HEAVY_MODEL } from "../_helpers/geminiModels.ts";
@@ -386,6 +393,13 @@ serve(async (req: Request) => {
   const invocationId = crypto.randomUUID().slice(0, 8);
   console.log(`[${invocationId}] ▶️ analyze-item STARTED`);
 
+  // Request-scoped wall clock. Every outbound budget below is clamped to the
+  // time actually remaining, so a late stage cannot be handed its full budget
+  // when the request has already spent most of the gateway's 150s. Per-call
+  // ceilings alone catch one hung upstream; this catches death by a dozen
+  // merely-slow ones -- the shape of the 2026-09-14 504.
+  const deadline = createRequestDeadline(startTime);
+
   initSentry();
 
   // IMPORTANT: Handle OPTIONS preflight first, before anything else
@@ -628,7 +642,7 @@ serve(async (req: Request) => {
           }
         } else {
           // Cache is stale — trigger a refresh via spot-prices function
-          const spotResp = await fetch(
+          const spotResp = await fetchWithTimeout(
             `${Deno.env.get("SUPABASE_URL")}/functions/v1/spot-prices`,
             {
               method: "POST",
@@ -638,6 +652,8 @@ serve(async (req: Request) => {
               },
               body: JSON.stringify({}),
             },
+            withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
+            "spot-prices",
           );
           if (spotResp.ok) {
             const spotJson = await spotResp.json();
@@ -714,6 +730,7 @@ serve(async (req: Request) => {
       userId,
       imageList,
       voiceNote,
+      deadline,
     });
 
     let identification = agentResult.identification;
@@ -767,7 +784,17 @@ serve(async (req: Request) => {
       // vintage_clothing to avoid unnecessary GPT-4o spend (~$0.038/call).
       const _slabOcrEligible = identification.domain === "coins_bullion" ||
         identification.domain === "general";
-      if (_hasOpenAiPath && _slabOcrEligible) {
+      // Evidence gate: skip the ~$0.038 / ~10s OCR call when the VisualAgent
+      // has already positively established the item is raw. Biased toward
+      // running -- see slabOcrGate.ts for why a Gemini "no slab" is only
+      // trusted when explicit and high-confidence.
+      const _slabGate = decideSlabOcr(agentResult.visualFindings);
+      if (_hasOpenAiPath && _slabOcrEligible && !_slabGate.runOcr) {
+        console.log(
+          `[${invocationId}] Slab OCR skipped: ${_slabGate.reason}`,
+        );
+      }
+      if (_hasOpenAiPath && _slabOcrEligible && _slabGate.runOcr) {
         const { runSlabOcr } = await import("../_helpers/slabOcr.ts");
         const ocrBase64List: string[] = [];
         const ocrMimeList: string[] = [];
@@ -778,7 +805,7 @@ serve(async (req: Request) => {
           ocrMimeList.push(mimeMatch ? mimeMatch[1] : "image/jpeg");
         }
         console.log(
-          `[${invocationId}] Calling Slab OCR with ${ocrBase64List.length} images (domain=${identification.domain}, eligible=true)`,
+          `[${invocationId}] Calling Slab OCR with ${ocrBase64List.length} images (domain=${identification.domain}, eligible=true, gate=${_slabGate.reason})`,
         );
         slabOcrResult = await runSlabOcr(
           NEW_OPENAI_API_KEY ?? "",
@@ -890,7 +917,7 @@ serve(async (req: Request) => {
         const _groundedVerifyUrl = Deno.env.get("SUPABASE_URL");
         const _groundedVerifyKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
         if (_groundedVerifyUrl && _groundedVerifyKey) {
-          const groundedVerifyResp = await fetch(
+          const groundedVerifyResp = await fetchWithTimeout(
             `${_groundedVerifyUrl}/functions/v1/category-lookup`,
             {
               method: "POST",
@@ -903,6 +930,8 @@ serve(async (req: Request) => {
                 categoryId: prePassResult.groundedCategoryId,
               }),
             },
+            withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
+            "category-lookup (grounded verify)",
           );
           if (groundedVerifyResp.ok) {
             const groundedVerifyText = await groundedVerifyResp.text();
@@ -978,7 +1007,7 @@ serve(async (req: Request) => {
           const _lookupUrl = Deno.env.get("SUPABASE_URL");
           const _lookupKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
           if (_lookupUrl && _lookupKey) {
-            const lookupResp = await fetch(
+            const lookupResp = await fetchWithTimeout(
               `${_lookupUrl}/functions/v1/category-lookup`,
               {
                 method: "POST",
@@ -991,6 +1020,8 @@ serve(async (req: Request) => {
                   itemType: searchQuery,
                 }),
               },
+              withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
+              "category-lookup (primary)",
             );
             if (lookupResp.ok) {
               const lookupText = await lookupResp.text();
@@ -1115,7 +1146,7 @@ serve(async (req: Request) => {
         const _aspectsKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
         if (_aspectsUrl && _aspectsKey) {
           try {
-            const aspectsResp = await fetch(
+            const aspectsResp = await fetchWithTimeout(
               `${_aspectsUrl}/functions/v1/category-lookup`,
               {
                 method: "POST",
@@ -1128,6 +1159,8 @@ serve(async (req: Request) => {
                   categoryId: targetCategoryId,
                 }),
               },
+              withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
+              "category-lookup aspects",
             );
             if (aspectsResp.ok) {
               categoryAspects = await aspectsResp.json();
@@ -1145,7 +1178,7 @@ serve(async (req: Request) => {
           }
 
           try {
-            const conditionsResp = await fetch(
+            const conditionsResp = await fetchWithTimeout(
               `${_aspectsUrl}/functions/v1/category-lookup`,
               {
                 method: "POST",
@@ -1158,6 +1191,8 @@ serve(async (req: Request) => {
                   categoryId: targetCategoryId,
                 }),
               },
+              withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
+              "category-lookup conditions",
             );
             if (conditionsResp.ok) {
               categoryConditions = await conditionsResp.json();
@@ -1188,7 +1223,7 @@ serve(async (req: Request) => {
           console.log(
             `[${invocationId}] Pre-AI competitor search with query: "${compQuery}"`,
           );
-          const compResp = await fetch(
+          const compResp = await fetchWithTimeout(
             `${Deno.env.get("SUPABASE_URL")}/functions/v1/ebay-competitor-search`,
             {
               method: "POST",
@@ -1198,6 +1233,8 @@ serve(async (req: Request) => {
               },
               body: JSON.stringify({ userId, title: compQuery, yourPrice: 0 }),
             },
+            withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
+            "ebay-competitor-search (pre-AI)",
           );
           if (compResp.ok) {
             const compText = await compResp.text();
@@ -1666,7 +1703,7 @@ Seller's note: "${voiceNote}"`;
     }
     // ── End dynamic tool schema ───────────────────────────────────────────────
 
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
       {
         method: "POST",
@@ -1822,6 +1859,8 @@ Seller's note: "${voiceNote}"`;
           },
         }),
       },
+      withDeadline(PIPELINE_TIMEOUTS_MS.listingGeneration, deadline),
+      "listing generation (Pass 2)",
     );
 
     if (!response.ok) {
@@ -2082,7 +2121,7 @@ Seller's note: "${voiceNote}"`;
           const _verifyUrl = Deno.env.get("SUPABASE_URL");
           const _verifyKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
           if (_verifyUrl && _verifyKey) {
-            const verifyResp = await fetch(
+            const verifyResp = await fetchWithTimeout(
               `${_verifyUrl}/functions/v1/category-lookup`,
               {
                 method: "POST",
@@ -2095,6 +2134,8 @@ Seller's note: "${voiceNote}"`;
                   categoryId: listing.ebayCategoryId,
                 }),
               },
+              withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
+              "category-lookup (verify)",
             );
             if (verifyResp.ok) {
               let verifyData: any;
@@ -2188,7 +2229,7 @@ Seller's note: "${voiceNote}"`;
         const _postLookupUrl = Deno.env.get("SUPABASE_URL");
         const _postLookupKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
         if (_postLookupUrl && _postLookupKey) {
-          const postLookupResp = await fetch(
+          const postLookupResp = await fetchWithTimeout(
             `${_postLookupUrl}/functions/v1/category-lookup`,
             {
               method: "POST",
@@ -2201,6 +2242,8 @@ Seller's note: "${voiceNote}"`;
                 itemType: _lookupQuery,
               }),
             },
+            withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
+            "category-lookup (post-lookup)",
           );
           if (postLookupResp.ok) {
             let postLookupData: any;
@@ -2542,7 +2585,7 @@ Seller's note: "${voiceNote}"`;
       const _metadataKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
       if (_metadataUrl && _metadataKey) {
         try {
-          const aspectsResp = await fetch(
+          const aspectsResp = await fetchWithTimeout(
             `${_metadataUrl}/functions/v1/category-lookup`,
             {
               method: "POST",
@@ -2555,6 +2598,8 @@ Seller's note: "${voiceNote}"`;
                 categoryId: listing.ebayCategoryId,
               }),
             },
+            withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
+            "category-lookup aspects (post-change)",
           );
           if (aspectsResp.ok) {
             categoryAspects = await aspectsResp.json();
@@ -2567,7 +2612,7 @@ Seller's note: "${voiceNote}"`;
         }
 
         try {
-          const conditionsResp = await fetch(
+          const conditionsResp = await fetchWithTimeout(
             `${_metadataUrl}/functions/v1/category-lookup`,
             {
               method: "POST",
@@ -2580,6 +2625,8 @@ Seller's note: "${voiceNote}"`;
                 categoryId: listing.ebayCategoryId,
               }),
             },
+            withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
+            "category-lookup conditions (post-change)",
           );
           if (conditionsResp.ok) {
             categoryConditions = await conditionsResp.json();
@@ -2666,7 +2713,7 @@ Item type: ${identification.itemName}${seedContext}
 Using ONLY the schema provided in the JSON schema tool, fill in the item specifics accurately based on what you can see in the images and the item context above. Do not invent values — only fill in what you can confidently determine.`,
             });
 
-            const regenResp = await fetch(
+            const regenResp = await fetchWithTimeout(
               "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
               {
                 method: "POST",
@@ -2694,6 +2741,8 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
                   temperature: 0.1,
                 }),
               },
+              withDeadline(PIPELINE_TIMEOUTS_MS.listingGeneration, deadline),
+              "item-specifics regeneration",
             );
 
             if (regenResp.ok) {
@@ -2801,21 +2850,26 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
             const _storeUrl = Deno.env.get("SUPABASE_URL");
             const _storeKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
             if (_storeUrl && _storeKey) {
-              await fetch(`${_storeUrl}/functions/v1/category-lookup`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${_storeKey}`,
+              await fetchWithTimeout(
+                `${_storeUrl}/functions/v1/category-lookup`,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${_storeKey}`,
+                  },
+                  body: JSON.stringify({
+                    action: "store",
+                    itemType: titleWords,
+                    categoryId: listing.ebayCategoryId,
+                    categoryName: catName,
+                    breadcrumb: catBreadcrumb,
+                    verificationSource: "ai_auto",
+                  }),
                 },
-                body: JSON.stringify({
-                  action: "store",
-                  itemType: titleWords,
-                  categoryId: listing.ebayCategoryId,
-                  categoryName: catName,
-                  breadcrumb: catBreadcrumb,
-                  verificationSource: "ai_auto",
-                }),
-              });
+                withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
+                "category-lookup (store)",
+              );
               console.log(
                 `analyze-item: submitted category ${listing.ebayCategoryId} for "${titleWords}" to category-lookup store (gated)`,
               );
@@ -2890,18 +2944,23 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
           );
           const competitorUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ebay-competitor-search`;
 
-          const competitorResp = await fetch(competitorUrl, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-              "Content-Type": "application/json",
+          const competitorResp = await fetchWithTimeout(
+            competitorUrl,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                userId,
+                title: listing.title,
+                yourPrice: listing.priceMin || listing.price?.amount || 0,
+              }),
             },
-            body: JSON.stringify({
-              userId,
-              title: listing.title,
-              yourPrice: listing.priceMin || listing.price?.amount || 0,
-            }),
-          });
+            withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
+            "ebay-competitor-search (post-AI)",
+          );
 
           console.log(
             `[${invocationId}] Post-AI competitor response status: ${competitorResp.status}`,
