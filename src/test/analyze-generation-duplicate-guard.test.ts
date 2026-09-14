@@ -9,11 +9,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * spend, and double pressure on the same upstream rate limits the real request
  * needs. `setGenerating(true)` cannot prevent this -- React state does not
  * update until the next render, so two calls in the same tick both observe
- * `generating === false`. The fix is a ref, which updates synchronously.
+ * `generating === false`. The guard is a module-scoped registry claimed
+ * synchronously, which covers the same-tick race AND survives a remount (a
+ * per-instance ref would die with the instance).
  *
  * AnalyzePage.tsx auto-fires handleGenerate() from a mount effect AND exposes a
  * Retry button, so a remount, a double-click, or any future StrictMode adoption
  * can all double-fire it.
+ *
+ * The registry stores the in-flight PROMISE, not just a timestamp, so a
+ * suppressed duplicate adopts the running request rather than being turned away
+ * with no feedback -- see the adoption tests at the bottom of this file.
  */
 
 const invokeMock = vi.fn();
@@ -26,6 +32,8 @@ vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }));
 
+import { toast } from "sonner";
+
 import {
   __resetInFlightRequests,
   useAnalyzeGeneration,
@@ -34,10 +42,12 @@ import {
 /** Defers resolution so we can hold a call "in flight" while firing another. */
 function deferred<T>() {
   let resolve!: (v: T) => void;
-  const promise = new Promise<T>((r) => {
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((r, j) => {
     resolve = r;
+    reject = j;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 function setup(overrides: Record<string, unknown> = {}) {
@@ -64,6 +74,7 @@ describe("useAnalyzeGeneration in-flight guard", () => {
     // The in-flight registry is module state and so outlives a component --
     // that is the point of it, and it means tests must clear it explicitly.
     __resetInFlightRequests();
+    vi.mocked(toast.error).mockClear();
   });
 
   it("collapses two same-tick triggers into ONE backend call", async () => {
@@ -307,5 +318,131 @@ describe("useAnalyzeGeneration in-flight guard", () => {
     await act(async () => {
       d.resolve({ data: { title: "ok" }, error: null });
     });
+  });
+
+  // ----------------------------------------------------------------------
+  // Adoption: a suppressed duplicate must still get feedback and a result.
+  //
+  // De-duplicating the backend call was correct, but bailing out silently left
+  // the caller with no result and no spinner -- and AnalyzePage renders
+  // "Retry Analysis" whenever `!generating && !generated`. So a duplicate
+  // trigger dropped the user onto a retry prompt while the real request still
+  // had ~70s to run. Reported 2026-09-14: "it immediately asked me to retry".
+  //
+  // The remount cases below are the load-bearing ones: within a single instance
+  // the first caller has already set `generating`, so the stranded-UI symptom
+  // needs the instance that issued the request to be GONE.
+  // ----------------------------------------------------------------------
+
+  it("delivers the result to a duplicate that adopted the in-flight request", async () => {
+    const d = deferred<{ data: unknown; error: null }>();
+    invokeMock.mockReturnValue(d.promise);
+
+    const { result, onSuccess } = setup();
+
+    await act(async () => {
+      void result.current.handleGenerate();
+      void result.current.handleGenerate();
+    });
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      d.resolve({ data: { title: "1oz Silver Eagle" }, error: null });
+    });
+
+    // Both callers resolve from the one request, so onSuccess fires for each.
+    expect(onSuccess).toHaveBeenCalledTimes(2);
+    expect(onSuccess).toHaveBeenLastCalledWith({ title: "1oz Silver Eagle" });
+  });
+
+  it("gives a REMOUNTED component the result of the request it adopted", async () => {
+    // The reported bug. The instance that issued the request is gone, so
+    // without adoption the new instance has no route to the result at all --
+    // it sits on a Retry button while the work completes invisibly.
+    const d = deferred<{ data: unknown; error: null }>();
+    invokeMock.mockReturnValue(d.promise);
+
+    const first = setup();
+    await act(async () => {
+      void first.result.current.handleGenerate();
+    });
+    first.unmount();
+
+    const second = setup();
+    await act(async () => {
+      void second.result.current.handleGenerate();
+    });
+
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+    // Spinner, not "Retry Analysis", while the adopted request is still live.
+    expect(second.result.current.generating).toBe(true);
+
+    await act(async () => {
+      d.resolve({ data: { title: "adopted" }, error: null });
+    });
+
+    expect(second.onSuccess).toHaveBeenCalledWith({ title: "adopted" });
+    expect(second.result.current.generating).toBe(false);
+  });
+
+  it("routes a shared failure through the adopter's OWN error path", async () => {
+    // The other half of adoption. Note the user sees an error toast either way
+    // here -- the original instance's `catch` still fires even though it has
+    // unmounted -- so failure is NOT where this fix earns its keep. What this
+    // pins down is that the adopter handles the shared rejection itself
+    // (its own toast, its own `finally`) rather than inheriting an unhandled
+    // rejection or a stuck spinner. Hence the count of 2.
+    const d = deferred<{ data: unknown; error: null }>();
+    invokeMock.mockReturnValue(d.promise);
+
+    const first = setup();
+    await act(async () => {
+      void first.result.current.handleGenerate();
+    });
+    first.unmount();
+
+    const second = setup();
+    await act(async () => {
+      void second.result.current.handleGenerate();
+    });
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      d.reject(new Error("gateway timeout"));
+    });
+
+    // One from the original caller, one from the adopter.
+    expect(toast.error).toHaveBeenCalledTimes(2);
+    expect(toast.error).toHaveBeenCalledWith("gateway timeout");
+    expect(second.result.current.generating).toBe(false);
+  });
+
+  it("lets a NEW analysis run once the shared request has settled", async () => {
+    // Adoption must not leak: the registry entry is deleted in `finally`, so a
+    // genuine retry after completion still reaches the backend.
+    const first = deferred<{ data: unknown; error: null }>();
+    invokeMock.mockReturnValue(first.promise);
+
+    const { result } = setup();
+    await act(async () => {
+      void result.current.handleGenerate();
+      void result.current.handleGenerate();
+    });
+    await act(async () => {
+      first.resolve({ data: { title: "first" }, error: null });
+    });
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+
+    const second = deferred<{ data: unknown; error: null }>();
+    invokeMock.mockReturnValue(second.promise);
+    await act(async () => {
+      void result.current.handleGenerate();
+    });
+    expect(invokeMock).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      second.resolve({ data: { title: "second" }, error: null });
+    });
+    expect(result.current.generating).toBe(false);
   });
 });
