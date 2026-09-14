@@ -1,3 +1,5 @@
+import { NULL_BODY_STATUSES } from "../_helpers/fetchWithTimeout.ts";
+
 /**
  * Fetch with timeout support.
  * Deno's fetch doesn't have a built-in timeout, so we use AbortController.
@@ -23,13 +25,25 @@ export async function fetchWithTimeout(
       ...fetchOptions,
       signal: controller.signal,
     });
-    clearTimeout(timeoutId);
-    return response;
+    // Drain the body while the abort signal is still armed. fetch() resolves on
+    // response HEADERS, so without this the ceiling above covers only the
+    // handshake and a stalled body escapes the timeout entirely (the gap closed
+    // in the shared helper by PR #564). Signature kept as-is here: this helper's
+    // timeout-in-options shape has 28 call sites, so converting to the shared
+    // helper is a separate change.
+    if (NULL_BODY_STATUSES.has(response.status)) return response;
+    const buffered = await response.arrayBuffer();
+    return new Response(buffered, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
   } catch (error) {
-    clearTimeout(timeoutId);
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error(`Request to ${url} timed out after ${timeout}ms`);
     }
     throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }

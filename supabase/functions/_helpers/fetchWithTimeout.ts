@@ -71,7 +71,7 @@ export const PIPELINE_TIMEOUTS_MS = {
 } as const;
 
 /** Statuses the Response constructor refuses to pair with a body of any size. */
-const NULL_BODY_STATUSES = new Set([101, 103, 204, 205, 304]);
+export const NULL_BODY_STATUSES = new Set([101, 103, 204, 205, 304]);
 
 /**
  * A request-scoped wall clock. Created once per invocation and passed to

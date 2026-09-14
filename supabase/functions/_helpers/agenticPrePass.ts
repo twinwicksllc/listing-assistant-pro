@@ -35,6 +35,9 @@
  */
 
 import { GEMINI_FAST_MODEL } from "./geminiModels.ts";
+// Shared helper: its timeout also covers reading the response body, which a
+// bare fetch() ceiling does not -- fetch() resolves on headers alone.
+import { fetchWithTimeout } from "./fetchWithTimeout.ts";
 
 // Canonical 12-domain type — kept in sync with agent-system/pipelineContracts.ts.
 // Single source of truth for domain routing.
@@ -271,20 +274,6 @@ function getZoomTargets(domain: Domain): ZoomTarget[] {
 }
 
 // ─── Utility: fetch with timeout ──────────────────────────────────────────────
-
-async function fetchWithTimeout(
-  url: string,
-  init: RequestInit,
-  timeoutMs: number,
-): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
 
 // ─── Utility: extract JSON from possibly-fenced model output ─────────────────
 
