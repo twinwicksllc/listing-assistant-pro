@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
+import { FunctionsFetchError } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
 interface UseAnalyzeGenerationParams {
@@ -42,6 +43,12 @@ interface InFlightEntry {
    * promise rejection.
    */
   promise: Promise<{ data: unknown; error: unknown }>;
+  /**
+   * The id sent to analyze-item as `clientRequestId`, so a duplicate that
+   * adopts this entry can still report a FunctionsFetchError against the
+   * SAME analysis_attempts row the originating caller's request created.
+   */
+  clientRequestId: string;
 }
 
 const inFlightRequests = new Map<string, InFlightEntry>();
@@ -73,6 +80,29 @@ function findInFlight(key: string): InFlightEntry | null {
     return existing;
   }
   return null;
+}
+
+/**
+ * Fire-and-forget report of a network-level analysis failure to
+ * `report-analysis-timeout`. `FunctionsFetchError` means supabase-js never
+ * received ANY response (as opposed to `FunctionsHttpError`, a real HTTP
+ * error the function returned) -- this is the one failure mode
+ * `_helpers/sentry.ts`'s `captureException` structurally cannot see, since a
+ * platform-level gateway kill of analyze-item never reaches its own catch
+ * block. See `analysis_attempts`'s migration comment for the full rationale.
+ *
+ * Deliberately swallows its own errors -- reporting a timeout must never
+ * itself throw and mask the user-facing toast for the timeout it's reporting.
+ */
+function reportClientObservedTimeout(clientRequestId: string): void {
+  supabase.functions
+    .invoke("report-analysis-timeout", { body: { clientRequestId } })
+    .catch((reportErr) => {
+      console.warn(
+        "[useAnalyzeGeneration] Failed to report client-observed timeout (non-blocking):",
+        reportErr,
+      );
+    });
 }
 
 /** Exposed for tests: module state outlives a component, so it must be resettable. */
@@ -190,32 +220,59 @@ export function useAnalyzeGeneration({
         await handleResult(data, error);
       } catch (err: any) {
         console.error("Analysis error (adopted):", err);
-        toast.error(err.message || "Failed to analyze item. Please try again.");
+        if (err instanceof FunctionsFetchError) {
+          reportClientObservedTimeout(existing.clientRequestId);
+          toast.error(
+            "The analysis took too long and the connection was lost. This can happen with complex items — check your credits if you're unsure whether this attempt was charged.",
+          );
+        } else {
+          toast.error(
+            err.message || "Failed to analyze item. Please try again.",
+          );
+        }
       } finally {
         setGenerating(false);
       }
       return;
     }
 
+    // Sent to analyze-item as `clientRequestId` and used as the correlation
+    // key for the analysis_attempts diagnostic table -- generated BEFORE the
+    // call so it survives even a response the client never receives (a
+    // FunctionsFetchError below has no server-assigned id to report against,
+    // since no response ever arrived).
+    const clientRequestId = crypto.randomUUID();
     setGenerating(true);
     const pending = supabase.functions.invoke("analyze-item", {
       body: {
         images: imageUrls,
         voiceNote,
+        clientRequestId,
         ...(ebayCategoryId ? { categoryId: ebayCategoryId } : {}),
       },
     }) as Promise<{ data: unknown; error: unknown }>;
     // Attached before anyone awaits, so a rejection nobody adopted does not
     // surface as an unhandled promise rejection.
     pending.catch(() => {});
-    inFlightRequests.set(key, { startedAt: Date.now(), promise: pending });
+    inFlightRequests.set(key, {
+      startedAt: Date.now(),
+      promise: pending,
+      clientRequestId,
+    });
 
     try {
       const { data, error } = await pending;
       await handleResult(data, error);
     } catch (err: any) {
       console.error("Analysis error:", err);
-      toast.error(err.message || "Failed to analyze item. Please try again.");
+      if (err instanceof FunctionsFetchError) {
+        reportClientObservedTimeout(clientRequestId);
+        toast.error(
+          "The analysis took too long and the connection was lost. This can happen with complex items — check your credits if you're unsure whether this attempt was charged.",
+        );
+      } else {
+        toast.error(err.message || "Failed to analyze item. Please try again.");
+      }
     } finally {
       inFlightRequests.delete(key);
       setGenerating(false);

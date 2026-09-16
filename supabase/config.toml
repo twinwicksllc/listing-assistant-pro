@@ -15,6 +15,9 @@ verify_jwt = false
 [functions.transcribe-voice]
 verify_jwt = false
 
+[functions.report-analysis-timeout]
+verify_jwt = false
+
 [functions.ebay-user]
 verify_jwt = false
 
