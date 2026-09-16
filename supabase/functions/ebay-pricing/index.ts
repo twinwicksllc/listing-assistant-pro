@@ -18,6 +18,17 @@ interface SoldItem {
   itemUrl?: string | null;
 }
 
+/**
+ * What a `source` value actually IS, not just which path produced it.
+ * `browse_api` (ebay-competitor-search) returns active asking-price listings
+ * -- this app has no Marketplace Insights access -- while `jina` scrapes
+ * eBay's LH_Sold=1 sold-search results. Exported/pure so it's testable
+ * without exercising the whole HTTP handler.
+ */
+export function basisFromSource(source: "browse_api" | "jina"): "sold" | "active" {
+  return source === "jina" ? "sold" : "active";
+}
+
 // ----------------------------------------------------------------
 // Primary source: delegate to ebay-competitor-search, which uses
 // the official eBay Browse API with Gemini-optimised query +
@@ -397,6 +408,7 @@ serve(async (req) => {
     // Higher recall + Gemini-optimised query. Falls through to Jina on empty.
     let soldItems: SoldItem[] = await fetchViaCompetitorSearch(query);
     const source: "browse_api" | "jina" = soldItems.length > 0 ? "browse_api" : "jina";
+    const basis = basisFromSource(source);
 
     if (soldItems.length === 0) {
       // Fallback: scrape sold listings via Jina
@@ -485,6 +497,7 @@ serve(async (req) => {
         query: searchQuery,
         originalQuery: query,
         source,
+        basis,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

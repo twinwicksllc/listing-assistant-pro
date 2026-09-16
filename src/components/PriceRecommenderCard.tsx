@@ -68,6 +68,7 @@ export default function PriceRecommenderCard({
         priceMin,
         priceMax,
         meltValue ?? undefined,
+        data.basis === "sold" ? "sold" : "active",
       );
       setRecommendation(rec);
       setSelectedSuggestion(rec.recommended);

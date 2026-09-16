@@ -2,6 +2,7 @@ import type {
   PriceRecommendation,
   PriceSuggestion,
   PriceConfidence,
+  PriceBasis,
   SoldComp,
 } from "@/types/price-recommender";
 
@@ -65,24 +66,43 @@ function round2(n: number): number {
 
 // ─── Confidence scoring ───────────────────────────────────────────────────────
 
-function getConfidence(compsCount: number): {
+/**
+ * "sold listings" implies a completed transaction at that price -- the
+ * strongest pricing signal there is. "active listings" are just other
+ * sellers' asking prices, never confirmed to have sold at all, which is a
+ * meaningfully weaker signal a seller should be told about, not just a
+ * cosmetic word swap. This app's eBay Browse API path (no Marketplace
+ * Insights access) is always the latter; only the Jina-scraped fallback is
+ * genuinely sold data.
+ */
+function basisNoun(basis: PriceBasis): string {
+  return basis === "sold" ? "sold listings" : "active listings";
+}
+
+function getConfidence(
+  compsCount: number,
+  basis: PriceBasis,
+): {
   confidence: PriceConfidence;
   reason: string;
 } {
+  const noun = basisNoun(basis);
   if (compsCount >= 8) {
     return {
       confidence: "high",
-      reason: `Based on ${compsCount} comparable sold listings`,
+      reason: `Based on ${compsCount} comparable ${noun}`,
     };
   } else if (compsCount >= 3) {
     return {
       confidence: "medium",
-      reason: `Based on ${compsCount} comparable listings — moderate confidence`,
+      reason: `Based on ${compsCount} comparable ${noun} — moderate confidence`,
     };
   } else if (compsCount > 0) {
     return {
       confidence: "low",
-      reason: `Only ${compsCount} comparable listing${compsCount === 1 ? "" : "s"} found — low confidence`,
+      reason: `Only ${compsCount} comparable ${
+        compsCount === 1 ? noun.replace(/s$/, "") : noun
+      } found — low confidence`,
     };
   }
   return {
@@ -164,6 +184,11 @@ export function buildPriceRecommendation(
   priceMin: number = 0,
   priceMax: number = 0,
   meltFloor?: number,
+  // Defaults to "active" rather than "sold" -- this app's primary comps
+  // source (eBay Browse API, no Marketplace Insights access) is always
+  // active-listing data, so a caller that doesn't yet pass a real basis
+  // should not silently claim the stronger "sold" signal.
+  basis: PriceBasis = "active",
 ): PriceRecommendation {
   const multiplier = CONDITION_MULTIPLIERS[condition] ?? 0.8;
   const conditionNote =
@@ -196,7 +221,12 @@ export function buildPriceRecommendation(
   const adjustedLow = round2(marketLow * multiplier);
   const adjustedHigh = round2(marketHigh * multiplier);
 
-  const { confidence, reason } = getConfidence(compsCount);
+  // No comps at all means there's no real data to attach a basis to --
+  // report "unknown" rather than defaulting to whatever the caller passed,
+  // since at compsCount=0 this is entirely an AI estimate regardless of
+  // which comps source was attempted.
+  const effectiveBasis: PriceBasis = compsCount > 0 ? basis : "unknown";
+  const { confidence, reason } = getConfidence(compsCount, effectiveBasis);
 
   const suggestions = buildSuggestions(
     adjustedAvg,
@@ -220,6 +250,7 @@ export function buildPriceRecommendation(
     recommended,
     confidence,
     confidenceReason: reason,
+    basis: effectiveBasis,
     marketAvg,
     marketLow,
     marketHigh,

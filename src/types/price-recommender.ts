@@ -10,6 +10,13 @@ export type PriceStrategy =
 
 export type PriceConfidence = "high" | "medium" | "low";
 
+// ─── What the comps data actually IS ──────────────────────────────────────────
+// "sold" = completed transactions (Jina-scraped eBay sold-search results).
+// "active" = current asking prices, never verified to have sold (eBay Browse
+// API -- this app has no Marketplace Insights access). "unknown" covers the
+// zero-comps/AI-estimate case, where there's no real data to label at all.
+export type PriceBasis = "sold" | "active" | "unknown";
+
 // ─── A single price suggestion with strategy context ─────────────────────────
 
 export interface PriceSuggestion {
@@ -28,7 +35,8 @@ export interface PriceRecommendation {
   suggestions: PriceSuggestion[];
   recommended: PriceSuggestion; // The top pick
   confidence: PriceConfidence;
-  confidenceReason: string; // e.g. "Based on 12 comparable sold listings"
+  confidenceReason: string; // e.g. "Based on 12 comparable active listings"
+  basis: PriceBasis; // What confidenceReason's comps actually are
 
   // Market stats
   marketAvg: number;
