@@ -160,6 +160,37 @@ function main() {
     }
   }
 
+  // forbidden_junk_leaf_ids are the awkward middle case that neither field
+  // above covers: ids that ARE live, active leaves (so checkForbidden would
+  // reject them as "actually a confirmed LIVE LEAF") yet must never be shipped
+  // for anything, so they are globally blocklisted -- 88433 "Everything Else >
+  // Every Other Thing" and its parent 99. Unlike forbidden_wrong_answer_ids,
+  // being wrong for THIS item is not the point; they are wrong for every item,
+  // and production must actually block them. So we assert both halves: the id
+  // is a real leaf (the case is well-formed and the snapshot is not stale) AND
+  // it is present in KNOWN_PARENT_CATEGORY_IDS (the code really refuses it).
+  //
+  // Added 2026-09-15 after a sterling silver pendant was locked to 88433 by
+  // analyze-item's grounded-category path, which verified leaf status and never
+  // consulted the blocklist. The corpus had no way to express that failure.
+  function checkForbiddenJunkLeaf(caseId, ids) {
+    for (const id of ids || []) {
+      if (!isConfirmedLeaf(id, categoryIndex)) {
+        failures.push(
+          `[${caseId}] forbidden_junk_leaf_ids entry ${id} is NOT a confirmed live leaf -- ` +
+            `if it is dead or a rollup it belongs in forbidden_category_ids instead.`,
+        );
+      }
+      if (!guardBlocklist.has(String(id))) {
+        failures.push(
+          `[${caseId}] forbidden_junk_leaf_ids entry ${id} is NOT present in ` +
+            `leafCategoryGuard.ts's KNOWN_PARENT_CATEGORY_IDS -- production code does ` +
+            `not actually refuse this junk catch-all.`,
+        );
+      }
+    }
+  }
+
   function checkGuardEnforcement(caseId, ids) {
     for (const id of ids || []) {
       if (!guardBlocklist.has(String(id))) {
@@ -188,12 +219,14 @@ function main() {
         }
         checkForbidden(c.id, c.forbidden_category_ids);
         checkForbiddenWrongAnswer(c.id, c.forbidden_wrong_answer_ids);
+        checkForbiddenJunkLeaf(c.id, c.forbidden_junk_leaf_ids);
         break;
       }
       case "must_not_regress": {
         checkExpected(c.id, c.expected_category_id);
         checkForbidden(c.id, c.forbidden_category_ids);
         checkForbiddenWrongAnswer(c.id, c.forbidden_wrong_answer_ids);
+        checkForbiddenJunkLeaf(c.id, c.forbidden_junk_leaf_ids);
         if (c.dead_category_id) {
           if (!isConfirmedNotShippable(c.dead_category_id, categoryIndex)) {
             failures.push(

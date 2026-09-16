@@ -34,19 +34,51 @@ function parseImageDataUrl(dataUrl: string) {
 }
 
 /**
- * Output cap for Pass 1. Raised from 150 after a truncation in production:
- * the model prefaced its answer with prose ("Here is the") and the cap cut it
- * off at 11 characters, so nothing parseable ever arrived and the run fell
- * through to DEFAULT_IDENTIFICATION's domain="general".
+ * Output cap for Pass 1. Raised 150 -> 500 on 2026-09-14, then diagnosed
+ * properly on 2026-09-15 -- see PASS1_REASONING_EFFORT below, which is the
+ * change that actually fixes the truncation.
  *
- * 150 was never a comfortable fit even on the happy path -- successful
- * responses that same day ran 256-271 characters, and tokens are not
- * characters, so the margin was thinner than it looked. The failure is
- * asymmetric: an unused ceiling costs nothing (output tokens bill only as
- * generated) while exceeding it discards the identification and misroutes
- * every downstream stage.
+ * On this endpoint `max_tokens` bounds reasoning tokens AND visible output
+ * together, so raising it alone could never be reliable: it hands the model a
+ * bigger budget to think with, not a guaranteed floor for the answer. The 500
+ * cap truncated a response at TWENTY-NINE characters
+ * (`{"domain":"jewelry","itemName`) the day after it landed -- an answer that
+ * short cannot be 500 tokens of output, so ~470 went to reasoning before the
+ * first visible character.
+ *
+ * 500 is kept because the ceiling itself is harmless (output tokens bill only
+ * as generated) and it leaves comfortable room for the ~260-char payload now
+ * that reasoning no longer competes for the same budget. Do NOT "fix" a future
+ * truncation here by raising this number again -- if `finish_reason: "length"`
+ * reappears with a short response, reasoning is eating the budget and the
+ * lever is PASS1_REASONING_EFFORT.
  */
 const PASS1_MAX_TOKENS = 500;
+
+/**
+ * Disable extended reasoning for Pass 1.
+ *
+ * GEMINI_HEAVY_MODEL is a thinking model (`gemini-pro-latest`), and nothing in
+ * this codebase set a reasoning budget on any Gemini call before 2026-09-15 --
+ * so every thinking-model call spends an unbounded, per-request-variable share
+ * of `max_tokens` on reasoning it never shows. On the OpenAI-compatible
+ * endpoint that budget comes out of the same allowance as the answer, which is
+ * how a 500-token cap produced 29 characters.
+ *
+ * Pass 1 is single-shot classification into a fixed 12-domain enum plus a name
+ * and keywords -- all of it read directly off the images. There is no
+ * multi-step inference for reasoning to help with, so "none" costs no accuracy
+ * here. This is deliberately NOT a blanket policy for the rest of the pipeline:
+ * the visual and market agents do multi-step work where reasoning earns its
+ * keep, and per the user's standing instruction the heavy model tier stays put
+ * for visual requests because accuracy matters more than cost there.
+ *
+ * Sent as `reasoning_effort` (the OpenAI-compat spelling). The native API's
+ * equivalent is `generationConfig.thinkingConfig.thinkingBudget` -- different
+ * shape, so a call site ported between the two endpoints needs this rewritten,
+ * not copied.
+ */
+const PASS1_REASONING_EFFORT = "none";
 
 const DEFAULT_IDENTIFICATION: Identification = {
   domain: "general",
@@ -141,6 +173,7 @@ OUTPUT FORMAT — STRICT: Your entire response must be the JSON object and nothi
             },
           ],
           max_tokens: PASS1_MAX_TOKENS,
+          reasoning_effort: PASS1_REASONING_EFFORT,
         }),
       },
       withDeadline(PIPELINE_TIMEOUTS_MS.pass1, deadline),
@@ -162,12 +195,21 @@ OUTPUT FORMAT — STRICT: Your entire response must be the JSON object and nothi
       );
 
       if (truncated) {
+        // Report the reasoning-token spend alongside the cap. A short response
+        // with a large `reasoning` count means the budget went to thinking, not
+        // to the answer -- the failure mode that made a 500-token cap emit 29
+        // characters on 2026-09-15. Raising the cap does not fix that; check
+        // that reasoning_effort is actually being honored instead.
+        const reasoningTokens = pass1Data.usage?.completion_tokens_details?.reasoning_tokens ?? null;
         console.error(
           `[${invocationId}] ❌ Pass 1 response TRUNCATED by max_tokens ` +
-            `(${PASS1_MAX_TOKENS}) -- finish_reason=length, chars=${pass1Text.length}. ` +
+            `(${PASS1_MAX_TOKENS}) -- finish_reason=length, chars=${pass1Text.length}, ` +
+            `reasoningTokens=${reasoningTokens ?? "unreported"}, ` +
+            `reasoning_effort=${PASS1_REASONING_EFFORT}. ` +
             `Identification will fall back to domain="general", which misroutes ` +
             `category resolution, the domain prompt and Slab OCR eligibility. ` +
-            `Raise PASS1_MAX_TOKENS.`,
+            `If the response is short, reasoning consumed the budget -- verify ` +
+            `reasoning_effort is honored rather than raising PASS1_MAX_TOKENS.`,
         );
       }
 
