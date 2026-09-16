@@ -110,6 +110,7 @@ jobs:
           supabase functions deploy sync-ebay-taxonomy --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
           supabase functions deploy competitor-prices-cron --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
           supabase functions deploy inventory-sync-cron --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
+          supabase functions deploy market-watch-refresh --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
           supabase functions deploy cost-alert-cron --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
           supabase functions deploy cleanup-media-retention --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
           supabase functions deploy category-hygiene-cron --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
