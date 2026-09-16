@@ -97,7 +97,9 @@ const LEGACY_CONDITION_MAP: Record<string, string> = {
   Damaged: "DAMAGED",
 };
 
-function normalizeConditionDescriptorToEnum(
+// Exported for testability (see bulk-publish.test.ts) — this is a pure
+// function with no I/O, safe to unit test directly.
+export function normalizeConditionDescriptorToEnum(
   value: string | undefined | null,
 ): string {
   const raw = String(value ?? "").trim();
@@ -130,6 +132,16 @@ function normalizeConditionDescriptorToEnum(
     remanufactured: "REMANUFACTURED",
     retread: "RETREAD",
     damaged: "DAMAGED",
+    // eBay's Jewelry & Watches / Sporting Goods condition policy returns
+    // these descriptions (confirmed via getItemConditionPolicies for
+    // category 261994, Fine Jewelry > Rings). Mirrored in
+    // ebay-publish/publish-helpers.ts's own copy of this function and
+    // src/types/listing.ts's normalizeEbayConditionDescription (frontend) —
+    // update all three together if eBay adds another condition string.
+    "new with tags": "NEW",
+    "new without tags": "NEW_OTHER",
+    "new with defects": "NEW_WITH_DEFECTS",
+    "pre-owned": "USED_EXCELLENT",
   };
 
   return (
@@ -185,7 +197,11 @@ async function fetchDynamicCategoryConditions(
   }
 }
 
-async function resolveConditionForCategory(
+// Exported for testability (see bulk-publish.test.ts). Passing an empty
+// categoryId skips the dynamicConditions network call entirely (see the
+// `&& categoryId` guard below), which is enough to unit-test the raw-input
+// normalization fix in isolation.
+export async function resolveConditionForCategory(
   rawCondition: string,
   categoryId: string,
 ): Promise<{
@@ -193,7 +209,19 @@ async function resolveConditionForCategory(
   conditionId: number;
   conditionDescription: string;
 }> {
-  const normalized = LEGACY_CONDITION_MAP[rawCondition] ?? rawCondition;
+  // Copilot review (PR #573): LEGACY_CONDITION_MAP is an exact, case-sensitive
+  // lookup and normalizeConditionDescriptorToEnum's alias table was only ever
+  // applied to a matched LIVE candidate's conditionDescription below, never
+  // to this raw input -- a CSV/API row containing a human-readable eBay
+  // descriptor like "New with tags" or "Pre-owned" (exactly the input shape
+  // this bulk path is meant to cover) fell through untouched, so it could
+  // never match a live candidate's normalized enum either.
+  // normalizeConditionDescriptorToEnum is idempotent on an already-valid
+  // enum string (its mangle-fallback is a no-op on uppercase_with_underscores
+  // input), so applying it unconditionally here is safe for legacy callers
+  // that already send a real enum.
+  const normalized = LEGACY_CONDITION_MAP[rawCondition] ??
+    normalizeConditionDescriptorToEnum(rawCondition);
   let conditionEnum = normalized;
   let conditionId = CONDITION_ID_MAP[conditionEnum];
   let conditionDescription = conditionEnum

@@ -185,6 +185,16 @@ export function normalizeConditionDescriptorToEnum(
     damaged: "DAMAGED",
     graded: "LIKE_NEW", // 2750 = Graded (per eBay condition ID docs)
     ungraded: "USED_VERY_GOOD", // 4000 = Ungraded (per eBay condition ID docs)
+    // eBay's Jewelry & Watches / Sporting Goods condition policy returns
+    // these descriptions (confirmed via getItemConditionPolicies for
+    // category 261994, Fine Jewelry > Rings). Mirrored in
+    // src/types/listing.ts's normalizeEbayConditionDescription (frontend)
+    // and bulk-publish/index.ts's own copy of this table — update all three
+    // together if eBay adds another condition string.
+    "new with tags": "NEW",
+    "new without tags": "NEW_OTHER",
+    "new with defects": "NEW_WITH_DEFECTS",
+    "pre-owned": "USED_EXCELLENT",
   };
 
   return (
@@ -208,14 +218,25 @@ export async function fetchDynamicCategoryConditions(
   if (!supabaseUrl || !supabaseServiceKey) return [];
 
   try {
-    const resp = await fetch(`${supabaseUrl}/functions/v1/category-lookup`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${supabaseServiceKey}`,
-        "Content-Type": "application/json",
+    // Copilot review (PR #573): this call gates the new pre-publish
+    // "other"-category condition check in publish-create-draft.ts, which
+    // runs for EVERY category outside coin/bullion/trading_card/collectible
+    // -- a plain unbounded fetch() here could hold that publish invocation
+    // indefinitely on a stalled internal request, before any eBay calls even
+    // begin. fetchWithTimeout (this file's local ./fetch.ts helper, default
+    // 15s) keeps this a best-effort check under network failure, matching
+    // every other internal category-lookup call in this same file.
+    const resp = await fetchWithTimeout(
+      `${supabaseUrl}/functions/v1/category-lookup`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${supabaseServiceKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action: "conditions", categoryId }),
       },
-      body: JSON.stringify({ action: "conditions", categoryId }),
-    });
+    );
 
     if (!resp.ok) {
       const errText = await resp.text();

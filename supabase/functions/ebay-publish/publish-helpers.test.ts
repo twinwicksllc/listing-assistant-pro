@@ -5,6 +5,7 @@ import {
   HARDCODED_COIN_CATEGORY_IDS,
   HARDCODED_COLLECTIBLE_CATEGORY_IDS,
   HARDCODED_TRADING_CARD_CATEGORY_IDS,
+  normalizeConditionDescriptorToEnum,
 } from "./publish-helpers.ts";
 
 // Regression guard for the 2026-09-01 stale-coin-category-ID cleanup (see
@@ -146,4 +147,69 @@ Deno.test("HARDCODED_TRADING_CARD_CATEGORY_IDS: dead 19107 is gone, replaced by 
 
 Deno.test("detectCategoryTreeSync: 183050 resolves as trading_card (19107 no longer does)", () => {
   assertEquals(detectCategoryTreeSync("183050", undefined), "trading_card");
+});
+
+// Regression guard for the 2026-09-16 ring-publish bug: eBay's Metadata API
+// returns human-readable conditionDescription strings for Jewelry & Watches /
+// Sporting Goods categories (confirmed via getItemConditionPolicies for
+// category 261994, Fine Jewelry > Rings) that had no alias entry — the
+// regex-mangle fallback turned them into non-existent enum tokens like
+// "NEW_WITH_TAGS", which normalizeConditionForCategory's "other" branch (no
+// coin/bullion/trading_card/collectible correction applies to jewelry) then
+// passed through to eBay's publish endpoint untouched.
+Deno.test("normalizeConditionDescriptorToEnum: jewelry/sporting conditionDescription strings", () => {
+  assertEquals(normalizeConditionDescriptorToEnum("New with tags"), "NEW");
+  assertEquals(
+    normalizeConditionDescriptorToEnum("New without tags"),
+    "NEW_OTHER",
+  );
+  assertEquals(
+    normalizeConditionDescriptorToEnum("New with defects"),
+    "NEW_WITH_DEFECTS",
+  );
+  assertEquals(
+    normalizeConditionDescriptorToEnum("Pre-owned"),
+    "USED_EXCELLENT",
+  );
+});
+
+Deno.test("normalizeConditionDescriptorToEnum: is case-insensitive for the new aliases", () => {
+  assertEquals(normalizeConditionDescriptorToEnum("NEW WITH TAGS"), "NEW");
+  assertEquals(
+    normalizeConditionDescriptorToEnum("pre-owned"),
+    "USED_EXCELLENT",
+  );
+});
+
+// Regression coverage for a Copilot review finding on PR #573:
+// publish-create-draft.ts's pre-publish "other"-category live-conditions
+// check normalized the LIVE side (liveEnums, from Metadata API
+// conditionDescriptions) but compared it against the RAW incoming
+// conditionEnum -- so a legacy draft/caller supplying a raw descriptor like
+// "New with tags" (exactly the case that whole safety net exists to catch)
+// could never match, and silently fell through to the USED_EXCELLENT
+// fallback (a new ring converted to pre-owned). These tests prove the
+// underlying comparison, once BOTH sides are normalized, resolves correctly
+// -- the fix itself (publish-create-draft.ts) mirrors this exact logic.
+Deno.test("normalizeConditionDescriptorToEnum: normalizing BOTH the live policy and a raw incoming descriptor makes them comparable", () => {
+  // Simulates category 261994's live condition policy (Fine Jewelry > Rings).
+  const liveConditionDescriptions = [
+    "New with tags",
+    "New without tags",
+    "New with defects",
+    "Pre-owned",
+  ];
+  const liveEnums = liveConditionDescriptions.map(
+    normalizeConditionDescriptorToEnum,
+  );
+
+  // The exact bug: an incoming RAW descriptor (not yet an enum) must resolve
+  // to a value present in the normalized live list once normalized itself --
+  // comparing it unnormalized against liveEnums would never match.
+  const incomingRaw = "New with tags";
+  const normalizedIncoming = normalizeConditionDescriptorToEnum(incomingRaw);
+
+  assertEquals(liveEnums.includes(incomingRaw), false); // the bug: raw never matches normalized live list
+  assertEquals(liveEnums.includes(normalizedIncoming), true); // the fix: normalized does
+  assertEquals(normalizedIncoming, "NEW");
 });

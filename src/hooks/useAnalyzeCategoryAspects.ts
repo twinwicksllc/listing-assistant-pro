@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { normalizeEbayConditionDescription } from "@/types/listing";
 import type { ItemSpecifics } from "@/types/listing";
 
 interface AspectInfo {
@@ -28,11 +29,18 @@ interface EbayMetadata {
  * `ebayMetadata`) so a category change gets the same shape eBay's own
  * condition-policy API would produce for the new category, not stale codes
  * left over from whatever category the item started in.
+ *
+ * eBay's conditions API returns human-readable `conditionDescription`
+ * strings ("New with tags", "Pre-owned", ...), not Inventory API
+ * `ConditionEnum` values — these must be normalized before being used as a
+ * dropdown value, or the exact string eBay described gets rejected by
+ * eBay's own publish endpoint for that same category.
  */
 function toAllowedConditions(conditions: RawCondition[]): string[] {
   return conditions
     .map((c) => c.conditionDescription || String(c.conditionId ?? ""))
-    .filter((desc) => desc.length > 0 && !/^(graded|ungraded)$/i.test(desc));
+    .filter((desc) => desc.length > 0 && !/^(graded|ungraded)$/i.test(desc))
+    .map((desc) => normalizeEbayConditionDescription(desc) || desc);
 }
 
 interface UseAnalyzeCategoryAspectsParams {
@@ -68,16 +76,22 @@ interface UseAnalyzeCategoryAspectsParams {
  *     called `setEbayMetadata`, so the effect re-ran on its own output. The ref
  *     guard hid the churn instead of fixing it.
  *  4. Stale specifics from the previous category were never removed, so aspects
- *     belonging to the old category lingered in the table.
+ *     belonging to the old category lingered in the table — and the removal
+ *     only checked for EMPTY string values, so an AI-seeded placeholder like
+ *     "N/A" (e.g. Author/Book Title on a book the AI misidentified, still
+ *     present after the user manually corrected the category to Rings) was
+ *     treated as "user-filled" and never dropped, no matter how unrelated it
+ *     was to the new category's schema.
  *  5. `allowedConditions` was carried over from the OLD category's metadata on
  *     every branch instead of being refetched, so switching categories (e.g.
  *     Books → Rings) kept condition codes eBay only accepts for the old leaf —
  *     none of which are legal for the new one, blocking publish.
  *
  * This version keeps a per-category request token, rolls the ref back on
- * failure so retries are possible, prunes stale untouched aspects, fetches
- * conditions fresh alongside aspects on every category change, and tells
- * the seller when a category is a parent with no aspects.
+ * failure so retries are possible, prunes every specific not present in the
+ * new category's aspect schema regardless of its value, fetches conditions
+ * fresh alongside aspects on every category change, and tells the seller
+ * when a category is a parent with no aspects.
  */
 export function useAnalyzeCategoryAspects({
   ebayCategoryId,
@@ -159,12 +173,28 @@ export function useAnalyzeCategoryAspects({
           : [];
 
         if (aspects.length === 0) {
-          // eBay returns no aspects for parent/rollup categories. Tell the
-          // seller explicitly instead of silently rendering an empty table.
-          const isParentCategory = data?.isLeaf === false;
+          // eBay returns no aspects for parent/rollup categories — but
+          // category-lookup's isLeaf:false ALSO covers every failure mode of
+          // its own leaf-verification call (404, non-2xx, unparseable JSON,
+          // a missing node, a thrown exception — see verifyCategoryLeafActive
+          // in category-lookup/index.ts, which returns isLeaf:false AND
+          // isActive:false on every one of those). Copilot review (PR #573):
+          // treating isLeaf:false alone as "confirmed parent" wiped valid
+          // specifics and permanently poisoned lastFetchedCategoryRef on a
+          // transient API hiccup, not just a real parent. isActive:true is
+          // only set on a genuine successful check (leaf or not) — require
+          // BOTH before treating this as confirmed rather than unknown.
+          const isParentCategory =
+            data?.isLeaf === false && data?.isActive === true;
+          const isUnknownFailure =
+            data?.isLeaf === false && data?.isActive !== true;
           console.warn(
             `useAnalyzeCategoryAspects: no aspects for category ${requestedCategoryId}` +
-              (isParentCategory ? " (non-leaf/parent category)" : ""),
+              (isParentCategory
+                ? " (confirmed non-leaf/parent category)"
+                : isUnknownFailure
+                  ? " (leaf status unknown — treating as transient, will retry)"
+                  : ""),
           );
 
           if (isParentCategory) {
@@ -175,6 +205,18 @@ export function useAnalyzeCategoryAspects({
             );
           }
 
+          if (isUnknownFailure) {
+            // Leaf status genuinely unknown (the leaf-verification call
+            // itself failed) — do NOT wipe specifics or cache anything.
+            // Treat exactly like the aspects-fetch-error branch below:
+            // leave existing state alone so a retry (re-picking the
+            // category, or this effect re-running) can recover cleanly.
+            toast.error(
+              "Couldn't confirm this category's item specifics. Re-select the category to retry.",
+            );
+            return;
+          }
+
           // Publish-time validation must not keep enforcing the OLD category's
           // required aspects, so commit an empty schema rather than leaving
           // metadata null.
@@ -182,6 +224,20 @@ export function useAnalyzeCategoryAspects({
             requiredAspects: [],
             suggestedAspects: [],
             allowedConditions,
+          });
+
+          // No aspects means no valid aspect names for this category — drop
+          // every real (non-underscore) key so a category with genuinely no
+          // schema doesn't keep showing whatever the previous category left
+          // behind (e.g. a parent rollup after leaving a leaf with specifics).
+          // Only reached for a CONFIRMED parent (isUnknownFailure returned
+          // above otherwise) — a transient failure never reaches this wipe.
+          setItemSpecifics((prev) => {
+            const next: ItemSpecifics = {};
+            for (const [key, value] of Object.entries(prev)) {
+              if (key.startsWith("_")) next[key] = value;
+            }
+            return next;
           });
 
           // Only cache the "no aspects" outcome for a confirmed parent. A
@@ -210,17 +266,18 @@ export function useAnalyzeCategoryAspects({
         setItemSpecifics((prev) => {
           const next: ItemSpecifics = {};
 
-          // Keep internal keys (_ prefixed) and any value the user actually
-          // filled in; drop empty placeholders left over from the previous
-          // category so the table doesn't show stale, unrelated fields.
+          // Keep internal keys (_ prefixed) and any value belonging to the
+          // NEW category's aspect schema; drop everything else — including a
+          // non-empty value like "N/A" the AI seeded for the OLD category
+          // (e.g. Author/Book Title surviving a switch to Rings). Value
+          // content is irrelevant here: only membership in validAspectNames
+          // decides whether a key belongs on this category's table at all.
           for (const [key, value] of Object.entries(prev)) {
             if (key.startsWith("_")) {
               next[key] = value;
               continue;
             }
-            const isEmptyString =
-              typeof value === "string" && value.trim() === "";
-            if (isEmptyString && !validAspectNames.has(key)) continue;
+            if (!validAspectNames.has(key)) continue;
             next[key] = value;
           }
 

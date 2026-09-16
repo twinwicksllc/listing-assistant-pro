@@ -8,18 +8,18 @@ import { getConditionsForCategory } from "../types/listing";
 // The old regex silently fell through to the generic condition set for every real
 // ring/jewelry listing, which includes "For Parts or Not Working" and other options
 // eBay does not accept on that leaf.
+//
+// The fallback list itself was also wrong (fixed same day): PRE_OWNED_GOOD/
+// PRE_OWNED_FAIR are not real eBay ConditionEnum values, and the *_REFURBISHED
+// tiers belong to electronics/appliances, not jewelry. Narrowed to the four
+// values eBay's own Metadata API returns for category 261994 (Fine Jewelry >
+// Rings): New with tags / New without tags / New with defects / Pre-owned.
 
 const RING_VALUES = new Set([
   "NEW",
   "NEW_OTHER",
   "NEW_WITH_DEFECTS",
   "USED_EXCELLENT",
-  "PRE_OWNED_GOOD",
-  "PRE_OWNED_FAIR",
-  "CERTIFIED_REFURBISHED",
-  "EXCELLENT_REFURBISHED",
-  "VERY_GOOD_REFURBISHED",
-  "GOOD_REFURBISHED",
 ]);
 
 describe("getConditionsForCategory jewelry breadcrumbs", () => {
