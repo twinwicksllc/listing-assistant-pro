@@ -15,6 +15,7 @@ import type { Identification } from "../_helpers/pass1Identification.ts";
 import { buildSeoTitle, TITLE_MAX_LENGTH, TITLE_TARGET_MIN_LENGTH, titleFillRatio } from "../_helpers/listingFormat.ts";
 import type { TitleComponents } from "../_helpers/listingFormat.ts";
 import { StageTimer } from "../_helpers/stageTimer.ts";
+import { finishAnalysisAttempt, startAnalysisAttempt } from "../_helpers/analysisAttemptTracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -411,6 +412,17 @@ serve(async (req: Request) => {
   // observational: nothing here changes ordering, concurrency or control flow.
   const timer = new StageTimer("analyze-item");
 
+  // Hoisted to function scope (not just the try block below) so the catch
+  // block can also call finishAnalysisAttempt -- a request that throws is
+  // exactly one of the two outcomes analysis_attempts exists to distinguish
+  // from a silent gateway kill (which reaches neither this catch nor that
+  // finish call at all).
+  // deno-lint-ignore no-explicit-any -- matches this file's existing loose
+  // typing for the service-role client (createClient's default generic
+  // otherwise produces `never` row types for every .from() table below).
+  let svc: any = null;
+  let clientRequestId: string | undefined;
+
   initSentry();
 
   // IMPORTANT: Handle OPTIONS preflight first, before anything else
@@ -432,7 +444,7 @@ serve(async (req: Request) => {
     );
 
     // --- Server-side usage limit enforcement ---
-    const svc = createClient(
+    svc = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
       { auth: { persistSession: false } },
@@ -468,6 +480,14 @@ serve(async (req: Request) => {
         },
       );
     }
+
+    // Client-generated correlation id for the analysis_attempts diagnostic
+    // table (see _helpers/analysisAttemptTracker.ts). Deliberately NOT this
+    // function's own `invocationId` -- a request the client never got a
+    // response for also never learned that internal id, so the table has to
+    // be keyed on something the client already had BEFORE calling.
+    clientRequestId = typeof body?.clientRequestId === "string" ? body.clientRequestId : undefined;
+    await startAnalysisAttempt(svc, { clientRequestId, userId });
 
     // Admin emails always get unlimited access
     const ADMIN_EMAILS = ["twinwicksllc@gmail.com"];
@@ -3492,6 +3512,13 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
     // union-of-intervals ("accounted"), concurrency ("overlap") and
     // uninstrumented remainder ("untimed"). Never throws.
     timer.log(`[${invocationId}]`);
+    if (svc) {
+      await finishAnalysisAttempt(svc, {
+        clientRequestId,
+        status: "completed",
+        totalMs: Date.now() - startTime,
+      });
+    }
 
     return new Response(JSON.stringify(finalResponse), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -3506,6 +3533,13 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
     // case where the per-stage split is worth having, and the stage still in
     // flight shows as `(open)`.
     timer.log(`[${invocationId}]`);
+    if (svc) {
+      await finishAnalysisAttempt(svc, {
+        clientRequestId,
+        status: "failed",
+        totalMs: elapsed,
+      });
+    }
     if (e instanceof Error) {
       console.error(`[${invocationId}] Error name: ${e.name}`);
       console.error(`[${invocationId}] Error message: ${e.message}`);
