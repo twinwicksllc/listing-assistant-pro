@@ -14,7 +14,8 @@
     },
     "forbidden_id_fields": {
       "forbidden_category_ids": "Ids that must NEVER be shippable for ANY item, because they are dead/non-leaf/rollup nodes in the live taxonomy tree. The replay harness verifies these are absent-or-non-leaf in the snapshot AND (for must_not_regress cases) present in leafCategoryGuard.ts's KNOWN_PARENT_CATEGORY_IDS.",
-      "forbidden_wrong_answer_ids": "Ids that ARE valid live leaves elsewhere in the tree, but would be the WRONG answer for this specific item (a plausible mis-identification, not a dead id). The replay harness only checks these are real leaves (so the corpus case itself is well-formed) -- it does NOT expect them to be blocklisted, since blocking a real leaf globally would break legitimate listings that actually belong there."
+      "forbidden_wrong_answer_ids": "Ids that ARE valid live leaves elsewhere in the tree, but would be the WRONG answer for this specific item (a plausible mis-identification, not a dead id). The replay harness only checks these are real leaves (so the corpus case itself is well-formed) -- it does NOT expect them to be blocklisted, since blocking a real leaf globally would break legitimate listings that actually belong there.",
+      "forbidden_junk_leaf_ids": "Ids that ARE live, active leaves but must never be shipped for ANY item because they are junk catch-alls (88433 \"Everything Else > Every Other Thing\", 99 its parent). The replay harness asserts BOTH that each is a real leaf in the snapshot AND that it is present in leafCategoryGuard.ts's KNOWN_PARENT_CATEGORY_IDS -- neither forbidden_category_ids (which requires the id be dead/non-leaf) nor forbidden_wrong_answer_ids (which does not require blocklisting) could express this. Added 2026-09-15."
     }
   },
   "cases": [
@@ -248,6 +249,17 @@
         }
       ],
       "notes": "Not a correctness bug (the category ids agree with their generic counterpart in every case checked), but it inflates category_mappings with redundant rows that a token-overlap/exact-match lookup will never actually need, and doubles the blast radius when an id like 41111 goes dead (both the generic and every year-locked variant need fixing). Tracked for Phase 5 hygiene-cron dedup-by-precedence."
+    },
+    {
+      "id": "vintage-sterling-pendant-grounded-lock-junk-category",
+      "kind": "must_not_regress",
+      "description": "Vintage sterling silver pendant/charm locked to 88433 by analyze-item's Pre-Pass 0 grounded-category path",
+      "item_type_query": "vintage bell trading post sterling silver pendant charm",
+      "expected_category_id": "261993",
+      "expected_breadcrumb": "Jewelry & Watches > Fine Jewelry > Necklaces & Pendants",
+      "forbidden_junk_leaf_ids": ["88433"],
+      "forbidden_category_ids": ["99"],
+      "notes": "Live incident 2026-09-15. Two independent bugs compounded. (1) Pass 1 identification truncated at 29 chars with finish_reason=length under a 500-token cap -- reasoning tokens consumed the budget before the answer began -- so the correct domain=\"jewelry\" (visible in the truncated payload) was discarded and the run proceeded as domain=\"general\", removing the domain-compatibility check that would otherwise have rejected a Jewelry-incompatible hint. (2) analyze-item's grounded-category lock verified 88433 via category-lookup's \"verify\" action, which reports leaf + active only. 88433 IS a live leaf, so it passed, and it became lockedCategoryId with the prompt instruction \"USE THIS CATEGORY\" -- driving the aspects fetch, conditions fetch and listing prompt. This was the only category-assignment path that never called isKnownParentCategoryId(). enforceLeafCategory caught it afterwards but the damage was done upstream. 261993 is the correct leaf and was present in the taxonomy snapshot (synced 2026-09-08) the whole time."
     }
   ]
 }

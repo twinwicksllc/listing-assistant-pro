@@ -331,3 +331,37 @@ Deno.test("isKnownParentCategoryId: canonical list still covers every id the del
     );
   }
 });
+
+// ---------------------------------------------------------------------------
+// The 2026-09-15 sterling-pendant misroute: both sides of the same decision.
+//
+// analyze-item's Pre-Pass 0 grounded-category path locked a vintage sterling
+// silver pendant to 88433 ("Everything Else > Every Other Thing") because it
+// verified the id through category-lookup's "verify" action -- which reports
+// leaf + active and nothing else -- and never called isKnownParentCategoryId().
+// It was the only category-assignment path in the pipeline that skipped this
+// guard. 88433 is a live, active leaf, so leaf-only verification cannot catch
+// it; the blocklist is the only thing that can.
+//
+// The pair below is what the guard has to get right for that item: refuse the
+// junk catch-all AND allow the category the pendant actually belonged in. A
+// blocklist that over-reaches to 261993 (or its Fine Jewelry ancestors) would
+// trade this bug for the worse one of refusing a valid listing target in a
+// primary vertical.
+
+Deno.test("isKnownParentCategoryId: 261993 (Necklaces & Pendants) is the pendant's correct leaf and is NOT blocked", () => {
+  // Jewelry & Watches > Fine Jewelry > Necklaces & Pendants, parent 4196. A
+  // live leaf, present in corpus/ebay_taxonomy_snapshot.json (synced
+  // 2026-09-08) the whole time the grounded lock was sending this item to
+  // Everything Else -- the right answer was already in the data.
+  assertEquals(isKnownParentCategoryId("261993"), false);
+  assertEquals(KNOWN_PARENT_CATEGORY_IDS.has("261993"), false);
+});
+
+Deno.test("isKnownParentCategoryId: 88433 and its parent 99 are both refused, so neither end of the junk branch is lockable", () => {
+  // 88433's parent in the snapshot is 99 -- the same rollup behind the
+  // Columbian Half Dollar incident. Blocking the leaf but not the parent (or
+  // vice versa) would leave one usable route into Everything Else.
+  assertEquals(isKnownParentCategoryId("88433"), true);
+  assertEquals(isKnownParentCategoryId("99"), true);
+});

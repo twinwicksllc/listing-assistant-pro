@@ -951,7 +951,27 @@ serve(async (req: Request) => {
                 groundedVerifyData.categoryName ||
                 "";
 
-              if (
+              // The "verify" action answers leaf + active, and nothing more --
+              // so a junk-but-technically-valid catch-all sails straight
+              // through it. This was the ONLY category-assignment path in the
+              // pipeline that never consulted KNOWN_PARENT_CATEGORY_IDS, and
+              // on 2026-09-15 a vintage sterling silver pendant was locked to
+              // 88433 ("Everything Else > Every Other Thing") because
+              // Pre-Pass 0's Google-grounded search suggested it and 88433 IS
+              // a live leaf. It is blocklisted deliberately as a junk target;
+              // see its comment in leafCategoryGuard.ts. The correct answer for
+              // that item was 261993 (Jewelry & Watches > Fine Jewelry >
+              // Necklaces & Pendants), a live leaf present in the same
+              // taxonomy snapshot the grounding search was meant to be reading.
+              //
+              // enforceLeafCategory did reject it downstream, but far too late:
+              // the lock had already driven the aspects fetch, the conditions
+              // fetch and the listing-generation prompt several stages earlier.
+              if (isKnownParentCategoryId(prePassResult.groundedCategoryId)) {
+                console.warn(
+                  `[${invocationId}] Grounded category ${prePassResult.groundedCategoryId} is a known parent/rollup/junk category (${groundedBreadcrumb}) — refusing the lock and suppressing the hint entirely`,
+                );
+              } else if (
                 isCategoryCompatibleWithDomain(
                   identification.domain,
                   prePassResult.groundedCategoryId,
@@ -976,6 +996,15 @@ serve(async (req: Request) => {
                   `[${invocationId}] Grounded category ${prePassResult.groundedCategoryId} rejected for domain ${identification.domain}: ${groundedBreadcrumb} — suppressing hint to avoid AI confusion`,
                 );
               }
+            } else if (
+              isKnownParentCategoryId(prePassResult.groundedCategoryId)
+            ) {
+              // Same bypass by a quieter route: an unverified blocklisted ID
+              // used to be handed to the AI as a hint, and the AI tends to
+              // follow hints. Suppress it rather than downgrading it.
+              console.warn(
+                `[${invocationId}] Grounded category ${prePassResult.groundedCategoryId} is not a verified leaf AND is blocklisted — suppressing hint entirely`,
+              );
             } else {
               // Not a valid leaf — downgrade to a strong hint
               categoryHints +=

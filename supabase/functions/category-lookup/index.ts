@@ -1602,6 +1602,10 @@ export async function handleRequest(req: Request): Promise<Response> {
             source: dbCategoryName ? "db" : "none",
             isLeaf: null,
             isActive: null,
+            // Present on this path too. The blocklist is a local constant, so
+            // it is still authoritative when eBay is unreachable -- a caller
+            // must not have to treat a missing field as "not blocklisted".
+            isKnownParentOrJunk: isKnownParentCategoryId(cid),
             categoryName: dbCategoryName,
             breadcrumb: dbBreadcrumb,
             message: "No eBay credentials — leaf status unknown",
@@ -1626,6 +1630,16 @@ export async function handleRequest(req: Request): Promise<Response> {
           valid: breadcrumbResult.valid,
           isLeaf: verification.isLeaf,
           isActive: verification.isActive,
+          // `isLeaf`/`isActive` deliberately say nothing about whether a
+          // category is a SENSIBLE listing target -- 88433 ("Everything Else >
+          // Every Other Thing") is a live, active leaf and is blocklisted
+          // anyway as a junk catch-all. A caller that checked only isLeaf
+          // therefore had no way to know it was about to lock onto junk, which
+          // is exactly what analyze-item's grounded-category lock did on
+          // 2026-09-15 (a sterling silver pendant, which belonged in 261993).
+          // Surfacing the blocklist verdict here means the next caller gets it
+          // without having to know that leafCategoryGuard.ts exists.
+          isKnownParentOrJunk: isKnownParentCategoryId(cid),
           source: "remote",
           categoryName: breadcrumbResult.categoryName ||
             verification.categoryName ||
