@@ -119,6 +119,19 @@ function captureErrors() {
   return { lines, restore: () => (console.error = originalError) };
 }
 
+/** Same as captureErrors, but for console.warn -- the `!pass1Resp.ok` branch warns, not errors. */
+function captureWarnings() {
+  const originalWarn = console.warn;
+  const lines: string[] = [];
+  console.warn = (...args: unknown[]) =>
+    lines.push(
+      args
+        .map((a) => (typeof a === "string" ? a : JSON.stringify(a)))
+        .join(" "),
+    );
+  return { lines, restore: () => (console.warn = originalWarn) };
+}
+
 function okResponse(content: string, finishReason = "stop", usage?: unknown) {
   return {
     choices: [{ message: { content }, finish_reason: finishReason }],
@@ -136,10 +149,13 @@ Deno.test("sends a reasoning budget, so max_tokens bounds the ANSWER not the thi
 
   assertEquals(f.bodies.length, 1);
   // The whole point of the 2026-09-15 fix. If this field ever goes missing,
-  // ~470 of the 500 tokens can vanish into invisible reasoning again.
-  assertEquals(f.bodies[0].reasoning_effort, "none");
+  // ~470 of the 500 tokens can vanish into invisible reasoning again. Value is
+  // "low", not "none" -- Google made thinking mandatory for this model
+  // generation on 2026-09-16 and started rejecting a zero budget outright;
+  // "low" is the lowest floor the OpenAI-compat endpoint still accepts.
+  assertEquals(f.bodies[0].reasoning_effort, "low");
   // `reasoning_effort` is the OpenAI-compat spelling. The native endpoint wants
-  // generationConfig.thinkingConfig.thinkingBudget -- a different shape, so a
+  // `thinking_level` for this model generation -- a different shape, so a
   // call site ported between endpoints must rewrite this, not copy it.
   assertEquals(f.bodies[0].max_tokens, 500);
 });
@@ -178,7 +194,7 @@ Deno.test("reports truncation from finish_reason=length, with the reasoning spen
   // without both numbers side by side this reads as "raise the cap".
   assertEquals(truncationLog!.includes("chars=29"), true);
   assertEquals(truncationLog!.includes("reasoningTokens=471"), true);
-  assertEquals(truncationLog!.includes("reasoning_effort=none"), true);
+  assertEquals(truncationLog!.includes("reasoning_effort=low"), true);
   // And the consequence the log warns about is real: unparseable JSON falls
   // back to domain="general", which is what misrouted category resolution.
   assertEquals(ident!.domain, "general");
@@ -222,4 +238,39 @@ Deno.test("does not cry truncation on a normal finish_reason", async () => {
     c.lines.some((l) => l.includes("JSON parse failed") && l.includes("stop")),
     true,
   );
+});
+
+// Regression coverage for the 2026-09-16 production incident: Google made
+// thinking mandatory for the gemini-pro-latest generation and started
+// rejecting a zero reasoning budget outright with a 400. Pass 1's own
+// `!pass1Resp.ok` branch already handled an API-level error gracefully (warn
+// + fall through to DEFAULT_IDENTIFICATION) -- the actual bug was upstream,
+// sending reasoning_effort: "none" in the first place, which is what these
+// tests above pin to "low" now. This test locks in that the graceful-failure
+// path itself still behaves correctly if this specific error ever recurs
+// (e.g. a future model swap reintroduces a rejected value).
+Deno.test("a 400 'Budget 0 is invalid' response warns and falls back to DEFAULT_IDENTIFICATION, not a thrown error", async () => {
+  const f = stubFetch(
+    {
+      error: {
+        code: 400,
+        message: "Budget 0 is invalid. This model only works in thinking mode.",
+        status: "INVALID_ARGUMENT",
+      },
+    },
+    400,
+  );
+  const c = captureWarnings();
+  let ident;
+  try {
+    ident = await runPass1Identification("key", [IMAGE], "", "inv-6");
+  } finally {
+    c.restore();
+    f.restore();
+  }
+
+  assertEquals(ident!.domain, "general");
+  assertEquals(ident!.itemName, "item");
+  const warned = c.lines.some((l) => l.includes("Pass 1 API returned status 400"));
+  assertEquals(warned, true);
 });
