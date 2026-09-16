@@ -484,12 +484,32 @@ export function normalizeEbayConditionDescription(
 
   const lowered = raw.toLowerCase();
   const aliases: Record<string, string> = {
+    "brand new": "NEW",
+    new: "NEW",
     "new with tags": "NEW",
     "new without tags": "NEW_OTHER",
     "new with defects": "NEW_WITH_DEFECTS",
-    new: "NEW",
-    "pre-owned": "USED_EXCELLENT",
+    "new other (see details)": "NEW_OTHER",
+    "new-open box": "NEW_OTHER",
+    "new open box": "NEW_OTHER",
+    "open box": "LIKE_NEW",
+    "like new": "LIKE_NEW",
     used: "USED_EXCELLENT",
+    "pre-owned": "USED_EXCELLENT",
+    "very good": "USED_VERY_GOOD",
+    good: "USED_GOOD",
+    acceptable: "USED_ACCEPTABLE",
+    "for parts or not working": "FOR_PARTS_OR_NOT_WORKING",
+    "certified refurbished": "CERTIFIED_REFURBISHED",
+    "excellent refurbished": "EXCELLENT_REFURBISHED",
+    "very good refurbished": "VERY_GOOD_REFURBISHED",
+    "good refurbished": "GOOD_REFURBISHED",
+    "seller refurbished": "SELLER_REFURBISHED",
+    "digital good": "DIGITAL_GOOD",
+    "certified pre-owned": "CERTIFIED_PRE_OWNED",
+    remanufactured: "REMANUFACTURED",
+    retread: "RETREAD",
+    damaged: "DAMAGED",
   };
 
   const mapped = aliases[lowered];
