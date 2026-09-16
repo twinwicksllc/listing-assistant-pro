@@ -378,17 +378,19 @@ const SHOES_CONDITION_OPTIONS: ConditionOption[] = [
   { value: "PRE_OWNED_FAIR", label: "Pre-owned - Fair" },
 ];
 
+// 2026-09-16: previously included PRE_OWNED_GOOD/PRE_OWNED_FAIR (not real eBay
+// ConditionEnum values — confirmed against eBay's own condition-policy API and
+// documentation) and CERTIFIED_REFURBISHED/EXCELLENT_REFURBISHED/
+// VERY_GOOD_REFURBISHED/GOOD_REFURBISHED (real values, but an electronics/
+// appliance refurb tier eBay's condition policy does not accept on Jewelry &
+// Watches or Sporting Goods leaves). Narrowed to the four values eBay's
+// Metadata API actually returns for a Fine Jewelry > Rings leaf (261994):
+// New with tags / New without tags / New with defects / Pre-owned.
 const JEWELRY_SPORTING_CONDITION_OPTIONS: ConditionOption[] = [
   { value: "NEW", label: "New with tags" },
   { value: "NEW_OTHER", label: "New without tags" },
   { value: "NEW_WITH_DEFECTS", label: "New with defects" },
-  { value: "USED_EXCELLENT", label: "Pre-owned - Excellent" },
-  { value: "PRE_OWNED_GOOD", label: "Pre-owned - Good" },
-  { value: "PRE_OWNED_FAIR", label: "Pre-owned - Fair" },
-  { value: "CERTIFIED_REFURBISHED", label: "Certified - Refurbished" },
-  { value: "EXCELLENT_REFURBISHED", label: "Excellent - Refurbished" },
-  { value: "VERY_GOOD_REFURBISHED", label: "Very Good - Refurbished" },
-  { value: "GOOD_REFURBISHED", label: "Good - Refurbished" },
+  { value: "USED_EXCELLENT", label: "Pre-owned" },
 ];
 
 const UNDERWEAR_CONDITION_OPTIONS: ConditionOption[] = [
@@ -454,6 +456,52 @@ export function getConditionLabel(condition: string): string {
     .filter(Boolean)
     .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
     .join(" ");
+}
+
+/**
+ * Converts an eBay Metadata API `conditionDescription` string (e.g. "New
+ * with tags", "Pre-owned") into the eBay Inventory API `ConditionEnum` value
+ * it actually corresponds to. eBay's category-conditions API returns
+ * human-readable descriptions, not enum values — passing one through
+ * unchanged (e.g. as the dropdown's `value`) produces a string eBay's own
+ * publish endpoint rejects for that same category.
+ *
+ * Mirrored in supabase/functions/ebay-publish/publish-helpers.ts's
+ * `normalizeConditionDescriptorToEnum` (backend, Deno) and
+ * supabase/functions/bulk-publish/index.ts's own copy of the same table —
+ * frontend and both backend copies can't share one module across the
+ * browser/Deno boundary, so all three must be updated together whenever a
+ * new eBay conditionDescription string turns up. "graded"/"ungraded" are
+ * deliberately absent: the coin condition path bypasses this table entirely
+ * via `isCoinCategory`, and those two strings are filtered out rather than
+ * mapped wherever this function's caller needs that behavior.
+ */
+export function normalizeEbayConditionDescription(
+  description: string | undefined | null,
+): string {
+  const raw = String(description ?? "").trim();
+  if (!raw) return "";
+
+  const lowered = raw.toLowerCase();
+  const aliases: Record<string, string> = {
+    "new with tags": "NEW",
+    "new without tags": "NEW_OTHER",
+    "new with defects": "NEW_WITH_DEFECTS",
+    new: "NEW",
+    "pre-owned": "USED_EXCELLENT",
+    used: "USED_EXCELLENT",
+  };
+
+  const mapped = aliases[lowered];
+  if (mapped) return mapped;
+
+  console.warn(
+    `normalizeEbayConditionDescription: no known mapping for conditionDescription "${raw}" — falling back to a mangled token. eBay may have added a new condition string; add it to this alias table.`,
+  );
+  return raw
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
 }
 
 /**

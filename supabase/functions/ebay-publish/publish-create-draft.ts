@@ -399,6 +399,52 @@ export async function handleCreateDraft({
     }
   }
 
+  // normalizeConditionForCategory only has correction branches for
+  // coin/bullion/trading_card/collectible — everything else (jewelry
+  // included) falls through with corrected=false and no validation, so a
+  // bad value (a stale hardcoded fallback, or a raw eBay conditionDescription
+  // that slipped past the frontend's own normalizer) reaches eBay untouched.
+  // Check it against what this category's own condition policy actually
+  // accepts, and swap to the closest live-valid match rather than guessing.
+  if (
+    !corrected &&
+    categoryTreeType === "other" &&
+    finalCategoryId
+  ) {
+    try {
+      const liveConditions = await fetchDynamicCategoryConditions(
+        finalCategoryId,
+      );
+      const liveEnums = liveConditions
+        .map((c) => normalizeConditionDescriptorToEnum(c.conditionDescription))
+        .filter((c) => c.length > 0);
+      if (liveEnums.length > 0 && !liveEnums.includes(conditionEnum)) {
+        const fallbackEnum = liveEnums.includes("USED_EXCELLENT") ? "USED_EXCELLENT" : liveEnums[0];
+        const fallbackCondition = liveConditions.find(
+          (c) =>
+            normalizeConditionDescriptorToEnum(c.conditionDescription) ===
+              fallbackEnum,
+        );
+        console.warn(
+          `create_draft: condition ${conditionEnum} is not in category ${finalCategoryId}'s live condition policy (${
+            liveEnums.join(", ")
+          }) — falling back to ${fallbackEnum}`,
+        );
+        conditionEnum = fallbackEnum;
+        conditionId = fallbackCondition?.conditionId ?? conditionId;
+        conditionDesc = fallbackCondition?.conditionDescription ?? conditionDesc;
+      }
+    } catch (liveConditionsErr) {
+      // Live-conditions check is a safety net, not a hard requirement —
+      // if eBay's Metadata API is unreachable, proceed with the value we
+      // already have rather than blocking publish.
+      console.warn(
+        `create_draft: pre-publish live-conditions check failed for category ${finalCategoryId}`,
+        liveConditionsErr,
+      );
+    }
+  }
+
   conditionId = conditionId ?? 3000;
   let effectiveConditionId = conditionId;
 
@@ -1074,6 +1120,14 @@ export async function handleCreateDraft({
   if (!publishResp.ok) {
     publishErrText = await publishResp.text();
     let isConditionIdError = false;
+    // Matches both eBay's generic message ("...condition id is invalid...")
+    // and the category-specific variant seen on non-coin leaves like
+    // Jewelry & Watches ("...invalid for the selected primary category
+    // id..."), which the narrower phrasing previously used here did not
+    // catch — that exact error was reaching the seller with no
+    // self-correction attempt.
+    const CONDITION_ID_ERROR_RE =
+      /CONDITION_ID|condition id is invalid|invalid for the selected primary category id|Condition descriptor \d+ is not valid/i;
     try {
       const parsed = JSON.parse(publishErrText);
       const errs: Array<{ errorId?: number; message?: string }> = parsed?.errors ?? [];
@@ -1081,14 +1135,10 @@ export async function handleCreateDraft({
         (e) =>
           e.errorId === 25021 ||
           e.errorId === 25060 ||
-          /CONDITION_ID|condition id is invalid|Condition descriptor \d+ is not valid/i.test(
-            e.message ?? "",
-          ),
+          CONDITION_ID_ERROR_RE.test(e.message ?? ""),
       );
     } catch {
-      isConditionIdError = /CONDITION_ID|condition id is invalid|Condition descriptor \d+ is not valid/i.test(
-        publishErrText,
-      );
+      isConditionIdError = CONDITION_ID_ERROR_RE.test(publishErrText);
     }
 
     if (isConditionIdError && offerId) {
@@ -1097,13 +1147,38 @@ export async function handleCreateDraft({
       // If the initial graded condition fails, this category cannot be salvaged via fallback.
       const isGradedCoinCategory = finalCategoryId === "171526";
 
-      const candidates = isGradedCoinCategory
+      let candidates: string[] = isGradedCoinCategory
         ? [] // No valid fallbacks for graded coin categories
         : categoryTreeType === "coin"
         ? ["USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE", "NEW"]
         : categoryTreeType === "bullion"
         ? ["NEW", "USED_GOOD"]
-        : ["USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE"];
+        : categoryTreeType === "trading_card"
+        ? ["USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE"]
+        : [];
+
+      // No hardcoded guess exists for "other" categories (jewelry and
+      // everything else outside coin/bullion/trading_card) — the hardcoded
+      // USED_VERY_GOOD/USED_GOOD/USED_ACCEPTABLE guess used here previously
+      // isn't even valid for e.g. Fine Jewelry > Rings (261994), whose real
+      // conditions are NEW/NEW_OTHER/NEW_WITH_DEFECTS/USED_EXCELLENT. Ask
+      // eBay what this specific category actually accepts instead of
+      // guessing again.
+      if (!isGradedCoinCategory && candidates.length === 0 && finalCategoryId) {
+        try {
+          const liveConditions = await fetchDynamicCategoryConditions(
+            finalCategoryId,
+          );
+          candidates = liveConditions
+            .map((c) => normalizeConditionDescriptorToEnum(c.conditionDescription))
+            .filter((c) => c.length > 0);
+        } catch (liveConditionsErr) {
+          console.warn(
+            `create_draft: live-conditions retry lookup failed for category ${finalCategoryId}`,
+            liveConditionsErr,
+          );
+        }
+      }
 
       const retryConditions = candidates.filter(
         (c) => c !== effectiveConditionEnum,

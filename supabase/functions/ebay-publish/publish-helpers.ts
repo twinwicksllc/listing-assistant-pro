@@ -185,6 +185,16 @@ export function normalizeConditionDescriptorToEnum(
     damaged: "DAMAGED",
     graded: "LIKE_NEW", // 2750 = Graded (per eBay condition ID docs)
     ungraded: "USED_VERY_GOOD", // 4000 = Ungraded (per eBay condition ID docs)
+    // eBay's Jewelry & Watches / Sporting Goods condition policy returns
+    // these descriptions (confirmed via getItemConditionPolicies for
+    // category 261994, Fine Jewelry > Rings). Mirrored in
+    // src/types/listing.ts's normalizeEbayConditionDescription (frontend)
+    // and bulk-publish/index.ts's own copy of this table — update all three
+    // together if eBay adds another condition string.
+    "new with tags": "NEW",
+    "new without tags": "NEW_OTHER",
+    "new with defects": "NEW_WITH_DEFECTS",
+    "pre-owned": "USED_EXCELLENT",
   };
 
   return (

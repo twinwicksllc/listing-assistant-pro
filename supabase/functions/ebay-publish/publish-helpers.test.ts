@@ -5,6 +5,7 @@ import {
   HARDCODED_COIN_CATEGORY_IDS,
   HARDCODED_COLLECTIBLE_CATEGORY_IDS,
   HARDCODED_TRADING_CARD_CATEGORY_IDS,
+  normalizeConditionDescriptorToEnum,
 } from "./publish-helpers.ts";
 
 // Regression guard for the 2026-09-01 stale-coin-category-ID cleanup (see
@@ -146,4 +147,36 @@ Deno.test("HARDCODED_TRADING_CARD_CATEGORY_IDS: dead 19107 is gone, replaced by 
 
 Deno.test("detectCategoryTreeSync: 183050 resolves as trading_card (19107 no longer does)", () => {
   assertEquals(detectCategoryTreeSync("183050", undefined), "trading_card");
+});
+
+// Regression guard for the 2026-09-16 ring-publish bug: eBay's Metadata API
+// returns human-readable conditionDescription strings for Jewelry & Watches /
+// Sporting Goods categories (confirmed via getItemConditionPolicies for
+// category 261994, Fine Jewelry > Rings) that had no alias entry — the
+// regex-mangle fallback turned them into non-existent enum tokens like
+// "NEW_WITH_TAGS", which normalizeConditionForCategory's "other" branch (no
+// coin/bullion/trading_card/collectible correction applies to jewelry) then
+// passed through to eBay's publish endpoint untouched.
+Deno.test("normalizeConditionDescriptorToEnum: jewelry/sporting conditionDescription strings", () => {
+  assertEquals(normalizeConditionDescriptorToEnum("New with tags"), "NEW");
+  assertEquals(
+    normalizeConditionDescriptorToEnum("New without tags"),
+    "NEW_OTHER",
+  );
+  assertEquals(
+    normalizeConditionDescriptorToEnum("New with defects"),
+    "NEW_WITH_DEFECTS",
+  );
+  assertEquals(
+    normalizeConditionDescriptorToEnum("Pre-owned"),
+    "USED_EXCELLENT",
+  );
+});
+
+Deno.test("normalizeConditionDescriptorToEnum: is case-insensitive for the new aliases", () => {
+  assertEquals(normalizeConditionDescriptorToEnum("NEW WITH TAGS"), "NEW");
+  assertEquals(
+    normalizeConditionDescriptorToEnum("pre-owned"),
+    "USED_EXCELLENT",
+  );
 });
