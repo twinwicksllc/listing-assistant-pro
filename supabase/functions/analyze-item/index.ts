@@ -14,6 +14,7 @@ import { enforceLeafCategory, isKnownParentCategoryId } from "../_helpers/leafCa
 import type { Identification } from "../_helpers/pass1Identification.ts";
 import { buildSeoTitle, TITLE_MAX_LENGTH, TITLE_TARGET_MIN_LENGTH, titleFillRatio } from "../_helpers/listingFormat.ts";
 import type { TitleComponents } from "../_helpers/listingFormat.ts";
+import { StageTimer } from "../_helpers/stageTimer.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -402,6 +403,14 @@ serve(async (req: Request) => {
   // merely-slow ones -- the shape of the 2026-09-14 504.
   const deadline = createRequestDeadline(startTime);
 
+  // Per-stage wall-clock instrumentation. Until this landed the function logged
+  // exactly ONE duration (the total at COMPLETE), so "which stage is slow" was
+  // always reconstructed from interleaved log timestamps rather than measured --
+  // against a 150s gateway ceiling that a coin analysis nearly fills. Emits one
+  // greppable summary line on both the success and failure paths. Purely
+  // observational: nothing here changes ordering, concurrency or control flow.
+  const timer = new StageTimer("analyze-item");
+
   initSentry();
 
   // IMPORTANT: Handle OPTIONS preflight first, before anything else
@@ -725,15 +734,21 @@ serve(async (req: Request) => {
     // Replaces the old linear Pass 1 / Pre-Pass 0 / Slab OCR sequence with a
     // modular Controller that handles Identification, Parallel Vision, and Grounding.
     const { ListingAgentController } = await import("../_helpers/agent-system/controller.ts");
-    const controller = new ListingAgentController(GEMINI_API_KEY, svc);
+    // Share this request's timer so Pass 1, the embedding pre-compute and the
+    // visual/market burst report into the SAME summary line as everything below.
+    const controller = new ListingAgentController(GEMINI_API_KEY, svc, timer);
 
-    const agentResult = await controller.run({
-      invocationId,
-      userId,
-      imageList,
-      voiceNote,
-      deadline,
-    });
+    const agentResult = await timer.time(
+      "agent_controller",
+      () =>
+        controller.run({
+          invocationId,
+          userId,
+          imageList,
+          voiceNote,
+          deadline,
+        }),
+    );
 
     let identification = agentResult.identification;
     prePassResult = agentResult.visualFindings
@@ -809,12 +824,19 @@ serve(async (req: Request) => {
         console.log(
           `[${invocationId}] Calling Slab OCR with ${ocrBase64List.length} images (domain=${identification.domain}, eligible=true, gate=${_slabGate.reason})`,
         );
-        slabOcrResult = await runSlabOcr(
-          NEW_OPENAI_API_KEY ?? "",
-          ocrBase64List,
-          ocrMimeList,
-          invocationId,
-          userId, // pass userId for OpenAI user attribution
+        // Timed around the OCR call itself, not the surrounding block: the block
+        // also covers the (frequent) skip paths, and a 0ms "slab_ocr" in the
+        // summary would read as "OCR was free" rather than "OCR did not run".
+        slabOcrResult = await timer.time(
+          "slab_ocr",
+          () =>
+            runSlabOcr(
+              NEW_OPENAI_API_KEY ?? "",
+              ocrBase64List,
+              ocrMimeList,
+              invocationId,
+              userId, // pass userId for OpenAI user attribution
+            ),
         );
         console.log(
           `[${invocationId}] Slab OCR result: isSlabbed=${slabOcrResult?.isSlabbed}, grader=${slabOcrResult?.grader}, year=${slabOcrResult?.year}, grade=${slabOcrResult?.grade}, certNumber=${slabOcrResult?.certNumber}`,
@@ -919,21 +941,25 @@ serve(async (req: Request) => {
         const _groundedVerifyUrl = Deno.env.get("SUPABASE_URL");
         const _groundedVerifyKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
         if (_groundedVerifyUrl && _groundedVerifyKey) {
-          const groundedVerifyResp = await fetchWithTimeout(
-            `${_groundedVerifyUrl}/functions/v1/category-lookup`,
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${_groundedVerifyKey}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                action: "verify",
-                categoryId: prePassResult.groundedCategoryId,
-              }),
-            },
-            withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
-            "category-lookup (grounded verify)",
+          const groundedVerifyResp = await timer.time(
+            "grounded_tier_verify",
+            () =>
+              fetchWithTimeout(
+                `${_groundedVerifyUrl}/functions/v1/category-lookup`,
+                {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${_groundedVerifyKey}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    action: "verify",
+                    categoryId: prePassResult.groundedCategoryId,
+                  }),
+                },
+                withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
+                "category-lookup (grounded verify)",
+              ),
           );
           if (groundedVerifyResp.ok) {
             const groundedVerifyText = await groundedVerifyResp.text();
@@ -1038,21 +1064,25 @@ serve(async (req: Request) => {
           const _lookupUrl = Deno.env.get("SUPABASE_URL");
           const _lookupKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
           if (_lookupUrl && _lookupKey) {
-            const lookupResp = await fetchWithTimeout(
-              `${_lookupUrl}/functions/v1/category-lookup`,
-              {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${_lookupKey}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  action: "lookup",
-                  itemType: searchQuery,
-                }),
-              },
-              withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
-              "category-lookup (primary)",
+            const lookupResp = await timer.time(
+              "category_lookup_primary",
+              () =>
+                fetchWithTimeout(
+                  `${_lookupUrl}/functions/v1/category-lookup`,
+                  {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${_lookupKey}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      action: "lookup",
+                      itemType: searchQuery,
+                    }),
+                  },
+                  withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
+                  "category-lookup (primary)",
+                ),
             );
             if (lookupResp.ok) {
               const lookupText = await lookupResp.text();
@@ -1148,9 +1178,15 @@ serve(async (req: Request) => {
     // + item name.  This guarantees Pass 2 always has the correct eBay aspects
     // schema, removing the need for post-lookup correction in the common case.
     if (!lockedCategoryId && !userCategoryId) {
-      const fallback = resolveDomainFallbackCategory(
-        identification,
-        slabOcrResult,
+      // Purely local rule evaluation (no I/O) -- timed to confirm it stays
+      // negligible rather than because it is suspected.
+      const fallback = timer.timeSync(
+        "domain_fallback",
+        () =>
+          resolveDomainFallbackCategory(
+            identification,
+            slabOcrResult,
+          ),
       );
       if (fallback) {
         lockedCategoryId = fallback.categoryId;
@@ -1177,21 +1213,25 @@ serve(async (req: Request) => {
         const _aspectsKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
         if (_aspectsUrl && _aspectsKey) {
           try {
-            const aspectsResp = await fetchWithTimeout(
-              `${_aspectsUrl}/functions/v1/category-lookup`,
-              {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${_aspectsKey}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  action: "aspects",
-                  categoryId: targetCategoryId,
-                }),
-              },
-              withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
-              "category-lookup aspects",
+            const aspectsResp = await timer.time(
+              "aspects_fetch",
+              () =>
+                fetchWithTimeout(
+                  `${_aspectsUrl}/functions/v1/category-lookup`,
+                  {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${_aspectsKey}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      action: "aspects",
+                      categoryId: targetCategoryId,
+                    }),
+                  },
+                  withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
+                  "category-lookup aspects",
+                ),
             );
             if (aspectsResp.ok) {
               categoryAspects = await aspectsResp.json();
@@ -1209,21 +1249,25 @@ serve(async (req: Request) => {
           }
 
           try {
-            const conditionsResp = await fetchWithTimeout(
-              `${_aspectsUrl}/functions/v1/category-lookup`,
-              {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${_aspectsKey}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  action: "conditions",
-                  categoryId: targetCategoryId,
-                }),
-              },
-              withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
-              "category-lookup conditions",
+            const conditionsResp = await timer.time(
+              "conditions_fetch",
+              () =>
+                fetchWithTimeout(
+                  `${_aspectsUrl}/functions/v1/category-lookup`,
+                  {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${_aspectsKey}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      action: "conditions",
+                      categoryId: targetCategoryId,
+                    }),
+                  },
+                  withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
+                  "category-lookup conditions",
+                ),
             );
             if (conditionsResp.ok) {
               categoryConditions = await conditionsResp.json();
@@ -1254,18 +1298,22 @@ serve(async (req: Request) => {
           console.log(
             `[${invocationId}] Pre-AI competitor search with query: "${compQuery}"`,
           );
-          const compResp = await fetchWithTimeout(
-            `${Deno.env.get("SUPABASE_URL")}/functions/v1/ebay-competitor-search`,
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({ userId, title: compQuery, yourPrice: 0 }),
-            },
-            withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
-            "ebay-competitor-search (pre-AI)",
+          const compResp = await timer.time(
+            "comps_pre_ai",
+            () =>
+              fetchWithTimeout(
+                `${Deno.env.get("SUPABASE_URL")}/functions/v1/ebay-competitor-search`,
+                {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({ userId, title: compQuery, yourPrice: 0 }),
+                },
+                withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
+                "ebay-competitor-search (pre-AI)",
+              ),
           );
           if (compResp.ok) {
             const compText = await compResp.text();
@@ -1314,6 +1362,12 @@ serve(async (req: Request) => {
     // ─── END pre-AI sold comps ────────────────────────────────────────────────
 
     // ─── Build domain-specific system prompt ─────────────────────────────────
+    // Bracketed rather than wrapped: this region spans a try/catch plus the Slab
+    // OCR ground-truth injection below, and pulling it into a closure would mean
+    // reindenting ~120 lines of prompt assembly for no behavioural gain. If it
+    // throws past the end() call the stage shows as `(open)` in the summary,
+    // which is exactly the diagnostic you want.
+    const promptBuildEnd = timer.start("prompt_build");
     let systemPrompt: string;
     try {
       const { buildSystemPrompt } = await import("../_helpers/domainPrompts.ts");
@@ -1431,6 +1485,7 @@ serve(async (req: Request) => {
         `[${invocationId}] Slab OCR context not injected: isSlabbed=${slabOcrResult?.isSlabbed}`,
       );
     }
+    promptBuildEnd();
     // ─── END Slab OCR injection ──────────────────────────────────────────────────────────────────
 
     // Build content array with all images + text prompt
@@ -1734,6 +1789,11 @@ Seller's note: "${voiceNote}"`;
     }
     // ── End dynamic tool schema ───────────────────────────────────────────────
 
+    // Bracketed rather than wrapped: the request body below is ~280 lines of
+    // tool schema and pulling it into a closure would reindent all of it. A
+    // throw here leaves the stage `(open)` in the summary, which is the signal
+    // we want if Pass 2 is what killed the request.
+    const pass2End = timer.start("pass2_listing");
     const response = await fetchWithTimeout(
       "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
       {
@@ -1930,6 +1990,7 @@ Seller's note: "${voiceNote}"`;
       withDeadline(PIPELINE_TIMEOUTS_MS.listingGeneration, deadline),
       "listing generation (Pass 2)",
     );
+    pass2End();
 
     if (!response.ok) {
       if (response.status === 429) {
@@ -2143,9 +2204,13 @@ Seller's note: "${voiceNote}"`;
     // ── ────────────────────────────────────────────────────────────────────
     if (listing.title) {
       const titleBefore = listing.title as string;
-      listing.title = buildSeoTitle(
-        listing.titleComponents as TitleComponents | undefined,
-        titleBefore,
+      listing.title = timer.timeSync(
+        "seo_title_assembly",
+        () =>
+          buildSeoTitle(
+            listing.titleComponents as TitleComponents | undefined,
+            titleBefore,
+          ),
       );
       if (listing.title !== titleBefore) {
         console.log(
@@ -2320,21 +2385,25 @@ Seller's note: "${voiceNote}"`;
         const _postLookupUrl = Deno.env.get("SUPABASE_URL");
         const _postLookupKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
         if (_postLookupUrl && _postLookupKey) {
-          const postLookupResp = await fetchWithTimeout(
-            `${_postLookupUrl}/functions/v1/category-lookup`,
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${_postLookupKey}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                action: "lookup",
-                itemType: _lookupQuery,
-              }),
-            },
-            withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
-            "category-lookup (post-lookup)",
+          const postLookupResp = await timer.time(
+            "post_lookup_verify",
+            () =>
+              fetchWithTimeout(
+                `${_postLookupUrl}/functions/v1/category-lookup`,
+                {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${_postLookupKey}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    action: "lookup",
+                    itemType: _lookupQuery,
+                  }),
+                },
+                withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
+                "category-lookup (post-lookup)",
+              ),
           );
           if (postLookupResp.ok) {
             let postLookupData: any;
@@ -2676,21 +2745,25 @@ Seller's note: "${voiceNote}"`;
       const _metadataKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
       if (_metadataUrl && _metadataKey) {
         try {
-          const aspectsResp = await fetchWithTimeout(
-            `${_metadataUrl}/functions/v1/category-lookup`,
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${_metadataKey}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                action: "aspects",
-                categoryId: listing.ebayCategoryId,
-              }),
-            },
-            withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
-            "category-lookup aspects (post-change)",
+          const aspectsResp = await timer.time(
+            "metadata_resync_aspects",
+            () =>
+              fetchWithTimeout(
+                `${_metadataUrl}/functions/v1/category-lookup`,
+                {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${_metadataKey}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    action: "aspects",
+                    categoryId: listing.ebayCategoryId,
+                  }),
+                },
+                withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
+                "category-lookup aspects (post-change)",
+              ),
           );
           if (aspectsResp.ok) {
             categoryAspects = await aspectsResp.json();
@@ -2703,21 +2776,25 @@ Seller's note: "${voiceNote}"`;
         }
 
         try {
-          const conditionsResp = await fetchWithTimeout(
-            `${_metadataUrl}/functions/v1/category-lookup`,
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${_metadataKey}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                action: "conditions",
-                categoryId: listing.ebayCategoryId,
-              }),
-            },
-            withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
-            "category-lookup conditions (post-change)",
+          const conditionsResp = await timer.time(
+            "metadata_resync_conditions",
+            () =>
+              fetchWithTimeout(
+                `${_metadataUrl}/functions/v1/category-lookup`,
+                {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${_metadataKey}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    action: "conditions",
+                    categoryId: listing.ebayCategoryId,
+                  }),
+                },
+                withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
+                "category-lookup conditions (post-change)",
+              ),
           );
           if (conditionsResp.ok) {
             categoryConditions = await conditionsResp.json();
@@ -2804,36 +2881,40 @@ Item type: ${identification.itemName}${seedContext}
 Using ONLY the schema provided in the JSON schema tool, fill in the item specifics accurately based on what you can see in the images and the item context above. Do not invent values — only fill in what you can confidently determine.`,
             });
 
-            const regenResp = await fetchWithTimeout(
-              "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-              {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${GEMINI_API_KEY}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  model: GEMINI_HEAVY_MODEL,
-                  messages: [{ role: "user", content: regenContentParts }],
-                  tools: [
-                    {
-                      type: "function",
-                      function: {
-                        name: "setItemSpecifics",
-                        description: "Set the item specifics for this eBay listing",
-                        parameters: regenSchema,
-                      },
+            const regenResp = await timer.time(
+              "pass2_5_specifics_regen",
+              () =>
+                fetchWithTimeout(
+                  "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+                  {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${GEMINI_API_KEY}`,
+                      "Content-Type": "application/json",
                     },
-                  ],
-                  tool_choice: {
-                    type: "function",
-                    function: { name: "setItemSpecifics" },
+                    body: JSON.stringify({
+                      model: GEMINI_HEAVY_MODEL,
+                      messages: [{ role: "user", content: regenContentParts }],
+                      tools: [
+                        {
+                          type: "function",
+                          function: {
+                            name: "setItemSpecifics",
+                            description: "Set the item specifics for this eBay listing",
+                            parameters: regenSchema,
+                          },
+                        },
+                      ],
+                      tool_choice: {
+                        type: "function",
+                        function: { name: "setItemSpecifics" },
+                      },
+                      temperature: 0.1,
+                    }),
                   },
-                  temperature: 0.1,
-                }),
-              },
-              withDeadline(PIPELINE_TIMEOUTS_MS.listingGeneration, deadline),
-              "item-specifics regeneration",
+                  withDeadline(PIPELINE_TIMEOUTS_MS.listingGeneration, deadline),
+                  "item-specifics regeneration",
+                ),
             );
 
             if (regenResp.ok) {
@@ -2996,13 +3077,19 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
         detailMimeList.push(detMimeMatch ? detMimeMatch[1] : "image/jpeg");
       }
 
-      const detailResult = await extractKeyDetails(
-        GEMINI_API_KEY,
-        identification.domain as any,
-        listing.title || identification.itemName,
-        detailBase64List,
-        detailMimeList,
-        invocationId,
+      // Timed at the call site, not inside detailExtractor.ts, so this
+      // instrumentation does not collide with in-flight work on that module.
+      const detailResult = await timer.time(
+        "detail_extraction",
+        () =>
+          extractKeyDetails(
+            GEMINI_API_KEY,
+            identification.domain as any,
+            listing.title || identification.itemName,
+            detailBase64List,
+            detailMimeList,
+            invocationId,
+          ),
       );
 
       if (detailResult) {
@@ -3035,22 +3122,26 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
           );
           const competitorUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ebay-competitor-search`;
 
-          const competitorResp = await fetchWithTimeout(
-            competitorUrl,
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                userId,
-                title: listing.title,
-                yourPrice: listing.priceMin || listing.price?.amount || 0,
-              }),
-            },
-            withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
-            "ebay-competitor-search (post-AI)",
+          const competitorResp = await timer.time(
+            "comps_post_ai",
+            () =>
+              fetchWithTimeout(
+                competitorUrl,
+                {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    userId,
+                    title: listing.title,
+                    yourPrice: listing.priceMin || listing.price?.amount || 0,
+                  }),
+                },
+                withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
+                "ebay-competitor-search (post-AI)",
+              ),
           );
 
           console.log(
@@ -3397,6 +3488,10 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
     console.log(
       `[${invocationId}] ✅ analyze-item COMPLETE (${Date.now() - startTime}ms)`,
     );
+    // One greppable line: per-stage ms sorted slowest-first, plus total,
+    // union-of-intervals ("accounted"), concurrency ("overlap") and
+    // uninstrumented remainder ("untimed"). Never throws.
+    timer.log(`[${invocationId}]`);
 
     return new Response(JSON.stringify(finalResponse), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -3407,6 +3502,10 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
       `[${invocationId}] ❌ analyze-item FAILED after ${elapsed}ms:`,
       e,
     );
+    // Emit timings on the failure path too -- a 504/timeout is precisely the
+    // case where the per-stage split is worth having, and the stage still in
+    // flight shows as `(open)`.
+    timer.log(`[${invocationId}]`);
     if (e instanceof Error) {
       console.error(`[${invocationId}] Error name: ${e.name}`);
       console.error(`[${invocationId}] Error message: ${e.message}`);

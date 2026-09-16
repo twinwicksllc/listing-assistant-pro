@@ -278,6 +278,59 @@ export function buildSeoTitle(
   return truncateToWordBoundary(assembled || fallback);
 }
 
+/**
+ * A title must keep at least this many words to still identify the item. Below
+ * it, dropping more is worse than declining the edit that needed the room.
+ */
+export const MIN_TITLE_WORDS_KEPT = 5;
+
+/** Trailing separators left dangling once a word is dropped. */
+const DANGLING_TAIL = /[\s,;:\-/&+.]+$/;
+
+/**
+ * Frees characters in an already-assembled title by dropping whole words from
+ * the tail, returning `null` rather than mid-word truncating when it cannot.
+ *
+ * This exists because a ceiling built *toward* breaks every later insertion.
+ * `buildSeoTitle` deliberately targets 75-80 of the 80 characters, so a
+ * downstream correction that needs two more -- adding a confirmed mint mark,
+ * "1894" -> "1894-O" -- arrives at a title with no room. The guards that used
+ * to sit at those call sites (`if (newTitle.length <= 80)`) then discarded the
+ * correction silently: item specifics carried the right mint while the title
+ * carried the wrong one, which on a coin is a materially wrong listing, not a
+ * cosmetic one. Before the assembler existed titles ran 50-58 characters and
+ * the room was always there, so the guards had never once fired.
+ *
+ * Dropping from the tail is safe because the tail is, by construction, the
+ * least valuable end: the assembler appends its six tiers in search-priority
+ * order, so trailing content is tier-6 secondary keywords ("Type Coin", "US
+ * Mint") and appended buyer synonyms. Trading a generic keyword for a verified
+ * mint mark is the right trade every time.
+ *
+ * To make room for something being appended or prepended, pass a reduced `max`
+ * (`TITLE_MAX_LENGTH - (addition.length + 1)`) -- the addition is then never
+ * itself a drop candidate.
+ */
+export function shrinkTitleToFit(
+  title: string,
+  max: number = TITLE_MAX_LENGTH,
+  minWordsKept: number = MIN_TITLE_WORDS_KEPT,
+): string | null {
+  const trimmed = (title ?? "").trim();
+  // Blank in, decline out. Returning "" here would read as SUCCESS to a caller
+  // testing `!== null`, and an empty title is worse than a declined edit.
+  if (trimmed.length === 0) return null;
+  if (max <= 0) return null;
+  if (trimmed.length <= max) return trimmed;
+
+  const words = trimmed.split(/\s+/);
+  for (let keep = words.length - 1; keep >= minWordsKept; keep--) {
+    const candidate = words.slice(0, keep).join(" ").replace(DANGLING_TAIL, "");
+    if (candidate.length > 0 && candidate.length <= max) return candidate;
+  }
+  return null;
+}
+
 /** Fraction of the 80-character budget used. For shortfall logging. */
 export function titleFillRatio(title: string): number {
   if (!title) return 0;

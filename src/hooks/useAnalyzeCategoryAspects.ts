@@ -12,10 +12,27 @@ interface AspectInfo {
   values: string[];
 }
 
+interface RawCondition {
+  conditionId?: string | number;
+  conditionDescription?: string;
+}
+
 interface EbayMetadata {
   requiredAspects: string[];
   suggestedAspects: string[];
   allowedConditions: string[];
+}
+
+/**
+ * Mirrors analyze-item's `allowedConditions` transform (index.ts, building
+ * `ebayMetadata`) so a category change gets the same shape eBay's own
+ * condition-policy API would produce for the new category, not stale codes
+ * left over from whatever category the item started in.
+ */
+function toAllowedConditions(conditions: RawCondition[]): string[] {
+  return conditions
+    .map((c) => c.conditionDescription || String(c.conditionId ?? ""))
+    .filter((desc) => desc.length > 0 && !/^(graded|ungraded)$/i.test(desc));
 }
 
 interface UseAnalyzeCategoryAspectsParams {
@@ -27,7 +44,7 @@ interface UseAnalyzeCategoryAspectsParams {
   itemSpecifics: ItemSpecifics;
   setItemSpecifics: (updater: (prev: ItemSpecifics) => ItemSpecifics) => void;
   setEbayMetadata: (meta: EbayMetadata | null) => void;
-  /** Previous metadata (to preserve allowedConditions when we only update aspects) */
+  /** Previous metadata — only used as a fallback if the fresh conditions fetch itself fails */
   currentEbayMetadata: EbayMetadata | null;
 }
 
@@ -52,9 +69,14 @@ interface UseAnalyzeCategoryAspectsParams {
  *     guard hid the churn instead of fixing it.
  *  4. Stale specifics from the previous category were never removed, so aspects
  *     belonging to the old category lingered in the table.
+ *  5. `allowedConditions` was carried over from the OLD category's metadata on
+ *     every branch instead of being refetched, so switching categories (e.g.
+ *     Books → Rings) kept condition codes eBay only accepts for the old leaf —
+ *     none of which are legal for the new one, blocking publish.
  *
  * This version keeps a per-category request token, rolls the ref back on
- * failure so retries are possible, prunes stale untouched aspects, and tells
+ * failure so retries are possible, prunes stale untouched aspects, fetches
+ * conditions fresh alongside aspects on every category change, and tells
  * the seller when a category is a parent with no aspects.
  */
 export function useAnalyzeCategoryAspects({
@@ -88,13 +110,36 @@ export function useAnalyzeCategoryAspects({
 
     const fetchAndSeed = async () => {
       try {
-        const { data, error } = await supabase.functions.invoke(
-          "category-lookup",
-          { body: { action: "aspects", categoryId: requestedCategoryId } },
-        );
+        const [{ data, error }, conditionsResult] = await Promise.all([
+          supabase.functions.invoke("category-lookup", {
+            body: { action: "aspects", categoryId: requestedCategoryId },
+          }),
+          // Fetch conditions fresh for the NEW category rather than keeping
+          // whatever allowedConditions belonged to the OLD one — a draft moved
+          // from Books to Rings otherwise keeps book-only condition codes,
+          // every one of which eBay rejects for a jewelry leaf.
+          supabase.functions.invoke("category-lookup", {
+            body: { action: "conditions", categoryId: requestedCategoryId },
+          }),
+        ]);
 
         // The user moved on to a different category while we were waiting.
         if (cancelled || requestedCategoryId !== ebayCategoryId) return;
+
+        let allowedConditions = metadataRef.current?.allowedConditions ?? [];
+        if (conditionsResult.error) {
+          console.warn(
+            `useAnalyzeCategoryAspects: conditions fetch failed for ${requestedCategoryId}`,
+            conditionsResult.error,
+          );
+        } else if (Array.isArray(conditionsResult.data?.conditions)) {
+          // Replace outright — even an empty result means "this category has
+          // no eBay-restricted conditions," which is still more correct than
+          // carrying over a different category's codes.
+          allowedConditions = toAllowedConditions(
+            conditionsResult.data.conditions,
+          );
+        }
 
         if (error) {
           // Transient failure — do NOT mark this category as fetched so the
@@ -136,7 +181,7 @@ export function useAnalyzeCategoryAspects({
           setEbayMetadata({
             requiredAspects: [],
             suggestedAspects: [],
-            allowedConditions: metadataRef.current?.allowedConditions ?? [],
+            allowedConditions,
           });
 
           // Only cache the "no aspects" outcome for a confirmed parent. A
@@ -157,7 +202,7 @@ export function useAnalyzeCategoryAspects({
         setEbayMetadata({
           requiredAspects: required,
           suggestedAspects: suggested,
-          allowedConditions: metadataRef.current?.allowedConditions ?? [],
+          allowedConditions,
         });
 
         const validAspectNames = new Set(aspects.map((a) => a.name));

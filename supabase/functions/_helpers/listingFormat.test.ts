@@ -2,6 +2,8 @@ import { assert, assertEquals, assertStringIncludes } from "https://deno.land/st
 import {
   buildSeoTitle,
   formatDescriptionHtml,
+  MIN_TITLE_WORDS_KEPT,
+  shrinkTitleToFit,
   stripTitleFiller,
   TITLE_MAX_LENGTH,
   TITLE_TARGET_MIN_LENGTH,
@@ -304,6 +306,278 @@ Deno.test("titleFillRatio reports the used fraction of the budget", () => {
   assertEquals(titleFillRatio("A".repeat(40)), 0.5);
   assertEquals(titleFillRatio("A".repeat(80)), 1);
   assertEquals(titleFillRatio(""), 0);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Making room in a full title (shrinkTitleToFit)
+//
+// Second-order fallout from the fix above. Teaching buildSeoTitle to fill the
+// 80-character budget broke every downstream insertion, because those call
+// sites were written against titles that ran 50-58 characters and so always
+// had 20+ spare. `applyDetailOverrides` corrects a coin's mint mark by
+// rewriting the year -- "1894" becomes "1894-O", two more characters -- behind
+// an `if (newTitle.length <= 80)` with no `else`. On a title packed to 79 or 80
+// that guard now fires and silently DISCARDS a confirmed mint mark: the item
+// specifics carry the right mint while the title carries the wrong one. "1894"
+// and "1894-O" are different coins at very different prices, so that ships a
+// materially wrong listing, not a cosmetic blemish. The guard had never once
+// fired before the assembler landed.
+//
+// shrinkTitleToFit is how the call site buys those two characters instead:
+// drop a trailing tier-6 keyword ("Type Coin", "US Mint") rather than drop the
+// verified mint mark. Dropping from the tail is safe by construction --
+// buildSeoTitle appends its six tiers in search-priority order and then buyer
+// synonyms, so the tail is always the least valuable end.
+//
+// The five fixtures below are real buildSeoTitle outputs measured on
+// 2026-09-15, and four of the five sit exactly at the 79-80 characters where
+// the old guard was dropping mint marks.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Measured buildSeoTitle output, one per shape the assembler produces.
+ * "1932 Washington Quarter" at 74 is the control: it already fits the reduced
+ * cap, so it exercises the "no work needed" branch on real data rather than on
+ * a toy string.
+ */
+const MEASURED_FULL_TITLES: readonly string[] = [
+  "1894 Morgan Silver Dollar $1 90% Silver 0.7734 oz ASW PCGS MS63 New Orleans Mint",
+  "1909 Lincoln Wheat Cent 1C 95% Copper Bronze VF Very Fine US Mint Key Date Penny",
+  "1916 Mercury Dime 10C 90% Silver 0.0723 oz AU About Uncirculated US Mint Type BU",
+  "1881 Morgan Silver Dollar $1 90% Silver GEM BU Proof Like San Francisco US Mint",
+  "1932 Washington Quarter 25C 90% Silver 0.1808 oz XF Extremely Fine US Mint",
+];
+
+/** The room a "1894" -> "1894-O" mint-mark correction actually needs. */
+const MINT_MARK_ROOM = TITLE_MAX_LENGTH - 2;
+
+/**
+ * Deliberately a character list rather than a regex. Two assertions in this
+ * very file once shipped with a literal backspace where a word-boundary escape
+ * was intended, which made both of them vacuous -- they passed while asserting
+ * nothing. A plain `includes` on the last character cannot fail that way.
+ */
+const TRAILING_SEPARATOR_CHARS: readonly string[] = [
+  ",",
+  ";",
+  ":",
+  "-",
+  "/",
+  "&",
+  "+",
+  ".",
+  " ",
+  "\t",
+  "\n",
+];
+
+const wordsOf = (text: string): string[] => text.split(/\s+/).filter((word) => word.length > 0);
+
+Deno.test("shrinkTitleToFit leaves a title that already fits untouched", () => {
+  const title = "1932 Washington Quarter 25C 90% Silver 0.1808 oz XF Extremely Fine US Mint";
+  assertEquals(shrinkTitleToFit(title, TITLE_MAX_LENGTH), title);
+  // Surrounding whitespace is normalised and that is not "an edit" for these
+  // purposes -- the caller may be handing us a raw model-supplied string.
+  assertEquals(shrinkTitleToFit(`  ${title}  `, TITLE_MAX_LENGTH), title);
+});
+
+Deno.test("shrinkTitleToFit frees mint-mark room on every measured full title", () => {
+  // The load-bearing case. Each of these is a real assembler output sitting at
+  // or one below the cap, which is exactly where the old `<= 80` guard was
+  // throwing away a CONFIRMED mint mark.
+  for (const title of MEASURED_FULL_TITLES) {
+    const shrunk = shrinkTitleToFit(title, MINT_MARK_ROOM);
+    assert(
+      shrunk !== null,
+      `declined to make room in a ${title.length}-char title: "${title}"`,
+    );
+    assert(
+      shrunk.length <= MINT_MARK_ROOM,
+      `still over ${MINT_MARK_ROOM} at ${shrunk.length}: "${shrunk}"`,
+    );
+
+    // A word-boundary prefix: the same words, in the same order, from the front.
+    const original = wordsOf(title);
+    const kept = wordsOf(shrunk);
+    assert(kept.length <= original.length, `gained words: "${shrunk}"`);
+    for (let i = 0; i < kept.length; i++) {
+      assertEquals(
+        kept[i],
+        original[i],
+        `word ${i} diverged from the source: "${shrunk}"`,
+      );
+    }
+
+    // The identifiers a buyer actually searches on -- year and series -- live
+    // at the front and must never be what pays for the mint mark.
+    assert(
+      shrunk.startsWith(original.slice(0, 3).join(" ")),
+      `lost leading identifiers: "${shrunk}"`,
+    );
+    assert(
+      kept.length >= MIN_TITLE_WORDS_KEPT,
+      `dropped below the word floor: "${shrunk}"`,
+    );
+  }
+});
+
+Deno.test("shrinkTitleToFit never ends mid-word", () => {
+  // The entire reason this is not truncateToWordBoundary. A title cut to
+  // "... New Orlea" is worse than declining the mint-mark edit, because it
+  // corrupts a keyword rather than merely failing to add one.
+  for (const title of MEASURED_FULL_TITLES) {
+    const sourceWords = new Set(wordsOf(title));
+    for (const max of [MINT_MARK_ROOM, 70, 60, 50, 40, 30]) {
+      const shrunk = shrinkTitleToFit(title, max);
+      if (shrunk === null) continue;
+      for (const word of wordsOf(shrunk)) {
+        assert(
+          sourceWords.has(word),
+          `emitted "${word}", not a whole word of the source, at max=${max}: "${shrunk}"`,
+        );
+      }
+    }
+  }
+});
+
+Deno.test("shrinkTitleToFit strips the separator a dropped word left dangling", () => {
+  // Dropping the word after a separator strands the separator, and
+  // "1894 Morgan Silver Dollar Proof -" is both ugly and a wasted character --
+  // the one character we were fighting for in the first place.
+  assertEquals(
+    shrinkTitleToFit("1894 Morgan Silver Dollar Proof - Uncirculated Coin", 34),
+    "1894 Morgan Silver Dollar Proof",
+  );
+  assertEquals(
+    shrinkTitleToFit("1894 Morgan Silver Dollar Type, Coin Extra", 32),
+    "1894 Morgan Silver Dollar Type",
+  );
+
+  // And the same as a property, swept across every cap: no result may end in
+  // one. A separator embedded inside a surviving word ("G/VG", "0.7734") is
+  // untouched, which is why this checks only the final character.
+  for (const title of MEASURED_FULL_TITLES) {
+    for (let max = 20; max <= TITLE_MAX_LENGTH; max++) {
+      const shrunk = shrinkTitleToFit(title, max);
+      if (shrunk === null) continue;
+      assert(
+        !TRAILING_SEPARATOR_CHARS.includes(shrunk.slice(-1)),
+        `dangling separator at max=${max}: "${shrunk}"`,
+      );
+    }
+  }
+});
+
+Deno.test("shrinkTitleToFit declines rather than shrink past the word floor", () => {
+  // `null` means "decline this edit". The caller's fallback -- keeping the
+  // slightly-wrong title -- is bad, but a title stripped back to "1894 Morgan"
+  // has lost the denomination, composition and grade buyers filter on, which is
+  // worse. Six words cannot reach 10 characters while keeping five.
+  assertEquals(shrinkTitleToFit("One Two Three Four Five Six", 10), null);
+  // Not an off-by-one at the boundary: 13 characters is still short of five
+  // words here ("One Two Three Four Five" is 23).
+  assertEquals(shrinkTitleToFit("One Two Three Four Five Six", 13), null);
+  // A floor above the word count is unsatisfiable by definition.
+  assertEquals(shrinkTitleToFit("One Two Three Four Five Six", 12, 7), null);
+  // Lowering the floor lets the same call succeed, which proves it is the floor
+  // doing the declining and not a length bug.
+  assertEquals(shrinkTitleToFit("One Two Three Four Five Six", 10, 2), "One Two");
+});
+
+Deno.test("shrinkTitleToFit returns null for a non-positive max", () => {
+  // A caller that computed `TITLE_MAX_LENGTH - (addition.length + 1)` against
+  // an absurdly long addition lands here. It must decline, not return "" --
+  // an empty title would pass a truthiness check at the call site and ship.
+  assertEquals(shrinkTitleToFit("1894 Morgan Silver Dollar PCGS MS63", 0), null);
+  assertEquals(shrinkTitleToFit("1894 Morgan Silver Dollar PCGS MS63", -5), null);
+});
+
+Deno.test("shrinkTitleToFit survives absent and blank input", () => {
+  // These arrive straight off a Gemini response field, so undefined is a real
+  // input shape rather than a hypothetical. Nothing here may throw -- and
+  // blank input DECLINES rather than returning "", because `null` is the
+  // contract's "leave the title alone" signal and a caller testing
+  // `!== null` would otherwise treat "" as a successful edit and ship it.
+  assertEquals(shrinkTitleToFit(""), null);
+  assertEquals(shrinkTitleToFit("   \t  "), null);
+  assertEquals(shrinkTitleToFit(null as never), null);
+  assertEquals(shrinkTitleToFit(undefined as never), null);
+});
+
+Deno.test("shrinkTitleToFit declines a single unbreakable token", () => {
+  // The one place it deliberately differs from truncateToWordBoundary, which
+  // cuts such a token to honour eBay's hard cap. Here the caller is asking
+  // "can I make room?" and the honest answer on one 120-character word is no --
+  // cutting it would corrupt the only keyword the title has.
+  assertEquals(shrinkTitleToFit("A".repeat(120), TITLE_MAX_LENGTH), null);
+  assertEquals(shrinkTitleToFit("A".repeat(120), 10), null);
+});
+
+Deno.test("shrinkTitleToFit is idempotent at the same max", () => {
+  // applyDetailOverrides can run more than once over one draft (a re-analysis,
+  // a user re-confirming a detail). A second shrink at the same cap must be a
+  // no-op, or repeated passes would erode the title one keyword at a time.
+  for (const title of MEASURED_FULL_TITLES) {
+    const once = shrinkTitleToFit(title, MINT_MARK_ROOM);
+    assert(once !== null, `unexpected decline for "${title}"`);
+    assertEquals(shrinkTitleToFit(once, MINT_MARK_ROOM), once);
+  }
+});
+
+Deno.test("shrinkTitleToFit lets a confirmed mint mark reach a packed title", () => {
+  // The end-to-end property the production bug violated. Assembled rather than
+  // hand-written so the fixture cannot drift away from what buildSeoTitle
+  // actually emits. The mint mark is CONFIRMED -- item specifics already carry
+  // it -- so the title disagreeing with them is the defect, and dropping the
+  // correction to stay under 80 is how that defect shipped.
+  const assembled = buildSeoTitle(
+    {
+      yearMint: "1894",
+      series: "Morgan Silver Dollar",
+      denomination: "$1",
+      composition: "90% Silver 0.7734 oz ASW",
+      grade: "PCGS MS63",
+      secondaryTerms: ["New Orleans Mint", "Type Coin"],
+    },
+    "1894 Morgan Silver Dollar",
+  );
+  assert(
+    assembled.length >= TITLE_TARGET_MIN_LENGTH,
+    `fixture no longer reproduces a packed title: ${assembled.length}`,
+  );
+
+  const rewritten = assembled.replace(/(^|\s)1894(\s|$)/, "$11894-O$2");
+  // Precondition, asserted so this test cannot quietly stop reproducing the
+  // bug: the rewrite really does breach the cap the old guard checked.
+  assert(
+    rewritten.length > TITLE_MAX_LENGTH,
+    `rewrite fits at ${rewritten.length}, so it never hit the guard`,
+  );
+
+  const shrunk = shrinkTitleToFit(rewritten, TITLE_MAX_LENGTH);
+  assert(shrunk !== null, "declined to make room for a confirmed mint mark");
+  assert(shrunk.length <= TITLE_MAX_LENGTH, `over cap at ${shrunk.length}: "${shrunk}"`);
+  // The whole point: the corrected mint mark survives into the shipped title.
+  assertStringIncludes(shrunk, "1894-O");
+  // And it is the tail that paid for it, not the identifiers.
+  assertStringIncludes(shrunk, "Morgan Silver Dollar");
+  assertStringIncludes(shrunk, "PCGS MS63");
+});
+
+Deno.test("shrinkTitleToFit spends the tail, keeping the highest-priority tiers", () => {
+  // Tail-first is the whole safety argument. If it ever dropped from the front
+  // or the middle, "trade a generic keyword for a verified mint mark" would
+  // silently become "trade the year for a verified mint mark".
+  const title = MEASURED_FULL_TITLES[0];
+  const tightened = shrinkTitleToFit(title, 60);
+  assert(tightened !== null, "declined at 60 chars");
+  assertStringIncludes(tightened, "1894 Morgan Silver Dollar");
+  assertStringIncludes(tightened, "$1");
+  // Tier-6 secondary terms are gone; the tier 1-3 identifiers are not.
+  assert(
+    !tightened.includes("New Orleans"),
+    `kept tier-6 filler over identifiers: "${tightened}"`,
+  );
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
