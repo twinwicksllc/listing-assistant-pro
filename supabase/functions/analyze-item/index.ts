@@ -12,6 +12,8 @@ import { GEMINI_HEAVY_MODEL } from "../_helpers/geminiModels.ts";
 import { applyVoiceNoteMetalFallback, runPass1Identification } from "../_helpers/pass1Identification.ts";
 import { enforceLeafCategory, isKnownParentCategoryId } from "../_helpers/leafCategoryGuard.ts";
 import type { Identification } from "../_helpers/pass1Identification.ts";
+import { buildSeoTitle, TITLE_MAX_LENGTH, TITLE_TARGET_MIN_LENGTH, titleFillRatio } from "../_helpers/listingFormat.ts";
+import type { TitleComponents } from "../_helpers/listingFormat.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1758,7 +1760,44 @@ Seller's note: "${voiceNote}"`;
                     title: {
                       type: "string",
                       description:
-                        "SEO-optimized eBay title, max 80 chars. Format: [Year] [Country] [Denomination] [Series/Design] [Metal] [Weight] [Condition/Grade]",
+                        "SEO-optimized eBay title. TARGET 75-80 characters INCLUDING SPACES — 80 is the hard cap, but a short title wastes search surface: eBay ranks on exact keyword tokens, so every unused character is a keyword buyers cannot find this item by. A 55-character title is a defect, not a safe choice. Front-load in this order: [Year+Mint Mark] [Series/Subject] [Denomination/Face Value] [Composition/Purity/Weight] [Grade/Condition/Strike] [Secondary terms: sovereign mint, Bullion, Type Coin, Penny]. Then, if characters remain, add synonyms buyers use interchangeably (Cent AND Penny, 1/2 oz AND Half oz, Silver Dollar AND $1). NEVER pad with subjective filler — no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!; eBay ignores or penalizes those. Every added word must be a factually true, searchable attribute of THIS item.",
+                    },
+                    titleComponents: {
+                      type: "object",
+                      description:
+                        "The title broken into search-priority tiers. The backend assembles these greedily into a 75-80 character title, so supply every tier you can support from the photos — a tier you omit is search surface lost. Do not repeat filler or guess: only facts you can see or verify.",
+                      properties: {
+                        yearMint: {
+                          type: "string",
+                          description: 'Tier 1: year and mint mark, e.g. "1894-O", "2018".',
+                        },
+                        series: {
+                          type: "string",
+                          description:
+                            'Tier 2: series or subject, e.g. "Indian Head Cent", "Morgan Silver Dollar", "Canada Polar Bear".',
+                        },
+                        denomination: {
+                          type: "string",
+                          description: 'Tier 3: denomination or face value, e.g. "1C", "$1", "$2".',
+                        },
+                        composition: {
+                          type: "string",
+                          description:
+                            'Tier 4: composition, purity and weight, e.g. ".9999 Fine Silver 1/2 oz", "90% Silver", "Bronze".',
+                        },
+                        grade: {
+                          type: "string",
+                          description:
+                            'Tier 5: grade, condition or strike, e.g. "BU", "PCGS MS63", "G/VG", "Proof". Omit entirely for an uncertified coin — numeric grades on raw coins are an eBay policy violation.',
+                        },
+                        secondaryTerms: {
+                          type: "array",
+                          description:
+                            'Tier 6: secondary search terms buyers use, e.g. "RCM", "US Mint", "Bullion", "Type Coin", "Penny". Most valuable when tiers 1-5 leave characters unused.',
+                          items: { type: "string" },
+                          maxItems: 4,
+                        },
+                      },
                     },
                     categoryId: {
                       type: "string",
@@ -1793,7 +1832,7 @@ Seller's note: "${voiceNote}"`;
                     description: {
                       type: "string",
                       description:
-                        "Write a natural, human-sounding eBay description in plain text. Do NOT output section headers or labels such as 'Opening Hook', 'Quick Specs', 'What Sets It Apart', 'Closing Statement', 'Overview', 'Specifications', or any markdown heading markers. Do NOT use HTML. Keep it concise and readable: 2-5 short paragraphs and optional simple bullet lines. Mention condition honestly, what is included, and specific visual details from the photos. Avoid robotic marketing language.",
+                        "Write a natural, human-sounding eBay description in plain text. Do NOT output section headers or labels such as 'Opening Hook', 'Quick Specs', 'What Sets It Apart', 'Closing Statement', 'Overview', 'Specifications', or any markdown heading markers. Do NOT use HTML — the backend converts this plain text into inline-styled HTML for eBay. Keep it concise and readable: 2-5 short paragraphs and optional simple bullet lines. STRUCTURE MATTERS: separate every paragraph and every list with ONE BLANK LINE, put each 'Label: Value' spec on its own line, and never hard-wrap a sentence across two lines — the converter reads blank lines and label lines to build paragraphs and bulleted spec lists, and without them eBay renders everything as one wall of text. Mention condition honestly, what is included, and specific visual details from the photos. Avoid robotic marketing language.",
                     },
                     price: {
                       type: "object",
@@ -1961,14 +2000,6 @@ Seller's note: "${voiceNote}"`;
       condition: listing.condition,
     });
 
-    if (listing.title && listing.title.length > 80) {
-      // Truncate at last complete word within 80 chars to avoid cutting mid-word
-      listing.title = listing.title
-        .substring(0, 80)
-        .replace(/\s+\S*$/, "")
-        .trim();
-    }
-
     // ── Anti-Novelty Guard ─────────────────────────────────────────────────
     // The AI occasionally prefixes the title with "NOVELTY REPLICA" or
     // "NOVELTY / FANTASY REPLICA" for legitimate certified coins (PCGS/NGC),
@@ -2100,6 +2131,37 @@ Seller's note: "${voiceNote}"`;
       }
     }
     // ── End Professional Tone Guard ─────────────────────────────────────────
+
+    // ── SEO title assembly ─────────────────────────────────────────────────
+    // The only length logic here used to be a downward truncation, and
+    // every prompt stated 80 as a ceiling -- so the model played it safe and
+    // production titles landed at 50-58 characters, throwing away 22-30
+    // characters of Cassini keyword surface per listing. buildSeoTitle assembles
+    // the structured tiers greedily toward 75-80, folds in whatever the model's
+    // own title contributed, adds buyer synonyms if room remains, and never
+    // splits a word. It cannot shorten a title below what the model produced.
+    // ── ────────────────────────────────────────────────────────────────────
+    if (listing.title) {
+      const titleBefore = listing.title as string;
+      listing.title = buildSeoTitle(
+        listing.titleComponents as TitleComponents | undefined,
+        titleBefore,
+      );
+      if (listing.title !== titleBefore) {
+        console.log(
+          `[${invocationId}] SEO title: ${titleBefore.length}ch -> ${listing.title.length}ch ("${listing.title}")`,
+        );
+      }
+      if (listing.title.length < TITLE_TARGET_MIN_LENGTH) {
+        // Not an error -- a sparse item may have nothing true left to add -- but
+        // a persistent pattern here means the tiers are coming back underfilled.
+        console.warn(
+          `[${invocationId}] SEO title short: ${listing.title.length}/${TITLE_MAX_LENGTH} chars (${
+            Math.round(titleFillRatio(listing.title) * 100)
+          }% of budget), components supplied: ${Object.keys(listing.titleComponents ?? {}).join(",") || "none"}`,
+        );
+      }
+    }
 
     // --- Build suggestedCategories (dedupe, backfill names via exact DB lookup) ---
     try {

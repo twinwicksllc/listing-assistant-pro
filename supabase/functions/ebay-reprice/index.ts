@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptToken } from "../_helpers/tokenCrypto.ts";
+import { formatDescriptionHtml } from "../_helpers/listingFormat.ts";
 
 // ebay-reprice v1: supports single + bulk price updates for eBay listings
 // - Inventory API listings: bulkUpdatePriceQuantity (up to 25 per call)
@@ -663,7 +664,13 @@ serve(async (req) => {
       } = body;
 
       const trimmedTitle = (newTitle || "").trim();
-      const trimmedDescription = (newDescription || "").trim();
+      // Both downstream paths treat this as HTML -- the Inventory API's
+      // listingDescription and the Trading API's <Description><![CDATA[...]]> --
+      // so an optimizer suggestion that arrives as plain text has to be
+      // formatted here or its newlines collapse into one wall of prose.
+      const trimmedDescription = formatDescriptionHtml(
+        (newDescription || "").trim(),
+      );
       const wantsTitle = trimmedTitle.length > 0;
       const wantsDescription = trimmedDescription.length > 0;
 

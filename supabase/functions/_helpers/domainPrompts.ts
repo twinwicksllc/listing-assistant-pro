@@ -67,7 +67,7 @@ Analyze all uploaded images as a single item and generate a precise listing.
 
 ### CORE RULES
 1. Use only visible evidence plus the seller note if provided.
-2. Title must be 80 characters or fewer.
+2. Title: TARGET 75-80 characters INCLUDING SPACES (80 is a hard cap, but a short title wastes search surface -- eBay ranks on exact keyword tokens, so an unused character is a keyword buyers cannot find this item by; a 55-char title is a defect). Front-load: the most identifying attributes first (make/model/series, then key specs, then condition). Then use any characters still remaining on additional TRUE searchable attributes and buyer synonyms. NEVER pad with subjective filler -- no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!
 3. ${pricingBlock(ctx)}
 4. Prefer the provided eBay category guidance when available.
 5. Fill required item specifics first, then recommended specifics if visible.
@@ -98,6 +98,10 @@ Simple, trust-building close referencing the photos.
 - NO clichés: no "Discover", "Elevate", "Invest in"
 - NO MARKDOWN, NO EMOJIS, NO EM-DASHES (use plain hyphens)
 - Use "Quick Details:" and "Why It Matters:" as plain text labels — these are REQUIRED
+- SEPARATE EVERY PART WITH ONE BLANK LINE, and put each "Label: Value" pair on its own line. The
+  backend converts this plain text into eBay's HTML (paragraphs and bulleted spec lists) by reading
+  those blank lines and label lines — without them eBay renders the whole description as one
+  unreadable wall of text. Do NOT hard-wrap a sentence across lines: one paragraph is one line.
 ${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}`;
 }
 
@@ -322,7 +326,7 @@ function buildCoinBullionPrompt(ctx: PromptContext): string {
 4. **CURRENT-DATED COIN VALIDITY CHECK**: For any U.S. or world government coin series, a date in the current-year range is normally valid and should not be treated as fantasy solely because it is recent. Use TODAY'S DATE above for temporal reasoning. If legal-tender/issuer cues are visible (e.g., denomination, country/issuer text, mint attribution, standard national mottos), classify as a valid coin. Only classify as novelty/fantasy/tribute/replica when there is explicit evidence (e.g., "COPY", "TRIBUTE", "REPLICA", private-mint round branding, or non-legal-tender novelty wording).
 5. ZERO SPECULATION: Only use visible evidence. If a mint mark or date is not visible, write "uncertain" or "not visible." **CRITICAL MINT MARK RULE**: NEVER assume Philadelphia mint by default. Philadelphia coins have NO mint mark — so "no mark visible" means either Philadelphia OR the mark is hidden/worn/off-frame. Always state the mint mark you can VISUALLY CONFIRM, or write "uncertain" if unclear. Do NOT infer Philadelphia just because you don't see a mark.
 6. NO NUMERICAL GRADING for uncertified coins. Use descriptive terms only (Circulated, Very Fine, Extremely Fine, About Uncirculated, Uncirculated). Numeric grades (MS-65, etc.) ONLY for coins in a PCGS, NGC, ANACS, ICG, CAC, or ICCS slab.
-7. Title ≤ 80 chars. Format: [Year] [Country] [Denomination] [Series] [Metal] [Weight] [Condition/Grade]
+7. Title: TARGET 75-80 characters INCLUDING SPACES (80 is a hard cap, but a short title wastes search surface -- eBay ranks on exact keyword tokens, so an unused character is a keyword buyers cannot find this item by; a 55-char title is a defect). Front-load: [Year+Mint Mark] [Series/Subject] [Denomination/Face Value] [Composition/Purity/Weight] [Grade/Condition/Strike] [Secondary terms: sovereign mint (RCM, US Mint), Bullion, Type Coin]. Then use any characters still remaining on additional TRUE searchable attributes and buyer synonyms. NEVER pad with subjective filler -- no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!. Also supply the titleComponents object so the backend can assemble toward 80. Add synonyms buyers use interchangeably when room allows: Cent AND Penny, 1/2 oz AND Half oz, Silver Dollar AND $1.
 8. PRICING: ${pricingBlock(ctx)}
 ${spotLine}
 
@@ -531,7 +535,7 @@ function buildTradingCardsPrompt(ctx: PromptContext): string {
 1. Identify: sport/game, player/character name, year, set name, card number, parallel/variant, holo/foil type.
 2. Graded cards: note the grading company, grade number, and cert number if visible.
 3. Raw (ungraded) cards: assess centering, corners, edges, and surface condition honestly.
-4. Title <= 80 chars. Format: [Year] [Player/Character] [Set] [Card#] [Parallel] [Grade if graded]
+4. Title: TARGET 75-80 characters INCLUDING SPACES (80 is a hard cap, but a short title wastes search surface -- eBay ranks on exact keyword tokens, so an unused character is a keyword buyers cannot find this item by; a 55-char title is a defect). Front-load: [Year] [Player/Character] [Set] [Card#] [Parallel] [Grade if graded]. Then use any characters still remaining on additional TRUE searchable attributes and buyer synonyms. NEVER pad with subjective filler -- no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!
 5. PRICING: ${pricing}
 
 ### DESCRIPTION FORMATTING (REQUIRED)
@@ -591,7 +595,7 @@ function buildSneakersPrompt(ctx: PromptContext): string {
    - "Used - Good": Moderate wear, visible sole wear and toe box creasing, still structurally sound
    - "Used - Fair": Heavy wear, significant sole wear, yellowing (for white midsoles), possible odor - disclose clearly
 5. AUTHENTICATION CUES: Note stitching consistency, glue line cleanliness, and whether the box label matches the shoe (style code, size, colorway name) when box is photographed. Do not make definitive "authentic" or "fake" claims — describe what is visually consistent with authentic pairs and let the buyer judge.
-6. Title <= 80 chars. Format: [Brand] [Model] [Colorway Name] [Size] [Condition]. Example: "Nike Air Jordan 1 Retro High OG Chicago Size 10 DS".
+6. Title: TARGET 75-80 characters INCLUDING SPACES (80 is a hard cap, but a short title wastes search surface -- eBay ranks on exact keyword tokens, so an unused character is a keyword buyers cannot find this item by; a 55-char title is a defect). Front-load: [Brand] [Model] [Colorway Name] [Size] [Condition]. Example: "Nike Air Jordan 1 Retro High OG Chicago Size 10 DS". Then use any characters still remaining on additional TRUE searchable attributes and buyer synonyms. NEVER pad with subjective filler -- no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!
 7. PRICING: ${pricing}
 
 ### ITEM SPECIFICS PRIORITY
@@ -651,7 +655,7 @@ function buildElectronicsPrompt(ctx: PromptContext): string {
    - "Used - Acceptable / For Parts": Heavy wear, cracks, functional issues, or sold explicitly for parts/repair - disclose the specific issue
 5. INCLUDED ACCESSORIES: List every accessory visible in photos (charger, cable, case, box, manual, controller, etc.) - this materially affects price and buyer expectations.
 6. BATTERY HEALTH: If a battery health percentage or cycle count is visible in a screenshot, include it - this is a high-value trust signal for used electronics.
-7. Title <= 80 chars. Format: [Brand] [Model] [Key Spec e.g. storage/color] [Condition]. Example: "Apple iPhone 13 Pro 256GB Graphite Unlocked Used Excellent".
+7. Title: TARGET 75-80 characters INCLUDING SPACES (80 is a hard cap, but a short title wastes search surface -- eBay ranks on exact keyword tokens, so an unused character is a keyword buyers cannot find this item by; a 55-char title is a defect). Front-load: [Brand] [Model] [Key Spec e.g. storage/color] [Condition]. Example: "Apple iPhone 13 Pro 256GB Graphite Unlocked Used Excellent". Then use any characters still remaining on additional TRUE searchable attributes and buyer synonyms. NEVER pad with subjective filler -- no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!
 8. PRICING: ${pricing}
 
 ### ITEM SPECIFICS PRIORITY
@@ -713,7 +717,7 @@ function buildJewelryPrompt(ctx: PromptContext): string {
 4. GEMSTONE IDENTIFICATION: Describe visible stones using standard grading language where determinable from photos - color, approximate clarity (eye-clean vs visible inclusions), cut, and approximate carat weight ONLY if stated on a tag or receipt. Never assert a definitive gemstone identification (e.g., "genuine diamond" vs "cubic zirconia") from photos alone unless a certification card is shown - describe what is visually consistent and note if a lab report/certificate is included.
 5. WEIGHT-TO-PRICE REASONING: If a scale weight or tag weight (in grams or dwt) is visible, factor it into the metal-value floor calculation using the purity from rule 3.
 6. CONDITION: Check clasps/closures for security, prongs for stone looseness, and plating for wear (common on gold-plated/vermeil pieces) - disclose any of these issues clearly.
-7. Title <= 80 chars. Format: [Metal/Purity] [Item Type] [Key Stone/Feature] [Brand if applicable]. Example: "14K Yellow Gold Diamond Solitaire Ring 0.5ct Size 7".
+7. Title: TARGET 75-80 characters INCLUDING SPACES (80 is a hard cap, but a short title wastes search surface -- eBay ranks on exact keyword tokens, so an unused character is a keyword buyers cannot find this item by; a 55-char title is a defect). Front-load: [Metal/Purity] [Item Type] [Key Stone/Feature] [Brand if applicable]. Example: "14K Yellow Gold Diamond Solitaire Ring 0.5ct Size 7". Then use any characters still remaining on additional TRUE searchable attributes and buyer synonyms. NEVER pad with subjective filler -- no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!
 8. PRICING: ${pricing}${spotLine}
 
 ### ITEM SPECIFICS PRIORITY
@@ -771,7 +775,7 @@ function buildAutoPartsPrompt(ctx: PromptContext): string {
    - "Used - Excellent": Light wear, fully functional, no corrosion or damage
    - "Used - Good": Visible wear or minor corrosion, functional
    - "For Parts / Not Working": Broken, heavily worn, or sold as-is for parts/repair - disclose the specific defect
-7. Title <= 80 chars. Format: [Brand] [Part Name] [Part Number] [Placement] [Condition]. Example: "Bosch Front Brake Pads Set OEM 0986424815 New".
+7. Title: TARGET 75-80 characters INCLUDING SPACES (80 is a hard cap, but a short title wastes search surface -- eBay ranks on exact keyword tokens, so an unused character is a keyword buyers cannot find this item by; a 55-char title is a defect). Front-load: [Brand] [Part Name] [Part Number] [Placement] [Condition]. Example: "Bosch Front Brake Pads Set OEM 0986424815 New". Then use any characters still remaining on additional TRUE searchable attributes and buyer synonyms. NEVER pad with subjective filler -- no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!
 8. PRICING: ${pricing}
 
 ### ITEM SPECIFICS PRIORITY
@@ -830,7 +834,7 @@ function buildLuxuryHandbagsPrompt(ctx: PromptContext): string {
    - "Good": Moderate wear, some patina darkening or scuffing, fully functional
    - "Fair": Heavy wear, visible staining, hardware tarnish, or structural issues - disclose specifically
 6. INCLUSIONS: Note dust bag, box, authenticity card, care booklet, receipt, or repair invoice if shown - these materially increase value and buyer confidence.
-7. Title <= 80 chars. Format: [Brand] [Model Name] [Size if applicable] [Material/Color] [Condition]. Example: "Louis Vuitton Neverfull MM Damier Ebene Canvas Tote Excellent".
+7. Title: TARGET 75-80 characters INCLUDING SPACES (80 is a hard cap, but a short title wastes search surface -- eBay ranks on exact keyword tokens, so an unused character is a keyword buyers cannot find this item by; a 55-char title is a defect). Front-load: [Brand] [Model Name] [Size if applicable] [Material/Color] [Condition]. Example: "Louis Vuitton Neverfull MM Damier Ebene Canvas Tote Excellent". Then use any characters still remaining on additional TRUE searchable attributes and buyer synonyms. NEVER pad with subjective filler -- no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!
 8. PRICING: ${pricing}
 
 ### ITEM SPECIFICS PRIORITY
@@ -889,7 +893,7 @@ function buildVintageClothingPrompt(ctx: PromptContext): string {
    - "Good": Visible wear (moderate fading, minor stains, small snags), still presentable
    - "Fair": Notable flaws (stains, holes, significant fading, odor) - ALWAYS disclose these explicitly and specifically, including odor, since non-disclosure is a common vintage clothing complaint
 6. MATERIAL: State fabric content from the care label if visible; otherwise describe based on visual/textural assessment and note it is an estimate.
-7. Title <= 80 chars. Format: [Era if determinable] [Brand] [Garment Type] [Size] [Key Feature]. Example: "Vintage 1970s Levi's Denim Trucker Jacket Size M Union Made".
+7. Title: TARGET 75-80 characters INCLUDING SPACES (80 is a hard cap, but a short title wastes search surface -- eBay ranks on exact keyword tokens, so an unused character is a keyword buyers cannot find this item by; a 55-char title is a defect). Front-load: [Era if determinable] [Brand] [Garment Type] [Size] [Key Feature]. Example: "Vintage 1970s Levi's Denim Trucker Jacket Size M Union Made". Then use any characters still remaining on additional TRUE searchable attributes and buyer synonyms. NEVER pad with subjective filler -- no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!
 8. PRICING: ${pricing}
 
 ### ITEM SPECIFICS PRIORITY
