@@ -56,29 +56,44 @@ function parseImageDataUrl(dataUrl: string) {
 const PASS1_MAX_TOKENS = 500;
 
 /**
- * Disable extended reasoning for Pass 1.
+ * Minimize (NOT disable) extended reasoning for Pass 1.
  *
  * GEMINI_HEAVY_MODEL is a thinking model (`gemini-pro-latest`), and nothing in
  * this codebase set a reasoning budget on any Gemini call before 2026-09-15 --
  * so every thinking-model call spends an unbounded, per-request-variable share
  * of `max_tokens` on reasoning it never shows. On the OpenAI-compatible
  * endpoint that budget comes out of the same allowance as the answer, which is
- * how a 500-token cap produced 29 characters.
+ * how a 500-token cap produced 29 characters. "none" fixed that on 2026-09-15.
+ *
+ * "none" stopped being a valid value on 2026-09-16: Google's `gemini-pro-latest`
+ * alias now points at a Gemini 3 Pro generation that made thinking mandatory --
+ * a zero reasoning budget is hardcoded-rejected with `400 INVALID_ARGUMENT:
+ * Budget 0 is invalid. This model only works in thinking mode`, and that
+ * request-level failure fell through Pass 1's existing !pass1Resp.ok branch to
+ * DEFAULT_IDENTIFICATION (domain="general") on EVERY call -- confirmed live in
+ * production, not from an error page. "low" is the lowest value the
+ * OpenAI-compat endpoint accepts for this model family; Pass 1's own
+ * single-shot classification task still needs none of the reasoning that
+ * floor buys, so this is a forced floor, not a considered increase in
+ * reasoning depth.
  *
  * Pass 1 is single-shot classification into a fixed 12-domain enum plus a name
  * and keywords -- all of it read directly off the images. There is no
- * multi-step inference for reasoning to help with, so "none" costs no accuracy
- * here. This is deliberately NOT a blanket policy for the rest of the pipeline:
- * the visual and market agents do multi-step work where reasoning earns its
- * keep, and per the user's standing instruction the heavy model tier stays put
- * for visual requests because accuracy matters more than cost there.
+ * multi-step inference for reasoning to help with, so minimizing it costs no
+ * accuracy here. This is deliberately NOT a blanket policy for the rest of the
+ * pipeline: the visual and market agents do multi-step work where reasoning
+ * earns its keep, and per the user's standing instruction the heavy model tier
+ * stays put for visual requests because accuracy matters more than cost there.
  *
  * Sent as `reasoning_effort` (the OpenAI-compat spelling). The native API's
- * equivalent is `generationConfig.thinkingConfig.thinkingBudget` -- different
- * shape, so a call site ported between the two endpoints needs this rewritten,
- * not copied.
+ * equivalent for this model family is `thinking_level` (NOT the older
+ * `thinkingConfig.thinkingBudget` integer, which this same model generation
+ * still accepts but treats a 0 floor identically -- and Google warns not to
+ * send both `thinking_level` and `thinking_budget` in the same request, they
+ * conflict). A call site ported between the native and OpenAI-compat endpoints
+ * needs this rewritten, not copied.
  */
-const PASS1_REASONING_EFFORT = "none";
+const PASS1_REASONING_EFFORT = "low";
 
 const DEFAULT_IDENTIFICATION: Identification = {
   domain: "general",
