@@ -1,5 +1,6 @@
 import { assert, assertEquals, assertStringIncludes } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import {
+  buildFallbackDescription,
   buildSeoTitle,
   formatDescriptionHtml,
   MIN_TITLE_WORDS_KEPT,
@@ -743,4 +744,99 @@ Deno.test("formatDescriptionHtml renders a mixed block with a lead-in and specs"
   // paragraph while the three real pairs become the list.
   assertStringIncludes(html, "<ul");
   assertEquals(html.match(/<li /g)?.length, 3);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// buildFallbackDescription (Phase 1.3b, 2026-09-16)
+//
+// analyze-item's Pass 2 splits into two concurrent calls (structured
+// extraction, prose description). Before the split, a Pass 2 failure threw
+// for the whole listing -- "structured fields OK, description missing" is a
+// new partial-failure state this function exists to cover. It must produce
+// the exact "Label: Value" line shape formatDescriptionHtml already parses,
+// so a real listing with only structured fields still renders as a proper
+// list, not a wall of unparsed text.
+// ─────────────────────────────────────────────────────────────────────────────
+
+Deno.test("buildFallbackDescription includes the title and every non-empty item specific", () => {
+  const out = buildFallbackDescription({
+    title: "1oz Silver Eagle Coin",
+    itemSpecifics: { Metal: "Silver", Year: "2024", Grade: "MS63" },
+  });
+  assertStringIncludes(out, "1oz Silver Eagle Coin");
+  assertStringIncludes(out, "Quick Details:");
+  assertStringIncludes(out, "Metal: Silver");
+  assertStringIncludes(out, "Year: 2024");
+  assertStringIncludes(out, "Grade: MS63");
+});
+
+Deno.test("buildFallbackDescription caps at 8 item specifics", () => {
+  const itemSpecifics: Record<string, string> = {};
+  for (let i = 1; i <= 12; i++) {
+    itemSpecifics[`Spec${i}`] = `Value${i}`;
+  }
+  const out = buildFallbackDescription({ title: "Test Item", itemSpecifics });
+  const labelLines = out
+    .split("\n")
+    .filter((line) => /^Spec\d+: Value\d+$/.test(line));
+  assertEquals(labelLines.length, 8);
+  // The first 8 keys in insertion order should be the ones kept, not an
+  // arbitrary subset -- Object.entries preserves insertion order for string
+  // keys, so this pins that assumption too.
+  for (let i = 1; i <= 8; i++) {
+    assertStringIncludes(out, `Spec${i}: Value${i}`);
+  }
+  assert(!out.includes("Spec9:"), `expected Spec9 to be dropped: ${out}`);
+});
+
+Deno.test("buildFallbackDescription skips null, undefined, and empty-string values", () => {
+  const out = buildFallbackDescription({
+    title: "Test Item",
+    itemSpecifics: {
+      Metal: "Gold",
+      Year: null as unknown as string,
+      Grade: undefined as unknown as string,
+      Notes: "",
+      Composition: "  ",
+    },
+  });
+  assertStringIncludes(out, "Metal: Gold");
+  assert(!out.includes("Year:"), `null value rendered: ${out}`);
+  assert(!out.includes("Grade:"), `undefined value rendered: ${out}`);
+  assert(!out.includes("Notes:"), `empty-string value rendered: ${out}`);
+  assert(!out.includes("Composition:"), `whitespace-only value rendered: ${out}`);
+});
+
+Deno.test("buildFallbackDescription omits the title line when no title is given", () => {
+  const out = buildFallbackDescription({ itemSpecifics: { Metal: "Gold" } });
+  assertStringIncludes(out, "Quick Details:");
+  assertStringIncludes(out, "Metal: Gold");
+  // No title means no leading non-"Quick Details:" prose line before it.
+  const firstLine = out.split("\n")[0];
+  assertEquals(firstLine, "Quick Details:");
+});
+
+Deno.test("buildFallbackDescription does not throw on empty or missing itemSpecifics", () => {
+  const noSpecifics = buildFallbackDescription({ title: "Test Item" });
+  assertStringIncludes(noSpecifics, "Quick Details:");
+  assertStringIncludes(noSpecifics, "Test Item");
+
+  const emptySpecifics = buildFallbackDescription({
+    title: "Test Item",
+    itemSpecifics: {},
+  });
+  assertStringIncludes(emptySpecifics, "Quick Details:");
+});
+
+Deno.test("buildFallbackDescription's output is parsed by formatDescriptionHtml into a real list, not left as unparsed prose", () => {
+  const fallback = buildFallbackDescription({
+    title: "1oz Silver Eagle Coin",
+    itemSpecifics: { Metal: "Silver", Year: "2024", Grade: "MS63" },
+  });
+  const html = formatDescriptionHtml(fallback);
+  assertStringIncludes(html, "<ul");
+  assertEquals(html.match(/<li /g)?.length, 3);
+  assertStringIncludes(html, "<b>Metal:</b> Silver");
+  assertStringIncludes(html, "<b>Year:</b> 2024");
+  assertStringIncludes(html, "<b>Grade:</b> MS63");
 });

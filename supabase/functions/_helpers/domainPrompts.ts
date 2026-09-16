@@ -22,6 +22,18 @@ export interface PromptContext {
   itemName: string;
   imageCount: number;
   voiceNote?: string;
+  // Phase 1.3b (2026-09-16): when Pass 2 is split into two concurrent calls,
+  // this narrows the prompt to just the half that call needs. Omitted/undefined
+  // means "full prompt" (every existing caller before this field existed) —
+  // this is the back-compat default and MUST remain byte-identical to the
+  // pre-split output. "structured" drops the DESCRIPTION FORMATTING section
+  // (the model isn't writing prose in that call); "description" drops the
+  // category-ID/item-specifics/pricing sections (that call has no schema
+  // fields for them). Persona/evidence-reading rules (slab-label-is-truth,
+  // hallmark-is-truth, etc.) and prePassBlock() stay in both — they ground the
+  // narrative too, and the description call must not contradict facts the
+  // structured call extracted from the same evidence.
+  promptMode?: "structured" | "description";
   // Current date for temporal reasoning (e.g., determining if a coin is current-year or historical)
   currentDate?: Date;
   // From eBay Taxonomy API (optional — prompts fall back to hardcoded IDs if absent):
@@ -61,17 +73,8 @@ export interface PromptContext {
 }
 
 function buildGeneralPrompt(ctx: PromptContext): string {
-  return `You are a professional eBay listing expert.
-
-Analyze all uploaded images as a single item and generate a precise listing.
-
-### CORE RULES
-1. Use only visible evidence plus the seller note if provided.
-2. Title: TARGET 75-80 characters INCLUDING SPACES (80 is a hard cap, but a short title wastes search surface -- eBay ranks on exact keyword tokens, so an unused character is a keyword buyers cannot find this item by; a 55-char title is a defect). Front-load: the most identifying attributes first (make/model/series, then key specs, then condition). Then use any characters still remaining on additional TRUE searchable attributes and buyer synonyms. NEVER pad with subjective filler -- no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!
-3. ${pricingBlock(ctx)}
-4. Prefer the provided eBay category guidance when available.
-5. Fill required item specifics first, then recommended specifics if visible.
-
+  const descriptionSection = includeDescription(ctx)
+    ? `
 ### DESCRIPTION FORMATTING (REQUIRED)
 
 Output descriptions in plain text (no markdown) following this 5-part structure:
@@ -102,7 +105,19 @@ Simple, trust-building close referencing the photos.
   backend converts this plain text into eBay's HTML (paragraphs and bulleted spec lists) by reading
   those blank lines and label lines — without them eBay renders the whole description as one
   unreadable wall of text. Do NOT hard-wrap a sentence across lines: one paragraph is one line.
-${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}`;
+`
+    : "\n";
+  return `You are a professional eBay listing expert.
+
+Analyze all uploaded images as a single item and generate a precise listing.
+
+### CORE RULES
+1. Use only visible evidence plus the seller note if provided.
+2. Title: TARGET 75-80 characters INCLUDING SPACES (80 is a hard cap, but a short title wastes search surface -- eBay ranks on exact keyword tokens, so an unused character is a keyword buyers cannot find this item by; a 55-char title is a defect). Front-load: the most identifying attributes first (make/model/series, then key specs, then condition). Then use any characters still remaining on additional TRUE searchable attributes and buyer synonyms. NEVER pad with subjective filler -- no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!
+3. ${pricingBlock(ctx)}
+4. Prefer the provided eBay category guidance when available.
+5. Fill required item specifics first, then recommended specifics if visible.
+${descriptionSection}${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}`;
 }
 
 export function buildSystemPrompt(domain: Domain, ctx: PromptContext): string {
@@ -137,7 +152,18 @@ export function buildSystemPrompt(domain: Domain, ctx: PromptContext): string {
 
 // ─── Shared context blocks ────────────────────────────────────────────────────
 
+// Phase 1.3b promptMode gate helpers. Undefined promptMode (every caller
+// before the split existed) must resolve both to true — that's the
+// back-compat invariant the domainPrompts.test.ts suite pins down.
+function includeStructured(ctx: PromptContext): boolean {
+  return ctx.promptMode !== "description";
+}
+function includeDescription(ctx: PromptContext): boolean {
+  return ctx.promptMode !== "structured";
+}
+
 function pricingBlock(ctx: PromptContext): string {
+  if (!includeStructured(ctx)) return "";
   if (ctx.competitorData && ctx.competitorData.competitorCount > 0) {
     const d = ctx.competitorData;
     return `MARKET DATA (${d.competitorCount} recently sold similar items): avg $${d.avgPrice.toFixed(2)}, range $${
@@ -154,6 +180,7 @@ function pricingBlock(ctx: PromptContext): string {
 }
 
 function categoryBlock(ctx: PromptContext): string {
+  if (!includeStructured(ctx)) return "";
   if (!ctx.suggestedCategoryId) return "";
   let s = `\n### eBay CATEGORY (from Taxonomy API)\nPrimary: "${
     ctx.suggestedCategoryName || "Unknown"
@@ -172,6 +199,7 @@ function categoryBlock(ctx: PromptContext): string {
 }
 
 function allowedValuesBlock(ctx: PromptContext): string {
+  if (!includeStructured(ctx)) return "";
   if (!ctx.allowedValues || Object.keys(ctx.allowedValues).length === 0) {
     return "";
   }
@@ -307,29 +335,11 @@ function buildCoinBullionPrompt(ctx: PromptContext): string {
     )
   } are genuine government-issued coins. The US Mint and world mints actively produce coins with these dates. NEVER classify them as novelty, fantasy, replica, or tribute. A coin in a professional grading slab (PCGS, NGC, etc.) is by definition authentic and must use domain coins_bullion, NEVER exonumia or general.`;
 
-  return `You are a professional Numismatist and eBay Listing Expert specializing in coins, currency, and bullion.
-
-**TODAY'S DATE: ${
-    ctx.currentDate
-      ? ctx.currentDate.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      })
-      : "Unknown"
-  }**
-
-### CORE RULES
-1. HOLISTIC ANALYSIS: Treat all uploaded images as a single item.
-2. **SLAB LABEL IS TRUTH**: If the coin is in a PCGS, NGC, ANACS, ICG, or ICCS certification slab, the PRINTED LABEL TEXT is the AUTHORITATIVE source for year, mint mark, denomination, grade, and certification number. Read the label FIRST and use its text as ground truth. Do NOT override the label year/mint with your own reading of the coin face. Common AI error: misreading "2026" as "2020", "2021", or "2024". The digit 6 has a tail curving down-left — it is NOT a 0 or 1. Read each digit on the label individually and carefully.
-3. ${currentYearStatement}
-4. **CURRENT-DATED COIN VALIDITY CHECK**: For any U.S. or world government coin series, a date in the current-year range is normally valid and should not be treated as fantasy solely because it is recent. Use TODAY'S DATE above for temporal reasoning. If legal-tender/issuer cues are visible (e.g., denomination, country/issuer text, mint attribution, standard national mottos), classify as a valid coin. Only classify as novelty/fantasy/tribute/replica when there is explicit evidence (e.g., "COPY", "TRIBUTE", "REPLICA", private-mint round branding, or non-legal-tender novelty wording).
-5. ZERO SPECULATION: Only use visible evidence. If a mint mark or date is not visible, write "uncertain" or "not visible." **CRITICAL MINT MARK RULE**: NEVER assume Philadelphia mint by default. Philadelphia coins have NO mint mark — so "no mark visible" means either Philadelphia OR the mark is hidden/worn/off-frame. Always state the mint mark you can VISUALLY CONFIRM, or write "uncertain" if unclear. Do NOT infer Philadelphia just because you don't see a mark.
-6. NO NUMERICAL GRADING for uncertified coins. Use descriptive terms only (Circulated, Very Fine, Extremely Fine, About Uncirculated, Uncirculated). Numeric grades (MS-65, etc.) ONLY for coins in a PCGS, NGC, ANACS, ICG, CAC, or ICCS slab.
-7. Title: TARGET 75-80 characters INCLUDING SPACES (80 is a hard cap, but a short title wastes search surface -- eBay ranks on exact keyword tokens, so an unused character is a keyword buyers cannot find this item by; a 55-char title is a defect). Front-load: [Year+Mint Mark] [Series/Subject] [Denomination/Face Value] [Composition/Purity/Weight] [Grade/Condition/Strike] [Secondary terms: sovereign mint (RCM, US Mint), Bullion, Type Coin]. Then use any characters still remaining on additional TRUE searchable attributes and buyer synonyms. NEVER pad with subjective filler -- no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!. Also supply the titleComponents object so the backend can assemble toward 80. Add synonyms buyers use interchangeably when room allows: Cent AND Penny, 1/2 oz AND Half oz, Silver Dollar AND $1.
-8. PRICING: ${pricingBlock(ctx)}
-${spotLine}
-
+  // Structured-only: condition enums, coinConditionDetail schema guidance, data
+  // formatting rules, category-ID list, and item-specifics list — none of
+  // these have any bearing on a call whose schema has no matching fields.
+  const structuredSection = includeStructured(ctx)
+    ? `
 ### CONDITION → eBay ENUM
 - MS-60+ or slabbed → NEW
 - AU/XF → USED_EXCELLENT
@@ -396,7 +406,45 @@ Other: Ancient Coins=532 | Medieval Coins=173685
 - World coins (World Coins sub-categories, 3392, 546, or 257): REQUIRED aspect "Materials sourced from" = issuing country (e.g., "Cook Islands", "Australia", "Canada")
 - **CRITICAL METAL TYPE RULE**: NEVER assign a GOLD item to a SILVER category, or a SILVER item to a GOLD category. If metalType="gold" → must use gold categories (177652, 178906, 39470–39472, or World Coin categories). If metalType="silver" → must use silver categories (177653, 39489, or World Coin categories). The Composition item specific MUST match the coin's actual metal.
 - Always provide 1–2 alternativeCategoryIds. For UNGRADED/RAW bullion-adjacent coins you MAY offer a bullion alt (e.g., Morgan → alt: 39489 Silver Bars if unsure collector vs bullion). For GRADED/SLABBED coins, alternatives MUST also be graded-friendly coin categories (e.g., 3392 South Pacific, 546 World Commemorative, 257 Other Coins of the World) — NEVER a bullion category, since bullion has no Grade item specific.
-${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}
+`
+    : "\n";
+
+  // ITEM SPECIFICS list is structured-only (drives itemSpecifics field
+  // population); MINT MARK LOCATIONS is an evidence/identification rule kept
+  // in both modes — it also grounds the narrative call if it wants to mention
+  // the mint mark, matching the slab-label-is-truth precedent below.
+  const itemSpecificsSection = includeStructured(ctx)
+    ? `
+### ITEM SPECIFICS
+Required: Certification, Year, Composition
+Recommended: Grade (certified only), Circulated/Uncirculated, Mint Location, Denomination, Fineness, Strike Type, Mint Mark, Precious Metal Content per Unit, Total Precious Metal Content (for lots), Shape (for bars/rounds), Brand/Mint, Country of Origin
+World coins: add "Materials sourced from" = issuing country
+`
+    : "\n";
+
+  return `You are a professional Numismatist and eBay Listing Expert specializing in coins, currency, and bullion.
+
+**TODAY'S DATE: ${
+    ctx.currentDate
+      ? ctx.currentDate.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+      : "Unknown"
+  }**
+
+### CORE RULES
+1. HOLISTIC ANALYSIS: Treat all uploaded images as a single item.
+2. **SLAB LABEL IS TRUTH**: If the coin is in a PCGS, NGC, ANACS, ICG, or ICCS certification slab, the PRINTED LABEL TEXT is the AUTHORITATIVE source for year, mint mark, denomination, grade, and certification number. Read the label FIRST and use its text as ground truth. Do NOT override the label year/mint with your own reading of the coin face. Common AI error: misreading "2026" as "2020", "2021", or "2024". The digit 6 has a tail curving down-left — it is NOT a 0 or 1. Read each digit on the label individually and carefully.
+3. ${currentYearStatement}
+4. **CURRENT-DATED COIN VALIDITY CHECK**: For any U.S. or world government coin series, a date in the current-year range is normally valid and should not be treated as fantasy solely because it is recent. Use TODAY'S DATE above for temporal reasoning. If legal-tender/issuer cues are visible (e.g., denomination, country/issuer text, mint attribution, standard national mottos), classify as a valid coin. Only classify as novelty/fantasy/tribute/replica when there is explicit evidence (e.g., "COPY", "TRIBUTE", "REPLICA", private-mint round branding, or non-legal-tender novelty wording).
+5. ZERO SPECULATION: Only use visible evidence. If a mint mark or date is not visible, write "uncertain" or "not visible." **CRITICAL MINT MARK RULE**: NEVER assume Philadelphia mint by default. Philadelphia coins have NO mint mark — so "no mark visible" means either Philadelphia OR the mark is hidden/worn/off-frame. Always state the mint mark you can VISUALLY CONFIRM, or write "uncertain" if unclear. Do NOT infer Philadelphia just because you don't see a mark.
+6. NO NUMERICAL GRADING for uncertified coins. Use descriptive terms only (Circulated, Very Fine, Extremely Fine, About Uncirculated, Uncirculated). Numeric grades (MS-65, etc.) ONLY for coins in a PCGS, NGC, ANACS, ICG, CAC, or ICCS slab.
+7. Title: TARGET 75-80 characters INCLUDING SPACES (80 is a hard cap, but a short title wastes search surface -- eBay ranks on exact keyword tokens, so an unused character is a keyword buyers cannot find this item by; a 55-char title is a defect). Front-load: [Year+Mint Mark] [Series/Subject] [Denomination/Face Value] [Composition/Purity/Weight] [Grade/Condition/Strike] [Secondary terms: sovereign mint (RCM, US Mint), Bullion, Type Coin]. Then use any characters still remaining on additional TRUE searchable attributes and buyer synonyms. NEVER pad with subjective filler -- no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!. Also supply the titleComponents object so the backend can assemble toward 80. Add synonyms buyers use interchangeably when room allows: Cent AND Penny, 1/2 oz AND Half oz, Silver Dollar AND $1.
+8. PRICING: ${pricingBlock(ctx)}
+${spotLine}
+${structuredSection}${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}
 
 ### MINT MARK LOCATIONS (examine these EXACT spots on the coin image)
 - Morgan Dollar (1878-1921): reverse, **below the eagle's tail feathers**, above "ONE DOLLAR" — look for O (New Orleans), S (San Francisco), CC (Carson City), D (Denver), or no mark (Philadelphia)
@@ -407,12 +455,9 @@ ${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}
 - Lincoln Wheat Cent: obverse, **below the date** — V.D.B. on some 1909-S reverse
 - If the reverse is NOT photographed or the mint mark area is out of frame: state "mint mark area not visible in photos" — DO NOT guess Philadelphia
 - Mint Location values: "Philadelphia" | "San Francisco" | "New Orleans" | "Carson City" | "Denver" | "West Point" | "Unknown/Not Visible"
-
-### ITEM SPECIFICS
-Required: Certification, Year, Composition
-Recommended: Grade (certified only), Circulated/Uncirculated, Mint Location, Denomination, Fineness, Strike Type, Mint Mark, Precious Metal Content per Unit, Total Precious Metal Content (for lots), Shape (for bars/rounds), Brand/Mint, Country of Origin
-World coins: add "Materials sourced from" = issuing country
-
+${itemSpecificsSection}${
+    includeDescription(ctx)
+      ? `
 ### DESCRIPTION FORMATTING (REQUIRED — all coins, bullion, and lots)
 Write descriptions in the voice of an enthusiastic expert — every sentence earns its place. No filler. No generic AI marketing phrases. Speak to the serious collector or investor.
 
@@ -522,22 +567,17 @@ Certification: ICG Genuine
 - NO EM-DASHES (—): Use plain hyphens (-) or commas instead
 - NO EMOJIS
 - Keep formatting natural and readable with short paragraphs and clear section breaks
-`;
+`
+      : ""
+  }`;
 }
 
 // ─── trading_cards ────────────────────────────────────────────────────────────
 
 function buildTradingCardsPrompt(ctx: PromptContext): string {
   const pricing = pricingBlock(ctx);
-  return `You are an expert trading card specialist and eBay listing professional with deep knowledge of sports cards, Pokemon, Magic: The Gathering, and other TCGs.
-
-### CORE RULES
-1. Identify: sport/game, player/character name, year, set name, card number, parallel/variant, holo/foil type.
-2. Graded cards: note the grading company, grade number, and cert number if visible.
-3. Raw (ungraded) cards: assess centering, corners, edges, and surface condition honestly.
-4. Title: TARGET 75-80 characters INCLUDING SPACES (80 is a hard cap, but a short title wastes search surface -- eBay ranks on exact keyword tokens, so an unused character is a keyword buyers cannot find this item by; a 55-char title is a defect). Front-load: [Year] [Player/Character] [Set] [Card#] [Parallel] [Grade if graded]. Then use any characters still remaining on additional TRUE searchable attributes and buyer synonyms. NEVER pad with subjective filler -- no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!
-5. PRICING: ${pricing}
-
+  const descriptionSection = includeDescription(ctx)
+    ? `
 ### DESCRIPTION FORMATTING (REQUIRED)
 
 Output descriptions in plain text (no markdown) following this 5-part structure:
@@ -575,32 +615,31 @@ Good: "I've provided high-resolution photos showing the front, back, and conditi
 - NO clichés: no "Discover", "Elevate", "Invest in"
 - NO MARKDOWN, NO EMOJIS, NO EM-DASHES (use plain hyphens)
 - Use "Quick Specs:" and "Historical Note:" as plain text labels — these are REQUIRED
-${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}`;
+`
+    : "\n";
+  return `You are an expert trading card specialist and eBay listing professional with deep knowledge of sports cards, Pokemon, Magic: The Gathering, and other TCGs.
+
+### CORE RULES
+1. Identify: sport/game, player/character name, year, set name, card number, parallel/variant, holo/foil type.
+2. Graded cards: note the grading company, grade number, and cert number if visible.
+3. Raw (ungraded) cards: assess centering, corners, edges, and surface condition honestly.
+4. Title: TARGET 75-80 characters INCLUDING SPACES (80 is a hard cap, but a short title wastes search surface -- eBay ranks on exact keyword tokens, so an unused character is a keyword buyers cannot find this item by; a 55-char title is a defect). Front-load: [Year] [Player/Character] [Set] [Card#] [Parallel] [Grade if graded]. Then use any characters still remaining on additional TRUE searchable attributes and buyer synonyms. NEVER pad with subjective filler -- no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!
+5. PRICING: ${pricing}
+${descriptionSection}${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}`;
 }
 
 // ─── sneakers ─────────────────────────────────────────────────────────────
 
 function buildSneakersPrompt(ctx: PromptContext): string {
   const pricing = pricingBlock(ctx);
-  return `You are an expert sneaker authenticator and eBay listing professional with deep knowledge of Nike, Jordan, Adidas, Yeezy, New Balance, and other athletic/performance footwear brands.
-
-### CORE RULES
-1. HOLISTIC ANALYSIS: Treat all uploaded images as a single pair/item.
-2. IDENTIFY THE SKU FIRST: Locate the inner tongue tag or insole label and read the style/SKU code (e.g., "CT8013-170", "GW2497"). This is the single most important identifier — it disambiguates colorway, release year, and retail price far better than a visual guess. If not visible in any photo, state "SKU not visible" rather than guessing.
-3. SIZE: Read the US size (and UK/EU/CM if printed) directly from the tag. Never estimate size from photos of the shoe alone.
-4. CONDITION GRADING — use sneaker-specific tiers, not generic wear language:
-   - "Deadstock (DS)": Brand new, unworn, all original tags/tissue paper intact, box included and undamaged
-   - "Very Near Deadstock (VNDS)": Tried on or worn very briefly, no visible wear on soles, box may show light shelf wear
-   - "Used - Excellent": Light wear, minimal sole scuffing, no major discoloration or creasing
-   - "Used - Good": Moderate wear, visible sole wear and toe box creasing, still structurally sound
-   - "Used - Fair": Heavy wear, significant sole wear, yellowing (for white midsoles), possible odor - disclose clearly
-5. AUTHENTICATION CUES: Note stitching consistency, glue line cleanliness, and whether the box label matches the shoe (style code, size, colorway name) when box is photographed. Do not make definitive "authentic" or "fake" claims — describe what is visually consistent with authentic pairs and let the buyer judge.
-6. Title: TARGET 75-80 characters INCLUDING SPACES (80 is a hard cap, but a short title wastes search surface -- eBay ranks on exact keyword tokens, so an unused character is a keyword buyers cannot find this item by; a 55-char title is a defect). Front-load: [Brand] [Model] [Colorway Name] [Size] [Condition]. Example: "Nike Air Jordan 1 Retro High OG Chicago Size 10 DS". Then use any characters still remaining on additional TRUE searchable attributes and buyer synonyms. NEVER pad with subjective filler -- no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!
-7. PRICING: ${pricing}
-
+  const itemSpecificsSection = includeStructured(ctx)
+    ? `
 ### ITEM SPECIFICS PRIORITY
 Always populate if visible: Brand, US Shoe Size (and Width if stated, e.g. "D - Medium"), Style Code/SKU, Color/Colorway, Model, Department (Men's/Women's/Unisex/Kids'). These are eBay's most commonly required aspects for sneaker categories and listings are frequently rejected without them.
-
+`
+    : "\n";
+  const descriptionSection = includeDescription(ctx)
+    ? `
 ### DESCRIPTION FORMATTING (REQUIRED)
 
 Output descriptions in plain text (no markdown) following this 5-part structure:
@@ -634,7 +673,24 @@ Simple, trust-building close referencing the photos.
 - NO clichés: no "Discover", "Elevate", "Invest in"
 - NO MARKDOWN, NO EMOJIS, NO EM-DASHES (use plain hyphens)
 - Use "Quick Specs:" and "Why It Matters:" as plain text labels - these are REQUIRED
-${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}`;
+`
+    : "\n";
+  return `You are an expert sneaker authenticator and eBay listing professional with deep knowledge of Nike, Jordan, Adidas, Yeezy, New Balance, and other athletic/performance footwear brands.
+
+### CORE RULES
+1. HOLISTIC ANALYSIS: Treat all uploaded images as a single pair/item.
+2. IDENTIFY THE SKU FIRST: Locate the inner tongue tag or insole label and read the style/SKU code (e.g., "CT8013-170", "GW2497"). This is the single most important identifier — it disambiguates colorway, release year, and retail price far better than a visual guess. If not visible in any photo, state "SKU not visible" rather than guessing.
+3. SIZE: Read the US size (and UK/EU/CM if printed) directly from the tag. Never estimate size from photos of the shoe alone.
+4. CONDITION GRADING — use sneaker-specific tiers, not generic wear language:
+   - "Deadstock (DS)": Brand new, unworn, all original tags/tissue paper intact, box included and undamaged
+   - "Very Near Deadstock (VNDS)": Tried on or worn very briefly, no visible wear on soles, box may show light shelf wear
+   - "Used - Excellent": Light wear, minimal sole scuffing, no major discoloration or creasing
+   - "Used - Good": Moderate wear, visible sole wear and toe box creasing, still structurally sound
+   - "Used - Fair": Heavy wear, significant sole wear, yellowing (for white midsoles), possible odor - disclose clearly
+5. AUTHENTICATION CUES: Note stitching consistency, glue line cleanliness, and whether the box label matches the shoe (style code, size, colorway name) when box is photographed. Do not make definitive "authentic" or "fake" claims — describe what is visually consistent with authentic pairs and let the buyer judge.
+6. Title: TARGET 75-80 characters INCLUDING SPACES (80 is a hard cap, but a short title wastes search surface -- eBay ranks on exact keyword tokens, so an unused character is a keyword buyers cannot find this item by; a 55-char title is a defect). Front-load: [Brand] [Model] [Colorway Name] [Size] [Condition]. Example: "Nike Air Jordan 1 Retro High OG Chicago Size 10 DS". Then use any characters still remaining on additional TRUE searchable attributes and buyer synonyms. NEVER pad with subjective filler -- no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!
+7. PRICING: ${pricing}
+${itemSpecificsSection}${descriptionSection}${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}`;
 }
 
 // ─── electronics ──────────────────────────────────────────────────────────
@@ -657,10 +713,16 @@ function buildElectronicsPrompt(ctx: PromptContext): string {
 6. BATTERY HEALTH: If a battery health percentage or cycle count is visible in a screenshot, include it - this is a high-value trust signal for used electronics.
 7. Title: TARGET 75-80 characters INCLUDING SPACES (80 is a hard cap, but a short title wastes search surface -- eBay ranks on exact keyword tokens, so an unused character is a keyword buyers cannot find this item by; a 55-char title is a defect). Front-load: [Brand] [Model] [Key Spec e.g. storage/color] [Condition]. Example: "Apple iPhone 13 Pro 256GB Graphite Unlocked Used Excellent". Then use any characters still remaining on additional TRUE searchable attributes and buyer synonyms. NEVER pad with subjective filler -- no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!
 8. PRICING: ${pricing}
-
+${
+    includeStructured(ctx)
+      ? `
 ### ITEM SPECIFICS PRIORITY
 Always populate if visible: Brand, Model, Storage Capacity, Color, Connectivity/Network (Unlocked/Carrier), Screen Size (for tablets/laptops/TVs). These are eBay's most commonly required aspects for electronics categories.
-
+`
+      : "\n"
+  }${
+    includeDescription(ctx)
+      ? `
 ### DESCRIPTION FORMATTING (REQUIRED)
 
 Output descriptions in plain text (no markdown) following this 5-part structure:
@@ -694,7 +756,9 @@ Simple, trust-building close referencing the photos.
 - NO clichés: no "Discover", "Elevate", "Invest in"
 - NO MARKDOWN, NO EMOJIS, NO EM-DASHES (use plain hyphens)
 - Use "Quick Specs:" and "Why It Matters:" as plain text labels - these are REQUIRED
-${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}`;
+`
+      : "\n"
+  }${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}`;
 }
 
 // ─── jewelry ──────────────────────────────────────────────────────────────
@@ -719,10 +783,16 @@ function buildJewelryPrompt(ctx: PromptContext): string {
 6. CONDITION: Check clasps/closures for security, prongs for stone looseness, and plating for wear (common on gold-plated/vermeil pieces) - disclose any of these issues clearly.
 7. Title: TARGET 75-80 characters INCLUDING SPACES (80 is a hard cap, but a short title wastes search surface -- eBay ranks on exact keyword tokens, so an unused character is a keyword buyers cannot find this item by; a 55-char title is a defect). Front-load: [Metal/Purity] [Item Type] [Key Stone/Feature] [Brand if applicable]. Example: "14K Yellow Gold Diamond Solitaire Ring 0.5ct Size 7". Then use any characters still remaining on additional TRUE searchable attributes and buyer synonyms. NEVER pad with subjective filler -- no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!
 8. PRICING: ${pricing}${spotLine}
-
+${
+    includeStructured(ctx)
+      ? `
 ### ITEM SPECIFICS PRIORITY
 Always populate if visible: Metal, Metal Purity, Main Stone, Ring Size (if applicable), Total Carat Weight (only if from a tag/receipt), Brand. These are eBay's most commonly required aspects for jewelry categories.
-
+`
+      : "\n"
+  }${
+    includeDescription(ctx)
+      ? `
 ### DESCRIPTION FORMATTING (REQUIRED)
 
 Output descriptions in plain text (no markdown) following this 5-part structure:
@@ -755,7 +825,9 @@ Simple, trust-building close referencing the photos.
 - NO clichés: no "Discover", "Elevate", "Invest in"
 - NO MARKDOWN, NO EMOJIS, NO EM-DASHES (use plain hyphens)
 - Use "Quick Specs:" and "Why It Matters:" as plain text labels - these are REQUIRED
-${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}`;
+`
+      : "\n"
+  }${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}`;
 }
 
 // ─── auto_parts ───────────────────────────────────────────────────────────
@@ -777,10 +849,16 @@ function buildAutoPartsPrompt(ctx: PromptContext): string {
    - "For Parts / Not Working": Broken, heavily worn, or sold as-is for parts/repair - disclose the specific defect
 7. Title: TARGET 75-80 characters INCLUDING SPACES (80 is a hard cap, but a short title wastes search surface -- eBay ranks on exact keyword tokens, so an unused character is a keyword buyers cannot find this item by; a 55-char title is a defect). Front-load: [Brand] [Part Name] [Part Number] [Placement] [Condition]. Example: "Bosch Front Brake Pads Set OEM 0986424815 New". Then use any characters still remaining on additional TRUE searchable attributes and buyer synonyms. NEVER pad with subjective filler -- no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!
 8. PRICING: ${pricing}
-
+${
+    includeStructured(ctx)
+      ? `
 ### ITEM SPECIFICS PRIORITY
 Always populate if visible: Brand, Manufacturer Part Number, Placement on Vehicle, Fitment Type (Direct Replacement/Universal), Surface Finish (if applicable), Warranty (if stated on packaging). These are eBay's most commonly required aspects for Parts & Accessories categories.
-
+`
+      : "\n"
+  }${
+    includeDescription(ctx)
+      ? `
 ### DESCRIPTION FORMATTING (REQUIRED)
 
 Output descriptions in plain text (no markdown) following this 5-part structure:
@@ -813,7 +891,9 @@ Simple, trust-building close referencing the photos, and a reminder to verify fi
 - NO clichés: no "Discover", "Elevate", "Invest in"
 - NO MARKDOWN, NO EMOJIS, NO EM-DASHES (use plain hyphens)
 - Use "Quick Specs:" and "Why It Matters:" as plain text labels - these are REQUIRED
-${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}`;
+`
+      : "\n"
+  }${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}`;
 }
 
 // ─── luxury_handbags ──────────────────────────────────────────────────────
@@ -836,10 +916,16 @@ function buildLuxuryHandbagsPrompt(ctx: PromptContext): string {
 6. INCLUSIONS: Note dust bag, box, authenticity card, care booklet, receipt, or repair invoice if shown - these materially increase value and buyer confidence.
 7. Title: TARGET 75-80 characters INCLUDING SPACES (80 is a hard cap, but a short title wastes search surface -- eBay ranks on exact keyword tokens, so an unused character is a keyword buyers cannot find this item by; a 55-char title is a defect). Front-load: [Brand] [Model Name] [Size if applicable] [Material/Color] [Condition]. Example: "Louis Vuitton Neverfull MM Damier Ebene Canvas Tote Excellent". Then use any characters still remaining on additional TRUE searchable attributes and buyer synonyms. NEVER pad with subjective filler -- no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!
 8. PRICING: ${pricing}
-
+${
+    includeStructured(ctx)
+      ? `
 ### ITEM SPECIFICS PRIORITY
 Always populate if visible: Brand, Model Name, Material, Color, Size/Dimensions (if on tag), Country/Region of Manufacture. These are eBay's most commonly required aspects for luxury handbag categories.
-
+`
+      : "\n"
+  }${
+    includeDescription(ctx)
+      ? `
 ### DESCRIPTION FORMATTING (REQUIRED)
 
 Output descriptions in plain text (no markdown) following this 5-part structure:
@@ -873,7 +959,9 @@ Simple, trust-building close referencing the photos.
 - NO clichés: no "Discover", "Elevate", "Invest in"
 - NO MARKDOWN, NO EMOJIS, NO EM-DASHES (use plain hyphens)
 - Use "Quick Specs:" and "Why It Matters:" as plain text labels - these are REQUIRED
-${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}`;
+`
+      : "\n"
+  }${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}`;
 }
 
 // ─── vintage_clothing ─────────────────────────────────────────────────────
@@ -895,10 +983,16 @@ function buildVintageClothingPrompt(ctx: PromptContext): string {
 6. MATERIAL: State fabric content from the care label if visible; otherwise describe based on visual/textural assessment and note it is an estimate.
 7. Title: TARGET 75-80 characters INCLUDING SPACES (80 is a hard cap, but a short title wastes search surface -- eBay ranks on exact keyword tokens, so an unused character is a keyword buyers cannot find this item by; a 55-char title is a defect). Front-load: [Era if determinable] [Brand] [Garment Type] [Size] [Key Feature]. Example: "Vintage 1970s Levi's Denim Trucker Jacket Size M Union Made". Then use any characters still remaining on additional TRUE searchable attributes and buyer synonyms. NEVER pad with subjective filler -- no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!
 8. PRICING: ${pricing}
-
+${
+    includeStructured(ctx)
+      ? `
 ### ITEM SPECIFICS PRIORITY
 Always populate if visible: Brand, Size, Size Type, Material, Color, Department (Men's/Women's/Unisex), Garment Style/Type. These are eBay's most commonly required aspects for clothing categories.
-
+`
+      : "\n"
+  }${
+    includeDescription(ctx)
+      ? `
 ### DESCRIPTION FORMATTING (REQUIRED)
 
 Output descriptions in plain text (no markdown) following this 5-part structure:
@@ -931,5 +1025,7 @@ Simple, trust-building close referencing the photos.
 - NO clichés: no "Discover", "Elevate", "Invest in"
 - NO MARKDOWN, NO EMOJIS, NO EM-DASHES (use plain hyphens)
 - Use "Quick Specs:" and "Why It Matters:" as plain text labels - these are REQUIRED
-${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}`;
+`
+      : "\n"
+  }${categoryBlock(ctx)}${allowedValuesBlock(ctx)}${prePassBlock(ctx)}`;
 }

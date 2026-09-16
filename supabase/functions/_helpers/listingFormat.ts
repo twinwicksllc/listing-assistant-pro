@@ -535,3 +535,36 @@ export function formatDescriptionHtml(raw: string): string {
   // A description with no blank lines at all still has to come out as HTML.
   return wrapInContainer(rendered || renderBlock(text.trim()));
 }
+
+/**
+ * Phase 1.3b fallback: analyze-item's Pass 2 description call can fail or
+ * time out independently of the structured-extraction call now that the two
+ * run concurrently (`Promise.allSettled`) instead of one call producing both.
+ * Before the split, a Pass 2 failure threw for the whole listing -- there was
+ * no such thing as "structured fields OK, description missing". This gives
+ * that new partial-failure state a plain-text description built entirely
+ * from data the structured call already returned, using the exact
+ * "Label: Value" line convention every domain prompt already teaches
+ * `formatDescriptionHtml` to parse -- so this needs no special-case there.
+ */
+export function buildFallbackDescription(
+  listing: { title?: string; itemSpecifics?: Record<string, unknown> },
+): string {
+  const lines: string[] = [];
+  if (listing.title) {
+    lines.push(`${listing.title}.`);
+    lines.push("");
+  }
+  lines.push("Quick Details:");
+  const specifics = listing.itemSpecifics ?? {};
+  let count = 0;
+  for (const [key, value] of Object.entries(specifics)) {
+    if (count >= 8) break;
+    if (value === null || value === undefined) continue;
+    const str = String(value).trim();
+    if (!str) continue;
+    lines.push(`${key}: ${str}`);
+    count++;
+  }
+  return lines.join("\n");
+}

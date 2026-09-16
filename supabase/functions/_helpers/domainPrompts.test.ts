@@ -80,3 +80,127 @@ Deno.test("buildSystemPrompt(coins_bullion): extraction actually finds category 
     );
   }
 });
+
+// Phase 1.3b (2026-09-16): analyze-item's Pass 2 splits into two concurrent
+// calls, one structured-extraction-only and one description-only, each built
+// from the same domain prompt with a narrowed `promptMode`. These tests pin
+// the two invariants the split depends on: (1) promptMode gates the right
+// sections out of each mode, and (2) the default (undefined) mode is
+// completely unaffected — byte-identical to how every caller before this
+// split behaved, since that's the only thing preventing this from being a
+// silent behavior change for every request that doesn't use the split.
+
+const GATED_DOMAINS: Array<Parameters<typeof buildSystemPrompt>[0]> = [
+  "coins_bullion",
+  "general",
+];
+
+function contextWithCategoryAndAspects(): PromptContext {
+  return {
+    itemName: "test item",
+    imageCount: 2,
+    suggestedCategoryId: "12345",
+    suggestedCategoryName: "Test Category",
+    requiredAspects: ["Brand"],
+    allowedValues: { Color: ["Red", "Blue"] },
+  };
+}
+
+for (const domain of GATED_DOMAINS) {
+  Deno.test(`buildSystemPrompt(${domain}, promptMode="structured"): excludes DESCRIPTION FORMATTING, includes category/aspect guidance`, () => {
+    const prompt = buildSystemPrompt(domain, {
+      ...contextWithCategoryAndAspects(),
+      promptMode: "structured",
+    });
+    if (/### DESCRIPTION FORMATTING/.test(prompt)) {
+      throw new Error(
+        `promptMode="structured" must not include a DESCRIPTION FORMATTING section, but one was found in the ${domain} prompt`,
+      );
+    }
+    if (!/### eBay CATEGORY|### CATEGORY IDs/.test(prompt)) {
+      throw new Error(
+        `promptMode="structured" must still include category guidance, but none was found in the ${domain} prompt`,
+      );
+    }
+    if (!/### VALID ASPECT VALUES/.test(prompt)) {
+      throw new Error(
+        `promptMode="structured" must still include allowed-values guidance, but none was found in the ${domain} prompt`,
+      );
+    }
+  });
+
+  Deno.test(`buildSystemPrompt(${domain}, promptMode="description"): includes DESCRIPTION FORMATTING, excludes category/aspect guidance`, () => {
+    const prompt = buildSystemPrompt(domain, {
+      ...contextWithCategoryAndAspects(),
+      promptMode: "description",
+    });
+    if (!/### DESCRIPTION FORMATTING/.test(prompt)) {
+      throw new Error(
+        `promptMode="description" must include a DESCRIPTION FORMATTING section, but none was found in the ${domain} prompt`,
+      );
+    }
+    if (/### eBay CATEGORY|### CATEGORY IDs/.test(prompt)) {
+      throw new Error(
+        `promptMode="description" must not include category guidance, but some was found in the ${domain} prompt`,
+      );
+    }
+    if (/### VALID ASPECT VALUES/.test(prompt)) {
+      throw new Error(
+        `promptMode="description" must not include allowed-values guidance, but some was found in the ${domain} prompt`,
+      );
+    }
+  });
+
+  Deno.test(`buildSystemPrompt(${domain}, promptMode=undefined): byte-identical to the pre-split full prompt (back-compat)`, () => {
+    const ctx = contextWithCategoryAndAspects();
+    const withUndefinedMode = buildSystemPrompt(domain, { ...ctx, promptMode: undefined });
+    const withoutModeField = buildSystemPrompt(domain, ctx);
+    assertEquals(withUndefinedMode, withoutModeField);
+    // Both structured-only content and description-only content must be present
+    // simultaneously — this is the "full prompt" every caller got before the
+    // split existed, and it's what every caller that doesn't pass promptMode
+    // still gets today.
+    if (!/### DESCRIPTION FORMATTING/.test(withoutModeField)) {
+      throw new Error(`Default (no promptMode) ${domain} prompt is missing DESCRIPTION FORMATTING`);
+    }
+    if (!/### eBay CATEGORY|### CATEGORY IDs/.test(withoutModeField)) {
+      throw new Error(`Default (no promptMode) ${domain} prompt is missing category guidance`);
+    }
+  });
+}
+
+Deno.test('buildSystemPrompt(coins_bullion, promptMode="structured"): keeps evidence-reading rules that ground both calls (slab-label-is-truth, mint mark locations)', () => {
+  const prompt = buildSystemPrompt("coins_bullion", {
+    ...contextWithCategoryAndAspects(),
+    promptMode: "structured",
+  });
+  if (!/SLAB LABEL IS TRUTH/.test(prompt)) {
+    throw new Error('promptMode="structured" must keep the slab-label-is-truth rule');
+  }
+  if (!/MINT MARK LOCATIONS/.test(prompt)) {
+    throw new Error('promptMode="structured" must keep the mint-mark-locations evidence rule');
+  }
+});
+
+Deno.test('buildSystemPrompt(coins_bullion, promptMode="description"): keeps evidence-reading rules so the narrative doesn\'t contradict extracted facts', () => {
+  const prompt = buildSystemPrompt("coins_bullion", {
+    ...contextWithCategoryAndAspects(),
+    promptMode: "description",
+  });
+  if (!/SLAB LABEL IS TRUTH/.test(prompt)) {
+    throw new Error('promptMode="description" must keep the slab-label-is-truth rule');
+  }
+  if (!/MINT MARK LOCATIONS/.test(prompt)) {
+    throw new Error('promptMode="description" must keep the mint-mark-locations evidence rule');
+  }
+});
+
+Deno.test('buildSystemPrompt(coins_bullion, promptMode="description"): drops the coin-specific ITEM SPECIFICS list', () => {
+  const prompt = buildSystemPrompt("coins_bullion", {
+    ...contextWithCategoryAndAspects(),
+    promptMode: "description",
+  });
+  if (/### ITEM SPECIFICS\n/.test(prompt)) {
+    throw new Error('promptMode="description" must not include the coin ITEM SPECIFICS list');
+  }
+});

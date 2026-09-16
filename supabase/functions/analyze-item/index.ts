@@ -12,7 +12,13 @@ import { GEMINI_HEAVY_MODEL } from "../_helpers/geminiModels.ts";
 import { applyVoiceNoteMetalFallback, runPass1Identification } from "../_helpers/pass1Identification.ts";
 import { enforceLeafCategory, isKnownParentCategoryId } from "../_helpers/leafCategoryGuard.ts";
 import type { Identification } from "../_helpers/pass1Identification.ts";
-import { buildSeoTitle, TITLE_MAX_LENGTH, TITLE_TARGET_MIN_LENGTH, titleFillRatio } from "../_helpers/listingFormat.ts";
+import {
+  buildFallbackDescription,
+  buildSeoTitle,
+  TITLE_MAX_LENGTH,
+  TITLE_TARGET_MIN_LENGTH,
+  titleFillRatio,
+} from "../_helpers/listingFormat.ts";
 import type { TitleComponents } from "../_helpers/listingFormat.ts";
 import { StageTimer } from "../_helpers/stageTimer.ts";
 import { finishAnalysisAttempt, startAnalysisAttempt } from "../_helpers/analysisAttemptTracker.ts";
@@ -1381,17 +1387,22 @@ serve(async (req: Request) => {
     }
     // ─── END pre-AI sold comps ────────────────────────────────────────────────
 
-    // ─── Build domain-specific system prompt ─────────────────────────────────
-    // Bracketed rather than wrapped: this region spans a try/catch plus the Slab
-    // OCR ground-truth injection below, and pulling it into a closure would mean
-    // reindenting ~120 lines of prompt assembly for no behavioural gain. If it
-    // throws past the end() call the stage shows as `(open)` in the summary,
-    // which is exactly the diagnostic you want.
+    // ─── Build domain-specific system prompts ────────────────────────────────
+    // Phase 1.3b (2026-09-16): Pass 2 splits into two concurrent calls (below)
+    // instead of one call producing structured fields + description together,
+    // so this now builds TWO narrower prompts from the same shared context
+    // instead of one full prompt. Bracketed rather than wrapped: this region
+    // spans a try/catch plus the Slab OCR ground-truth injection below, and
+    // pulling it into a closure would mean reindenting ~120 lines of prompt
+    // assembly for no behavioural gain. If it throws past the end() call the
+    // stage shows as `(open)` in the summary, which is exactly the diagnostic
+    // you want.
     const promptBuildEnd = timer.start("prompt_build");
-    let systemPrompt: string;
+    let structuredPrompt: string;
+    let descriptionPrompt: string;
     try {
       const { buildSystemPrompt } = await import("../_helpers/domainPrompts.ts");
-      systemPrompt = buildSystemPrompt(identification.domain, {
+      const basePromptCtx = {
         itemName: identification.itemName,
         imageCount: imageList.length,
         voiceNote: voiceNote || undefined,
@@ -1420,13 +1431,18 @@ serve(async (req: Request) => {
               : undefined,
           }
           : null,
-      });
-      // Inject category hints from pre-lookup into the prompt
+      };
+      structuredPrompt = buildSystemPrompt(identification.domain, { ...basePromptCtx, promptMode: "structured" });
+      descriptionPrompt = buildSystemPrompt(identification.domain, { ...basePromptCtx, promptMode: "description" });
+
+      // Inject category hints from pre-lookup into the prompt — structured-only,
+      // these feed categoryId/alternativeCategoryIds which the description call
+      // no longer has a schema field for.
       if (categoryHints) {
-        systemPrompt += `\n\n### CATEGORY SELECTION HINTS (from deterministic pre-lookup)\n${categoryHints}`;
+        structuredPrompt += `\n\n### CATEGORY SELECTION HINTS (from deterministic pre-lookup)\n${categoryHints}`;
       }
 
-      // Inject dynamic aspects guidance from eBay API
+      // Inject dynamic aspects guidance from eBay API — structured-only.
       if (categoryAspects?.aspects && categoryAspects.aspects.length > 0) {
         const required = categoryAspects.aspects
           .filter((a: any) => a.required)
@@ -1450,10 +1466,10 @@ serve(async (req: Request) => {
               .join("\n")
           }`;
         }
-        systemPrompt += aspectsGuidance;
+        structuredPrompt += aspectsGuidance;
       }
 
-      // Inject allowed conditions from eBay API
+      // Inject allowed conditions from eBay API — structured-only.
       if (
         categoryConditions?.conditions &&
         categoryConditions.conditions.length > 0
@@ -1463,28 +1479,31 @@ serve(async (req: Request) => {
           categoryConditions.conditions
             .map((c: any) => `- ${c.conditionDescription || c.conditionId}`)
             .join("\n");
-        systemPrompt += conditionsGuidance;
+        structuredPrompt += conditionsGuidance;
       }
     } catch (promptErr) {
       console.error(
         "analyze-item: failed to load domain prompts, using fallback:",
         promptErr,
       );
-      systemPrompt =
+      const fallbackPrompt =
         `You are a professional eBay listing expert. Analyze the provided photo(s) and generate a complete, accurate listing via the create_listing tool. Title ≤ 80 chars. Condition must be one of: NEW, USED_EXCELLENT, USED_VERY_GOOD, USED_GOOD, USED_ACCEPTABLE, FOR_PARTS_OR_NOT_WORKING.`;
+      structuredPrompt = fallbackPrompt;
+      descriptionPrompt = fallbackPrompt;
     }
-    // ─── Inject Slab OCR ground truth into system prompt ──────────────────────────────
-    // If GPT-4o successfully read the slab label, prepend it to the system prompt
-    // so Gemini sees the correct year/grade/cert BEFORE all other instructions.
+    // ─── Inject Slab OCR ground truth into both system prompts ────────────────
+    // If GPT-4o successfully read the slab label, prepend it to BOTH prompts so
+    // Gemini sees the correct year/grade/cert BEFORE all other instructions on
+    // either call — the description call must not contradict slab-verified facts.
     if (slabOcrResult?.isSlabbed) {
       try {
         const { formatSlabOcrContext } = await import("../_helpers/slabOcr.ts");
         const ocrContext = formatSlabOcrContext(slabOcrResult);
         if (ocrContext) {
-          const originalLength = systemPrompt.length;
-          systemPrompt = ocrContext + "\n\n" + systemPrompt;
+          structuredPrompt = ocrContext + "\n\n" + structuredPrompt;
+          descriptionPrompt = ocrContext + "\n\n" + descriptionPrompt;
           console.log(
-            `[${invocationId}] Slab OCR ground truth injected into system prompt (length=${ocrContext.length} chars, total prompt now ${systemPrompt.length} chars)`,
+            `[${invocationId}] Slab OCR ground truth injected into both system prompts (length=${ocrContext.length} chars, structured=${structuredPrompt.length} chars, description=${descriptionPrompt.length} chars)`,
           );
           console.log(
             `[${invocationId}] OCR context preview: ${ocrContext.slice(0, 200)}...`,
@@ -1809,211 +1828,258 @@ Seller's note: "${voiceNote}"`;
     }
     // ── End dynamic tool schema ───────────────────────────────────────────────
 
-    // Bracketed rather than wrapped: the request body below is ~280 lines of
-    // tool schema and pulling it into a closure would reindent all of it. A
+    // Bracketed rather than wrapped: the request bodies below are large tool
+    // schemas and pulling them into a closure would reindent all of it. A
     // throw here leaves the stage `(open)` in the summary, which is the signal
     // we want if Pass 2 is what killed the request.
-    const pass2End = timer.start("pass2_listing");
-    const response = await fetchWithTimeout(
-      "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${GEMINI_API_KEY}`,
-          "Content-Type": "application/json",
+    //
+    // Phase 1.3b (2026-09-16): Pass 2 used to be one call producing structured
+    // fields AND the prose description together. It is now two concurrent
+    // calls against the same images — one structured-extraction-only, one
+    // description-only — both on GEMINI_HEAVY_MODEL (see the plan doc for why
+    // this is not a fast/heavy split: the latency win comes from concurrency,
+    // max() instead of a sum, not from downgrading either call's tier). No
+    // existing prompt text couples the description to title/category/specifics
+    // (verified directly), so there is no ordering dependency between them.
+    const structuredSchemaProperties: Record<string, unknown> = {
+      title: {
+        type: "string",
+        description:
+          "SEO-optimized eBay title. TARGET 75-80 characters INCLUDING SPACES — 80 is the hard cap, but a short title wastes search surface: eBay ranks on exact keyword tokens, so every unused character is a keyword buyers cannot find this item by. A 55-character title is a defect, not a safe choice. Front-load in this order: [Year+Mint Mark] [Series/Subject] [Denomination/Face Value] [Composition/Purity/Weight] [Grade/Condition/Strike] [Secondary terms: sovereign mint, Bullion, Type Coin, Penny]. Then, if characters remain, add synonyms buyers use interchangeably (Cent AND Penny, 1/2 oz AND Half oz, Silver Dollar AND $1). NEVER pad with subjective filler — no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!; eBay ignores or penalizes those. Every added word must be a factually true, searchable attribute of THIS item.",
+      },
+      titleComponents: {
+        type: "object",
+        description:
+          "The title broken into search-priority tiers. The backend assembles these greedily into a 75-80 character title, so supply every tier you can support from the photos — a tier you omit is search surface lost. Do not repeat filler or guess: only facts you can see or verify.",
+        properties: {
+          yearMint: {
+            type: "string",
+            description: 'Tier 1: year and mint mark, e.g. "1894-O", "2018".',
+          },
+          series: {
+            type: "string",
+            description:
+              'Tier 2: series or subject, e.g. "Indian Head Cent", "Morgan Silver Dollar", "Canada Polar Bear".',
+          },
+          denomination: {
+            type: "string",
+            description: 'Tier 3: denomination or face value, e.g. "1C", "$1", "$2".',
+          },
+          composition: {
+            type: "string",
+            description:
+              'Tier 4: composition, purity and weight, e.g. ".9999 Fine Silver 1/2 oz", "90% Silver", "Bronze".',
+          },
+          grade: {
+            type: "string",
+            description:
+              'Tier 5: grade, condition or strike, e.g. "BU", "PCGS MS63", "G/VG", "Proof". Omit entirely for an uncertified coin — numeric grades on raw coins are an eBay policy violation.',
+          },
+          secondaryTerms: {
+            type: "array",
+            description:
+              'Tier 6: secondary search terms buyers use, e.g. "RCM", "US Mint", "Bullion", "Type Coin", "Penny". Most valuable when tiers 1-5 leave characters unused.',
+            items: { type: "string" },
+            maxItems: 4,
+          },
         },
-        body: JSON.stringify({
-          model: GEMINI_HEAVY_MODEL,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: contentParts },
-          ],
-          tools: [
-            {
-              type: "function",
-              function: {
-                name: "create_listing",
-                description: "Generates a structured eBay listing payload for coins and collectibles.",
-                parameters: {
-                  type: "object",
-                  properties: {
-                    title: {
-                      type: "string",
-                      description:
-                        "SEO-optimized eBay title. TARGET 75-80 characters INCLUDING SPACES — 80 is the hard cap, but a short title wastes search surface: eBay ranks on exact keyword tokens, so every unused character is a keyword buyers cannot find this item by. A 55-character title is a defect, not a safe choice. Front-load in this order: [Year+Mint Mark] [Series/Subject] [Denomination/Face Value] [Composition/Purity/Weight] [Grade/Condition/Strike] [Secondary terms: sovereign mint, Bullion, Type Coin, Penny]. Then, if characters remain, add synonyms buyers use interchangeably (Cent AND Penny, 1/2 oz AND Half oz, Silver Dollar AND $1). NEVER pad with subjective filler — no L@@K, Rare, Stunning, Wow, Estate, and no punctuation runs like *** or !!!; eBay ignores or penalizes those. Every added word must be a factually true, searchable attribute of THIS item.",
-                    },
-                    titleComponents: {
-                      type: "object",
-                      description:
-                        "The title broken into search-priority tiers. The backend assembles these greedily into a 75-80 character title, so supply every tier you can support from the photos — a tier you omit is search surface lost. Do not repeat filler or guess: only facts you can see or verify.",
-                      properties: {
-                        yearMint: {
-                          type: "string",
-                          description: 'Tier 1: year and mint mark, e.g. "1894-O", "2018".',
-                        },
-                        series: {
-                          type: "string",
-                          description:
-                            'Tier 2: series or subject, e.g. "Indian Head Cent", "Morgan Silver Dollar", "Canada Polar Bear".',
-                        },
-                        denomination: {
-                          type: "string",
-                          description: 'Tier 3: denomination or face value, e.g. "1C", "$1", "$2".',
-                        },
-                        composition: {
-                          type: "string",
-                          description:
-                            'Tier 4: composition, purity and weight, e.g. ".9999 Fine Silver 1/2 oz", "90% Silver", "Bronze".',
-                        },
-                        grade: {
-                          type: "string",
-                          description:
-                            'Tier 5: grade, condition or strike, e.g. "BU", "PCGS MS63", "G/VG", "Proof". Omit entirely for an uncertified coin — numeric grades on raw coins are an eBay policy violation.',
-                        },
-                        secondaryTerms: {
-                          type: "array",
-                          description:
-                            'Tier 6: secondary search terms buyers use, e.g. "RCM", "US Mint", "Bullion", "Type Coin", "Penny". Most valuable when tiers 1-5 leave characters unused.',
-                          items: { type: "string" },
-                          maxItems: 4,
-                        },
-                      },
-                    },
-                    categoryId: {
-                      type: "string",
-                      description:
-                        "eBay leaf category ID. ALL IDs below are VERIFIED LEAF categories (cross-checked against the live ebay_taxonomy_cache synced 2026-08-23). COINS US: Morgan Dollars=39464, Peace Dollars=11980, Eisenhower Dollars=11981, Kennedy Half=41102, Franklin Half=11973, Walking Liberty Half=41099, Barber Half=11971, Wheat Penny=39455, US Proof Sets=41109, US Mint Sets=526, Ancient Coins=532, Medieval Coins=173685, Commemorative Silver 1892-1954 (e.g. Columbian Exposition, Panama-Pacific)=179531, Commemorative Gold 1903-1926=179532, Modern Commemorative Silver/Clad 1982-Now=179533, Modern Commemorative Gold 1984-Now=179534, Commemorative Mixed Lots=529. BULLION (use ONLY for items sold primarily for precious metal content — e.g. generic silver rounds, metal bars, American Silver/Gold Eagles sold as bullion): Gold Bars/Rounds=178906, Silver Bars/Rounds=39489, Gold Coins (bullion)=177652, Silver Coins (bullion)=177653, Copper/Other Bullion=166679, Other Silver Bullion=3361. WORLD COINS (non-US coins — use for ANY coin issued by a non-US government mint, especially collectibles). Each country has denomination/era leaves; when unsure of the exact era use that country's \"Other\" catch-all leaf: Canada Commemorative=3379, Canada Dollars=3383, Canada Other=536; Mexico 1905-Now=173631, Mexico Colonial (up to 1821)=173629, Mexico Mixed Lots=173692; UK/Great Britain Commemorative=141146, UK Crown=3406, UK Other=538; Australia Commemorative=3375, Australia Decimal=3372, Australia Other=535; Germany West & Unified 1949-Now=7955, Germany Empire 1871-1918=173620, Germany Mixed Lots=173694; China Empire (up to 1948)=173597, China PRC (1949-Now)=173598; Japan=3391; South Pacific (Cook Islands/Fiji/Niue/Palau/Tuvalu/Tokelau/Samoa/Solomon Islands)=3392; World Commemorative Coins (cross-country)=546; Other Coins of the World (any country not listed above, or when country is unknown)=257. CRITICAL WORLD COIN RULES: Chinese Panda coins, Chinese Lunar series (Year of the Pig/Rat/Ox/Tiger/Dragon/etc.), any Chinese Yuan/commemorative coin = use China leaves (173597/173598) or 257 if era is unclear; Japanese Yen commemoratives = use 3391 or 257. NEVER use bullion categories for these. A coin in a grading slab with a foreign country name on the label is a WORLD COIN, not bullion. Never use 45243 or 256 (Coins: World rollups) — both are non-leaf parent categories that will reject graded/certified coins and fail to publish; always pick the specific country/era leaf or the 257 catch-all instead. FORBIDDEN CATEGORY RULE: NEVER assign any coin, currency, or bullion item to category 261186 (Books) or any category outside Coins & Paper Money. If unsure about a coin's origin, default to 3392 (if a South Pacific country) or 257 (any other country) before guessing any non-coin category. TRADING CARDS: Sports Card Singles=261328, Sports Card Lots=261329, Sports Card Sets=261330, Sealed Card Packs=261331, Sealed Card Boxes=261332, CCG Individual Cards (Pokemon/MTG/Yu-Gi-Oh)=183454, Non-Sport Card Singles=183050. TOYS: LEGO Complete Sets=19006, Action Figures=261068, Beanie Babies Retired=440, Jellycat=158786, Other Stuffed Animals=230, Jigsaw Puzzles=19183, Diecast Cars=180506, Board Games=180349, Collectible Figures/Bobbleheads=149372. ELECTRONICS: Smartphones=9355, Headphones=112529. JEWELRY: Wristwatches=31387. For items not listed above, describe the item clearly and the system will find the correct leaf category via eBay's API. NEVER use broad parent/rollup IDs like 99 (not a real category — do not use), 253, 256, 11118, 213, 246, 182, 1, 550, or 64482.",
-                    },
-                    alternativeCategoryIds: {
-                      type: "array",
-                      description:
-                        "Up to 2 alternative eBay category IDs that would also be appropriate. Must be from the same domain as the primary (e.g. if item is a coin, alternatives must also be coin/bullion/world-coin categories — NEVER suggest a Books or non-Coins category as an alternative for a coin).",
-                      items: { type: "string" },
-                      maxItems: 2,
-                    },
-                    categoryQuery: {
-                      type: "string",
-                      description:
-                        "A short, plain descriptive phrase (4-8 words) naming WHAT THE ITEM IS, used to look up the category via eBay's taxonomy API. This is NOT the sales title. " +
-                        "INCLUDE: year, issuing country, denomination, series/design name, and the item noun. " +
-                        "EXCLUDE ALL of the following, they actively harm lookup accuracy: marketing words (RARE, GEM, STUNNING, L@@K, WOW, HOT, NR), " +
-                        "grading company names (PCGS, NGC, ANACS, ICG, CAC, ICCS), grades (MS-65, PF70, AU58), certification numbers, " +
-                        "the words graded/slabbed/certified/raw/ungraded, prices, quantities, and punctuation. " +
-                        "Grading is NOT a category dimension on eBay — including it adds noise and can pull in miscategorised listings. " +
-                        'Examples: "1883 Shield Nickel five cent coin" (NOT "RARE 1883 Shield Nickel PCGS MS-65 GEM!"), ' +
-                        '"2021 Cook Islands 2 dollar silver commemorative coin", "1oz silver bullion bar", ' +
-                        '"1998 Pokemon Base Set Charizard trading card".',
-                    },
-                    condition: {
-                      type: "string",
-                      enum: conditionEnum,
-                      description: "Item condition from eBay's allowed list for this category",
-                    },
-                    description: {
-                      type: "string",
-                      description:
-                        "Write a natural, human-sounding eBay description in plain text. Do NOT output section headers or labels such as 'Opening Hook', 'Quick Specs', 'What Sets It Apart', 'Closing Statement', 'Overview', 'Specifications', or any markdown heading markers. Do NOT use HTML — the backend converts this plain text into inline-styled HTML for eBay. Keep it concise and readable: 2-5 short paragraphs and optional simple bullet lines. STRUCTURE MATTERS: separate every paragraph and every list with ONE BLANK LINE, put each 'Label: Value' spec on its own line, and never hard-wrap a sentence across two lines — the converter reads blank lines and label lines to build paragraphs and bulleted spec lists, and without them eBay renders everything as one wall of text. Mention condition honestly, what is included, and specific visual details from the photos. Avoid robotic marketing language.",
-                    },
-                    price: {
-                      type: "object",
-                      properties: {
-                        amount: { type: "number" },
-                        currency: { type: "string", default: "USD" },
-                      },
-                      required: ["amount"],
-                    },
-                    itemSpecifics: itemSpecificsSchema,
-                    pricingNotes: { type: "string" },
-                    isSlabbed: { type: "boolean" },
-                    metalType: {
-                      type: "string",
-                      enum: ["gold", "silver", "platinum", "none"],
-                    },
-                    metalWeightOz: { type: "number" },
-                    coinConditionDetail: {
-                      type: "object",
-                      description: isCoinCategoryForSchema
-                        ? "REQUIRED for this coin listing per eBay's June 2026 structured-condition mandate. " +
-                          "If isSlabbed=true, set type='graded' with gradingCompany, grade (e.g. 'MS 65'), " +
-                          "and certificationNumber (if visible on the slab label). " +
-                          "If isSlabbed=false, set type='raw' with rawCondition set to exactly one of: " +
-                          "'Uncirculated', 'Extremely Fine to About Uncirculated', 'Fine to Very Fine', 'Below Fine'. " +
-                          "Do NOT omit this field for a coin."
-                        : "Only for coins. Omit this field entirely for non-coin items.",
-                      properties: {
-                        type: {
-                          type: "string",
-                          enum: ["graded", "raw"],
-                          description:
-                            "'graded' if the coin is in a PCGS/NGC/ANACS/ICG/CAC/ICCS slab, otherwise 'raw'.",
-                        },
-                        gradingCompany: {
-                          type: "string",
-                          enum: [
-                            "PCGS",
-                            "NGC",
-                            "ANACS",
-                            "ICG",
-                            "CAC",
-                            "ICCS",
-                            "PMG",
-                            "Legacy Currency Grading",
-                          ],
-                          description: "Required when type='graded'.",
-                        },
-                        grade: {
-                          type: "string",
-                          description:
-                            "Required when type='graded'. Full grade string as printed on slab label, e.g. 'MS 65', 'PR 70 DCAM'.",
-                        },
-                        certificationNumber: {
-                          type: "string",
-                          description: "Optional. Certification number from the slab label, if visible.",
-                        },
-                        rawCondition: {
-                          type: "string",
-                          enum: [
-                            "Uncirculated",
-                            "Extremely Fine to About Uncirculated",
-                            "Fine to Very Fine",
-                            "Below Fine",
-                          ],
-                          description: "Required when type='raw'.",
-                        },
-                      },
-                      required: ["type"],
-                    },
-                  },
-                  required: [
-                    "title",
-                    "categoryId",
-                    "condition",
-                    "description",
-                    "price",
-                    "itemSpecifics",
-                    "isSlabbed",
-                    "metalType",
-                    "metalWeightOz",
-                    ...(isCoinCategoryForSchema ? ["coinConditionDetail"] : []),
-                  ],
-                  additionalProperties: false,
-                },
+      },
+      categoryId: {
+        type: "string",
+        description:
+          "eBay leaf category ID. ALL IDs below are VERIFIED LEAF categories (cross-checked against the live ebay_taxonomy_cache synced 2026-08-23). COINS US: Morgan Dollars=39464, Peace Dollars=11980, Eisenhower Dollars=11981, Kennedy Half=41102, Franklin Half=11973, Walking Liberty Half=41099, Barber Half=11971, Wheat Penny=39455, US Proof Sets=41109, US Mint Sets=526, Ancient Coins=532, Medieval Coins=173685, Commemorative Silver 1892-1954 (e.g. Columbian Exposition, Panama-Pacific)=179531, Commemorative Gold 1903-1926=179532, Modern Commemorative Silver/Clad 1982-Now=179533, Modern Commemorative Gold 1984-Now=179534, Commemorative Mixed Lots=529. BULLION (use ONLY for items sold primarily for precious metal content — e.g. generic silver rounds, metal bars, American Silver/Gold Eagles sold as bullion): Gold Bars/Rounds=178906, Silver Bars/Rounds=39489, Gold Coins (bullion)=177652, Silver Coins (bullion)=177653, Copper/Other Bullion=166679, Other Silver Bullion=3361. WORLD COINS (non-US coins — use for ANY coin issued by a non-US government mint, especially collectibles). Each country has denomination/era leaves; when unsure of the exact era use that country's \"Other\" catch-all leaf: Canada Commemorative=3379, Canada Dollars=3383, Canada Other=536; Mexico 1905-Now=173631, Mexico Colonial (up to 1821)=173629, Mexico Mixed Lots=173692; UK/Great Britain Commemorative=141146, UK Crown=3406, UK Other=538; Australia Commemorative=3375, Australia Decimal=3372, Australia Other=535; Germany West & Unified 1949-Now=7955, Germany Empire 1871-1918=173620, Germany Mixed Lots=173694; China Empire (up to 1948)=173597, China PRC (1949-Now)=173598; Japan=3391; South Pacific (Cook Islands/Fiji/Niue/Palau/Tuvalu/Tokelau/Samoa/Solomon Islands)=3392; World Commemorative Coins (cross-country)=546; Other Coins of the World (any country not listed above, or when country is unknown)=257. CRITICAL WORLD COIN RULES: Chinese Panda coins, Chinese Lunar series (Year of the Pig/Rat/Ox/Tiger/Dragon/etc.), any Chinese Yuan/commemorative coin = use China leaves (173597/173598) or 257 if era is unclear; Japanese Yen commemoratives = use 3391 or 257. NEVER use bullion categories for these. A coin in a grading slab with a foreign country name on the label is a WORLD COIN, not bullion. Never use 45243 or 256 (Coins: World rollups) — both are non-leaf parent categories that will reject graded/certified coins and fail to publish; always pick the specific country/era leaf or the 257 catch-all instead. FORBIDDEN CATEGORY RULE: NEVER assign any coin, currency, or bullion item to category 261186 (Books) or any category outside Coins & Paper Money. If unsure about a coin's origin, default to 3392 (if a South Pacific country) or 257 (any other country) before guessing any non-coin category. TRADING CARDS: Sports Card Singles=261328, Sports Card Lots=261329, Sports Card Sets=261330, Sealed Card Packs=261331, Sealed Card Boxes=261332, CCG Individual Cards (Pokemon/MTG/Yu-Gi-Oh)=183454, Non-Sport Card Singles=183050. TOYS: LEGO Complete Sets=19006, Action Figures=261068, Beanie Babies Retired=440, Jellycat=158786, Other Stuffed Animals=230, Jigsaw Puzzles=19183, Diecast Cars=180506, Board Games=180349, Collectible Figures/Bobbleheads=149372. ELECTRONICS: Smartphones=9355, Headphones=112529. JEWELRY: Wristwatches=31387. For items not listed above, describe the item clearly and the system will find the correct leaf category via eBay's API. NEVER use broad parent/rollup IDs like 99 (not a real category — do not use), 253, 256, 11118, 213, 246, 182, 1, 550, or 64482.",
+      },
+      alternativeCategoryIds: {
+        type: "array",
+        description:
+          "Up to 2 alternative eBay category IDs that would also be appropriate. Must be from the same domain as the primary (e.g. if item is a coin, alternatives must also be coin/bullion/world-coin categories — NEVER suggest a Books or non-Coins category as an alternative for a coin).",
+        items: { type: "string" },
+        maxItems: 2,
+      },
+      categoryQuery: {
+        type: "string",
+        description:
+          "A short, plain descriptive phrase (4-8 words) naming WHAT THE ITEM IS, used to look up the category via eBay's taxonomy API. This is NOT the sales title. " +
+          "INCLUDE: year, issuing country, denomination, series/design name, and the item noun. " +
+          "EXCLUDE ALL of the following, they actively harm lookup accuracy: marketing words (RARE, GEM, STUNNING, L@@K, WOW, HOT, NR), " +
+          "grading company names (PCGS, NGC, ANACS, ICG, CAC, ICCS), grades (MS-65, PF70, AU58), certification numbers, " +
+          "the words graded/slabbed/certified/raw/ungraded, prices, quantities, and punctuation. " +
+          "Grading is NOT a category dimension on eBay — including it adds noise and can pull in miscategorised listings. " +
+          'Examples: "1883 Shield Nickel five cent coin" (NOT "RARE 1883 Shield Nickel PCGS MS-65 GEM!"), ' +
+          '"2021 Cook Islands 2 dollar silver commemorative coin", "1oz silver bullion bar", ' +
+          '"1998 Pokemon Base Set Charizard trading card".',
+      },
+      condition: {
+        type: "string",
+        enum: conditionEnum,
+        description: "Item condition from eBay's allowed list for this category",
+      },
+      price: {
+        type: "object",
+        properties: {
+          amount: { type: "number" },
+          currency: { type: "string", default: "USD" },
+        },
+        required: ["amount"],
+      },
+      itemSpecifics: itemSpecificsSchema,
+      pricingNotes: { type: "string" },
+      isSlabbed: { type: "boolean" },
+      metalType: {
+        type: "string",
+        enum: ["gold", "silver", "platinum", "none"],
+      },
+      metalWeightOz: { type: "number" },
+      coinConditionDetail: {
+        type: "object",
+        description: isCoinCategoryForSchema
+          ? "REQUIRED for this coin listing per eBay's June 2026 structured-condition mandate. " +
+            "If isSlabbed=true, set type='graded' with gradingCompany, grade (e.g. 'MS 65'), " +
+            "and certificationNumber (if visible on the slab label). " +
+            "If isSlabbed=false, set type='raw' with rawCondition set to exactly one of: " +
+            "'Uncirculated', 'Extremely Fine to About Uncirculated', 'Fine to Very Fine', 'Below Fine'. " +
+            "Do NOT omit this field for a coin."
+          : "Only for coins. Omit this field entirely for non-coin items.",
+        properties: {
+          type: {
+            type: "string",
+            enum: ["graded", "raw"],
+            description: "'graded' if the coin is in a PCGS/NGC/ANACS/ICG/CAC/ICCS slab, otherwise 'raw'.",
+          },
+          gradingCompany: {
+            type: "string",
+            enum: [
+              "PCGS",
+              "NGC",
+              "ANACS",
+              "ICG",
+              "CAC",
+              "ICCS",
+              "PMG",
+              "Legacy Currency Grading",
+            ],
+            description: "Required when type='graded'.",
+          },
+          grade: {
+            type: "string",
+            description:
+              "Required when type='graded'. Full grade string as printed on slab label, e.g. 'MS 65', 'PR 70 DCAM'.",
+          },
+          certificationNumber: {
+            type: "string",
+            description: "Optional. Certification number from the slab label, if visible.",
+          },
+          rawCondition: {
+            type: "string",
+            enum: [
+              "Uncirculated",
+              "Extremely Fine to About Uncirculated",
+              "Fine to Very Fine",
+              "Below Fine",
+            ],
+            description: "Required when type='raw'.",
+          },
+        },
+        required: ["type"],
+      },
+    };
+    const structuredSchemaRequired: string[] = [
+      "title",
+      "categoryId",
+      "condition",
+      "price",
+      "itemSpecifics",
+      "isSlabbed",
+      "metalType",
+      "metalWeightOz",
+      ...(isCoinCategoryForSchema ? ["coinConditionDetail"] : []),
+    ];
+
+    // Description-only schema: same verbatim field definition as before, just
+    // the sole field in its own call instead of one of many in a shared one.
+    const descriptionSchemaProperties = {
+      description: {
+        type: "string",
+        description:
+          "Write a natural, human-sounding eBay description in plain text. Do NOT output section headers or labels such as 'Opening Hook', 'Quick Specs', 'What Sets It Apart', 'Closing Statement', 'Overview', 'Specifications', or any markdown heading markers. Do NOT use HTML — the backend converts this plain text into inline-styled HTML for eBay. Keep it concise and readable: 2-5 short paragraphs and optional simple bullet lines. STRUCTURE MATTERS: separate every paragraph and every list with ONE BLANK LINE, put each 'Label: Value' spec on its own line, and never hard-wrap a sentence across two lines — the converter reads blank lines and label lines to build paragraphs and bulleted spec lists, and without them eBay renders everything as one wall of text. Mention condition honestly, what is included, and specific visual details from the photos. Avoid robotic marketing language.",
+      },
+    };
+
+    function buildPass2RequestBody(
+      systemPrompt: string,
+      schemaProperties: Record<string, unknown>,
+      schemaRequired: string[],
+    ) {
+      return JSON.stringify({
+        model: GEMINI_HEAVY_MODEL,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: contentParts },
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "create_listing",
+              description: "Generates a structured eBay listing payload for coins and collectibles.",
+              parameters: {
+                type: "object",
+                properties: schemaProperties,
+                required: schemaRequired,
+                additionalProperties: false,
               },
             },
-          ],
-          tool_choice: {
-            type: "function",
-            function: { name: "create_listing" },
           },
-        }),
-      },
-      withDeadline(PIPELINE_TIMEOUTS_MS.listingGeneration, deadline),
-      "listing generation (Pass 2)",
-    );
-    pass2End();
+        ],
+        tool_choice: {
+          type: "function",
+          function: { name: "create_listing" },
+        },
+      });
+    }
 
-    if (!response.ok) {
-      if (response.status === 429) {
+    const pass2SplitEnd = timer.start("pass2_listing_split");
+    const [structuredOutcome, descriptionOutcome] = await Promise.allSettled([
+      timer.time("pass2_structured", () =>
+        fetchWithTimeout(
+          "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${GEMINI_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: buildPass2RequestBody(structuredPrompt, structuredSchemaProperties, structuredSchemaRequired),
+          },
+          withDeadline(PIPELINE_TIMEOUTS_MS.listingGeneration, deadline),
+          "listing generation (Pass 2 structured)",
+        )),
+      timer.time("pass2_description", () =>
+        fetchWithTimeout(
+          "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${GEMINI_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: buildPass2RequestBody(descriptionPrompt, descriptionSchemaProperties, ["description"]),
+          },
+          withDeadline(PIPELINE_TIMEOUTS_MS.listingGeneration, deadline),
+          "listing generation (Pass 2 description)",
+        )),
+    ]);
+    pass2SplitEnd();
+
+    // ── Structured call: load-bearing. A failure here throws for the whole
+    // request, matching today's behavior — there is no graceful degradation
+    // for missing structured fields, the rest of the pipeline depends on them.
+    if (structuredOutcome.status === "rejected") {
+      throw structuredOutcome.reason;
+    }
+    const structuredResponse = structuredOutcome.value;
+    if (!structuredResponse.ok) {
+      if (structuredResponse.status === 429) {
         return new Response(
           JSON.stringify({
             error: "Rate limit exceeded. Please try again in a moment.",
@@ -2024,7 +2090,7 @@ Seller's note: "${voiceNote}"`;
           },
         );
       }
-      if (response.status === 402) {
+      if (structuredResponse.status === 402) {
         return new Response(
           JSON.stringify({
             error: "AI usage limit reached. Please add credits.",
@@ -2035,27 +2101,27 @@ Seller's note: "${voiceNote}"`;
           },
         );
       }
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      throw new Error(`AI gateway error: ${response.status}`);
+      const errorText = await structuredResponse.text();
+      console.error("AI gateway error (structured):", structuredResponse.status, errorText);
+      throw new Error(`AI gateway error: ${structuredResponse.status}`);
     }
 
-    const data = await response.json();
-    const usage = data.usage;
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+    const structuredData = await structuredResponse.json();
+    const structuredUsage = structuredData.usage;
+    const toolCall = structuredData.choices?.[0]?.message?.tool_calls?.[0];
 
-    // Log Gemini token usage (reuse svc and userId from above)
+    // Log Gemini token usage for the structured call (reuse svc and userId from above)
     try {
       await svc.from("gemini_usage").insert({
         user_id: userId,
-        function_name: "analyze-item",
+        function_name: "analyze-item/pass2-structured",
         model: GEMINI_HEAVY_MODEL,
-        prompt_tokens: usage?.prompt_tokens || 0,
-        completion_tokens: usage?.completion_tokens || 0,
-        total_tokens: usage?.total_tokens || 0,
+        prompt_tokens: structuredUsage?.prompt_tokens || 0,
+        completion_tokens: structuredUsage?.completion_tokens || 0,
+        total_tokens: structuredUsage?.total_tokens || 0,
       });
     } catch (logErr) {
-      console.error("Failed to log gemini usage:", logErr);
+      console.error("Failed to log gemini usage (structured):", logErr);
     }
 
     if (!toolCall?.function?.arguments) {
@@ -2063,6 +2129,55 @@ Seller's note: "${voiceNote}"`;
     }
 
     const listing = JSON.parse(toolCall.function.arguments);
+
+    // ── Description call: NOT load-bearing. Before this split, a Pass 2
+    // failure threw for the whole listing -- there was no such thing as
+    // "structured fields OK, description missing". Now that the two calls run
+    // independently, a description failure/timeout falls back to a plain-text
+    // template built from the structured fields we already have, rather than
+    // failing a request that otherwise succeeded.
+    try {
+      if (descriptionOutcome.status === "rejected") {
+        throw descriptionOutcome.reason;
+      }
+      const descriptionResponse = descriptionOutcome.value;
+      if (!descriptionResponse.ok) {
+        const errorText = await descriptionResponse.text();
+        throw new Error(`AI gateway error (description): ${descriptionResponse.status} ${errorText}`);
+      }
+      const descriptionData = await descriptionResponse.json();
+      const descriptionUsage = descriptionData.usage;
+      const descriptionToolCall = descriptionData.choices?.[0]?.message?.tool_calls?.[0];
+      if (!descriptionToolCall?.function?.arguments) {
+        throw new Error("AI did not return a description");
+      }
+      const descriptionArgs = JSON.parse(descriptionToolCall.function.arguments);
+      if (!descriptionArgs.description) {
+        throw new Error("AI returned an empty description");
+      }
+      listing.description = descriptionArgs.description;
+
+      // Only log what was actually billed -- a rejection before this point
+      // means no tokens were charged for the description call.
+      try {
+        await svc.from("gemini_usage").insert({
+          user_id: userId,
+          function_name: "analyze-item/pass2-description",
+          model: GEMINI_HEAVY_MODEL,
+          prompt_tokens: descriptionUsage?.prompt_tokens || 0,
+          completion_tokens: descriptionUsage?.completion_tokens || 0,
+          total_tokens: descriptionUsage?.total_tokens || 0,
+        });
+      } catch (logErr) {
+        console.error("Failed to log gemini usage (description):", logErr);
+      }
+    } catch (descErr) {
+      console.warn(
+        `[${invocationId}] Pass 2 description call failed, falling back to a templated description:`,
+        descErr,
+      );
+      listing.description = buildFallbackDescription(listing);
+    }
 
     // Normalize new schema field names to legacy equivalents for frontend compatibility
     if (listing.categoryId && !listing.ebayCategoryId) {
