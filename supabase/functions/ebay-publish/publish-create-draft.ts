@@ -418,21 +418,48 @@ export async function handleCreateDraft({
       const liveEnums = liveConditions
         .map((c) => normalizeConditionDescriptorToEnum(c.conditionDescription))
         .filter((c) => c.length > 0);
-      if (liveEnums.length > 0 && !liveEnums.includes(conditionEnum)) {
-        const fallbackEnum = liveEnums.includes("USED_EXCELLENT") ? "USED_EXCELLENT" : liveEnums[0];
-        const fallbackCondition = liveConditions.find(
+      // Copilot review (PR #573): this comparison previously checked the
+      // RAW conditionEnum against the NORMALIZED liveEnums list — a legacy
+      // draft/caller supplying a raw descriptor like "New with tags" (the
+      // exact case this whole safety net exists for) would never match, so
+      // it fell through to the fallback and got silently downgraded to
+      // USED_EXCELLENT (pre-owned) even though the category's live policy
+      // may have accepted it all along. Normalize BOTH sides before
+      // comparing, and carry the matched live condition's own id/description
+      // through even on a match, so conditionId/conditionDesc reflect what
+      // eBay itself just confirmed rather than whatever normalizeCondition-
+      // ForCategory guessed upstream.
+      const normalizedIncoming = normalizeConditionDescriptorToEnum(conditionEnum) ||
+        conditionEnum;
+      if (liveEnums.length > 0) {
+        const matchedIncoming = liveConditions.find(
           (c) =>
             normalizeConditionDescriptorToEnum(c.conditionDescription) ===
-              fallbackEnum,
+              normalizedIncoming,
         );
-        console.warn(
-          `create_draft: condition ${conditionEnum} is not in category ${finalCategoryId}'s live condition policy (${
-            liveEnums.join(", ")
-          }) — falling back to ${fallbackEnum}`,
-        );
-        conditionEnum = fallbackEnum;
-        conditionId = fallbackCondition?.conditionId ?? conditionId;
-        conditionDesc = fallbackCondition?.conditionDescription ?? conditionDesc;
+        if (matchedIncoming) {
+          // The incoming value IS valid for this category once normalized —
+          // adopt the live condition's own id/description rather than
+          // whatever normalizeConditionForCategory produced upstream.
+          conditionEnum = normalizedIncoming;
+          conditionId = matchedIncoming.conditionId;
+          conditionDesc = matchedIncoming.conditionDescription;
+        } else {
+          const fallbackEnum = liveEnums.includes("USED_EXCELLENT") ? "USED_EXCELLENT" : liveEnums[0];
+          const fallbackCondition = liveConditions.find(
+            (c) =>
+              normalizeConditionDescriptorToEnum(c.conditionDescription) ===
+                fallbackEnum,
+          );
+          console.warn(
+            `create_draft: condition ${conditionEnum} (normalized: ${normalizedIncoming}) is not in category ${finalCategoryId}'s live condition policy (${
+              liveEnums.join(", ")
+            }) — falling back to ${fallbackEnum}`,
+          );
+          conditionEnum = fallbackEnum;
+          conditionId = fallbackCondition?.conditionId ?? conditionId;
+          conditionDesc = fallbackCondition?.conditionDescription ?? conditionDesc;
+        }
       }
     } catch (liveConditionsErr) {
       // Live-conditions check is a safety net, not a hard requirement —

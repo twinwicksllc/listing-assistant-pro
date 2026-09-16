@@ -25,6 +25,7 @@ vi.mock("sonner", () => ({
   toast: { error: vi.fn(), warning: vi.fn(), success: vi.fn() },
 }));
 
+import { toast } from "sonner";
 import { useAnalyzeCategoryAspects } from "@/hooks/useAnalyzeCategoryAspects";
 
 function mockResponsesFor(categoryId: string) {
@@ -234,7 +235,14 @@ describe("useAnalyzeCategoryAspects — stale item specifics pruning on category
         opts: { body: { action: string; categoryId: string } },
       ) => {
         if (opts.body.action === "aspects") {
-          return { data: { aspects: [], isLeaf: false }, error: null };
+          // isActive:true is required alongside isLeaf:false to mean a
+          // CONFIRMED parent/rollup category (category-lookup's
+          // verifyCategoryLeafActive returns isActive:false on every one of
+          // its own failure modes too -- isLeaf:false alone is ambiguous).
+          return {
+            data: { aspects: [], isLeaf: false, isActive: true },
+            error: null,
+          };
         }
         if (opts.body.action === "conditions") {
           return { data: { conditions: [] }, error: null };
@@ -267,5 +275,58 @@ describe("useAnalyzeCategoryAspects — stale item specifics pruning on category
 
     expect(result.Language).toBeUndefined();
     expect(result._domain).toBe("books");
+  });
+
+  // Regression coverage for a Copilot review finding on PR #573:
+  // category-lookup's verifyCategoryLeafActive returns isLeaf:false on EVERY
+  // one of its own failure modes (404, non-2xx, unparseable JSON, a missing
+  // node, a thrown exception) -- not just a real parent/rollup category. The
+  // hook must not treat that ambiguous shape as a confirmed parent: doing so
+  // wiped valid specifics and permanently poisoned the retry cache on a
+  // transient API hiccup, not just a genuine parent category.
+  it("does NOT wipe specifics or cache the category when isLeaf:false but isActive is NOT true (unknown/transient failure, not a confirmed parent)", async () => {
+    invokeMock.mockImplementation(
+      async (
+        _fn: string,
+        opts: { body: { action: string; categoryId: string } },
+      ) => {
+        if (opts.body.action === "aspects") {
+          // isActive:false (or absent) alongside isLeaf:false means the
+          // leaf-verification call itself failed -- leaf status is unknown,
+          // NOT a confirmed parent.
+          return {
+            data: { aspects: [], isLeaf: false, isActive: false },
+            error: null,
+          };
+        }
+        if (opts.body.action === "conditions") {
+          return { data: { conditions: [] }, error: null };
+        }
+        throw new Error("unexpected action");
+      },
+    );
+
+    const setItemSpecifics = vi.fn();
+    const setEbayMetadata = vi.fn();
+
+    renderHook(() =>
+      useAnalyzeCategoryAspects({
+        ebayCategoryId: "999999",
+        generated: true,
+        itemSpecifics: { Metal: "Gold" },
+        setItemSpecifics,
+        setEbayMetadata,
+        currentEbayMetadata: null,
+      }),
+    );
+
+    // The toast.error path fires instead of the specifics-wipe path.
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+
+    // Existing specifics must be left untouched -- no wipe on an unknown failure.
+    expect(setItemSpecifics).not.toHaveBeenCalled();
+    // ebayMetadata must not be overwritten with an empty schema either --
+    // that would incorrectly stop enforcing this category's real requirements.
+    expect(setEbayMetadata).not.toHaveBeenCalled();
   });
 });

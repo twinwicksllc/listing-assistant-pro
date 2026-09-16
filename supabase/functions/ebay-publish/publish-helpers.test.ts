@@ -180,3 +180,36 @@ Deno.test("normalizeConditionDescriptorToEnum: is case-insensitive for the new a
     "USED_EXCELLENT",
   );
 });
+
+// Regression coverage for a Copilot review finding on PR #573:
+// publish-create-draft.ts's pre-publish "other"-category live-conditions
+// check normalized the LIVE side (liveEnums, from Metadata API
+// conditionDescriptions) but compared it against the RAW incoming
+// conditionEnum -- so a legacy draft/caller supplying a raw descriptor like
+// "New with tags" (exactly the case that whole safety net exists to catch)
+// could never match, and silently fell through to the USED_EXCELLENT
+// fallback (a new ring converted to pre-owned). These tests prove the
+// underlying comparison, once BOTH sides are normalized, resolves correctly
+// -- the fix itself (publish-create-draft.ts) mirrors this exact logic.
+Deno.test("normalizeConditionDescriptorToEnum: normalizing BOTH the live policy and a raw incoming descriptor makes them comparable", () => {
+  // Simulates category 261994's live condition policy (Fine Jewelry > Rings).
+  const liveConditionDescriptions = [
+    "New with tags",
+    "New without tags",
+    "New with defects",
+    "Pre-owned",
+  ];
+  const liveEnums = liveConditionDescriptions.map(
+    normalizeConditionDescriptorToEnum,
+  );
+
+  // The exact bug: an incoming RAW descriptor (not yet an enum) must resolve
+  // to a value present in the normalized live list once normalized itself --
+  // comparing it unnormalized against liveEnums would never match.
+  const incomingRaw = "New with tags";
+  const normalizedIncoming = normalizeConditionDescriptorToEnum(incomingRaw);
+
+  assertEquals(liveEnums.includes(incomingRaw), false); // the bug: raw never matches normalized live list
+  assertEquals(liveEnums.includes(normalizedIncoming), true); // the fix: normalized does
+  assertEquals(normalizedIncoming, "NEW");
+});

@@ -173,12 +173,28 @@ export function useAnalyzeCategoryAspects({
           : [];
 
         if (aspects.length === 0) {
-          // eBay returns no aspects for parent/rollup categories. Tell the
-          // seller explicitly instead of silently rendering an empty table.
-          const isParentCategory = data?.isLeaf === false;
+          // eBay returns no aspects for parent/rollup categories — but
+          // category-lookup's isLeaf:false ALSO covers every failure mode of
+          // its own leaf-verification call (404, non-2xx, unparseable JSON,
+          // a missing node, a thrown exception — see verifyCategoryLeafActive
+          // in category-lookup/index.ts, which returns isLeaf:false AND
+          // isActive:false on every one of those). Copilot review (PR #573):
+          // treating isLeaf:false alone as "confirmed parent" wiped valid
+          // specifics and permanently poisoned lastFetchedCategoryRef on a
+          // transient API hiccup, not just a real parent. isActive:true is
+          // only set on a genuine successful check (leaf or not) — require
+          // BOTH before treating this as confirmed rather than unknown.
+          const isParentCategory =
+            data?.isLeaf === false && data?.isActive === true;
+          const isUnknownFailure =
+            data?.isLeaf === false && data?.isActive !== true;
           console.warn(
             `useAnalyzeCategoryAspects: no aspects for category ${requestedCategoryId}` +
-              (isParentCategory ? " (non-leaf/parent category)" : ""),
+              (isParentCategory
+                ? " (confirmed non-leaf/parent category)"
+                : isUnknownFailure
+                  ? " (leaf status unknown — treating as transient, will retry)"
+                  : ""),
           );
 
           if (isParentCategory) {
@@ -187,6 +203,18 @@ export function useAnalyzeCategoryAspects({
                 'Pick a more specific sub-category (e.g. "Barber (1892-1915)" rather than "Half Dollars").',
               { duration: 10000 },
             );
+          }
+
+          if (isUnknownFailure) {
+            // Leaf status genuinely unknown (the leaf-verification call
+            // itself failed) — do NOT wipe specifics or cache anything.
+            // Treat exactly like the aspects-fetch-error branch below:
+            // leave existing state alone so a retry (re-picking the
+            // category, or this effect re-running) can recover cleanly.
+            toast.error(
+              "Couldn't confirm this category's item specifics. Re-select the category to retry.",
+            );
+            return;
           }
 
           // Publish-time validation must not keep enforcing the OLD category's
@@ -202,6 +230,8 @@ export function useAnalyzeCategoryAspects({
           // every real (non-underscore) key so a category with genuinely no
           // schema doesn't keep showing whatever the previous category left
           // behind (e.g. a parent rollup after leaving a leaf with specifics).
+          // Only reached for a CONFIRMED parent (isUnknownFailure returned
+          // above otherwise) — a transient failure never reaches this wipe.
           setItemSpecifics((prev) => {
             const next: ItemSpecifics = {};
             for (const [key, value] of Object.entries(prev)) {
