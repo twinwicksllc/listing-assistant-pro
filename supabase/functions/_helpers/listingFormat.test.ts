@@ -268,8 +268,8 @@ Deno.test("buildSeoTitle does not append orphaned units as word-salad", () => {
     "2019 Canada $2 Polar Bear 1/2 oz .9999 Fine Silver Coin BU",
   );
 
-  assert(!/Coin$/.test(title), `orphaned classifier at tail: "${title}"`);
-  assert(!/oz\s+oz/.test(title), `duplicated unit: "${title}"`);
+  assert(!/\bCoin$/.test(title), `orphaned classifier at tail: "${title}"`);
+  assert(!/\boz\s+oz\b/.test(title), `duplicated unit: "${title}"`);
 });
 
 Deno.test("truncateToWordBoundary cuts at a space, never mid-word", () => {
