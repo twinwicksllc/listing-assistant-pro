@@ -643,9 +643,13 @@ export function getConditionsForCategory(
   }
 
   if (
-    /clothing, shoes\s*&\s*accessories\s*>\s*(jewelry\s*&\s*watches|sporting goods)/.test(
-      normalizedBreadcrumb,
-    )
+    // Jewelry & Watches and Sporting Goods are their own top-level eBay trees
+    // (e.g. "Jewelry & Watches > Fine Jewelry > Rings"), not sub-trees of
+    // Clothing, Shoes & Accessories — the old regex required that prefix and
+    // so never matched real jewelry breadcrumbs, silently falling through to
+    // the generic condition set (which includes "For Parts or Not Working",
+    // not a valid eBay condition for rings/jewelry leaves).
+    /jewelry\s*&\s*watches|sporting goods/.test(normalizedBreadcrumb)
   ) {
     return JEWELRY_SPORTING_CONDITION_OPTIONS;
   }

@@ -158,6 +158,10 @@ import { GEMINI_FAST_MODEL } from "./geminiModels.ts";
 // Shared helper: its timeout also covers reading the response body, which a
 // bare fetch() ceiling does not -- fetch() resolves on headers alone.
 import { fetchWithTimeout } from "./fetchWithTimeout.ts";
+// Title edits below go through these rather than `.slice(0, 80)`: eBay's cap is
+// hard, and mid-word truncation ships an unsearchable token. `shrinkTitleToFit`
+// makes room by dropping whole low-priority tail words instead.
+import { shrinkTitleToFit, TITLE_MAX_LENGTH } from "./listingFormat.ts";
 
 const DETAIL_MODEL = GEMINI_FAST_MODEL;
 const DETAIL_TIMEOUT_MS = 15_000; // 15 seconds
@@ -1004,6 +1008,99 @@ function inferCoinWeightOz(text: string): number {
   return 0;
 }
 
+/**
+ * Title-edit helpers for the overrides below.
+ *
+ * Every title edit in `applyDetailOverrides` used to be spelled
+ * `` `${listing.title} ${addition}`.slice(0, 80).replace(/\s+\S*$/, "").trim() ``
+ * which carried two defects:
+ *
+ *   1. The `.replace(/\s+\S*$/, "")` fired UNCONDITIONALLY, so it deleted the
+ *      last word even when the concatenation already fitted inside 80. Adding a
+ *      card's parallel to a 40-character title cost a real keyword for nothing.
+ *   2. Three of the five sites then assigned the result with no length check at
+ *      all, so an addition that could not fit made the title SHORTER than it
+ *      started -- "1896 Morgan Silver Dollar" + "Prizm" came back as
+ *      "1896 Morgan Silver Dollar" with "Dollar" dropped and "Prizm" never
+ *      added. `.slice(0, 80)` also cuts mid-word before that replace runs, so a
+ *      prepended brand could ship "Gucci 1896 Morgan Silver" -- an unsearchable
+ *      fragment.
+ *
+ * These reserve room for the addition FIRST, then drop whole low-value tail
+ * words to pay for it, and return `null` when the price is too high -- at which
+ * point the caller leaves the title alone rather than damaging it.
+ */
+
+/** Reserves `addition.length + 1` characters by shrinking the title's tail. */
+function makeRoomFor(
+  title: string,
+  addition: string,
+  label: string,
+  what: string,
+): string | null {
+  const room = TITLE_MAX_LENGTH - (addition.length + 1);
+  const base = shrinkTitleToFit(title, room);
+  if (base === null) {
+    // Never silent: a discarded override used to be invisible in the logs,
+    // which is how the mint-mark mismatch survived unnoticed.
+    console.warn(
+      `${label} SKIPPED Title ${what}: no room for "${addition}" in "${title}"`,
+    );
+    return null;
+  }
+  return base;
+}
+
+/** `"<title> <addition>"`, capped at 80, or `null` if it cannot be paid for. */
+function titleWithAppended(
+  title: string,
+  addition: string,
+  label: string,
+  what: string,
+): string | null {
+  const base = makeRoomFor(title, addition, label, what);
+  // Trimmed because a whitespace-only title is truthy at the call sites and
+  // would otherwise ship a leading or trailing space to eBay.
+  return base === null ? null : `${base} ${addition}`.trim();
+}
+
+/** `"<addition> <title>"`, capped at 80, or `null` if it cannot be paid for. */
+function titleWithPrepended(
+  title: string,
+  addition: string,
+  label: string,
+  what: string,
+): string | null {
+  const base = makeRoomFor(title, addition, label, what);
+  return base === null ? null : `${addition} ${base}`.trim();
+}
+
+/**
+ * Fits a mint-mark-corrected title into 80 characters.
+ *
+ * The correction is a REWRITE, not an append ("1894" -> "1894-O"), so the two
+ * extra characters have to come out of the title's own tail. A confirmed mint
+ * mark outranks anything the assembler put there: `1894` and `1894-O` are
+ * different coins at very different prices, so trading a trailing "Type Coin"
+ * for the correct mint is always the right call.
+ */
+function fitTitleWithMintMark(
+  originalTitle: string,
+  correctedTitle: string,
+  label: string,
+): string | null {
+  const fitted = shrinkTitleToFit(correctedTitle, TITLE_MAX_LENGTH);
+  if (fitted === null) {
+    console.warn(
+      `${label} SKIPPED Title mint mark: cannot fit "${correctedTitle}" ` +
+        `(${correctedTitle.length} chars) into ${TITLE_MAX_LENGTH}; ` +
+        `left "${originalTitle}" -- item specifics still carry the correct mint`,
+    );
+    return null;
+  }
+  return fitted;
+}
+
 export function applyDetailOverrides(
   listing: any,
   extraction: DetailExtractionResult,
@@ -1067,10 +1164,11 @@ export function applyDetailOverrides(
               yearPattern,
               `${cd.year}-${cd.mintMark}`,
             );
-            if (newTitle.length <= 80) {
-              listing.title = newTitle;
+            const fitted = fitTitleWithMintMark(title, newTitle, label);
+            if (fitted) {
+              listing.title = fitted;
               console.log(
-                `${label} OVERRIDE Title: added mint mark → "${newTitle}"`,
+                `${label} OVERRIDE Title: added mint mark → "${fitted}"`,
               );
             }
           }
@@ -1086,10 +1184,11 @@ export function applyDetailOverrides(
                   wrongPattern,
                   `${cd.year}-${cd.mintMark}`,
                 );
-                if (newTitle.length <= 80) {
-                  listing.title = newTitle;
+                const fitted = fitTitleWithMintMark(title, newTitle, label);
+                if (fitted) {
+                  listing.title = fitted;
                   console.log(
-                    `${label} OVERRIDE Title: fixed mint mark "${currentMark}" → "${cd.mintMark}" → "${newTitle}"`,
+                    `${label} OVERRIDE Title: fixed mint mark "${currentMark}" → "${cd.mintMark}" → "${fitted}"`,
                   );
                 }
               }
@@ -1302,11 +1401,13 @@ export function applyDetailOverrides(
         listing.title &&
         !listing.title.toLowerCase().includes(card.parallel.toLowerCase())
       ) {
-        const newTitle = `${listing.title} ${card.parallel}`
-          .slice(0, 80)
-          .replace(/\s+\S*$/, "")
-          .trim();
-        if (newTitle.length > listing.title.length) {
+        const newTitle = titleWithAppended(
+          listing.title as string,
+          card.parallel,
+          label,
+          "parallel",
+        );
+        if (newTitle) {
           listing.title = newTitle;
           console.log(
             `${label} OVERRIDE Title: added parallel → "${newTitle}"`,
@@ -1318,14 +1419,18 @@ export function applyDetailOverrides(
     // ── Serial Number — HIGH VALUE ──
     if (card.serialNumbered && card.serialNumber) {
       if (listing.title && !listing.title.includes("/")) {
-        const newTitle = `${listing.title} ${card.serialNumber}`
-          .slice(0, 80)
-          .replace(/\s+\S*$/, "")
-          .trim();
-        listing.title = newTitle;
-        console.log(
-          `${label} OVERRIDE Title: added serial number → "${newTitle}"`,
+        const newTitle = titleWithAppended(
+          listing.title as string,
+          card.serialNumber,
+          label,
+          "serial number",
         );
+        if (newTitle) {
+          listing.title = newTitle;
+          console.log(
+            `${label} OVERRIDE Title: added serial number → "${newTitle}"`,
+          );
+        }
       }
     }
 
@@ -1339,12 +1444,16 @@ export function applyDetailOverrides(
         !listing.title.toLowerCase().includes("rc") &&
         !listing.title.toLowerCase().includes("rookie")
       ) {
-        const newTitle = `${listing.title} RC`
-          .slice(0, 80)
-          .replace(/\s+\S*$/, "")
-          .trim();
-        listing.title = newTitle;
-        console.log(`${label} OVERRIDE Title: added RC → "${newTitle}"`);
+        const newTitle = titleWithAppended(
+          listing.title as string,
+          "RC",
+          label,
+          "rookie",
+        );
+        if (newTitle) {
+          listing.title = newTitle;
+          console.log(`${label} OVERRIDE Title: added RC → "${newTitle}"`);
+        }
       }
     }
 
@@ -1376,12 +1485,16 @@ export function applyDetailOverrides(
         listing.title &&
         !listing.title.toLowerCase().includes(jd.brandSignature.toLowerCase())
       ) {
-        const newTitle = `${jd.brandSignature} ${listing.title}`
-          .slice(0, 80)
-          .replace(/\s+\S*$/, "")
-          .trim();
-        listing.title = newTitle;
-        console.log(`${label} OVERRIDE Title: added brand → "${newTitle}"`);
+        const newTitle = titleWithPrepended(
+          listing.title as string,
+          jd.brandSignature,
+          label,
+          "brand",
+        );
+        if (newTitle) {
+          listing.title = newTitle;
+          console.log(`${label} OVERRIDE Title: added brand → "${newTitle}"`);
+        }
       }
     }
 
@@ -1531,12 +1644,16 @@ export function applyDetailOverrides(
         listing.title &&
         !listing.title.toLowerCase().includes(hd.brand.toLowerCase())
       ) {
-        const newTitle = `${hd.brand} ${listing.title}`
-          .slice(0, 80)
-          .replace(/\s+\S*$/, "")
-          .trim();
-        listing.title = newTitle;
-        console.log(`${label} OVERRIDE Title: added brand → "${newTitle}"`);
+        const newTitle = titleWithPrepended(
+          listing.title as string,
+          hd.brand,
+          label,
+          "brand",
+        );
+        if (newTitle) {
+          listing.title = newTitle;
+          console.log(`${label} OVERRIDE Title: added brand → "${newTitle}"`);
+        }
       }
     }
 
