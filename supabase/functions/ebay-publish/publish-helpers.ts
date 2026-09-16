@@ -1,6 +1,7 @@
 import { decode as decodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { createClient } from "./supabase.ts";
 import { fetchWithTimeout } from "./fetch.ts";
+import { formatDescriptionHtml } from "../_helpers/listingFormat.ts";
 
 // eBay publish Edge Function.
 // Handles OAuth helpers, policy lookup, media upload, inventory/offer creation,
@@ -1979,128 +1980,6 @@ export function sanitizeDescription(desc: string): string {
 }
 
 // ----------------------------------------------------------------
-// Convert markdown formatting to HTML for eBay listings.
-// eBay's listingDescription field expects HTML, but AI generates markdown.
-// This converts: **bold** → <b>bold</b>, *italic* → <i>italic</i>,
-// line breaks → <br>, bullet points → <ul><li>, etc.
-// ----------------------------------------------------------------
-export function markdownToHtml(markdown: string): string {
-  if (!markdown) return markdown;
-
-  let html = markdown;
-
-  // Don't double-convert - if it already looks like HTML, return as-is
-  if (/<[a-z][\s\S]*>/i.test(html)) {
-    return html;
-  }
-
-  // Pre-process: Convert inline " - " bullets to separate lines
-  // Handles cases like "- Year: 2026 - Mint: West Point - Grade: MS 70"
-  // Pattern: " - Label:" should become "\n- Label:"
-  const bulletLabels = [
-    "Year:",
-    "Mint:",
-    "Grade:",
-    "Certification Number:",
-    "Metal Content:",
-    "Condition:",
-    "Historical Note:",
-  ];
-  const labelPattern = bulletLabels.join("|");
-  // Replace " - Label:" with "\n- Label:" when not at start of line
-  html = html.replace(
-    new RegExp(`(?!^|\n)(\\s*-\\s*)(${labelPattern})`, "g"),
-    "\n- $2",
-  );
-
-  // Convert headers (### ## #)
-  html = html.replace(/^### (.+)$/gm, "<h3>$1</h3>");
-  html = html.replace(/^## (.+)$/gm, "<h2>$1</h2>");
-  html = html.replace(/^# (.+)$/gm, "<h1>$1</h1>");
-
-  // Convert bold (**text** or __text__)
-  html = html.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
-  html = html.replace(/__(.+?)__/g, "<b>$1</b>");
-
-  // Convert italic (*text* or _text_) - but avoid matching within words
-  html = html.replace(/(?<!\w)\*(.+?)\*(?!\w)/g, "<i>$1</i>");
-  html = html.replace(/(?<!\w)_(.+?)_(?!\w)/g, "<i>$1</i>");
-
-  // Convert bullet points (- item or * item)
-  // First, group consecutive bullet lines into <ul> blocks
-  const bulletLines: string[] = [];
-  const lines = html.split("\n");
-  let inBulletList = false;
-  const processedLines: string[] = [];
-
-  for (const line of lines) {
-    const bulletMatch = line.match(/^(\s*)[-*]\s+(.+)$/);
-    if (bulletMatch) {
-      if (!inBulletList) {
-        processedLines.push("<ul>");
-        inBulletList = true;
-      }
-      processedLines.push(`<li>${bulletMatch[2]}</li>`);
-    } else {
-      if (inBulletList) {
-        processedLines.push("</ul>");
-        inBulletList = false;
-      }
-      processedLines.push(line);
-    }
-  }
-  if (inBulletList) {
-    processedLines.push("</ul>");
-  }
-  html = processedLines.join("\n");
-
-  // Convert numbered lists (1. item, 2. item, etc.)
-  const numberedLines: string[] = [];
-  const htmlLines = html.split("\n");
-  let inNumberedList = false;
-  const processedNumberedLines: string[] = [];
-
-  for (const line of htmlLines) {
-    const numberedMatch = line.match(/^(\s*)\d+\.\s+(.+)$/);
-    if (numberedMatch) {
-      if (!inNumberedList) {
-        processedNumberedLines.push("<ol>");
-        inNumberedList = true;
-      }
-      processedNumberedLines.push(`<li>${numberedMatch[2]}</li>`);
-    } else {
-      if (inNumberedList) {
-        processedNumberedLines.push("</ol>");
-        inNumberedList = false;
-      }
-      processedNumberedLines.push(line);
-    }
-  }
-  if (inNumberedList) {
-    processedNumberedLines.push("</ol>");
-  }
-  html = processedNumberedLines.join("\n");
-
-  // Convert line breaks: double newline -> paragraph, single newline -> <br>
-  // First, wrap paragraphs (blocks of text separated by blank lines)
-  html = html.replace(/\n\n+/g, "</p><p>");
-  html = html.replace(/\n/g, "<br>");
-
-  // Wrap in paragraph tags if not already wrapped
-  if (!html.startsWith("<")) {
-    html = "<p>" + html + "</p>";
-  }
-
-  // Clean up empty paragraphs and extra breaks
-  html = html.replace(/<p>\s*<\/p>/g, "");
-  html = html.replace(/<p>\s*<br>/g, "<p>");
-  html = html.replace(/<br>\s*<\/p>/g, "</p>");
-  html = html.replace(/<br>\s*<br>/g, "<br>");
-
-  return html;
-}
-
-// ----------------------------------------------------------------
 // Strip numerical coin grades (e.g. MS-65, AU-58, VF-30) from text
 // when the coin is NOT certified by an approved grading service.
 // eBay errorId 25019: grades in title/description of uncertified coins
@@ -3570,12 +3449,15 @@ export function prepareListingDescription(
     );
   }
 
-  // Convert markdown to HTML for eBay listing
-  // AI generates markdown (**bold**, bullets, etc.) but eBay expects HTML
-  const htmlDescription = markdownToHtml(finalDescription);
+  // eBay renders listingDescription as HTML, so raw newlines collapse to single
+  // spaces on the desktop site and in the native apps. Everything is emitted
+  // with inline styles -- eBay strips <head>/external CSS and flags <script>,
+  // so inline style="..." is the only markup that renders identically across
+  // desktop, mobile web and the iOS/Android apps.
+  const htmlDescription = formatDescriptionHtml(finalDescription);
   if (htmlDescription !== finalDescription) {
     console.log(
-      `create_draft: converted markdown to HTML for eBay listingDescription`,
+      `create_draft: formatted description as inline-styled HTML for eBay listingDescription`,
     );
   }
 

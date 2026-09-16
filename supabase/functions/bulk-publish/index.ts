@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { NULL_BODY_STATUSES } from "../_helpers/fetchWithTimeout.ts";
+import { formatDescriptionHtml, truncateToWordBoundary } from "../_helpers/listingFormat.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -517,7 +518,9 @@ serve(async (req: Request) => {
           .slice(0, 8);
         const inventoryBody: Record<string, unknown> = {
           product: {
-            title: row.title.slice(0, 80),
+            // Word boundary, not a hard slice -- a mid-word cut ("Comme" for
+            // "Commemorative") loses the keyword token entirely.
+            title: truncateToWordBoundary(row.title),
             ...(imageUrls.length > 0 ? { imageUrls } : {}),
             ...(row.itemSpecifics && Object.keys(row.itemSpecifics).length > 0
               ? {
@@ -568,7 +571,11 @@ serve(async (req: Request) => {
           marketplaceId: "EBAY_US",
           format: row.format,
           categoryId: row.categoryId,
-          listingDescription: row.description || row.title,
+          // eBay renders this as HTML: a raw newline collapses to a single space,
+          // so an unconverted plain-text description arrives as one wall of prose.
+          listingDescription: formatDescriptionHtml(
+            row.description || row.title,
+          ),
           pricingSummary: row.format === "AUCTION"
             ? {
               auctionStartPrice: {
