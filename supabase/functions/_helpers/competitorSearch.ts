@@ -30,6 +30,23 @@ export interface CompetitorSearchOutcome {
   body: Record<string, unknown>;
 }
 
+/**
+ * Defensive numeric parse for Browse API's watchCount/bidCount -- exported
+ * standalone (rather than only inline in fetchEbayCompetitors, which is not
+ * itself exported/testable) so the "missing/non-numeric -> undefined, never
+ * a coerced 0" contract has direct test coverage. A bare 0 would misreport
+ * "confirmed zero interest" for an item eBay simply didn't report a count for.
+ *
+ * Restricted to number/string inputs before calling Number() -- `Number([])`
+ * coerces to 0 and `Number(["5"])` to 5 in JS, which would silently treat a
+ * malformed array value from upstream JSON as a real count.
+ */
+export function parseOptionalCount(raw: unknown): number | undefined {
+  if (typeof raw !== "number" && typeof raw !== "string") return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 interface CompetitorItem {
   title: string;
   price: number;
@@ -38,6 +55,14 @@ interface CompetitorItem {
   itemId?: string;
   itemUrl?: string | null;
   imageUrl?: string | null;
+  // Phase 3.2a (pricing-reliability plan): Browse API's ItemSummary includes
+  // both by default (no fieldgroups param needed), but neither is guaranteed
+  // populated for every item -- eBay has historically gated watcher-count
+  // visibility, and bidCount only ever applies to auction-format listings.
+  // Both undefined (never a bare null) when absent, so a consumer can use
+  // `?? "not shown"` uniformly rather than juggling null vs. undefined.
+  watchCount?: number;
+  bidCount?: number;
 }
 
 // ----------------------------------------------------------------
@@ -469,6 +494,10 @@ async function fetchEbayCompetitors(params: {
       const price = parseFloat(String(priceVal ?? "0"));
       if (isNaN(price) || price <= 0) continue;
       prices.push(price);
+      // watchCount/bidCount are already present on Browse API's default
+      // ItemSummary response (no fieldgroups param needed) but not
+      // guaranteed populated for every item -- see parseOptionalCount's own
+      // docstring for why a missing value must stay undefined, not become 0.
       structured.push({
         title: String(item?.title ?? "").slice(0, 200),
         price,
@@ -477,6 +506,8 @@ async function fetchEbayCompetitors(params: {
         itemId: item?.itemId ? String(item.itemId) : undefined,
         itemUrl: item?.itemWebUrl ?? null,
         imageUrl: item?.image?.imageUrl ?? item?.thumbnailImages?.[0]?.imageUrl ?? null,
+        watchCount: parseOptionalCount(item?.watchCount),
+        bidCount: parseOptionalCount(item?.bidCount),
       });
     } catch {
       // Skip malformed items

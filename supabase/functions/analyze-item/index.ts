@@ -3494,6 +3494,14 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
         maxPrice: competitorData.maxPrice || 0,
         medianPrice: competitorData.medianPrice || 0,
         fromCache: competitorData.fromCache || false,
+        // Both the pre-AI and post-AI paths above call ebay-competitor-search
+        // exclusively (Browse API) -- this app has no Marketplace Insights
+        // access, so this is unconditionally active asking-price data, never
+        // sold data. Hardcoded rather than threaded through because there is
+        // only ever one possible value on this path (contrast ebay-pricing,
+        // which also has a Jina sold-data fallback and computes this
+        // per-request).
+        basis: "active" as const,
       };
       console.log(
         `[${invocationId}] Final response includes competitor data from ${competitorDataSource}: ${competitorData.competitorCount} competitors`,
