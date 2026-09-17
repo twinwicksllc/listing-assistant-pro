@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { describeCronAuthEnv, requireCronSecret, requireUser } from "../_helpers/authGuard.ts";
+import { logBrowseApiCall } from "../_helpers/competitorSearch.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -324,6 +325,7 @@ export async function refreshOneWatch(
 
   // Run both requests in parallel: Browse API (active) + Jina (sold)
   const token = await getEbayAppToken();
+  logBrowseApiCall(supabase, "market-watch-refresh");
 
   const [activeResult, soldData] = await Promise.all([
     browseSearch({

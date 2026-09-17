@@ -64,6 +64,12 @@ verify_jwt = false
 [functions.cost-alert-cron]
 verify_jwt = false
 
+# Cron-only, polls eBay's getRateLimits API and emails a warning at 90% of
+# the Browse API's daily quota. Gated in code by requireCronSecret (same
+# reasoning as cost-alert-cron above). See RBR-0028.
+[functions.ebay-quota-monitor]
+verify_jwt = false
+
 # Cron-only, deletes production storage objects and mutates drafts rows on a
 # schedule. Gated in code by requireCronSecret (same reasoning as above).
 [functions.cleanup-media-retention]

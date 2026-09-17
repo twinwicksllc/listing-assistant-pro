@@ -40,7 +40,12 @@ function parseDsn(dsn: string): ParsedDsn | null {
 // it, a fire-and-forget fetch issued right before the handler returns can be
 // cut off mid-flight. Falls back to a bare unawaited call if that global
 // isn't present (e.g. running this file under plain `deno test`).
-function runInBackground(work: Promise<unknown>): void {
+// Exported so other fire-and-forget call sites (e.g.
+// competitorSearch.ts's logBrowseApiCall) can reuse this exact isolate-
+// lifetime-safe pattern instead of a bare unawaited call, which risks being
+// cut off before completing once the handler's response is already sent
+// (Copilot review, PR #581).
+export function runInBackground(work: Promise<unknown>): void {
   const runtime = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } })
     .EdgeRuntime;
   if (runtime?.waitUntil) {

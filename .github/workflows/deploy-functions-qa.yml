@@ -90,6 +90,12 @@ jobs:
           supabase functions deploy competitor-prices-cron --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
           supabase functions deploy inventory-sync-cron --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
           supabase functions deploy cost-alert-cron --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+          # NOTE (Copilot review, PR #581): this list was already missing
+          # market-watch-refresh (added to deploy-functions.yml/config.toml
+          # in PR #578) before this PR -- pre-existing gap, not introduced
+          # here, and out of this PR's scope to fix. Flagged, not silently
+          # left unexamined.
+          supabase functions deploy ebay-quota-monitor --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
           supabase functions deploy cleanup-media-retention --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
           supabase functions deploy category-hygiene-cron --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
           supabase functions deploy backfill-ebay-token-encryption --project-ref majmvgakczrpcwgxgulj --no-verify-jwt

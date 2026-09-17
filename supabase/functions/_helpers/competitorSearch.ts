@@ -22,6 +22,7 @@
 // ----------------------------------------------------------------
 
 import { GEMINI_FAST_MODEL } from "./geminiModels.ts";
+import { runInBackground } from "./sentry.ts";
 
 export const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
@@ -457,8 +458,11 @@ async function getEbayAppToken(ebayEnv: string): Promise<string> {
 }
 
 // ----------------------------------------------------------------
-// Fetch competitor listings via eBay Browse API (modern, no quota issues).
-// Uses OAuth Bearer token — no hard 5,000 calls/day limit.
+// Fetch competitor listings via eBay Browse API (OAuth Bearer token).
+// CORRECTED 2026-09-17: this DOES have a real, hard 5,000-calls/day limit
+// per client_id -- confirmed via a live getRateLimits check against this
+// account's real keyset, which showed buy.browse at 73.8% used before any
+// quota monitoring existed. See ebay-quota-monitor/index.ts and PR #580/#581.
 // ----------------------------------------------------------------
 async function fetchEbayCompetitors(params: {
   token: string;
@@ -466,6 +470,10 @@ async function fetchEbayCompetitors(params: {
   categoryId?: string;
   ebayEnv: string;
   filterMode?: "fixed" | "any";
+  // deno-lint-ignore no-explicit-any -- matches this file's existing loose
+  // supabase-js client typing.
+  supabaseForLogging: any;
+  loggingCaller: string;
 }): Promise<{
   prices: number[];
   count: number;
@@ -478,6 +486,8 @@ async function fetchEbayCompetitors(params: {
     categoryId,
     ebayEnv,
     filterMode = "fixed",
+    supabaseForLogging,
+    loggingCaller,
   } = params;
 
   const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
@@ -507,6 +517,12 @@ async function fetchEbayCompetitors(params: {
 
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
+      // Log at the point of the actual HTTP call, not once per planned
+      // search attempt in the caller -- a 5xx/network retry here still
+      // consumes real Browse API quota (Copilot review, PR #581), so
+      // logging only once around this whole retrying function would
+      // undercount the same-day counter by up to 3x on a retry-heavy run.
+      logBrowseApiCall(supabaseForLogging, `${loggingCaller} (attempt ${attempt + 1})`);
       resp = await fetch(url, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -595,6 +611,51 @@ export interface CompSearchAttemptResult {
   prices: number[];
   count: number;
   items: CompetitorItem[];
+}
+
+/**
+ * Fire-and-forget increment of the same-day Browse API call counter (see
+ * the ebay-quota-monitor migration/function for how this is read). Never
+ * awaited by the caller and never throws into it -- a logging failure must
+ * not affect the real Browse API call it's counting, which is why this
+ * takes the already-open supabase client rather than opening its own.
+ * Exported so other Browse API callers (market-watch-refresh,
+ * keyword-research) can share this one implementation instead of
+ * duplicating it -- there is no shared Browse API client module in this
+ * codebase to hook a counter into otherwise (confirmed: each caller keeps
+ * its own getEbayAppToken/search function).
+ */
+export function logBrowseApiCall(
+  // deno-lint-ignore no-explicit-any -- matches the loose supabase-js typing
+  // already used throughout this codebase's Edge Functions.
+  supabase: any,
+  caller: string,
+): void {
+  try {
+    // Registered via runInBackground (EdgeRuntime.waitUntil) rather than a
+    // bare unawaited .then() -- without it, this insert can be cut off
+    // mid-flight once the handler's own response has already been sent,
+    // since nothing else keeps the isolate alive for it (Copilot review,
+    // PR #581). Falls back to a bare unawaited call under plain `deno test`,
+    // where EdgeRuntime doesn't exist -- see runInBackground's own docstring.
+    runInBackground(
+      Promise.resolve(supabase.from("ebay_browse_call_log").insert({ caller }))
+        .then((result: { error?: { message?: string } } | undefined) => {
+          if (result?.error) {
+            console.warn(
+              `[competitorSearch] Failed to log Browse API call for quota tracking: ${
+                result.error.message ?? JSON.stringify(result.error)
+              }`,
+            );
+          }
+        })
+        .catch((err: unknown) => {
+          console.warn(`[competitorSearch] Failed to log Browse API call for quota tracking: ${String(err)}`);
+        }),
+    );
+  } catch (err) {
+    console.warn(`[competitorSearch] Failed to log Browse API call for quota tracking: ${String(err)}`);
+  }
 }
 
 /**
@@ -903,12 +964,18 @@ export async function runCompetitorSearch(params: {
           attempt.categoryId ?? "any"
         }`,
       );
+      // Counter logging happens inside fetchEbayCompetitors itself, at each
+      // actual HTTP attempt (including internal 5xx/network retries) --
+      // not here, which would only count once per planned search attempt
+      // and undercount by up to 3x on a retry-heavy run.
       return fetchEbayCompetitors({
         token,
         searchQuery: attempt.query,
         categoryId: attempt.categoryId,
         ebayEnv,
         filterMode: attempt.filterMode,
+        supabaseForLogging: supabase,
+        loggingCaller: "competitorSearch",
       });
     });
 

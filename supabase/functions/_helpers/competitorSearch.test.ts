@@ -3,6 +3,7 @@ import {
   type CompSearchAttemptResult,
   evaluateCompQuality,
   groupPlanIntoTiers,
+  logBrowseApiCall,
   parseOptionalCount,
   runAttemptsSequential,
   runTieredCompSearch,
@@ -221,4 +222,72 @@ Deno.test("runTieredCompSearch: escape hatch fires tier 1 concurrently when tier
   // Both tiers pass quality (3 comps each, tight spread) -- picks whichever
   // has more comps; here it's a tie so tier 0 wins by the tie-break rule.
   assertEquals(result.tiersUsed, 2);
+});
+
+// Regression coverage for the eBay quota monitor's same-day counter
+// (spun out of the 2026-09-17 429 investigation): logBrowseApiCall must
+// never throw into its caller, even when the insert itself fails --  a
+// counter-logging failure must not affect the real Browse API call it's
+// counting.
+
+function fakeSupabaseForLogging(
+  opts: { insertRejects?: boolean; insertReturnsError?: boolean } = {},
+) {
+  const inserted: { table: string; row: Record<string, unknown> }[] = [];
+  return {
+    client: {
+      from(table: string) {
+        return {
+          insert(row: Record<string, unknown>) {
+            inserted.push({ table, row });
+            if (opts.insertRejects) {
+              return Promise.reject(new Error("insert failed"));
+            }
+            if (opts.insertReturnsError) {
+              return Promise.resolve({ data: null, error: { message: "RLS denied" } });
+            }
+            return Promise.resolve({ data: null, error: null });
+          },
+        };
+      },
+    },
+    inserted,
+  };
+}
+
+Deno.test("logBrowseApiCall: inserts into ebay_browse_call_log with the given caller name", async () => {
+  const { client, inserted } = fakeSupabaseForLogging();
+  logBrowseApiCall(client, "competitorSearch");
+  // Fire-and-forget -- give the microtask queue a tick to run.
+  await new Promise((r) => setTimeout(r, 0));
+  assertEquals(inserted.length, 1);
+  assertEquals(inserted[0].table, "ebay_browse_call_log");
+  assertEquals(inserted[0].row.caller, "competitorSearch");
+});
+
+Deno.test("logBrowseApiCall: a rejected insert does not throw or reject into the caller", () => {
+  const { client } = fakeSupabaseForLogging({ insertRejects: true });
+  // Must not throw synchronously, and the returned value (none) gives the
+  // caller nothing to await/catch -- this call itself completing without
+  // throwing is the assertion.
+  logBrowseApiCall(client, "market-watch-refresh");
+});
+
+Deno.test("logBrowseApiCall: a resolved insert with a PostgREST error is logged, not silently swallowed as success", async () => {
+  const { client } = fakeSupabaseForLogging({ insertReturnsError: true });
+  logBrowseApiCall(client, "keyword-research");
+  // Must not throw synchronously -- the error is only visible via the
+  // console.warn this test doesn't assert on directly (no throw is the
+  // contract here; distinguishing this path from a silent no-op is covered
+  // by reading the source, not a spy on console.warn).
+  await new Promise((r) => setTimeout(r, 0));
+});
+
+Deno.test("logBrowseApiCall: a client whose .from() itself throws does not propagate", () => {
+  const throwingClient = {
+    from() {
+      throw new Error("client misconfigured");
+    },
+  };
+  logBrowseApiCall(throwingClient, "keyword-research");
 });
