@@ -15,6 +15,7 @@ import {
 import { ADMIN_EMAIL } from "@/components/admin/types";
 import type { SystemData } from "@/components/admin/types";
 import { SystemStatusChecklist } from "@/components/admin/SystemStatusChecklist";
+import { EbayQuotaPollCard } from "@/components/admin/EbayQuotaPollCard";
 import { StatsCards } from "@/components/admin/StatsCards";
 import { FeatureUsageCard } from "@/components/admin/FeatureUsageCard";
 import { GeminiUsageSection } from "@/components/admin/GeminiUsageSection";
@@ -148,6 +149,8 @@ export default function AdminPage() {
                 <CheckCircle2 className="w-4 h-4 text-accent flex-shrink-0" />
               )}
             </div>
+
+            <EbayQuotaPollCard poll={data.lastEbayQuotaPoll} />
 
             <SystemStatusChecklist data={data} />
 

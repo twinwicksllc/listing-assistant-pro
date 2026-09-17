@@ -388,6 +388,33 @@ serve(async (req) => {
       // skip
     }
 
+    // --- Last eBay Quota Poll ---
+    // Surfaces ebay-quota-monitor's (PR #581) most recent poll of eBay's own
+    // getRateLimits, so the admin can see current buy.browse quota status
+    // without waiting for a 90%-threshold alert email. Read-only -- does not
+    // change polling frequency or alerting, matches this function's existing
+    // "select the latest row, skip on error" pattern used for cost_alerts.
+    let lastEbayQuotaPoll: {
+      resource_name: string;
+      call_limit: number;
+      call_count: number;
+      call_remaining: number;
+      reset_at: string;
+      alert_sent: boolean;
+      polled_at: string;
+    } | null = null;
+    try {
+      const { data: pollData } = await supabaseClient
+        .from("ebay_rate_limit_polls")
+        .select("resource_name, call_limit, call_count, call_remaining, reset_at, alert_sent, polled_at")
+        .order("polled_at", { ascending: false })
+        .limit(1)
+        .single();
+      if (pollData) lastEbayQuotaPoll = pollData;
+    } catch {
+      // skip
+    }
+
     return new Response(
       JSON.stringify({
         stripe: stripeStatus,
@@ -397,6 +424,7 @@ serve(async (req) => {
         openai: openaiUsage,
         featureUsage,
         lastCostAlert,
+        lastEbayQuotaPoll,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

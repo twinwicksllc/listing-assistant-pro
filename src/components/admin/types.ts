@@ -1,5 +1,11 @@
 export const ADMIN_EMAIL = "twinwicksllc@gmail.com";
 
+// Matches ebay-quota-monitor's WARN_THRESHOLD_RATIO -- kept as a separate
+// constant rather than importing across the Deno Edge Function boundary,
+// since both live in this repo and change together; duplication is
+// disclosed here rather than silent.
+export const EBAY_QUOTA_WARN_THRESHOLD_RATIO = 0.9;
+
 export const formatTokensInMillions = (tokens: number): string => {
   const millions = tokens / 1_000_000;
   return millions.toFixed(3) + "M";
@@ -50,5 +56,14 @@ export interface SystemData {
     sent_at: string;
     total_cost: number;
     total_requests: number;
+  } | null;
+  lastEbayQuotaPoll: {
+    resource_name: string;
+    call_limit: number;
+    call_count: number;
+    call_remaining: number;
+    reset_at: string;
+    alert_sent: boolean;
+    polled_at: string;
   } | null;
 }
