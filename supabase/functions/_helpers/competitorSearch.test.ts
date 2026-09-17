@@ -61,6 +61,21 @@ function fakeResult(prices: number[]): CompSearchAttemptResult {
   return { prices, count: prices.length, items: [] };
 }
 
+/** Like fakeResult, but with real itemIds so dedup-across-attempts can be tested. */
+function fakeResultWithIds(pairs: [price: number, itemId: string][]): CompSearchAttemptResult {
+  return {
+    prices: pairs.map((p) => p[0]),
+    count: pairs.length,
+    items: pairs.map(([price, itemId]) => ({
+      title: "test item",
+      price,
+      currency: "USD",
+      condition: "Pre-Owned",
+      itemId,
+    })),
+  };
+}
+
 Deno.test("evaluateCompQuality: 3 comps within 3x spread passes (global default)", () => {
   const r = evaluateCompQuality([10, 20, 30]);
   assertEquals(r.passes, true);
@@ -104,16 +119,69 @@ Deno.test("groupPlanIntoTiers: empty plan yields zero tiers", () => {
   assertEquals(groupPlanIntoTiers([]), []);
 });
 
-Deno.test("runAttemptsSequential: stops at the first non-empty result", async () => {
+// NOTE on the intra-tier quality gate (Phase 1.2b residual gap fix): before
+// this change, runAttemptsSequential stopped on ANY non-empty result,
+// including a single thin comp. This test previously asserted exactly that
+// ("stops at the first non-empty result" with only 2 comps). That assertion
+// implicitly relied on the old "any non-empty = stop" behavior, which the
+// new intra-tier quality-aware early exit deliberately supersedes -- 2
+// comps doesn't meet the default 3-comp bar, so the loop now keeps going to
+// look for more within the same tier. Updated below to reflect the new
+// behavior (intent preserved: don't waste attempts once the running result
+// is good enough) rather than silently keeping the old assertion.
+
+Deno.test("runAttemptsSequential: first attempt alone already passing the quality gate stops immediately (regression guard -- cheap/common case must not regress to always trying every attempt)", async () => {
   const calls: string[] = [];
   const attempts = [attempt("a", "s1"), attempt("b", "s2"), attempt("c", "s3")];
   const { result, chosen } = await runAttemptsSequential(attempts, (a) => {
     calls.push(a.query);
-    return Promise.resolve(fakeResult(a.query === "b" ? [10, 20] : []));
+    // "a" alone already has 3 comps within a tight spread -- passes the
+    // default gate on the very first attempt.
+    return Promise.resolve(fakeResult(a.query === "a" ? [10, 20, 30] : [999]));
+  });
+  assertEquals(calls, ["a"]);
+  assertEquals(result.prices, [10, 20, 30]);
+  assertEquals(chosen?.query, "a");
+});
+
+Deno.test("runAttemptsSequential: thin first result accumulates with the second attempt and stops once the running total passes the gate (does not blow through all remaining attempts)", async () => {
+  const calls: string[] = [];
+  const attempts = [attempt("a", "s1"), attempt("b", "s2"), attempt("c", "s3"), attempt("d", "s4")];
+  const { result, chosen } = await runAttemptsSequential(attempts, (a) => {
+    calls.push(a.query);
+    // "a" returns 1 comp (thin -- fails the 3-comp minimum alone), "b"
+    // returns 2 more -- accumulated total (3 comps, tight spread) passes.
+    if (a.query === "a") return Promise.resolve(fakeResult([10]));
+    if (a.query === "b") return Promise.resolve(fakeResult([15, 20]));
+    return Promise.resolve(fakeResult([999])); // c/d must never fire
   });
   assertEquals(calls, ["a", "b"]);
-  assertEquals(result.prices, [10, 20]);
+  assertEquals(result.prices, [10, 15, 20]);
   assertEquals(chosen?.query, "b");
+});
+
+Deno.test("runAttemptsSequential: all attempts thin/empty still exhausts every attempt in the tier and returns whatever accumulated (no attempts silently dropped)", async () => {
+  const calls: string[] = [];
+  const attempts = [attempt("a", "s1"), attempt("b", "s2"), attempt("c", "s3")];
+  const { result, chosen } = await runAttemptsSequential(attempts, (a) => {
+    calls.push(a.query);
+    // Each attempt contributes 1 comp -- accumulated total never reaches
+    // the 3-comp minimum, so every attempt in the tier gets tried.
+    return Promise.resolve(fakeResult(a.query === "a" ? [10] : a.query === "b" ? [] : [12]));
+  });
+  assertEquals(calls, ["a", "b", "c"]);
+  assertEquals(result.prices, [10, 12]);
+  assertEquals(chosen?.query, "c");
+});
+
+Deno.test("runAttemptsSequential: never fires more than N attempts for a tier of N (regression guard against an infinite loop or over-fetching)", async () => {
+  let calls = 0;
+  const attempts = [attempt("a", "s1"), attempt("b", "s2"), attempt("c", "s3"), attempt("d", "s4")];
+  await runAttemptsSequential(attempts, () => {
+    calls++;
+    return Promise.resolve(fakeResult([])); // never passes the gate
+  });
+  assertEquals(calls, attempts.length);
 });
 
 Deno.test("runAttemptsSequential: all-empty attempts yields a null chosen attempt", async () => {
@@ -121,6 +189,48 @@ Deno.test("runAttemptsSequential: all-empty attempts yields a null chosen attemp
   const { result, chosen } = await runAttemptsSequential(attempts, () => Promise.resolve(fakeResult([])));
   assertEquals(result.prices, []);
   assertEquals(chosen, null);
+});
+
+// Regression coverage: buildSearchPlan's attempts within one tier share the
+// same query and often the same category, varying only filterMode
+// (fixed-price vs. any buying option). "any" is a superset of "fixed", so
+// the same real eBay listing commonly appears in both attempts' results --
+// accumulating without dedup would double-count it, inflating comp count
+// and corrupting avgPrice/medianPrice/spread with duplicates rather than
+// genuinely new comps.
+Deno.test("runAttemptsSequential: dedups overlapping items across attempts by itemId (fixed vs. any buying-option overlap)", async () => {
+  const attempts = [attempt("a", "with-category-fixed"), attempt("b", "with-category-any")];
+  const { result } = await runAttemptsSequential(attempts, (a) => {
+    // "any" mode returns everything "fixed" mode returned (item-1, item-2)
+    // plus one genuinely new auction item (item-3) -- a realistic overlap.
+    if (a.query === "a") {
+      return Promise.resolve(fakeResultWithIds([[10, "item-1"], [12, "item-2"]]));
+    }
+    return Promise.resolve(
+      fakeResultWithIds([[10, "item-1"], [12, "item-2"], [15, "item-3"]]),
+    );
+  });
+  // 2 comps from attempt "a" don't pass the gate (below the 3-comp minimum),
+  // so "b" fires too -- but item-1/item-2 must not be counted twice.
+  assertEquals(result.prices.sort(), [10, 12, 15]);
+  assertEquals(result.count, 3);
+  assertEquals(result.items.map((i) => i.itemId).sort(), ["item-1", "item-2", "item-3"]);
+});
+
+Deno.test("runAttemptsSequential: an item missing itemId is kept, never dropped for lack of an id", async () => {
+  const attempts = [attempt("a", "s1")];
+  const { result } = await runAttemptsSequential(attempts, () =>
+    Promise.resolve({
+      prices: [10, 20, 30],
+      count: 3,
+      items: [
+        { title: "no id 1", price: 10, currency: "USD", condition: "Pre-Owned" },
+        { title: "no id 2", price: 20, currency: "USD", condition: "Pre-Owned" },
+        { title: "no id 3", price: 30, currency: "USD", condition: "Pre-Owned" },
+      ],
+    }));
+  assertEquals(result.prices, [10, 20, 30]);
+  assertEquals(result.items.length, 3);
 });
 
 Deno.test("runTieredCompSearch: tier 0 alone is sufficient when it passes the quality gate — tier 1 never fires", async () => {

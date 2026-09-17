@@ -68,6 +68,14 @@ export const PIPELINE_TIMEOUTS_MS = {
    * would let it eat the budget in front of every other ceiling here.
    */
   ragRetrieval: 10_000,
+  /**
+   * Race ceiling for the pre-AI comps lookup, layered ON TOP of
+   * `internalFunction`'s own 25s budget -- not a replacement for it. A
+   * successful call settles in ~5-8s observed; this splits that range so a
+   * slow-but-normal response isn't cut off while still bounding the worst
+   * case tightly enough that Pass 2's prompt-build doesn't wait the full 25s.
+   */
+  compsPreAiRace: 6_000,
 } as const;
 
 /** Statuses the Response constructor refuses to pair with a body of any size. */
