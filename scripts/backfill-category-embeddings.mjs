@@ -51,14 +51,31 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || !GEMINI_API_KEY) {
   process.exit(2);
 }
 
+/**
+ * Parses a `--flag=N` integer argument. Distinguishes "absent" (returns
+ * `fallback`) from "present but invalid" (throws) -- Copilot review (PR
+ * #587) caught that the original `arg ? Number(...) : fallback` pattern
+ * treated `--limit=0`/`--concurrency=0` as falsy and silently fell back
+ * to "unset" (a full unbounded run) instead of the caller's explicit
+ * zero, and never rejected NaN/negative values either.
+ */
+function parseIntArg(args, flag, { fallback, min = 1 } = {}) {
+  const raw = args.find((a) => a.startsWith(`${flag}=`));
+  if (!raw) return fallback;
+  const value = Number(raw.split("=")[1]);
+  if (!Number.isInteger(value) || value < min) {
+    console.error(
+      `FATAL: ${flag} must be an integer >= ${min}, got "${raw.split("=")[1]}"`,
+    );
+    process.exit(2);
+  }
+  return value;
+}
+
 const args = process.argv.slice(2);
 const DRY_RUN = args.includes("--dry-run");
-const CONCURRENCY = Number(
-  args.find((a) => a.startsWith("--concurrency="))?.split("=")[1] ?? 8,
-);
-const LIMIT = args.find((a) => a.startsWith("--limit="))
-  ? Number(args.find((a) => a.startsWith("--limit=")).split("=")[1])
-  : null;
+const CONCURRENCY = parseIntArg(args, "--concurrency", { fallback: 8, min: 1 });
+const LIMIT = parseIntArg(args, "--limit", { fallback: null, min: 1 });
 
 // Same model/dimension as _helpers/rag/embedding.ts's getEmbedding -- kept
 // as a literal here (not imported) since this script runs under Node, not
@@ -81,9 +98,81 @@ const PAGE_SIZE = 1000;
  * the embedded text for no benefit. This also matches what the LLM ranking
  * call in category-lookup will actually be shown (the full ancestor path),
  * so retrieval and ranking see the same text shape.
+ *
+ * Prefixed with the embedding model name (Copilot review, PR #587):
+ * embedding_source_text originally only watermarked TEXT changes, missing
+ * the case backfill-knowledge-base-embeddings/index.ts's own
+ * metadata.embedding_model watermark exists to catch -- GEMINI_EMBEDDING_MODEL
+ * is env-overridable, and the script's env can drift from the Edge Function's.
+ * Without this, a model swap would leave old- and new-model vectors mixed
+ * under one HNSW index (they are not comparable even at the same 768
+ * dimension), and this script would skip every unchanged breadcrumb as
+ * "already current" -- silently corrupting similarity search. Baking the
+ * model into the compared text forces a full re-embed on any model change,
+ * matching that existing precedent's intent without adding a second column.
  */
 function buildSourceText(row) {
-  return row.breadcrumb;
+  return `[${GEMINI_EMBEDDING_MODEL}] ${row.breadcrumb}`;
+}
+
+/**
+ * fetch() with a real timeout that stays armed through response-body
+ * reading, plus retry+backoff on 429/5xx (Copilot review, PR #587, on
+ * getEmbedding's original abort-timer bug: clearing the timer as soon as
+ * fetch() resolves -- i.e. once headers arrive -- leaves await
+ * res.json()/res.text() completely unbounded, so a response that stalls
+ * mid-body hangs forever despite EMBED_TIMEOUT_MS). Mirrors this repo's
+ * own supabase/functions/_helpers/fetchWithTimeout.ts line for line: the
+ * body is drained into an arrayBuffer WHILE the abort signal is still
+ * live, then handed back as a fresh Response so callers can still call
+ * .json()/.text() on an already-resolved payload. Also used for the
+ * Supabase REST calls below, which (per the same review) had no timeout
+ * or retry at all.
+ */
+// Statuses the Response constructor refuses to pair with a body of any
+// size, even an empty one -- matches this repo's own
+// _helpers/fetchWithTimeout.ts's NULL_BODY_STATUSES exactly. patchRow's
+// `Prefer: return=minimal` header makes a successful PATCH return 204.
+const NULL_BODY_STATUSES = new Set([101, 103, 204, 205, 304]);
+
+async function fetchWithRetry(
+  url,
+  options,
+  { timeoutMs = EMBED_TIMEOUT_MS, label } = {},
+) {
+  let lastErr;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...options, signal: controller.signal });
+      if (NULL_BODY_STATUSES.has(res.status)) return res;
+      const bodyBuffer = await res.arrayBuffer();
+      const buffered = new Response(bodyBuffer, {
+        status: res.status,
+        statusText: res.statusText,
+        headers: res.headers,
+      });
+      if (!buffered.ok) {
+        const body = await buffered.text().catch(() => "");
+        const err = new Error(`${label} ${buffered.status}: ${body}`);
+        if (!(buffered.status === 429 || buffered.status >= 500))
+          err.nonRetryable = true;
+        throw err;
+      }
+      return buffered;
+    } catch (err) {
+      lastErr = controller.signal.aborted
+        ? new Error(`${label} timed out after ${timeoutMs}ms`)
+        : err;
+      if (lastErr.nonRetryable || attempt === MAX_RETRIES) break;
+      const backoffMs = 500 * 2 ** (attempt - 1);
+      await new Promise((r) => setTimeout(r, backoffMs));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastErr;
 }
 
 async function fetchAllCategoryRows() {
@@ -97,18 +186,16 @@ async function fetchAllCategoryRows() {
       `&is_leaf=eq.true` +
       `&order=category_id.asc` +
       `&limit=${pageSize}&offset=${offset}`;
-    const res = await fetch(url, {
-      headers: {
-        apikey: SUPABASE_SERVICE_KEY,
-        Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+    const res = await fetchWithRetry(
+      url,
+      {
+        headers: {
+          apikey: SUPABASE_SERVICE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+        },
       },
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error(
-        `Supabase REST fetch failed (offset=${offset}): ${res.status} ${res.statusText} -- ${body}`,
-      );
-    }
+      { timeoutMs: 30_000, label: `Supabase REST fetch (offset=${offset})` },
+    );
     const page = await res.json();
     rows.push(...page);
     if (page.length < pageSize) break;
@@ -119,65 +206,31 @@ async function fetchAllCategoryRows() {
 }
 
 async function getEmbedding(text) {
-  let lastErr;
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), EMBED_TIMEOUT_MS);
-      let res;
-      try {
-        res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_EMBEDDING_MODEL}:embedContent?key=${GEMINI_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              model: `models/${GEMINI_EMBEDDING_MODEL}`,
-              content: { parts: [{ text }] },
-              outputDimensionality: 768,
-            }),
-            signal: controller.signal,
-          },
-        );
-      } finally {
-        clearTimeout(timer);
-      }
-
-      if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        // 429/5xx are worth retrying with backoff; a 400 (e.g. malformed
-        // text) will just fail identically on retry -- fail fast instead.
-        if (res.status === 429 || res.status >= 500) {
-          throw new Error(`Gemini Embedding API ${res.status}: ${body}`);
-        }
-        throw Object.assign(
-          new Error(`Gemini Embedding API ${res.status}: ${body}`),
-          {
-            nonRetryable: true,
-          },
-        );
-      }
-
-      const data = await res.json();
-      const values = data?.embedding?.values;
-      if (!Array.isArray(values) || values.length !== 768) {
-        throw new Error(
-          `Gemini Embedding API returned an unexpected shape (length=${values?.length ?? "n/a"})`,
-        );
-      }
-      return values;
-    } catch (err) {
-      lastErr = err;
-      if (err.nonRetryable || attempt === MAX_RETRIES) break;
-      const backoffMs = 500 * 2 ** (attempt - 1);
-      await new Promise((r) => setTimeout(r, backoffMs));
-    }
+  const res = await fetchWithRetry(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_EMBEDDING_MODEL}:embedContent?key=${GEMINI_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: `models/${GEMINI_EMBEDDING_MODEL}`,
+        content: { parts: [{ text }] },
+        outputDimensionality: 768,
+      }),
+    },
+    { timeoutMs: EMBED_TIMEOUT_MS, label: "Gemini Embedding API" },
+  );
+  const data = await res.json();
+  const values = data?.embedding?.values;
+  if (!Array.isArray(values) || values.length !== 768) {
+    throw new Error(
+      `Gemini Embedding API returned an unexpected shape (length=${values?.length ?? "n/a"})`,
+    );
   }
-  throw lastErr;
+  return values;
 }
 
 async function patchRow(categoryId, embedding, sourceText) {
-  const res = await fetch(
+  await fetchWithRetry(
     `${SUPABASE_URL}/rest/v1/ebay_taxonomy_cache?category_id=eq.${encodeURIComponent(categoryId)}`,
     {
       method: "PATCH",
@@ -189,13 +242,8 @@ async function patchRow(categoryId, embedding, sourceText) {
       },
       body: JSON.stringify({ embedding, embedding_source_text: sourceText }),
     },
+    { timeoutMs: 15_000, label: `Supabase PATCH (${categoryId})` },
   );
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(
-      `Supabase PATCH failed for ${categoryId}: ${res.status} ${res.statusText} -- ${body}`,
-    );
-  }
 }
 
 /**

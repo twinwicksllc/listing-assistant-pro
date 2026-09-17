@@ -44,7 +44,7 @@ COMMENT ON COLUMN public.ebay_taxonomy_cache.embedding IS
   'Embedding of embedding_source_text (768-dim, same model as knowledge_base) -- populated by scripts/backfill-category-embeddings.mjs, not by sync-ebay-taxonomy itself. NULL until backfilled.';
 
 COMMENT ON COLUMN public.ebay_taxonomy_cache.embedding_source_text IS
-  'The exact breadcrumb string that was embedded (breadcrumb''s own last segment already is category_name, so no separate concatenation is needed). Compared against the freshly computed breadcrumb to detect which rows need re-embedding -- synced_at/updated_at are refreshed on every row every weekly sync regardless of whether the text changed, so they cannot be used for this.';
+  'The exact text that was embedded: "[<model>] <breadcrumb>" (breadcrumb''s own last segment already is category_name, so no separate concatenation is needed; the model name is prefixed so a model swap -- GEMINI_EMBEDDING_MODEL is env-overridable -- forces a full re-embed rather than silently skipping unchanged breadcrumbs under a stale, incomparable vector). Compared against the freshly computed value to detect which rows need re-embedding -- synced_at/updated_at are refreshed on every row every weekly sync regardless of whether the text changed, so they cannot be used for this.';
 
 -- Partial index: only leaf rows with a computed embedding are ever
 -- candidates for match_ebay_categories's WHERE clause below, so indexing
@@ -74,6 +74,23 @@ CREATE INDEX IF NOT EXISTS idx_ebay_taxonomy_cache_embedding_hnsw
 -- against both real projects (2026-09-17), not just review. Both schemas
 -- are included so this RPC is portable across the drift rather than
 -- coupled to one environment's extension placement.
+--
+-- Freshness gate (Copilot review, PR #587): sync-ebay-taxonomy never
+-- deletes rows -- it only upserts categories still present in eBay's live
+-- tree and logs (never persists) which IDs disappeared. A category eBay
+-- retired last month, embedded before it was retired, would otherwise
+-- stay a candidate forever with is_leaf=TRUE alone as the filter.
+--
+-- 30 days, not category-lookup's own 7-day CACHE_STALE_DAYS
+-- (index.ts:26/:837): checking this against real production data
+-- (2026-09-17) found sync-ebay-taxonomy-weekly has not completed
+-- successfully since 2026-08-23 -- ~4 weeks stale, meaning a strict 7-day
+-- window returns ZERO candidates from all 15,111 real leaf rows today.
+-- 30 days keeps this a real, non-decorative gate (it still excludes
+-- truly abandoned/ancient rows) without going fully unguarded while the
+-- underlying cron-health issue is investigated separately. TODO: tighten
+-- back to 7 days, matching category-lookup's own gates, once that sync
+-- is confirmed running on schedule again.
 CREATE OR REPLACE FUNCTION public.match_ebay_categories(
   query_embedding vector(768),
   match_count INTEGER,
@@ -98,12 +115,31 @@ AS $$
   FROM public.ebay_taxonomy_cache etc
   WHERE etc.is_leaf = TRUE
     AND etc.embedding IS NOT NULL
+    AND etc.synced_at >= now() - interval '30 days'
     AND 1 - (etc.embedding <=> query_embedding) > match_threshold
   ORDER BY etc.embedding <=> query_embedding
   LIMIT match_count;
 $$;
 
+-- Newly created functions are executable by PUBLIC by default in Postgres
+-- unless explicitly revoked (Copilot review, PR #587) -- confirmed exploitable
+-- on this project's real production database: anon/authenticated could call
+-- this SECURITY DEFINER function and read ebay_taxonomy_cache rows bypassing
+-- its service-role-only RLS policy, entirely regardless of the GRANT below.
+-- (Also confirmed the same gap pre-exists on get_watches_due_for_refresh,
+-- get_users_for_inventory_sync, and get_next_competitor_price_batch --
+-- out of scope to fix here, flagged separately.)
+--
+-- REVOKE ALL ... FROM PUBLIC alone is NOT sufficient here -- confirmed by
+-- actually checking pg_proc.proacl after applying: Supabase's own
+-- project-level ALTER DEFAULT PRIVILEGES grants EXECUTE to anon,
+-- authenticated, AND service_role individually (not via the PUBLIC
+-- pseudo-role) on every function created in `public`, owned by
+-- postgres/supabase_admin. Revoking FROM PUBLIC does nothing to those
+-- already-explicit per-role grants; anon/authenticated must be revoked
+-- by name.
+REVOKE ALL ON FUNCTION public.match_ebay_categories(vector(768), INTEGER, FLOAT) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.match_ebay_categories(vector(768), INTEGER, FLOAT) TO service_role;
 
 COMMENT ON FUNCTION public.match_ebay_categories IS
-  'Vector similarity search over ebay_taxonomy_cache''s live leaf categories, for category-lookup''s vector_llm candidate source (Phase 2.2b). Returns up to match_count real, currently-live leaves above match_threshold cosine similarity -- callers still validate any LLM-picked ID is present in this result set before treating it as a candidate.';
+  'Vector similarity search over ebay_taxonomy_cache''s live leaf categories, for category-lookup''s vector_llm candidate source (Phase 2.2b). Returns up to match_count categories synced within the last 30 days (widened from category-lookup''s own 7-day Gate 1/2 window because sync-ebay-taxonomy-weekly was found ~4 weeks stale on 2026-09-17 -- see migration comment; tighten back to 7 days once that cron is confirmed healthy), above match_threshold cosine similarity -- callers still validate any LLM-picked ID is present in this result set before treating it as a candidate.';
