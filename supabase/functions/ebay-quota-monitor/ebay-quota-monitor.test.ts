@@ -1,5 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
-import { findBrowseRate, shouldPruneThisTick, shouldWarn } from "./index.ts";
+import { findBrowseRate, pruneOldCallLogRows, shouldPruneThisTick, shouldWarn } from "./index.ts";
 
 // Regression coverage for the eBay Browse API quota monitor (spun out of the
 // 2026-09-17 429 investigation, follow-on to PR #580's call-fan-out cap).
@@ -128,4 +128,54 @@ Deno.test("shouldPruneThisTick: does not fire on other UTC hours", () => {
   for (const hour of [1, 5, 12, 23]) {
     assertEquals(shouldPruneThisTick(hour), false);
   }
+});
+
+/** Minimal fake mirroring only the .from().delete().lt() shape pruneOldCallLogRows uses. */
+function fakeSupabaseForPrune(opts: {
+  error?: { message: string };
+  onDelete?: (table: string, filterField: string, filterValue: string) => void;
+}) {
+  return {
+    from(table: string) {
+      return {
+        delete() {
+          return {
+            lt(field: string, value: string) {
+              opts.onDelete?.(table, field, value);
+              return Promise.resolve({ error: opts.error ?? null });
+            },
+          };
+        },
+      };
+    },
+  };
+}
+
+Deno.test("pruneOldCallLogRows: deletes from ebay_browse_call_log with a cutoff 3 days before `now`", async () => {
+  let capturedTable = "";
+  let capturedField = "";
+  let capturedCutoff = "";
+  const svc = fakeSupabaseForPrune({
+    onDelete: (table, field, value) => {
+      capturedTable = table;
+      capturedField = field;
+      capturedCutoff = value;
+    },
+  });
+  const now = new Date("2026-09-20T00:31:00.000Z");
+  const result = await pruneOldCallLogRows(svc, now);
+  assertEquals(result, { pruned: true });
+  assertEquals(capturedTable, "ebay_browse_call_log");
+  assertEquals(capturedField, "created_at");
+  // RETENTION_DAYS = 3, so the cutoff must be exactly 3 days before `now` --
+  // rows on the "3 days old, still within retention" side of this boundary
+  // must survive, and rows just past it must be deleted.
+  assertEquals(capturedCutoff, "2026-09-17T00:31:00.000Z");
+});
+
+Deno.test("pruneOldCallLogRows: reports failure on a delete error rather than reporting pruned: true", async () => {
+  const svc = fakeSupabaseForPrune({ error: { message: "connection reset" } });
+  const result = await pruneOldCallLogRows(svc, new Date());
+  assertEquals(result.pruned, false);
+  assertEquals(result.error, "connection reset");
 });

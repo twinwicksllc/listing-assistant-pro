@@ -195,13 +195,21 @@ export function shouldPruneThisTick(utcHour: number): boolean {
   return utcHour === 0;
 }
 
-async function pruneOldCallLogRows(
+/**
+ * Deletes ebay_browse_call_log rows older than RETENTION_DAYS. Exported so
+ * the cutoff math, the table/filter targeted, and the error path all have
+ * direct test coverage against a fake Supabase client -- the earlier
+ * version only had test coverage on shouldPruneThisTick's hour guard, never
+ * on this function itself (Copilot review, PR #582).
+ */
+export async function pruneOldCallLogRows(
   // deno-lint-ignore no-explicit-any -- matches competitorSearch.ts's
   // logBrowseApiCall, which takes the same loosely-typed supabase-js client
   // for the same reason (avoids fighting the generated client's generics).
   svc: any,
+  now: Date = new Date(),
 ): Promise<{ pruned: boolean; error?: string }> {
-  const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const cutoff = new Date(now.getTime() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
   const { error } = await svc
     .from("ebay_browse_call_log")
     .delete()
@@ -311,6 +319,19 @@ serve(async (req) => {
     { auth: { persistSession: false } },
   );
 
+  // Run the prune independently of the eBay poll below, and before it --
+  // the poll can fail or short-circuit (token error, getRateLimits error,
+  // no buy.browse resource found) well before reaching the poll's own
+  // success path, and since shouldPruneThisTick only allows the 00:00 UTC
+  // tick, a poll outage at exactly that hour would otherwise skip pruning
+  // until the next day with no retry, letting the append-only table grow
+  // unboundedly during exactly the kind of outage this is meant to be
+  // resilient to (Copilot review, PR #582).
+  let pruneResult: { pruned: boolean; error?: string } | null = null;
+  if (shouldPruneThisTick(new Date().getUTCHours())) {
+    pruneResult = await pruneOldCallLogRows(svc);
+  }
+
   try {
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "production";
     const token = await getEbayAppToken(ebayEnv);
@@ -320,7 +341,11 @@ serve(async (req) => {
     if (!found) {
       console.warn("[ebay-quota-monitor] No buy.browse resource found in getRateLimits response");
       return new Response(
-        JSON.stringify({ warned: false, reason: "buy.browse resource not found in response" }),
+        JSON.stringify({
+          warned: false,
+          reason: "buy.browse resource not found in response",
+          pruned: pruneResult?.pruned ?? null,
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -414,11 +439,6 @@ serve(async (req) => {
       // watches routinely (Copilot review, PR #581).
       console.error("[ebay-quota-monitor] Failed to persist poll snapshot:", insertErr.message);
       captureException(new Error(`Poll insert failed: ${insertErr.message}`), { function: "ebay-quota-monitor" });
-    }
-
-    let pruneResult: { pruned: boolean; error?: string } | null = null;
-    if (shouldPruneThisTick(new Date().getUTCHours())) {
-      pruneResult = await pruneOldCallLogRows(svc);
     }
 
     return new Response(
