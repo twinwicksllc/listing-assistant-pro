@@ -34,6 +34,16 @@ name: Category Taxonomy Maintenance
 # production: category_hygiene_log holds six weekly rows, 2026-07-19 to
 # 2026-08-23, all status=success. The score-based duties Phase 5 deleted were
 # no-ops in every logged run ("expired": 0), so nothing load-bearing was removed.
+#
+# `set -o pipefail` (2026-09-17): both curl calls below pipe into `tee`, and a
+# bash `run:` step defaults to `bash -e` (no pipefail), so a pipeline's exit
+# code is the LAST command's -- `tee` always exits 0 as long as it can write
+# the file, so curl's real failure exit code was silently swallowed. Confirmed
+# this masked a real, live 401 today: `gh run view` showed the "Call
+# sync-ebay-taxonomy" step passing (green) while its own log line one row
+# above read `curl: (22) The requested URL returned error: 401`. Both jobs had
+# been reporting false-positive success this way -- there is no way to know
+# from the Actions UI history how many prior runs were silently broken.
 
 on:
   schedule:
@@ -52,6 +62,7 @@ jobs:
     steps:
       - name: Call sync-ebay-taxonomy
         run: |
+          set -o pipefail
           curl --fail --show-error --silent \
             -X POST "${{ secrets.SUPABASE_URL }}/functions/v1/sync-ebay-taxonomy" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
@@ -69,6 +80,7 @@ jobs:
     steps:
       - name: Call category-hygiene-cron
         run: |
+          set -o pipefail
           curl --fail --show-error --silent \
             -X POST "${{ secrets.SUPABASE_URL }}/functions/v1/category-hygiene-cron" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
