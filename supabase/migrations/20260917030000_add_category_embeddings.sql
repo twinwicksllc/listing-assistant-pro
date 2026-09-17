@@ -60,6 +60,20 @@ CREATE INDEX IF NOT EXISTS idx_ebay_taxonomy_cache_embedding_hnsw
 -- same SECURITY DEFINER + search_path + service_role-only grant shape as
 -- get_watches_due_for_refresh (20260916010000) and this project's other
 -- cursor RPCs.
+--
+-- search_path includes `extensions`, not just `public`: confirmed the
+-- `vector` extension (and its <=> operator) lives in a DIFFERENT schema
+-- per environment -- `public` on listrassistr-qa (created there by
+-- 20260622000000's unqualified `CREATE EXTENSION vector`, which resolved
+-- to whatever schema was first in that project's search_path at the time)
+-- but `extensions` on this repo's actual linked production project
+-- (wcednzaxmxwfiijzmjmx), pre-provisioned before this repo's migrations
+-- ever ran. `SET search_path = public` alone applied cleanly on QA but
+-- failed on production with "operator does not exist: extensions.vector
+-- <=> extensions.vector" -- caught by actually running this migration
+-- against both real projects (2026-09-17), not just review. Both schemas
+-- are included so this RPC is portable across the drift rather than
+-- coupled to one environment's extension placement.
 CREATE OR REPLACE FUNCTION public.match_ebay_categories(
   query_embedding vector(768),
   match_count INTEGER,
@@ -74,7 +88,7 @@ RETURNS TABLE (
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
   SELECT
     etc.category_id,
