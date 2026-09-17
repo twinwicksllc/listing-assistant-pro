@@ -1,5 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
-import { findBrowseRate, shouldWarn } from "./index.ts";
+import { findBrowseRate, shouldPruneThisTick, shouldWarn } from "./index.ts";
 
 // Regression coverage for the eBay Browse API quota monitor (spun out of the
 // 2026-09-17 429 investigation, follow-on to PR #580's call-fan-out cap).
@@ -114,4 +114,18 @@ Deno.test("shouldWarn: both signals crossing the threshold still reports a singl
   const r = shouldWarn(5000, 100, 4600);
   assertEquals(r.warn, true);
   assertEquals(r.reason.includes("eBay's own poll"), true);
+});
+
+// Retention/pruning: ebay_browse_call_log is append-only and only ever read
+// via a same-day query, so rows older than the retention window are pure
+// dead weight. This cron runs hourly; the prune should fire on exactly one
+// of those 24 ticks/day, not all of them.
+Deno.test("shouldPruneThisTick: fires at the designated UTC hour (00)", () => {
+  assertEquals(shouldPruneThisTick(0), true);
+});
+
+Deno.test("shouldPruneThisTick: does not fire on other UTC hours", () => {
+  for (const hour of [1, 5, 12, 23]) {
+    assertEquals(shouldPruneThisTick(hour), false);
+  }
 });

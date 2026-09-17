@@ -43,6 +43,17 @@ const ADMIN_EMAIL = "twinwicksllc@gmail.com";
 const WARN_THRESHOLD_RATIO = 0.9;
 const BROWSE_RESOURCE_NAME = "buy.browse";
 
+// ebay_browse_call_log is append-only and only ever read via a same-day
+// (gte todayStart) query -- every row older than "today" is dead weight
+// from the moment it's written. Flagged by Copilot review on PR #581 as a
+// real, non-blocking gap; now folded into this cron (already running
+// hourly, already has the right auth) rather than standing up a whole new
+// function/migration/RBR-0028 entry for a one-line delete. Retention keeps
+// a few days (not just "today") so a recent spike can still be
+// investigated after the fact -- nothing reads past the same-day window
+// today, so this is headroom, not a requirement.
+const RETENTION_DAYS = 3;
+
 interface EbayRateLimitRate {
   limit: number;
   remaining: number;
@@ -170,6 +181,39 @@ export function shouldWarn(
     };
   }
   return { warn: false, reason: "below threshold" };
+}
+
+/**
+ * Decides whether this invocation should run the (once/day) call-log prune,
+ * given the current UTC hour this cron tick landed on. Pure so the "only on
+ * the designated hour" guard has direct test coverage without a live clock
+ * or DB round trip. This cron runs hourly (`31 * * * *`); running the prune
+ * on every tick would be 24 redundant DELETEs/day for no benefit, so it's
+ * gated to a single hour.
+ */
+export function shouldPruneThisTick(utcHour: number): boolean {
+  return utcHour === 0;
+}
+
+async function pruneOldCallLogRows(
+  // deno-lint-ignore no-explicit-any -- matches competitorSearch.ts's
+  // logBrowseApiCall, which takes the same loosely-typed supabase-js client
+  // for the same reason (avoids fighting the generated client's generics).
+  svc: any,
+): Promise<{ pruned: boolean; error?: string }> {
+  const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const { error } = await svc
+    .from("ebay_browse_call_log")
+    .delete()
+    .lt("created_at", cutoff.toISOString());
+  if (error) {
+    console.error("[ebay-quota-monitor] Call-log prune failed:", error.message);
+    captureException(new Error(`Call-log prune failed: ${error.message}`), {
+      function: "ebay-quota-monitor",
+    });
+    return { pruned: false, error: error.message };
+  }
+  return { pruned: true };
 }
 
 async function sendQuotaAlertEmail(params: {
@@ -372,6 +416,11 @@ serve(async (req) => {
       captureException(new Error(`Poll insert failed: ${insertErr.message}`), { function: "ebay-quota-monitor" });
     }
 
+    let pruneResult: { pruned: boolean; error?: string } | null = null;
+    if (shouldPruneThisTick(new Date().getUTCHours())) {
+      pruneResult = await pruneOldCallLogRows(svc);
+    }
+
     return new Response(
       JSON.stringify({
         warned: verdict.warn,
@@ -381,6 +430,7 @@ serve(async (req) => {
         remaining: rate.remaining,
         sameDayCount: sameDayCount ?? null,
         pollPersisted: !insertErr,
+        pruned: pruneResult?.pruned ?? null,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
