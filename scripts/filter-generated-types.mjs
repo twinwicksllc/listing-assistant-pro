@@ -50,6 +50,7 @@ const ALLOWED_FUNCTIONS = new Set([
   "increment_sku_sequence",
   "is_org_member",
   "is_org_owner",
+  "match_ebay_categories",
   "match_knowledge_base",
   "set_ebay_taxonomy_cache_updated_at",
   "set_ebay_taxonomy_meta_updated_at",
