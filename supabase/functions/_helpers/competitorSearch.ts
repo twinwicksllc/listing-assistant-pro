@@ -47,7 +47,7 @@ export function parseOptionalCount(raw: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-interface CompetitorItem {
+export interface CompetitorItem {
   title: string;
   price: number;
   currency: string;
@@ -176,17 +176,19 @@ function broadenSearchQuery(query: string): string {
   return tokens.slice(0, 5).join(" ");
 }
 
+export interface SearchPlanAttempt {
+  query: string;
+  categoryId?: string;
+  strategy: string;
+  filterMode: "fixed" | "any";
+}
+
 function buildSearchPlan(params: {
   title: string;
   geminiQuery: string | null;
   heuristicQuery: string;
   categoryId?: string;
-}): Array<{
-  query: string;
-  categoryId?: string;
-  strategy: string;
-  filterMode: "fixed" | "any";
-}> {
+}): SearchPlanAttempt[] {
   const { title, geminiQuery, heuristicQuery, categoryId } = params;
 
   const uniqueQueries: string[] = [];
@@ -202,13 +204,21 @@ function buildSearchPlan(params: {
   pushQuery(broadenSearchQuery(heuristicQuery));
   pushQuery(deriveSearchQueryFallback(title));
 
-  const plan: Array<{
-    query: string;
-    categoryId?: string;
-    strategy: string;
-    filterMode: "fixed" | "any";
-  }> = [];
-  for (const query of uniqueQueries.slice(0, 4)) {
+  const plan: SearchPlanAttempt[] = [];
+  // Phase 1.2b (pricing-reliability plan): capped at the first 2 unique
+  // queries, not 4 -- confirmed 2026-09-17 that eBay's Browse API has a
+  // real, hard 5,000-calls/day limit per client_id, shared across every
+  // caller (live analyze-item requests, competitor-prices-cron,
+  // market-watch-refresh, everything). The un-capped 4-query x 4-filter-mode
+  // plan could reach 16 raw calls for a single search, and analyze-item
+  // calls this twice per analysis (pre-AI + post-AI) -- up to 32 calls for
+  // one item, or (via competitor-prices-cron's 24h refresh cycle) enough to
+  // exhaust the daily quota with well under 500 synced listings for a
+  // single user. groupPlanIntoTiers/runTieredCompSearch below group this
+  // plan into per-query tiers and only run a 2nd tier if the 1st doesn't
+  // meet the quality bar -- see their docstrings for the sequential-and-
+  // evaluate control flow this caps against.
+  for (const query of uniqueQueries.slice(0, 2)) {
     if (categoryId) {
       plan.push({
         query,
@@ -238,6 +248,66 @@ function buildSearchPlan(params: {
   }
 
   return plan;
+}
+
+/**
+ * Groups buildSearchPlan's flat output into contiguous same-query runs --
+ * "tier 0" is the full run of 2-4 filter/category attempts for the first
+ * unique query, "tier 1" for the second. Does not change buildSearchPlan's
+ * own return shape (its flat list is still used for the `attemptedQueries`
+ * field in the empty-response body).
+ */
+export function groupPlanIntoTiers(
+  plan: SearchPlanAttempt[],
+): SearchPlanAttempt[][] {
+  const tiers: SearchPlanAttempt[][] = [];
+  let current: SearchPlanAttempt[] = [];
+  for (const attempt of plan) {
+    if (current.length > 0 && current[0].query !== attempt.query) {
+      tiers.push(current);
+      current = [];
+    }
+    current.push(attempt);
+  }
+  if (current.length > 0) tiers.push(current);
+  return tiers;
+}
+
+export interface CompQualityGateResult {
+  passes: boolean;
+  reason: string;
+}
+
+/**
+ * Phase 1.2b's quality gate: decides whether one tier's result is good
+ * enough to stop, or thin enough to justify spending a 2nd tier's worth of
+ * eBay quota. Spread (not comp count) is the dial that matters -- comp
+ * count mostly reflects category liquidity (how many listings exist at
+ * all), not query quality, so requiring more comps for thin categories
+ * just penalizes them without signaling whether the query itself was good.
+ * A tight spread from few comps means the query pulled a coherent set of
+ * the same item; a wide spread means it grabbed unlike things. Global
+ * defaults (3 comps / 3x spread) are deliberately not tuned per-category
+ * yet -- see the plan doc's Phase 1.2b section for the deferred-until-
+ * real-data reasoning on that.
+ */
+export function evaluateCompQuality(
+  prices: number[],
+  opts: { minCount?: number; maxSpreadRatio?: number } = {},
+): CompQualityGateResult {
+  const minCount = opts.minCount ?? 3;
+  const maxSpreadRatio = opts.maxSpreadRatio ?? 3;
+  if (prices.length < minCount) {
+    return { passes: false, reason: `only ${prices.length} comps (need ${minCount}+)` };
+  }
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  if (min <= 0) return { passes: false, reason: "non-positive minimum price" };
+  const spread = max / min;
+  if (spread > maxSpreadRatio) {
+    return { passes: false, reason: `price spread ${spread.toFixed(1)}x exceeds ${maxSpreadRatio}x` };
+  }
+  return { passes: true, reason: `${prices.length} comps within ${spread.toFixed(1)}x spread` };
 }
 
 // ----------------------------------------------------------------
@@ -521,6 +591,117 @@ async function fetchEbayCompetitors(params: {
   return { prices, count: prices.length, raw: items, items: structured };
 }
 
+export interface CompSearchAttemptResult {
+  prices: number[];
+  count: number;
+  items: CompetitorItem[];
+}
+
+/**
+ * Runs a list of search attempts sequentially, stopping at the first one
+ * that returns a non-empty price list. Line-for-line-identical behavior to
+ * the original flat loop this replaced in runCompetitorSearch -- extracted
+ * so runTieredCompSearch can reuse it per-tier.
+ */
+export async function runAttemptsSequential(
+  attempts: SearchPlanAttempt[],
+  fetchOne: (attempt: SearchPlanAttempt) => Promise<CompSearchAttemptResult>,
+): Promise<{ result: CompSearchAttemptResult; chosen: SearchPlanAttempt | null }> {
+  for (const attempt of attempts) {
+    const result = await fetchOne(attempt);
+    if (result.prices.length > 0) {
+      return { result, chosen: attempt };
+    }
+  }
+  return { result: { prices: [], count: 0, items: [] }, chosen: null };
+}
+
+export interface TieredCompSearchResult {
+  prices: number[];
+  count: number;
+  items: CompetitorItem[];
+  chosen: SearchPlanAttempt | null;
+  tiersUsed: number;
+}
+
+/**
+ * Phase 1.2b's sequential-and-evaluate control flow, replacing the old
+ * fire-everything-until-something-hits loop. Awaits tier 0 in full; if its
+ * result passes evaluateCompQuality, stops there -- 1 tier used, no quota
+ * spent on tier 1. Only falls through to tier 1 when tier 0 is thin or
+ * empty, and never proceeds past 2 tiers regardless of outcome (structurally
+ * guaranteed anyway, since buildSearchPlan only ever produces 2).
+ *
+ * escapeHatchMs is a tail-latency safety net, not the primary trigger: the
+ * common path evaluates tier 0 after it actually resolves. Only if tier 0
+ * hasn't resolved within escapeHatchMs does tier 1 fire concurrently as
+ * insurance (tier 0 is not cancelled) -- in that case both are awaited and
+ * the better result wins, since there was no chance to cheaply check
+ * whether tier 0 alone would have sufficed.
+ */
+export async function runTieredCompSearch(
+  tiers: SearchPlanAttempt[][],
+  fetchOne: (attempt: SearchPlanAttempt) => Promise<CompSearchAttemptResult>,
+  opts: { minCount?: number; maxSpreadRatio?: number; escapeHatchMs?: number } = {},
+): Promise<TieredCompSearchResult> {
+  if (tiers.length === 0) {
+    return { prices: [], count: 0, items: [], chosen: null, tiersUsed: 0 };
+  }
+
+  const tier0Promise = runAttemptsSequential(tiers[0], fetchOne);
+
+  if (tiers.length === 1) {
+    const tier0 = await tier0Promise;
+    return { ...tier0.result, chosen: tier0.chosen, tiersUsed: 1 };
+  }
+
+  const escapeHatchMs = opts.escapeHatchMs ?? 1000;
+  let tier1Promise: ReturnType<typeof runAttemptsSequential> | null = null;
+
+  const raced = await Promise.race([
+    tier0Promise.then(() => "tier0" as const),
+    new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), escapeHatchMs)),
+  ]);
+
+  if (raced === "timeout") {
+    // Tier 0 is slow -- fire tier 1 concurrently as insurance, without
+    // cancelling tier 0.
+    tier1Promise = runAttemptsSequential(tiers[1], fetchOne);
+  }
+
+  const tier0 = await tier0Promise;
+
+  if (!tier1Promise) {
+    // Tier 0 resolved within the escape hatch window -- evaluate it before
+    // deciding whether tier 1 is even needed.
+    if (tier0.chosen && evaluateCompQuality(tier0.result.prices, opts).passes) {
+      return { ...tier0.result, chosen: tier0.chosen, tiersUsed: 1 };
+    }
+    tier1Promise = runAttemptsSequential(tiers[1], fetchOne);
+  }
+
+  const tier1 = await tier1Promise;
+
+  const tier0Gate = tier0.chosen
+    ? evaluateCompQuality(tier0.result.prices, opts)
+    : { passes: false, reason: "no result" };
+  const tier1Gate = tier1.chosen
+    ? evaluateCompQuality(tier1.result.prices, opts)
+    : { passes: false, reason: "no result" };
+
+  if (tier0Gate.passes && !tier1Gate.passes) {
+    return { ...tier0.result, chosen: tier0.chosen, tiersUsed: 2 };
+  }
+  if (tier1Gate.passes && !tier0Gate.passes) {
+    return { ...tier1.result, chosen: tier1.chosen, tiersUsed: 2 };
+  }
+  // Both pass or both fail -- pick whichever has more comps.
+  if (tier1.result.prices.length > tier0.result.prices.length) {
+    return { ...tier1.result, chosen: tier1.chosen, tiersUsed: 2 };
+  }
+  return { ...tier0.result, chosen: tier0.chosen, tiersUsed: 2 };
+}
+
 // ----------------------------------------------------------------
 // Compute median from a sorted or unsorted array of numbers.
 // ----------------------------------------------------------------
@@ -715,35 +896,30 @@ export async function runCompetitorSearch(params: {
       categoryId,
     });
 
-    let prices: number[] = [];
-    let structuredItems: CompetitorItem[] = [];
-    let count = 0;
-    let chosenQuery = searchQuery;
-    let chosenCategoryId = categoryId;
-
-    for (const attempt of searchPlan) {
+    const tiers = groupPlanIntoTiers(searchPlan);
+    const tiered = await runTieredCompSearch(tiers, (attempt) => {
       console.log(
         `[competitorSearch] Attempting search (${attempt.strategy}): "${attempt.query}" category=${
           attempt.categoryId ?? "any"
         }`,
       );
-      const result = await fetchEbayCompetitors({
+      return fetchEbayCompetitors({
         token,
         searchQuery: attempt.query,
         categoryId: attempt.categoryId,
         ebayEnv,
         filterMode: attempt.filterMode,
       });
+    });
 
-      if (result.prices.length > 0) {
-        prices = result.prices;
-        structuredItems = result.items;
-        count = result.count;
-        chosenQuery = attempt.query;
-        chosenCategoryId = attempt.categoryId;
-        break;
-      }
-    }
+    const prices = tiered.prices;
+    const structuredItems = tiered.items;
+    const count = tiered.count;
+    const chosenQuery = tiered.chosen?.query ?? searchQuery;
+    const chosenCategoryId = tiered.chosen?.categoryId ?? categoryId;
+    console.log(
+      `[competitorSearch] Tiered search used ${tiered.tiersUsed} tier(s) of ${tiers.length} available`,
+    );
 
     if (prices.length === 0) {
       console.log(
