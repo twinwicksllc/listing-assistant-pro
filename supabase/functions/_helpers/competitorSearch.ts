@@ -659,22 +659,73 @@ export function logBrowseApiCall(
 }
 
 /**
- * Runs a list of search attempts sequentially, stopping at the first one
- * that returns a non-empty price list. Line-for-line-identical behavior to
- * the original flat loop this replaced in runCompetitorSearch -- extracted
- * so runTieredCompSearch can reuse it per-tier.
+ * Runs a list of search attempts sequentially, accumulating prices/items
+ * ACROSS attempts within this one tier and stopping early once the running
+ * total passes evaluateCompQuality's bar (same default 3-comps/3x-spread
+ * gate the between-tier check in runTieredCompSearch already uses -- pass
+ * the same `opts` here so the two bars stay in sync by construction).
+ *
+ * This closes a residual gap in Phase 1.2b: capping tiers at 2 bounds
+ * *between-tier* attempts, but a tier alone could still burn all of its own
+ * 2-4 raw attempts even after the first one or two already accumulated a
+ * comfortably-passing set, or even when the running total is thin for a
+ * reason more attempts in the same tier won't fix. Stops as soon as the
+ * accumulated result passes the quality gate, OR once every attempt in the
+ * tier has been tried, whichever comes first -- an attempt that returns 0
+ * comps never satisfies the gate on its own, so the loop still continues
+ * past a genuinely empty result exactly as it did before this change.
  */
 export async function runAttemptsSequential(
   attempts: SearchPlanAttempt[],
   fetchOne: (attempt: SearchPlanAttempt) => Promise<CompSearchAttemptResult>,
+  opts: { minCount?: number; maxSpreadRatio?: number } = {},
 ): Promise<{ result: CompSearchAttemptResult; chosen: SearchPlanAttempt | null }> {
+  const accumulatedPrices: number[] = [];
+  const accumulatedItems: CompetitorItem[] = [];
+  // buildSearchPlan's attempts within one tier share the same query and
+  // often the same category, varying only filterMode (fixed-price vs. any
+  // buying option) or whether categoryId is set at all -- "any" is a
+  // superset of "fixed", and "any category" often reoverlaps with "fixed
+  // category" for a common item. Accumulating across attempts without
+  // dedup would double-count the same real eBay listing across attempts,
+  // inflating comp count and corrupting avgPrice/medianPrice/spread with
+  // duplicates rather than genuinely new comps. Dedup by itemId (present on
+  // Browse API's default ItemSummary response); an item missing itemId is
+  // kept as-is -- rare in practice, and the alternative (dropping it) would
+  // silently lose a real comp for a much rarer case than the duplication
+  // this exists to prevent.
+  const seenItemIds = new Set<string>();
+  let chosen: SearchPlanAttempt | null = null;
+
   for (const attempt of attempts) {
     const result = await fetchOne(attempt);
     if (result.prices.length > 0) {
-      return { result, chosen: attempt };
+      // result.prices/result.items are index-parallel in the real
+      // fetchEbayCompetitors output (both pushed together per raw item, see
+      // that function), but iterate by prices.length rather than
+      // items.length -- some callers (tests, or a future caller) may pass a
+      // shorter/empty items array, and a price should never be silently
+      // dropped just because its structured item metadata is unavailable.
+      for (let i = 0; i < result.prices.length; i++) {
+        const item = result.items[i];
+        if (item?.itemId) {
+          if (seenItemIds.has(item.itemId)) continue;
+          seenItemIds.add(item.itemId);
+        }
+        if (item) accumulatedItems.push(item);
+        accumulatedPrices.push(result.prices[i]);
+      }
+      chosen = attempt;
+      if (evaluateCompQuality(accumulatedPrices, opts).passes) {
+        break;
+      }
     }
   }
-  return { result: { prices: [], count: 0, items: [] }, chosen: null };
+
+  return {
+    result: { prices: accumulatedPrices, count: accumulatedPrices.length, items: accumulatedItems },
+    chosen,
+  };
 }
 
 export interface TieredCompSearchResult {
@@ -709,7 +760,7 @@ export async function runTieredCompSearch(
     return { prices: [], count: 0, items: [], chosen: null, tiersUsed: 0 };
   }
 
-  const tier0Promise = runAttemptsSequential(tiers[0], fetchOne);
+  const tier0Promise = runAttemptsSequential(tiers[0], fetchOne, opts);
 
   if (tiers.length === 1) {
     const tier0 = await tier0Promise;
@@ -727,7 +778,7 @@ export async function runTieredCompSearch(
   if (raced === "timeout") {
     // Tier 0 is slow -- fire tier 1 concurrently as insurance, without
     // cancelling tier 0.
-    tier1Promise = runAttemptsSequential(tiers[1], fetchOne);
+    tier1Promise = runAttemptsSequential(tiers[1], fetchOne, opts);
   }
 
   const tier0 = await tier0Promise;
@@ -738,7 +789,7 @@ export async function runTieredCompSearch(
     if (tier0.chosen && evaluateCompQuality(tier0.result.prices, opts).passes) {
       return { ...tier0.result, chosen: tier0.chosen, tiersUsed: 1 };
     }
-    tier1Promise = runAttemptsSequential(tiers[1], fetchOne);
+    tier1Promise = runAttemptsSequential(tiers[1], fetchOne, opts);
   }
 
   const tier1 = await tier1Promise;

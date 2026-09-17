@@ -4,6 +4,7 @@ import {
   fetchWithTimeout,
   PIPELINE_TIMEOUTS_MS,
   withDeadline,
+  withTimeout,
 } from "../_helpers/fetchWithTimeout.ts";
 import { decideSlabOcr } from "../_helpers/slabOcrGate.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
@@ -1386,18 +1387,22 @@ serve(async (req: Request) => {
           const compResp = await timer.time(
             "comps_pre_ai",
             () =>
-              fetchWithTimeout(
-                `${Deno.env.get("SUPABASE_URL")}/functions/v1/ebay-competitor-search`,
-                {
-                  method: "POST",
-                  headers: {
-                    Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-                    "Content-Type": "application/json",
+              withTimeout(
+                fetchWithTimeout(
+                  `${Deno.env.get("SUPABASE_URL")}/functions/v1/ebay-competitor-search`,
+                  {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ userId, title: compQuery, yourPrice: 0 }),
                   },
-                  body: JSON.stringify({ userId, title: compQuery, yourPrice: 0 }),
-                },
-                withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
-                "ebay-competitor-search (pre-AI)",
+                  withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
+                  "ebay-competitor-search (pre-AI)",
+                ),
+                withDeadline(PIPELINE_TIMEOUTS_MS.compsPreAiRace, deadline),
+                "comps_pre_ai (race)",
               ),
           );
           if (compResp.ok) {

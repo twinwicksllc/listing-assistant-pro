@@ -308,3 +308,7 @@ Deno.test("RAG retrieval budget leaves room for the stages that follow it", () =
     true,
   );
 });
+
+Deno.test("compsPreAiRace is strictly tighter than internalFunction (so the race ceiling actually bites)", () => {
+  assertEquals(PIPELINE_TIMEOUTS_MS.compsPreAiRace < PIPELINE_TIMEOUTS_MS.internalFunction, true);
+});
