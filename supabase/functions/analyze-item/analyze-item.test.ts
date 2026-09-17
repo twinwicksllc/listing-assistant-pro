@@ -105,3 +105,20 @@ Deno.test("isCategoryCompatibleWithDomain: auto_parts still delegates to isKnown
     true,
   );
 });
+
+// NOTE (Copilot review, PR #584): the checks above prove
+// isCategoryCompatibleWithDomain itself is correct, but the original PR
+// added a jewelry case to this function WITHOUT ever calling it from the
+// post-lookup override block (~line 2748, "POST-LOOKUP override") — that
+// block accepted any leaf-verified post-lookup result unconditionally for
+// every domain except coins_bullion. So a jewelry item whose post-lookup
+// query resolved to "Books" would still have been overridden straight into
+// Books, the exact bug this whole plan exists to fix, just reached via a
+// different code path than the one this function's jewelry case guards.
+// Fixed by gating that override on isCategoryCompatibleWithDomain's result.
+// No unit-test seam exists for that block (inline control flow inside the
+// request handler, same situation as Phases 1.1/1.3 elsewhere in this
+// plan) -- verified by direct code reading plus deno check/lint/fmt, not a
+// unit test. A manual re-run against a real jewelry item whose post-lookup
+// query resolves to a wrong-domain category is the integration-level
+// confirmation.

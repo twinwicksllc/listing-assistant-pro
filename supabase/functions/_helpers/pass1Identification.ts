@@ -358,8 +358,18 @@ export function detectMetalGeneralContradiction(
     return { domain: identification.domain, corrected: false, reason: "" };
   }
   const text = `${identification.itemName} ${identification.keywords.join(" ")}`.toLowerCase();
+  // Kept as a separate literal from domainSignals.ts's JEWELRY_SIGNAL_RE
+  // (rather than imported) to avoid a dependency from _helpers/ up into
+  // agent-system/ — this file is imported by callers that predate the
+  // agent-system/ module and shouldn't need to reach into it. Excludes the
+  // same compound false-positives (a "metal ring light"/"ring binder" is not
+  // jewelry; "chain saw"/"chain link fence" is not a chain necklace; "watch
+  // dog"/"watchtower" is not a wristwatch) found via Copilot review on PR
+  // #584 and confirmed against real compound phrases before fixing. Also
+  // adds watch/wristwatch coverage per the same review — Pass 1's domain
+  // guide classifies watches as jewelry, and the original list omitted them.
   const JEWELRY_SIGNAL_RE =
-    /\b(rings?|necklaces?|bracelets?|earrings?|pendants?|brooch(?:es)?|bangles?|chains?|anklets?|cufflinks?)\b/i;
+    /\b(rings?(?!\s*(light|binder|toss))|necklaces?|bracelets?|earrings?|pendants?|brooch(?:es)?|bangles?|chains?(?!\s*(saw|link))|anklets?|cufflinks?|wrist\s*watch(?:es)?|watch(?:es)?(?!\s*dog))\b/i;
   if (JEWELRY_SIGNAL_RE.test(text)) {
     return { domain: "jewelry", corrected: true, reason: `metal detected + jewelry noun in "${text}"` };
   }

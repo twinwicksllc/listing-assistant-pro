@@ -73,3 +73,51 @@ Deno.test("jewelry chain and earrings variants are covered", () => {
   assertEquals(earrings.matchedDomain, "jewelry");
   assertEquals(earrings.promotedDomain, "jewelry");
 });
+
+Deno.test("watch/wristwatch promotes to jewelry (Copilot review, PR #584 — was missing entirely)", () => {
+  const watch = resolveDomainPromotion("this is a silver watch, not a general item", "general");
+  assertEquals(watch.matchedDomain, "jewelry");
+  const wristwatch = resolveDomainPromotion("clearly a wristwatch here", "general");
+  assertEquals(wristwatch.matchedDomain, "jewelry");
+});
+
+Deno.test(
+  "does not promote on a rejected alternative named in an 'X, not Y' correction (Copilot review, PR #584)",
+  () => {
+    // The visual agent asserts action figure and REJECTS trading card — the
+    // old implementation scanned the whole sentence and matched
+    // trading_cards first (its regex happened to be checked before
+    // toys_collectibles), promoting to the domain the correction explicitly
+    // said the item is NOT.
+    const result = resolveDomainPromotion(
+      "this is an action figure, not a trading card",
+      "toys_collectibles",
+    );
+    assertEquals(result.matchedDomain, "toys_collectibles");
+    assertEquals(result.promotedDomain, null); // already toys_collectibles — no-op, not trading_cards
+  },
+);
+
+Deno.test("a rejected alternative does not promote a general item to the wrong domain either", () => {
+  const result = resolveDomainPromotion(
+    "this is an action figure, not a trading card",
+    "general",
+  );
+  assertEquals(result.matchedDomain, "toys_collectibles");
+  assertEquals(result.promotedDomain, "toys_collectibles"); // the ASSERTED domain, never the rejected one
+});
+
+Deno.test("jewelry signal excludes compound false-positives (Copilot review, PR #584)", () => {
+  for (
+    const text of [
+      "this is a metal ring light, not a general item",
+      "just a metal ring binder",
+      "a chain saw, not jewelry",
+      "a chain link fence panel",
+      "a watch dog statue",
+    ]
+  ) {
+    const result = resolveDomainPromotion(text, "general");
+    assertEquals(result.matchedDomain, null, `expected no jewelry match for: "${text}"`);
+  }
+});

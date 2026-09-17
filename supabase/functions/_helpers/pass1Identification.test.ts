@@ -383,3 +383,47 @@ Deno.test("OR-gate: metalType set with isMetal=false still triggers", () => {
   assertEquals(result.domain, "jewelry");
   assertEquals(result.corrected, true);
 });
+
+Deno.test("watch/wristwatch corrects to jewelry (Copilot review, PR #584 — was missing entirely)", () => {
+  const watch = detectMetalGeneralContradiction({
+    domain: "general",
+    itemName: "silver watch",
+    keywords: [],
+    isMetal: true,
+    metalType: "silver",
+  });
+  assertEquals(watch.domain, "jewelry");
+  assertEquals(watch.corrected, true);
+
+  const wristwatch = detectMetalGeneralContradiction({
+    domain: "general",
+    itemName: "vintage wristwatch",
+    keywords: ["metal", "band"],
+    isMetal: true,
+    metalType: "gold",
+  });
+  assertEquals(wristwatch.domain, "jewelry");
+  assertEquals(wristwatch.corrected, true);
+});
+
+Deno.test("compound false-positives do not trigger a jewelry correction (Copilot review, PR #584)", () => {
+  for (
+    const itemName of [
+      "metal ring light",
+      "metal ring binder",
+      "chain saw",
+      "chain link fence panel",
+      "watch dog statue",
+    ]
+  ) {
+    const result = detectMetalGeneralContradiction({
+      domain: "general",
+      itemName,
+      keywords: [],
+      isMetal: true,
+      metalType: "none",
+    });
+    assertEquals(result.domain, "general", `expected no jewelry correction for: "${itemName}"`);
+    assertEquals(result.corrected, false);
+  }
+});

@@ -2745,10 +2745,30 @@ Seller's note: "${voiceNote}"`;
                     .toLowerCase()
                     .includes("coins"));
 
+              // Copilot review (PR #584): this override previously accepted ANY
+              // leaf-verified post-lookup result (postLookupIsStrong) with no
+              // domain check at all -- so a jewelry item whose post-lookup query
+              // matched "Books" would be overridden straight into Books, the
+              // exact failure this whole plan exists to fix, just reached via a
+              // different code path than the one isCategoryCompatibleWithDomain
+              // was added to guard. Require the override target itself to pass
+              // the same compatibility check as the lock-release logic above
+              // (isKnownParentCategoryId/isCategoryCompatibleWithDomain already
+              // in scope) before accepting it -- this only ever narrows
+              // acceptance (default: true for domains with no specific checker,
+              // so general/electronics/etc. are unaffected).
+              const postLookupCompatible = isCategoryCompatibleWithDomain(
+                identification.domain,
+                postLookupData.categoryId,
+                postLookupData.categoryName,
+                postLookupData.breadcrumb,
+              );
+
               if (
-                aiCategoryIsParent ||
-                postLookupIsStrong ||
-                isDomainMismatch
+                postLookupCompatible &&
+                (aiCategoryIsParent ||
+                  postLookupIsStrong ||
+                  isDomainMismatch)
               ) {
                 console.log(
                   `analyze-item: POST-LOOKUP override: AI picked ${listing.ebayCategoryId}, ` +
