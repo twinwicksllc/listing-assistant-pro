@@ -350,3 +350,22 @@ export function applyVoiceNoteMetalFallback(
 
   return identification;
 }
+
+export function detectMetalGeneralContradiction(
+  identification: Pick<Identification, "domain" | "itemName" | "keywords" | "isMetal" | "metalType">,
+): { domain: Domain; corrected: boolean; reason: string } {
+  if (identification.domain !== "general" || (!identification.isMetal && identification.metalType === "none")) {
+    return { domain: identification.domain, corrected: false, reason: "" };
+  }
+  const text = `${identification.itemName} ${identification.keywords.join(" ")}`.toLowerCase();
+  const JEWELRY_SIGNAL_RE =
+    /\b(rings?|necklaces?|bracelets?|earrings?|pendants?|brooch(?:es)?|bangles?|chains?|anklets?|cufflinks?)\b/i;
+  if (JEWELRY_SIGNAL_RE.test(text)) {
+    return { domain: "jewelry", corrected: true, reason: `metal detected + jewelry noun in "${text}"` };
+  }
+  return {
+    domain: "general",
+    corrected: false,
+    reason: `metal detected but no jewelry noun in "${text}" — leaving general`,
+  };
+}

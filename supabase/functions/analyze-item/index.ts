@@ -9,7 +9,11 @@ import { decideSlabOcr } from "../_helpers/slabOcrGate.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { captureException, initSentry } from "../_helpers/sentry.ts";
 import { GEMINI_HEAVY_MODEL } from "../_helpers/geminiModels.ts";
-import { applyVoiceNoteMetalFallback, runPass1Identification } from "../_helpers/pass1Identification.ts";
+import {
+  applyVoiceNoteMetalFallback,
+  detectMetalGeneralContradiction,
+  runPass1Identification,
+} from "../_helpers/pass1Identification.ts";
 import { enforceLeafCategory, isKnownParentCategoryId } from "../_helpers/leafCategoryGuard.ts";
 import type { Identification } from "../_helpers/pass1Identification.ts";
 import {
@@ -75,7 +79,7 @@ function computeNextResetAt(resetDay: number | null): string | null {
   ).toISOString();
 }
 
-function isCoinDomainCategory(
+export function isCoinDomainCategory(
   categoryId: string | null | undefined,
   categoryName: string | null | undefined,
   breadcrumb: string | null | undefined,
@@ -118,7 +122,7 @@ function isSneakerDomainCategory(
 
 // Categories that are clearly the wrong domain for a sneaker listing, even if
 // a sneaker-related keyword (e.g. a brand name) appears somewhere in the text.
-function isKnownWrongDomainForSneakers(
+export function isKnownWrongDomainForSneakers(
   categoryName: string | null | undefined,
   breadcrumb: string | null | undefined,
 ): boolean {
@@ -144,7 +148,7 @@ function isAutoPartsDomainCategory(
 
 // Categories that are clearly the wrong domain for an auto-part listing, even
 // if an auto-related keyword slipped into the title (e.g. a car-shaped toy).
-function isKnownWrongDomainForAutoParts(
+export function isKnownWrongDomainForAutoParts(
   categoryName: string | null | undefined,
   breadcrumb: string | null | undefined,
 ): boolean {
@@ -152,6 +156,21 @@ function isKnownWrongDomainForAutoParts(
   return /(home & garden|toys? & hobbies|clothing|electronics|coins)/i.test(
     categoryText,
   );
+}
+
+// Categories that are clearly the wrong domain for a jewelry listing, even if
+// a jewelry-adjacent keyword (e.g. "gold", "silver") slipped into the title
+// (e.g. the "ring called a book" misclassification this plan exists to fix,
+// or a coin/bullion item whose metallic sheen gets it routed to Jewelry).
+export function isKnownWrongDomainForJewelry(
+  categoryName: string | null | undefined,
+  breadcrumb: string | null | undefined,
+): boolean {
+  const categoryText = `${categoryName || ""} ${breadcrumb || ""}`.toLowerCase();
+  return /(books?\b|magazines?|coins?\b|bullion|trading cards|action figures|electronics|video games|home & garden|kitchen)/i
+    .test(
+      categoryText,
+    );
 }
 
 // South Pacific countries whose World Coin listings belong in the 3392 leaf
@@ -372,7 +391,7 @@ function resolveDomainFallbackCategory(
   return resolveGradedFriendlyWorldCoinCategory(detectedCountry);
 }
 
-function isCategoryCompatibleWithDomain(
+export function isCategoryCompatibleWithDomain(
   domain: string | null | undefined,
   categoryId: string | null | undefined,
   categoryName: string | null | undefined,
@@ -393,6 +412,11 @@ function isCategoryCompatibleWithDomain(
       return !isKnownWrongDomainForSneakers(categoryName, breadcrumb);
     case "auto_parts":
       return !isKnownWrongDomainForAutoParts(categoryName, breadcrumb);
+    case "jewelry":
+      // Soft guardrail, same style as sneakers/auto_parts: reject only known-
+      // wrong breadcrumbs (e.g. the "ring called a book" misclassification this
+      // whole plan exists to fix); anything ambiguous stays compatible.
+      return !isKnownWrongDomainForJewelry(categoryName, breadcrumb);
     default:
       return true;
   }
@@ -808,6 +832,20 @@ serve(async (req: Request) => {
         );
         identification.domain = "coins_bullion";
       }
+    }
+
+    // ─── DOMAIN SELF-CORRECTION: catch metal items Pass 1 misrouted to general ─
+    // Independent of the coins-only check above (different signal: Pass 1's
+    // own isMetal/metalType fields, not a keyword regex; different target
+    // domain: jewelry, not coins_bullion). See detectMetalGeneralContradiction.
+    const _metalCheck = detectMetalGeneralContradiction(identification);
+    if (_metalCheck.corrected) {
+      console.log(
+        `[${invocationId}] Domain self-correction: ${_metalCheck.reason} — correcting to ${_metalCheck.domain}`,
+      );
+      identification.domain = _metalCheck.domain;
+    } else if (_metalCheck.reason) {
+      console.warn(`[${invocationId}] Domain self-correction: ${_metalCheck.reason}`);
     }
     // ─── END MODULAR CONTROLLER ───────────────────────────────────────────────
 

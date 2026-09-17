@@ -1,5 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
-import { unwrapIdentificationPayload } from "./pass1Identification.ts";
+import { detectMetalGeneralContradiction, unwrapIdentificationPayload } from "./pass1Identification.ts";
 
 // Regression coverage for the Pass 1 array-wrapping bug (2026-09-14).
 //
@@ -273,4 +273,113 @@ Deno.test("a 400 'Budget 0 is invalid' response warns and falls back to DEFAULT_
   assertEquals(ident!.itemName, "item");
   const warned = c.lines.some((l) => l.includes("Pass 1 API returned status 400"));
   assertEquals(warned, true);
+});
+
+// ---------------------------------------------------------------------------
+// Phase 2.1 -- detectMetalGeneralContradiction (2026-09-17)
+//
+// Pass 1 already returns isMetal/metalType alongside domain in one call.
+// isMetal=true (or metalType!=="none") together with domain="general" should
+// never survive unchallenged: a metal item with a jewelry noun in its
+// itemName/keywords is corrected to domain="jewelry"; a metal item with no
+// jewelry noun is left as "general" but flagged via a non-empty `reason` so
+// it's still visible without being force-corrected (e.g. an actual metal box).
+// ---------------------------------------------------------------------------
+
+Deno.test("gold ring misclassified as general corrects to jewelry", () => {
+  const result = detectMetalGeneralContradiction({
+    domain: "general",
+    itemName: "antique ring",
+    keywords: ["gold", "band"],
+    isMetal: true,
+    metalType: "gold",
+  });
+  assertEquals(result.domain, "jewelry");
+  assertEquals(result.corrected, true);
+});
+
+Deno.test("hardcover novel with no metal signal is left unchanged", () => {
+  const result = detectMetalGeneralContradiction({
+    domain: "general",
+    itemName: "hardcover novel",
+    keywords: ["book", "fiction"],
+    isMetal: false,
+    metalType: "none",
+  });
+  assertEquals(result.domain, "general");
+  assertEquals(result.corrected, false);
+  assertEquals(result.reason, "");
+});
+
+Deno.test("metal item with no jewelry noun stays general but is flagged", () => {
+  const result = detectMetalGeneralContradiction({
+    domain: "general",
+    itemName: "metal lunchbox",
+    keywords: ["tin", "vintage"],
+    isMetal: true,
+    metalType: "silver",
+  });
+  assertEquals(result.domain, "general");
+  assertEquals(result.corrected, false);
+  assertEquals(result.reason.length > 0, true);
+});
+
+Deno.test("already non-general domain is a no-op regardless of metal fields", () => {
+  // Regression guard: must not overwrite an already-correct domain, e.g.
+  // coins_bullion, even when isMetal/metalType/itemName all look jewelry-ish.
+  const result = detectMetalGeneralContradiction({
+    domain: "jewelry",
+    itemName: "ring",
+    keywords: [],
+    isMetal: true,
+    metalType: "gold",
+  });
+  assertEquals(result.domain, "jewelry");
+  assertEquals(result.corrected, false);
+});
+
+Deno.test("chain and earrings variants both correct to jewelry", () => {
+  const chainResult = detectMetalGeneralContradiction({
+    domain: "general",
+    itemName: "14k gold chain",
+    keywords: [],
+    isMetal: true,
+    metalType: "gold",
+  });
+  assertEquals(chainResult.domain, "jewelry");
+  assertEquals(chainResult.corrected, true);
+
+  const earringsResult = detectMetalGeneralContradiction({
+    domain: "general",
+    itemName: "pair of pearl earrings",
+    keywords: ["silver", "clasp"],
+    isMetal: true,
+    metalType: "silver",
+  });
+  assertEquals(earringsResult.domain, "jewelry");
+  assertEquals(earringsResult.corrected, true);
+});
+
+Deno.test("OR-gate: isMetal=true with metalType='none' still triggers", () => {
+  const result = detectMetalGeneralContradiction({
+    domain: "general",
+    itemName: "metal ring",
+    keywords: [],
+    isMetal: true,
+    metalType: "none",
+  });
+  assertEquals(result.domain, "jewelry");
+  assertEquals(result.corrected, true);
+});
+
+Deno.test("OR-gate: metalType set with isMetal=false still triggers", () => {
+  const result = detectMetalGeneralContradiction({
+    domain: "general",
+    itemName: "gold necklace",
+    keywords: [],
+    isMetal: false,
+    metalType: "gold",
+  });
+  assertEquals(result.domain, "jewelry");
+  assertEquals(result.corrected, true);
 });
