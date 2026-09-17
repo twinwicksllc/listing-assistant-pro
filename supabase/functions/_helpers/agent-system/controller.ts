@@ -6,6 +6,7 @@
 
 import { AgentContext, Identification, MarketDataReport, VisualInspectionResult } from "./pipelineContracts.ts";
 import { DOMAIN_REGISTRY } from "./registry.ts";
+import { resolveDomainPromotion } from "./domainSignals.ts";
 import { runPass1Identification } from "../pass1Identification.ts";
 import { runAgenticVisualAgent } from "./sub-agents/visual-agent.ts";
 import { runMarketAgent } from "./sub-agents/market-agent.ts";
@@ -130,15 +131,12 @@ export class ListingAgentController {
     const correction = visualResult?.identificationCorrection;
     const boost = visualResult?.confidenceBoost ?? 0;
     if (correction && boost >= 70) {
-      const corrLower = correction.toLowerCase();
-      if (
-        /coins?|bullion|numismatic|currency|paper money/.test(corrLower) &&
-        identification.domain !== "coins_bullion"
-      ) {
+      const { promotedDomain } = resolveDomainPromotion(correction, identification.domain);
+      if (promotedDomain) {
         console.log(
-          `[${invocationId}] Controller: identificationCorrection → upgrading domain to coins_bullion (boost=${boost})`,
+          `[${invocationId}] Controller: identificationCorrection → upgrading domain from "${identification.domain}" to "${promotedDomain}" (boost=${boost})`,
         );
-        identification.domain = "coins_bullion";
+        identification.domain = promotedDomain;
       }
       // Attempt to extract a more precise item name from the correction text
       const nameMatch = correction.match(
