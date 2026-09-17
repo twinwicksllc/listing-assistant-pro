@@ -24,14 +24,22 @@ const ADMIN_EMAIL = "twinwicksllc@gmail.com";
 // `reset` field over any assumption about the reset schedule's shape.
 // #580 reduced the RATE of waste; this makes the REMAINING budget visible,
 // via two complementary signals rather than one:
-//   1. The daily poll below (authoritative -- eBay's own real numbers).
+//   1. The hourly poll below (authoritative -- eBay's own real numbers).
 //   2. ebay_browse_call_log's same-day running count (early-warning
 //      heuristic between polls, incremented at each Browse API call site --
 //      see competitorSearch.ts/market-watch-refresh/keyword-research).
-// These two can drift slightly (this app's counter resets whenever this
-// feature deploys, not necessarily at the same moment eBay's own quota
-// resets) -- an accepted, disclosed limitation, not a bug. The daily poll
-// re-anchors ground truth each time it runs.
+// These two can drift: the same-day counter's query window is always
+// "today in UTC" (todayStart below, setUTCHours(0,0,0,0)) regardless of
+// when eBay's own quota actually resets for this account (observed as
+// midnight Pacific = 07:00/08:00 UTC depending on DST) -- so a call made
+// between midnight UTC and eBay's real reset can be attributed to the
+// wrong "day" relative to eBay's own window. This is an accepted, disclosed
+// heuristic-vs-ground-truth mismatch, not a bug: the counter is early-
+// warning only, and the hourly poll (which reads eBay's own `reset` field
+// directly) re-anchors ground truth each time it runs regardless of this
+// drift. (Copilot review, PR #581, flagged the original wording here as
+// misleading -- it previously implied a deploy-triggered reset, which
+// this table has no mechanism for.)
 const WARN_THRESHOLD_RATIO = 0.9;
 const BROWSE_RESOURCE_NAME = "buy.browse";
 
@@ -110,13 +118,21 @@ async function fetchEbayRateLimits(
  * rateLimits -> resources -> rates response shape. Exported so the parsing
  * logic (which nesting level actually holds what) has direct test coverage
  * without needing a live HTTP call.
+ *
+ * Matches the EXACT resource name (case-insensitive), not a substring --
+ * a live getRateLimits response for this account also includes
+ * `buy.browse.item.bulk` as a separate resource with its own quota, and a
+ * substring match on "browse" could pick that one up first depending on
+ * response ordering, persisting/alerting on the wrong quota entirely
+ * (Copilot review, PR #581).
  */
 export function findBrowseRate(
   rateLimits: EbayRateLimitContext[],
 ): { resource: EbayRateLimitResource; rate: EbayRateLimitRate } | null {
+  const target = BROWSE_RESOURCE_NAME.toLowerCase();
   for (const ctx of rateLimits) {
     for (const resource of ctx.resources ?? []) {
-      if (resource.name?.toLowerCase().includes("browse")) {
+      if (resource.name?.toLowerCase() === target) {
         const rate = resource.rates?.[0];
         if (rate) return { resource, rate };
       }
@@ -206,7 +222,7 @@ async function sendQuotaAlertEmail(params: {
                 </tr>
               </table>
             </div>
-            <p style="color: #6b7280; font-size: 14px;">This is a rolling 24h window from eBay's first call, not a calendar/midnight reset.</p>
+            <p style="color: #6b7280; font-size: 14px;">Reset timing observed on this account: a shared wall-clock reset (midnight Pacific), not a rolling window from first call. Always check this poll's own reset time above, not an assumption about the reset schedule's shape.</p>
             <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
             <p style="color: #9ca3af; font-size: 12px;">This is an automated alert from Sovereign AI Assistant.</p>
           </div>
@@ -271,32 +287,52 @@ serve(async (req) => {
     // Same-day dedup: this cron runs once/day, so "already alerted today"
     // in practice means "did today's earlier run (if any) already send an
     // email" -- checked BEFORE this poll's own insert, mirroring
-    // cost-alert-cron's check-before-insert ordering.
+    // cost-alert-cron's check-before-insert ordering. On a query error,
+    // fail closed (assume "already alerted") rather than risk a duplicate
+    // email storm from a transient DB blip (Copilot review, PR #581) --
+    // missing one alert email for a day is a much smaller cost than
+    // spamming one every retry.
     const todayStart = new Date();
     todayStart.setUTCHours(0, 0, 0, 0);
-    const { data: priorAlertToday } = await svc
+    const { data: priorAlertToday, error: dedupErr } = await svc
       .from("ebay_rate_limit_polls")
       .select("id")
       .eq("alert_sent", true)
       .gte("polled_at", todayStart.toISOString())
       .limit(1);
-    const alreadyAlertedToday = (priorAlertToday?.length ?? 0) > 0;
+    if (dedupErr) {
+      console.error("[ebay-quota-monitor] Same-day dedup query failed, failing closed:", dedupErr.message);
+      captureException(new Error(`Dedup query failed: ${dedupErr.message}`), { function: "ebay-quota-monitor" });
+    }
+    const alreadyAlertedToday = dedupErr ? true : (priorAlertToday?.length ?? 0) > 0;
 
     // Same-day running count from this app's own counter, independent of
     // eBay's poll -- see the migration's comment for why this needed its own
     // table rather than reusing usage_tracking (NOT NULL user_id there,
-    // this is an app-level count).
-    const { count: sameDayCount } = await svc
+    // this is an app-level count). A query error must NOT silently become 0
+    // -- treating an unknown count as zero-usage could suppress a real
+    // warning during exactly the failure this counter exists to catch
+    // (Copilot review, PR #581), so a failed count is reported as unknown
+    // (null) and excluded from shouldWarn's same-day check rather than
+    // defaulting to 0 (eBay's own poll signal still applies independently).
+    const { count: sameDayCountRaw, error: countErr } = await svc
       .from("ebay_browse_call_log")
       .select("*", { count: "exact", head: true })
       .gte("created_at", todayStart.toISOString());
+    if (countErr) {
+      console.error("[ebay-quota-monitor] Same-day count query failed:", countErr.message);
+      captureException(new Error(`Same-day count query failed: ${countErr.message}`), {
+        function: "ebay-quota-monitor",
+      });
+    }
+    const sameDayCount = countErr ? null : (sameDayCountRaw ?? 0);
 
     const verdict = shouldWarn(rate.limit, rate.remaining, sameDayCount ?? 0);
     const shouldSendEmail = verdict.warn && !alreadyAlertedToday;
 
     console.log(
       `[ebay-quota-monitor] limit=${rate.limit} remaining=${rate.remaining} sameDayCount=${
-        sameDayCount ?? 0
+        sameDayCount ?? "unknown"
       } reset=${rate.reset} warn=${verdict.warn} alreadyAlertedToday=${alreadyAlertedToday}`,
     );
 
@@ -313,11 +349,12 @@ serve(async (req) => {
       console.log("[ebay-quota-monitor] Already alerted today — recording the poll without a duplicate email");
     }
 
-    // Record `alert_sent` regardless of whether the email itself succeeded
-    // (matches cost-alert-cron's "record the alert either way" reasoning --
-    // a Resend failure shouldn't cause repeat-send spam; email delivery
-    // failures are separately visible via captureException above).
-    await svc.from("ebay_rate_limit_polls").insert({
+    // Record `alert_sent` as whether the email actually succeeded, not
+    // merely whether one was attempted -- shouldSendEmail alone would mark
+    // an unsent alert (missing RESEND_API_KEY, Resend outage, network
+    // failure) as sent, permanently suppressing any retry for the rest of
+    // the day (Copilot review, PR #581).
+    const { error: insertErr } = await svc.from("ebay_rate_limit_polls").insert({
       resource_name: resource.name,
       api_context: BROWSE_RESOURCE_NAME.split(".")[0],
       call_limit: rate.limit,
@@ -325,8 +362,15 @@ serve(async (req) => {
       call_remaining: rate.remaining,
       reset_at: rate.reset,
       time_window_seconds: rate.timeWindow ?? null,
-      alert_sent: shouldSendEmail,
+      alert_sent: emailSent,
     });
+    if (insertErr) {
+      // The authoritative poll snapshot is now lost for this run -- this
+      // must be visible to an operator, not just a console log nobody
+      // watches routinely (Copilot review, PR #581).
+      console.error("[ebay-quota-monitor] Failed to persist poll snapshot:", insertErr.message);
+      captureException(new Error(`Poll insert failed: ${insertErr.message}`), { function: "ebay-quota-monitor" });
+    }
 
     return new Response(
       JSON.stringify({
@@ -335,7 +379,8 @@ serve(async (req) => {
         reason: verdict.reason,
         limit: rate.limit,
         remaining: rate.remaining,
-        sameDayCount: sameDayCount ?? 0,
+        sameDayCount: sameDayCount ?? null,
+        pollPersisted: !insertErr,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

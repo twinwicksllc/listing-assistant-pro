@@ -67,4 +67,13 @@ ALTER TABLE public.ebay_browse_call_log ENABLE ROW LEVEL SECURITY;
 -- Edge Function call site, never the frontend.
 
 COMMENT ON TABLE public.ebay_browse_call_log IS
-  'One row per actual eBay Browse API call this app''s own code makes -- a same-day running counter for the ebay-quota-monitor cron''s 90%-of-limit self-warning, independent of eBay''s own rolling-window poll.';
+  'One row per actual eBay Browse API call this app''s own code makes -- a same-day running counter for the ebay-quota-monitor cron''s 90%-of-limit self-warning, independent of and complementary to eBay''s own getRateLimits poll. Append-only; consider retention/pruning before this grows unbounded at production call volume (flagged, not yet implemented -- see PR #581 review).';
+
+-- No automated pruning yet. At the account's real confirmed limit
+-- (5,000 calls/day), this table could grow by roughly 1.8M rows/year if
+-- every day ran at the ceiling -- in practice far less, but unbounded
+-- growth on a table nothing ever reads past a same-day window is worth
+-- addressing before this runs at full production volume for a long time.
+-- Flagged by Copilot review on PR #581; not blocking this PR, but tracked
+-- here rather than silently dropped -- a follow-up migration should add a
+-- daily prune (e.g. delete rows older than 2-3 days) once this ships.

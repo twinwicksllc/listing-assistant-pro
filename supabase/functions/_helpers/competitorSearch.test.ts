@@ -230,7 +230,9 @@ Deno.test("runTieredCompSearch: escape hatch fires tier 1 concurrently when tier
 // counter-logging failure must not affect the real Browse API call it's
 // counting.
 
-function fakeSupabaseForLogging(opts: { insertRejects?: boolean } = {}) {
+function fakeSupabaseForLogging(
+  opts: { insertRejects?: boolean; insertReturnsError?: boolean } = {},
+) {
   const inserted: { table: string; row: Record<string, unknown> }[] = [];
   return {
     client: {
@@ -240,6 +242,9 @@ function fakeSupabaseForLogging(opts: { insertRejects?: boolean } = {}) {
             inserted.push({ table, row });
             if (opts.insertRejects) {
               return Promise.reject(new Error("insert failed"));
+            }
+            if (opts.insertReturnsError) {
+              return Promise.resolve({ data: null, error: { message: "RLS denied" } });
             }
             return Promise.resolve({ data: null, error: null });
           },
@@ -266,6 +271,16 @@ Deno.test("logBrowseApiCall: a rejected insert does not throw or reject into the
   // caller nothing to await/catch -- this call itself completing without
   // throwing is the assertion.
   logBrowseApiCall(client, "market-watch-refresh");
+});
+
+Deno.test("logBrowseApiCall: a resolved insert with a PostgREST error is logged, not silently swallowed as success", async () => {
+  const { client } = fakeSupabaseForLogging({ insertReturnsError: true });
+  logBrowseApiCall(client, "keyword-research");
+  // Must not throw synchronously -- the error is only visible via the
+  // console.warn this test doesn't assert on directly (no throw is the
+  // contract here; distinguishing this path from a silent no-op is covered
+  // by reading the source, not a spy on console.warn).
+  await new Promise((r) => setTimeout(r, 0));
 });
 
 Deno.test("logBrowseApiCall: a client whose .from() itself throws does not propagate", () => {

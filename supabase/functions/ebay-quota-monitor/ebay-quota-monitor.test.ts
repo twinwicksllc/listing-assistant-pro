@@ -48,6 +48,33 @@ Deno.test("findBrowseRate: returns null when a resource has an empty rates array
   assertEquals(findBrowseRate(rateLimits), null);
 });
 
+Deno.test("findBrowseRate: matches buy.browse exactly, not buy.browse.item.bulk, even when the latter appears first", () => {
+  // Regression for a real finding on this account's actual getRateLimits
+  // response, which includes BOTH resources -- a substring match on
+  // "browse" could pick up the wrong one depending on response ordering
+  // (Copilot review, PR #581).
+  const rateLimits = [
+    {
+      apiContext: "buy",
+      resources: [
+        { name: "buy.browse.item.bulk", rates: [{ limit: 5000, remaining: 5000, reset: "x" }] },
+        { name: "buy.browse", rates: [{ limit: 5000, remaining: 1310, reset: "y" }] },
+      ],
+    },
+  ];
+  const found = findBrowseRate(rateLimits);
+  assertEquals(found?.resource.name, "buy.browse");
+  assertEquals(found?.rate.remaining, 1310);
+});
+
+Deno.test("findBrowseRate: case-insensitive match still requires the exact resource name", () => {
+  const rateLimits = [
+    { apiContext: "buy", resources: [{ name: "Buy.Browse", rates: [{ limit: 5000, remaining: 4000, reset: "z" }] }] },
+  ];
+  const found = findBrowseRate(rateLimits);
+  assertEquals(found?.rate.remaining, 4000);
+});
+
 Deno.test("shouldWarn: below both thresholds does not warn", () => {
   const r = shouldWarn(5000, 4500, 100);
   assertEquals(r.warn, false);
