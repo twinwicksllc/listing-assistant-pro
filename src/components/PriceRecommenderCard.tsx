@@ -69,6 +69,7 @@ export default function PriceRecommenderCard({
         priceMax,
         meltValue ?? undefined,
         data.basis === "sold" ? "sold" : "active",
+        data.sourceReliability === "scraped" ? "scraped" : "structured",
       );
       setRecommendation(rec);
       setSelectedSuggestion(rec.recommended);
@@ -257,6 +258,17 @@ export default function PriceRecommenderCard({
               {recommendation.confidenceReason}
             </span>
           </div>
+
+          {/* Scraped-source caveat -- these numbers came from parsing eBay's
+              HTML sold-search page (Jina), not eBay's own structured API, so
+              they're inherently noisier and can break silently if eBay
+              changes that page's markup. */}
+          {recommendation.sourceReliability === "scraped" && (
+            <p className="text-[11px] text-muted-foreground bg-muted/50 rounded-lg px-3 py-1.5">
+              ⓘ Sold-price figures are estimated from a page scrape, not eBay's
+              official sales data — treat as directional.
+            </p>
+          )}
 
           {/* Market stats row */}
           <div className="grid grid-cols-3 gap-2 bg-secondary/50 rounded-lg p-3">

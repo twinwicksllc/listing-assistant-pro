@@ -1,5 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
-import { basisFromSource } from "./index.ts";
+import { basisFromSource, sourceReliabilityFromSource } from "./index.ts";
 
 // Regression coverage for the 2026-09-16 sold-vs-active mislabeling fix
 // (Problem 3, Phase 3.1 of the pricing-reliability plan). ebay-pricing's
@@ -16,4 +16,16 @@ Deno.test("basisFromSource: browse_api is active-listing data, not sold", () => 
 
 Deno.test("basisFromSource: jina scrapes eBay's LH_Sold=1 sold-search results", () => {
   assertEquals(basisFromSource("jina"), "sold");
+});
+
+// Regression coverage for Phase 3.3(b) of the pricing-reliability plan:
+// label Jina-sourced comps as lower-confidence, distinctly from whether the
+// data is "sold" or "active" (basisFromSource above) -- a scrape can produce
+// a "sold" number that's still noisier than a structured API response.
+Deno.test("sourceReliabilityFromSource: browse_api is a structured API call", () => {
+  assertEquals(sourceReliabilityFromSource("browse_api"), "structured");
+});
+
+Deno.test("sourceReliabilityFromSource: jina is an HTML scrape, not a structured API", () => {
+  assertEquals(sourceReliabilityFromSource("jina"), "scraped");
 });

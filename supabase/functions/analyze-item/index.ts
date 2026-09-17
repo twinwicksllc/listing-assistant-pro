@@ -3502,6 +3502,10 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
         // which also has a Jina sold-data fallback and computes this
         // per-request).
         basis: "active" as const,
+        // Same reasoning as `basis` above: this path only ever calls
+        // ebay-competitor-search (Browse API), never the Jina scraper, so
+        // it's unconditionally the higher-trust structured-extraction path.
+        sourceReliability: "structured" as const,
       };
       console.log(
         `[${invocationId}] Final response includes competitor data from ${competitorDataSource}: ${competitorData.competitorCount} competitors`,

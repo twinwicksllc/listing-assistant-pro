@@ -17,6 +17,19 @@ export type PriceConfidence = "high" | "medium" | "low";
 // zero-comps/AI-estimate case, where there's no real data to label at all.
 export type PriceBasis = "sold" | "active" | "unknown";
 
+// ─── HOW the comps data was obtained, independent of what it IS ──────────────
+// "structured" = official eBay Browse API (structured JSON, one call, one
+// parse). "scraped" = Jina AI Reader fetching eBay's HTML sold-search page
+// and regex-parsing whatever markdown comes back -- it works today, but it's
+// the ToS-risk surface flagged in the pricing-reliability plan's Phase 3.3,
+// and a strictly noisier extraction than a real API response (its own
+// fallback strategy inside ebay-pricing/index.ts literally grabs any
+// dollar-looking number in the page when structured parsing fails). Kept
+// distinct from PriceBasis: a "sold" figure can still be a "scraped" one --
+// this type says how much to trust the number, not what kind of listing it
+// describes.
+export type PriceSourceReliability = "structured" | "scraped";
+
 // ─── A single price suggestion with strategy context ─────────────────────────
 
 export interface PriceSuggestion {
@@ -37,6 +50,7 @@ export interface PriceRecommendation {
   confidence: PriceConfidence;
   confidenceReason: string; // e.g. "Based on 12 comparable active listings"
   basis: PriceBasis; // What confidenceReason's comps actually are
+  sourceReliability: PriceSourceReliability; // How trustworthy the extraction itself is
 
   // Market stats
   marketAvg: number;

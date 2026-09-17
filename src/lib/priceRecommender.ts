@@ -3,6 +3,7 @@ import type {
   PriceSuggestion,
   PriceConfidence,
   PriceBasis,
+  PriceSourceReliability,
   SoldComp,
 } from "@/types/price-recommender";
 
@@ -189,6 +190,11 @@ export function buildPriceRecommendation(
   // active-listing data, so a caller that doesn't yet pass a real basis
   // should not silently claim the stronger "sold" signal.
   basis: PriceBasis = "active",
+  // Defaults to "structured" for the same reason: the Browse API path (this
+  // app's primary comps source) is one official JSON call, not a scrape. A
+  // caller that doesn't yet pass a real value should not silently claim the
+  // scraped path's ToS/parsing risk is present when it isn't.
+  sourceReliability: PriceSourceReliability = "structured",
 ): PriceRecommendation {
   const multiplier = CONDITION_MULTIPLIERS[condition] ?? 0.8;
   const conditionNote =
@@ -226,6 +232,11 @@ export function buildPriceRecommendation(
   // since at compsCount=0 this is entirely an AI estimate regardless of
   // which comps source was attempted.
   const effectiveBasis: PriceBasis = compsCount > 0 ? basis : "unknown";
+  // Same reasoning as effectiveBasis: at zero comps nothing was scraped or
+  // fetched at all, it's purely an AI estimate -- "scraped" would falsely
+  // imply Jina involvement that never happened.
+  const effectiveSourceReliability: PriceSourceReliability =
+    compsCount > 0 ? sourceReliability : "structured";
   const { confidence, reason } = getConfidence(compsCount, effectiveBasis);
 
   const suggestions = buildSuggestions(
@@ -251,6 +262,7 @@ export function buildPriceRecommendation(
     confidence,
     confidenceReason: reason,
     basis: effectiveBasis,
+    sourceReliability: effectiveSourceReliability,
     marketAvg,
     marketLow,
     marketHigh,
