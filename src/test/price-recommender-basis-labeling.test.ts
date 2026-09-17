@@ -111,3 +111,53 @@ describe("buildPriceRecommendation — basis-aware confidenceReason", () => {
     );
   });
 });
+
+/**
+ * Regression coverage for Phase 3.3(b) of the pricing-reliability plan:
+ * label Jina-scraped comps as lower-confidence in the UI, distinct from the
+ * "sold vs. active" basis fixed above. sourceReliability answers a different
+ * question than basis -- "how was this number extracted" vs. "what kind of
+ * listing does it describe" -- so a scrape can still report basis="sold"
+ * while sourceReliability="scraped" flags that the number itself is noisier
+ * than a structured API response.
+ */
+describe("buildPriceRecommendation — sourceReliability", () => {
+  it("defaults to 'structured' when no sourceReliability argument is passed", () => {
+    const rec = buildPriceRecommendation(
+      EIGHT_COMPS,
+      "USED_EXCELLENT",
+      0,
+      0,
+      undefined,
+      "active",
+    );
+    expect(rec.sourceReliability).toBe("structured");
+  });
+
+  it("reports sourceReliability='scraped' when explicitly passed with comps present", () => {
+    const rec = buildPriceRecommendation(
+      EIGHT_COMPS,
+      "USED_EXCELLENT",
+      0,
+      0,
+      undefined,
+      "sold",
+      "scraped",
+    );
+    expect(rec.sourceReliability).toBe("scraped");
+  });
+
+  it("reports sourceReliability='structured' when there are zero comps, regardless of the argument passed", () => {
+    const rec = buildPriceRecommendation(
+      [],
+      "USED_EXCELLENT",
+      10,
+      20,
+      undefined,
+      "sold",
+      "scraped",
+    );
+    expect(rec.compsCount).toBe(0);
+    expect(rec.sourceReliability).toBe("structured");
+  });
+});

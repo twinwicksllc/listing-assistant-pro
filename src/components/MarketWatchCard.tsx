@@ -159,13 +159,18 @@ export default function MarketWatchCard({
         <Badge variant="secondary" className="text-[10px]">
           {watch.activeCount} active
         </Badge>
-        <Badge variant="secondary" className="text-[10px]">
-          {watch.soldCount} sold
+        <Badge
+          variant="secondary"
+          className="text-[10px]"
+          title="Sold count and price are scraped from eBay's sold-search page (Jina), not eBay's official sales data -- market-watch-refresh has no other source for sold data. Treat as directional, not exact."
+        >
+          {watch.soldCount} sold (est.)
         </Badge>
         {str > 0 && (
           <Badge
             variant="secondary"
             className={`text-[10px] ${str >= 60 ? "bg-green-500/10 text-green-600" : str >= 30 ? "bg-yellow-500/10 text-yellow-600" : "bg-red-500/10 text-red-500"}`}
+            title="Sell-through rate is derived from the scraped (est.) sold count above, so it inherits the same estimate-not-exact caveat."
           >
             {str.toFixed(0)}% STR
           </Badge>

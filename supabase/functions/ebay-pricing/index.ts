@@ -29,6 +29,23 @@ export function basisFromSource(source: "browse_api" | "jina"): "sold" | "active
   return source === "jina" ? "sold" : "active";
 }
 
+/**
+ * How much to trust the *extraction itself*, independent of `basisFromSource`
+ * (what the data IS). `browse_api` is one official, structured JSON call.
+ * `jina` is an HTML scrape of eBay's sold-search page regex-parsed into
+ * numbers (see parseSoldItemsFromMarkdown's own multi-strategy fallback
+ * chain, including a last-resort "grab any dollar amount near the word sold"
+ * pass) -- a fundamentally noisier extraction, and the ToS-risk surface
+ * flagged in the pricing-reliability plan's Phase 3.3. Surfacing this
+ * distinctly from `basis` lets the UI say "sold, but scraped" rather than
+ * implying Jina-derived sold data is as trustworthy as a real API response.
+ */
+export function sourceReliabilityFromSource(
+  source: "browse_api" | "jina",
+): "structured" | "scraped" {
+  return source === "jina" ? "scraped" : "structured";
+}
+
 // ----------------------------------------------------------------
 // Primary source: delegate to ebay-competitor-search, which uses
 // the official eBay Browse API with Gemini-optimised query +
@@ -409,6 +426,7 @@ serve(async (req) => {
     let soldItems: SoldItem[] = await fetchViaCompetitorSearch(query);
     const source: "browse_api" | "jina" = soldItems.length > 0 ? "browse_api" : "jina";
     const basis = basisFromSource(source);
+    const sourceReliability = sourceReliabilityFromSource(source);
 
     if (soldItems.length === 0) {
       // Fallback: scrape sold listings via Jina
@@ -498,6 +516,7 @@ serve(async (req) => {
         originalQuery: query,
         source,
         basis,
+        sourceReliability,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
