@@ -1276,75 +1276,96 @@ serve(async (req: Request) => {
         const _aspectsUrl = Deno.env.get("SUPABASE_URL");
         const _aspectsKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
         if (_aspectsUrl && _aspectsKey) {
-          try {
-            const aspectsResp = await timer.time(
-              "aspects_fetch",
-              () =>
-                fetchWithTimeout(
-                  `${_aspectsUrl}/functions/v1/category-lookup`,
-                  {
-                    method: "POST",
-                    headers: {
-                      Authorization: `Bearer ${_aspectsKey}`,
-                      "Content-Type": "application/json",
+          const aspectsConditionsBurstEnd = timer.start(
+            "aspects_conditions_burst",
+          );
+          const [aspectsOutcome, conditionsOutcome] = await Promise
+            .allSettled([
+              timer.time(
+                "aspects_fetch",
+                () =>
+                  fetchWithTimeout(
+                    `${_aspectsUrl}/functions/v1/category-lookup`,
+                    {
+                      method: "POST",
+                      headers: {
+                        Authorization: `Bearer ${_aspectsKey}`,
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({
+                        action: "aspects",
+                        categoryId: targetCategoryId,
+                      }),
                     },
-                    body: JSON.stringify({
-                      action: "aspects",
-                      categoryId: targetCategoryId,
-                    }),
-                  },
-                  withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
-                  "category-lookup aspects",
-                ),
-            );
-            if (aspectsResp.ok) {
-              categoryAspects = await aspectsResp.json();
+                    withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
+                    "category-lookup aspects",
+                  ),
+              ),
+              timer.time(
+                "conditions_fetch",
+                () =>
+                  fetchWithTimeout(
+                    `${_aspectsUrl}/functions/v1/category-lookup`,
+                    {
+                      method: "POST",
+                      headers: {
+                        Authorization: `Bearer ${_aspectsKey}`,
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({
+                        action: "conditions",
+                        categoryId: targetCategoryId,
+                      }),
+                    },
+                    withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
+                    "category-lookup conditions",
+                  ),
+              ),
+            ]);
+          aspectsConditionsBurstEnd();
+
+          if (aspectsOutcome.status === "fulfilled" && aspectsOutcome.value.ok) {
+            try {
+              categoryAspects = await aspectsOutcome.value.json();
               console.log(
                 `[${invocationId}] analyze-item: fetched ${
                   categoryAspects.aspects?.length || 0
                 } aspects for category ${targetCategoryId}`,
               );
+            } catch (aspectErr) {
+              console.warn(
+                `[${invocationId}] analyze-item: aspects fetch failed (non-blocking):`,
+                aspectErr,
+              );
             }
-          } catch (aspectErr) {
+          } else if (aspectsOutcome.status === "rejected") {
             console.warn(
               `[${invocationId}] analyze-item: aspects fetch failed (non-blocking):`,
-              aspectErr,
+              aspectsOutcome.reason,
             );
           }
 
-          try {
-            const conditionsResp = await timer.time(
-              "conditions_fetch",
-              () =>
-                fetchWithTimeout(
-                  `${_aspectsUrl}/functions/v1/category-lookup`,
-                  {
-                    method: "POST",
-                    headers: {
-                      Authorization: `Bearer ${_aspectsKey}`,
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                      action: "conditions",
-                      categoryId: targetCategoryId,
-                    }),
-                  },
-                  withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
-                  "category-lookup conditions",
-                ),
-            );
-            if (conditionsResp.ok) {
-              categoryConditions = await conditionsResp.json();
+          if (
+            conditionsOutcome.status === "fulfilled" &&
+            conditionsOutcome.value.ok
+          ) {
+            try {
+              categoryConditions = await conditionsOutcome.value.json();
               console.log(
                 `[${invocationId}] analyze-item: fetched ${
                   categoryConditions.conditions?.length || 0
                 } conditions for category ${targetCategoryId}`,
               );
+            } catch (condErr) {
+              console.warn(
+                `[${invocationId}] analyze-item: conditions fetch failed (non-blocking):`,
+                condErr,
+              );
             }
-          } catch (condErr) {
+          } else if (conditionsOutcome.status === "rejected") {
             console.warn(
               `[${invocationId}] analyze-item: conditions fetch failed (non-blocking):`,
-              condErr,
+              conditionsOutcome.reason,
             );
           }
         }
@@ -2937,8 +2958,9 @@ Seller's note: "${voiceNote}"`;
       const _metadataUrl = Deno.env.get("SUPABASE_URL");
       const _metadataKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
       if (_metadataUrl && _metadataKey) {
-        try {
-          const aspectsResp = await timer.time(
+        const metadataResyncBurstEnd = timer.start("metadata_resync_burst");
+        const [aspectsOutcome, conditionsOutcome] = await Promise.allSettled([
+          timer.time(
             "metadata_resync_aspects",
             () =>
               fetchWithTimeout(
@@ -2957,19 +2979,8 @@ Seller's note: "${voiceNote}"`;
                 withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
                 "category-lookup aspects (post-change)",
               ),
-          );
-          if (aspectsResp.ok) {
-            categoryAspects = await aspectsResp.json();
-          }
-        } catch (aspectErr) {
-          console.warn(
-            `[${invocationId}] analyze-item: final-category aspects fetch failed (non-blocking):`,
-            aspectErr,
-          );
-        }
-
-        try {
-          const conditionsResp = await timer.time(
+          ),
+          timer.time(
             "metadata_resync_conditions",
             () =>
               fetchWithTimeout(
@@ -2988,14 +2999,42 @@ Seller's note: "${voiceNote}"`;
                 withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
                 "category-lookup conditions (post-change)",
               ),
-          );
-          if (conditionsResp.ok) {
-            categoryConditions = await conditionsResp.json();
+          ),
+        ]);
+        metadataResyncBurstEnd();
+
+        if (aspectsOutcome.status === "fulfilled" && aspectsOutcome.value.ok) {
+          try {
+            categoryAspects = await aspectsOutcome.value.json();
+          } catch (aspectErr) {
+            console.warn(
+              `[${invocationId}] analyze-item: final-category aspects fetch failed (non-blocking):`,
+              aspectErr,
+            );
           }
-        } catch (condErr) {
+        } else if (aspectsOutcome.status === "rejected") {
+          console.warn(
+            `[${invocationId}] analyze-item: final-category aspects fetch failed (non-blocking):`,
+            aspectsOutcome.reason,
+          );
+        }
+
+        if (
+          conditionsOutcome.status === "fulfilled" &&
+          conditionsOutcome.value.ok
+        ) {
+          try {
+            categoryConditions = await conditionsOutcome.value.json();
+          } catch (condErr) {
+            console.warn(
+              `[${invocationId}] analyze-item: final-category conditions fetch failed (non-blocking):`,
+              condErr,
+            );
+          }
+        } else if (conditionsOutcome.status === "rejected") {
           console.warn(
             `[${invocationId}] analyze-item: final-category conditions fetch failed (non-blocking):`,
-            condErr,
+            conditionsOutcome.reason,
           );
         }
 
@@ -3257,57 +3296,65 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
     //   • Trading Cards: set, parallel, serial number, rookie status
     //   • Jewelry: hallmarks, brand signatures, karat
     // Findings are AUTHORITATIVE and OVERRIDE the main model's output.
-    try {
-      const { extractKeyDetails, applyDetailOverrides } = await import("../_helpers/detailExtractor.ts");
+    //
+    // Runs concurrently with the post-AI competitor search below —
+    // independence verified: this block only reads/writes listing.title,
+    // listing.description, listing.itemSpecifics, listing.metalType,
+    // listing.metalWeightOz, listing.isSlabbed; it never touches
+    // competitorData/competitorDataSource/preAICompetitorData.
+    const runDetailExtraction = async () => {
+      try {
+        const { extractKeyDetails, applyDetailOverrides } = await import("../_helpers/detailExtractor.ts");
 
-      // Build image lists for the detail extractor — use ALL images
-      const detailBase64List: string[] = [];
-      const detailMimeList: string[] = [];
-      for (const img of imageList) {
-        const detB64 = img.includes(",") ? img.split(",")[1] : img;
-        const detMimeMatch = img.match(/^data:(image\/\w+);/);
-        detailBase64List.push(detB64);
-        detailMimeList.push(detMimeMatch ? detMimeMatch[1] : "image/jpeg");
-      }
+        // Build image lists for the detail extractor — use ALL images
+        const detailBase64List: string[] = [];
+        const detailMimeList: string[] = [];
+        for (const img of imageList) {
+          const detB64 = img.includes(",") ? img.split(",")[1] : img;
+          const detMimeMatch = img.match(/^data:(image\/\w+);/);
+          detailBase64List.push(detB64);
+          detailMimeList.push(detMimeMatch ? detMimeMatch[1] : "image/jpeg");
+        }
 
-      // Timed at the call site, not inside detailExtractor.ts, so this
-      // instrumentation does not collide with in-flight work on that module.
-      const detailResult = await timer.time(
-        "detail_extraction",
-        () =>
-          extractKeyDetails(
-            GEMINI_API_KEY,
-            identification.domain as any,
-            listing.title || identification.itemName,
-            detailBase64List,
-            detailMimeList,
-            invocationId,
-          ),
-      );
-
-      if (detailResult) {
-        applyDetailOverrides(listing, detailResult, invocationId);
-        console.log(
-          `[${invocationId}] ✓ Detail extraction applied (domain=${detailResult.domain})`,
+        // Timed at the call site, not inside detailExtractor.ts, so this
+        // instrumentation does not collide with in-flight work on that module.
+        const detailResult = await timer.time(
+          "detail_extraction",
+          () =>
+            extractKeyDetails(
+              GEMINI_API_KEY,
+              identification.domain as any,
+              listing.title || identification.itemName,
+              detailBase64List,
+              detailMimeList,
+              invocationId,
+            ),
         );
-      } else {
-        console.log(
-          `[${invocationId}] Detail extraction returned null (domain=${identification.domain}) — no overrides`,
+
+        if (detailResult) {
+          applyDetailOverrides(listing, detailResult, invocationId);
+          console.log(
+            `[${invocationId}] ✓ Detail extraction applied (domain=${detailResult.domain})`,
+          );
+        } else {
+          console.log(
+            `[${invocationId}] Detail extraction returned null (domain=${identification.domain}) — no overrides`,
+          );
+        }
+      } catch (detailErr) {
+        console.warn(
+          `[${invocationId}] Detail extraction failed (non-blocking):`,
+          String(detailErr),
         );
       }
-    } catch (detailErr) {
-      console.warn(
-        `[${invocationId}] Detail extraction failed (non-blocking):`,
-        String(detailErr),
-      );
-    }
+    };
     // ─── END POST-PASS ─────────────────────────────────────────────────────
 
     // ─── POST-AI competitor search: Fetch with AI-generated title ─────────────
     // This runs AFTER Gemini generates a better title. Use full title for accuracy.
     // If pre-AI failed/returned 0, this provides fallback data for response.
     // If pre-AI succeeded, post-AI data can be compared/enhanced.
-    {
+    const runPostAiComps = async () => {
       if (listing.title && userId) {
         try {
           console.log(
@@ -3404,8 +3451,12 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
           `[${invocationId}] Skipping post-AI competitor search (title=${!!listing.title}, userId=${!!userId})`,
         );
       }
-    }
+    };
     // ─── END post-AI competitor search ────────────────────────────────────────
+
+    const burstEnd = timer.start("post_pass2_burst");
+    await Promise.allSettled([runDetailExtraction(), runPostAiComps()]);
+    burstEnd();
 
     // --- Server-side melt value enforcement ---
     let meltValue: number | null = null;
