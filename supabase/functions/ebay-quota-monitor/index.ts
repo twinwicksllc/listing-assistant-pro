@@ -1,0 +1,351 @@
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { describeCronAuthEnv, requireCronSecret } from "../_helpers/authGuard.ts";
+import { captureException, initSentry } from "../_helpers/sentry.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+const ADMIN_EMAIL = "twinwicksllc@gmail.com";
+
+// Follow-on to PR #580 (Phase 1.2b's search fan-out cap), which fixed the
+// self-inflicted call-volume spike behind a real production 429 pattern.
+// eBay's Browse API has a real, hard 5,000-calls/day limit per client_id.
+// A live getRateLimits check on this account's real keyset (2026-09-17)
+// showed buy.browse at 73.8% used (3,690/5,000) BEFORE this monitor existed
+// -- confirming the risk was real, not theoretical. Reset timing: every
+// resource checked, buy.browse included, reset at the same wall-clock
+// timestamp (midnight Pacific) -- a shared calendar-style reset for this
+// account, NOT the "rolling 24h window from first call" a web-search lookup
+// initially (and incorrectly) reported. Always trust each poll's own
+// `reset` field over any assumption about the reset schedule's shape.
+// #580 reduced the RATE of waste; this makes the REMAINING budget visible,
+// via two complementary signals rather than one:
+//   1. The daily poll below (authoritative -- eBay's own real numbers).
+//   2. ebay_browse_call_log's same-day running count (early-warning
+//      heuristic between polls, incremented at each Browse API call site --
+//      see competitorSearch.ts/market-watch-refresh/keyword-research).
+// These two can drift slightly (this app's counter resets whenever this
+// feature deploys, not necessarily at the same moment eBay's own quota
+// resets) -- an accepted, disclosed limitation, not a bug. The daily poll
+// re-anchors ground truth each time it runs.
+const WARN_THRESHOLD_RATIO = 0.9;
+const BROWSE_RESOURCE_NAME = "buy.browse";
+
+interface EbayRateLimitRate {
+  limit: number;
+  remaining: number;
+  reset: string;
+  timeWindow?: number;
+}
+
+interface EbayRateLimitResource {
+  name: string;
+  rates: EbayRateLimitRate[];
+}
+
+interface EbayRateLimitContext {
+  apiContext: string;
+  apiName?: string;
+  resources: EbayRateLimitResource[];
+}
+
+async function getEbayAppToken(ebayEnv: string): Promise<string> {
+  const clientId = Deno.env.get("EBAY_CLIENT_ID");
+  const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
+
+  if (!clientId || !clientSecret) {
+    throw new Error("EBAY_CLIENT_ID or EBAY_CLIENT_SECRET not configured");
+  }
+
+  const credentials = btoa(`${clientId}:${clientSecret}`);
+  const tokenUrl = ebayEnv === "production"
+    ? "https://api.ebay.com/identity/v1/oauth2/token"
+    : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
+
+  const resp = await fetch(tokenUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
+  });
+
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`Failed to get eBay OAuth token: ${resp.status} — ${body.slice(0, 200)}`);
+  }
+
+  const data = await resp.json();
+  return data.access_token as string;
+}
+
+async function fetchEbayRateLimits(
+  token: string,
+  ebayEnv: string,
+): Promise<EbayRateLimitContext[]> {
+  const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
+  const resp = await fetch(`${apiBase}/developer/analytics/v1/rate_limit/`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`getRateLimits failed: ${resp.status} — ${body.slice(0, 300)}`);
+  }
+
+  const data = await resp.json();
+  return data?.rateLimits ?? [];
+}
+
+/**
+ * Finds the buy.browse resource's rate entry inside eBay's nested
+ * rateLimits -> resources -> rates response shape. Exported so the parsing
+ * logic (which nesting level actually holds what) has direct test coverage
+ * without needing a live HTTP call.
+ */
+export function findBrowseRate(
+  rateLimits: EbayRateLimitContext[],
+): { resource: EbayRateLimitResource; rate: EbayRateLimitRate } | null {
+  for (const ctx of rateLimits) {
+    for (const resource of ctx.resources ?? []) {
+      if (resource.name?.toLowerCase().includes("browse")) {
+        const rate = resource.rates?.[0];
+        if (rate) return { resource, rate };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Decides whether either signal (eBay's own poll, or this app's own
+ * same-day counter) has crossed WARN_THRESHOLD_RATIO of the known limit.
+ * Pure function so the boundary case (exactly 90%) has direct test
+ * coverage without a live poll or DB round trip.
+ */
+export function shouldWarn(
+  limit: number,
+  pollRemaining: number,
+  sameDayCount: number,
+): { warn: boolean; reason: string } {
+  if (limit <= 0) return { warn: false, reason: "no known limit" };
+  const pollUsedRatio = (limit - pollRemaining) / limit;
+  const countRatio = sameDayCount / limit;
+  if (pollUsedRatio >= WARN_THRESHOLD_RATIO) {
+    return {
+      warn: true,
+      reason: `eBay's own poll reports ${pollRemaining}/${limit} remaining (${(pollUsedRatio * 100).toFixed(1)}% used)`,
+    };
+  }
+  if (countRatio >= WARN_THRESHOLD_RATIO) {
+    return {
+      warn: true,
+      reason: `same-day counter has logged ${sameDayCount} calls against a ${limit}/day limit (${
+        (countRatio * 100).toFixed(1)
+      }%)`,
+    };
+  }
+  return { warn: false, reason: "below threshold" };
+}
+
+async function sendQuotaAlertEmail(params: {
+  limit: number;
+  pollRemaining: number;
+  sameDayCount: number;
+  reason: string;
+  resetAt: string;
+}): Promise<boolean> {
+  const resendKey = Deno.env.get("RESEND_API_KEY");
+  if (!resendKey) {
+    console.log("[ebay-quota-monitor] No RESEND_API_KEY configured. Skipping email.");
+    return false;
+  }
+
+  try {
+    const resp = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${resendKey}`,
+      },
+      body: JSON.stringify({
+        // rankedceo.com is the only verified Resend sending domain on this
+        // account -- see cost-alert-cron/index.ts's RBR-0031 comment for why.
+        from: "Sovereign Listing Suite Alerts <alerts@rankedceo.com>",
+        to: [ADMIN_EMAIL],
+        subject: `⚠️ eBay Browse API quota warning: ${params.reason}`,
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #dc2626; margin-bottom: 16px;">⚠️ eBay Browse API quota warning</h2>
+            <p style="color: #374151; font-size: 16px;">${params.reason}</p>
+            <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 20px; margin: 20px 0;">
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Daily limit</td>
+                  <td style="padding: 8px 0; text-align: right; font-weight: bold; font-size: 18px; color: #374151;">${params.limit}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Remaining (eBay's own poll)</td>
+                  <td style="padding: 8px 0; text-align: right; font-weight: bold; font-size: 18px; color: #dc2626;">${params.pollRemaining}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Same-day call count (our counter)</td>
+                  <td style="padding: 8px 0; text-align: right; font-weight: bold; color: #374151;">${params.sameDayCount}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Quota resets at</td>
+                  <td style="padding: 8px 0; text-align: right; color: #374151;">${params.resetAt}</td>
+                </tr>
+              </table>
+            </div>
+            <p style="color: #6b7280; font-size: 14px;">This is a rolling 24h window from eBay's first call, not a calendar/midnight reset.</p>
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
+            <p style="color: #9ca3af; font-size: 12px;">This is an automated alert from Sovereign AI Assistant.</p>
+          </div>
+        `,
+      }),
+    });
+
+    if (resp.ok) return true;
+    const errBody = await resp.text();
+    console.error("[ebay-quota-monitor] Resend API error:", errBody);
+    captureException(new Error(`Resend API error: ${errBody}`), { function: "ebay-quota-monitor" });
+    return false;
+  } catch (err) {
+    console.error("[ebay-quota-monitor] Email sending failed:", err);
+    captureException(err, { function: "ebay-quota-monitor" });
+    return false;
+  }
+}
+
+serve(async (req) => {
+  initSentry();
+
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  const auth = await requireCronSecret(req);
+  if (!auth.ok) {
+    console.warn(
+      "[ebay-quota-monitor] auth rejected:",
+      JSON.stringify(describeCronAuthEnv(req)),
+    );
+    return new Response(JSON.stringify({ error: auth.message }), {
+      status: auth.status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const svc = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    { auth: { persistSession: false } },
+  );
+
+  try {
+    const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "production";
+    const token = await getEbayAppToken(ebayEnv);
+    const rateLimits = await fetchEbayRateLimits(token, ebayEnv);
+    const found = findBrowseRate(rateLimits);
+
+    if (!found) {
+      console.warn("[ebay-quota-monitor] No buy.browse resource found in getRateLimits response");
+      return new Response(
+        JSON.stringify({ warned: false, reason: "buy.browse resource not found in response" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const { resource, rate } = found;
+    const callCount = rate.limit - rate.remaining;
+
+    // Same-day dedup: this cron runs once/day, so "already alerted today"
+    // in practice means "did today's earlier run (if any) already send an
+    // email" -- checked BEFORE this poll's own insert, mirroring
+    // cost-alert-cron's check-before-insert ordering.
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+    const { data: priorAlertToday } = await svc
+      .from("ebay_rate_limit_polls")
+      .select("id")
+      .eq("alert_sent", true)
+      .gte("polled_at", todayStart.toISOString())
+      .limit(1);
+    const alreadyAlertedToday = (priorAlertToday?.length ?? 0) > 0;
+
+    // Same-day running count from this app's own counter, independent of
+    // eBay's poll -- see the migration's comment for why this needed its own
+    // table rather than reusing usage_tracking (NOT NULL user_id there,
+    // this is an app-level count).
+    const { count: sameDayCount } = await svc
+      .from("ebay_browse_call_log")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", todayStart.toISOString());
+
+    const verdict = shouldWarn(rate.limit, rate.remaining, sameDayCount ?? 0);
+    const shouldSendEmail = verdict.warn && !alreadyAlertedToday;
+
+    console.log(
+      `[ebay-quota-monitor] limit=${rate.limit} remaining=${rate.remaining} sameDayCount=${
+        sameDayCount ?? 0
+      } reset=${rate.reset} warn=${verdict.warn} alreadyAlertedToday=${alreadyAlertedToday}`,
+    );
+
+    let emailSent = false;
+    if (shouldSendEmail) {
+      emailSent = await sendQuotaAlertEmail({
+        limit: rate.limit,
+        pollRemaining: rate.remaining,
+        sameDayCount: sameDayCount ?? 0,
+        reason: verdict.reason,
+        resetAt: rate.reset,
+      });
+    } else if (verdict.warn && alreadyAlertedToday) {
+      console.log("[ebay-quota-monitor] Already alerted today — recording the poll without a duplicate email");
+    }
+
+    // Record `alert_sent` regardless of whether the email itself succeeded
+    // (matches cost-alert-cron's "record the alert either way" reasoning --
+    // a Resend failure shouldn't cause repeat-send spam; email delivery
+    // failures are separately visible via captureException above).
+    await svc.from("ebay_rate_limit_polls").insert({
+      resource_name: resource.name,
+      api_context: BROWSE_RESOURCE_NAME.split(".")[0],
+      call_limit: rate.limit,
+      call_count: callCount,
+      call_remaining: rate.remaining,
+      reset_at: rate.reset,
+      time_window_seconds: rate.timeWindow ?? null,
+      alert_sent: shouldSendEmail,
+    });
+
+    return new Response(
+      JSON.stringify({
+        warned: verdict.warn,
+        emailSent,
+        reason: verdict.reason,
+        limit: rate.limit,
+        remaining: rate.remaining,
+        sameDayCount: sameDayCount ?? 0,
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[ebay-quota-monitor] Error:", msg);
+    captureException(err, { function: "ebay-quota-monitor" });
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});

@@ -598,6 +598,36 @@ export interface CompSearchAttemptResult {
 }
 
 /**
+ * Fire-and-forget increment of the same-day Browse API call counter (see
+ * the ebay-quota-monitor migration/function for how this is read). Never
+ * awaited by the caller and never throws into it -- a logging failure must
+ * not affect the real Browse API call it's counting, which is why this
+ * takes the already-open supabase client rather than opening its own.
+ * Exported so other Browse API callers (market-watch-refresh,
+ * keyword-research) can share this one implementation instead of
+ * duplicating it -- there is no shared Browse API client module in this
+ * codebase to hook a counter into otherwise (confirmed: each caller keeps
+ * its own getEbayAppToken/search function).
+ */
+export function logBrowseApiCall(
+  // deno-lint-ignore no-explicit-any -- matches the loose supabase-js typing
+  // already used throughout this codebase's Edge Functions.
+  supabase: any,
+  caller: string,
+): void {
+  try {
+    supabase
+      .from("ebay_browse_call_log")
+      .insert({ caller })
+      .then(() => {}, (err: unknown) => {
+        console.warn(`[competitorSearch] Failed to log Browse API call for quota tracking: ${String(err)}`);
+      });
+  } catch (err) {
+    console.warn(`[competitorSearch] Failed to log Browse API call for quota tracking: ${String(err)}`);
+  }
+}
+
+/**
  * Runs a list of search attempts sequentially, stopping at the first one
  * that returns a non-empty price list. Line-for-line-identical behavior to
  * the original flat loop this replaced in runCompetitorSearch -- extracted
@@ -903,6 +933,7 @@ export async function runCompetitorSearch(params: {
           attempt.categoryId ?? "any"
         }`,
       );
+      logBrowseApiCall(supabase, "competitorSearch");
       return fetchEbayCompetitors({
         token,
         searchQuery: attempt.query,

@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { logBrowseApiCall } from "../_helpers/competitorSearch.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -358,6 +360,16 @@ serve(async (req) => {
     // Run both requests in parallel: Browse API (active) + Jina scrape (sold)
     const token = await getEbayAppToken();
     console.log(`[keyword-research] Obtained OAuth token`);
+
+    // Fire-and-forget same-day call counter for the ebay-quota-monitor cron
+    // -- see competitorSearch.ts's logBrowseApiCall docstring for why this
+    // is a shared helper rather than duplicated per caller.
+    const svc = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      { auth: { persistSession: false } },
+    );
+    logBrowseApiCall(svc, "keyword-research");
 
     const [activeResult, soldData] = await Promise.all([
       browseSearch({ query, token, ebayEnv, categoryId, limit: 50 }),

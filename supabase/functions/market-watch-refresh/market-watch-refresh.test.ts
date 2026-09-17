@@ -116,9 +116,14 @@ Deno.test("refreshOneWatch: computes stats and persists an update + a history in
   }
 
   assertEquals(updates.length, 1);
-  assertEquals(inserts.length, 1);
-  assertEquals(inserts[0].table, "market_price_history");
-  assertEquals(inserts[0].row.watch_id, "w1");
+  // logBrowseApiCall (the eBay quota monitor's same-day counter, added
+  // alongside ebay-quota-monitor) also inserts a row here now -- filter to
+  // market_price_history specifically rather than asserting a bare total
+  // insert count, so this test doesn't need to know about every unrelated
+  // fire-and-forget insert this function may grow over time.
+  const historyInserts = inserts.filter((i) => i.table === "market_price_history");
+  assertEquals(historyInserts.length, 1);
+  assertEquals(historyInserts[0].row.watch_id, "w1");
 });
 
 Deno.test("runBatch: refreshes every watch the RPC returns", async () => {
