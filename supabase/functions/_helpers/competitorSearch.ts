@@ -211,6 +211,13 @@ function broadenSearchQuery(query: string): string {
 // doc for the full reasoning (found via external entity-resolution research
 // before implementation, not just an internal guess).
 // ----------------------------------------------------------------
+// "lot"/"set"/"collection"/"bundle" are deliberately NOT in either list below
+// -- they're quantity/unit words, not filler: "1921 Morgan Silver Dollar"
+// and "1921 Morgan Silver Dollar Set" price completely differently (one
+// coin vs. a multi-coin set), so stripping the word would silently merge a
+// single-item listing's comps with a set listing's (found in Copilot review
+// of PR #602, 2026-09-19 -- a real false-positive class the original noise
+// list missed).
 const SIGNATURE_STOP_WORDS = new Set([
   "a",
   "an",
@@ -222,9 +229,6 @@ const SIGNATURE_STOP_WORDS = new Set([
   "for",
   "to",
   "with",
-  "lot",
-  "set",
-  "collection",
   "item",
   "listing",
   "ebay",
@@ -243,7 +247,6 @@ const LISTING_BOILERPLATE_WORDS = new Set([
   "fast",
   "ship",
   "combined",
-  "bundle",
   "look",
   "wow",
   "sale",
@@ -280,6 +283,19 @@ export function computeProductSignature(
   title: string,
   categoryId?: string,
 ): ProductSignatureResult {
+  if (typeof title !== "string" || title.trim().length === 0) {
+    return { signature: null, reason: "title is missing or not a string" };
+  }
+
+  // A missing/blank categoryId is deliberately treated as ineligible, not
+  // folded into a shared "nocat" bucket -- category_id is nullable on the
+  // rows this cron reads, so a common fallback bucket would let two
+  // unrelated four-token titles in different (or no) categories match each
+  // other's comps (found in Copilot review of PR #602, 2026-09-19).
+  if (typeof categoryId !== "string" || categoryId.trim().length === 0) {
+    return { signature: null, reason: "no categoryId — not eligible for signature matching" };
+  }
+
   const tokens = title
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
@@ -295,10 +311,10 @@ export function computeProductSignature(
   }
 
   const sortedTokens = [...tokens].sort();
-  const signature = `${categoryId ?? "nocat"}::${sortedTokens.join("_")}`;
+  const signature = `${categoryId}::${sortedTokens.join("_")}`;
   return {
     signature,
-    reason: `${tokens.length} significant tokens, category=${categoryId ?? "none"}`,
+    reason: `${tokens.length} significant tokens, category=${categoryId}`,
   };
 }
 
@@ -1647,6 +1663,33 @@ export async function attemptItemsRefresh(params: {
 const SIGNATURE_MATCH_MIN_COMPS = 3;
 
 /**
+ * Guards against reusing a sibling's aggregates across incompatible
+ * price-anchor contexts (found in Copilot review of PR #602, 2026-09-19).
+ * The sibling's avg/min/max/median/count were computed by computeCompStats,
+ * which runs priceAnchorFilter keyed on THAT listing's own yourPrice --
+ * items priced under 10% or over 10x of it get dropped before the
+ * aggregates are ever computed. If this listing's yourPrice would have
+ * produced a materially different anchor window, the sibling's aggregates
+ * may reflect comps this listing's own search would have excluded (or vice
+ * versa), and recomputing only priceDelta on top of them does not correct
+ * that. Only the two "anchor filter didn't fire at all" cases (both prices
+ * missing/under the $50 floor) or "both prices close enough that the 10x
+ * window is effectively the same" are treated as compatible; everything
+ * else falls through to a real search instead of guessing.
+ */
+function anchorContextsCompatible(
+  yourPrice: number | null | undefined,
+  siblingYourPrice: number | null | undefined,
+): boolean {
+  const a = yourPrice != null && yourPrice >= 50 ? yourPrice : null;
+  const b = siblingYourPrice != null && siblingYourPrice >= 50 ? siblingYourPrice : null;
+  if (a === null && b === null) return true; // anchor filter never applied to either
+  if (a === null || b === null) return false; // filter applied to only one
+  const ratio = a / b;
+  return ratio >= 0.5 && ratio <= 2.0;
+}
+
+/**
  * Attempts the cache-by-product-signature path: finds an existing FRESH
  * comp lookup for a DIFFERENT listing of the same seller with the same
  * product signature, and reuses its stats/comp itemIds for this listing
@@ -1705,8 +1748,32 @@ export async function attemptSignatureMatch(params: {
     return null;
   }
 
+  // The sibling's aggregates were computed by computeCompStats using ITS OWN
+  // your_price as the anchor for priceAnchorFilter -- if this listing's
+  // yourPrice implies a materially different anchor window, those
+  // aggregates may include/exclude comps this listing's own search would
+  // not have, and recomputing only priceDelta on top of them would not fix
+  // that (found in Copilot review of PR #602, 2026-09-19). Fall through to
+  // a real search rather than reuse an aggregate computed under an
+  // incompatible price context.
+  if (!anchorContextsCompatible(yourPrice, sibling.your_price)) {
+    console.log(
+      `[competitorSearch] attemptSignatureMatch: sibling listing ${sibling.ebay_listing_id}'s price anchor ($${sibling.your_price}) is incompatible with this listing's ($${yourPrice}) — falling through`,
+    );
+    return null;
+  }
+
   const medianPrice: number = sibling.median_price;
   const priceDelta = yourPrice != null ? Math.round((yourPrice - medianPrice) * 100) / 100 : null;
+
+  // Preserve the sibling's ORIGINAL fetched_at rather than stamping "now" --
+  // this row did no live Gemini/eBay lookup, so treating it as freshly
+  // fetched would let two duplicate listings perpetually renew each other's
+  // stale snapshot (each sees the other as "fresh" on its next check),
+  // silently starving the cron of any real refresh (found in Copilot review
+  // of PR #602, 2026-09-19). Expiry is derived from the same original
+  // timestamp the sibling itself will expire on.
+  const siblingFetchedAt = new Date(sibling.fetched_at);
 
   try {
     const payload = buildCompetitorPricesUpsertPayload({
@@ -1724,6 +1791,7 @@ export async function attemptSignatureMatch(params: {
       priceDistribution: sibling.price_distribution,
       compItemIds: sibling.comp_item_ids ?? null,
       productSignature: signature,
+      now: siblingFetchedAt,
     });
     const { error: upsertErr } = await supabase.from("competitor_prices").upsert(payload, {
       onConflict: "user_id,ebay_listing_id",
@@ -1743,7 +1811,7 @@ export async function attemptSignatureMatch(params: {
     console.warn("[competitorSearch] attemptSignatureMatch: failed to persist snapshot:", dbErr);
   }
 
-  const cacheExpiresAt = new Date(Date.now() + CACHE_TTL_MS).toISOString();
+  const cacheExpiresAt = new Date(siblingFetchedAt.getTime() + CACHE_TTL_MS).toISOString();
 
   return {
     status: 200,
