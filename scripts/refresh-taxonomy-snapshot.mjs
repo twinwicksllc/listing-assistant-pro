@@ -34,6 +34,12 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import {
+  buildCategoryIndex,
+  extractGuardBlocklist,
+  isConfirmedLeaf,
+  isConfirmedNotShippable,
+} from "./lib/taxonomySnapshot.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -91,47 +97,6 @@ async function fetchAllCategories() {
     offset += pageSize;
   }
   return rows;
-}
-
-function buildCategoryIndex(categories) {
-  const byId = new Map();
-  for (const cat of categories) {
-    byId.set(String(cat.category_id), cat);
-  }
-  return byId;
-}
-
-function extractGuardBlocklist(guardSrc) {
-  const start = guardSrc.indexOf("KNOWN_PARENT_CATEGORY_IDS");
-  if (start === -1) {
-    throw new Error(
-      "KNOWN_PARENT_CATEGORY_IDS not found in leafCategoryGuard.ts",
-    );
-  }
-  const openParen = guardSrc.indexOf("([", start);
-  const closeParen = guardSrc.indexOf("]);", openParen);
-  if (openParen === -1 || closeParen === -1) {
-    throw new Error(
-      "Could not locate KNOWN_PARENT_CATEGORY_IDS Set([...]) bounds",
-    );
-  }
-  const body = guardSrc.slice(openParen, closeParen);
-  const ids = new Set();
-  for (const m of body.matchAll(/"(\d+)"/g)) {
-    ids.add(m[1]);
-  }
-  return ids;
-}
-
-function isConfirmedNotShippable(id, categoryIndex) {
-  const cat = categoryIndex.get(String(id));
-  if (!cat) return true;
-  return cat.is_leaf === false;
-}
-
-function isConfirmedLeaf(id, categoryIndex) {
-  const cat = categoryIndex.get(String(id));
-  return !!cat && cat.is_leaf === true;
 }
 
 function validateCorpus(corpus, categoryIndex, guardBlocklist) {

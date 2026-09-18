@@ -41,6 +41,12 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import {
+  buildCategoryIndex,
+  extractGuardBlocklist,
+  isConfirmedLeaf,
+  isConfirmedNotShippable,
+} from "./lib/taxonomySnapshot.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -59,55 +65,12 @@ function loadJson(p) {
   return JSON.parse(readFileSync(p, "utf8"));
 }
 
-function buildCategoryIndex(snapshot) {
-  const byId = new Map();
-  for (const cat of snapshot.categories) {
-    byId.set(String(cat.category_id), cat);
-  }
-  return byId;
-}
-
-function extractGuardBlocklist(guardSrc) {
-  // KNOWN_PARENT_CATEGORY_IDS is defined as `new Set<string>([ "id", // comment ... ])`.
-  // Pull every quoted numeric-looking string literal between the Set([ ... ]) bounds.
-  const start = guardSrc.indexOf("KNOWN_PARENT_CATEGORY_IDS");
-  if (start === -1) {
-    throw new Error(
-      "KNOWN_PARENT_CATEGORY_IDS not found in leafCategoryGuard.ts",
-    );
-  }
-  const openParen = guardSrc.indexOf("([", start);
-  const closeParen = guardSrc.indexOf("]);", openParen);
-  if (openParen === -1 || closeParen === -1) {
-    throw new Error(
-      "Could not locate KNOWN_PARENT_CATEGORY_IDS Set([...]) bounds",
-    );
-  }
-  const body = guardSrc.slice(openParen, closeParen);
-  const ids = new Set();
-  for (const m of body.matchAll(/"(\d+)"/g)) {
-    ids.add(m[1]);
-  }
-  return ids;
-}
-
-function isConfirmedNotShippable(id, categoryIndex) {
-  const cat = categoryIndex.get(String(id));
-  if (!cat) return true; // absent entirely from the live tree -- definitely not shippable
-  return cat.is_leaf === false; // present but a rollup/branch node
-}
-
-function isConfirmedLeaf(id, categoryIndex) {
-  const cat = categoryIndex.get(String(id));
-  return !!cat && cat.is_leaf === true;
-}
-
 function main() {
   const corpus = loadJson(CORPUS_PATH);
   const snapshot = loadJson(SNAPSHOT_PATH);
   const guardSrc = readFileSync(GUARD_PATH, "utf8");
 
-  const categoryIndex = buildCategoryIndex(snapshot);
+  const categoryIndex = buildCategoryIndex(snapshot.categories);
   const guardBlocklist = extractGuardBlocklist(guardSrc);
 
   console.log(`Loaded ${corpus.cases.length} corpus cases.`);
