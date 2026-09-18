@@ -1,10 +1,12 @@
 import { assertEquals, assertNotEquals, assertRejects } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import {
   attemptItemsRefresh,
+  attemptSignatureMatch,
   buildCompetitorPricesUpsertPayload,
   type CompetitorItem,
   type CompSearchAttemptResult,
   computeCompStats,
+  computeProductSignature,
   decideRefreshStrategy,
   evaluateCompQuality,
   extractCompItemIds,
@@ -1175,4 +1177,323 @@ Deno.test("attemptItemsRefresh: a DB lookup failure -> returns null, does not th
     yourPrice: null,
   });
   assertEquals(result, null);
+});
+
+// ----------------------------------------------------------------
+// computeProductSignature (cache-by-product-signature feature).
+//
+// These tests deliberately do NOT reuse deriveSearchQueryFallback's
+// stopWords or broadenSearchQuery's gradeNoise sets as a baseline -- see
+// computeProductSignature's own docstring in competitorSearch.ts for why
+// those two sets are actively wrong for this purpose (they broaden a search
+// query; here, stripping the same tokens would collapse two differently-
+// priced products into one signature). Several tests below exist
+// specifically to prove that divergence.
+// ----------------------------------------------------------------
+
+const COIN_CATEGORY = "11116";
+
+Deno.test("computeProductSignature: differently-worded/ordered titles for the same product -> identical signature", () => {
+  const a = computeProductSignature("1999 TY McDonald's Teenie Beanie Baby", COIN_CATEGORY);
+  const b = computeProductSignature("TY 1999 Teenie Beanie Baby McDonald's Free Shipping", COIN_CATEGORY);
+  assertEquals(a.signature !== null, true);
+  assertEquals(a.signature, b.signature);
+});
+
+Deno.test("computeProductSignature: short/garbled title -> null signature (production noise-rejection case)", () => {
+  assertEquals(computeProductSignature("202", COIN_CATEGORY).signature, null);
+  assertEquals(computeProductSignature("Year", COIN_CATEGORY).signature, null);
+  assertEquals(computeProductSignature("price", COIN_CATEGORY).signature, null);
+});
+
+Deno.test("computeProductSignature: exactly 4 significant tokens -> non-null (boundary case)", () => {
+  const result = computeProductSignature("1921 Morgan Silver Dollar", COIN_CATEGORY);
+  assertEquals(result.signature !== null, true);
+});
+
+Deno.test("computeProductSignature: fewer than 4 significant tokens -> null (just below boundary)", () => {
+  const result = computeProductSignature("1921 Morgan Dollar", COIN_CATEGORY);
+  assertEquals(result.signature, null);
+});
+
+Deno.test("computeProductSignature: categoryId is structurally folded into the key, not cosmetic", () => {
+  const withCat = computeProductSignature("1921 Morgan Silver Dollar", "11116");
+  const otherCat = computeProductSignature("1921 Morgan Silver Dollar", "99999");
+  assertNotEquals(withCat.signature, otherCat.signature);
+});
+
+Deno.test("computeProductSignature: missing/blank categoryId -> null signature, NOT a shared 'nocat' bucket", () => {
+  // category_id is nullable on the rows this cron reads -- a common fallback
+  // bucket would let two unrelated four-token titles in different (or no)
+  // categories reuse each other's comps (Copilot review of PR #602,
+  // 2026-09-19). Missing category must be treated as ineligible, not folded
+  // into a shared key.
+  assertEquals(computeProductSignature("1921 Morgan Silver Dollar").signature, null);
+  assertEquals(computeProductSignature("1921 Morgan Silver Dollar", "").signature, null);
+  assertEquals(computeProductSignature("1921 Morgan Silver Dollar", "   ").signature, null);
+});
+
+Deno.test("computeProductSignature: non-string/empty title -> null signature, does not throw", () => {
+  // The HTTP caller only rejects falsy titles, so a truthy malformed value
+  // (number, object) could otherwise reach here and throw out of
+  // runCompetitorSearch before the cache fallback can handle it (Copilot
+  // review of PR #602, 2026-09-19).
+  // deno-lint-ignore no-explicit-any
+  assertEquals(computeProductSignature(12345 as any, COIN_CATEGORY).signature, null);
+  // deno-lint-ignore no-explicit-any
+  assertEquals(computeProductSignature({ foo: "bar" } as any, COIN_CATEGORY).signature, null);
+  assertEquals(computeProductSignature("   ", COIN_CATEGORY).signature, null);
+});
+
+Deno.test("computeProductSignature: same title/category, called twice -> stable", () => {
+  const a = computeProductSignature("1921 Morgan Silver Dollar", COIN_CATEGORY);
+  const b = computeProductSignature("1921 Morgan Silver Dollar", COIN_CATEGORY);
+  assertEquals(a.signature, b.signature);
+});
+
+Deno.test("computeProductSignature: token order does not affect the signature", () => {
+  const a = computeProductSignature("Silver Morgan 1921 Dollar", COIN_CATEGORY);
+  const b = computeProductSignature("1921 Morgan Silver Dollar", COIN_CATEGORY);
+  assertEquals(a.signature, b.signature);
+});
+
+Deno.test("computeProductSignature: listing boilerplate (shipping/marketing spam) is stripped", () => {
+  const a = computeProductSignature("1921 Morgan Silver Dollar Free Shipping Fast Combined Ship", COIN_CATEGORY);
+  const b = computeProductSignature("1921 Morgan Silver Dollar", COIN_CATEGORY);
+  assertEquals(a.signature, b.signature);
+});
+
+Deno.test("computeProductSignature: REGRESSION -- different products with overlapping generic tokens must NOT collapse", () => {
+  const steelCent = computeProductSignature("1943 Lincoln Wheat Cent Steel Penny", COIN_CATEGORY);
+  const vdbCent = computeProductSignature("1909 VDB Lincoln Wheat Cent Penny", COIN_CATEGORY);
+  assertNotEquals(steelCent.signature, vdbCent.signature);
+});
+
+Deno.test("computeProductSignature: REGRESSION -- grade number must survive, NOT be stripped like broadenSearchQuery's gradeNoise does", () => {
+  const ms63 = computeProductSignature("1921 Morgan Dollar PCGS MS63", COIN_CATEGORY);
+  const ms64 = computeProductSignature("1921 Morgan Dollar PCGS MS64", COIN_CATEGORY);
+  assertNotEquals(ms63.signature, ms64.signature);
+});
+
+Deno.test("computeProductSignature: REGRESSION -- single-character mint mark must survive (key date vs common date)", () => {
+  // "S" is a single-character token that deriveSearchQueryFallback's
+  // `length > 1` filter would silently drop -- doing the same here would
+  // merge a 1909-S VDB (key date) with a plain 1909 VDB (common date), a
+  // real price-collapsing bug for this app's coin vertical.
+  const keyDate = computeProductSignature("1909 S VDB Lincoln Cent", COIN_CATEGORY);
+  const commonDate = computeProductSignature("1909 VDB Lincoln Cent", COIN_CATEGORY);
+  assertNotEquals(keyDate.signature, commonDate.signature);
+});
+
+Deno.test("computeProductSignature: REGRESSION -- condition-class words (certified/uncirculated) must NOT be treated as stopwords here", () => {
+  // deriveSearchQueryFallback's stopWords strips "certified"/"uncirculated"
+  // for query-broadening purposes -- doing the same here would merge a
+  // certified/graded listing with a raw one of the same date.
+  const certified = computeProductSignature("1921 Morgan Dollar Certified", COIN_CATEGORY);
+  const uncirculated = computeProductSignature("1921 Morgan Dollar Uncirculated", COIN_CATEGORY);
+  assertNotEquals(certified.signature, uncirculated.signature);
+});
+
+Deno.test("computeProductSignature: REGRESSION -- quantity/unit words (lot/set/collection/bundle) must NOT be treated as stopwords here", () => {
+  // A single coin and a multi-coin set of the same date price completely
+  // differently -- stripping these words would merge a single-item
+  // listing's comps with a set listing's (Copilot review of PR #602,
+  // 2026-09-19).
+  const single = computeProductSignature("1921 Morgan Silver Dollar", COIN_CATEGORY);
+  const set = computeProductSignature("1921 Morgan Silver Dollar Set", COIN_CATEGORY);
+  assertNotEquals(single.signature, set.signature);
+});
+
+// ----------------------------------------------------------------
+// attemptSignatureMatch
+// ----------------------------------------------------------------
+
+function fakeSupabaseForSignatureMatch(opts: {
+  sibling?: Record<string, unknown> | null;
+  selectThrows?: boolean;
+  upsertError?: { message: string } | null;
+}) {
+  const upserted: Record<string, unknown>[] = [];
+  return {
+    client: {
+      from(table: string) {
+        if (table === "competitor_prices") {
+          return {
+            select() {
+              return {
+                eq() {
+                  return this;
+                },
+                neq() {
+                  return this;
+                },
+                gte() {
+                  return this;
+                },
+                order() {
+                  return this;
+                },
+                limit() {
+                  return this;
+                },
+                maybeSingle() {
+                  if (opts.selectThrows) return Promise.reject(new Error("db down"));
+                  return Promise.resolve({ data: opts.sibling ?? null, error: null });
+                },
+              };
+            },
+            upsert(row: Record<string, unknown>) {
+              upserted.push(row);
+              return Promise.resolve({ data: null, error: opts.upsertError ?? null });
+            },
+          };
+        }
+        return {
+          insert() {
+            return Promise.resolve({ data: null, error: null });
+          },
+        };
+      },
+    },
+    upserted,
+  };
+}
+
+const SIBLING_FETCHED_AT = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // 1h ago
+
+const FRESH_SIBLING = {
+  ebay_listing_id: "sibling-listing",
+  search_query: "1921 morgan silver dollar",
+  gemini_search_query: "1921 morgan silver dollar",
+  avg_price: 52.0,
+  min_price: 40.0,
+  max_price: 65.0,
+  median_price: 50.0,
+  your_price: 55,
+  competitor_count: 5,
+  price_distribution: [{ min: 40, max: 65, count: 5 }],
+  comp_item_ids: ["v1|1|0", "v1|2|0"],
+  fetched_at: SIBLING_FETCHED_AT,
+};
+
+Deno.test("attemptSignatureMatch: hit -> returns signatureMatch outcome, persists sibling's stats under this listing", async () => {
+  const { client, upserted } = fakeSupabaseForSignatureMatch({ sibling: FRESH_SIBLING });
+  const result = await attemptSignatureMatch({
+    supabase: client,
+    userId: "u1",
+    listingId: "this-listing",
+    signature: "sig",
+    yourPrice: 60,
+  });
+  assertEquals(result?.body.refreshMethod, "signatureMatch");
+  assertEquals(result?.body.matchedListingId, "sibling-listing");
+  assertEquals(result?.body.medianPrice, 50);
+  // yourPrice (60) - sibling's medianPrice (50) = 10, recomputed for THIS
+  // listing's own price, not copied from the sibling.
+  assertEquals(result?.body.priceDelta, 10);
+  assertEquals(upserted.length, 1);
+  assertEquals(upserted[0].ebay_listing_id, "this-listing");
+  assertEquals(upserted[0].product_signature, "sig");
+  assertEquals(upserted[0].comp_item_ids, FRESH_SIBLING.comp_item_ids);
+  // Preserves the sibling's ORIGINAL fetched_at rather than stamping "now" --
+  // this row did no live lookup, so treating it as freshly fetched would let
+  // two duplicate listings perpetually renew each other's stale snapshot.
+  assertEquals(upserted[0].fetched_at, SIBLING_FETCHED_AT);
+});
+
+Deno.test("attemptSignatureMatch: incompatible price-anchor contexts -> returns null, falls through", async () => {
+  // Sibling's aggregates were computed with priceAnchorFilter anchored on
+  // its own your_price=55; this listing's yourPrice=600 implies a
+  // completely different anchor window (10x+), so those aggregates may not
+  // reflect what a real search for THIS listing's price would find.
+  const { client, upserted } = fakeSupabaseForSignatureMatch({ sibling: FRESH_SIBLING });
+  const result = await attemptSignatureMatch({
+    supabase: client,
+    userId: "u1",
+    listingId: "this-listing",
+    signature: "sig",
+    yourPrice: 600,
+  });
+  assertEquals(result, null);
+  assertEquals(upserted.length, 0);
+});
+
+Deno.test("attemptSignatureMatch: compatible price-anchor contexts (both under $50 floor) -> hit", async () => {
+  const cheapSibling = { ...FRESH_SIBLING, your_price: 20 };
+  const { client } = fakeSupabaseForSignatureMatch({ sibling: cheapSibling });
+  const result = await attemptSignatureMatch({
+    supabase: client,
+    userId: "u1",
+    listingId: "this-listing",
+    signature: "sig",
+    yourPrice: 22,
+  });
+  assertEquals(result?.body.refreshMethod, "signatureMatch");
+});
+
+Deno.test("attemptSignatureMatch: no sibling row -> returns null", async () => {
+  const { client } = fakeSupabaseForSignatureMatch({ sibling: null });
+  const result = await attemptSignatureMatch({
+    supabase: client,
+    userId: "u1",
+    listingId: "this-listing",
+    signature: "sig",
+    yourPrice: null,
+  });
+  assertEquals(result, null);
+});
+
+Deno.test("attemptSignatureMatch: sibling below quality floor (< 3 comps) -> returns null, falls through", async () => {
+  const { client } = fakeSupabaseForSignatureMatch({
+    sibling: { ...FRESH_SIBLING, competitor_count: 2 },
+  });
+  const result = await attemptSignatureMatch({
+    supabase: client,
+    userId: "u1",
+    listingId: "this-listing",
+    signature: "sig",
+    yourPrice: null,
+  });
+  assertEquals(result, null);
+});
+
+Deno.test("attemptSignatureMatch: DB lookup failure -> returns null, does not throw", async () => {
+  const { client } = fakeSupabaseForSignatureMatch({ selectThrows: true });
+  const result = await attemptSignatureMatch({
+    supabase: client,
+    userId: "u1",
+    listingId: "this-listing",
+    signature: "sig",
+    yourPrice: null,
+  });
+  assertEquals(result, null);
+});
+
+Deno.test("attemptSignatureMatch: upsert error is non-fatal -- outcome still returned to caller", async () => {
+  // Sibling's your_price is under the $50 anchor floor so a null yourPrice
+  // here is a compatible anchor context (neither ever applied the filter).
+  const { client } = fakeSupabaseForSignatureMatch({
+    sibling: { ...FRESH_SIBLING, your_price: 20 },
+    upsertError: { message: "write failed" },
+  });
+  const result = await attemptSignatureMatch({
+    supabase: client,
+    userId: "u1",
+    listingId: "this-listing",
+    signature: "sig",
+    yourPrice: null,
+  });
+  assertEquals(result?.body.refreshMethod, "signatureMatch");
+});
+
+Deno.test("attemptSignatureMatch: no yourPrice -> priceDelta is null, not a bogus computed value", async () => {
+  const { client } = fakeSupabaseForSignatureMatch({ sibling: { ...FRESH_SIBLING, your_price: 20 } });
+  const result = await attemptSignatureMatch({
+    supabase: client,
+    userId: "u1",
+    listingId: "this-listing",
+    signature: "sig",
+    yourPrice: null,
+  });
+  assertEquals(result?.body.priceDelta, null);
 });

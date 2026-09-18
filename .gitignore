@@ -46,3 +46,7 @@ supabase-export/storage_objects.json
 supabase-export/*.json
 !supabase-export/package.json
 !supabase-export/package-lock.json
+
+# Local research/scratch artifacts, not for commit
+analyze-redesign/
+scripts/check-getitems-live.ps1

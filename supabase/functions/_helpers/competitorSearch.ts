@@ -26,6 +26,17 @@ import { runInBackground } from "./sentry.ts";
 
 export const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
+// Kill switch for the cache-by-product-signature feature, checked at call
+// time (not module load) via a live Deno.env.get() so it can be flipped in
+// production without a redeploy -- same pattern as category-lookup's
+// CATEGORY_GATE4_ENFORCE (supabase/functions/category-lookup/index.ts).
+// Default-on: signature matching only ever SKIPS a call it would otherwise
+// make (see runCompetitorSearch's wiring), so there's no new failure mode
+// to gate behind an opt-in.
+function isSignatureMatchEnabled(): boolean {
+  return (Deno.env.get("SIGNATURE_MATCH_ENABLED") ?? "true").toLowerCase() !== "false";
+}
+
 export interface CompetitorSearchOutcome {
   status: number;
   body: Record<string, unknown>;
@@ -175,6 +186,136 @@ function broadenSearchQuery(query: string): string {
     .filter((t) => !/^(ms|pr|pf|au|xf|vf)\d{1,2}$/i.test(t));
 
   return tokens.slice(0, 5).join(" ");
+}
+
+// ----------------------------------------------------------------
+// Product-signature derivation (cache-by-product-signature feature).
+//
+// Deliberately DOES NOT reuse deriveSearchQueryFallback's stopWords or
+// broadenSearchQuery's gradeNoise sets above, even though this function
+// lives right next to them and does similar-looking tokenization. Those two
+// sets exist to BROADEN a search query -- stripping a grading service name
+// or a grade number there just means "search more loosely," which is safe,
+// even desirable. Stripping the same tokens here would mean "treat two
+// listings as the SAME priced product," which is a wrong-price bug the
+// moment it's untrue -- e.g. gradeNoise strips "pcgs"/"ms63"-style tokens,
+// which would silently collapse "1921 Morgan Dollar PCGS MS63" and "...
+// MS64" into one signature despite a real price gap between those grades.
+// stopWords also strips "certified"/"uncirculated", which would collapse a
+// certified/graded listing with a raw one of the same date. And this
+// function skips deriveSearchQueryFallback's `length > 1` filter entirely --
+// that would drop single-character mint marks (S/D/P), silently merging
+// "1909 S VDB Lincoln Cent" (a key date) with "1909 VDB Lincoln Cent" (a
+// common date), the single highest-value false-positive case identified for
+// this app's coin vertical. See competitorSearch's product-signature plan
+// doc for the full reasoning (found via external entity-resolution research
+// before implementation, not just an internal guess).
+// ----------------------------------------------------------------
+// "lot"/"set"/"collection"/"bundle" are deliberately NOT in either list below
+// -- they're quantity/unit words, not filler: "1921 Morgan Silver Dollar"
+// and "1921 Morgan Silver Dollar Set" price completely differently (one
+// coin vs. a multi-coin set), so stripping the word would silently merge a
+// single-item listing's comps with a set listing's (found in Copilot review
+// of PR #602, 2026-09-19 -- a real false-positive class the original noise
+// list missed).
+const SIGNATURE_STOP_WORDS = new Set([
+  "a",
+  "an",
+  "the",
+  "and",
+  "or",
+  "of",
+  "in",
+  "for",
+  "to",
+  "with",
+  "item",
+  "listing",
+  "ebay",
+  "beautiful",
+  "stunning",
+  "rare",
+  "vintage",
+  "antique",
+  "original",
+  "authentic",
+]);
+
+const LISTING_BOILERPLATE_WORDS = new Set([
+  "free",
+  "shipping",
+  "fast",
+  "ship",
+  "combined",
+  "look",
+  "wow",
+  "sale",
+  "deal",
+  "nr",
+  "nice",
+]);
+
+// Below this many surviving significant tokens, a signature is too generic
+// to trust -- production data (2026-09-18 audit) showed short/garbled
+// titles producing queries like "202"/"Year"/"price" that repeat across
+// unrelated listings via the heuristic search-query fallback. 4 gives
+// comfortable margin below that noise floor while staying well under the
+// token count of every real duplicate found in that same audit (e.g. "1999
+// ty mcdonald teenie beanie baby" survives with 6 tokens).
+const SIGNATURE_MIN_TOKENS = 4;
+
+export interface ProductSignatureResult {
+  signature: string | null;
+  reason: string;
+}
+
+/**
+ * Derives a normalized, order-insensitive, category-scoped signature from a
+ * listing title for the cache-by-product-signature feature -- lets
+ * attemptSignatureMatch find an existing fresh comp lookup for a DIFFERENT
+ * listing of the same underlying product owned by the same seller, instead
+ * of repeating a full Gemini + eBay Browse API search. Returns
+ * `{signature: null, reason}` (never throws) whenever the title doesn't
+ * yield enough significant tokens to trust -- callers should treat a null
+ * signature exactly like a cache miss, not an error.
+ */
+export function computeProductSignature(
+  title: string,
+  categoryId?: string,
+): ProductSignatureResult {
+  if (typeof title !== "string" || title.trim().length === 0) {
+    return { signature: null, reason: "title is missing or not a string" };
+  }
+
+  // A missing/blank categoryId is deliberately treated as ineligible, not
+  // folded into a shared "nocat" bucket -- category_id is nullable on the
+  // rows this cron reads, so a common fallback bucket would let two
+  // unrelated four-token titles in different (or no) categories match each
+  // other's comps (found in Copilot review of PR #602, 2026-09-19).
+  if (typeof categoryId !== "string" || categoryId.trim().length === 0) {
+    return { signature: null, reason: "no categoryId — not eligible for signature matching" };
+  }
+
+  const tokens = title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((t) => t.length > 0)
+    .filter((t) => !SIGNATURE_STOP_WORDS.has(t) && !LISTING_BOILERPLATE_WORDS.has(t));
+
+  if (tokens.length < SIGNATURE_MIN_TOKENS) {
+    return {
+      signature: null,
+      reason: `only ${tokens.length} significant token(s) after normalization (need ${SIGNATURE_MIN_TOKENS}+)`,
+    };
+  }
+
+  const sortedTokens = [...tokens].sort();
+  const signature = `${categoryId}::${sortedTokens.join("_")}`;
+  return {
+    signature,
+    reason: `${tokens.length} significant tokens, category=${categoryId}`,
+  };
 }
 
 export interface SearchPlanAttempt {
@@ -1212,6 +1353,15 @@ export function buildCompetitorPricesUpsertPayload(params: {
    * full search on, not errors.
    */
   compItemIds?: string[] | null;
+  /**
+   * Cache-by-product-signature feature (see computeProductSignature):
+   * written on every persist path so a FUTURE listing of the same product
+   * can find this row via attemptSignatureMatch. Optional/nullable so every
+   * pre-existing call site stays source-compatible -- omitting it persists
+   * `null`, meaning "not eligible for signature matching yet," identical to
+   * a row written before this column existed.
+   */
+  productSignature?: string | null;
 }) {
   const now = params.now ?? new Date();
   return {
@@ -1230,6 +1380,7 @@ export function buildCompetitorPricesUpsertPayload(params: {
     fetched_at: now.toISOString(),
     expires_at: new Date(now.getTime() + CACHE_TTL_MS).toISOString(),
     comp_item_ids: params.compItemIds ?? null,
+    product_signature: params.productSignature ?? null,
   };
 }
 
@@ -1347,8 +1498,12 @@ export async function attemptItemsRefresh(params: {
   listingId: string;
   ebayEnv: string;
   yourPrice: number | null | undefined;
+  /** Threaded through to buildCompetitorPricesUpsertPayload -- see that
+   * param's own docstring. Computed once by the caller (runCompetitorSearch)
+   * rather than recomputed here. */
+  productSignature?: string | null;
 }): Promise<CompetitorSearchOutcome | null> {
-  const { supabase, userId, listingId, ebayEnv, yourPrice } = params;
+  const { supabase, userId, listingId, ebayEnv, yourPrice, productSignature } = params;
 
   let row: any;
   try {
@@ -1450,6 +1605,7 @@ export async function attemptItemsRefresh(params: {
       competitorCount: stats.cleanPrices.length,
       priceDistribution: stats.priceDistribution,
       compItemIds: newCompItemIds,
+      productSignature,
     });
     const { error: upsertErr } = await supabase.from("competitor_prices").upsert(payload, {
       onConflict: "user_id,ebay_listing_id",
@@ -1499,6 +1655,186 @@ export async function attemptItemsRefresh(params: {
   };
 }
 
+// Minimum comps a sibling row must have before its stats are trusted enough
+// to copy into another listing -- same literal as evaluateCompQuality's
+// default minCount, kept in sync deliberately: a signature match must never
+// propagate an already-thin snapshot to N listings just because it happened
+// to be fresh.
+const SIGNATURE_MATCH_MIN_COMPS = 3;
+
+/**
+ * Guards against reusing a sibling's aggregates across incompatible
+ * price-anchor contexts (found in Copilot review of PR #602, 2026-09-19).
+ * The sibling's avg/min/max/median/count were computed by computeCompStats,
+ * which runs priceAnchorFilter keyed on THAT listing's own yourPrice --
+ * items priced under 10% or over 10x of it get dropped before the
+ * aggregates are ever computed. If this listing's yourPrice would have
+ * produced a materially different anchor window, the sibling's aggregates
+ * may reflect comps this listing's own search would have excluded (or vice
+ * versa), and recomputing only priceDelta on top of them does not correct
+ * that. Only the two "anchor filter didn't fire at all" cases (both prices
+ * missing/under the $50 floor) or "both prices close enough that the 10x
+ * window is effectively the same" are treated as compatible; everything
+ * else falls through to a real search instead of guessing.
+ */
+function anchorContextsCompatible(
+  yourPrice: number | null | undefined,
+  siblingYourPrice: number | null | undefined,
+): boolean {
+  const a = yourPrice != null && yourPrice >= 50 ? yourPrice : null;
+  const b = siblingYourPrice != null && siblingYourPrice >= 50 ? siblingYourPrice : null;
+  if (a === null && b === null) return true; // anchor filter never applied to either
+  if (a === null || b === null) return false; // filter applied to only one
+  const ratio = a / b;
+  return ratio >= 0.5 && ratio <= 2.0;
+}
+
+/**
+ * Attempts the cache-by-product-signature path: finds an existing FRESH
+ * comp lookup for a DIFFERENT listing of the same seller with the same
+ * product signature, and reuses its stats/comp itemIds for this listing
+ * instead of running a new Gemini + eBay Browse API search. Returns a
+ * CompetitorSearchOutcome on success, or null to signal "fall through to
+ * the next path unchanged" -- same fail-open contract as
+ * attemptItemsRefresh, and every failure mode here (no sibling, stale
+ * sibling, thin sibling, DB error) falls through rather than throwing.
+ *
+ * Recomputes price_delta against THIS listing's own yourPrice rather than
+ * copying the sibling's -- two listings sharing a signature can have
+ * different seller-set prices, and copying the sibling's price_delta
+ * verbatim would show every dupe listing the wrong delta.
+ */
+export async function attemptSignatureMatch(params: {
+  // deno-lint-ignore no-explicit-any -- matches this file's existing loose
+  // supabase-js client typing.
+  supabase: any;
+  userId: string;
+  listingId: string;
+  signature: string;
+  yourPrice: number | null | undefined;
+}): Promise<CompetitorSearchOutcome | null> {
+  const { supabase, userId, listingId, signature, yourPrice } = params;
+
+  let sibling: any;
+  try {
+    const freshCutoff = new Date(Date.now() - CACHE_TTL_MS).toISOString();
+    const { data } = await supabase
+      .from("competitor_prices")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("product_signature", signature)
+      .neq("ebay_listing_id", listingId)
+      .gte("fetched_at", freshCutoff)
+      .order("fetched_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    sibling = data;
+  } catch (err) {
+    console.warn("[competitorSearch] attemptSignatureMatch: lookup failed, falling through:", err);
+    return null;
+  }
+
+  if (!sibling) {
+    console.log(`[competitorSearch] attemptSignatureMatch: no fresh sibling for signature "${signature}"`);
+    return null;
+  }
+
+  if ((sibling.competitor_count ?? 0) < SIGNATURE_MATCH_MIN_COMPS) {
+    console.log(
+      `[competitorSearch] attemptSignatureMatch: sibling listing ${sibling.ebay_listing_id} has only ${
+        sibling.competitor_count ?? 0
+      } comps (need ${SIGNATURE_MATCH_MIN_COMPS}+) — falling through`,
+    );
+    return null;
+  }
+
+  // The sibling's aggregates were computed by computeCompStats using ITS OWN
+  // your_price as the anchor for priceAnchorFilter -- if this listing's
+  // yourPrice implies a materially different anchor window, those
+  // aggregates may include/exclude comps this listing's own search would
+  // not have, and recomputing only priceDelta on top of them would not fix
+  // that (found in Copilot review of PR #602, 2026-09-19). Fall through to
+  // a real search rather than reuse an aggregate computed under an
+  // incompatible price context.
+  if (!anchorContextsCompatible(yourPrice, sibling.your_price)) {
+    console.log(
+      `[competitorSearch] attemptSignatureMatch: sibling listing ${sibling.ebay_listing_id}'s price anchor ($${sibling.your_price}) is incompatible with this listing's ($${yourPrice}) — falling through`,
+    );
+    return null;
+  }
+
+  const medianPrice: number = sibling.median_price;
+  const priceDelta = yourPrice != null ? Math.round((yourPrice - medianPrice) * 100) / 100 : null;
+
+  // Preserve the sibling's ORIGINAL fetched_at rather than stamping "now" --
+  // this row did no live Gemini/eBay lookup, so treating it as freshly
+  // fetched would let two duplicate listings perpetually renew each other's
+  // stale snapshot (each sees the other as "fresh" on its next check),
+  // silently starving the cron of any real refresh (found in Copilot review
+  // of PR #602, 2026-09-19). Expiry is derived from the same original
+  // timestamp the sibling itself will expire on.
+  const siblingFetchedAt = new Date(sibling.fetched_at);
+
+  try {
+    const payload = buildCompetitorPricesUpsertPayload({
+      userId,
+      listingId,
+      searchQuery: sibling.search_query,
+      geminiQuery: sibling.gemini_search_query ?? null,
+      avgPrice: sibling.avg_price,
+      minPrice: sibling.min_price,
+      maxPrice: sibling.max_price,
+      medianPrice,
+      priceDelta,
+      yourPrice: yourPrice ?? null,
+      competitorCount: sibling.competitor_count,
+      priceDistribution: sibling.price_distribution,
+      compItemIds: sibling.comp_item_ids ?? null,
+      productSignature: signature,
+      now: siblingFetchedAt,
+    });
+    const { error: upsertErr } = await supabase.from("competitor_prices").upsert(payload, {
+      onConflict: "user_id,ebay_listing_id",
+    });
+    if (upsertErr) {
+      console.warn("[competitorSearch] attemptSignatureMatch: upsert reported an error:", upsertErr);
+    } else {
+      console.log(
+        `[competitorSearch] Signature match saved for listing ${listingId}: reused from ${sibling.ebay_listing_id}, avg=$${
+          Number(sibling.avg_price).toFixed(2)
+        }`,
+      );
+    }
+  } catch (dbErr) {
+    // Non-fatal, matching attemptItemsRefresh's own persist-failure handling
+    // -- still return the freshly-computed data to the caller.
+    console.warn("[competitorSearch] attemptSignatureMatch: failed to persist snapshot:", dbErr);
+  }
+
+  const cacheExpiresAt = new Date(siblingFetchedAt.getTime() + CACHE_TTL_MS).toISOString();
+
+  return {
+    status: 200,
+    body: {
+      searchQuery: sibling.gemini_search_query ?? sibling.search_query,
+      finalSearchQuery: sibling.search_query,
+      geminiSearchQuery: sibling.gemini_search_query ?? null,
+      avgPrice: Math.round(Number(sibling.avg_price) * 100) / 100,
+      minPrice: sibling.min_price,
+      maxPrice: sibling.max_price,
+      medianPrice: Math.round(medianPrice * 100) / 100,
+      priceDelta,
+      competitorCount: sibling.competitor_count,
+      priceDistribution: sibling.price_distribution ?? [],
+      noData: false,
+      fromCache: false,
+      cacheExpiresAt,
+      refreshMethod: "signatureMatch",
+      matchedListingId: sibling.ebay_listing_id,
+    },
+  };
+}
+
 /**
  * Extracts up to 20 itemIds from the price-cleaned comp set for storage on
  * competitor_prices.comp_item_ids -- 20 is a single Browse API getItems
@@ -1533,6 +1869,12 @@ export async function runCompetitorSearch(params: {
   geminiKey?: string;
 }): Promise<CompetitorSearchOutcome> {
   const { supabase, userId, listingId, title, categoryId, yourPrice, ebayEnv, geminiKey } = params;
+
+  // Computed once up front (cache-by-product-signature feature) so both the
+  // new signature-match step below AND the full-search persist at the end
+  // of this function use the identical value -- every persist path needs to
+  // write it so a FUTURE listing can find this one.
+  const sig = computeProductSignature(title, categoryId);
 
   try {
     // ------------------------------------------------------------------
@@ -1590,6 +1932,30 @@ export async function runCompetitorSearch(params: {
       }
 
       // ------------------------------------------------------------------
+      // Signature-match attempt — reuse a FRESH comp lookup from a
+      // DIFFERENT listing of the same product for this same seller, if one
+      // exists. Tried before attemptItemsRefresh since a signature hit
+      // skips Gemini AND eBay entirely, cheaper than even a getItems call.
+      // Only reached when the cache check above found nothing fresh for
+      // THIS listing. Returns null (or is skipped outright when no
+      // signature was derived) to fall through unchanged.
+      // ------------------------------------------------------------------
+      if (isSignatureMatchEnabled() && sig.signature) {
+        const signatureOutcome = await attemptSignatureMatch({
+          supabase,
+          userId,
+          listingId,
+          signature: sig.signature,
+          yourPrice,
+        });
+        if (signatureOutcome) {
+          return signatureOutcome;
+        }
+      } else if (sig.signature === null) {
+        console.log(`[competitorSearch] no product signature: ${sig.reason}`);
+      }
+
+      // ------------------------------------------------------------------
       // getItems refresh attempt — cheap bulk lookup of already-known comps
       // instead of a full re-search, drawing from the (confirmed unused)
       // buy.browse.item.bulk pool rather than buy.browse. Only reached when
@@ -1605,6 +1971,7 @@ export async function runCompetitorSearch(params: {
         listingId,
         ebayEnv,
         yourPrice,
+        productSignature: sig.signature,
       });
       if (itemsRefreshOutcome) {
         return itemsRefreshOutcome;
@@ -1771,6 +2138,7 @@ export async function runCompetitorSearch(params: {
           competitorCount: cleanPrices.length,
           priceDistribution,
           compItemIds,
+          productSignature: sig.signature,
         });
 
         await supabase.from("competitor_prices").upsert(
