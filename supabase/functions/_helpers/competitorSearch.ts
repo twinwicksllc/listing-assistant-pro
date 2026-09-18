@@ -1283,7 +1283,20 @@ export async function attemptItemsRefresh(params: {
     prices: bulkResult.items.map((it) => it.price),
     yourPrice,
   });
-  const newCompItemIds = bulkResult.foundItemIds.slice(0, 20);
+
+  // Build compItemIds from the CLEANED item set, not bulkResult.foundItemIds
+  // -- foundItemIds is everything getItems returned, before the price-anchor
+  // /outlier filters computeCompStats just applied. Persisting the raw
+  // found set would let comps the stats themselves rejected keep counting
+  // toward the NEXT refresh's survival ratio, so comp_item_ids would no
+  // longer represent "the items that drove these saved stats" (Copilot
+  // review, PR #600).
+  const cleanSet = new Set(stats.cleanPrices);
+  const cleanItems = bulkResult.items.filter((it) => cleanSet.has(it.price)).slice(0, 25);
+  const newCompItemIds = cleanItems
+    .map((it) => it.itemId)
+    .filter((id): id is string => !!id)
+    .slice(0, 20);
 
   try {
     const payload = buildCompetitorPricesUpsertPayload({
@@ -1301,20 +1314,30 @@ export async function attemptItemsRefresh(params: {
       priceDistribution: stats.priceDistribution,
       compItemIds: newCompItemIds,
     });
-    await supabase.from("competitor_prices").upsert(payload, { onConflict: "user_id,ebay_listing_id" });
-    console.log(
-      `[competitorSearch] getItems refresh saved for listing ${listingId}: avg=$${
-        stats.avgPrice.toFixed(2)
-      }, n=${stats.cleanPrices.length}`,
-    );
+    const { error: upsertErr } = await supabase.from("competitor_prices").upsert(payload, {
+      onConflict: "user_id,ebay_listing_id",
+    });
+    // The Supabase client reports a failed write via a returned `error`,
+    // not a throw -- an unchecked await here would silently log/report
+    // success on a write that never landed, leaving fetched_at/comp_item_ids
+    // unchanged and causing every subsequent cron tick to repeat this same
+    // bulk lookup for no benefit (Copilot review, PR #600, citing
+    // ebayInventorySync.ts's own error-checked upsert as the precedent).
+    if (upsertErr) {
+      console.warn("[competitorSearch] attemptItemsRefresh: upsert reported an error:", upsertErr);
+    } else {
+      console.log(
+        `[competitorSearch] getItems refresh saved for listing ${listingId}: avg=$${
+          stats.avgPrice.toFixed(2)
+        }, n=${stats.cleanPrices.length}`,
+      );
+    }
   } catch (dbErr) {
     // Non-fatal, matching the full-search path's own persist-failure
     // handling -- still return the freshly-computed data to the caller.
     console.warn("[competitorSearch] attemptItemsRefresh: failed to persist snapshot:", dbErr);
   }
 
-  const cleanSet = new Set(stats.cleanPrices);
-  const cleanItems = bulkResult.items.filter((it) => cleanSet.has(it.price)).slice(0, 25);
   const cacheExpiresAt = new Date(Date.now() + CACHE_TTL_MS).toISOString();
 
   return {

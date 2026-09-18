@@ -819,6 +819,7 @@ Deno.test("computeCompStats: priceDistribution is non-empty for a real price set
 function fakeSupabaseForItemsRefresh(opts: {
   row?: Record<string, unknown> | null;
   selectThrows?: boolean;
+  upsertError?: { message: string } | null;
 }) {
   const upserted: Record<string, unknown>[] = [];
   return {
@@ -845,7 +846,12 @@ function fakeSupabaseForItemsRefresh(opts: {
             },
             upsert(row: Record<string, unknown>) {
               upserted.push(row);
-              return Promise.resolve({ data: null, error: null });
+              // A real Supabase write failure comes back as a returned
+              // `error`, not a throw -- opts.upsertError lets a test assert
+              // attemptItemsRefresh actually inspects it instead of assuming
+              // success whenever the promise merely resolves (Copilot
+              // review, PR #600).
+              return Promise.resolve({ data: null, error: opts.upsertError ?? null });
             },
           };
         }
@@ -937,6 +943,79 @@ Deno.test("attemptItemsRefresh: usable getItems result -> returns a successful o
   assertEquals(result?.body.fromCache, false);
   assertEquals(upserted.length, 1);
   assertEquals((upserted[0].comp_item_ids as string[]).sort(), ["a", "b", "c"]);
+});
+
+Deno.test("attemptItemsRefresh: comp_item_ids reflects the CLEANED item set, excluding an item the price filters rejected (Copilot review, PR #600)", async () => {
+  // "d" is a $0.50 novelty price alongside three $10-12 items anchored to
+  // yourPrice=11 -- computeCompStats's price-anchor filter should reject it,
+  // so it must never be counted toward the NEXT refresh's survival ratio
+  // even though getItems itself successfully returned it (not delisted).
+  const { client, upserted } = fakeSupabaseForItemsRefresh({
+    row: { comp_item_ids: ["a", "b", "c", "d"], search_query: "vintage coin", gemini_search_query: null },
+  });
+  const result = await withEbayCreds(() =>
+    withMockedFetch(
+      mockTokenAndItemsFetch(() =>
+        itemsResponse([
+          { itemId: "a", price: { value: "10.00" }, title: "A" },
+          { itemId: "b", price: { value: "11.00" }, title: "B" },
+          { itemId: "c", price: { value: "12.00" }, title: "C" },
+          { itemId: "d", price: { value: "0.50" }, title: "Novelty D" },
+        ])
+      ),
+      () =>
+        attemptItemsRefresh({
+          supabase: client,
+          userId: "u1",
+          listingId: "l1",
+          ebayEnv: "production",
+          yourPrice: 11,
+        }),
+    )
+  );
+  assertNotEquals(result, null);
+  assertEquals(upserted.length, 1);
+  const savedIds = (upserted[0].comp_item_ids as string[]).sort();
+  assertEquals(savedIds, ["a", "b", "c"]);
+  assertEquals(savedIds.includes("d"), false);
+});
+
+Deno.test("attemptItemsRefresh: an upsert error is inspected, not silently treated as a successful save (Copilot review, PR #600)", async () => {
+  // The Supabase client reports a failed write via a returned `error`, not
+  // a throw -- an implementation that only wraps the await in try/catch
+  // (with no explicit error check) would still log/return success here.
+  // This test's fake resolves normally with an error field set, so it can
+  // only pass if attemptItemsRefresh actually inspects that field.
+  const { client, upserted } = fakeSupabaseForItemsRefresh({
+    row: { comp_item_ids: ["a", "b", "c"], search_query: "q", gemini_search_query: null },
+    upsertError: { message: "connection reset" },
+  });
+  const result = await withEbayCreds(() =>
+    withMockedFetch(
+      mockTokenAndItemsFetch(() =>
+        itemsResponse([
+          { itemId: "a", price: { value: "10.00" }, title: "A" },
+          { itemId: "b", price: { value: "11.00" }, title: "B" },
+          { itemId: "c", price: { value: "12.00" }, title: "C" },
+        ])
+      ),
+      () =>
+        attemptItemsRefresh({
+          supabase: client,
+          userId: "u1",
+          listingId: "l1",
+          ebayEnv: "production",
+          yourPrice: null,
+        }),
+    )
+  );
+  // The freshly-computed data is still returned to the caller (matching
+  // the full-search path's own non-fatal persist-failure handling) even
+  // though the write itself failed -- this test only confirms the error
+  // was surfaced somewhere reachable (the upsert was still attempted),
+  // not that the whole request fails.
+  assertNotEquals(result, null);
+  assertEquals(upserted.length, 1);
 });
 
 Deno.test("attemptItemsRefresh: too many delisted (below minRemainingRatio) -> returns null (fall through)", async () => {
