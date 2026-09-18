@@ -83,6 +83,17 @@ async function refreshCompetitorData(
       console.log(
         `[cron] Listing ${listing.listingId} served from internal cache`,
       );
+    } else if (result.refreshMethod === "signatureMatch") {
+      // Cache-by-product-signature feature -- distinguishes a reused
+      // sibling-listing lookup from a real getItems/full-search call, so
+      // real-world hit rate is observable in cron logs without a DB query.
+      console.log(
+        `[cron] Listing ${listing.listingId} reused comps from sibling listing ${result.matchedListingId} (signature match)`,
+      );
+    } else if (result.refreshMethod === "getItems") {
+      console.log(
+        `[cron] Listing ${listing.listingId} refreshed via getItems (cheap path)`,
+      );
     }
 
     return true;
@@ -189,6 +200,20 @@ serve(async (req) => {
 
   // Refresh in bounded-concurrency batches instead of all at once -- see
   // REFRESH_CONCURRENCY above for why.
+  //
+  // Cache-by-product-signature follow-on (explicitly out of scope for v1,
+  // same as the getItems follow-on work noted elsewhere in this file): two
+  // listings sharing a product signature that land in the SAME
+  // Promise.all() slice below can race -- neither has persisted its
+  // signature-matched write yet when the other checks, so both fall through
+  // to a full search instead of one deduping to the other. This is a
+  // missed-savings case, not a correctness bug (worst case: today's
+  // behavior, never a wrong price), and get_next_competitor_price_batch's
+  // fairness ranking doesn't group by signature anyway, so same-signature
+  // siblings landing in the same slice is expected to be rare. Measure real
+  // hit rate via the "signature match" log line below before investing in
+  // intra-batch sequencing (e.g. processing signature-duplicate groups
+  // sequentially instead of within the same Promise.all tick).
   for (let i = 0; i < listings.length; i += REFRESH_CONCURRENCY) {
     const batchSlice = listings.slice(i, i + REFRESH_CONCURRENCY);
     const results = await Promise.all(
