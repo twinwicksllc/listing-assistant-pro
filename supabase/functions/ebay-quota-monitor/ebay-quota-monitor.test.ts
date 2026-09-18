@@ -246,7 +246,7 @@ Deno.test("fetchEbayRateLimits: falls back to v1_beta when v1 404s", async () =>
 
 Deno.test("fetchEbayRateLimits: does NOT fall back on a non-404 failure (auth/scope errors aren't fixed by trying the other path)", async () => {
   const calledUrls: string[] = [];
-  await assertRejects(
+  const error = await assertRejects(
     () =>
       withMockedFetch(
         (url) => {
@@ -256,22 +256,30 @@ Deno.test("fetchEbayRateLimits: does NOT fall back on a non-404 failure (auth/sc
         () => fetchEbayRateLimits("fake-token", "production"),
       ),
     Error,
-    "403",
   );
   // Only the first (v1) attempt should have fired -- a 403 means "try again
   // at a different path" won't help, so falling back here would just mask
   // the real error behind a second, identically-doomed request.
   assertEquals(calledUrls.length, 1);
+  assertStringIncludes(error.message, "403");
+  // The message must say this was a fail-fast, not claim v1_beta was tried
+  // when it was deliberately skipped (Copilot review).
+  assertStringIncludes(error.message, "failed fast");
+  assertStringIncludes(error.message, "no fallback attempted");
 });
 
 Deno.test("fetchEbayRateLimits: throws with both attempts' details when both v1 and v1_beta 404", async () => {
-  await assertRejects(
+  const error = await assertRejects(
     () =>
       withMockedFetch(
         () => new Response("not found", { status: 404 }),
         () => fetchEbayRateLimits("fake-token", "production"),
       ),
     Error,
-    "v1_beta: 404",
   );
+  // A regression that stopped recording the first (v1) attempt would still
+  // pass a test asserting only the v1_beta detail -- assert both paths'
+  // status are present in the message (Copilot review).
+  assertStringIncludes(error.message, "v1: 404");
+  assertStringIncludes(error.message, "v1_beta: 404");
 });
