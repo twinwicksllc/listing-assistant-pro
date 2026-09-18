@@ -700,7 +700,11 @@ Deno.test("fetchEbayItemsBulk: a missing itemId (404) is reported as missingItem
   assertEquals(result.missingItemIds.sort(), ["b", "c"]);
 });
 
-Deno.test("fetchEbayItemsBulk: a single item failing after 3 retries on a persistent 5xx is treated as missing, not a whole-batch failure, when other items succeed", async () => {
+Deno.test("fetchEbayItemsBulk: a single item failing after 3 retries on a persistent 5xx is UNCERTAIN, not confirmed missing, and doesn't sink other items (Copilot review, PR #601)", async () => {
+  // Conflating a transient failure with a confirmed 404 would let a flaky
+  // single request permanently drop a still-live comp from the next
+  // refresh's persisted comp_item_ids -- this is the exact regression
+  // guard for that fix.
   const { client } = fakeSupabaseForLogging();
   const result = await withMockedFetch(
     (url) => {
@@ -718,7 +722,57 @@ Deno.test("fetchEbayItemsBulk: a single item failing after 3 retries on a persis
       }),
   );
   assertEquals(result.foundItemIds, ["b"]);
-  assertEquals(result.missingItemIds, ["a"]);
+  assertEquals(result.missingItemIds, []);
+  assertEquals(result.uncertainItemIds, ["a"]);
+});
+
+Deno.test("fetchEbayItemsBulk: a 404 is confirmed missing, a persistent 500 for a different item is uncertain -- the two are never conflated", async () => {
+  const { client } = fakeSupabaseForLogging();
+  const result = await withMockedFetch(
+    (url) => {
+      const id = itemIdFromUrl(url);
+      if (id === "a") return singleItemResponse({ itemId: "a", price: { value: "10.00" }, title: "A" });
+      if (id === "b") return new Response("gone", { status: 404 });
+      return new Response("boom", { status: 500 }); // c
+    },
+    () =>
+      fetchEbayItemsBulk({
+        token: "tok",
+        itemIds: ["a", "b", "c"],
+        ebayEnv: "production",
+        supabaseForLogging: client,
+        loggingCaller: "test",
+      }),
+  );
+  assertEquals(result.foundItemIds, ["a"]);
+  assertEquals(result.missingItemIds, ["b"]);
+  assertEquals(result.uncertainItemIds, ["c"]);
+});
+
+Deno.test("fetchEbayItemsBulk: an abort/timeout-shaped rejection is uncertain, not a whole-batch failure", async () => {
+  // Simulates what a real per-item AbortController timeout produces (fetch
+  // rejecting with an AbortError) without actually waiting out
+  // ITEM_LOOKUP_TIMEOUT_MS's real delay in a unit test -- the retry catch
+  // branch treats any thrown fetch error identically regardless of cause,
+  // so this exercises the same code path a real timeout would.
+  const { client } = fakeSupabaseForLogging();
+  const result = await withMockedFetch(
+    (url) => {
+      const id = itemIdFromUrl(url);
+      if (id === "a") return Promise.reject(new DOMException("aborted", "AbortError"));
+      return singleItemResponse({ itemId: "b", price: { value: "5.00" }, title: "B" });
+    },
+    () =>
+      fetchEbayItemsBulk({
+        token: "tok",
+        itemIds: ["a", "b"],
+        ebayEnv: "production",
+        supabaseForLogging: client,
+        loggingCaller: "test",
+      }),
+  );
+  assertEquals(result.foundItemIds, ["b"]);
+  assertEquals(result.uncertainItemIds, ["a"]);
 });
 
 Deno.test("fetchEbayItemsBulk: every item failing after retries throws (nothing at all came back)", async () => {

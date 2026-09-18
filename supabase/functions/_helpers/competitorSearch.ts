@@ -633,10 +633,36 @@ export function parseCompetitorItem(item: unknown): CompetitorItem | null {
   }
 }
 
+// Per-item HTTP deadline (Copilot review, PR #601) -- without this, a single
+// stalled eBay response holds Promise.allSettled (and therefore the whole
+// refresh, and the cron's current batch slot) open until the Edge Function's
+// own gateway ceiling, since allSettled can't finish until every promise
+// settles one way or another.
+const ITEM_LOOKUP_TIMEOUT_MS = 8_000;
+
+// Bounds how many single-item lookups run concurrently WITHIN one
+// fetchEbayItemsBulk call (Copilot review, PR #601). itemIds is already
+// capped at 20 by callers, but competitor-prices-cron itself refreshes up to
+// REFRESH_CONCURRENCY (15) listings in parallel -- with unbounded per-item
+// fan-out, a normal batch of 15 listings x 20 stored ids could fire up to 300
+// simultaneous eBay requests at once, versus the 15 the replaced bulk
+// endpoint would have made. Capping this helper's OWN concurrency keeps the
+// worst case bounded (15 x 4 = 60) regardless of what the outer cron does.
+const ITEM_LOOKUP_CONCURRENCY = 4;
+
 export interface BulkItemsLookupResult {
   items: CompetitorItem[];
   foundItemIds: string[];
+  /** Confirmed gone -- eBay returned a 404 for this id. Safe to drop. */
   missingItemIds: string[];
+  /**
+   * Transient failure (timeout, 5xx exhausted, network error) -- NOT a
+   * confirmed delisting (Copilot review, PR #601: conflating the two let a
+   * flaky single request permanently drop a still-live comp from
+   * comp_item_ids on the next persist). Callers should retain these ids for
+   * a future refresh attempt rather than treat them as gone.
+   */
+  uncertainItemIds: string[];
 }
 
 /**
@@ -664,13 +690,26 @@ export interface BulkItemsLookupResult {
  * original design for continuity with the quota-monitor dashboard/alerts,
  * even though the mechanism is now N single-item calls, not one bulk call.
  *
- * A 404 for one itemId means delisted/ended -- that id alone is added to
- * missingItemIds, never treated as a failure for the whole batch. Only a
- * fully-failed HTTP request (after retries, non-404) throws for that one
- * id; other ids in the same batch are unaffected (Promise.allSettled).
+ * Three outcomes per itemId, NOT two (Copilot review, PR #601 -- the first
+ * version conflated the last two, which let a flaky single request
+ * permanently drop a still-live comp from the next refresh's persisted set):
+ * - found: eBay returned a usable item -- alive, in `items`/`foundItemIds`.
+ * - missing (confirmed gone): a 404, or a 200 whose shape didn't parse into
+ *   a usable comp -- in `missingItemIds`. Safe to drop permanently.
+ * - uncertain (NOT confirmed gone): every retry timed out, errored, or
+ *   returned a non-404 non-2xx status (e.g. a 403, meaning the endpoint
+ *   itself may have broken) -- in `uncertainItemIds`. Callers should retain
+ *   these ids for a future attempt rather than treat them as delisted.
  * An item that IS returned but shows e.g. OUT_OF_STOCK availability is
  * still alive (the listing exists), not delisted -- this function does
  * not treat availability status as a delisting signal, only a 404 does.
+ *
+ * Each per-item HTTP attempt is bounded by ITEM_LOOKUP_TIMEOUT_MS (a stalled
+ * response can't hold the whole refresh open), and lookups within one call
+ * run at most ITEM_LOOKUP_CONCURRENCY at a time (competitor-prices-cron
+ * already refreshes multiple listings in parallel; unbounded per-item
+ * fan-out on top of that could multiply into hundreds of simultaneous
+ * requests -- see both constants' own comments).
  */
 export async function fetchEbayItemsBulk(params: {
   token: string;
@@ -688,11 +727,19 @@ export async function fetchEbayItemsBulk(params: {
     `[competitorSearch] Browse API single-item lookup: ${itemIds.length} itemId(s)`,
   );
 
-  async function fetchOne(itemId: string): Promise<{ itemId: string; item: CompetitorItem | null; missing: boolean }> {
+  type FetchOneResult =
+    | { itemId: string; kind: "found"; item: CompetitorItem }
+    | { itemId: string; kind: "missing" } // confirmed 404 -- actually gone
+    | { itemId: string; kind: "uncertain"; reason: string }; // transient -- unknown, not gone
+
+  async function fetchOne(itemId: string): Promise<FetchOneResult> {
     const url = `${apiBase}/buy/browse/v1/item/${encodeURIComponent(itemId)}`;
     let resp: Response | null = null;
+    let lastErr: unknown = null;
 
     for (let attempt = 0; attempt < 3; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), ITEM_LOOKUP_TIMEOUT_MS);
       try {
         // Same reasoning as fetchEbayCompetitors: log at the point of the
         // actual HTTP attempt, not once per id, since a retried 5xx still
@@ -704,7 +751,9 @@ export async function fetchEbayItemsBulk(params: {
             "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
             Accept: "application/json",
           },
+          signal: controller.signal,
         });
+        lastErr = null;
 
         // 404 means "this specific item is gone" -- not retryable, and not
         // a failure for the batch as a whole (see this function's own
@@ -722,67 +771,98 @@ export async function fetchEbayItemsBulk(params: {
           await new Promise((r) => setTimeout(r, delayMs));
         }
       } catch (fetchErr) {
+        lastErr = fetchErr;
+        resp = null;
         if (attempt < 2) {
           const delayMs = 1500 * Math.pow(1.5, attempt);
+          const isTimeout = controller.signal.aborted;
           console.warn(
-            `[competitorSearch] getItem(${itemId}) fetch error (attempt ${attempt + 1}/3) — retrying in ${delayMs}ms`,
+            `[competitorSearch] getItem(${itemId}) ${isTimeout ? "timed out" : "fetch error"} (attempt ${
+              attempt + 1
+            }/3) — retrying in ${delayMs}ms`,
           );
           await new Promise((r) => setTimeout(r, delayMs));
         }
+      } finally {
+        clearTimeout(timer);
       }
     }
 
     if (resp && resp.status === 404) {
-      return { itemId, item: null, missing: true };
+      return { itemId, kind: "missing" };
     }
     if (!resp || !resp.ok) {
-      const errBody = (await resp?.text?.().catch(() => "(could not read body)")) ??
-        "(no response)";
-      throw new Error(
-        `eBay getItem(${itemId}) error: ${resp?.status ?? "unknown"} — ${errBody.slice(0, 200)}`,
-      );
+      // Exhausted retries with no confirmed 404 -- this is unknown, not
+      // confirmed gone (Copilot review, PR #601). A 403 (the single-item
+      // endpoint itself breaking) lands here too, which is intentional: it
+      // should read as "couldn't confirm," not "this one item vanished."
+      const status = resp?.status;
+      const errBody = resp ? await resp.text().catch(() => "(could not read body)") : null;
+      const reason = errBody !== null
+        ? `HTTP ${status} — ${errBody.slice(0, 200)}`
+        : `${lastErr instanceof Error ? lastErr.message : String(lastErr ?? "unknown error")}`;
+      return { itemId, kind: "uncertain", reason };
     }
 
-    const respText = await resp.text();
+    let respText: string;
     let json: any;
     try {
+      respText = await resp.text();
       json = JSON.parse(respText);
-    } catch {
-      throw new Error(`eBay getItem(${itemId}) returned invalid JSON`);
+    } catch (parseErr) {
+      // A malformed response is also "couldn't confirm," not "gone."
+      return {
+        itemId,
+        kind: "uncertain",
+        reason: `invalid JSON response: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
+      };
     }
 
     const parsed = parseCompetitorItem(json);
-    return { itemId, item: parsed, missing: parsed === null };
+    if (!parsed) {
+      // The HTTP call succeeded but the item shape didn't parse (e.g.
+      // missing/zero price) -- distinct from a 404: eBay found the item,
+      // it's just not usable as a comp. Treat as confirmed-not-a-comp
+      // (missing), not uncertain, since there's no reason to retry it.
+      return { itemId, kind: "missing" };
+    }
+    return { itemId, kind: "found", item: parsed };
   }
 
-  // Bounded concurrency, not Promise.all unbounded -- itemIds is already
-  // capped at 20 (a single listing's tracked comp set), so 20 concurrent
-  // single-item requests is a small, known ceiling, not an open-ended fan-
-  // out. A single failing id (thrown, non-404 error) must not sink every
-  // other id in the batch -- allSettled, not all.
-  const settled = await Promise.allSettled(itemIds.map(fetchOne));
+  // Bounded concurrency WITHIN this call (Copilot review, PR #601) -- see
+  // ITEM_LOOKUP_CONCURRENCY's own comment for why unbounded Promise.all(map)
+  // is unsafe once the outer cron's own parallelism is accounted for. A
+  // single failing id must not sink every other id in the batch, so results
+  // are collected via a plain array + index rather than allSettled (nothing
+  // here throws per-item anymore -- fetchOne always resolves; only a
+  // programmer error would reject, and that should propagate).
+  const results: FetchOneResult[] = new Array(itemIds.length);
+  let nextIndex = 0;
+  async function worker() {
+    while (true) {
+      const i = nextIndex++;
+      if (i >= itemIds.length) return;
+      results[i] = await fetchOne(itemIds[i]);
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(ITEM_LOOKUP_CONCURRENCY, itemIds.length) }, worker),
+  );
 
   const items: CompetitorItem[] = [];
   const missingItemIds: string[] = [];
-  let firstError: Error | null = null;
+  const uncertainItemIds: string[] = [];
 
-  for (let i = 0; i < settled.length; i++) {
-    const outcome = settled[i];
-    if (outcome.status === "rejected") {
-      // A real (non-404) failure on one id. Don't throw immediately --
-      // still process every other id's result -- but remember the first
-      // failure so the caller can decide whether the batch as a whole is
-      // trustworthy (see isItemsRefreshUsable's foundCount/requestedCount
-      // ratio, which will naturally treat a thrown-away id the same as a
-      // missing one for the purpose of that ratio).
-      firstError ??= outcome.reason instanceof Error ? outcome.reason : new Error(String(outcome.reason));
-      missingItemIds.push(itemIds[i]);
-      continue;
-    }
-    if (outcome.value.missing || !outcome.value.item) {
-      missingItemIds.push(outcome.value.itemId);
+  for (const outcome of results) {
+    if (outcome.kind === "found") {
+      items.push(outcome.item);
+    } else if (outcome.kind === "missing") {
+      missingItemIds.push(outcome.itemId);
     } else {
-      items.push(outcome.value.item);
+      uncertainItemIds.push(outcome.itemId);
+      console.warn(
+        `[competitorSearch] getItem(${outcome.itemId}) uncertain, not confirmed delisted: ${outcome.reason}`,
+      );
     }
   }
 
@@ -791,17 +871,19 @@ export async function fetchEbayItemsBulk(params: {
     .filter((id): id is string => !!id);
 
   console.log(
-    `[competitorSearch] Single-item lookups: ${foundItemIds.length}/${itemIds.length} requested itemIds still present`,
+    `[competitorSearch] Single-item lookups: ${foundItemIds.length}/${itemIds.length} requested itemIds still present ` +
+      `(${missingItemIds.length} confirmed gone, ${uncertainItemIds.length} uncertain)`,
   );
 
-  // Only throw if EVERY id failed/errored -- a partial success (some ids
-  // found, some 404/errored) is exactly the "some comps delisted" case
-  // isItemsRefreshUsable already exists to evaluate, not a hard failure.
-  if (items.length === 0 && firstError) {
-    throw firstError;
+  // Only throw if EVERY id came back uncertain with nothing confirmed either
+  // way -- that's the "the endpoint itself may be broken" case (e.g. every
+  // call 403s), which should surface as a hard failure rather than a
+  // 0-comps-found result silently persisted.
+  if (items.length === 0 && missingItemIds.length === 0 && uncertainItemIds.length === itemIds.length) {
+    throw new Error(`eBay getItem: all ${itemIds.length} lookups failed/uncertain`);
   }
 
-  return { items, foundItemIds, missingItemIds };
+  return { items, foundItemIds, missingItemIds, uncertainItemIds };
 }
 
 export interface CompSearchAttemptResult {
@@ -1314,9 +1396,15 @@ export async function attemptItemsRefresh(params: {
     return null;
   }
 
+  // Uncertain ids count toward "survived" for the usability check -- they
+  // are NOT confirmed gone (Copilot review, PR #601), so treating them like
+  // confirmed delistings here would make a transient blip (a timeout, one
+  // flaky 500) look like real market attrition and trigger an unnecessary
+  // fall-through to a full rediscovery search.
+  const survivedCount = bulkResult.items.length + bulkResult.uncertainItemIds.length;
   const usability = isItemsRefreshUsable({
     requestedCount: storedItemIds.length,
-    foundCount: bulkResult.items.length,
+    foundCount: survivedCount,
   });
   if (!usability.usable) {
     console.log(`[competitorSearch] attemptItemsRefresh: ${usability.reason} — falling through to full search`);
@@ -1337,10 +1425,15 @@ export async function attemptItemsRefresh(params: {
   // review, PR #600).
   const cleanSet = new Set(stats.cleanPrices);
   const cleanItems = bulkResult.items.filter((it) => cleanSet.has(it.price)).slice(0, 25);
-  const newCompItemIds = cleanItems
-    .map((it) => it.itemId)
-    .filter((id): id is string => !!id)
-    .slice(0, 20);
+  // Retain uncertainItemIds too, not just confirmed-found ones (Copilot
+  // review, PR #601) -- an id that timed out or 500'd this time is NOT
+  // confirmed delisted, so dropping it here would permanently bias future
+  // refreshes against a comp that's very likely still live. Only ids
+  // fetchEbayItemsBulk actually confirmed gone (missingItemIds) are excluded.
+  const newCompItemIds = [
+    ...cleanItems.map((it) => it.itemId).filter((id): id is string => !!id),
+    ...bulkResult.uncertainItemIds,
+  ].slice(0, 20);
 
   try {
     const payload = buildCompetitorPricesUpsertPayload({
