@@ -27,6 +27,32 @@ Deno.test("buildAuthUrl: joins the real EBAY_OAUTH_SCOPES into one space-delimit
   assertEquals(parsed.searchParams.get("scope"), EBAY_OAUTH_SCOPES.join(" "));
 });
 
+Deno.test("buildAuthUrl: the scope param actually contains every scope this app requires (hardcoded, not derived from the same constant under test)", () => {
+  // Copilot review, PR #597: the assertion above compares against
+  // EBAY_OAUTH_SCOPES itself, so a regression that deleted a required scope
+  // from constants.ts would change both sides identically and still pass.
+  // These four strings are hardcoded here -- confirmed against
+  // constants.ts's own "(required)" comments -- so a future edit to
+  // EBAY_OAUTH_SCOPES that drops one of them fails this test.
+  const REQUIRED_SCOPES = [
+    "https://api.ebay.com/oauth/api_scope",
+    "https://api.ebay.com/oauth/api_scope/sell.inventory",
+    "https://api.ebay.com/oauth/api_scope/sell.account",
+    "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
+  ];
+  const url = buildAuthUrl("https://auth.ebay.com", "client", "runame");
+  const scopeParam = new URL(url).searchParams.get("scope") ?? "";
+  const actualScopes = scopeParam.split(" ");
+  for (const required of REQUIRED_SCOPES) {
+    assertEquals(
+      actualScopes.includes(required),
+      true,
+      `expected scope param to include "${required}"`,
+    );
+  }
+  assertEquals(actualScopes.length >= REQUIRED_SCOPES.length, true);
+});
+
 Deno.test("buildAuthUrl: URL-encodes a redirect_uri containing reserved characters", () => {
   const url = buildAuthUrl(
     "https://auth.ebay.com",

@@ -122,11 +122,12 @@ Deno.test("getResourceIdFromLocation: null location returns null rather than thr
 // intercept fetchWithTimeout directly.
 
 function withMockedFetch<T>(
-  handler: (url: string) => Response | Promise<Response>,
+  handler: (url: string, init?: RequestInit) => Response | Promise<Response>,
   fn: () => Promise<T>,
 ): Promise<T> {
   const original = globalThis.fetch;
-  globalThis.fetch = ((url: string | URL | Request) => Promise.resolve(handler(String(url)))) as typeof fetch;
+  globalThis.fetch =
+    ((url: string | URL | Request, init?: RequestInit) => Promise.resolve(handler(String(url), init))) as typeof fetch;
   return fn().finally(() => {
     globalThis.fetch = original;
   });
@@ -145,6 +146,21 @@ Deno.test("probeTokenEnvironment: a token accepted by the production Identity AP
   assertEquals(result, "production");
   // Production is probed first and returns ok -- sandbox should never be tried.
   assertEquals(calledUrls, [IDENTITY_API_PROD]);
+});
+
+Deno.test("probeTokenEnvironment: forwards the supplied token as a Bearer Authorization header (Copilot review, PR #597 -- the mock previously ignored RequestInit entirely, so this would still pass even if the header were wrong or missing)", async () => {
+  const capturedAuthHeaders: (string | null)[] = [];
+  const result = await withMockedFetch(
+    (url, init) => {
+      const headers = new Headers(init?.headers);
+      capturedAuthHeaders.push(headers.get("Authorization"));
+      if (url === IDENTITY_API_PROD) return new Response("{}", { status: 200 });
+      return new Response("", { status: 401 });
+    },
+    () => probeTokenEnvironment("my-real-user-token"),
+  );
+  assertEquals(result, "production");
+  assertEquals(capturedAuthHeaders, ["Bearer my-real-user-token"]);
 });
 
 Deno.test("probeTokenEnvironment: a token rejected by production but accepted by sandbox is detected as 'sandbox'", async () => {
