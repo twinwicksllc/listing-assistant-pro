@@ -267,6 +267,32 @@ export async function pruneOldCallLogRows(
   return { pruned: true };
 }
 
+/**
+ * Counts today's ebay_browse_call_log rows against the buy.browse pool
+ * specifically. Exported so the resource="buy.browse" filter -- the fix
+ * for a real regression risk found during the getItems follow-on work's
+ * planning (an unfiltered count would let a burst of cheap getItems calls
+ * falsely inflate this early-warning heuristic for a pool nowhere near
+ * exhausted) -- has direct test coverage against a fake Supabase client,
+ * same pattern as pruneOldCallLogRows.
+ */
+export async function countSameDayBrowseCalls(
+  // deno-lint-ignore no-explicit-any -- matches this file's existing loose
+  // supabase-js client typing (pruneOldCallLogRows, etc.).
+  svc: any,
+  todayStart: Date,
+): Promise<{ count: number | null; error: { message: string } | null }> {
+  const { count, error } = await svc
+    .from("ebay_browse_call_log")
+    .select("*", { count: "exact", head: true })
+    // Reuses the same constant findBrowseRate/the poll insert derive the
+    // resource name from, so a future rename can't make the quota poll and
+    // this same-day counter silently disagree (Copilot review, PR #599).
+    .eq("resource", BROWSE_RESOURCE_NAME)
+    .gte("created_at", todayStart.toISOString());
+  return { count: count ?? null, error: error ?? null };
+}
+
 async function sendQuotaAlertEmail(params: {
   limit: number;
   pollRemaining: number;
@@ -421,16 +447,11 @@ serve(async (req) => {
     // Same-day running count from this app's own counter, independent of
     // eBay's poll -- see the migration's comment for why this needed its own
     // table rather than reusing usage_tracking (NOT NULL user_id there,
-    // this is an app-level count). A query error must NOT silently become 0
-    // -- treating an unknown count as zero-usage could suppress a real
-    // warning during exactly the failure this counter exists to catch
-    // (Copilot review, PR #581), so a failed count is reported as unknown
-    // (null) and excluded from shouldWarn's same-day check rather than
-    // defaulting to 0 (eBay's own poll signal still applies independently).
-    const { count: sameDayCountRaw, error: countErr } = await svc
-      .from("ebay_browse_call_log")
-      .select("*", { count: "exact", head: true })
-      .gte("created_at", todayStart.toISOString());
+    // this is an app-level count). Extracted to a standalone function (below
+    // this handler) so the resource="buy.browse" filter has direct test
+    // coverage against a fake Supabase client, matching pruneOldCallLogRows'
+    // own precedent (Copilot review, PR #582).
+    const { count: sameDayCountRaw, error: countErr } = await countSameDayBrowseCalls(svc, todayStart);
     if (countErr) {
       console.error("[ebay-quota-monitor] Same-day count query failed:", countErr.message);
       captureException(new Error(`Same-day count query failed: ${countErr.message}`), {
