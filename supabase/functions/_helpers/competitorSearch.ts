@@ -883,6 +883,57 @@ function removeOutliers(prices: number[]): number[] {
   return filtered.length >= 2 ? filtered : prices; // Fallback if too aggressive
 }
 
+/**
+ * Builds the exact row upserted into competitor_prices after a successful
+ * search. Extracted as a pure function (rather than inlined in
+ * runCompetitorSearch) specifically so fetched_at/expires_at are directly
+ * unit-testable without mocking the whole search pipeline -- their absence
+ * here was a real production bug (2026-09-18): a Postgres column DEFAULT
+ * only fires on INSERT, never on ON CONFLICT DO UPDATE, so omitting
+ * fetched_at left every refresh silently keeping the original insert-time
+ * value forever. That froze every row's staleness clock while
+ * get_next_competitor_price_batch's 24h filter kept re-selecting the same
+ * ~541 rows as "stale," and competitor-prices-cron (every 5 min) kept
+ * re-fetching them in an unbroken loop -- confirmed via pg_stat_user_tables
+ * showing 48,292 updates against only 578 inserts on this table, and every
+ * row's fetched_at frozen at the same ~20-hour-old timestamp. That loop is
+ * what actually burned a full day's 5,000-call Browse API quota with zero
+ * new listings created, not any per-listing query-fan-out logic.
+ */
+export function buildCompetitorPricesUpsertPayload(params: {
+  userId: string;
+  listingId: string;
+  searchQuery: string;
+  geminiQuery: string | null;
+  avgPrice: number;
+  minPrice: number;
+  maxPrice: number;
+  medianPrice: number;
+  priceDelta: number | null;
+  yourPrice: number | null;
+  competitorCount: number;
+  priceDistribution: unknown;
+  now?: Date;
+}) {
+  const now = params.now ?? new Date();
+  return {
+    user_id: params.userId,
+    ebay_listing_id: params.listingId,
+    search_query: params.searchQuery,
+    gemini_search_query: params.geminiQuery,
+    avg_price: Math.round(params.avgPrice * 100) / 100,
+    min_price: params.minPrice,
+    max_price: params.maxPrice,
+    median_price: Math.round(params.medianPrice * 100) / 100,
+    price_delta: params.priceDelta,
+    your_price: params.yourPrice,
+    competitor_count: params.competitorCount,
+    price_distribution: params.priceDistribution,
+    fetched_at: now.toISOString(),
+    expires_at: new Date(now.getTime() + CACHE_TTL_MS).toISOString(),
+  };
+}
+
 // ----------------------------------------------------------------
 // Run a full competitor-price search + persist cycle for one listing.
 // Assumes the caller has already validated its inputs (non-empty title,
@@ -1096,24 +1147,23 @@ export async function runCompetitorSearch(params: {
     // ------------------------------------------------------------------
     if (userId && listingId) {
       try {
-        const expiresAt = new Date(Date.now() + CACHE_TTL_MS).toISOString();
+        const payload = buildCompetitorPricesUpsertPayload({
+          userId,
+          listingId,
+          searchQuery: chosenQuery,
+          geminiQuery: geminiQuery ?? null,
+          avgPrice,
+          minPrice,
+          maxPrice,
+          medianPrice,
+          priceDelta,
+          yourPrice: yourPrice ?? null,
+          competitorCount: cleanPrices.length,
+          priceDistribution,
+        });
 
         await supabase.from("competitor_prices").upsert(
-          {
-            user_id: userId,
-            ebay_listing_id: listingId,
-            search_query: chosenQuery,
-            gemini_search_query: geminiQuery ?? null,
-            avg_price: Math.round(avgPrice * 100) / 100,
-            min_price: minPrice,
-            max_price: maxPrice,
-            median_price: Math.round(medianPrice * 100) / 100,
-            price_delta: priceDelta,
-            your_price: yourPrice ?? null,
-            competitor_count: cleanPrices.length,
-            price_distribution: priceDistribution,
-            expires_at: expiresAt,
-          },
+          payload,
           { onConflict: "user_id,ebay_listing_id" },
         );
 
