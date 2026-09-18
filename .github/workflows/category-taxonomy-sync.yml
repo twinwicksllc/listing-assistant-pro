@@ -44,6 +44,23 @@ name: Category Taxonomy Maintenance
 # above read `curl: (22) The requested URL returned error: 401`. Both jobs had
 # been reporting false-positive success this way -- there is no way to know
 # from the Actions UI history how many prior runs were silently broken.
+#
+# Switched from SUPABASE_SERVICE_KEY to CRON_SECRET (2026-09-17, same day):
+# Supabase auto-rotated this project's legacy-JWT-format API keys today --
+# SUPABASE_SERVICE_ROLE_KEY and six sibling secrets all changed at the
+# identical millisecond, including new SUPABASE_PUBLISHABLE_KEYS/
+# SUPABASE_SECRET_KEYS/SUPABASE_JWKS names, implying a migration to a new key
+# format/system. The GitHub Actions secret was updated to the new value but
+# still 401'd (pipefail above is what let this be seen at all -- it was
+# previously masked). requireCronSecret() in _helpers/authGuard.ts already
+# accepts CRON_SECRET as an equally-valid alternative, and its own docstring
+# explains exactly why that's the more robust choice here: it's a value this
+# app's operator sets and rotates deliberately on both sides, "unaffected by
+# the deprecation of Supabase's legacy JWT API keys" -- which is precisely
+# the failure this switch sidesteps, whatever its exact cause turns out to be.
+# refresh-taxonomy-snapshot.mjs's own SUPABASE_SERVICE_KEY usage further down
+# is unrelated (plain PostgREST reads, not a requireCronSecret()-gated
+# function call) and is unaffected by this change.
 
 on:
   schedule:
@@ -65,7 +82,7 @@ jobs:
           set -o pipefail
           curl --fail --show-error --silent \
             -X POST "${{ secrets.SUPABASE_URL }}/functions/v1/sync-ebay-taxonomy" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
             -d '{}' | tee /tmp/sync-result.json
       - name: Show result summary
@@ -83,7 +100,7 @@ jobs:
           set -o pipefail
           curl --fail --show-error --silent \
             -X POST "${{ secrets.SUPABASE_URL }}/functions/v1/category-hygiene-cron" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
             -d '{}' | tee /tmp/hygiene-result.json
       - name: Show result summary
