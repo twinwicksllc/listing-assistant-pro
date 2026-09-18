@@ -157,7 +157,14 @@ export async function fetchEbayRateLimits(
     }
   }
 
-  throw new Error(`getRateLimits failed on all paths — ${attempts.join(" | ")}`);
+  // Distinguish "tried every fallback path and all 404'd" from "failed fast
+  // on the first non-404 without trying v1_beta at all" -- saying "all
+  // paths" for the latter would mislead an operator into thinking v1_beta
+  // was attempted when it was deliberately skipped (Copilot review).
+  const summary = attempts.length === RATE_LIMIT_PATHS.length
+    ? `all paths failed — ${attempts.join(" | ")}`
+    : `failed fast on a non-404 (no fallback attempted) — ${attempts.join(" | ")}`;
+  throw new Error(`getRateLimits failed: ${summary}`);
 }
 
 /**
