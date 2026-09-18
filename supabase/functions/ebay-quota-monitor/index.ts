@@ -103,25 +103,61 @@ async function getEbayAppToken(ebayEnv: string): Promise<string> {
   return data.access_token as string;
 }
 
-async function fetchEbayRateLimits(
+// eBay's docs have been inconsistent about whether this endpoint lives at
+// v1 or v1_beta -- scripts/check-ebay-rate-limit.ps1 (the manual companion
+// tool) already anticipated this with a try-v1-then-v1_beta fallback, but
+// this deployed function did not, and on 2026-09-18 v1 started 404ing here
+// while the manual script's v1_beta fallback still worked. That gap left
+// this monitor silently 500ing on every hourly tick (confirmed via
+// net._http_response: `{"error":"getRateLimits failed: 404 — "}"` on every
+// run for at least 6+ hours) while the real quota was fully exhausted
+// (8,200/5,000 used, confirmed via the manual script) with zero alert ever
+// sent -- exactly the failure this monitor exists to catch. v1 is tried
+// first (still the documented primary path) and v1_beta only on a 404,
+// matching the script's own reasoning: a 404 means "wrong path, try the
+// other one," while any other non-OK status is a real error (auth/scope/
+// rate-limit-on-the-rate-limit-endpoint itself) that retrying at a
+// different path won't fix.
+const RATE_LIMIT_PATHS = ["v1", "v1_beta"] as const;
+
+/**
+ * Fetches eBay's getRateLimits response, trying each of RATE_LIMIT_PATHS in
+ * order and falling back to the next only on a 404. Exported so the
+ * fallback/fail-fast decision has direct test coverage against a mocked
+ * `fetch`, without depending on which path eBay actually serves today.
+ */
+export async function fetchEbayRateLimits(
   token: string,
   ebayEnv: string,
 ): Promise<EbayRateLimitContext[]> {
   const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
-  const resp = await fetch(`${apiBase}/developer/analytics/v1/rate_limit/`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-  });
+  const attempts: string[] = [];
 
-  if (!resp.ok) {
+  for (const version of RATE_LIMIT_PATHS) {
+    const url = `${apiBase}/developer/analytics/${version}/rate_limit/`;
+    const resp = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (resp.ok) {
+      const data = await resp.json();
+      return data?.rateLimits ?? [];
+    }
+
     const body = await resp.text();
-    throw new Error(`getRateLimits failed: ${resp.status} — ${body.slice(0, 300)}`);
+    attempts.push(`${version}: ${resp.status} — ${body.slice(0, 200)}`);
+    if (resp.status !== 404) {
+      // A non-404 failure (auth, scope, upstream error) won't be fixed by
+      // trying the other version -- fail now instead of masking it behind
+      // a second, doomed-to-fail-the-same-way attempt.
+      break;
+    }
   }
 
-  const data = await resp.json();
-  return data?.rateLimits ?? [];
+  throw new Error(`getRateLimits failed on all paths — ${attempts.join(" | ")}`);
 }
 
 /**

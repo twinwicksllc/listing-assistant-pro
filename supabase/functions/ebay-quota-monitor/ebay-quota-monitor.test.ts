@@ -1,5 +1,5 @@
-import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
-import { findBrowseRate, pruneOldCallLogRows, shouldPruneThisTick, shouldWarn } from "./index.ts";
+import { assertEquals, assertRejects, assertStringIncludes } from "https://deno.land/std@0.208.0/assert/mod.ts";
+import { fetchEbayRateLimits, findBrowseRate, pruneOldCallLogRows, shouldPruneThisTick, shouldWarn } from "./index.ts";
 
 // Regression coverage for the eBay Browse API quota monitor (spun out of the
 // 2026-09-17 429 investigation, follow-on to PR #580's call-fan-out cap).
@@ -178,4 +178,100 @@ Deno.test("pruneOldCallLogRows: reports failure on a delete error rather than re
   const result = await pruneOldCallLogRows(svc, new Date());
   assertEquals(result.pruned, false);
   assertEquals(result.error, "connection reset");
+});
+
+// ── fetchEbayRateLimits: v1/v1_beta fallback (2026-09-18) ───────────────────
+// Regression coverage for the real production gap: v1 started 404ing on
+// this account while v1_beta still worked, and the pre-fix version only
+// ever tried v1 -- see the function's own comment in index.ts for the full
+// incident. Monkey-patches globalThis.fetch for the duration of each test,
+// same pattern as tokenCrypto.test.ts/ebayTokenRefresh.test.ts use for
+// Deno.env.get, restored in a `finally` so a failure never leaks into a
+// later test.
+
+function withMockedFetch<T>(
+  handler: (url: string) => Response | Promise<Response>,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const original = globalThis.fetch;
+  globalThis.fetch = ((url: string | URL | Request) => Promise.resolve(handler(String(url)))) as typeof fetch;
+  return fn().finally(() => {
+    globalThis.fetch = original;
+  });
+}
+
+Deno.test("fetchEbayRateLimits: uses the v1 response when v1 succeeds (no fallback needed)", async () => {
+  await withMockedFetch(
+    (url) => {
+      if (url.includes("/v1/rate_limit/")) {
+        return new Response(
+          JSON.stringify({ rateLimits: [{ apiContext: "buy", resources: [] }] }),
+          { status: 200 },
+        );
+      }
+      throw new Error(`unexpected URL in this test: ${url}`);
+    },
+    async () => {
+      const result = await fetchEbayRateLimits("fake-token", "production");
+      assertEquals(result, [{ apiContext: "buy", resources: [] }]);
+    },
+  );
+});
+
+Deno.test("fetchEbayRateLimits: falls back to v1_beta when v1 404s", async () => {
+  const calledUrls: string[] = [];
+  await withMockedFetch(
+    (url) => {
+      calledUrls.push(url);
+      if (url.includes("/v1/rate_limit/")) {
+        return new Response("", { status: 404 });
+      }
+      if (url.includes("/v1_beta/rate_limit/")) {
+        return new Response(
+          JSON.stringify({ rateLimits: [{ apiContext: "buy", resources: [{ name: "buy.browse", rates: [] }] }] }),
+          { status: 200 },
+        );
+      }
+      throw new Error(`unexpected URL in this test: ${url}`);
+    },
+    async () => {
+      const result = await fetchEbayRateLimits("fake-token", "production");
+      assertEquals(result[0].resources[0].name, "buy.browse");
+    },
+  );
+  assertEquals(calledUrls.length, 2);
+  assertStringIncludes(calledUrls[0], "/v1/rate_limit/");
+  assertStringIncludes(calledUrls[1], "/v1_beta/rate_limit/");
+});
+
+Deno.test("fetchEbayRateLimits: does NOT fall back on a non-404 failure (auth/scope errors aren't fixed by trying the other path)", async () => {
+  const calledUrls: string[] = [];
+  await assertRejects(
+    () =>
+      withMockedFetch(
+        (url) => {
+          calledUrls.push(url);
+          return new Response("invalid_scope", { status: 403 });
+        },
+        () => fetchEbayRateLimits("fake-token", "production"),
+      ),
+    Error,
+    "403",
+  );
+  // Only the first (v1) attempt should have fired -- a 403 means "try again
+  // at a different path" won't help, so falling back here would just mask
+  // the real error behind a second, identically-doomed request.
+  assertEquals(calledUrls.length, 1);
+});
+
+Deno.test("fetchEbayRateLimits: throws with both attempts' details when both v1 and v1_beta 404", async () => {
+  await assertRejects(
+    () =>
+      withMockedFetch(
+        () => new Response("not found", { status: 404 }),
+        () => fetchEbayRateLimits("fake-token", "production"),
+      ),
+    Error,
+    "v1_beta: 404",
+  );
 });
