@@ -22,6 +22,43 @@ export interface EbayActionHandlerContext {
 }
 
 /**
+ * Builds the eBay OAuth consent URL, including the scope-list generation
+ * (EBAY_OAUTH_SCOPES joined into a single space-delimited, URL-encoded
+ * string). Extracted as a pure function so this has direct unit test
+ * coverage without needing a live HTTP request -- REFACTOR_PLAN.md's
+ * Testing section specifically calls out "scope list generation" as a unit
+ * test target.
+ */
+export function buildAuthUrl(
+  authBase: string,
+  clientId: string,
+  ruName: string,
+  scopes: readonly string[] = EBAY_OAUTH_SCOPES,
+): string {
+  const scopeString = scopes.join(" ");
+  return `${authBase}/oauth2/authorize?` +
+    `client_id=${encodeURIComponent(clientId)}` +
+    `&redirect_uri=${encodeURIComponent(ruName)}` +
+    `&response_type=code` +
+    `&scope=${encodeURIComponent(scopeString)}`;
+}
+
+/**
+ * Decides whether a stored eBay token should be proactively refreshed:
+ * true if it has no known expiry, or expires within REFRESH_BUFFER_MS.
+ * Extracted as a pure function (accepting `now` explicitly) so the
+ * boundary condition is directly unit-testable without mocking `Date`.
+ */
+export function isTokenExpiredOrExpiringSoon(
+  expiresAtRaw: string | null | undefined,
+  now: Date,
+): boolean {
+  const expiresAt = expiresAtRaw ? new Date(expiresAtRaw) : null;
+  if (!expiresAt) return true;
+  return expiresAt.getTime() - now.getTime() < REFRESH_BUFFER_MS;
+}
+
+/**
  * Generate and return the eBay OAuth consent URL.
  */
 export async function handleGetAuthUrl({
@@ -34,13 +71,7 @@ export async function handleGetAuthUrl({
   const ruName = Deno.env.get("EBAY_RUNAME") || Deno.env.get("EBAY_REDIRECT_URI");
   if (!ruName) throw new Error("EBAY_RUNAME not configured");
 
-  const scopes = EBAY_OAUTH_SCOPES.join(" ");
-
-  const authUrl = `${authBase}/oauth2/authorize?` +
-    `client_id=${encodeURIComponent(clientId)}` +
-    `&redirect_uri=${encodeURIComponent(ruName)}` +
-    `&response_type=code` +
-    `&scope=${encodeURIComponent(scopes)}`;
+  const authUrl = buildAuthUrl(authBase, clientId, ruName);
 
   console.log("get_auth_url: ruName =", ruName);
 
@@ -532,10 +563,10 @@ export async function handleGetStoredToken({
   const decryptedAccessToken = await decryptToken(data.ebay_access_token);
   const decryptedRefreshToken = await decryptToken(data.ebay_refresh_token);
 
-  const now = new Date();
-  const expiresAt = data.ebay_token_expires_at ? new Date(data.ebay_token_expires_at) : null;
-  // Consider token expired if it expires within 5 minutes (proactive refresh window)
-  const isExpiredOrExpiringSoon = expiresAt ? expiresAt.getTime() - now.getTime() < REFRESH_BUFFER_MS : true;
+  const isExpiredOrExpiringSoon = isTokenExpiredOrExpiringSoon(
+    data.ebay_token_expires_at,
+    new Date(),
+  );
 
   // Proactively refresh if token is expired or expiring within 5 minutes
   if (isExpiredOrExpiringSoon && decryptedRefreshToken) {

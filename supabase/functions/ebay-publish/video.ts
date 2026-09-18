@@ -27,7 +27,7 @@ async function requireAuthenticatedSession(req: Request): Promise<Response | nul
   });
 }
 
-function getMediaVideoBaseCandidates(ebayEnv: string): string[] {
+export function getMediaVideoBaseCandidates(ebayEnv: string): string[] {
   const isProduction = ebayEnv === "production";
   const restBase = isProduction ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
   const mediaGatewayBase = isProduction ? "https://apim.ebay.com" : "https://apim.sandbox.ebay.com";
@@ -42,7 +42,7 @@ function getMediaVideoBaseCandidates(ebayEnv: string): string[] {
   ];
 }
 
-function isRetryableCreateEndpointStatus(status: number): boolean {
+export function isRetryableCreateEndpointStatus(status: number): boolean {
   // 404/405 are the clean "wrong path" signals. 400 is included too because
   // some API gateways (this function tries four base-URL variants across
   // apim/rest and v1/v1_beta) return a plain 400 rather than 404 for an
@@ -54,7 +54,7 @@ function isRetryableCreateEndpointStatus(status: number): boolean {
   return status === 404 || status === 405 || status === 400;
 }
 
-function isRetryableStatusCode(status: number): boolean {
+export function isRetryableStatusCode(status: number): boolean {
   // Transient errors that warrant a retry with backoff
   return (
     status === 500 ||
@@ -65,7 +65,7 @@ function isRetryableStatusCode(status: number): boolean {
   );
 }
 
-function normalizeVideoStatus(rawStatus: string | null | undefined): string {
+export function normalizeVideoStatus(rawStatus: string | null | undefined): string {
   const status = (rawStatus || "").toUpperCase();
   if (status === "LIVE") return "LIVE";
   if (status === "BLOCKED" || status === "PROCESSING_FAILED") return "FAILED";
@@ -201,7 +201,7 @@ async function pollVideoStatusWithRetry(
   );
 }
 
-function getResourceIdFromLocation(location: string | null): string | null {
+export function getResourceIdFromLocation(location: string | null): string | null {
   if (!location) return null;
   const pathname = new URL(location).pathname.replace(/\/$/, "");
   const resourceId = pathname.split("/").pop();
@@ -237,7 +237,7 @@ async function readJsonObject(
  * @param userToken The eBay user token to probe
  * @returns "production", "sandbox", or "unknown"
  */
-async function probeTokenEnvironment(userToken: string): Promise<string> {
+export async function probeTokenEnvironment(userToken: string): Promise<string> {
   try {
     try {
       const idProdResp = await fetchWithTimeout(IDENTITY_API_PROD, {
