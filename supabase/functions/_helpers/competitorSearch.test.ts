@@ -1,8 +1,10 @@
 import { assertEquals, assertNotEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import {
   buildCompetitorPricesUpsertPayload,
+  type CompetitorItem,
   type CompSearchAttemptResult,
   evaluateCompQuality,
+  extractCompItemIds,
   groupPlanIntoTiers,
   logBrowseApiCall,
   parseOptionalCount,
@@ -486,4 +488,64 @@ Deno.test("buildCompetitorPricesUpsertPayload: maps every field to its snake_cas
   assertEquals(payload.your_price, 10);
   assertEquals(payload.competitor_count, 7);
   assertEquals(payload.price_distribution, { buckets: [1, 2, 3] });
+});
+
+// ── comp_item_ids: getItems batch-refresh follow-on, PR 1/2 (2026-09-18) ────
+// Regression coverage for the persistence groundwork this column exists
+// for -- without it, there is nothing durable a future refresh could look
+// up to call eBay's getItems bulk-lookup instead of re-running a full
+// search. compItemIds is optional so every pre-existing call site (before
+// this param was added) stays source-compatible, persisting null.
+
+Deno.test("buildCompetitorPricesUpsertPayload: persists comp_item_ids verbatim when provided", () => {
+  const payload = buildCompetitorPricesUpsertPayload(
+    basePayloadParams({ compItemIds: ["v1|123|0", "v1|456|0"] }),
+  );
+  assertEquals(payload.comp_item_ids, ["v1|123|0", "v1|456|0"]);
+});
+
+Deno.test("buildCompetitorPricesUpsertPayload: comp_item_ids defaults to null when omitted (back-compat with call sites predating this param)", () => {
+  const payload = buildCompetitorPricesUpsertPayload(basePayloadParams());
+  assertEquals(payload.comp_item_ids, null);
+});
+
+Deno.test("buildCompetitorPricesUpsertPayload: an explicit null comp_item_ids is persisted as null, not coerced to an empty array", () => {
+  const payload = buildCompetitorPricesUpsertPayload(basePayloadParams({ compItemIds: null }));
+  assertEquals(payload.comp_item_ids, null);
+});
+
+function compItem(overrides: Partial<CompetitorItem> = {}): CompetitorItem {
+  return {
+    title: "test item",
+    price: 10,
+    currency: "USD",
+    condition: "Pre-Owned",
+    itemId: "v1|123|0",
+    ...overrides,
+  };
+}
+
+Deno.test("extractCompItemIds: extracts itemIds in order from a small item list", () => {
+  const items = [compItem({ itemId: "a" }), compItem({ itemId: "b" }), compItem({ itemId: "c" })];
+  assertEquals(extractCompItemIds(items), ["a", "b", "c"]);
+});
+
+Deno.test("extractCompItemIds: caps at 20 -- a single getItems bulk-lookup call's max item_ids", () => {
+  const items = Array.from({ length: 25 }, (_, i) => compItem({ itemId: `item-${i}` }));
+  const ids = extractCompItemIds(items);
+  assertEquals(ids.length, 20);
+  assertEquals(ids, Array.from({ length: 20 }, (_, i) => `item-${i}`));
+});
+
+Deno.test("extractCompItemIds: items missing an itemId are filtered out, never producing an empty-string/undefined entry", () => {
+  const items = [
+    compItem({ itemId: "a" }),
+    compItem({ itemId: undefined }),
+    compItem({ itemId: "b" }),
+  ];
+  assertEquals(extractCompItemIds(items), ["a", "b"]);
+});
+
+Deno.test("extractCompItemIds: an empty item list returns an empty array, not null/undefined", () => {
+  assertEquals(extractCompItemIds([]), []);
 });

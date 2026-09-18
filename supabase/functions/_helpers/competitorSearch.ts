@@ -630,6 +630,14 @@ export function logBrowseApiCall(
   // already used throughout this codebase's Edge Functions.
   supabase: any,
   caller: string,
+  // Which Browse API quota pool this call actually drew from. Default
+  // "buy.browse" (item_summary/search, every call site before the getItems
+  // follow-on work) keeps every existing 2-arg call site source-compatible.
+  // "buy.browse.item.bulk" (getItems) is a genuinely separate 5,000/day
+  // pool per eBay's own getRateLimits -- ebay-quota-monitor's same-day
+  // counter filters on this column specifically so a burst of cheap
+  // getItems calls can never inflate the buy.browse early-warning heuristic.
+  resource: "buy.browse" | "buy.browse.item.bulk" = "buy.browse",
 ): void {
   try {
     // Registered via runInBackground (EdgeRuntime.waitUntil) rather than a
@@ -639,7 +647,7 @@ export function logBrowseApiCall(
     // PR #581). Falls back to a bare unawaited call under plain `deno test`,
     // where EdgeRuntime doesn't exist -- see runInBackground's own docstring.
     runInBackground(
-      Promise.resolve(supabase.from("ebay_browse_call_log").insert({ caller }))
+      Promise.resolve(supabase.from("ebay_browse_call_log").insert({ caller, resource }))
         .then((result: { error?: { message?: string } } | undefined) => {
           if (result?.error) {
             console.warn(
@@ -900,6 +908,21 @@ function removeOutliers(prices: number[]): number[] {
  * what actually burned a full day's 5,000-call Browse API quota with zero
  * new listings created, not any per-listing query-fan-out logic.
  */
+/**
+ * Extracts up to 20 itemIds from the price-cleaned comp set for storage on
+ * competitor_prices.comp_item_ids -- 20 is a single Browse API getItems
+ * bulk-lookup call's max item_ids, chosen so a future refresh of this
+ * listing (see the getItems follow-on work) never needs pagination/
+ * batching logic. Pure and exported so the cap/filter behavior has direct
+ * test coverage without exercising the whole search pipeline.
+ */
+export function extractCompItemIds(items: CompetitorItem[]): string[] {
+  return items
+    .map((it) => it.itemId)
+    .filter((id): id is string => !!id)
+    .slice(0, 20);
+}
+
 export function buildCompetitorPricesUpsertPayload(params: {
   userId: string;
   listingId: string;
@@ -914,6 +937,17 @@ export function buildCompetitorPricesUpsertPayload(params: {
   competitorCount: number;
   priceDistribution: unknown;
   now?: Date;
+  /**
+   * itemIds of the individual comps that drove this row's aggregate stats,
+   * already capped by the caller (see runCompetitorSearch's Step 5) at 20 --
+   * a single Browse API getItems bulk-lookup call's max. Optional/nullable
+   * so every pre-existing call site stays source-compatible: omitting it
+   * persists `null`, which is indistinguishable from "no comps found" or "a
+   * row written before this column existed" -- both are valid "nothing to
+   * refresh yet" states for the getItems follow-on work to fall back to
+   * full search on, not errors.
+   */
+  compItemIds?: string[] | null;
 }) {
   const now = params.now ?? new Date();
   return {
@@ -931,6 +965,7 @@ export function buildCompetitorPricesUpsertPayload(params: {
     price_distribution: params.priceDistribution,
     fetched_at: now.toISOString(),
     expires_at: new Date(now.getTime() + CACHE_TTL_MS).toISOString(),
+    comp_item_ids: params.compItemIds ?? null,
   };
 }
 
@@ -1142,11 +1177,25 @@ export async function runCompetitorSearch(params: {
       }, n=${cleanPrices.length} (raw: ${count}, query="${chosenQuery}", category=${chosenCategoryId ?? "any"})`,
     );
 
+    // Filter structured items to the price-cleaned set so callers (e.g.
+    // PriceRecommenderCard) render only the comps that drove the stats.
+    // Computed BEFORE Step 5 (moved up from after it) -- the getItems
+    // batch-refresh follow-on plan needs these itemIds AT persist time,
+    // not just for the HTTP response, so a later refresh of this same
+    // listing can call getItems against them instead of re-running a full
+    // search (see shimmying-humming-feather.md's getItems follow-on plan).
+    const cleanSet = new Set(cleanPrices);
+    const cleanItems = structuredItems
+      .filter((it) => cleanSet.has(it.price))
+      .slice(0, 25);
+
     // ------------------------------------------------------------------
     // Step 5 — Persist to competitor_prices (upsert)
     // ------------------------------------------------------------------
     if (userId && listingId) {
       try {
+        const compItemIds = extractCompItemIds(cleanItems);
+
         const payload = buildCompetitorPricesUpsertPayload({
           userId,
           listingId,
@@ -1160,6 +1209,7 @@ export async function runCompetitorSearch(params: {
           yourPrice: yourPrice ?? null,
           competitorCount: cleanPrices.length,
           priceDistribution,
+          compItemIds,
         });
 
         await supabase.from("competitor_prices").upsert(
@@ -1180,13 +1230,6 @@ export async function runCompetitorSearch(params: {
     }
 
     const cacheExpiresAt = new Date(Date.now() + CACHE_TTL_MS).toISOString();
-
-    // Filter structured items to the price-cleaned set so callers (e.g.
-    // PriceRecommenderCard) render only the comps that drove the stats.
-    const cleanSet = new Set(cleanPrices);
-    const cleanItems = structuredItems
-      .filter((it) => cleanSet.has(it.price))
-      .slice(0, 25);
 
     return {
       status: 200,

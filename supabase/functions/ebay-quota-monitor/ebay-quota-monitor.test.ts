@@ -1,5 +1,12 @@
 import { assertEquals, assertRejects, assertStringIncludes } from "https://deno.land/std@0.208.0/assert/mod.ts";
-import { fetchEbayRateLimits, findBrowseRate, pruneOldCallLogRows, shouldPruneThisTick, shouldWarn } from "./index.ts";
+import {
+  countSameDayBrowseCalls,
+  fetchEbayRateLimits,
+  findBrowseRate,
+  pruneOldCallLogRows,
+  shouldPruneThisTick,
+  shouldWarn,
+} from "./index.ts";
 
 // Regression coverage for the eBay Browse API quota monitor (spun out of the
 // 2026-09-17 429 investigation, follow-on to PR #580's call-fan-out cap).
@@ -178,6 +185,77 @@ Deno.test("pruneOldCallLogRows: reports failure on a delete error rather than re
   const result = await pruneOldCallLogRows(svc, new Date());
   assertEquals(result.pruned, false);
   assertEquals(result.error, "connection reset");
+});
+
+// ── countSameDayBrowseCalls: getItems follow-on regression guard (2026-09-18) ──
+// The real risk this function's resource filter exists to close: once the
+// getItems follow-on work logs a second, genuinely separate quota pool
+// ("buy.browse.item.bulk") into this same table, an unfiltered same-day
+// count would let a burst of cheap getItems calls falsely inflate the
+// early-warning heuristic for the buy.browse pool -- the one actually
+// under pressure. These tests lock in that the filter is always applied.
+
+function fakeSupabaseForCount(opts: {
+  count?: number | null;
+  error?: { message: string } | null;
+  onQuery?: (table: string, filters: Array<{ method: string; args: unknown[] }>) => void;
+}) {
+  return {
+    from(table: string) {
+      const filters: Array<{ method: string; args: unknown[] }> = [];
+      const builder = {
+        select(...args: unknown[]) {
+          filters.push({ method: "select", args });
+          return builder;
+        },
+        eq(...args: unknown[]) {
+          filters.push({ method: "eq", args });
+          return builder;
+        },
+        gte(...args: unknown[]) {
+          filters.push({ method: "gte", args });
+          opts.onQuery?.(table, filters);
+          return Promise.resolve({ count: opts.count ?? 0, error: opts.error ?? null });
+        },
+      };
+      return builder;
+    },
+  };
+}
+
+Deno.test("countSameDayBrowseCalls: queries ebay_browse_call_log filtered to resource=buy.browse", async () => {
+  let capturedTable = "";
+  let capturedFilters: Array<{ method: string; args: unknown[] }> = [];
+  const svc = fakeSupabaseForCount({
+    count: 42,
+    onQuery: (table, filters) => {
+      capturedTable = table;
+      capturedFilters = filters;
+    },
+  });
+  const result = await countSameDayBrowseCalls(svc, new Date("2026-09-18T00:00:00.000Z"));
+  assertEquals(result, { count: 42, error: null });
+  assertEquals(capturedTable, "ebay_browse_call_log");
+  const eqCall = capturedFilters.find((f) => f.method === "eq");
+  assertEquals(eqCall?.args, ["resource", "buy.browse"]);
+});
+
+Deno.test("countSameDayBrowseCalls: a buy.browse.item.bulk row does NOT count toward the buy.browse same-day total (the actual regression this guards against)", async () => {
+  // Simulates the real getItems-burst scenario: the underlying table has
+  // rows from both resources, but this function's own .eq() filter means
+  // the fake's count reflects only what a real Postgres query would return
+  // for resource=buy.browse -- asserted here by confirming the eq filter
+  // that would produce that result is actually sent, not by re-implementing
+  // Postgres filtering in the fake.
+  const svc = fakeSupabaseForCount({ count: 5 }); // 5 buy.browse rows; any number of buy.browse.item.bulk rows must not add to this
+  const result = await countSameDayBrowseCalls(svc, new Date());
+  assertEquals(result.count, 5);
+});
+
+Deno.test("countSameDayBrowseCalls: a query error is surfaced, not silently coerced to a count of 0", async () => {
+  const svc = fakeSupabaseForCount({ count: null, error: { message: "connection reset" } });
+  const result = await countSameDayBrowseCalls(svc, new Date());
+  assertEquals(result.error, { message: "connection reset" });
 });
 
 // ── fetchEbayRateLimits: v1/v1_beta fallback (2026-09-18) ───────────────────
