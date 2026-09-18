@@ -49,7 +49,8 @@ export type CandidateSource =
   | "db_exact"
   | "ebay_api"
   | "db_fuzzy"
-  | "gemini";
+  | "gemini"
+  | "vector_llm";
 
 export interface GatedCandidate {
   categoryId: string;
