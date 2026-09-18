@@ -633,39 +633,83 @@ export function parseCompetitorItem(item: unknown): CompetitorItem | null {
   }
 }
 
+// Per-item HTTP deadline (Copilot review, PR #601) -- without this, a single
+// stalled eBay response holds Promise.allSettled (and therefore the whole
+// refresh, and the cron's current batch slot) open until the Edge Function's
+// own gateway ceiling, since allSettled can't finish until every promise
+// settles one way or another.
+const ITEM_LOOKUP_TIMEOUT_MS = 8_000;
+
+// Bounds how many single-item lookups run concurrently WITHIN one
+// fetchEbayItemsBulk call (Copilot review, PR #601). itemIds is already
+// capped at 20 by callers, but competitor-prices-cron itself refreshes up to
+// REFRESH_CONCURRENCY (15) listings in parallel -- with unbounded per-item
+// fan-out, a normal batch of 15 listings x 20 stored ids could fire up to 300
+// simultaneous eBay requests at once, versus the 15 the replaced bulk
+// endpoint would have made. Capping this helper's OWN concurrency keeps the
+// worst case bounded (15 x 4 = 60) regardless of what the outer cron does.
+const ITEM_LOOKUP_CONCURRENCY = 4;
+
 export interface BulkItemsLookupResult {
   items: CompetitorItem[];
   foundItemIds: string[];
+  /** Confirmed gone -- eBay returned a 404 for this id. Safe to drop. */
   missingItemIds: string[];
+  /**
+   * Transient failure (timeout, 5xx exhausted, network error) -- NOT a
+   * confirmed delisting (Copilot review, PR #601: conflating the two let a
+   * flaky single request permanently drop a still-live comp from
+   * comp_item_ids on the next persist). Callers should retain these ids for
+   * a future refresh attempt rather than treat them as gone.
+   */
+  uncertainItemIds: string[];
 }
 
 /**
- * Bulk item lookup via GET /buy/browse/v1/item?item_ids=... -- draws from
- * eBay's buy.browse.item.bulk quota pool, confirmed via a live getRateLimits
- * check (2026-09-17/18) to be a SEPARATE 5,000/day pool from buy.browse
- * (item_summary/search), and confirmed sitting at 0/5,000 used -- entirely
- * unused by this codebase until now. Up to 20 IDs per call; callers must
- * pre-cap (comp_item_ids is capped to 20 at write time in
- * buildCompetitorPricesUpsertPayload's caller, matching a single call's max).
+ * Fetches known itemIds via eBay's SINGLE-item Browse API endpoint,
+ * GET /buy/browse/v1/item/{item_id}, one call per id (bounded concurrency).
  *
- * A missing itemId in the response is eBay's documented way of saying
- * "delisted/ended" -- there is no per-item error, the id is simply absent
- * from the returned array. That is never treated as a failure for the
- * whole call; only a fully-failed HTTP request (after retries) throws.
- * An item that IS present but shows e.g. OUT_OF_STOCK availability is still
- * alive (the listing exists), not delisted -- this function does not treat
- * availability status as a delisting signal, only presence/absence in the
- * response does.
+ * NOT the bulk endpoint (GET /buy/browse/v1/item?item_ids=...) -- that was
+ * the original design (see this function's own git history / the getItems
+ * batch-refresh plan's PR 1/2), but a live verification call against this
+ * account's real production keyset (2026-09-18) confirmed the bulk form
+ * returns 403 "Insufficient permissions to fulfill the request" while the
+ * single-item form on the exact same token/scope succeeds immediately.
+ * Checked the Application Keys page directly: both getItem and getItems
+ * are documented under the SAME base `api_scope` this app already has (no
+ * scope is missing) -- this points to an eBay-side compliance/tier
+ * restriction specific to the bulk operation, not a fixable config error
+ * on this app's side. Rather than wait on an eBay support ticket, this
+ * function was rewritten to loop single-item calls -- a smaller quota win
+ * than the original 20-per-call design (1 call per comp instead of up to
+ * 20 comps per call) but confirmed working today.
  *
- * *** NOT YET VERIFIED against a live eBay call *** -- no eBay credentials
- * exist in this dev sandbox. Before this path is trusted in production,
- * manually confirm against a real account: (a) the itemId format captured
- * from item_summary/search's itemSummaries[].itemId is accepted as-is by
- * this endpoint's item_ids param, (b) the response's field names actually
- * match what parseCompetitorItem expects, (c) a deliberately delisted/
- * invalid itemId is omitted rather than causing a 4xx for the whole batch.
- * See the getItems batch-refresh plan (shimmying-humming-feather.md) for
- * the full verification step this must go through before merge.
+ * Each single-item call still draws from a resource distinct from
+ * buy.browse (item_summary/search) per eBay's own getRateLimits response --
+ * logged under the same "buy.browse.item.bulk" resource name kept from the
+ * original design for continuity with the quota-monitor dashboard/alerts,
+ * even though the mechanism is now N single-item calls, not one bulk call.
+ *
+ * Three outcomes per itemId, NOT two (Copilot review, PR #601 -- the first
+ * version conflated the last two, which let a flaky single request
+ * permanently drop a still-live comp from the next refresh's persisted set):
+ * - found: eBay returned a usable item -- alive, in `items`/`foundItemIds`.
+ * - missing (confirmed gone): a 404, or a 200 whose shape didn't parse into
+ *   a usable comp -- in `missingItemIds`. Safe to drop permanently.
+ * - uncertain (NOT confirmed gone): every retry timed out, errored, or
+ *   returned a non-404 non-2xx status (e.g. a 403, meaning the endpoint
+ *   itself may have broken) -- in `uncertainItemIds`. Callers should retain
+ *   these ids for a future attempt rather than treat them as delisted.
+ * An item that IS returned but shows e.g. OUT_OF_STOCK availability is
+ * still alive (the listing exists), not delisted -- this function does
+ * not treat availability status as a delisting signal, only a 404 does.
+ *
+ * Each per-item HTTP attempt is bounded by ITEM_LOOKUP_TIMEOUT_MS (a stalled
+ * response can't hold the whole refresh open), and lookups within one call
+ * run at most ITEM_LOOKUP_CONCURRENCY at a time (competitor-prices-cron
+ * already refreshes multiple listings in parallel; unbounded per-item
+ * fan-out on top of that could multiply into hundreds of simultaneous
+ * requests -- see both constants' own comments).
  */
 export async function fetchEbayItemsBulk(params: {
   token: string;
@@ -677,87 +721,169 @@ export async function fetchEbayItemsBulk(params: {
   loggingCaller: string;
 }): Promise<BulkItemsLookupResult> {
   const { token, itemIds, ebayEnv, supabaseForLogging, loggingCaller } = params;
-
   const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
-  const url = `${apiBase}/buy/browse/v1/item?item_ids=${itemIds.map((id) => encodeURIComponent(id)).join(",")}`;
 
   console.log(
-    `[competitorSearch] Browse API getItems bulk lookup: ${itemIds.length} itemId(s)`,
+    `[competitorSearch] Browse API single-item lookup: ${itemIds.length} itemId(s)`,
   );
 
-  let resp: Response | null = null;
+  type FetchOneResult =
+    | { itemId: string; kind: "found"; item: CompetitorItem }
+    | { itemId: string; kind: "missing" } // confirmed 404 -- actually gone
+    | { itemId: string; kind: "uncertain"; reason: string }; // transient -- unknown, not gone
 
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      // Same reasoning as fetchEbayCompetitors: log at the point of the
-      // actual HTTP attempt, not once per call, since a retried 5xx still
-      // consumes real quota against the buy.browse.item.bulk pool.
-      logBrowseApiCall(supabaseForLogging, `${loggingCaller} (attempt ${attempt + 1})`, "buy.browse.item.bulk");
-      resp = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
-          Accept: "application/json",
-        },
-      });
+  async function fetchOne(itemId: string): Promise<FetchOneResult> {
+    const url = `${apiBase}/buy/browse/v1/item/${encodeURIComponent(itemId)}`;
+    let resp: Response | null = null;
+    let lastErr: unknown = null;
 
-      if (resp.ok || resp.status < 500) break;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), ITEM_LOOKUP_TIMEOUT_MS);
+      try {
+        // Same reasoning as fetchEbayCompetitors: log at the point of the
+        // actual HTTP attempt, not once per id, since a retried 5xx still
+        // consumes real quota.
+        logBrowseApiCall(supabaseForLogging, `${loggingCaller} (attempt ${attempt + 1})`, "buy.browse.item.bulk");
+        resp = await fetch(url, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+            Accept: "application/json",
+          },
+          signal: controller.signal,
+        });
+        lastErr = null;
 
-      if (attempt < 2) {
-        const delayMs = 1500 * Math.pow(1.5, attempt);
-        console.warn(
-          `[competitorSearch] getItems returned ${resp.status} — retrying in ${delayMs}ms`,
-        );
-        await new Promise((r) => setTimeout(r, delayMs));
-      }
-    } catch (fetchErr) {
-      if (attempt < 2) {
-        const delayMs = 1500 * Math.pow(1.5, attempt);
-        console.warn(
-          `[competitorSearch] getItems fetch error (attempt ${attempt + 1}/3) — retrying in ${delayMs}ms`,
-        );
-        await new Promise((r) => setTimeout(r, delayMs));
+        // 404 means "this specific item is gone" -- not retryable, and not
+        // a failure for the batch as a whole (see this function's own
+        // docstring). Any other non-OK status is either retryable (5xx) or
+        // a real error (e.g. a 403 would mean the single-item endpoint
+        // itself stopped working, which should surface as a thrown error,
+        // not be silently treated as "this one item is missing").
+        if (resp.ok || resp.status === 404 || resp.status < 500) break;
+
+        if (attempt < 2) {
+          const delayMs = 1500 * Math.pow(1.5, attempt);
+          console.warn(
+            `[competitorSearch] getItem(${itemId}) returned ${resp.status} — retrying in ${delayMs}ms`,
+          );
+          await new Promise((r) => setTimeout(r, delayMs));
+        }
+      } catch (fetchErr) {
+        lastErr = fetchErr;
+        resp = null;
+        if (attempt < 2) {
+          const delayMs = 1500 * Math.pow(1.5, attempt);
+          const isTimeout = controller.signal.aborted;
+          console.warn(
+            `[competitorSearch] getItem(${itemId}) ${isTimeout ? "timed out" : "fetch error"} (attempt ${
+              attempt + 1
+            }/3) — retrying in ${delayMs}ms`,
+          );
+          await new Promise((r) => setTimeout(r, delayMs));
+        }
+      } finally {
+        clearTimeout(timer);
       }
     }
+
+    if (resp && resp.status === 404) {
+      return { itemId, kind: "missing" };
+    }
+    if (!resp || !resp.ok) {
+      // Exhausted retries with no confirmed 404 -- this is unknown, not
+      // confirmed gone (Copilot review, PR #601). A 403 (the single-item
+      // endpoint itself breaking) lands here too, which is intentional: it
+      // should read as "couldn't confirm," not "this one item vanished."
+      const status = resp?.status;
+      const errBody = resp ? await resp.text().catch(() => "(could not read body)") : null;
+      const reason = errBody !== null
+        ? `HTTP ${status} — ${errBody.slice(0, 200)}`
+        : `${lastErr instanceof Error ? lastErr.message : String(lastErr ?? "unknown error")}`;
+      return { itemId, kind: "uncertain", reason };
+    }
+
+    let respText: string;
+    let json: any;
+    try {
+      respText = await resp.text();
+      json = JSON.parse(respText);
+    } catch (parseErr) {
+      // A malformed response is also "couldn't confirm," not "gone."
+      return {
+        itemId,
+        kind: "uncertain",
+        reason: `invalid JSON response: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
+      };
+    }
+
+    const parsed = parseCompetitorItem(json);
+    if (!parsed) {
+      // The HTTP call succeeded but the item shape didn't parse (e.g.
+      // missing/zero price) -- distinct from a 404: eBay found the item,
+      // it's just not usable as a comp. Treat as confirmed-not-a-comp
+      // (missing), not uncertain, since there's no reason to retry it.
+      return { itemId, kind: "missing" };
+    }
+    return { itemId, kind: "found", item: parsed };
   }
 
-  if (!resp || !resp.ok) {
-    const errBody = (await resp?.text?.().catch(() => "(could not read body)")) ??
-      "(no response)";
-    console.error(
-      `[competitorSearch] getItems failed: ${resp?.status} — ${errBody.slice(0, 300)}`,
-    );
-    throw new Error(
-      `eBay getItems error: ${resp?.status ?? "unknown"} — ${errBody.slice(0, 200)}`,
-    );
+  // Bounded concurrency WITHIN this call (Copilot review, PR #601) -- see
+  // ITEM_LOOKUP_CONCURRENCY's own comment for why unbounded Promise.all(map)
+  // is unsafe once the outer cron's own parallelism is accounted for. A
+  // single failing id must not sink every other id in the batch, so results
+  // are collected via a plain array + index rather than allSettled (nothing
+  // here throws per-item anymore -- fetchOne always resolves; only a
+  // programmer error would reject, and that should propagate).
+  const results: FetchOneResult[] = new Array(itemIds.length);
+  let nextIndex = 0;
+  async function worker() {
+    while (true) {
+      const i = nextIndex++;
+      if (i >= itemIds.length) return;
+      results[i] = await fetchOne(itemIds[i]);
+    }
   }
+  await Promise.all(
+    Array.from({ length: Math.min(ITEM_LOOKUP_CONCURRENCY, itemIds.length) }, worker),
+  );
 
-  const respText = await resp.text();
-  let json: any;
-  try {
-    json = JSON.parse(respText);
-  } catch {
-    throw new Error(`eBay getItems returned invalid JSON`);
-  }
-
-  const rawItems: any[] = json?.items ?? [];
   const items: CompetitorItem[] = [];
-  for (const raw of rawItems) {
-    const parsed = parseCompetitorItem(raw);
-    if (parsed) items.push(parsed);
+  const missingItemIds: string[] = [];
+  const uncertainItemIds: string[] = [];
+
+  for (const outcome of results) {
+    if (outcome.kind === "found") {
+      items.push(outcome.item);
+    } else if (outcome.kind === "missing") {
+      missingItemIds.push(outcome.itemId);
+    } else {
+      uncertainItemIds.push(outcome.itemId);
+      console.warn(
+        `[competitorSearch] getItem(${outcome.itemId}) uncertain, not confirmed delisted: ${outcome.reason}`,
+      );
+    }
   }
 
   const foundItemIds = items
     .map((it) => it.itemId)
     .filter((id): id is string => !!id);
-  const foundSet = new Set(foundItemIds);
-  const missingItemIds = itemIds.filter((id) => !foundSet.has(id));
 
   console.log(
-    `[competitorSearch] getItems: ${foundItemIds.length}/${itemIds.length} requested itemIds still present`,
+    `[competitorSearch] Single-item lookups: ${foundItemIds.length}/${itemIds.length} requested itemIds still present ` +
+      `(${missingItemIds.length} confirmed gone, ${uncertainItemIds.length} uncertain)`,
   );
 
-  return { items, foundItemIds, missingItemIds };
+  // Only throw if EVERY id came back uncertain with nothing confirmed either
+  // way -- that's the "the endpoint itself may be broken" case (e.g. every
+  // call 403s), which should surface as a hard failure rather than a
+  // 0-comps-found result silently persisted.
+  if (items.length === 0 && missingItemIds.length === 0 && uncertainItemIds.length === itemIds.length) {
+    throw new Error(`eBay getItem: all ${itemIds.length} lookups failed/uncertain`);
+  }
+
+  return { items, foundItemIds, missingItemIds, uncertainItemIds };
 }
 
 export interface CompSearchAttemptResult {
@@ -1270,9 +1396,15 @@ export async function attemptItemsRefresh(params: {
     return null;
   }
 
+  // Uncertain ids count toward "survived" for the usability check -- they
+  // are NOT confirmed gone (Copilot review, PR #601), so treating them like
+  // confirmed delistings here would make a transient blip (a timeout, one
+  // flaky 500) look like real market attrition and trigger an unnecessary
+  // fall-through to a full rediscovery search.
+  const survivedCount = bulkResult.items.length + bulkResult.uncertainItemIds.length;
   const usability = isItemsRefreshUsable({
     requestedCount: storedItemIds.length,
-    foundCount: bulkResult.items.length,
+    foundCount: survivedCount,
   });
   if (!usability.usable) {
     console.log(`[competitorSearch] attemptItemsRefresh: ${usability.reason} — falling through to full search`);
@@ -1293,10 +1425,15 @@ export async function attemptItemsRefresh(params: {
   // review, PR #600).
   const cleanSet = new Set(stats.cleanPrices);
   const cleanItems = bulkResult.items.filter((it) => cleanSet.has(it.price)).slice(0, 25);
-  const newCompItemIds = cleanItems
-    .map((it) => it.itemId)
-    .filter((id): id is string => !!id)
-    .slice(0, 20);
+  // Retain uncertainItemIds too, not just confirmed-found ones (Copilot
+  // review, PR #601) -- an id that timed out or 500'd this time is NOT
+  // confirmed delisted, so dropping it here would permanently bias future
+  // refreshes against a comp that's very likely still live. Only ids
+  // fetchEbayItemsBulk actually confirmed gone (missingItemIds) are excluded.
+  const newCompItemIds = [
+    ...cleanItems.map((it) => it.itemId).filter((id): id is string => !!id),
+    ...bulkResult.uncertainItemIds,
+  ].slice(0, 20);
 
   try {
     const payload = buildCompetitorPricesUpsertPayload({
