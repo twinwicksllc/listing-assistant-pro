@@ -575,29 +575,10 @@ async function fetchEbayCompetitors(params: {
   const structured: CompetitorItem[] = [];
 
   for (const item of items) {
-    try {
-      const priceVal = item?.price?.value ?? item?.currentPrice?.value;
-      const price = parseFloat(String(priceVal ?? "0"));
-      if (isNaN(price) || price <= 0) continue;
-      prices.push(price);
-      // watchCount/bidCount are already present on Browse API's default
-      // ItemSummary response (no fieldgroups param needed) but not
-      // guaranteed populated for every item -- see parseOptionalCount's own
-      // docstring for why a missing value must stay undefined, not become 0.
-      structured.push({
-        title: String(item?.title ?? "").slice(0, 200),
-        price,
-        currency: String(item?.price?.currency ?? "USD"),
-        condition: String(item?.condition ?? "Pre-Owned"),
-        itemId: item?.itemId ? String(item.itemId) : undefined,
-        itemUrl: item?.itemWebUrl ?? null,
-        imageUrl: item?.image?.imageUrl ?? item?.thumbnailImages?.[0]?.imageUrl ?? null,
-        watchCount: parseOptionalCount(item?.watchCount),
-        bidCount: parseOptionalCount(item?.bidCount),
-      });
-    } catch {
-      // Skip malformed items
-    }
+    const parsed = parseCompetitorItem(item);
+    if (!parsed) continue;
+    prices.push(parsed.price);
+    structured.push(parsed);
   }
 
   console.log(
@@ -605,6 +586,178 @@ async function fetchEbayCompetitors(params: {
   );
 
   return { prices, count: prices.length, raw: items, items: structured };
+}
+
+/**
+ * Parses one Browse API item object into a CompetitorItem, or null if it
+ * has no usable price. Shared verbatim between item_summary/search's
+ * itemSummaries[] (fetchEbayCompetitors) and getItems' items[]
+ * (fetchEbayItemsBulk) -- both endpoints use the same field names for
+ * everything this app reads (price.value/currency, condition, title,
+ * itemWebUrl, image.imageUrl, watchCount, bidCount) per eBay's Browse API
+ * docs. Using one function for both guards against stat drift: any
+ * difference in resulting prices/stats between the two endpoints can only
+ * come from eBay returning different underlying data, never from divergent
+ * app-side parsing.
+ *
+ * NOT YET VERIFIED against a live getItems response (no eBay credentials in
+ * this dev sandbox) -- see fetchEbayItemsBulk's own docstring for the
+ * required manual verification step before this is trusted for the getItems
+ * path in production.
+ */
+export function parseCompetitorItem(item: unknown): CompetitorItem | null {
+  try {
+    const it = item as Record<string, any>;
+    const priceVal = it?.price?.value ?? it?.currentPrice?.value;
+    const price = parseFloat(String(priceVal ?? "0"));
+    if (isNaN(price) || price <= 0) return null;
+    // watchCount/bidCount are already present on Browse API's default
+    // ItemSummary response (no fieldgroups param needed) but not
+    // guaranteed populated for every item -- see parseOptionalCount's own
+    // docstring for why a missing value must stay undefined, not become 0.
+    return {
+      title: String(it?.title ?? "").slice(0, 200),
+      price,
+      currency: String(it?.price?.currency ?? "USD"),
+      condition: String(it?.condition ?? "Pre-Owned"),
+      itemId: it?.itemId ? String(it.itemId) : undefined,
+      itemUrl: it?.itemWebUrl ?? null,
+      imageUrl: it?.image?.imageUrl ?? it?.thumbnailImages?.[0]?.imageUrl ?? null,
+      watchCount: parseOptionalCount(it?.watchCount),
+      bidCount: parseOptionalCount(it?.bidCount),
+    };
+  } catch {
+    // Malformed item -- skip rather than throw, matching this file's
+    // existing tolerance for individual bad items in a Browse API response.
+    return null;
+  }
+}
+
+export interface BulkItemsLookupResult {
+  items: CompetitorItem[];
+  foundItemIds: string[];
+  missingItemIds: string[];
+}
+
+/**
+ * Bulk item lookup via GET /buy/browse/v1/item?item_ids=... -- draws from
+ * eBay's buy.browse.item.bulk quota pool, confirmed via a live getRateLimits
+ * check (2026-09-17/18) to be a SEPARATE 5,000/day pool from buy.browse
+ * (item_summary/search), and confirmed sitting at 0/5,000 used -- entirely
+ * unused by this codebase until now. Up to 20 IDs per call; callers must
+ * pre-cap (comp_item_ids is capped to 20 at write time in
+ * buildCompetitorPricesUpsertPayload's caller, matching a single call's max).
+ *
+ * A missing itemId in the response is eBay's documented way of saying
+ * "delisted/ended" -- there is no per-item error, the id is simply absent
+ * from the returned array. That is never treated as a failure for the
+ * whole call; only a fully-failed HTTP request (after retries) throws.
+ * An item that IS present but shows e.g. OUT_OF_STOCK availability is still
+ * alive (the listing exists), not delisted -- this function does not treat
+ * availability status as a delisting signal, only presence/absence in the
+ * response does.
+ *
+ * *** NOT YET VERIFIED against a live eBay call *** -- no eBay credentials
+ * exist in this dev sandbox. Before this path is trusted in production,
+ * manually confirm against a real account: (a) the itemId format captured
+ * from item_summary/search's itemSummaries[].itemId is accepted as-is by
+ * this endpoint's item_ids param, (b) the response's field names actually
+ * match what parseCompetitorItem expects, (c) a deliberately delisted/
+ * invalid itemId is omitted rather than causing a 4xx for the whole batch.
+ * See the getItems batch-refresh plan (shimmying-humming-feather.md) for
+ * the full verification step this must go through before merge.
+ */
+export async function fetchEbayItemsBulk(params: {
+  token: string;
+  itemIds: string[];
+  ebayEnv: string;
+  // deno-lint-ignore no-explicit-any -- matches this file's existing loose
+  // supabase-js client typing.
+  supabaseForLogging: any;
+  loggingCaller: string;
+}): Promise<BulkItemsLookupResult> {
+  const { token, itemIds, ebayEnv, supabaseForLogging, loggingCaller } = params;
+
+  const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
+  const url = `${apiBase}/buy/browse/v1/item?item_ids=${itemIds.map((id) => encodeURIComponent(id)).join(",")}`;
+
+  console.log(
+    `[competitorSearch] Browse API getItems bulk lookup: ${itemIds.length} itemId(s)`,
+  );
+
+  let resp: Response | null = null;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      // Same reasoning as fetchEbayCompetitors: log at the point of the
+      // actual HTTP attempt, not once per call, since a retried 5xx still
+      // consumes real quota against the buy.browse.item.bulk pool.
+      logBrowseApiCall(supabaseForLogging, `${loggingCaller} (attempt ${attempt + 1})`, "buy.browse.item.bulk");
+      resp = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+          Accept: "application/json",
+        },
+      });
+
+      if (resp.ok || resp.status < 500) break;
+
+      if (attempt < 2) {
+        const delayMs = 1500 * Math.pow(1.5, attempt);
+        console.warn(
+          `[competitorSearch] getItems returned ${resp.status} — retrying in ${delayMs}ms`,
+        );
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    } catch (fetchErr) {
+      if (attempt < 2) {
+        const delayMs = 1500 * Math.pow(1.5, attempt);
+        console.warn(
+          `[competitorSearch] getItems fetch error (attempt ${attempt + 1}/3) — retrying in ${delayMs}ms`,
+        );
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+  }
+
+  if (!resp || !resp.ok) {
+    const errBody = (await resp?.text?.().catch(() => "(could not read body)")) ??
+      "(no response)";
+    console.error(
+      `[competitorSearch] getItems failed: ${resp?.status} — ${errBody.slice(0, 300)}`,
+    );
+    throw new Error(
+      `eBay getItems error: ${resp?.status ?? "unknown"} — ${errBody.slice(0, 200)}`,
+    );
+  }
+
+  const respText = await resp.text();
+  let json: any;
+  try {
+    json = JSON.parse(respText);
+  } catch {
+    throw new Error(`eBay getItems returned invalid JSON`);
+  }
+
+  const rawItems: any[] = json?.items ?? [];
+  const items: CompetitorItem[] = [];
+  for (const raw of rawItems) {
+    const parsed = parseCompetitorItem(raw);
+    if (parsed) items.push(parsed);
+  }
+
+  const foundItemIds = items
+    .map((it) => it.itemId)
+    .filter((id): id is string => !!id);
+  const foundSet = new Set(foundItemIds);
+  const missingItemIds = itemIds.filter((id) => !foundSet.has(id));
+
+  console.log(
+    `[competitorSearch] getItems: ${foundItemIds.length}/${itemIds.length} requested itemIds still present`,
+  );
+
+  return { items, foundItemIds, missingItemIds };
 }
 
 export interface CompSearchAttemptResult {
@@ -954,6 +1107,238 @@ export function buildCompetitorPricesUpsertPayload(params: {
   };
 }
 
+export interface CompStats {
+  avgPrice: number;
+  minPrice: number;
+  maxPrice: number;
+  medianPrice: number;
+  priceDelta: number | null;
+  priceDistribution: ReturnType<typeof buildDistribution>;
+  cleanPrices: number[];
+}
+
+/**
+ * Price-anchor filter -> outlier removal -> avg/min/max/median/delta/
+ * distribution. Extracted from runCompetitorSearch's own Step 4 (verbatim
+ * math, just relocated) so BOTH the full-search discovery path and the new
+ * getItems-based refresh path (attemptItemsRefresh) compute stats
+ * identically -- the concrete guard against "getItems returning a
+ * materially different price shape leads to stat drift": any difference in
+ * resulting numbers between the two paths can only come from eBay
+ * returning different underlying prices for the same itemId, never from
+ * divergent app-side arithmetic.
+ */
+export function computeCompStats(params: {
+  prices: number[];
+  yourPrice: number | null | undefined;
+}): CompStats {
+  const { prices, yourPrice } = params;
+  const anchoredPrices = priceAnchorFilter(prices, yourPrice);
+  const cleanPrices = removeOutliers(anchoredPrices);
+  const avgPrice = cleanPrices.reduce((s, p) => s + p, 0) / cleanPrices.length;
+  const minPrice = Math.min(...cleanPrices);
+  const maxPrice = Math.max(...cleanPrices);
+  const medianPrice = median(cleanPrices);
+  const priceDelta = yourPrice != null ? Math.round((yourPrice - medianPrice) * 100) / 100 : null;
+  const priceDistribution = buildDistribution(cleanPrices);
+  return { avgPrice, minPrice, maxPrice, medianPrice, priceDelta, priceDistribution, cleanPrices };
+}
+
+export interface RefreshStrategyDecision {
+  useItemsRefresh: boolean;
+  reason: string;
+}
+
+/**
+ * Decides whether a listing has enough previously-stored comp itemIds to
+ * even attempt the cheap getItems refresh path. Pure so both branches have
+ * direct test coverage without a live fetch/DB round trip -- same pattern
+ * as evaluateCompQuality/groupPlanIntoTiers in this file. This only looks
+ * at what's known BEFORE any call is made; whether the results that come
+ * back are actually trustworthy is a separate, later decision
+ * (isItemsRefreshUsable) made only after fetchEbayItemsBulk returns.
+ */
+export function decideRefreshStrategy(params: {
+  storedItemIds: string[] | null | undefined;
+}): RefreshStrategyDecision {
+  const ids = params.storedItemIds ?? [];
+  if (ids.length === 0) {
+    return { useItemsRefresh: false, reason: "no stored itemIds — first encounter or pre-migration row" };
+  }
+  return { useItemsRefresh: true, reason: `${ids.length} stored itemIds available for bulk refresh` };
+}
+
+export interface ItemsRefreshUsability {
+  usable: boolean;
+  reason: string;
+}
+
+/**
+ * Decides whether a getItems bulk-lookup RESULT is trustworthy enough to
+ * use, once it's actually back. A listing whose tracked comps have mostly
+ * delisted since the last refresh is no longer a good market sample --
+ * minRemainingRatio (default 0.5) forces a fallback to full rediscovery in
+ * that case rather than computing stats off a badly-thinned set.
+ * minCount (default 3) mirrors evaluateCompQuality's own comp-count bar for
+ * consistency across this file's two quality gates.
+ */
+export function isItemsRefreshUsable(params: {
+  requestedCount: number;
+  foundCount: number;
+  minCount?: number;
+  minRemainingRatio?: number;
+}): ItemsRefreshUsability {
+  const minCount = params.minCount ?? 3;
+  const minRemainingRatio = params.minRemainingRatio ?? 0.5;
+  if (params.foundCount < minCount) {
+    return { usable: false, reason: `only ${params.foundCount} comps survived (need ${minCount}+)` };
+  }
+  const remainingRatio = params.requestedCount > 0 ? params.foundCount / params.requestedCount : 0;
+  if (remainingRatio < minRemainingRatio) {
+    return {
+      usable: false,
+      reason: `only ${(remainingRatio * 100).toFixed(0)}% of tracked comps still live (need ${
+        (minRemainingRatio * 100).toFixed(0)
+      }%+)`,
+    };
+  }
+  return { usable: true, reason: `${params.foundCount}/${params.requestedCount} tracked comps still live` };
+}
+
+/**
+ * Attempts the cheap getItems-based refresh path for an already-known
+ * listing. Returns a CompetitorSearchOutcome on success, or null to signal
+ * "fall through to the existing full-search discovery path unchanged" --
+ * every branch here either succeeds and returns, or falls through; no
+ * branch introduces a new failure mode reaching runCompetitorSearch's
+ * caller. Only ever called when userId && listingId are both present.
+ */
+export async function attemptItemsRefresh(params: {
+  // deno-lint-ignore no-explicit-any -- matches this file's existing loose
+  // supabase-js client typing.
+  supabase: any;
+  userId: string;
+  listingId: string;
+  ebayEnv: string;
+  yourPrice: number | null | undefined;
+}): Promise<CompetitorSearchOutcome | null> {
+  const { supabase, userId, listingId, ebayEnv, yourPrice } = params;
+
+  let row: any;
+  try {
+    const { data } = await supabase
+      .from("competitor_prices")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("ebay_listing_id", listingId)
+      .order("fetched_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    row = data;
+  } catch (err) {
+    console.warn("[competitorSearch] attemptItemsRefresh: row lookup failed, falling through to full search:", err);
+    return null;
+  }
+
+  const decision = decideRefreshStrategy({ storedItemIds: row?.comp_item_ids });
+  if (!decision.useItemsRefresh) {
+    console.log(`[competitorSearch] attemptItemsRefresh: ${decision.reason}`);
+    return null;
+  }
+
+  const storedItemIds: string[] = row.comp_item_ids;
+
+  let token: string;
+  try {
+    token = await getEbayAppToken(ebayEnv);
+  } catch (err) {
+    console.warn("[competitorSearch] attemptItemsRefresh: token fetch failed, falling through to full search:", err);
+    return null;
+  }
+
+  let bulkResult: BulkItemsLookupResult;
+  try {
+    bulkResult = await fetchEbayItemsBulk({
+      token,
+      itemIds: storedItemIds,
+      ebayEnv,
+      supabaseForLogging: supabase,
+      loggingCaller: "competitorSearch:getItems",
+    });
+  } catch (err) {
+    console.warn("[competitorSearch] attemptItemsRefresh: getItems call failed, falling through to full search:", err);
+    return null;
+  }
+
+  const usability = isItemsRefreshUsable({
+    requestedCount: storedItemIds.length,
+    foundCount: bulkResult.items.length,
+  });
+  if (!usability.usable) {
+    console.log(`[competitorSearch] attemptItemsRefresh: ${usability.reason} — falling through to full search`);
+    return null;
+  }
+
+  const stats = computeCompStats({
+    prices: bulkResult.items.map((it) => it.price),
+    yourPrice,
+  });
+  const newCompItemIds = bulkResult.foundItemIds.slice(0, 20);
+
+  try {
+    const payload = buildCompetitorPricesUpsertPayload({
+      userId,
+      listingId,
+      searchQuery: row.search_query,
+      geminiQuery: row.gemini_search_query ?? null,
+      avgPrice: stats.avgPrice,
+      minPrice: stats.minPrice,
+      maxPrice: stats.maxPrice,
+      medianPrice: stats.medianPrice,
+      priceDelta: stats.priceDelta,
+      yourPrice: yourPrice ?? null,
+      competitorCount: stats.cleanPrices.length,
+      priceDistribution: stats.priceDistribution,
+      compItemIds: newCompItemIds,
+    });
+    await supabase.from("competitor_prices").upsert(payload, { onConflict: "user_id,ebay_listing_id" });
+    console.log(
+      `[competitorSearch] getItems refresh saved for listing ${listingId}: avg=$${
+        stats.avgPrice.toFixed(2)
+      }, n=${stats.cleanPrices.length}`,
+    );
+  } catch (dbErr) {
+    // Non-fatal, matching the full-search path's own persist-failure
+    // handling -- still return the freshly-computed data to the caller.
+    console.warn("[competitorSearch] attemptItemsRefresh: failed to persist snapshot:", dbErr);
+  }
+
+  const cleanSet = new Set(stats.cleanPrices);
+  const cleanItems = bulkResult.items.filter((it) => cleanSet.has(it.price)).slice(0, 25);
+  const cacheExpiresAt = new Date(Date.now() + CACHE_TTL_MS).toISOString();
+
+  return {
+    status: 200,
+    body: {
+      searchQuery: row.gemini_search_query ?? row.search_query,
+      finalSearchQuery: row.search_query,
+      geminiSearchQuery: row.gemini_search_query ?? null,
+      avgPrice: Math.round(stats.avgPrice * 100) / 100,
+      minPrice: stats.minPrice,
+      maxPrice: stats.maxPrice,
+      medianPrice: Math.round(stats.medianPrice * 100) / 100,
+      priceDelta: stats.priceDelta,
+      competitorCount: stats.cleanPrices.length,
+      priceDistribution: stats.priceDistribution,
+      items: cleanItems,
+      noData: false,
+      fromCache: false,
+      cacheExpiresAt,
+      refreshMethod: "getItems",
+    },
+  };
+}
+
 /**
  * Extracts up to 20 itemIds from the price-cleaned comp set for storage on
  * competitor_prices.comp_item_ids -- 20 is a single Browse API getItems
@@ -1042,6 +1427,27 @@ export async function runCompetitorSearch(params: {
           "[competitorSearch] Cache check failed, proceeding to eBay:",
           cacheErr,
         );
+      }
+
+      // ------------------------------------------------------------------
+      // getItems refresh attempt — cheap bulk lookup of already-known comps
+      // instead of a full re-search, drawing from the (confirmed unused)
+      // buy.browse.item.bulk pool rather than buy.browse. Only reached when
+      // the cache check above found nothing fresh. Returns null on any
+      // failure/unusable-result to fall through to the existing full-search
+      // path below, completely unchanged -- this can only ever REMOVE a
+      // buy.browse call when it succeeds, never add one or introduce a new
+      // failure mode.
+      // ------------------------------------------------------------------
+      const itemsRefreshOutcome = await attemptItemsRefresh({
+        supabase,
+        userId,
+        listingId,
+        ebayEnv,
+        yourPrice,
+      });
+      if (itemsRefreshOutcome) {
+        return itemsRefreshOutcome;
       }
     }
 
@@ -1158,16 +1564,12 @@ export async function runCompetitorSearch(params: {
     // < 10% or > 10x the seller's own price. This prevents e.g. $0.95
     // novelty coins from polluting the market analysis of a $995 graded
     // gold coin when both match the same keywords.
-    // Then apply IQR outlier removal for the remaining items.
-    const anchoredPrices = priceAnchorFilter(prices, yourPrice);
-    const cleanPrices = removeOutliers(anchoredPrices);
-    const avgPrice = cleanPrices.reduce((s, p) => s + p, 0) / cleanPrices.length;
-    const minPrice = Math.min(...cleanPrices);
-    const maxPrice = Math.max(...cleanPrices);
-    const medianPrice = median(cleanPrices);
-    // Use median as basis for priceDelta — more robust than avg for skewed distributions
-    const priceDelta = yourPrice != null ? Math.round((yourPrice - medianPrice) * 100) / 100 : null;
-    const priceDistribution = buildDistribution(cleanPrices);
+    // Then apply IQR outlier removal for the remaining items. Shared with
+    // attemptItemsRefresh's getItems path via computeCompStats -- see that
+    // function's own docstring for why sharing this exact code matters.
+    const { avgPrice, minPrice, maxPrice, medianPrice, priceDelta, priceDistribution, cleanPrices } = computeCompStats(
+      { prices, yourPrice },
+    );
 
     console.log(
       `[competitorSearch] Stats (after outlier removal): avg=$${avgPrice.toFixed(2)}, median=$${
@@ -1188,14 +1590,13 @@ export async function runCompetitorSearch(params: {
     const cleanItems = structuredItems
       .filter((it) => cleanSet.has(it.price))
       .slice(0, 25);
+    const compItemIds = extractCompItemIds(cleanItems);
 
     // ------------------------------------------------------------------
     // Step 5 — Persist to competitor_prices (upsert)
     // ------------------------------------------------------------------
     if (userId && listingId) {
       try {
-        const compItemIds = extractCompItemIds(cleanItems);
-
         const payload = buildCompetitorPricesUpsertPayload({
           userId,
           listingId,
