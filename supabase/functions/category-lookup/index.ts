@@ -2,6 +2,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireUserOrServiceRole } from "../_helpers/authGuard.ts";
 import { GEMINI_FAST_MODEL } from "../_helpers/geminiModels.ts";
 import { isKnownParentCategoryId } from "../_helpers/leafCategoryGuard.ts";
+import { getEmbedding } from "../_helpers/rag/embedding.ts";
+import { fetchWithTimeout, PIPELINE_TIMEOUTS_MS, withTimeout } from "../_helpers/fetchWithTimeout.ts";
 import { type CandidateSource, type GatedCandidate, selectWinner } from "./resolverCore.ts";
 
 const corsHeaders = {
@@ -685,6 +687,205 @@ Example response:
   }
 }
 
+// ── Helper: vector_llm candidate source (Phase 2.2b, PR 2/3) ─────────────────
+// Retrieve-then-rank replacement for askGeminiForCategory's guess-from-memory
+// fallback: embed the item text, pull a real shortlist of live leaf
+// categories from ebay_taxonomy_cache via match_ebay_categories (added in
+// PR #587), then ask a minimal LLM call to pick up to 3 FROM THAT SHORTLIST
+// ONLY. The LLM can never suggest an ID that isn't a real, currently-live
+// leaf, because it was never shown one that wasn't -- see
+// LISTING_MODIFICATION_PRICING_PLAN.md's sibling doc / CLAUDE.md for the
+// "stale-ID disease" this is designed to structurally prevent.
+interface MatchedTaxonomyCategory {
+  categoryId: string;
+  categoryName: string;
+  breadcrumb: string;
+  similarity: number;
+}
+
+/** Vector shortlist size: the 15-30 range settled at 20 (see plan doc). */
+const VECTOR_MATCH_COUNT = 20;
+
+async function matchTaxonomyCategories(
+  supabase: any,
+  queryEmbedding: number[],
+  matchCount: number = VECTOR_MATCH_COUNT,
+): Promise<MatchedTaxonomyCategory[]> {
+  try {
+    const { data, error } = await withTimeout(
+      Promise.resolve(
+        supabase.rpc("match_ebay_categories", {
+          query_embedding: queryEmbedding,
+          match_count: matchCount,
+        }),
+      ),
+      PIPELINE_TIMEOUTS_MS.ragRetrieval,
+      "category-lookup vector_llm shortlist",
+    );
+    if (error) {
+      console.warn("category-lookup: match_ebay_categories RPC error", error);
+      return [];
+    }
+    return (data || []) as MatchedTaxonomyCategory[];
+  } catch (err) {
+    console.warn("category-lookup: match_ebay_categories timed out/threw, degrading to []", err);
+    return [];
+  }
+}
+
+interface LlmCategoryPick {
+  categoryId: string;
+  categoryName: string;
+}
+
+/**
+ * Discards any LLM pick whose categoryId is not present in the supplied
+ * shortlist -- the one hallucination vector left in this design (the LLM
+ * could still emit an ID we never showed it). Pure and exported so this
+ * safety check is directly unit-testable without a live LLM call. Ordering
+ * of the surviving picks (rank 1..N) is preserved.
+ */
+export function validateLlmCategoryPicks(
+  picks: LlmCategoryPick[],
+  shortlist: MatchedTaxonomyCategory[],
+): MatchedTaxonomyCategory[] {
+  const byId = new Map(shortlist.map((s) => [s.categoryId, s]));
+  const validated: MatchedTaxonomyCategory[] = [];
+  for (const pick of picks) {
+    const match = byId.get(pick.categoryId);
+    if (match) validated.push(match);
+  }
+  return validated;
+}
+
+/**
+ * Minimal fast-model call: given the item text and a real shortlist of
+ * {categoryId, categoryName, breadcrumb} rows, ask for up to 3 picks in
+ * best-first order. Returns the raw (unvalidated) picks -- the caller runs
+ * them through validateLlmCategoryPicks before treating any as a candidate.
+ */
+async function rankCategoriesWithLLM(
+  itemDescription: string,
+  shortlist: MatchedTaxonomyCategory[],
+): Promise<LlmCategoryPick[]> {
+  const geminiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!geminiKey || shortlist.length === 0) return [];
+
+  const shortlistText = shortlist
+    .map((c) => `- ${c.categoryId}: ${c.breadcrumb}`)
+    .join("\n");
+
+  const prompt =
+    `You are an eBay category expert. Given the item description and a list of REAL, currently-live eBay leaf categories, pick the best 1-3 categories for this item, best match first.
+
+Item: "${itemDescription}"
+
+Candidate categories (choose ONLY from this list -- do not invent an ID):
+${shortlistText}
+
+Rules:
+- Return ONLY a JSON object: {"picks": [{"categoryId": "...", "categoryName": "..."}, ...]}
+- Every categoryId you return MUST be copied exactly from the candidate list above.
+- Return at most 3 picks, ordered best match first.
+- Do not include any explanation or extra text -- only the JSON object.`;
+
+  try {
+    const resp = await fetchWithTimeout(
+      "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${geminiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: GEMINI_FAST_MODEL,
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.1,
+        }),
+      },
+      PIPELINE_TIMEOUTS_MS.internalFunction,
+      "category-lookup vector_llm ranking",
+    );
+
+    if (!resp.ok) {
+      console.error("category-lookup: vector_llm ranking Gemini API error", resp.status);
+      return [];
+    }
+
+    const respText = await resp.text();
+    let data: any;
+    try {
+      data = JSON.parse(respText);
+    } catch {
+      console.error(
+        `category-lookup: vector_llm ranking JSON parse failed (length=${respText.length}):`,
+        respText.slice(0, 200),
+      );
+      return [];
+    }
+    const text = data.choices?.[0]?.message?.content ?? "";
+
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.warn("category-lookup: vector_llm ranking returned no JSON", text);
+      return [];
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    const picks = Array.isArray(parsed.picks) ? parsed.picks : [];
+    return picks
+      .filter((p: any) => p && p.categoryId)
+      .map((p: any) => ({
+        categoryId: String(p.categoryId).trim(),
+        categoryName: String(p.categoryName ?? "").trim(),
+      }));
+  } catch (err) {
+    console.error("category-lookup: vector_llm ranking exception", err);
+    return [];
+  }
+}
+
+/**
+ * Full vector_llm gathering pipeline: embed -> retrieve real shortlist ->
+ * minimal LLM rank -> validate against the shortlist -> RawCandidates.
+ * Degrades to [] (never throws) on any failure -- this source is a
+ * corroborating signal, not a hard dependency, matching every other
+ * candidate-gathering helper in this file.
+ */
+async function fetchVectorLlmCandidates(
+  supabase: any,
+  itemDescription: string,
+): Promise<RawCandidate[]> {
+  const geminiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!geminiKey) return [];
+
+  let queryEmbedding: number[];
+  try {
+    queryEmbedding = await getEmbedding(geminiKey, itemDescription, PIPELINE_TIMEOUTS_MS.embedding);
+  } catch (err) {
+    console.warn("category-lookup: vector_llm embedding failed, degrading to []", err);
+    return [];
+  }
+
+  const shortlist = await matchTaxonomyCategories(supabase, queryEmbedding);
+  if (shortlist.length === 0) return [];
+
+  const rawPicks = await rankCategoriesWithLLM(itemDescription, shortlist);
+  const validated = validateLlmCategoryPicks(rawPicks, shortlist);
+
+  return validated.slice(0, 3).map((c, i) => ({
+    categoryId: c.categoryId,
+    categoryName: c.categoryName,
+    breadcrumb: c.breadcrumb,
+    source: "vector_llm" as CandidateSource,
+    rank: i + 1,
+    reason: `vector_llm: retrieved from ${shortlist.length}-candidate taxonomy shortlist (similarity=${
+      c.similarity.toFixed(3)
+    }), LLM rank #${i + 1} -- validated against real live leaf categories only`,
+  }));
+}
+
 // ── Helper: Persist audit entries to lookup_decisions table (#0, #9) ─────────
 async function persistAuditEntries(
   supabase: any,
@@ -1242,6 +1443,18 @@ export async function handleRequest(req: Request): Promise<Response> {
         }
       }
 
+      // ── Gather: vector_llm (Phase 2.2b, PR 2/3) ─────────────────────────
+      // Runs UNCONDITIONALLY (not gated on rawCandidates.length === 0) --
+      // its value is corroborating (or beating) eBay's #1 via the agreement
+      // check in resolverCore.ts, which requires it to run even when eBay
+      // DID return something. selectWinner() is untouched in this PR: this
+      // source can only ever be an agreement participant here, never an
+      // outright winner -- that precedence change is PR 3/3.
+      const vectorLlmStart = Date.now();
+      const vectorLlmCandidates = await fetchVectorLlmCandidates(supabase, rawItemType);
+      const vectorLlmLatency = Date.now() - vectorLlmStart;
+      rawCandidates.push(...vectorLlmCandidates);
+
       // ── Layer 1: run every gathered candidate through the hard gates ───
       const gatedCandidates: GatedCandidate[] = await Promise.all(
         rawCandidates.map((c) => gateCandidate(c, supabase, ebayAuth, conditionIdStr, queryTokens)),
@@ -1272,6 +1485,8 @@ export async function handleRequest(req: Request): Promise<Response> {
           ? ebayLatency
           : c.source === "db_fuzzy"
           ? dbFuzzyLatency
+          : c.source === "vector_llm"
+          ? vectorLlmLatency
           : geminiLatency,
       }));
 

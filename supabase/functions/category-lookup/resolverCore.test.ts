@@ -222,3 +222,106 @@ Deno.test("selectWinner: gemini alone, even if it survives, never wins outright"
   assertEquals(result.winner, null);
   assertEquals(result.needsConfirmation, true);
 });
+
+// ── vector_llm (Phase 2.2b, PR 2/3): agreement-participant only in THIS PR ──
+// The precedence change making vector_llm winner-capable when eBay's #1 is
+// absent/dropped is PR 3/3 — selectWinner() itself is deliberately untouched
+// here. These cases lock in today's behavior (identical shape to gemini's
+// existing agreement-only role) so PR 3/3's rewrite has a clear, intentional
+// diff against a known-good baseline rather than an accidental one.
+
+Deno.test("selectWinner: vector_llm alone, even if it survives, never wins outright (PR 2/3 baseline)", () => {
+  const vectorLlmOnly = candidate({
+    categoryId: "555",
+    source: "vector_llm",
+    rank: 1,
+    survived: true,
+  });
+
+  const result = selectWinner([vectorLlmOnly]);
+
+  assertEquals(result.winner, null);
+  assertEquals(result.needsConfirmation, true);
+});
+
+Deno.test("selectWinner: vector_llm can act as the agreement source that confirms eBay #1", () => {
+  const ebayTop = candidate({
+    categoryId: "222",
+    source: "ebay_api",
+    rank: 1,
+    breadcrumb: "Coins & Paper Money > Coins: US > Commemorative > Silver",
+  });
+  const ebaySecond = candidate({
+    categoryId: "999",
+    source: "ebay_api",
+    rank: 2,
+    breadcrumb: "Toys & Hobbies > Action Figures",
+  });
+  const vectorLlmAgree = candidate({
+    categoryId: "222",
+    source: "vector_llm",
+    rank: 1,
+    breadcrumb: "Coins & Paper Money > Coins: US > Commemorative > Silver",
+  });
+
+  const result = selectWinner([ebayTop, ebaySecond, vectorLlmAgree]);
+
+  assertExists(result.winner);
+  assertEquals(result.winner?.categoryId, "222");
+  assertEquals(result.winner?.source, "ebay_api");
+  assertEquals(result.needsConfirmation, false);
+  assertEquals(result.agreementSourcesMatched, ["vector_llm"]);
+});
+
+Deno.test("selectWinner: vector_llm disagreeing with eBay #1 does not help — still NEEDS_CONFIRMATION without another agreeing source", () => {
+  const ebayTop = candidate({
+    categoryId: "222",
+    source: "ebay_api",
+    rank: 1,
+    breadcrumb: "Coins & Paper Money > Coins: US > Commemorative > Silver",
+  });
+  const vectorLlmDisagree = candidate({
+    categoryId: "444",
+    source: "vector_llm",
+    rank: 1,
+    breadcrumb: "Toys & Hobbies > Action Figures",
+  });
+
+  const result = selectWinner([ebayTop, vectorLlmDisagree]);
+
+  assertEquals(result.winner, null);
+  assertEquals(result.needsConfirmation, true);
+  assertEquals(result.agreementSourcesMatched.length, 0);
+});
+
+Deno.test("selectWinner: vector_llm does NOT outrank a surviving user_verified mapping", () => {
+  const userVerified = candidate({ categoryId: "111", source: "user_verified", rank: 1 });
+  const vectorLlm = candidate({ categoryId: "222", source: "vector_llm", rank: 1 });
+
+  const result = selectWinner([userVerified, vectorLlm]);
+
+  assertExists(result.winner);
+  assertEquals(result.winner?.categoryId, "111");
+  assertEquals(result.winner?.source, "user_verified");
+});
+
+Deno.test("selectWinner: eBay #1 dropped, vector_llm survivor exists alone — still NEEDS_CONFIRMATION (no consolation prize, PR 2/3 baseline)", () => {
+  const ebayTopDropped = candidate({
+    categoryId: "99",
+    source: "ebay_api",
+    rank: 1,
+    survived: false,
+    dropReason: "not a leaf",
+  });
+  const vectorLlmSurvivor = candidate({
+    categoryId: "555",
+    source: "vector_llm",
+    rank: 1,
+    survived: true,
+  });
+
+  const result = selectWinner([ebayTopDropped, vectorLlmSurvivor]);
+
+  assertEquals(result.winner, null);
+  assertEquals(result.needsConfirmation, true);
+});
