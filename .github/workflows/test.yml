@@ -88,14 +88,72 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Run leafCategoryGuard unit tests
-        run: deno test --allow-net --allow-env supabase/functions/_helpers/leafCategoryGuard.test.ts
-
-      - name: Run domainPrompts freshness test
-        run: deno test --allow-read=corpus/ebay_taxonomy_snapshot.json --allow-net --allow-env supabase/functions/_helpers/domainPrompts.test.ts
-
       - name: Run golden-corpus replay harness
         run: node scripts/replay-corpus.mjs
+
+  # Deno unit tests: everything under supabase/functions/*.test.ts (2026-09-18).
+  # Before this, only two files here (leafCategoryGuard/domainPrompts) actually
+  # ran in CI -- 23 other *.test.ts files, including resolverCore.test.ts and
+  # everything shipped in recent category/pricing/quota-monitor PRs, had zero
+  # CI coverage and could sit broken on main indefinitely with a green
+  # checkmark. Pointing `deno test` at the whole directory makes it discover
+  # every *.test.ts file itself (Deno's own recursive test-file discovery,
+  # not a shell glob) -- a new *.test.ts file is covered the moment it's
+  # added, no per-file wiring, and this doesn't depend on bash's `globstar`
+  # option being enabled (it isn't, by default, on GitHub's ubuntu runners --
+  # a `**/*.test.ts` shell glob here would have silently missed any file
+  # nested two directories deep, e.g. _helpers/rag/retriever.test.ts).
+  #
+  # --ignore excludes analyze-item/test.ts (note: NOT *.test.ts -- a
+  # different, pre-existing HTTP-level smoke test requiring a running local
+  # Supabase stack per TESTING.md, out of scope for this fast/offline job by
+  # design; it's the only file directly under supabase/functions/ that
+  # doesn't end in .test.ts and would otherwise be picked up).
+  #
+  # --allow-net: several files spin up a real local Deno.serve() test server
+  # (fetchWithTimeout.test.ts) or import an index.ts whose only top-level
+  # side effect is Deno.serve(handleRequest) (category-lookup, ebay-pricing,
+  # ebay-quota-monitor, market-watch-refresh, bulk-publish, etc.) -- binding
+  # that listener requires net access even though no test makes a real
+  # outbound network call (they all mock at the fetch/Supabase-client
+  # boundary). --allow-env: several files read real env vars (or a test
+  # monkey-patches Deno.env.get for one specific key, e.g. tokenCrypto.test.ts
+  # / ebayTokenRefresh.test.ts's EBAY_TOKEN_ENCRYPTION_KEY). --allow-read is
+  # scoped to exactly the one file three tests need (domainPrompts,
+  # publish-helpers, suggestedCategories all read the same frozen
+  # corpus/ebay_taxonomy_snapshot.json), matching the pre-existing
+  # domainPrompts entry's own scoping rather than widening it repo-wide.
+  #
+  # DENO_NO_PACKAGE_JSON=1: two files (ebay-quota-monitor, market-watch-
+  # refresh) import their index.ts via an `npm:@supabase/supabase-js` bare
+  # specifier. Without this, Deno tries to resolve it against this repo's
+  # root package.json/package-lock.json (a frontend npm project unrelated to
+  # the Edge Functions) and attempts to materialize a full local
+  # node_modules for that entire dependency graph -- unnecessary weight and
+  # slow in CI. This env var makes Deno resolve the npm specifier purely
+  # through its own npm cache instead, which is what every other test file
+  # here already gets for free via esm.sh imports.
+  deno-unit-tests:
+    name: Deno Unit Tests (Edge Functions)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: v2.x
+
+      - name: Run all supabase/functions unit tests
+        env:
+          DENO_NO_PACKAGE_JSON: "1"
+        run: >
+          deno test --allow-net --allow-env
+          --allow-read=corpus/ebay_taxonomy_snapshot.json
+          --config supabase/functions/deno.json
+          --ignore=supabase/functions/analyze-item/test.ts
+          supabase/functions/
 
   # Integration tests require a local Supabase instance (Docker).
   # Standard GitHub Actions runners do not have Docker available, so these
@@ -119,8 +177,9 @@ jobs:
           deno check --config supabase/functions/deno.json supabase/functions/analyze-item/test.ts
         continue-on-error: true
 
-  # Send summary — frontend, functions-check, and category-corpus-replay are blocking.
-  # E2E smoke testing against a real deployment lives in e2e-pr-smoke.yml, not here.
+  # Send summary — frontend, functions-check, category-corpus-replay, and
+  # deno-unit-tests are blocking. E2E smoke testing against a real deployment
+  # lives in e2e-pr-smoke.yml, not here.
   test-summary:
     name: Test Summary
     runs-on: ubuntu-latest
@@ -130,6 +189,7 @@ jobs:
         frontend-tests,
         functions-check,
         category-corpus-replay,
+        deno-unit-tests,
         integration-tests,
       ]
 
@@ -138,7 +198,8 @@ jobs:
         run: |
           if [ "${{ needs.frontend-tests.result }}" = "failure" ] || \
              [ "${{ needs.functions-check.result }}" = "failure" ] || \
-             [ "${{ needs.category-corpus-replay.result }}" = "failure" ]; then
+             [ "${{ needs.category-corpus-replay.result }}" = "failure" ] || \
+             [ "${{ needs.deno-unit-tests.result }}" = "failure" ]; then
             echo "❌ Tests failed"
             exit 1
           fi
