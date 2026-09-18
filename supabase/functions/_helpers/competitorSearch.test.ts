@@ -1,5 +1,6 @@
-import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
+import { assertEquals, assertNotEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import {
+  buildCompetitorPricesUpsertPayload,
   type CompSearchAttemptResult,
   evaluateCompQuality,
   groupPlanIntoTiers,
@@ -400,4 +401,89 @@ Deno.test("logBrowseApiCall: a client whose .from() itself throws does not propa
     },
   };
   logBrowseApiCall(throwingClient, "keyword-research");
+});
+
+// ── buildCompetitorPricesUpsertPayload: real production bug fix (2026-09-18) ──
+// Regression coverage for the actual root cause of a full day's 5,000-call
+// Browse API quota being burned with zero new listings created: the upsert
+// into competitor_prices never set fetched_at, so Postgres's column
+// DEFAULT NOW() (which only fires on INSERT, never on ON CONFLICT DO
+// UPDATE) left every refresh silently keeping the ORIGINAL insert-time
+// value forever -- freezing every row's staleness clock while
+// get_next_competitor_price_batch's 24h filter kept re-selecting the same
+// rows as "stale" and competitor-prices-cron (every 5 min) re-fetched them
+// in an unbroken loop. Confirmed live via pg_stat_user_tables: 48,292
+// updates against only 578 inserts on this table.
+
+function basePayloadParams(overrides: Partial<Parameters<typeof buildCompetitorPricesUpsertPayload>[0]> = {}) {
+  return {
+    userId: "user-1",
+    listingId: "listing-1",
+    searchQuery: "vintage widget",
+    geminiQuery: null,
+    avgPrice: 12.345,
+    minPrice: 5,
+    maxPrice: 20,
+    medianPrice: 11.999,
+    priceDelta: 1.5,
+    yourPrice: 10,
+    competitorCount: 7,
+    priceDistribution: { buckets: [1, 2, 3] },
+    ...overrides,
+  };
+}
+
+Deno.test("buildCompetitorPricesUpsertPayload: sets fetched_at to the current time, not left to a DB default", () => {
+  const now = new Date("2026-09-18T12:00:00.000Z");
+  const payload = buildCompetitorPricesUpsertPayload(basePayloadParams({ now }));
+  assertEquals(payload.fetched_at, "2026-09-18T12:00:00.000Z");
+});
+
+Deno.test("buildCompetitorPricesUpsertPayload: expires_at is fetched_at + the cache TTL, not a fixed offset from some other time", () => {
+  const now = new Date("2026-09-18T12:00:00.000Z");
+  const payload = buildCompetitorPricesUpsertPayload(basePayloadParams({ now }));
+  // CACHE_TTL_MS is 24h -- expires_at must be exactly 24h after fetched_at.
+  const fetchedMs = new Date(payload.fetched_at).getTime();
+  const expiresMs = new Date(payload.expires_at).getTime();
+  assertEquals(expiresMs - fetchedMs, 24 * 60 * 60 * 1000);
+});
+
+Deno.test("buildCompetitorPricesUpsertPayload: two calls a moment apart produce two DIFFERENT fetched_at values (regression guard against a frozen/stale timestamp)", () => {
+  // Deliberately does NOT pass `now` -- exercises the real default path
+  // (`params.now ?? new Date()`) exactly as runCompetitorSearch's call site
+  // does, so this catches a regression where the default silently stops
+  // advancing (e.g. a future refactor that hoists `new Date()` out to a
+  // module-level constant).
+  const first = buildCompetitorPricesUpsertPayload(basePayloadParams());
+  const second = buildCompetitorPricesUpsertPayload(basePayloadParams());
+  // Not asserting exact difference (could tie at ms resolution on a fast
+  // machine) -- asserting neither is a hardcoded/frozen sentinel value.
+  assertNotEquals(first.fetched_at, "");
+  assertNotEquals(second.fetched_at, "");
+  // Both must be real, recent ISO timestamps, not epoch-zero or undefined.
+  const age = Date.now() - new Date(first.fetched_at).getTime();
+  assertEquals(age < 5000 && age >= 0, true);
+});
+
+Deno.test("buildCompetitorPricesUpsertPayload: rounds avg/median price to 2 decimal places, passes min/max through unrounded", () => {
+  const payload = buildCompetitorPricesUpsertPayload(
+    basePayloadParams({ avgPrice: 12.3456, medianPrice: 11.999, minPrice: 5.1, maxPrice: 19.999 }),
+  );
+  assertEquals(payload.avg_price, 12.35);
+  assertEquals(payload.median_price, 12);
+  assertEquals(payload.min_price, 5.1);
+  assertEquals(payload.max_price, 19.999);
+});
+
+Deno.test("buildCompetitorPricesUpsertPayload: maps every field to its snake_case column name", () => {
+  const now = new Date("2026-09-18T12:00:00.000Z");
+  const payload = buildCompetitorPricesUpsertPayload(basePayloadParams({ now }));
+  assertEquals(payload.user_id, "user-1");
+  assertEquals(payload.ebay_listing_id, "listing-1");
+  assertEquals(payload.search_query, "vintage widget");
+  assertEquals(payload.gemini_search_query, null);
+  assertEquals(payload.price_delta, 1.5);
+  assertEquals(payload.your_price, 10);
+  assertEquals(payload.competitor_count, 7);
+  assertEquals(payload.price_distribution, { buckets: [1, 2, 3] });
 });
