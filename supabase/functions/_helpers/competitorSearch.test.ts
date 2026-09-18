@@ -621,7 +621,9 @@ Deno.test("parseCompetitorItem: falls back to currentPrice.value when price.valu
   assertEquals(parseCompetitorItem(raw)?.price, 12.5);
 });
 
-// ── getItems batch-refresh plan (PR 2): fetchEbayItemsBulk ──────────────────
+// ── getItems batch-refresh plan (now rewritten as a single-item loop after
+// a live 403 on the bulk item_ids= endpoint, see fetchEbayItemsBulk's own
+// docstring): fetchEbayItemsBulk ────────────────────────────────────────────
 
 function withMockedFetch<T>(
   handler: (url: string, init?: RequestInit, callIndex?: number) => Response | Promise<Response>,
@@ -638,18 +640,26 @@ function withMockedFetch<T>(
   });
 }
 
-function itemsResponse(items: unknown[]): Response {
-  return new Response(JSON.stringify({ items }), { status: 200 });
+// Extracts the itemId from a single-item getItem URL
+// (".../buy/browse/v1/item/<encoded-id>"), the shape fetchEbayItemsBulk now
+// calls per id instead of one bulk item_ids= URL.
+function itemIdFromUrl(url: string): string {
+  const encoded = url.split("/buy/browse/v1/item/")[1] ?? "";
+  return decodeURIComponent(encoded);
+}
+
+function singleItemResponse(item: unknown): Response {
+  return new Response(JSON.stringify(item), { status: 200 });
 }
 
 Deno.test("fetchEbayItemsBulk: all requested itemIds present in the response", async () => {
   const { client, inserted } = fakeSupabaseForLogging();
+  const byId: Record<string, unknown> = {
+    a: { itemId: "a", price: { value: "10.00" }, title: "A" },
+    b: { itemId: "b", price: { value: "20.00" }, title: "B" },
+  };
   const result = await withMockedFetch(
-    () =>
-      itemsResponse([
-        { itemId: "a", price: { value: "10.00" }, title: "A" },
-        { itemId: "b", price: { value: "20.00" }, title: "B" },
-      ]),
+    (url) => singleItemResponse(byId[itemIdFromUrl(url)]),
     () =>
       fetchEbayItemsBulk({
         token: "tok",
@@ -662,16 +672,21 @@ Deno.test("fetchEbayItemsBulk: all requested itemIds present in the response", a
   assertEquals(result.foundItemIds.sort(), ["a", "b"]);
   assertEquals(result.missingItemIds, []);
   assertEquals(result.items.length, 2);
-  // Logged against the buy.browse.item.bulk resource, not buy.browse --
-  // this is the regression guard for the same-day-counter pollution risk.
-  assertEquals(inserted.length, 1);
-  assertEquals(inserted[0].row.resource, "buy.browse.item.bulk");
+  // Logged against the buy.browse.item.bulk resource (kept for quota-
+  // dashboard continuity even though the mechanism is now single-item
+  // calls) -- one insert per item, not per batch.
+  assertEquals(inserted.length, 2);
+  assertEquals(inserted.every((i) => i.row.resource === "buy.browse.item.bulk"), true);
 });
 
-Deno.test("fetchEbayItemsBulk: a partial subset missing from the response is reported as missingItemIds, not a failure", async () => {
+Deno.test("fetchEbayItemsBulk: a missing itemId (404) is reported as missingItemIds, not a failure, and doesn't sink the other ids", async () => {
   const { client } = fakeSupabaseForLogging();
   const result = await withMockedFetch(
-    () => itemsResponse([{ itemId: "a", price: { value: "10.00" }, title: "A" }]),
+    (url) => {
+      const id = itemIdFromUrl(url);
+      if (id === "a") return singleItemResponse({ itemId: "a", price: { value: "10.00" }, title: "A" });
+      return new Response("not found", { status: 404 });
+    },
     () =>
       fetchEbayItemsBulk({
         token: "tok",
@@ -685,7 +700,28 @@ Deno.test("fetchEbayItemsBulk: a partial subset missing from the response is rep
   assertEquals(result.missingItemIds.sort(), ["b", "c"]);
 });
 
-Deno.test("fetchEbayItemsBulk: fails after 3 retries on a persistent 5xx, does not swallow the error", async () => {
+Deno.test("fetchEbayItemsBulk: a single item failing after 3 retries on a persistent 5xx is treated as missing, not a whole-batch failure, when other items succeed", async () => {
+  const { client } = fakeSupabaseForLogging();
+  const result = await withMockedFetch(
+    (url) => {
+      const id = itemIdFromUrl(url);
+      if (id === "a") return new Response("boom", { status: 500 });
+      return singleItemResponse({ itemId: "b", price: { value: "20.00" }, title: "B" });
+    },
+    () =>
+      fetchEbayItemsBulk({
+        token: "tok",
+        itemIds: ["a", "b"],
+        ebayEnv: "production",
+        supabaseForLogging: client,
+        loggingCaller: "test",
+      }),
+  );
+  assertEquals(result.foundItemIds, ["b"]);
+  assertEquals(result.missingItemIds, ["a"]);
+});
+
+Deno.test("fetchEbayItemsBulk: every item failing after retries throws (nothing at all came back)", async () => {
   const { client } = fakeSupabaseForLogging();
   await assertRejects(
     () =>
@@ -704,7 +740,7 @@ Deno.test("fetchEbayItemsBulk: fails after 3 retries on a persistent 5xx, does n
   );
 });
 
-Deno.test("fetchEbayItemsBulk: a 4xx (not 5xx) fails immediately without retrying 3 times", async () => {
+Deno.test("fetchEbayItemsBulk: a 403 (not 404, not 5xx) fails that item immediately without retrying 3 times", async () => {
   const { client } = fakeSupabaseForLogging();
   let calls = 0;
   await assertRejects(
@@ -712,7 +748,7 @@ Deno.test("fetchEbayItemsBulk: a 4xx (not 5xx) fails immediately without retryin
       withMockedFetch(
         () => {
           calls++;
-          return new Response("bad request", { status: 400 });
+          return new Response("forbidden", { status: 403 });
         },
         () =>
           fetchEbayItemsBulk({
@@ -880,12 +916,21 @@ function withEbayCreds<T>(fn: () => Promise<T>): Promise<T> {
   });
 }
 
-function mockTokenAndItemsFetch(itemsHandlerResponse: () => Response) {
+// itemsById maps itemId -> either a raw item object (200 response) or a
+// Response (for simulating a per-item failure like a 404/500). Any itemId
+// not present in the map returns a 500 -- mirrors the old bulk mock's
+// "items not in the handler's list are just absent" default, generalized
+// to per-item calls.
+function mockTokenAndItemsFetch(itemsById: Record<string, unknown | Response>) {
   return (url: string) => {
     if (url.includes("/oauth2/token")) {
       return new Response(JSON.stringify({ access_token: "fake-token" }), { status: 200 });
     }
-    return itemsHandlerResponse();
+    const id = itemIdFromUrl(url);
+    const entry = itemsById[id];
+    if (entry instanceof Response) return entry;
+    if (entry === undefined) return new Response("not found", { status: 500 });
+    return singleItemResponse(entry);
   };
 }
 
@@ -919,13 +964,11 @@ Deno.test("attemptItemsRefresh: usable getItems result -> returns a successful o
   });
   const result = await withEbayCreds(() =>
     withMockedFetch(
-      mockTokenAndItemsFetch(() =>
-        itemsResponse([
-          { itemId: "a", price: { value: "10.00" }, title: "A" },
-          { itemId: "b", price: { value: "11.00" }, title: "B" },
-          { itemId: "c", price: { value: "12.00" }, title: "C" },
-        ])
-      ),
+      mockTokenAndItemsFetch({
+        a: { itemId: "a", price: { value: "10.00" }, title: "A" },
+        b: { itemId: "b", price: { value: "11.00" }, title: "B" },
+        c: { itemId: "c", price: { value: "12.00" }, title: "C" },
+      }),
       () =>
         attemptItemsRefresh({
           supabase: client,
@@ -955,14 +998,12 @@ Deno.test("attemptItemsRefresh: comp_item_ids reflects the CLEANED item set, exc
   });
   const result = await withEbayCreds(() =>
     withMockedFetch(
-      mockTokenAndItemsFetch(() =>
-        itemsResponse([
-          { itemId: "a", price: { value: "10.00" }, title: "A" },
-          { itemId: "b", price: { value: "11.00" }, title: "B" },
-          { itemId: "c", price: { value: "12.00" }, title: "C" },
-          { itemId: "d", price: { value: "0.50" }, title: "Novelty D" },
-        ])
-      ),
+      mockTokenAndItemsFetch({
+        a: { itemId: "a", price: { value: "10.00" }, title: "A" },
+        b: { itemId: "b", price: { value: "11.00" }, title: "B" },
+        c: { itemId: "c", price: { value: "12.00" }, title: "C" },
+        d: { itemId: "d", price: { value: "0.50" }, title: "Novelty D" },
+      }),
       () =>
         attemptItemsRefresh({
           supabase: client,
@@ -992,13 +1033,11 @@ Deno.test("attemptItemsRefresh: an upsert error is inspected, not silently treat
   });
   const result = await withEbayCreds(() =>
     withMockedFetch(
-      mockTokenAndItemsFetch(() =>
-        itemsResponse([
-          { itemId: "a", price: { value: "10.00" }, title: "A" },
-          { itemId: "b", price: { value: "11.00" }, title: "B" },
-          { itemId: "c", price: { value: "12.00" }, title: "C" },
-        ])
-      ),
+      mockTokenAndItemsFetch({
+        a: { itemId: "a", price: { value: "10.00" }, title: "A" },
+        b: { itemId: "b", price: { value: "11.00" }, title: "B" },
+        c: { itemId: "c", price: { value: "12.00" }, title: "C" },
+      }),
       () =>
         attemptItemsRefresh({
           supabase: client,
@@ -1025,7 +1064,13 @@ Deno.test("attemptItemsRefresh: too many delisted (below minRemainingRatio) -> r
   const result = await withEbayCreds(() =>
     withMockedFetch(
       // Only 1 of 4 survives -- below both minCount(3) and minRemainingRatio(0.5).
-      mockTokenAndItemsFetch(() => itemsResponse([{ itemId: "a", price: { value: "10.00" }, title: "A" }])),
+      // b/c/d are explicit 404s (not retried, unlike a 500) so this stays fast.
+      mockTokenAndItemsFetch({
+        a: { itemId: "a", price: { value: "10.00" }, title: "A" },
+        b: new Response("not found", { status: 404 }),
+        c: new Response("not found", { status: 404 }),
+        d: new Response("not found", { status: 404 }),
+      }),
       () =>
         attemptItemsRefresh({
           supabase: client,
@@ -1045,7 +1090,14 @@ Deno.test("attemptItemsRefresh: getItems call throws (e.g. persistent 5xx) -> re
   });
   const result = await withEbayCreds(() =>
     withMockedFetch(
-      mockTokenAndItemsFetch(() => new Response("boom", { status: 500 })),
+      // Every requested id 500s and is retried to exhaustion -- all-fail
+      // means fetchEbayItemsBulk throws (see its own "every item failing"
+      // test above), which attemptItemsRefresh must catch and swallow.
+      mockTokenAndItemsFetch({
+        a: new Response("boom", { status: 500 }),
+        b: new Response("boom", { status: 500 }),
+        c: new Response("boom", { status: 500 }),
+      }),
       () =>
         attemptItemsRefresh({
           supabase: client,
