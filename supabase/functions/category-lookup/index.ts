@@ -171,6 +171,7 @@ interface AuditEntry {
   verified_active: boolean | null;
   persisted_to_db: boolean;
   latency_ms: number;
+  gate4_warnings: string[] | null;
 }
 
 // ── Helper: Generate request ID ──────────────────────────────────────────────
@@ -886,6 +887,51 @@ async function fetchVectorLlmCandidates(
   }));
 }
 
+/**
+ * Builds one lookup_decisions audit row from a single gated candidate.
+ * Pure and exported so the Gate 4 persistence logic (which candidates get
+ * their warnings recorded, and in what shape) is directly unit-testable
+ * without a live Supabase client or the rest of the `lookup` action's I/O.
+ *
+ * gate4_warnings is recorded for EVERY candidate this is called on --
+ * survivors and drops alike, winner and non-winners alike -- not just the
+ * response body's winner.gate4Warnings. Phase 6's false-positive review
+ * needs to see warnings on candidates that were never selected too, or the
+ * dataset is silently biased toward whichever candidate happened to win.
+ * An empty array is persisted as `null` rather than `[]` -- purely a
+ * storage-size/readability choice ("no warnings" reads cleaner as null in
+ * a query result), not a semantic difference from the caller's perspective.
+ */
+export function buildAuditEntry(
+  candidate: GatedCandidate,
+  ctx: {
+    requestId: string;
+    queryText: string;
+    winner: GatedCandidate | null;
+    lockReason: string;
+    latencyMs: number;
+  },
+): AuditEntry {
+  return {
+    request_id: ctx.requestId,
+    query_text: ctx.queryText,
+    candidate_source: candidate.source,
+    candidate_id: candidate.categoryId,
+    candidate_name: candidate.categoryName,
+    candidate_score: 0, // no score in the filter-then-rank model
+    candidate_rank: candidate.rank,
+    was_selected: ctx.winner !== null &&
+      candidate.categoryId === ctx.winner.categoryId &&
+      candidate.source === ctx.winner.source,
+    reason_selected: candidate === ctx.winner ? ctx.lockReason : (candidate.dropReason ?? candidate.reason),
+    verified_leaf: candidate.survived ? true : (candidate.dropReason?.startsWith("Gate 1") ? false : null),
+    verified_active: candidate.survived ? true : (candidate.dropReason?.startsWith("Gate 2") ? false : null),
+    persisted_to_db: false,
+    latency_ms: ctx.latencyMs,
+    gate4_warnings: candidate.gate4Warnings.length > 0 ? candidate.gate4Warnings : null,
+  };
+}
+
 // ── Helper: Persist audit entries to lookup_decisions table (#0, #9) ─────────
 async function persistAuditEntries(
   supabase: any,
@@ -1464,31 +1510,26 @@ export async function handleRequest(req: Request): Promise<Response> {
       const result = selectWinner(gatedCandidates);
 
       // ── Audit logging (#0, #9) ──────────────────────────────────────────
-      const auditEntries: AuditEntry[] = gatedCandidates.map((c) => ({
-        request_id: requestId,
-        query_text: rawItemType,
-        candidate_source: c.source,
-        candidate_id: c.categoryId,
-        candidate_name: c.categoryName,
-        candidate_score: 0, // no score in the filter-then-rank model
-        candidate_rank: c.rank,
-        was_selected: result.winner !== null &&
-          c.categoryId === result.winner.categoryId &&
-          c.source === result.winner.source,
-        reason_selected: c === result.winner ? result.lockReason : (c.dropReason ?? c.reason),
-        verified_leaf: c.survived ? true : (c.dropReason?.startsWith("Gate 1") ? false : null),
-        verified_active: c.survived ? true : (c.dropReason?.startsWith("Gate 2") ? false : null),
-        persisted_to_db: false,
-        latency_ms: c.source === "user_verified" || c.source === "db_exact"
-          ? dbLatency
-          : c.source === "ebay_api"
-          ? ebayLatency
-          : c.source === "db_fuzzy"
-          ? dbFuzzyLatency
-          : c.source === "vector_llm"
-          ? vectorLlmLatency
-          : geminiLatency,
-      }));
+      // gate4_warnings is recorded here for every gated candidate via
+      // buildAuditEntry (Phase 6 data-collection fix) -- see that function's
+      // own comment for why this must cover non-winners too.
+      const auditEntries: AuditEntry[] = gatedCandidates.map((c) =>
+        buildAuditEntry(c, {
+          requestId,
+          queryText: rawItemType,
+          winner: result.winner,
+          lockReason: result.lockReason,
+          latencyMs: c.source === "user_verified" || c.source === "db_exact"
+            ? dbLatency
+            : c.source === "ebay_api"
+            ? ebayLatency
+            : c.source === "db_fuzzy"
+            ? dbFuzzyLatency
+            : c.source === "vector_llm"
+            ? vectorLlmLatency
+            : geminiLatency,
+        })
+      );
 
       // ── Auto-persist winner (only automated sources — never re-persist
       //    a user_verified row back over itself) ──────────────────────────

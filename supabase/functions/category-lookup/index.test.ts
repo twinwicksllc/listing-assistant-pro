@@ -1,5 +1,6 @@
 import { assertEquals } from "https://deno.land/std@0.203.0/assert/mod.ts";
-import { validateLlmCategoryPicks } from "./index.ts";
+import { buildAuditEntry, validateLlmCategoryPicks } from "./index.ts";
+import type { GatedCandidate } from "./resolverCore.ts";
 
 function shortlistRow(
   categoryId: string,
@@ -86,4 +87,100 @@ Deno.test("validateLlmCategoryPicks: returned rows come from the shortlist, not 
   assertEquals(result[0].categoryName, "Real Name");
   assertEquals(result[0].breadcrumb, "Real > Breadcrumb");
   assertEquals(result[0].similarity, 0.77);
+});
+
+// ── buildAuditEntry: Gate 4 warning persistence (Phase 6 data-collection fix) ──
+// Regression coverage for the real gap found 2026-09-18: gate4Warnings was
+// computed for every candidate but never persisted anywhere except the
+// winner's own HTTP response body -- so Phase 6's "review two weeks of
+// warn-only data" could never actually start, since no queryable dataset
+// existed. These lock in that EVERY gated candidate's warnings are now
+// recorded, not just the winner's.
+
+function candidate(overrides: Partial<GatedCandidate> = {}): GatedCandidate {
+  return {
+    categoryId: "12345",
+    categoryName: "Test Category",
+    breadcrumb: "Domain > Sub > Test Category",
+    source: "ebay_api",
+    rank: 1,
+    survived: true,
+    dropReason: null,
+    gate4Warnings: [],
+    reason: "test candidate",
+    ...overrides,
+  };
+}
+
+function baseCtx(overrides: Partial<Parameters<typeof buildAuditEntry>[1]> = {}) {
+  return {
+    requestId: "req-1",
+    queryText: "1921 morgan silver dollar",
+    winner: null,
+    lockReason: "NEEDS_CONFIRMATION: no candidate survived the hard gates",
+    latencyMs: 42,
+    ...overrides,
+  };
+}
+
+Deno.test("buildAuditEntry: a candidate with no Gate 4 warnings persists gate4_warnings as null, not an empty array", () => {
+  const c = candidate({ gate4Warnings: [] });
+  const entry = buildAuditEntry(c, baseCtx());
+  assertEquals(entry.gate4_warnings, null);
+});
+
+Deno.test("buildAuditEntry: a non-empty Gate 4 warnings list is persisted verbatim", () => {
+  const warnings = [
+    'Required aspect "Grade" has no plausible value in the known item data',
+  ];
+  const c = candidate({ gate4Warnings: warnings });
+  const entry = buildAuditEntry(c, baseCtx());
+  assertEquals(entry.gate4_warnings, warnings);
+});
+
+Deno.test("buildAuditEntry: warnings are recorded on a NON-winning candidate too (the whole point of this fix)", () => {
+  const winner = candidate({ categoryId: "111", source: "ebay_api", gate4Warnings: [] });
+  const loser = candidate({
+    categoryId: "222",
+    source: "db_fuzzy",
+    survived: false,
+    dropReason: "Gate 1 failed: not a leaf",
+    gate4Warnings: ['Required aspect "Metal" has no plausible value in the known item data'],
+  });
+
+  const entry = buildAuditEntry(loser, baseCtx({ winner, lockReason: "eBay rank #1 confirmed" }));
+
+  assertEquals(entry.was_selected, false);
+  assertEquals(entry.gate4_warnings, ['Required aspect "Metal" has no plausible value in the known item data']);
+});
+
+Deno.test("buildAuditEntry: the winning candidate's own fields (was_selected, reason_selected) are unaffected by this change", () => {
+  const winner = candidate({ categoryId: "111", source: "ebay_api", gate4Warnings: [] });
+  const entry = buildAuditEntry(winner, baseCtx({ winner, lockReason: "eBay rank #1 confirmed by agreement" }));
+
+  assertEquals(entry.was_selected, true);
+  assertEquals(entry.reason_selected, "eBay rank #1 confirmed by agreement");
+});
+
+Deno.test("buildAuditEntry: a dropped (non-Gate-4) candidate's reason_selected still reports its own dropReason, gate4_warnings independent of that", () => {
+  const c = candidate({
+    survived: false,
+    dropReason: "Gate 2 failed: not confirmed active",
+    gate4Warnings: ['Required aspect "Year" has no plausible value in the known item data'],
+  });
+  const entry = buildAuditEntry(c, baseCtx());
+
+  assertEquals(entry.reason_selected, "Gate 2 failed: not confirmed active");
+  assertEquals(entry.verified_active, false);
+  assertEquals(entry.gate4_warnings, ['Required aspect "Year" has no plausible value in the known item data']);
+});
+
+Deno.test("buildAuditEntry: latency and query/request context pass through unchanged", () => {
+  const c = candidate({ source: "vector_llm" });
+  const entry = buildAuditEntry(c, baseCtx({ requestId: "req-xyz", queryText: "graded coin", latencyMs: 250 }));
+
+  assertEquals(entry.request_id, "req-xyz");
+  assertEquals(entry.query_text, "graded coin");
+  assertEquals(entry.latency_ms, 250);
+  assertEquals(entry.candidate_source, "vector_llm");
 });
