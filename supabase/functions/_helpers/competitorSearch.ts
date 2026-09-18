@@ -908,21 +908,6 @@ function removeOutliers(prices: number[]): number[] {
  * what actually burned a full day's 5,000-call Browse API quota with zero
  * new listings created, not any per-listing query-fan-out logic.
  */
-/**
- * Extracts up to 20 itemIds from the price-cleaned comp set for storage on
- * competitor_prices.comp_item_ids -- 20 is a single Browse API getItems
- * bulk-lookup call's max item_ids, chosen so a future refresh of this
- * listing (see the getItems follow-on work) never needs pagination/
- * batching logic. Pure and exported so the cap/filter behavior has direct
- * test coverage without exercising the whole search pipeline.
- */
-export function extractCompItemIds(items: CompetitorItem[]): string[] {
-  return items
-    .map((it) => it.itemId)
-    .filter((id): id is string => !!id)
-    .slice(0, 20);
-}
-
 export function buildCompetitorPricesUpsertPayload(params: {
   userId: string;
   listingId: string;
@@ -967,6 +952,21 @@ export function buildCompetitorPricesUpsertPayload(params: {
     expires_at: new Date(now.getTime() + CACHE_TTL_MS).toISOString(),
     comp_item_ids: params.compItemIds ?? null,
   };
+}
+
+/**
+ * Extracts up to 20 itemIds from the price-cleaned comp set for storage on
+ * competitor_prices.comp_item_ids -- 20 is a single Browse API getItems
+ * bulk-lookup call's max item_ids, chosen so a future refresh of this
+ * listing (see the getItems follow-on work) never needs pagination/
+ * batching logic. Pure and exported so the cap/filter behavior has direct
+ * test coverage without exercising the whole search pipeline.
+ */
+export function extractCompItemIds(items: CompetitorItem[]): string[] {
+  return items
+    .map((it) => it.itemId)
+    .filter((id): id is string => !!id)
+    .slice(0, 20);
 }
 
 // ----------------------------------------------------------------

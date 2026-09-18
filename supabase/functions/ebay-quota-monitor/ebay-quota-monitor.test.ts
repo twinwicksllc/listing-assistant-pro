@@ -215,7 +215,12 @@ function fakeSupabaseForCount(opts: {
         gte(...args: unknown[]) {
           filters.push({ method: "gte", args });
           opts.onQuery?.(table, filters);
-          return Promise.resolve({ count: opts.count ?? 0, error: opts.error ?? null });
+          // Deliberately does NOT coerce a null count to 0 here -- the
+          // real Postgres client can return count: null alongside a query
+          // error, and countSameDayBrowseCalls's own null-passthrough
+          // behavior must be exercised by an actual null, not masked by
+          // this fake defaulting it away (Copilot review, PR #599).
+          return Promise.resolve({ count: opts.count === undefined ? 0 : opts.count, error: opts.error ?? null });
         },
       };
       return builder;
@@ -256,6 +261,13 @@ Deno.test("countSameDayBrowseCalls: a query error is surfaced, not silently coer
   const svc = fakeSupabaseForCount({ count: null, error: { message: "connection reset" } });
   const result = await countSameDayBrowseCalls(svc, new Date());
   assertEquals(result.error, { message: "connection reset" });
+  // The fake genuinely returns count: null here (not 0) -- assert the
+  // function passes that through rather than coercing it, which is what
+  // this test claims to guard against (Copilot review, PR #599: the
+  // previous version of this fake defaulted null to 0 before
+  // countSameDayBrowseCalls ever saw it, so this assertion would have
+  // passed even if the implementation silently coerced the count).
+  assertEquals(result.count, null);
 });
 
 // ── fetchEbayRateLimits: v1/v1_beta fallback (2026-09-18) ───────────────────

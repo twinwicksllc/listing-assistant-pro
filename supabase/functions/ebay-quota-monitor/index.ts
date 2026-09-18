@@ -285,7 +285,10 @@ export async function countSameDayBrowseCalls(
   const { count, error } = await svc
     .from("ebay_browse_call_log")
     .select("*", { count: "exact", head: true })
-    .eq("resource", "buy.browse")
+    // Reuses the same constant findBrowseRate/the poll insert derive the
+    // resource name from, so a future rename can't make the quota poll and
+    // this same-day counter silently disagree (Copilot review, PR #599).
+    .eq("resource", BROWSE_RESOURCE_NAME)
     .gte("created_at", todayStart.toISOString());
   return { count: count ?? null, error: error ?? null };
 }
