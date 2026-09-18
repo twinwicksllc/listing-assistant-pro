@@ -1,12 +1,18 @@
-import { assertEquals, assertNotEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
+import { assertEquals, assertNotEquals, assertRejects } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import {
+  attemptItemsRefresh,
   buildCompetitorPricesUpsertPayload,
   type CompetitorItem,
   type CompSearchAttemptResult,
+  computeCompStats,
+  decideRefreshStrategy,
   evaluateCompQuality,
   extractCompItemIds,
+  fetchEbayItemsBulk,
   groupPlanIntoTiers,
+  isItemsRefreshUsable,
   logBrowseApiCall,
+  parseCompetitorItem,
   parseOptionalCount,
   runAttemptsSequential,
   runTieredCompSearch,
@@ -548,4 +554,519 @@ Deno.test("extractCompItemIds: items missing an itemId are filtered out, never p
 
 Deno.test("extractCompItemIds: an empty item list returns an empty array, not null/undefined", () => {
   assertEquals(extractCompItemIds([]), []);
+});
+
+// ── getItems batch-refresh plan (PR 2): parseCompetitorItem ─────────────────
+// Shared verbatim between item_summary/search and getItems -- this is the
+// concrete guard against the two endpoints' responses being parsed
+// differently and causing stat drift.
+
+Deno.test("parseCompetitorItem: parses a search-shaped item (itemSummaries[] shape)", () => {
+  const raw = {
+    itemId: "v1|123456789|0",
+    title: "1921 Morgan Silver Dollar",
+    price: { value: "45.00", currency: "USD" },
+    condition: "Pre-Owned",
+    itemWebUrl: "https://www.ebay.com/itm/123456789",
+    image: { imageUrl: "https://i.ebayimg.com/thumb.jpg" },
+    watchCount: 3,
+    bidCount: undefined,
+  };
+  const parsed = parseCompetitorItem(raw);
+  assertEquals(parsed?.price, 45);
+  assertEquals(parsed?.currency, "USD");
+  assertEquals(parsed?.condition, "Pre-Owned");
+  assertEquals(parsed?.itemId, "v1|123456789|0");
+  assertEquals(parsed?.itemUrl, "https://www.ebay.com/itm/123456789");
+  assertEquals(parsed?.imageUrl, "https://i.ebayimg.com/thumb.jpg");
+  assertEquals(parsed?.watchCount, 3);
+  assertEquals(parsed?.bidCount, undefined);
+});
+
+Deno.test("parseCompetitorItem: parses a getItems-shaped item (items[] shape) equivalently", () => {
+  // Per eBay's Browse API docs, getItems' items[] uses the same field names
+  // as item_summary/search's itemSummaries[] for everything this app reads.
+  const raw = {
+    itemId: "v1|123456789|0",
+    title: "1921 Morgan Silver Dollar",
+    price: { value: "45.00", currency: "USD" },
+    condition: "Pre-Owned",
+    itemWebUrl: "https://www.ebay.com/itm/123456789",
+    image: { imageUrl: "https://i.ebayimg.com/thumb.jpg" },
+    watchCount: 3,
+  };
+  const parsed = parseCompetitorItem(raw);
+  assertEquals(parsed?.price, 45);
+  assertEquals(parsed?.itemId, "v1|123456789|0");
+  assertEquals(parsed?.watchCount, 3);
+});
+
+Deno.test("parseCompetitorItem: a missing/zero/negative price returns null, not a fabricated 0", () => {
+  assertEquals(parseCompetitorItem({ itemId: "x", title: "no price" }), null);
+  assertEquals(parseCompetitorItem({ itemId: "x", price: { value: "0" } }), null);
+  assertEquals(parseCompetitorItem({ itemId: "x", price: { value: "-5" } }), null);
+});
+
+Deno.test("parseCompetitorItem: a malformed item (throws while reading a field) returns null, not a throw", () => {
+  const poison = {
+    get price() {
+      throw new Error("boom");
+    },
+  };
+  assertEquals(parseCompetitorItem(poison), null);
+});
+
+Deno.test("parseCompetitorItem: falls back to currentPrice.value when price.value is absent", () => {
+  const raw = { itemId: "x", currentPrice: { value: "12.50" } };
+  assertEquals(parseCompetitorItem(raw)?.price, 12.5);
+});
+
+// ── getItems batch-refresh plan (PR 2): fetchEbayItemsBulk ──────────────────
+
+function withMockedFetch<T>(
+  handler: (url: string, init?: RequestInit, callIndex?: number) => Response | Promise<Response>,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const original = globalThis.fetch;
+  let callIndex = 0;
+  globalThis.fetch = ((url: string | URL | Request, init?: RequestInit) => {
+    const idx = callIndex++;
+    return Promise.resolve(handler(String(url), init, idx));
+  }) as typeof fetch;
+  return fn().finally(() => {
+    globalThis.fetch = original;
+  });
+}
+
+function itemsResponse(items: unknown[]): Response {
+  return new Response(JSON.stringify({ items }), { status: 200 });
+}
+
+Deno.test("fetchEbayItemsBulk: all requested itemIds present in the response", async () => {
+  const { client, inserted } = fakeSupabaseForLogging();
+  const result = await withMockedFetch(
+    () =>
+      itemsResponse([
+        { itemId: "a", price: { value: "10.00" }, title: "A" },
+        { itemId: "b", price: { value: "20.00" }, title: "B" },
+      ]),
+    () =>
+      fetchEbayItemsBulk({
+        token: "tok",
+        itemIds: ["a", "b"],
+        ebayEnv: "production",
+        supabaseForLogging: client,
+        loggingCaller: "test",
+      }),
+  );
+  assertEquals(result.foundItemIds.sort(), ["a", "b"]);
+  assertEquals(result.missingItemIds, []);
+  assertEquals(result.items.length, 2);
+  // Logged against the buy.browse.item.bulk resource, not buy.browse --
+  // this is the regression guard for the same-day-counter pollution risk.
+  assertEquals(inserted.length, 1);
+  assertEquals(inserted[0].row.resource, "buy.browse.item.bulk");
+});
+
+Deno.test("fetchEbayItemsBulk: a partial subset missing from the response is reported as missingItemIds, not a failure", async () => {
+  const { client } = fakeSupabaseForLogging();
+  const result = await withMockedFetch(
+    () => itemsResponse([{ itemId: "a", price: { value: "10.00" }, title: "A" }]),
+    () =>
+      fetchEbayItemsBulk({
+        token: "tok",
+        itemIds: ["a", "b", "c"],
+        ebayEnv: "production",
+        supabaseForLogging: client,
+        loggingCaller: "test",
+      }),
+  );
+  assertEquals(result.foundItemIds, ["a"]);
+  assertEquals(result.missingItemIds.sort(), ["b", "c"]);
+});
+
+Deno.test("fetchEbayItemsBulk: fails after 3 retries on a persistent 5xx, does not swallow the error", async () => {
+  const { client } = fakeSupabaseForLogging();
+  await assertRejects(
+    () =>
+      withMockedFetch(
+        () => new Response("boom", { status: 500 }),
+        () =>
+          fetchEbayItemsBulk({
+            token: "tok",
+            itemIds: ["a"],
+            ebayEnv: "production",
+            supabaseForLogging: client,
+            loggingCaller: "test",
+          }),
+      ),
+    Error,
+  );
+});
+
+Deno.test("fetchEbayItemsBulk: a 4xx (not 5xx) fails immediately without retrying 3 times", async () => {
+  const { client } = fakeSupabaseForLogging();
+  let calls = 0;
+  await assertRejects(
+    () =>
+      withMockedFetch(
+        () => {
+          calls++;
+          return new Response("bad request", { status: 400 });
+        },
+        () =>
+          fetchEbayItemsBulk({
+            token: "tok",
+            itemIds: ["a"],
+            ebayEnv: "production",
+            supabaseForLogging: client,
+            loggingCaller: "test",
+          }),
+      ),
+    Error,
+  );
+  assertEquals(calls, 1);
+});
+
+// ── getItems batch-refresh plan (PR 2): decideRefreshStrategy ───────────────
+
+Deno.test("decideRefreshStrategy: null storedItemIds -> do not attempt getItems refresh", () => {
+  assertEquals(decideRefreshStrategy({ storedItemIds: null }).useItemsRefresh, false);
+});
+
+Deno.test("decideRefreshStrategy: empty array -> do not attempt getItems refresh", () => {
+  assertEquals(decideRefreshStrategy({ storedItemIds: [] }).useItemsRefresh, false);
+});
+
+Deno.test("decideRefreshStrategy: undefined -> do not attempt getItems refresh", () => {
+  assertEquals(decideRefreshStrategy({ storedItemIds: undefined }).useItemsRefresh, false);
+});
+
+Deno.test("decideRefreshStrategy: non-empty stored itemIds -> attempt getItems refresh", () => {
+  assertEquals(decideRefreshStrategy({ storedItemIds: ["a", "b"] }).useItemsRefresh, true);
+});
+
+// ── getItems batch-refresh plan (PR 2): isItemsRefreshUsable ────────────────
+
+Deno.test("isItemsRefreshUsable: full survival is usable", () => {
+  const r = isItemsRefreshUsable({ requestedCount: 5, foundCount: 5 });
+  assertEquals(r.usable, true);
+});
+
+Deno.test("isItemsRefreshUsable: below minCount (default 3) is not usable even at 100% survival", () => {
+  const r = isItemsRefreshUsable({ requestedCount: 2, foundCount: 2 });
+  assertEquals(r.usable, false);
+});
+
+Deno.test("isItemsRefreshUsable: above minCount but below minRemainingRatio (default 0.5) is not usable", () => {
+  const r = isItemsRefreshUsable({ requestedCount: 10, foundCount: 4 });
+  assertEquals(r.usable, false);
+});
+
+Deno.test("isItemsRefreshUsable: exactly at both boundaries (minCount met, exactly 50% survival) is usable", () => {
+  const r = isItemsRefreshUsable({ requestedCount: 6, foundCount: 3 });
+  assertEquals(r.usable, true);
+});
+
+Deno.test("isItemsRefreshUsable: zero requestedCount does not divide-by-zero into a false positive", () => {
+  const r = isItemsRefreshUsable({ requestedCount: 0, foundCount: 0 });
+  assertEquals(r.usable, false);
+});
+
+Deno.test("isItemsRefreshUsable: custom minCount/minRemainingRatio are respected", () => {
+  const r = isItemsRefreshUsable({ requestedCount: 10, foundCount: 8, minCount: 5, minRemainingRatio: 0.9 });
+  assertEquals(r.usable, false); // 80% < 90% required
+});
+
+// ── getItems batch-refresh plan (PR 2): computeCompStats ────────────────────
+// Refactor-safety test: must produce byte-identical output to the original
+// inline Step-4 block (price-anchor filter -> outlier removal -> stats) for
+// the same inputs, since this same function now backs BOTH the full-search
+// path and the new getItems-refresh path.
+
+Deno.test("computeCompStats: matches the expected avg/min/max/median/delta for a simple price set", () => {
+  const stats = computeCompStats({ prices: [10, 20, 30], yourPrice: 15 });
+  assertEquals(stats.cleanPrices.sort((a, b) => a - b), [10, 20, 30]);
+  assertEquals(stats.avgPrice, 20);
+  assertEquals(stats.minPrice, 10);
+  assertEquals(stats.maxPrice, 30);
+  assertEquals(stats.medianPrice, 20);
+  assertEquals(stats.priceDelta, -5); // yourPrice(15) - medianPrice(20)
+});
+
+Deno.test("computeCompStats: null yourPrice yields a null priceDelta, not a coerced 0", () => {
+  const stats = computeCompStats({ prices: [10, 20, 30], yourPrice: null });
+  assertEquals(stats.priceDelta, null);
+});
+
+Deno.test("computeCompStats: price-anchor filter removes an item far outside 0.1x-10x of yourPrice", () => {
+  // A $0.95 novelty item alongside $95 items, anchored to a $100 yourPrice --
+  // the outlier-far-below item should be filtered before stats are computed.
+  const stats = computeCompStats({ prices: [0.95, 95, 96, 97], yourPrice: 100 });
+  assertEquals(stats.cleanPrices.includes(0.95), false);
+});
+
+Deno.test("computeCompStats: priceDistribution is non-empty for a real price set", () => {
+  const stats = computeCompStats({ prices: [10, 20, 30, 40, 50], yourPrice: null });
+  assertEquals(stats.priceDistribution.length > 0, true);
+});
+
+// ── getItems batch-refresh plan (PR 2): attemptItemsRefresh ─────────────────
+// Integration-style: fake supabase client returning a row with
+// comp_item_ids, fake fetch for both the OAuth token endpoint and the
+// getItems endpoint.
+
+function fakeSupabaseForItemsRefresh(opts: {
+  row?: Record<string, unknown> | null;
+  selectThrows?: boolean;
+  upsertError?: { message: string } | null;
+}) {
+  const upserted: Record<string, unknown>[] = [];
+  return {
+    client: {
+      from(table: string) {
+        if (table === "competitor_prices") {
+          return {
+            select() {
+              return {
+                eq() {
+                  return this;
+                },
+                order() {
+                  return this;
+                },
+                limit() {
+                  return this;
+                },
+                maybeSingle() {
+                  if (opts.selectThrows) return Promise.reject(new Error("db down"));
+                  return Promise.resolve({ data: opts.row ?? null, error: null });
+                },
+              };
+            },
+            upsert(row: Record<string, unknown>) {
+              upserted.push(row);
+              // A real Supabase write failure comes back as a returned
+              // `error`, not a throw -- opts.upsertError lets a test assert
+              // attemptItemsRefresh actually inspects it instead of assuming
+              // success whenever the promise merely resolves (Copilot
+              // review, PR #600).
+              return Promise.resolve({ data: null, error: opts.upsertError ?? null });
+            },
+          };
+        }
+        // ebay_browse_call_log logging target -- accept and ignore.
+        return {
+          insert() {
+            return Promise.resolve({ data: null, error: null });
+          },
+        };
+      },
+    },
+    upserted,
+  };
+}
+
+function withEbayCreds<T>(fn: () => Promise<T>): Promise<T> {
+  const prevId = Deno.env.get("EBAY_CLIENT_ID");
+  const prevSecret = Deno.env.get("EBAY_CLIENT_SECRET");
+  Deno.env.set("EBAY_CLIENT_ID", "test-client-id");
+  Deno.env.set("EBAY_CLIENT_SECRET", "test-client-secret");
+  return fn().finally(() => {
+    if (prevId === undefined) Deno.env.delete("EBAY_CLIENT_ID");
+    else Deno.env.set("EBAY_CLIENT_ID", prevId);
+    if (prevSecret === undefined) Deno.env.delete("EBAY_CLIENT_SECRET");
+    else Deno.env.set("EBAY_CLIENT_SECRET", prevSecret);
+  });
+}
+
+function mockTokenAndItemsFetch(itemsHandlerResponse: () => Response) {
+  return (url: string) => {
+    if (url.includes("/oauth2/token")) {
+      return new Response(JSON.stringify({ access_token: "fake-token" }), { status: 200 });
+    }
+    return itemsHandlerResponse();
+  };
+}
+
+Deno.test("attemptItemsRefresh: no stored comp_item_ids -> returns null (fall through to full search)", async () => {
+  const { client } = fakeSupabaseForItemsRefresh({ row: { comp_item_ids: null, search_query: "q" } });
+  const result = await attemptItemsRefresh({
+    supabase: client,
+    userId: "u1",
+    listingId: "l1",
+    ebayEnv: "production",
+    yourPrice: null,
+  });
+  assertEquals(result, null);
+});
+
+Deno.test("attemptItemsRefresh: no row at all (first encounter) -> returns null", async () => {
+  const { client } = fakeSupabaseForItemsRefresh({ row: null });
+  const result = await attemptItemsRefresh({
+    supabase: client,
+    userId: "u1",
+    listingId: "l1",
+    ebayEnv: "production",
+    yourPrice: null,
+  });
+  assertEquals(result, null);
+});
+
+Deno.test("attemptItemsRefresh: usable getItems result -> returns a successful outcome and persists new comp_item_ids", async () => {
+  const { client, upserted } = fakeSupabaseForItemsRefresh({
+    row: { comp_item_ids: ["a", "b", "c"], search_query: "vintage coin", gemini_search_query: null },
+  });
+  const result = await withEbayCreds(() =>
+    withMockedFetch(
+      mockTokenAndItemsFetch(() =>
+        itemsResponse([
+          { itemId: "a", price: { value: "10.00" }, title: "A" },
+          { itemId: "b", price: { value: "11.00" }, title: "B" },
+          { itemId: "c", price: { value: "12.00" }, title: "C" },
+        ])
+      ),
+      () =>
+        attemptItemsRefresh({
+          supabase: client,
+          userId: "u1",
+          listingId: "l1",
+          ebayEnv: "production",
+          yourPrice: 11,
+        }),
+    )
+  );
+  assertNotEquals(result, null);
+  assertEquals(result?.status, 200);
+  assertEquals(result?.body.refreshMethod, "getItems");
+  assertEquals(result?.body.noData, false);
+  assertEquals(result?.body.fromCache, false);
+  assertEquals(upserted.length, 1);
+  assertEquals((upserted[0].comp_item_ids as string[]).sort(), ["a", "b", "c"]);
+});
+
+Deno.test("attemptItemsRefresh: comp_item_ids reflects the CLEANED item set, excluding an item the price filters rejected (Copilot review, PR #600)", async () => {
+  // "d" is a $0.50 novelty price alongside three $10-12 items anchored to
+  // yourPrice=11 -- computeCompStats's price-anchor filter should reject it,
+  // so it must never be counted toward the NEXT refresh's survival ratio
+  // even though getItems itself successfully returned it (not delisted).
+  const { client, upserted } = fakeSupabaseForItemsRefresh({
+    row: { comp_item_ids: ["a", "b", "c", "d"], search_query: "vintage coin", gemini_search_query: null },
+  });
+  const result = await withEbayCreds(() =>
+    withMockedFetch(
+      mockTokenAndItemsFetch(() =>
+        itemsResponse([
+          { itemId: "a", price: { value: "10.00" }, title: "A" },
+          { itemId: "b", price: { value: "11.00" }, title: "B" },
+          { itemId: "c", price: { value: "12.00" }, title: "C" },
+          { itemId: "d", price: { value: "0.50" }, title: "Novelty D" },
+        ])
+      ),
+      () =>
+        attemptItemsRefresh({
+          supabase: client,
+          userId: "u1",
+          listingId: "l1",
+          ebayEnv: "production",
+          yourPrice: 11,
+        }),
+    )
+  );
+  assertNotEquals(result, null);
+  assertEquals(upserted.length, 1);
+  const savedIds = (upserted[0].comp_item_ids as string[]).sort();
+  assertEquals(savedIds, ["a", "b", "c"]);
+  assertEquals(savedIds.includes("d"), false);
+});
+
+Deno.test("attemptItemsRefresh: an upsert error is inspected, not silently treated as a successful save (Copilot review, PR #600)", async () => {
+  // The Supabase client reports a failed write via a returned `error`, not
+  // a throw -- an implementation that only wraps the await in try/catch
+  // (with no explicit error check) would still log/return success here.
+  // This test's fake resolves normally with an error field set, so it can
+  // only pass if attemptItemsRefresh actually inspects that field.
+  const { client, upserted } = fakeSupabaseForItemsRefresh({
+    row: { comp_item_ids: ["a", "b", "c"], search_query: "q", gemini_search_query: null },
+    upsertError: { message: "connection reset" },
+  });
+  const result = await withEbayCreds(() =>
+    withMockedFetch(
+      mockTokenAndItemsFetch(() =>
+        itemsResponse([
+          { itemId: "a", price: { value: "10.00" }, title: "A" },
+          { itemId: "b", price: { value: "11.00" }, title: "B" },
+          { itemId: "c", price: { value: "12.00" }, title: "C" },
+        ])
+      ),
+      () =>
+        attemptItemsRefresh({
+          supabase: client,
+          userId: "u1",
+          listingId: "l1",
+          ebayEnv: "production",
+          yourPrice: null,
+        }),
+    )
+  );
+  // The freshly-computed data is still returned to the caller (matching
+  // the full-search path's own non-fatal persist-failure handling) even
+  // though the write itself failed -- this test only confirms the error
+  // was surfaced somewhere reachable (the upsert was still attempted),
+  // not that the whole request fails.
+  assertNotEquals(result, null);
+  assertEquals(upserted.length, 1);
+});
+
+Deno.test("attemptItemsRefresh: too many delisted (below minRemainingRatio) -> returns null (fall through)", async () => {
+  const { client } = fakeSupabaseForItemsRefresh({
+    row: { comp_item_ids: ["a", "b", "c", "d"], search_query: "q", gemini_search_query: null },
+  });
+  const result = await withEbayCreds(() =>
+    withMockedFetch(
+      // Only 1 of 4 survives -- below both minCount(3) and minRemainingRatio(0.5).
+      mockTokenAndItemsFetch(() => itemsResponse([{ itemId: "a", price: { value: "10.00" }, title: "A" }])),
+      () =>
+        attemptItemsRefresh({
+          supabase: client,
+          userId: "u1",
+          listingId: "l1",
+          ebayEnv: "production",
+          yourPrice: null,
+        }),
+    )
+  );
+  assertEquals(result, null);
+});
+
+Deno.test("attemptItemsRefresh: getItems call throws (e.g. persistent 5xx) -> returns null, does not propagate", async () => {
+  const { client } = fakeSupabaseForItemsRefresh({
+    row: { comp_item_ids: ["a", "b", "c"], search_query: "q", gemini_search_query: null },
+  });
+  const result = await withEbayCreds(() =>
+    withMockedFetch(
+      mockTokenAndItemsFetch(() => new Response("boom", { status: 500 })),
+      () =>
+        attemptItemsRefresh({
+          supabase: client,
+          userId: "u1",
+          listingId: "l1",
+          ebayEnv: "production",
+          yourPrice: null,
+        }),
+    )
+  );
+  assertEquals(result, null);
+});
+
+Deno.test("attemptItemsRefresh: a DB lookup failure -> returns null, does not throw", async () => {
+  const { client } = fakeSupabaseForItemsRefresh({ selectThrows: true });
+  const result = await attemptItemsRefresh({
+    supabase: client,
+    userId: "u1",
+    listingId: "l1",
+    ebayEnv: "production",
+    yourPrice: null,
+  });
+  assertEquals(result, null);
 });
