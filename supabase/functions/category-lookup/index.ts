@@ -924,8 +924,15 @@ export function buildAuditEntry(
       candidate.categoryId === ctx.winner.categoryId &&
       candidate.source === ctx.winner.source,
     reason_selected: candidate === ctx.winner ? ctx.lockReason : (candidate.dropReason ?? candidate.reason),
-    verified_leaf: candidate.survived ? true : (candidate.dropReason?.startsWith("Gate 1") ? false : null),
-    verified_active: candidate.survived ? true : (candidate.dropReason?.startsWith("Gate 2") ? false : null),
+    // Gates run in order (1: leaf, 2: active, 3: condition, 4: aspects) and
+    // each only runs if every earlier gate already passed (gateCandidate's
+    // own `if (!dropReason)` guards) -- so a candidate dropped by Gate 3 or
+    // an enforced Gate 4 necessarily passed Gates 1/2 too, and recording
+    // null here would make the audit row internally inconsistent with its
+    // own dropReason (Copilot review, PR #598). survived, or dropped by
+    // anything OTHER than Gate 1/2, both mean leaf+active are confirmed true.
+    verified_leaf: candidate.dropReason?.startsWith("Gate 1") ? false : true,
+    verified_active: candidate.dropReason?.startsWith("Gate 2") ? false : true,
     persisted_to_db: false,
     latency_ms: ctx.latencyMs,
     gate4_warnings: candidate.gate4Warnings.length > 0 ? candidate.gate4Warnings : null,

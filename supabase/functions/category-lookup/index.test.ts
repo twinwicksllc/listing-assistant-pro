@@ -175,6 +175,29 @@ Deno.test("buildAuditEntry: a dropped (non-Gate-4) candidate's reason_selected s
   assertEquals(entry.gate4_warnings, ['Required aspect "Year" has no plausible value in the known item data']);
 });
 
+Deno.test("buildAuditEntry: a candidate dropped by Gate 3 (condition) or an enforced Gate 4 reports verified_leaf/verified_active as true, not null (Copilot review, PR #598)", () => {
+  // Gates run strictly in order with an `if (!dropReason)` guard
+  // (gateCandidate) -- a Gate 3/4 dropReason can only exist if Gates 1/2
+  // already passed. Reporting null here would contradict the row's own
+  // dropReason instead of confirming what actually happened.
+  const gate3Dropped = candidate({
+    survived: false,
+    dropReason: "Gate 3 failed: category 12345 does not accept condition 1000",
+  });
+  const gate3Entry = buildAuditEntry(gate3Dropped, baseCtx());
+  assertEquals(gate3Entry.verified_leaf, true);
+  assertEquals(gate3Entry.verified_active, true);
+
+  const gate4Dropped = candidate({
+    survived: false,
+    dropReason: 'Gate 4 failed (enforced): Required aspect "Grade" has no plausible value',
+    gate4Warnings: ['Required aspect "Grade" has no plausible value'],
+  });
+  const gate4Entry = buildAuditEntry(gate4Dropped, baseCtx());
+  assertEquals(gate4Entry.verified_leaf, true);
+  assertEquals(gate4Entry.verified_active, true);
+});
+
 Deno.test("buildAuditEntry: latency and query/request context pass through unchanged", () => {
   const c = candidate({ source: "vector_llm" });
   const entry = buildAuditEntry(c, baseCtx({ requestId: "req-xyz", queryText: "graded coin", latencyMs: 250 }));
