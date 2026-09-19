@@ -33,6 +33,7 @@ type WatchData = {
   watchCount: number;
   questionCount: number;
   description?: string;
+  categoryId?: string;
 };
 
 // ─── Fetch analytics for one date window ─────────────────────────────────────
@@ -800,8 +801,22 @@ async function fetchOrderCounts(
   return { ...counts, financial, soldItems };
 }
 
-// ─── Fetch WatchCount + QuestionCount + Description via GetItem ────────────────────────────
-async function fetchWatchDataForListings(
+// ─── Fetch WatchCount + QuestionCount + Description (+ CategoryID) via GetItem ─────
+// Also pulls PrimaryCategory/CategoryID here as a fallback source for categoryId.
+// This is a real, known eBay API quirk: the Sell Inventory API's bulk offer-LIST
+// endpoint (GET /sell/inventory/v1/offer, used above to build `offers`) frequently
+// omits `categoryId` on offers created via Seller Hub/bulk/legacy flows -- it is not
+// guaranteed present on that endpoint's response schema the way it is on a single
+// offer detail fetch. Rather than adding N new per-offer detail calls (costly at
+// cron scale), we piggyback on this function's EXISTING per-listing GetItem call
+// (already made for every listing with a listingId, for WatchCount/QuestionCount) and
+// read <PrimaryCategory><CategoryID> from it too -- zero additional API calls.
+// Note eBay's Trading API nests category info under PrimaryCategory, not a bare
+// top-level CategoryID tag (see fetchTradingAPIListingsRaw's `get("CategoryID")`,
+// which works there because that regex greedily matches the FIRST CategoryID tag in
+// the whole <Item> block, which happens to be the one under PrimaryCategory in that
+// response shape -- still fragile, but out of scope for this fix).
+export async function fetchWatchDataForListings(
   listingIds: string[],
   tradingUrl: string,
   userToken: string,
@@ -814,7 +829,7 @@ async function fetchWatchDataForListings(
 <GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <ItemID>${itemId}</ItemID>
   <IncludeWatchCount>true</IncludeWatchCount>
-  <OutputSelector>ItemID,WatchCount,QuestionCount,Description</OutputSelector>
+  <OutputSelector>ItemID,WatchCount,QuestionCount,Description,PrimaryCategory.CategoryID</OutputSelector>
 </GetItemRequest>`;
     try {
       const resp = await fetch(tradingUrl, {
@@ -837,10 +852,19 @@ async function fetchWatchDataForListings(
       const watchCount = parseInt(getTag("WatchCount") || "0", 10);
       const questionCount = parseInt(getTag("QuestionCount") || "0", 10);
       const description = getTag("Description");
+      // PrimaryCategory.CategoryID is nested: <PrimaryCategory><CategoryID>123</CategoryID></PrimaryCategory>
+      const primaryCategoryMatch = xmlText.match(
+        /<PrimaryCategory[^>]*>([\s\S]*?)<\/PrimaryCategory>/,
+      );
+      const categoryId = primaryCategoryMatch
+        ? (primaryCategoryMatch[1].match(/<CategoryID[^>]*>([\s\S]*?)<\/CategoryID>/)?.[1]
+          ?.trim() || "")
+        : "";
       result[itemId] = {
         watchCount: isNaN(watchCount) ? 0 : watchCount,
         questionCount: isNaN(questionCount) ? 0 : questionCount,
         description: description ? description.trim() : undefined,
+        categoryId: categoryId || undefined,
       };
     } catch (e) {
       console.warn(`GetItem failed for ${itemId}:`, e);
@@ -1521,9 +1545,14 @@ serve(async (req) => {
 
     const enrichedInventoryListings = listings.map((l: any) => {
       const w = l.listingId ? watchMap[l.listingId] || null : null;
+      // Fall back to the categoryId read from GetItem's PrimaryCategory.CategoryID
+      // when the Inventory API's bulk offer-list endpoint didn't return one (see
+      // fetchWatchDataForListings' comment above for why this happens).
+      const categoryId = l.categoryId || w?.categoryId || "";
       return {
         ...l,
         ...mergeAnalytics(l.listingId, l.sku, a7, a30, a90),
+        categoryId,
         watchCount: w?.watchCount ?? 0,
         questionCount: w?.questionCount ?? 0,
         description: w?.description,

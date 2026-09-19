@@ -12,13 +12,13 @@ import {
   CATEGORY_ASPECT_RULES,
   categoryAcceptsCondition,
   type CoinConditionDetail,
-  CONDITION_DESCRIPTIONS,
   CONDITION_ID_MAP,
   EBAY_CONDITION_ID_GRADED,
   ensureInventoryLocation,
   fetchCoinConditionDescriptors,
   fetchDynamicCategoryConditions,
   generateDraftSku,
+  getConditionDescription,
   HARDCODED_COIN_CATEGORY_IDS,
   isGrainBar,
   normalizeCoinConditionDetail,
@@ -367,11 +367,7 @@ export async function handleCreateDraft({
   let conditionEnum = normalizedCondition;
   let conditionId = CONDITION_ID_MAP[conditionEnum];
   let effectiveConditionEnum = conditionEnum;
-  let conditionDesc = CONDITION_DESCRIPTIONS[conditionEnum] ??
-    conditionEnum
-      .replace(/_/g, " ")
-      .toLowerCase()
-      .replace(/\b\w/g, (c: string) => c.toUpperCase());
+  let conditionDesc = getConditionDescription(conditionEnum, categoryTreeType);
 
   if (
     (!conditionId ||
@@ -1226,11 +1222,7 @@ export async function handleCreateDraft({
       }
 
       for (const retryCondition of retryConditions) {
-        const retryDescription = CONDITION_DESCRIPTIONS[retryCondition] ??
-          retryCondition
-            .replace(/_/g, " ")
-            .toLowerCase()
-            .replace(/\b\w/g, (ch: string) => ch.toUpperCase());
+        const retryDescription = getConditionDescription(retryCondition, categoryTreeType);
 
         const retryInventoryBody: Record<string, unknown> = {
           ...inventoryBody,
@@ -1365,6 +1357,31 @@ export async function handleCreateDraft({
       /list.*more.*this month/i,
       /\$[\d,]+.*more.*total sales/i,
     ];
+    // errorId 25002 also covers (e) a rejected item-specific/aspect value
+    // (observed in production 2026-09-18: "A user error has occurred. Brand"
+    // rejecting "Matchbox" as the Brand value on category 180506, and the
+    // same misfire on 28021/180534). This flavor is NOT a condition or
+    // category problem — the category was correctly resolved — so it must
+    // not trigger condition retries or category demotion. Detection is kept
+    // deliberately narrow (parameters[].name === "Brand", or a message that
+    // literally starts with "A user error has occurred. Brand") so a real
+    // condition-mismatch 25002 (which does not carry a Brand parameter and
+    // does not use this exact phrasing) can never be misclassified here.
+    const ASPECT_VALUE_ERROR_RE = /^A user error has occurred\.\s*Brand\b/i;
+    const isAspectValueError = (
+      e: { errorId?: number; message?: string; parameters?: Array<{ name?: string; value?: string }> },
+    ): boolean =>
+      e.errorId === 25002 &&
+      (e.parameters?.some((p) => p.name === "Brand") ||
+        ASPECT_VALUE_ERROR_RE.test(e.message ?? ""));
+    const getAspectErrorName = (
+      e: { message?: string; parameters?: Array<{ name?: string; value?: string }> },
+    ): string => {
+      const brandParam = e.parameters?.find((p) => p.name === "Brand");
+      if (brandParam?.name) return brandParam.name;
+      const match = ASPECT_VALUE_ERROR_RE.exec(e.message ?? "");
+      return match ? "Brand" : "an item specific";
+    };
     const DEMOTABLE_ERROR_IDS = new Set([
       21919288, // Invalid category ID
       25004, // Category not supported
@@ -1377,11 +1394,32 @@ export async function handleCreateDraft({
     ]);
     let shouldDemote = false;
     let isSellerLimitError = false;
+    let isBrandOrAspectError = false;
+    let aspectErrorName = "an item specific";
     let parsedErrJson: any = null;
     try {
       parsedErrJson = JSON.parse(errText);
-      const errors: Array<{ errorId?: number; message?: string }> = parsedErrJson?.errors ?? [];
+      const errors: Array<
+        { errorId?: number; message?: string; parameters?: Array<{ name?: string; value?: string }> }
+      > = parsedErrJson?.errors ?? [];
       const errorIds: number[] = errors.map((e) => e.errorId ?? 0);
+
+      // Check for the Brand/aspect-value flavor of 25002 next — this is
+      // checked before the seller-limit check has any bearing on demotion
+      // logic below, but seller-limit is still checked first here since its
+      // detection loop also performs a repair side effect for legacy data.
+      for (const e of errors) {
+        if (isAspectValueError(e)) {
+          isBrandOrAspectError = true;
+          aspectErrorName = getAspectErrorName(e);
+          console.warn(
+            `create_draft: errorId 25002 is a BRAND/ASPECT VALUE error (not condition/category) — skipping demotion. Aspect: ${aspectErrorName}, message: ${
+              e.message?.slice(0, 160)
+            }`,
+          );
+          break;
+        }
+      }
 
       // Check for seller limit flavor of 25002 first
       for (const e of errors) {
@@ -1429,17 +1467,20 @@ export async function handleCreateDraft({
         }
       }
 
-      // Only demote for known category/condition mismatch errors, never for 500s or seller limit
-      if (!isSellerLimitError && publishResp.status !== 500) {
+      // Only demote for known category/condition mismatch errors, never for 500s, seller limit,
+      // or a Brand/aspect-value rejection (the category was correctly resolved in that case).
+      if (!isSellerLimitError && !isBrandOrAspectError && publishResp.status !== 500) {
         shouldDemote = errorIds.some((id) => DEMOTABLE_ERROR_IDS.has(id));
-        // 25002 is demotable ONLY when it is NOT a seller limit error
+        // 25002 is demotable ONLY when it is NOT a seller limit or Brand/aspect error
         const has25002 = errorIds.includes(25002);
-        if (has25002 && !isSellerLimitError) {
-          // Check all 25002 errors in this response — if any is NOT a seller limit, it's a condition error
+        if (has25002) {
+          // Check all 25002 errors in this response — if any is NOT a seller limit and NOT
+          // a Brand/aspect error, it's a condition error.
           const conditionError = errors.some(
             (e) =>
               e.errorId === 25002 &&
-              !SELLER_LIMIT_PATTERNS.some((p) => p.test(e.message ?? "")),
+              !SELLER_LIMIT_PATTERNS.some((p) => p.test(e.message ?? "")) &&
+              !isAspectValueError(e),
           );
           if (conditionError) shouldDemote = true;
         }
@@ -1447,7 +1488,7 @@ export async function handleCreateDraft({
 
       if (!shouldDemote) {
         console.warn(
-          `create_draft: skipping category demotion for ${finalCategoryId} — not a category/condition error (HTTP ${publishResp.status}, sellerLimit=${isSellerLimitError})`,
+          `create_draft: skipping category demotion for ${finalCategoryId} — not a category/condition error (HTTP ${publishResp.status}, sellerLimit=${isSellerLimitError}, brandOrAspect=${isBrandOrAspectError})`,
         );
       }
     } catch (_parseErr) {
@@ -1513,6 +1554,9 @@ export async function handleCreateDraft({
         userFriendlyError = remaining
           ? `Your eBay account has reached its monthly selling limit. You have ${remaining} of listing capacity remaining this month. Visit eBay's Selling Limits page to request an increase.`
           : "Your eBay account has reached its monthly selling limit. Please visit eBay's Selling Limits page to request an increase before listing high-value items.";
+      } else if (isBrandOrAspectError) {
+        userFriendlyError =
+          `eBay rejected the value for "${aspectErrorName}" on this listing (it may be a restricted/trademarked brand name for this category). Try removing or correcting that item specific and republish.`;
       } else if (errorId === 25002 || errorId === 25060) {
         userFriendlyError =
           "The selected condition is not valid for this category. Please adjust the condition and try again.";

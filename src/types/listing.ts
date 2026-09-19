@@ -131,6 +131,27 @@ export const CONDITION_LABELS: Record<string, string> = {
   DAMAGED: "Damaged",
 };
 
+// Generic, domain-neutral labels for non-coin verticals (diecast, pencil
+// sharpeners, jewelry, general merchandise, etc.). The coin-flavored labels
+// in CONDITION_LABELS above ("Uncirculated", "circulated") read as
+// nonsensical outside the coin vertical — see getConditionLabel() below,
+// which picks between the two maps based on domain. Only entries with
+// coin-specific wording in CONDITION_LABELS need an override here; entries
+// that are already generic (LIKE_NEW, NEW_OTHER, DIGITAL_GOOD, etc.) are
+// intentionally omitted and fall back to CONDITION_LABELS for those keys.
+export const GENERIC_CONDITION_LABELS: Record<string, string> = {
+  NEW: "New",
+  USED_EXCELLENT: "Used – Excellent",
+  USED_VERY_GOOD: "Used – Very Good",
+  USED_GOOD: "Used – Good",
+  USED_ACCEPTABLE: "Used – Acceptable",
+  PRE_OWNED_GOOD: "Used – Excellent",
+  PRE_OWNED_FAIR: "Used – Acceptable",
+  EXCELLENT_REFURBISHED: "Used – Excellent",
+  VERY_GOOD_REFURBISHED: "Used – Very Good",
+  GOOD_REFURBISHED: "Used – Good",
+};
+
 export type ConditionOption = { value: string; label: string };
 
 // Category ID sets matching the publish function's detection logic.
@@ -447,8 +468,13 @@ const NFT_CONDITION_OPTIONS: ConditionOption[] = [
   { value: "DIGITAL_GOOD", label: "Digital Good" },
 ];
 
-export function getConditionLabel(condition: string): string {
+export function getConditionLabel(condition: string, domain?: string): string {
   if (!condition) return "";
+
+  if (domain !== undefined && domain !== "coins_bullion") {
+    if (GENERIC_CONDITION_LABELS[condition])
+      return GENERIC_CONDITION_LABELS[condition];
+  }
   if (CONDITION_LABELS[condition]) return CONDITION_LABELS[condition];
 
   return condition

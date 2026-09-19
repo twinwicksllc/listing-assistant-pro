@@ -1673,6 +1673,59 @@ export const CONDITION_DESCRIPTIONS: Record<string, string> = {
   DAMAGED: "Damaged item that may require repair or service.",
 };
 
+// Generic, domain-neutral condition descriptions for non-coin verticals
+// (diecast, pencil sharpeners, jewelry, general merchandise, etc.). The
+// numismatic language in CONDITION_DESCRIPTIONS above ("circulated",
+// "Uncirculated coin") is nonsensical outside the coin vertical — see
+// getConditionDescription() below, which picks between the two maps by
+// categoryTreeType. Only entries with coin-specific wording in the default
+// map need an override here; entries that are already generic (NEW_OTHER,
+// CERTIFIED_REFURBISHED, DIGITAL_GOOD, etc.) are intentionally omitted and
+// fall back to CONDITION_DESCRIPTIONS for those keys.
+export const GENERIC_CONDITION_DESCRIPTIONS: Record<string, string> = {
+  NEW: "Brand new, unused item in original packaging (if any).",
+  LIKE_NEW: "Like-new item showing virtually no signs of use.",
+  USED_EXCELLENT: "Gently used item in excellent condition with minimal signs of wear.",
+  USED_VERY_GOOD: "Used item in very good condition with some signs of wear.",
+  USED_GOOD: "Used item in good condition with noticeable wear.",
+  USED_ACCEPTABLE: "Used item in acceptable condition with significant wear.",
+  FOR_PARTS_OR_NOT_WORKING: "Damaged or not fully functional; sold for parts or repair.",
+  EXCELLENT_REFURBISHED: "Gently used item in excellent condition with minimal signs of wear.",
+  VERY_GOOD_REFURBISHED: "Used item in very good condition with some signs of wear.",
+  GOOD_REFURBISHED: "Used item in very good condition with some signs of wear.",
+  PRE_OWNED_GOOD: "Gently used item in excellent condition with minimal signs of wear.",
+  PRE_OWNED_FAIR: "Used item in good condition with noticeable wear.",
+  PRE_OWNED_POOR: "Used item in acceptable condition with significant wear.",
+};
+
+/**
+ * Returns the eBay `conditionDescription` text for a condition enum, chosen
+ * by category tree type. Coin listings (categoryTreeType === "coin") — and
+ * any caller that hasn't been updated to pass a tree type — keep the
+ * original coin-flavored text in CONDITION_DESCRIPTIONS unchanged, for
+ * backward compatibility with existing callers/behavior. All other known
+ * tree types (bullion, trading_card, other, undefined-but-known-non-coin)
+ * get the generic, domain-neutral text from GENERIC_CONDITION_DESCRIPTIONS
+ * when an override exists there, else fall back to CONDITION_DESCRIPTIONS.
+ */
+export function getConditionDescription(
+  conditionEnum: string,
+  categoryTreeType?: string,
+): string {
+  const fallback = conditionEnum
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (c: string) => c.toUpperCase());
+
+  if (categoryTreeType === undefined || categoryTreeType === "coin") {
+    return CONDITION_DESCRIPTIONS[conditionEnum] ?? fallback;
+  }
+
+  return GENERIC_CONDITION_DESCRIPTIONS[conditionEnum] ??
+    CONDITION_DESCRIPTIONS[conditionEnum] ??
+    fallback;
+}
+
 export const LEGACY_CONDITION_MAP: Record<string, string> = {
   // Migrate old *_REFURBISHED and PRE_OWNED_* values from DB to USED_* equivalents.
   // Users no longer select these from the UI — these only handle old stored records.
