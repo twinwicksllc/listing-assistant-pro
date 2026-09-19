@@ -1,6 +1,8 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import {
+  CONDITION_DESCRIPTIONS,
   detectCategoryTreeSync,
+  getConditionDescription,
   HARDCODED_BULLION_CATEGORY_IDS,
   HARDCODED_COIN_CATEGORY_IDS,
   HARDCODED_COLLECTIBLE_CATEGORY_IDS,
@@ -157,6 +159,59 @@ Deno.test("detectCategoryTreeSync: 183050 resolves as trading_card (19107 no lon
 // "NEW_WITH_TAGS", which normalizeConditionForCategory's "other" branch (no
 // coin/bullion/trading_card/collectible correction applies to jewelry) then
 // passed through to eBay's publish endpoint untouched.
+// Regression guard for the 2026-09-19 non-coin condition-description fix:
+// CONDITION_DESCRIPTIONS is universally coin-flavored ("Uncirculated coin",
+// "circulated"), which was being sent verbatim as the eBay
+// conditionDescription field for every domain, including diecast toy cars
+// and pencil sharpeners. getConditionDescription() must keep coin listings
+// byte-for-byte identical to the old CONDITION_DESCRIPTIONS[...] lookup
+// while giving every other domain generic, non-numismatic text.
+Deno.test("getConditionDescription: categoryTreeType 'coin' matches legacy CONDITION_DESCRIPTIONS exactly", () => {
+  for (const key of Object.keys(CONDITION_DESCRIPTIONS)) {
+    assertEquals(getConditionDescription(key, "coin"), CONDITION_DESCRIPTIONS[key]);
+  }
+});
+
+Deno.test("getConditionDescription: undefined categoryTreeType preserves legacy default behavior", () => {
+  // Callers that haven't been updated to pass a tree type must see identical
+  // output to before this change (backward compatibility requirement).
+  for (const key of Object.keys(CONDITION_DESCRIPTIONS)) {
+    assertEquals(getConditionDescription(key), CONDITION_DESCRIPTIONS[key]);
+  }
+});
+
+Deno.test("getConditionDescription: non-coin domains get generic, non-numismatic text", () => {
+  for (const treeType of ["bullion", "trading_card", "other", "diecast"]) {
+    const desc = getConditionDescription("NEW", treeType);
+    assertEquals(desc, "Brand new, unused item in original packaging (if any).");
+  }
+
+  const usedExcellent = getConditionDescription("USED_EXCELLENT", "other");
+  assertEquals(
+    usedExcellent,
+    "Gently used item in excellent condition with minimal signs of wear.",
+  );
+  // Must not contain coin-specific numismatic vocabulary.
+  assertEquals(/circulated/i.test(usedExcellent), false);
+
+  const newDesc = getConditionDescription("NEW", "other");
+  assertEquals(/coin/i.test(newDesc), false);
+});
+
+Deno.test("getConditionDescription: falls back to CONDITION_DESCRIPTIONS for keys with no generic override", () => {
+  // NEW_OTHER has no coin-specific wording, so it's intentionally omitted
+  // from GENERIC_CONDITION_DESCRIPTIONS and should fall back unchanged.
+  assertEquals(
+    getConditionDescription("NEW_OTHER", "other"),
+    CONDITION_DESCRIPTIONS["NEW_OTHER"],
+  );
+});
+
+Deno.test("getConditionDescription: unknown enum falls back to title-cased key regardless of tree type", () => {
+  assertEquals(getConditionDescription("SOME_UNKNOWN_ENUM", "other"), "Some Unknown Enum");
+  assertEquals(getConditionDescription("SOME_UNKNOWN_ENUM", "coin"), "Some Unknown Enum");
+});
+
 Deno.test("normalizeConditionDescriptorToEnum: jewelry/sporting conditionDescription strings", () => {
   assertEquals(normalizeConditionDescriptorToEnum("New with tags"), "NEW");
   assertEquals(

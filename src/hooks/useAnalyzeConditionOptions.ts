@@ -62,7 +62,10 @@ export function useAnalyzeConditionOptions({
       hasAllowed && allowed!.every((c) => /^(ungraded|graded)$/i.test(c));
 
     if (hasAllowed && !isOnlyCoinLabels) {
-      return allowed!.map((c) => ({ value: c, label: getConditionLabel(c) }));
+      return allowed!.map((c) => ({
+        value: c,
+        label: getConditionLabel(c, domain),
+      }));
     }
 
     return getConditionsForCategory(
