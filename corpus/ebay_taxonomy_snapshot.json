@@ -1,8 +1,8 @@
 {
   "snapshot_meta": {
     "source": "ebay_taxonomy_cache (live Supabase REST fetch)",
-    "synced_at": "2026-09-18T01:25:35.003Z",
-    "row_count": 15116,
+    "synced_at": "2026-09-20T05:49:10.089Z",
+    "row_count": 15117,
     "purpose": "Deterministic snapshot for the Phase 3 golden-corpus replay harness. Refreshed automatically by scripts/refresh-taxonomy-snapshot.mjs after each sync-ebay-taxonomy-weekly run."
   },
   "categories": [
@@ -38491,6 +38491,13 @@
       "breadcrumb": "Toys & Hobbies > Diecast & Toy Vehicles > Cars: Racing, NASCAR > Sport & Touring Cars",
       "parent_category_id": "171127",
       "is_leaf": true
+    },
+    {
+      "category_id": "180273",
+      "category_name": "Cars, Trucks & Vans",
+      "breadcrumb": "Toys & Hobbies > Diecast & Toy Vehicles > Cars, Trucks & Vans",
+      "parent_category_id": "222",
+      "is_leaf": false
     },
     {
       "category_id": "180279",
