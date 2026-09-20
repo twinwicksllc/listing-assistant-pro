@@ -74,6 +74,16 @@ export default function PriceRecommenderCard({
       setRecommendation(rec);
       setSelectedSuggestion(rec.recommended);
       setHistogram(data.histogram || []);
+
+      // Jina's eBay sold-listings scrape was blocked (eBay's WAF returning a
+      // 403/error page instead of real results) -- distinct from a
+      // legitimate "no comps found" result. Surface a soft, non-alarming
+      // notice rather than silently implying the item has zero market data.
+      if (data.jinaBlocked && (data.totalFound || 0) === 0) {
+        setError(
+          "Pricing data temporarily unavailable — showing AI-based estimates",
+        );
+      }
     } catch (err: unknown) {
       console.error("PriceRecommender fetch error:", err);
       // Fallback: build recommendation from AI estimates

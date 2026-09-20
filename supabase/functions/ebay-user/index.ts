@@ -9,6 +9,69 @@ const corsHeaders = {
   "Access-Control-Max-Age": "86400",
 };
 
+// ----------------------------------------------------------------
+// Fetch the eBay Identity API user record with a bounded retry for
+// transient failures (5xx / network errors) -- 2026-09-20 log review found
+// a single 502 where eBay's Identity API returned a non-OK, non-401/403
+// status with no diagnostic body captured in the retention window. There
+// was previously *zero* retry here, so any one-off transient 5xx from eBay
+// (or a dropped connection) immediately surfaced as a hard failure instead
+// of self-healing on a second attempt. Mirrors the retry pattern already
+// used for the Browse API in _helpers/competitorSearch.ts: up to 3
+// attempts, retry only on 5xx/network error (4xx, including 401/403, is
+// never retried -- eBay is telling us something concrete about the
+// request/token, not experiencing a transient blip), capped exponential
+// backoff (1.5s, 2.25s).
+//
+// Exported so retry/backoff behavior can be exercised directly against a
+// mocked `globalThis.fetch`, without waiting on real timers or standing up
+// a live eBay token.
+export async function fetchIdentityWithRetry(
+  apiBase: string,
+  userToken: string,
+): Promise<{ resp: Response | null; lastFetchErr: unknown }> {
+  let resp: Response | null = null;
+  let lastFetchErr: unknown = null;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      resp = await fetch(`${apiBase}/commerce/identity/v1/user/`, {
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+          "Content-Type": "application/json",
+          "Accept-Language": "en-US",
+        },
+      });
+      lastFetchErr = null;
+
+      // Only retry on 5xx -- 4xx is a concrete, non-transient answer.
+      if (resp.status < 500) break;
+
+      if (attempt < 2) {
+        const delayMs = 1500 * Math.pow(1.5, attempt);
+        console.warn(
+          `ebay-user: Identity API returned ${resp.status} -- retrying in ${delayMs}ms (attempt ${attempt + 1}/3)`,
+        );
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    } catch (fetchErr) {
+      lastFetchErr = fetchErr;
+      resp = null;
+      if (attempt < 2) {
+        const delayMs = 1500 * Math.pow(1.5, attempt);
+        console.warn(
+          `ebay-user: Identity API fetch error (attempt ${attempt + 1}/3) -- retrying in ${delayMs}ms: ${
+            String(fetchErr)
+          }`,
+        );
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+  }
+
+  return { resp, lastFetchErr };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -59,14 +122,22 @@ serve(async (req) => {
       });
     }
 
-    // Fetch user info from eBay Identity API
-    const userResp = await fetch(`${apiBase}/commerce/identity/v1/user/`, {
-      headers: {
-        Authorization: `Bearer ${userToken}`,
-        "Content-Type": "application/json",
-        "Accept-Language": "en-US",
-      },
-    });
+    // Fetch user info from eBay Identity API, with a bounded retry on
+    // transient (5xx/network) failures -- see fetchIdentityWithRetry above.
+    const { resp: userResp, lastFetchErr } = await fetchIdentityWithRetry(apiBase, userToken);
+
+    if (!userResp) {
+      console.error("ebay-user: Identity API unreachable after 3 attempts:", String(lastFetchErr));
+      return new Response(
+        JSON.stringify({
+          error: `eBay API unreachable: ${lastFetchErr instanceof Error ? lastFetchErr.message : String(lastFetchErr)}`,
+        }),
+        {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
 
     if (userResp.status === 401 || userResp.status === 403) {
       return new Response(JSON.stringify({ needsAuth: true }), {
