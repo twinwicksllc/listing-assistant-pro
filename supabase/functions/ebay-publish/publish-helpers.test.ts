@@ -268,3 +268,59 @@ Deno.test("normalizeConditionDescriptorToEnum: normalizing BOTH the live policy 
   assertEquals(liveEnums.includes(normalizedIncoming), true); // the fix: normalized does
   assertEquals(normalizedIncoming, "NEW");
 });
+
+// Regression coverage for a live production incident (2026-09-20): a Pocket
+// Watch (category 3937, "Jewelry & Watches > ... > Pocket Watches",
+// categoryTreeType="other") was published with rawCondition=PRE_OWNED_GOOD,
+// which passed through normalizeConditionForCategory unchanged (no
+// correction branch for "other" categories) and reached eBay's Inventory API
+// verbatim. eBay rejected it with errorId 2004 "Could not serialize field
+// [condition]" because PRE_OWNED_GOOD/FAIR/POOR are NOT valid ConditionEnum
+// values (confirmed against eBay's condition-id-values docs -- ID 3000's
+// real enum is USED_EXCELLENT). The "other"-category safety net in
+// publish-create-draft.ts was also a no-op for this exact case: eBay's own
+// live condition policy for this category returns the description
+// "Pre-owned - Good", and the (buggy) alias table used to map that string
+// right back to "PRE_OWNED_GOOD" -- so the safety net's own match check
+// "confirmed" the invalid value as correct instead of catching it.
+Deno.test("normalizeConditionDescriptorToEnum: PRE_OWNED_GOOD/FAIR/POOR are corrected to real USED_* enums, not passed through", () => {
+  // Raw enum string form (e.g. a value already stored in the DB, or passed
+  // directly as rawCondition without going through the text-alias table).
+  assertEquals(normalizeConditionDescriptorToEnum("PRE_OWNED_GOOD"), "USED_EXCELLENT");
+  assertEquals(normalizeConditionDescriptorToEnum("PRE_OWNED_FAIR"), "USED_GOOD");
+  assertEquals(normalizeConditionDescriptorToEnum("PRE_OWNED_POOR"), "USED_ACCEPTABLE");
+
+  // Human-readable descriptor text form, exactly as eBay's own Metadata API
+  // (getItemConditionPolicies) returns it for category 3937.
+  assertEquals(normalizeConditionDescriptorToEnum("Pre-owned - Good"), "USED_EXCELLENT");
+  assertEquals(normalizeConditionDescriptorToEnum("Pre-owned Good"), "USED_EXCELLENT");
+  assertEquals(normalizeConditionDescriptorToEnum("pre-owned fair"), "USED_GOOD");
+});
+
+Deno.test("normalizeConditionDescriptorToEnum: the live-incident tautology is fixed -- PRE_OWNED_GOOD no longer 'confirms' itself as valid", () => {
+  // Simulates category 3937's live condition policy exactly as returned by
+  // eBay during the incident.
+  const liveConditions = [
+    { conditionId: 3000, conditionDescription: "Pre-owned - Good" },
+    { conditionId: 1000, conditionDescription: "New" },
+  ];
+  const liveEnums = liveConditions.map((c) => normalizeConditionDescriptorToEnum(c.conditionDescription));
+
+  // Before the fix: liveEnums would contain "PRE_OWNED_GOOD", and the
+  // upstream conditionEnum "PRE_OWNED_GOOD" would normalize to itself too --
+  // so the safety net's match check would pass and ship the invalid value.
+  // After the fix: both sides resolve to the real enum "USED_EXCELLENT".
+  assertEquals(liveEnums.includes("PRE_OWNED_GOOD"), false);
+  assertEquals(liveEnums.includes("USED_EXCELLENT"), true);
+
+  const upstreamConditionEnum = "PRE_OWNED_GOOD"; // what reached publish-create-draft.ts
+  const normalizedIncoming = normalizeConditionDescriptorToEnum(upstreamConditionEnum);
+  assertEquals(normalizedIncoming, "USED_EXCELLENT");
+
+  const matched = liveConditions.find(
+    (c) => normalizeConditionDescriptorToEnum(c.conditionDescription) === normalizedIncoming,
+  );
+  assertEquals(matched?.conditionId, 3000);
+  // The value that would actually be sent to eBay is now a real ConditionEnum.
+  assertEquals(normalizedIncoming, "USED_EXCELLENT");
+});

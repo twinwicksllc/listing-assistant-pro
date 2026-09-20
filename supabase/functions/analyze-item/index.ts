@@ -1671,9 +1671,14 @@ Seller's note: "${voiceNote}"`;
       "very good refurbished": "VERY_GOOD_REFURBISHED",
       "good refurbished": "GOOD_REFURBISHED",
       "seller refurbished": "SELLER_REFURBISHED",
-      "pre-owned good": "PRE_OWNED_GOOD",
-      "pre-owned fair": "PRE_OWNED_FAIR",
-      "pre-owned poor": "PRE_OWNED_POOR",
+      // PRE_OWNED_GOOD/FAIR/POOR are NOT valid eBay ConditionEnum values --
+      // map straight to the real USED_* equivalents so this table can never
+      // leak a fake enum into the AI's allowed-conditions list (errorId 2004
+      // on publish). Mirrored in ebay-publish/publish-helpers.ts and
+      // bulk-publish/index.ts.
+      "pre-owned good": "USED_EXCELLENT",
+      "pre-owned fair": "USED_GOOD",
+      "pre-owned poor": "USED_ACCEPTABLE",
       "digital good": "DIGITAL_GOOD",
       "certified pre-owned": "CERTIFIED_PRE_OWNED",
       remanufactured: "REMANUFACTURED",
@@ -1687,11 +1692,20 @@ Seller's note: "${voiceNote}"`;
     // "Graded") that are NOT valid Inventory API condition enum values. We must never let these
     // pass through to the AI's allowed enum list or the publish call will fail with errorId 2004.
     const INVALID_CONDITION_STRINGS = new Set(["UNGRADED", "GRADED"]);
+    // Fake enum strings that must never reach the AI's allowed-conditions
+    // list -- correct to the real USED_* equivalent rather than dropping the
+    // option outright. Mirrored in ebay-publish/publish-helpers.ts and
+    // bulk-publish/index.ts.
+    const FAKE_ENUM_CORRECTIONS: Record<string, string> = {
+      PRE_OWNED_GOOD: "USED_EXCELLENT",
+      PRE_OWNED_FAIR: "USED_GOOD",
+      PRE_OWNED_POOR: "USED_ACCEPTABLE",
+    };
     const mappedConditionEnums: string[] = categoryConditions?.conditions?.length > 0
       ? categoryConditions.conditions
         .map((c: any) => {
           const id = Number(c.conditionId);
-          const mapped = CONDITION_ID_TO_ENUM[id] ??
+          let mapped = CONDITION_ID_TO_ENUM[id] ??
             CONDITION_DESCRIPTION_TO_ENUM[
               String(c.conditionDescription ?? "")
                 .trim()
@@ -1701,7 +1715,9 @@ Seller's note: "${voiceNote}"`;
               .toUpperCase()
               .replace(/[^A-Z0-9]+/g, "_")
               .replace(/^_|_$/g, "");
-          return INVALID_CONDITION_STRINGS.has(mapped.toUpperCase()) ? null : mapped;
+          if (INVALID_CONDITION_STRINGS.has(mapped.toUpperCase())) return null;
+          mapped = FAKE_ENUM_CORRECTIONS[mapped.toUpperCase()] ?? mapped;
+          return mapped;
         })
         .filter(
           (value: string | null): value is string => typeof value === "string" && value.length > 0,

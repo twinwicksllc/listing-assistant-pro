@@ -15,8 +15,21 @@ const corsHeaders = {
 // duplicated constants).
 
 // How long to wait between batches of eBay calls (ms).
-// Browse API has no hard quota, but we throttle to be polite and
-// avoid transient 429s under sustained load.
+// CORRECTED 2026-09-21 (do not re-introduce the old claim below): the
+// Browse API DOES have a real, hard 5,000-calls/day quota per client_id --
+// the 2026-09-20/21 quota-storm incident confirmed this directly (429
+// errorId 2001 on both buy.browse and buy.browse.item.bulk). This delay
+// only smooths out short bursts within a single batch; it does nothing to
+// prevent the daily ceiling itself from being exhausted well before this
+// cron's ~172,800 calls/day worst-case fan-out (30 listings/tick x 288
+// ticks/day x up to 20 stored comp ids/listing). The real quota protection
+// is checkBrowseQuotaHeadroom (see competitorSearch.ts's runCompetitorSearch),
+// which this cron relies on indirectly since every refreshCompetitorData
+// call below goes through runCompetitorSearch.
+//
+// (Original, now-disproven claim, kept here so a future reader can see
+// exactly what was corrected and why: "Browse API has no hard quota, but
+// we throttle to be polite and avoid transient 429s under sustained load.")
 const SEARCH_DELAY_MS = 300;
 
 // How many refreshCompetitorData calls to run concurrently per batch.

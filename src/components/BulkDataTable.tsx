@@ -91,7 +91,9 @@ export default function BulkDataTable({
       {
         rowIndex: newIndex,
         title: "",
-        condition: "PRE_OWNED_GOOD",
+        // PRE_OWNED_GOOD is not a valid eBay ConditionEnum -- see
+        // src/types/listing.ts for the full explanation.
+        condition: "USED_EXCELLENT",
         price: 0,
         quantity: 1,
         categoryId: "",

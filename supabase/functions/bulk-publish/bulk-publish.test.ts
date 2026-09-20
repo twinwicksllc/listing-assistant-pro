@@ -48,3 +48,30 @@ Deno.test("resolveConditionForCategory: LEGACY_CONDITION_MAP's own aliases still
   const result = await resolveConditionForCategory("New", "");
   assertEquals(result.conditionEnum, "NEW");
 });
+
+// Regression coverage for a live production incident (2026-09-20):
+// PRE_OWNED_GOOD/FAIR/POOR are NOT valid eBay Inventory API ConditionEnum
+// values (confirmed against eBay's condition-id-values docs), but this
+// function's own normalizeConditionDescriptorToEnum copy used to map the
+// text "pre-owned good" straight to the fake enum "PRE_OWNED_GOOD" instead
+// of a real USED_* value, and LEGACY_CONDITION_MAP's exact-case lookup only
+// caught the exact-case enum string, not the lowercase text form a CSV/API
+// bulk row would actually contain.
+Deno.test("normalizeConditionDescriptorToEnum: PRE_OWNED_GOOD/FAIR/POOR text and enum forms both resolve to real USED_* enums", () => {
+  assertEquals(normalizeConditionDescriptorToEnum("pre-owned good"), "USED_EXCELLENT");
+  assertEquals(normalizeConditionDescriptorToEnum("pre-owned fair"), "USED_GOOD");
+  assertEquals(normalizeConditionDescriptorToEnum("PRE_OWNED_GOOD"), "USED_EXCELLENT");
+  assertEquals(normalizeConditionDescriptorToEnum("PRE_OWNED_POOR"), "USED_ACCEPTABLE");
+});
+
+Deno.test("resolveConditionForCategory: 'Pre-owned good' (bulk CSV text form) resolves to USED_EXCELLENT, never the fake PRE_OWNED_GOOD enum", async () => {
+  const result = await resolveConditionForCategory("Pre-owned good", "");
+  assertEquals(result.conditionEnum, "USED_EXCELLENT");
+  assertEquals(result.conditionId, 3000);
+});
+
+Deno.test("resolveConditionForCategory: a legacy stored PRE_OWNED_GOOD enum value still migrates via LEGACY_CONDITION_MAP", async () => {
+  const result = await resolveConditionForCategory("PRE_OWNED_GOOD", "");
+  assertEquals(result.conditionEnum, "USED_EXCELLENT");
+  assertEquals(result.conditionId, 3000);
+});

@@ -38,4 +38,24 @@ describe("normalizeEbayConditionDescription", () => {
       "SOME_NEW_THING",
     );
   });
+
+  // Regression coverage for a live production incident (2026-09-20): eBay's
+  // Metadata API returns "Pre-owned - Good" / "Pre-owned - Fair" as the
+  // conditionDescription for some categories (e.g. Jewelry & Watches >
+  // Pocket Watches, category 3937). Before this fix, these strings had no
+  // entry in the alias table, so they fell through to the mangle fallback
+  // and produced "PRE_OWNED_GOOD" / "PRE_OWNED_FAIR" — NOT valid eBay
+  // ConditionEnum values, which eBay's Inventory API rejects with errorId
+  // 2004 ("Could not serialize field [condition]") on publish.
+  test.each([
+    ["Pre-owned - Good", "USED_EXCELLENT"],
+    ["Pre-owned Good", "USED_EXCELLENT"],
+    ["pre-owned good", "USED_EXCELLENT"],
+    ["Pre-owned - Fair", "USED_GOOD"],
+    ["Pre-owned - Poor", "USED_ACCEPTABLE"],
+  ])("maps %s -> %s (never a fake PRE_OWNED_* enum)", (input, expected) => {
+    const result = normalizeEbayConditionDescription(input);
+    expect(result).toBe(expected);
+    expect(result).not.toMatch(/^PRE_OWNED_/);
+  });
 });

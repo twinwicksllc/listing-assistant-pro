@@ -471,8 +471,17 @@ export async function handleCreateDraft({
   conditionId = conditionId ?? 3000;
   let effectiveConditionId = conditionId;
 
+  // NOTE: this log intentionally reports `conditionEnum` (the FINAL value
+  // after the "other"-category live-conditions safety net above may have
+  // overridden it), not `normalizedCondition` (the PRE-safety-net value from
+  // normalizeConditionForCategory). Logging normalizedCondition here was
+  // misleading during a live incident (2026-09-20): it showed the original
+  // rawCondition/normalized pair even when the safety net had since changed
+  // conditionEnum, making it look like the net never ran. The inventory-body
+  // log further down remains the ultimate source of truth for what was
+  // actually sent to eBay.
   console.log(
-    `create_draft: condition normalization - rawCondition=${rawCondition}, normalized=${normalizedCondition}, conditionId=${conditionId}, categoryId=${finalCategoryId}, corrected=${corrected}`,
+    `create_draft: condition normalization - rawCondition=${rawCondition}, normalized=${normalizedCondition}, finalCondition=${conditionEnum}, conditionId=${conditionId}, categoryId=${finalCategoryId}, corrected=${corrected}`,
   );
 
   if (corrected) {
