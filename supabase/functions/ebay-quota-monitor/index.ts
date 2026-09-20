@@ -43,6 +43,23 @@ const ADMIN_EMAIL = "twinwicksllc@gmail.com";
 const WARN_THRESHOLD_RATIO = 0.9;
 const BROWSE_RESOURCE_NAME = "buy.browse";
 
+// CORRECTED 2026-09-21 (do not re-introduce the old "genuinely separate
+// pool" claim below): a live production incident (the 2026-09-20/21
+// quota-storm) proved buy.browse and buy.browse.item.bulk share -- or at
+// minimum both individually exhaust against -- the SAME real-world
+// 5,000/day ceiling per client_id. getItem (bulk) calls returned the exact
+// same `429 errorId 2001` buy.browse calls did, at the same time, even
+// though this monitor's same-day counter (which only ever filtered on
+// resource === BROWSE_RESOURCE_NAME) still showed comfortable headroom --
+// a ~21x under-report of the real combined burn (2,976 counted vs ~63,170
+// actual calls across both resources in the same 24h window). Both
+// resource names are now summed wherever this file decides whether quota
+// is at risk. BROWSE_RESOURCE_NAME above is kept only for findBrowseRate's
+// exact-match parsing of eBay's own getRateLimits response (that response
+// genuinely does report the two as separate named entries, even if they
+// share one real budget) and for the poll snapshot's resource_name column.
+const COMBINED_BROWSE_RESOURCES = [BROWSE_RESOURCE_NAME, "buy.browse.item.bulk"] as const;
+
 // ebay_browse_call_log is append-only and only ever read via a same-day
 // (gte todayStart) query -- every row older than "today" is dead weight
 // from the moment it's written. Flagged by Copilot review on PR #581 as a
@@ -180,10 +197,11 @@ export async function fetchEbayRateLimits(
  * response ordering, persisting/alerting on the wrong quota entirely
  * (Copilot review, PR #581).
  */
-export function findBrowseRate(
+function findResourceRate(
   rateLimits: EbayRateLimitContext[],
+  resourceName: string,
 ): { resource: EbayRateLimitResource; rate: EbayRateLimitRate } | null {
-  const target = BROWSE_RESOURCE_NAME.toLowerCase();
+  const target = resourceName.toLowerCase();
   for (const ctx of rateLimits) {
     for (const resource of ctx.resources ?? []) {
       if (resource.name?.toLowerCase() === target) {
@@ -193,6 +211,41 @@ export function findBrowseRate(
     }
   }
   return null;
+}
+
+export function findBrowseRate(
+  rateLimits: EbayRateLimitContext[],
+): { resource: EbayRateLimitResource; rate: EbayRateLimitRate } | null {
+  return findResourceRate(rateLimits, BROWSE_RESOURCE_NAME);
+}
+
+/**
+ * CORRECTED 2026-09-21: eBay's getRateLimits reports buy.browse and
+ * buy.browse.item.bulk as two separate named resources with their own
+ * remaining counts, but the quota-storm incident proved they draw against
+ * ONE shared real-world ceiling for this account. Rather than trust
+ * whichever of the two happens to look healthier, this checks BOTH and
+ * returns whichever currently shows the HIGHER used-ratio (the worst
+ * case) -- that's the one closest to actually 429ing, and therefore the
+ * one this monitor's warn decision and poll snapshot should be anchored
+ * to. Returns null only if NEITHER resource is present in the response
+ * (findBrowseRate's own null case, just for both names).
+ */
+export function findWorstCombinedBrowseRate(
+  rateLimits: EbayRateLimitContext[],
+): { resource: EbayRateLimitResource; rate: EbayRateLimitRate } | null {
+  let worst: { resource: EbayRateLimitResource; rate: EbayRateLimitRate } | null = null;
+  let worstUsedRatio = -1;
+  for (const resourceName of COMBINED_BROWSE_RESOURCES) {
+    const found = findResourceRate(rateLimits, resourceName);
+    if (!found) continue;
+    const usedRatio = found.rate.limit > 0 ? (found.rate.limit - found.rate.remaining) / found.rate.limit : 0;
+    if (usedRatio > worstUsedRatio) {
+      worstUsedRatio = usedRatio;
+      worst = found;
+    }
+  }
+  return worst;
 }
 
 /**
@@ -269,12 +322,11 @@ export async function pruneOldCallLogRows(
 
 /**
  * Counts today's ebay_browse_call_log rows against the buy.browse pool
- * specifically. Exported so the resource="buy.browse" filter -- the fix
- * for a real regression risk found during the getItems follow-on work's
- * planning (an unfiltered count would let a burst of cheap getItems calls
- * falsely inflate this early-warning heuristic for a pool nowhere near
- * exhausted) -- has direct test coverage against a fake Supabase client,
- * same pattern as pruneOldCallLogRows.
+ * specifically. Exported so the resource="buy.browse" filter has direct
+ * test coverage against a fake Supabase client, same pattern as
+ * pruneOldCallLogRows. Kept for observability/breakdown purposes (see
+ * countSameDayCombinedBrowseCalls below for the value actually used in the
+ * warn decision as of the 2026-09-21 quota-storm fix).
  */
 export async function countSameDayBrowseCalls(
   // deno-lint-ignore no-explicit-any -- matches this file's existing loose
@@ -285,10 +337,32 @@ export async function countSameDayBrowseCalls(
   const { count, error } = await svc
     .from("ebay_browse_call_log")
     .select("*", { count: "exact", head: true })
-    // Reuses the same constant findBrowseRate/the poll insert derive the
-    // resource name from, so a future rename can't make the quota poll and
-    // this same-day counter silently disagree (Copilot review, PR #599).
     .eq("resource", BROWSE_RESOURCE_NAME)
+    .gte("created_at", todayStart.toISOString());
+  return { count: count ?? null, error: error ?? null };
+}
+
+/**
+ * CORRECTED 2026-09-21: counts today's ebay_browse_call_log rows across
+ * BOTH buy.browse AND buy.browse.item.bulk combined -- see
+ * COMBINED_BROWSE_RESOURCES's own comment above for the incident that
+ * proved these need to be treated as one shared budget. This is the value
+ * the warn decision is now anchored to (countSameDayBrowseCalls above is
+ * kept separately purely for breakdown/observability, not as an input to
+ * shouldWarn anymore). Exported so the `.in()` filter has direct test
+ * coverage against a fake Supabase client, matching this file's existing
+ * pattern for its sibling counters.
+ */
+export async function countSameDayCombinedBrowseCalls(
+  // deno-lint-ignore no-explicit-any -- matches this file's existing loose
+  // supabase-js client typing.
+  svc: any,
+  todayStart: Date,
+): Promise<{ count: number | null; error: { message: string } | null }> {
+  const { count, error } = await svc
+    .from("ebay_browse_call_log")
+    .select("*", { count: "exact", head: true })
+    .in("resource", COMBINED_BROWSE_RESOURCES)
     .gte("created_at", todayStart.toISOString());
   return { count: count ?? null, error: error ?? null };
 }
@@ -405,14 +479,18 @@ serve(async (req) => {
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "production";
     const token = await getEbayAppToken(ebayEnv);
     const rateLimits = await fetchEbayRateLimits(token, ebayEnv);
-    const found = findBrowseRate(rateLimits);
+    // CORRECTED 2026-09-21: anchor to whichever of buy.browse /
+    // buy.browse.item.bulk currently shows the worse used-ratio, since the
+    // quota-storm incident proved they share one real ceiling -- see
+    // findWorstCombinedBrowseRate's own docstring.
+    const found = findWorstCombinedBrowseRate(rateLimits);
 
     if (!found) {
-      console.warn("[ebay-quota-monitor] No buy.browse resource found in getRateLimits response");
+      console.warn("[ebay-quota-monitor] Neither buy.browse nor buy.browse.item.bulk found in getRateLimits response");
       return new Response(
         JSON.stringify({
           warned: false,
-          reason: "buy.browse resource not found in response",
+          reason: "neither buy.browse nor buy.browse.item.bulk resource found in response",
           pruned: pruneResult?.pruned ?? null,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -447,11 +525,12 @@ serve(async (req) => {
     // Same-day running count from this app's own counter, independent of
     // eBay's poll -- see the migration's comment for why this needed its own
     // table rather than reusing usage_tracking (NOT NULL user_id there,
-    // this is an app-level count). Extracted to a standalone function (below
-    // this handler) so the resource="buy.browse" filter has direct test
-    // coverage against a fake Supabase client, matching pruneOldCallLogRows'
-    // own precedent (Copilot review, PR #582).
-    const { count: sameDayCountRaw, error: countErr } = await countSameDayBrowseCalls(svc, todayStart);
+    // this is an app-level count). CORRECTED 2026-09-21: uses the COMBINED
+    // count across both buy.browse and buy.browse.item.bulk (see
+    // countSameDayCombinedBrowseCalls's own docstring) -- the single-
+    // resource countSameDayBrowseCalls under-reported real burn by ~21x
+    // during the quota-storm incident (2,976 counted vs ~63,170 actual).
+    const { count: sameDayCountRaw, error: countErr } = await countSameDayCombinedBrowseCalls(svc, todayStart);
     if (countErr) {
       console.error("[ebay-quota-monitor] Same-day count query failed:", countErr.message);
       captureException(new Error(`Same-day count query failed: ${countErr.message}`), {

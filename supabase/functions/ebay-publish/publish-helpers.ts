@@ -175,9 +175,16 @@ export function normalizeConditionDescriptorToEnum(
     "very good refurbished": "VERY_GOOD_REFURBISHED",
     "good refurbished": "GOOD_REFURBISHED",
     "seller refurbished": "SELLER_REFURBISHED",
-    "pre-owned good": "PRE_OWNED_GOOD",
-    "pre-owned fair": "PRE_OWNED_FAIR",
-    "pre-owned poor": "PRE_OWNED_POOR",
+    // NOTE: PRE_OWNED_GOOD/FAIR/POOR are NOT valid eBay ConditionEnum values
+    // (confirmed against eBay's condition-id-values docs). They must resolve
+    // directly to their real USED_* equivalents here, not to the fake
+    // PRE_OWNED_* strings. Also mirrored as a final catch-all below via
+    // LEGACY_CONDITION_MAP, in case this same fake string is produced by the
+    // regex fallback (e.g. from eBay's own condition description text
+    // "Pre-owned - Good", whose punctuation doesn't match this key exactly).
+    "pre-owned good": "USED_EXCELLENT",
+    "pre-owned fair": "USED_GOOD",
+    "pre-owned poor": "USED_ACCEPTABLE",
     "digital good": "DIGITAL_GOOD",
     "certified pre-owned": "CERTIFIED_PRE_OWNED",
     remanufactured: "REMANUFACTURED",
@@ -197,13 +204,24 @@ export function normalizeConditionDescriptorToEnum(
     "pre-owned": "USED_EXCELLENT",
   };
 
-  return (
-    aliases[lowered] ??
-      raw
-        .toUpperCase()
-        .replace(/[^A-Z0-9]+/g, "_")
-        .replace(/^_|_$/g, "")
-  );
+  const resolved = aliases[lowered] ??
+    raw
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "_")
+      .replace(/^_|_$/g, "");
+
+  // Final catch-all: PRE_OWNED_GOOD/FAIR/POOR are NOT valid eBay
+  // ConditionEnum values under any spelling. This covers callers passing the
+  // exact enum string directly (e.g. a value already stored in the DB from
+  // before this fix, or a frontend default that hasn't been corrected yet),
+  // which the lowercase phrase aliases above don't catch because
+  // "PRE_OWNED_GOOD".toLowerCase() = "pre_owned_good", not "pre-owned good".
+  const FAKE_ENUM_CORRECTIONS: Record<string, string> = {
+    PRE_OWNED_GOOD: "USED_EXCELLENT",
+    PRE_OWNED_FAIR: "USED_GOOD",
+    PRE_OWNED_POOR: "USED_ACCEPTABLE",
+  };
+  return FAKE_ENUM_CORRECTIONS[resolved] ?? resolved;
 }
 
 export async function fetchDynamicCategoryConditions(

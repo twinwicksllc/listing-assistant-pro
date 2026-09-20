@@ -381,13 +381,18 @@ const ELECTRONICS_CONDITION_OPTIONS: ConditionOption[] = [
   { value: "FOR_PARTS_OR_NOT_WORKING", label: "For parts or not working" },
 ];
 
+// 2026-09-20: removed PRE_OWNED_GOOD/PRE_OWNED_FAIR (not real eBay
+// ConditionEnum values -- confirmed against eBay's condition-id-values docs;
+// caused live errorId 2004 "Could not serialize field [condition]" on
+// publish). Mapped to their real USED_* equivalents, matching the same fix
+// already applied to JEWELRY_SPORTING_CONDITION_OPTIONS below on 2026-09-16.
 const CLOTHING_CONDITION_OPTIONS: ConditionOption[] = [
   { value: "NEW", label: "New with tags" },
   { value: "NEW_OTHER", label: "New without tags" },
   { value: "NEW_WITH_DEFECTS", label: "New with imperfections" },
   { value: "USED_EXCELLENT", label: "Pre-owned - Excellent" },
-  { value: "PRE_OWNED_GOOD", label: "Pre-owned - Good" },
-  { value: "PRE_OWNED_FAIR", label: "Pre-owned - Fair" },
+  { value: "USED_GOOD", label: "Pre-owned - Good" },
+  { value: "USED_ACCEPTABLE", label: "Pre-owned - Fair" },
 ];
 
 const SHOES_CONDITION_OPTIONS: ConditionOption[] = [
@@ -395,8 +400,8 @@ const SHOES_CONDITION_OPTIONS: ConditionOption[] = [
   { value: "NEW_OTHER", label: "New without box" },
   { value: "NEW_WITH_DEFECTS", label: "New with defects" },
   { value: "USED_EXCELLENT", label: "Pre-owned - Excellent" },
-  { value: "PRE_OWNED_GOOD", label: "Pre-owned - Good" },
-  { value: "PRE_OWNED_FAIR", label: "Pre-owned - Fair" },
+  { value: "USED_GOOD", label: "Pre-owned - Good" },
+  { value: "USED_ACCEPTABLE", label: "Pre-owned - Fair" },
 ];
 
 // 2026-09-16: previously included PRE_OWNED_GOOD/PRE_OWNED_FAIR (not real eBay
@@ -522,6 +527,15 @@ export function normalizeEbayConditionDescription(
     "like new": "LIKE_NEW",
     used: "USED_EXCELLENT",
     "pre-owned": "USED_EXCELLENT",
+    // eBay's live condition policy for some categories (e.g. Jewelry &
+    // Watches leaves) returns "Pre-owned - Good" / "Pre-owned - Fair" as the
+    // conditionDescription text. Without these aliases, the fallback mangle
+    // below would produce PRE_OWNED_GOOD/PRE_OWNED_FAIR -- NOT valid eBay
+    // ConditionEnum values, which eBay rejects with errorId 2004 on publish.
+    // Mirrored in the three backend copies of this table.
+    "pre-owned good": "USED_EXCELLENT",
+    "pre-owned fair": "USED_GOOD",
+    "pre-owned poor": "USED_ACCEPTABLE",
     "very good": "USED_VERY_GOOD",
     good: "USED_GOOD",
     acceptable: "USED_ACCEPTABLE",
@@ -544,10 +558,25 @@ export function normalizeEbayConditionDescription(
   console.warn(
     `normalizeEbayConditionDescription: no known mapping for conditionDescription "${raw}" — falling back to a mangled token. eBay may have added a new condition string; add it to this alias table.`,
   );
-  return raw
+  const mangled = raw
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, "_")
     .replace(/^_|_$/g, "");
+
+  // Final catch-all: eBay's Metadata API returns "Pre-owned - Good" /
+  // "Pre-owned - Fair" (with a dash) for some categories, which the phrase
+  // aliases above don't match exactly (they key on the dash-free "pre-owned
+  // good" form) and which mangles to the fake enum PRE_OWNED_GOOD/FAIR --
+  // NOT a valid eBay ConditionEnum. Correct it here so this function can
+  // never emit one under any punctuation variant. Mirrored in the three
+  // backend copies of this table (ebay-publish/publish-helpers.ts,
+  // bulk-publish/index.ts, analyze-item/index.ts).
+  const FAKE_ENUM_CORRECTIONS: Record<string, string> = {
+    PRE_OWNED_GOOD: "USED_EXCELLENT",
+    PRE_OWNED_FAIR: "USED_GOOD",
+    PRE_OWNED_POOR: "USED_ACCEPTABLE",
+  };
+  return FAKE_ENUM_CORRECTIONS[mangled] ?? mangled;
 }
 
 /**

@@ -124,9 +124,13 @@ export function normalizeConditionDescriptorToEnum(
     "very good refurbished": "VERY_GOOD_REFURBISHED",
     "good refurbished": "GOOD_REFURBISHED",
     "seller refurbished": "SELLER_REFURBISHED",
-    "pre-owned good": "PRE_OWNED_GOOD",
-    "pre-owned fair": "PRE_OWNED_FAIR",
-    "pre-owned poor": "PRE_OWNED_POOR",
+    // NOTE: PRE_OWNED_GOOD/FAIR/POOR are NOT valid eBay ConditionEnum values
+    // (confirmed against eBay's condition-id-values docs) -- resolve straight
+    // to the real USED_* equivalents. Mirrored in ebay-publish/publish-
+    // helpers.ts's copy of this function -- keep both in sync.
+    "pre-owned good": "USED_EXCELLENT",
+    "pre-owned fair": "USED_GOOD",
+    "pre-owned poor": "USED_ACCEPTABLE",
     "digital good": "DIGITAL_GOOD",
     "certified pre-owned": "CERTIFIED_PRE_OWNED",
     remanufactured: "REMANUFACTURED",
@@ -144,13 +148,22 @@ export function normalizeConditionDescriptorToEnum(
     "pre-owned": "USED_EXCELLENT",
   };
 
-  return (
-    aliases[lowered] ??
-      raw
-        .toUpperCase()
-        .replace(/[^A-Z0-9]+/g, "_")
-        .replace(/^_|_$/g, "")
-  );
+  const resolved = aliases[lowered] ??
+    raw
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "_")
+      .replace(/^_|_$/g, "");
+
+  // Final catch-all: catches the exact enum strings PRE_OWNED_GOOD/FAIR/POOR
+  // arriving directly (e.g. from a legacy DB row), which the lowercase
+  // phrase aliases above don't match. Mirrored in ebay-publish/publish-
+  // helpers.ts's copy of this function.
+  const FAKE_ENUM_CORRECTIONS: Record<string, string> = {
+    PRE_OWNED_GOOD: "USED_EXCELLENT",
+    PRE_OWNED_FAIR: "USED_GOOD",
+    PRE_OWNED_POOR: "USED_ACCEPTABLE",
+  };
+  return FAKE_ENUM_CORRECTIONS[resolved] ?? resolved;
 }
 
 async function fetchDynamicCategoryConditions(

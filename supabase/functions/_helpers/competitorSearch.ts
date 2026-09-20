@@ -825,11 +825,26 @@ export interface BulkItemsLookupResult {
  * than the original 20-per-call design (1 call per comp instead of up to
  * 20 comps per call) but confirmed working today.
  *
- * Each single-item call still draws from a resource distinct from
- * buy.browse (item_summary/search) per eBay's own getRateLimits response --
- * logged under the same "buy.browse.item.bulk" resource name kept from the
- * original design for continuity with the quota-monitor dashboard/alerts,
- * even though the mechanism is now N single-item calls, not one bulk call.
+ * CORRECTED 2026-09-20 (do not re-introduce the old claim below): this
+ * function's own log lines are still stamped "buy.browse.item.bulk" per
+ * eBay's getRateLimits resource NAMING for continuity with existing
+ * dashboards/alerts, but that name does NOT mean this traffic draws from a
+ * pool independent of buy.browse. A live production incident confirmed the
+ * opposite: with buy.browse's own poll reporting remaining=0, single-item
+ * getItem calls from this exact function were ALSO rejected with the same
+ * `429 errorId 2001 "The request limit has been reached for the resource"`
+ * (~63,000 getItem calls in 24h against a 5,000/day limit). Whatever eBay's
+ * metadata reports about these being separate named resources, the two
+ * clearly share -- or at minimum both individually exhaust against -- the
+ * same real-world ceiling for this account. Treat buy.browse and
+ * buy.browse.item.bulk as ONE combined budget for any capacity-planning or
+ * quota-gating decision (see checkBrowseQuotaHeadroom below, and
+ * ebay-quota-monitor/index.ts, which now polls both resource names).
+ *
+ * (Original, now-disproven claim, kept here so a future reader can see
+ * exactly what was corrected and why: "Each single-item call still draws
+ * from a resource distinct from buy.browse (item_summary/search) per eBay's
+ * own getRateLimits response.")
  *
  * Three outcomes per itemId, NOT two (Copilot review, PR #601 -- the first
  * version conflated the last two, which let a flaky single request
@@ -1033,6 +1048,96 @@ export interface CompSearchAttemptResult {
   items: CompetitorItem[];
 }
 
+// Combined-quota gate for the eBay Browse API. See fetchEbayItemsBulk's
+// corrected docstring above for the incident this exists to prevent:
+// buy.browse and buy.browse.item.bulk are reported as separate named
+// resources by getRateLimits, but the 2026-09-20/21 quota-storm incident
+// proved they draw against the SAME real-world 5,000/day ceiling per
+// client_id -- getItem (bulk) calls returned the identical
+// `429 errorId 2001` buy.browse calls did, at the same time. Before this
+// gate existed, runCompetitorSearch/attemptItemsRefresh had no way to know
+// quota was already gone and would keep firing calls straight into the 429
+// wall for the rest of the day, burning nothing but time and generating
+// noise. CRITICAL_QUOTA_RATIO is set well above ebay-quota-monitor's own
+// WARN_THRESHOLD_RATIO (0.9) -- that email alert is meant to fire EARLY as
+// a heads-up with headroom still left to react; this gate is a hard stop
+// only once quota is essentially exhausted, so the two never fight over
+// which one is "right" at 91% used.
+const BROWSE_QUOTA_DAILY_LIMIT = 5000;
+const CRITICAL_QUOTA_RATIO = 0.97;
+const COMBINED_BROWSE_RESOURCES = ["buy.browse", "buy.browse.item.bulk"] as const;
+
+export interface QuotaHeadroomResult {
+  hasHeadroom: boolean;
+  sameDayCount: number | null;
+  reason: string;
+}
+
+/**
+ * Checks whether today's COMBINED same-day count across both buy.browse
+ * and buy.browse.item.bulk (see COMBINED_BROWSE_RESOURCES above) still has
+ * headroom under the real shared 5,000/day ceiling. Exported so the
+ * combined-count query and the critical-ratio decision both have direct
+ * test coverage against a fake Supabase client, matching
+ * ebay-quota-monitor's countSameDayBrowseCalls/shouldWarn precedent.
+ *
+ * Fails OPEN (hasHeadroom: true) on a query error -- this gate sits on the
+ * hot path of every competitor-price lookup, so a transient DB blip here
+ * must never take down the whole feature. The email alert in
+ * ebay-quota-monitor already covers the "something is wrong, go look"
+ * signal; this gate is a best-effort optimization on top of that, not a
+ * safety-critical control.
+ */
+export async function checkBrowseQuotaHeadroom(
+  // deno-lint-ignore no-explicit-any -- matches this file's existing loose
+  // supabase-js client typing.
+  supabase: any,
+  todayStart: Date = (() => {
+    const d = new Date();
+    d.setUTCHours(0, 0, 0, 0);
+    return d;
+  })(),
+): Promise<QuotaHeadroomResult> {
+  try {
+    const { count, error } = await supabase
+      .from("ebay_browse_call_log")
+      .select("*", { count: "exact", head: true })
+      .in("resource", COMBINED_BROWSE_RESOURCES)
+      .gte("created_at", todayStart.toISOString());
+
+    if (error) {
+      console.warn(
+        `[competitorSearch] checkBrowseQuotaHeadroom: count query failed, failing OPEN (assuming headroom): ${error.message}`,
+      );
+      return { hasHeadroom: true, sameDayCount: null, reason: `count query failed: ${error.message}` };
+    }
+
+    const sameDayCount = count ?? 0;
+    const ratio = sameDayCount / BROWSE_QUOTA_DAILY_LIMIT;
+    if (ratio >= CRITICAL_QUOTA_RATIO) {
+      return {
+        hasHeadroom: false,
+        sameDayCount,
+        reason:
+          `combined buy.browse + buy.browse.item.bulk same-day count (${sameDayCount}/${BROWSE_QUOTA_DAILY_LIMIT}) is at or above the critical ${
+            (CRITICAL_QUOTA_RATIO * 100).toFixed(0)
+          }% threshold`,
+      };
+    }
+    return {
+      hasHeadroom: true,
+      sameDayCount,
+      reason: `${sameDayCount}/${BROWSE_QUOTA_DAILY_LIMIT} combined calls today`,
+    };
+  } catch (err) {
+    // Same fail-open reasoning as the error branch above -- an unexpected
+    // throw (e.g. a network blip on the query itself) is still just a
+    // monitoring-path failure, not a reason to also break competitor search.
+    console.warn("[competitorSearch] checkBrowseQuotaHeadroom: unexpected error, failing OPEN:", err);
+    return { hasHeadroom: true, sameDayCount: null, reason: `unexpected error: ${String(err)}` };
+  }
+}
+
 /**
  * Fire-and-forget increment of the same-day Browse API call counter (see
  * the ebay-quota-monitor migration/function for how this is read). Never
@@ -1050,13 +1155,21 @@ export function logBrowseApiCall(
   // already used throughout this codebase's Edge Functions.
   supabase: any,
   caller: string,
-  // Which Browse API quota pool this call actually drew from. Default
-  // "buy.browse" (item_summary/search, every call site before the getItems
-  // follow-on work) keeps every existing 2-arg call site source-compatible.
-  // "buy.browse.item.bulk" (getItems) is a genuinely separate 5,000/day
-  // pool per eBay's own getRateLimits -- ebay-quota-monitor's same-day
-  // counter filters on this column specifically so a burst of cheap
-  // getItems calls can never inflate the buy.browse early-warning heuristic.
+  // Which named resource eBay's getRateLimits reports this call under.
+  // Default "buy.browse" (item_summary/search, every call site before the
+  // getItems follow-on work) keeps every existing 2-arg call site
+  // source-compatible. "buy.browse.item.bulk" (getItem/getItems) is
+  // reported as a separate named resource by getRateLimits, but the
+  // 2026-09-20/21 quota-storm incident proved both resources draw against
+  // the SAME real-world 5,000/day ceiling per client_id -- getItem calls
+  // returned 429 errorId 2001 ("Too many requests") at the same time
+  // buy.browse calls did, even though ebay-quota-monitor's same-day counter
+  // (which only filtered on resource === "buy.browse") still showed plenty
+  // of headroom. This column is kept purely for observability/breakdown
+  // (which resource is generating the load) -- see
+  // checkBrowseQuotaHeadroom() below and ebay-quota-monitor/index.ts, both
+  // of which now sum counts across BOTH resource values when deciding
+  // whether quota is exhausted.
   resource: "buy.browse" | "buy.browse.item.bulk" = "buy.browse",
 ): void {
   try {
@@ -1878,6 +1991,23 @@ export async function runCompetitorSearch(params: {
 
   try {
     // ------------------------------------------------------------------
+    // Combined-quota pre-flight gate (2026-09-21 quota-storm fix). Checked
+    // once up front, before any cache/signature-match short-circuit --
+    // those two paths never call eBay at all, so gating them would be
+    // pointless; this only actually matters once we're about to reach
+    // attemptItemsRefresh or the full search below. Computed here (not
+    // deeper in the function) so BOTH of those call sites share the exact
+    // same read of "is there headroom today" rather than risking two
+    // slightly-different-in-time answers from two separate queries.
+    // ------------------------------------------------------------------
+    const quotaHeadroom = await checkBrowseQuotaHeadroom(supabase);
+    if (!quotaHeadroom.hasHeadroom) {
+      console.warn(
+        `[competitorSearch] Skipping eBay Browse API call(s) -- ${quotaHeadroom.reason}. Serving cache/no-data instead of burning more calls into an exhausted quota.`,
+      );
+    }
+
+    // ------------------------------------------------------------------
     // Cache check — return immediately if data is < CACHE_TTL_MS old.
     // ------------------------------------------------------------------
     if (userId && listingId) {
@@ -1956,26 +2086,101 @@ export async function runCompetitorSearch(params: {
       }
 
       // ------------------------------------------------------------------
-      // getItems refresh attempt — cheap bulk lookup of already-known comps
-      // instead of a full re-search, drawing from the (confirmed unused)
-      // buy.browse.item.bulk pool rather than buy.browse. Only reached when
-      // the cache check above found nothing fresh. Returns null on any
-      // failure/unusable-result to fall through to the existing full-search
-      // path below, completely unchanged -- this can only ever REMOVE a
-      // buy.browse call when it succeeds, never add one or introduce a new
-      // failure mode.
+      // getItems refresh attempt — cheap single-item lookup of already-known
+      // comps instead of a full re-search. Logged under the
+      // "buy.browse.item.bulk" resource name for dashboard continuity, but
+      // (CORRECTED 2026-09-20) that traffic shares the same real-world
+      // 5,000/day ceiling as buy.browse -- see the corrected docstring on
+      // fetchEbayItemsBulk above. Only reached when the cache check above
+      // found nothing fresh, AND only when checkBrowseQuotaHeadroom below
+      // confirms there's combined headroom left today -- otherwise this
+      // falls straight through to the full-search path without spending
+      // any more calls into an already-exhausted quota.
       // ------------------------------------------------------------------
-      const itemsRefreshOutcome = await attemptItemsRefresh({
-        supabase,
-        userId,
-        listingId,
-        ebayEnv,
-        yourPrice,
-        productSignature: sig.signature,
-      });
-      if (itemsRefreshOutcome) {
-        return itemsRefreshOutcome;
+      if (quotaHeadroom.hasHeadroom) {
+        const itemsRefreshOutcome = await attemptItemsRefresh({
+          supabase,
+          userId,
+          listingId,
+          ebayEnv,
+          yourPrice,
+          productSignature: sig.signature,
+        });
+        if (itemsRefreshOutcome) {
+          return itemsRefreshOutcome;
+        }
       }
+    }
+
+    // ------------------------------------------------------------------
+    // Quota-exhausted short-circuit -- if the combined pre-flight gate
+    // above found no headroom, do NOT proceed to the full Gemini + Browse
+    // API search fan-out below (that's the expensive multi-tier path,
+    // several calls per listing). Fall back to whatever stale cache exists
+    // for this listing, or a clean noData response if there isn't one --
+    // either is far better than adding to an already-429ing call volume.
+    // ------------------------------------------------------------------
+    if (!quotaHeadroom.hasHeadroom) {
+      if (userId && listingId) {
+        try {
+          const { data: staleCached } = await supabase
+            .from("competitor_prices")
+            .select("*")
+            .eq("user_id", userId)
+            .eq("ebay_listing_id", listingId)
+            .order("fetched_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (staleCached) {
+            const cacheAgeHours = Math.round(
+              (Date.now() - new Date(staleCached.fetched_at).getTime()) / (60 * 60 * 1000),
+            );
+            console.log(
+              `[competitorSearch] Quota exhausted -- returning stale cache (${cacheAgeHours}h old) instead of a live search`,
+            );
+            return {
+              status: 200,
+              body: {
+                searchQuery: staleCached.gemini_search_query ?? staleCached.search_query,
+                avgPrice: staleCached.avg_price,
+                minPrice: staleCached.min_price,
+                maxPrice: staleCached.max_price,
+                medianPrice: staleCached.median_price,
+                priceDelta: staleCached.price_delta,
+                competitorCount: staleCached.competitor_count,
+                priceDistribution: staleCached.price_distribution ?? [],
+                noData: false,
+                fromCache: true,
+                stale: true,
+                cacheAgeHours,
+                warning: "eBay Browse API daily quota is exhausted. Showing cached data.",
+              },
+            };
+          }
+        } catch (fallbackErr) {
+          console.warn(
+            "[competitorSearch] Quota-exhausted stale-cache fallback failed:",
+            fallbackErr,
+          );
+        }
+      }
+
+      return {
+        status: 200,
+        body: {
+          searchQuery: title,
+          avgPrice: null,
+          minPrice: null,
+          maxPrice: null,
+          medianPrice: null,
+          priceDelta: null,
+          competitorCount: 0,
+          priceDistribution: [],
+          noData: true,
+          warning: "eBay Browse API daily quota is exhausted. Try again after the daily reset.",
+        },
+      };
     }
 
     // ------------------------------------------------------------------

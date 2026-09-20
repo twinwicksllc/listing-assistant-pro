@@ -117,9 +117,13 @@ function normalizeConditionDescriptorToEnum(
     "very good refurbished": "VERY_GOOD_REFURBISHED",
     "good refurbished": "GOOD_REFURBISHED",
     "seller refurbished": "SELLER_REFURBISHED",
-    "pre-owned good": "PRE_OWNED_GOOD",
-    "pre-owned fair": "PRE_OWNED_FAIR",
-    "pre-owned poor": "PRE_OWNED_POOR",
+    // PRE_OWNED_GOOD/FAIR/POOR are NOT valid eBay Inventory API ConditionEnum
+    // values -- map to the real USED_* equivalents for consistency with the
+    // Edge Function copies of this same function (ebay-publish/publish-
+    // helpers.ts, bulk-publish/index.ts, analyze-item/index.ts).
+    "pre-owned good": "USED_EXCELLENT",
+    "pre-owned fair": "USED_GOOD",
+    "pre-owned poor": "USED_ACCEPTABLE",
     "digital good": "DIGITAL_GOOD",
     "certified pre-owned": "CERTIFIED_PRE_OWNED",
     remanufactured: "REMANUFACTURED",
@@ -127,13 +131,23 @@ function normalizeConditionDescriptorToEnum(
     damaged: "DAMAGED",
   };
 
-  return (
+  const resolved =
     aliases[lowered] ??
     raw
       .toUpperCase()
       .replace(/[^A-Z0-9]+/g, "_")
-      .replace(/^_|_$/g, "")
-  );
+      .replace(/^_|_$/g, "");
+
+  // Final catch-all: eBay's Metadata API returns "Pre-owned - Good" (with a
+  // dash) for some categories, which mangles to the fake enum
+  // PRE_OWNED_GOOD -- NOT a valid ConditionEnum. Mirrored in the three
+  // backend copies of this function.
+  const FAKE_ENUM_CORRECTIONS: Record<string, string> = {
+    PRE_OWNED_GOOD: "USED_EXCELLENT",
+    PRE_OWNED_FAIR: "USED_GOOD",
+    PRE_OWNED_POOR: "USED_ACCEPTABLE",
+  };
+  return FAKE_ENUM_CORRECTIONS[resolved] ?? resolved;
 }
 
 async function resolveEbayConditionId(listing: ListingData): Promise<string> {

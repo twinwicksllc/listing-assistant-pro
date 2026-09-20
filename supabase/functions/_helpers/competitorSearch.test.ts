@@ -3,6 +3,7 @@ import {
   attemptItemsRefresh,
   attemptSignatureMatch,
   buildCompetitorPricesUpsertPayload,
+  checkBrowseQuotaHeadroom,
   type CompetitorItem,
   type CompSearchAttemptResult,
   computeCompStats,
@@ -1496,4 +1497,95 @@ Deno.test("attemptSignatureMatch: no yourPrice -> priceDelta is null, not a bogu
     yourPrice: null,
   });
   assertEquals(result?.body.priceDelta, null);
+});
+
+// ── checkBrowseQuotaHeadroom (2026-09-21 quota-storm fix) ──────────────────
+// Regression coverage for the combined-quota pre-flight gate: buy.browse
+// and buy.browse.item.bulk share one real 5,000/day ceiling (proved by the
+// live incident where getItem calls 429'd with errorId 2001 at the same
+// time buy.browse did), so this must count BOTH resources together and
+// hard-stop well before either one actually 429s.
+
+function fakeSupabaseForQuotaHeadroom(opts: {
+  count?: number | null;
+  error?: { message: string } | null;
+  onQuery?: (table: string, inArgs: unknown[]) => void;
+}) {
+  return {
+    from(table: string) {
+      const builder = {
+        select() {
+          return builder;
+        },
+        in(...args: unknown[]) {
+          opts.onQuery?.(table, args);
+          return builder;
+        },
+        gte() {
+          return Promise.resolve({ count: opts.count === undefined ? 0 : opts.count, error: opts.error ?? null });
+        },
+      };
+      return builder;
+    },
+  };
+}
+
+Deno.test("checkBrowseQuotaHeadroom: reports headroom when the combined same-day count is well under the critical threshold", async () => {
+  const svc = fakeSupabaseForQuotaHeadroom({ count: 1000 });
+  const result = await checkBrowseQuotaHeadroom(svc, new Date("2026-09-21T00:00:00.000Z"));
+  assertEquals(result.hasHeadroom, true);
+  assertEquals(result.sameDayCount, 1000);
+});
+
+Deno.test("checkBrowseQuotaHeadroom: no headroom once the combined count crosses the critical ratio (97%)", async () => {
+  const svc = fakeSupabaseForQuotaHeadroom({ count: 4900 }); // 98% of 5000
+  const result = await checkBrowseQuotaHeadroom(svc, new Date());
+  assertEquals(result.hasHeadroom, false);
+  assertEquals(result.sameDayCount, 4900);
+});
+
+Deno.test("checkBrowseQuotaHeadroom: exactly at the critical ratio (97%) reports no headroom (boundary is inclusive)", async () => {
+  const svc = fakeSupabaseForQuotaHeadroom({ count: 4850 }); // exactly 97% of 5000
+  const result = await checkBrowseQuotaHeadroom(svc, new Date());
+  assertEquals(result.hasHeadroom, false);
+});
+
+Deno.test("checkBrowseQuotaHeadroom: just under the critical ratio still reports headroom", async () => {
+  const svc = fakeSupabaseForQuotaHeadroom({ count: 4849 }); // 96.98% of 5000
+  const result = await checkBrowseQuotaHeadroom(svc, new Date());
+  assertEquals(result.hasHeadroom, true);
+});
+
+Deno.test("checkBrowseQuotaHeadroom: queries ebay_browse_call_log filtered to BOTH buy.browse and buy.browse.item.bulk via .in()", async () => {
+  let capturedTable = "";
+  let capturedInArgs: unknown[] = [];
+  const svc = fakeSupabaseForQuotaHeadroom({
+    count: 10,
+    onQuery: (table, args) => {
+      capturedTable = table;
+      capturedInArgs = args;
+    },
+  });
+  await checkBrowseQuotaHeadroom(svc, new Date());
+  assertEquals(capturedTable, "ebay_browse_call_log");
+  assertEquals(capturedInArgs[0], "resource");
+  assertEquals(capturedInArgs[1], ["buy.browse", "buy.browse.item.bulk"]);
+});
+
+Deno.test("checkBrowseQuotaHeadroom: fails OPEN (hasHeadroom: true) on a query error rather than blocking the whole feature", async () => {
+  const svc = fakeSupabaseForQuotaHeadroom({ count: null, error: { message: "connection reset" } });
+  const result = await checkBrowseQuotaHeadroom(svc, new Date());
+  assertEquals(result.hasHeadroom, true);
+  assertEquals(result.sameDayCount, null);
+});
+
+Deno.test("checkBrowseQuotaHeadroom: fails OPEN when the query itself throws", async () => {
+  const svc = {
+    from() {
+      throw new Error("network down");
+    },
+  };
+  const result = await checkBrowseQuotaHeadroom(svc, new Date());
+  assertEquals(result.hasHeadroom, true);
+  assertEquals(result.sameDayCount, null);
 });

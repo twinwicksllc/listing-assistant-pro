@@ -1,8 +1,10 @@
 import { assertEquals, assertRejects, assertStringIncludes } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import {
   countSameDayBrowseCalls,
+  countSameDayCombinedBrowseCalls,
   fetchEbayRateLimits,
   findBrowseRate,
+  findWorstCombinedBrowseRate,
   pruneOldCallLogRows,
   shouldPruneThisTick,
   shouldWarn,
@@ -372,4 +374,110 @@ Deno.test("fetchEbayRateLimits: throws with both attempts' details when both v1 
   // status are present in the message (Copilot review).
   assertStringIncludes(error.message, "v1: 404");
   assertStringIncludes(error.message, "v1_beta: 404");
+});
+
+// ── findWorstCombinedBrowseRate / countSameDayCombinedBrowseCalls ──────────
+// Regression coverage for the 2026-09-21 quota-storm fix: a live incident
+// proved buy.browse and buy.browse.item.bulk share one real 5,000/day
+// ceiling per client_id, even though getRateLimits reports them as two
+// separate named resources and the pre-fix monitor only ever tracked
+// buy.browse -- a ~21x under-report of the real combined burn (2,976
+// counted vs ~63,170 actual calls in the same 24h window).
+
+Deno.test("findWorstCombinedBrowseRate: picks buy.browse.item.bulk when IT has the worse used-ratio, even though buy.browse looks healthy", () => {
+  const rateLimits = [
+    {
+      apiContext: "buy",
+      resources: [
+        { name: "buy.browse", rates: [{ limit: 5000, remaining: 4500, reset: "x" }] }, // 10% used
+        { name: "buy.browse.item.bulk", rates: [{ limit: 5000, remaining: 100, reset: "y" }] }, // 98% used
+      ],
+    },
+  ];
+  const found = findWorstCombinedBrowseRate(rateLimits);
+  assertEquals(found?.resource.name, "buy.browse.item.bulk");
+  assertEquals(found?.rate.remaining, 100);
+});
+
+Deno.test("findWorstCombinedBrowseRate: picks buy.browse when IT has the worse used-ratio", () => {
+  const rateLimits = [
+    {
+      apiContext: "buy",
+      resources: [
+        { name: "buy.browse", rates: [{ limit: 5000, remaining: 50, reset: "x" }] }, // 99% used
+        { name: "buy.browse.item.bulk", rates: [{ limit: 5000, remaining: 4900, reset: "y" }] }, // 2% used
+      ],
+    },
+  ];
+  const found = findWorstCombinedBrowseRate(rateLimits);
+  assertEquals(found?.resource.name, "buy.browse");
+  assertEquals(found?.rate.remaining, 50);
+});
+
+Deno.test("findWorstCombinedBrowseRate: falls back to whichever single resource is present when only one exists", () => {
+  const rateLimits = [
+    {
+      apiContext: "buy",
+      resources: [{ name: "buy.browse.item.bulk", rates: [{ limit: 5000, remaining: 10, reset: "z" }] }],
+    },
+  ];
+  const found = findWorstCombinedBrowseRate(rateLimits);
+  assertEquals(found?.resource.name, "buy.browse.item.bulk");
+});
+
+Deno.test("findWorstCombinedBrowseRate: returns null when neither resource is present", () => {
+  const rateLimits = [
+    { apiContext: "sell", resources: [{ name: "inventory", rates: [{ limit: 1000, remaining: 500, reset: "x" }] }] },
+  ];
+  assertEquals(findWorstCombinedBrowseRate(rateLimits), null);
+});
+
+Deno.test("countSameDayCombinedBrowseCalls: queries ebay_browse_call_log filtered to BOTH resources via .in()", async () => {
+  let capturedTable = "";
+  let capturedInArgs: unknown[] = [];
+  const svc = {
+    from(table: string) {
+      capturedTable = table;
+      const builder = {
+        select() {
+          return builder;
+        },
+        in(...args: unknown[]) {
+          capturedInArgs = args;
+          return builder;
+        },
+        gte() {
+          return Promise.resolve({ count: 63170, error: null });
+        },
+      };
+      return builder;
+    },
+  };
+  const result = await countSameDayCombinedBrowseCalls(svc, new Date("2026-09-21T00:00:00.000Z"));
+  assertEquals(result, { count: 63170, error: null });
+  assertEquals(capturedTable, "ebay_browse_call_log");
+  assertEquals(capturedInArgs[0], "resource");
+  assertEquals(capturedInArgs[1], ["buy.browse", "buy.browse.item.bulk"]);
+});
+
+Deno.test("countSameDayCombinedBrowseCalls: surfaces a query error rather than coercing to 0", async () => {
+  const svc = {
+    from() {
+      const builder = {
+        select() {
+          return builder;
+        },
+        in() {
+          return builder;
+        },
+        gte() {
+          return Promise.resolve({ count: null, error: { message: "connection reset" } });
+        },
+      };
+      return builder;
+    },
+  };
+  const result = await countSameDayCombinedBrowseCalls(svc, new Date());
+  assertEquals(result.error, { message: "connection reset" });
+  assertEquals(result.count, null);
 });
