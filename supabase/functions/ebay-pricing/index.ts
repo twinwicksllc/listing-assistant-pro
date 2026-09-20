@@ -130,10 +130,41 @@ async function fetchViaCompetitorSearch(query: string): Promise<SoldItem[]> {
 }
 
 // ----------------------------------------------------------------
-// Scrape eBay completed/sold listings via Jina AI reader.
-// Jina converts the page to clean markdown, bypassing bot detection.
+// Detects eBay's own error/interstitial page coming back *through* Jina,
+// as opposed to a real sold-listings page with genuinely zero results.
+//
+// 2026-09-20 log investigation (Issue #4) found eBay returning a 403
+// directly to Jina's scrape request, with Jina still responding 200 and
+// wrapping eBay's "SORRY Something went wrong on our end" error page in
+// markdown -- e.g.:
+//   "Warning: Target URL returned error 403: Forbidden
+//    Markdown Content: SORRY Something went wrong on our end ..."
+// Per Jina's own documentation, Reader "doesn't circumvent website
+// defenses" -- this is eBay's WAF/bot-detection blocking Jina's fetch
+// infrastructure at the network level, not a fixable header/UA issue.
+// Distinguishing this from "the search legitimately returned 0 sold
+// comps" matters for two reasons: (1) the caller should not immediately
+// re-fire an identical, guaranteed-to-be-blocked second Jina request with
+// a "fuller query" -- that only doubles wasted traffic against a page
+// that's already blocking us, and (2) the UI should say "pricing data
+// temporarily unavailable" rather than implying the item has no market.
+// Pure/exported so it's testable without a live Jina call.
+export function isJinaBlockedContent(content: string): boolean {
+  return (
+    /Target URL returned error 4\d\d/i.test(content) ||
+    /SORRY[\s\S]{0,40}Something went wrong on our end/i.test(content)
+  );
+}
+
 // ----------------------------------------------------------------
-async function scrapeEbaySoldListings(query: string): Promise<SoldItem[]> {
+// Scrape eBay completed/sold listings via Jina AI reader.
+// Jina converts the page to clean markdown -- this does NOT bypass eBay's
+// own bot detection (see isJinaBlockedContent above); it just gives us
+// clean markdown when the fetch succeeds.
+// ----------------------------------------------------------------
+async function scrapeEbaySoldListings(
+  query: string,
+): Promise<{ items: SoldItem[]; blocked: boolean }> {
   const encoded = encodeURIComponent(query);
   // LH_Complete=1&LH_Sold=1 → completed AND sold listings only
   // _sop=13 → sort by most recently ended
@@ -145,17 +176,32 @@ async function scrapeEbaySoldListings(query: string): Promise<SoldItem[]> {
     `[ebay-pricing] Fetching via Jina: ${jinaUrl.substring(0, 100)}...`,
   );
 
-  const resp = await fetch(jinaUrl, {
-    headers: {
-      Accept: "text/plain,text/markdown,*/*",
-      "User-Agent": "Mozilla/5.0 (compatible; ListingAssistantBot/1.0)",
-    },
-    signal: AbortSignal.timeout(20000),
-  });
+  let resp: Response;
+  try {
+    resp = await fetch(jinaUrl, {
+      headers: {
+        Accept: "text/plain,text/markdown,*/*",
+        // A standard browser UA rather than a self-identifying bot UA
+        // ("ListingAssistantBot/1.0") -- a lower-cost, legitimate change,
+        // though per Jina's own docs a paid key/header change does not
+        // reliably "unblock" a site that's already blocking Reader's
+        // infrastructure at the WAF level (see isJinaBlockedContent).
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+      },
+      signal: AbortSignal.timeout(20000),
+    });
+  } catch (err) {
+    // Network error / timeout -- degrade gracefully instead of throwing an
+    // unhandled 500 up to the main handler (unlike fetchViaCompetitorSearch,
+    // this fetch previously had no try/catch at all).
+    console.error(`[ebay-pricing] Jina fetch threw: ${String(err)}`);
+    return { items: [], blocked: false };
+  }
 
   if (!resp.ok) {
     console.error(`[ebay-pricing] Jina fetch failed: ${resp.status}`);
-    return [];
+    return { items: [], blocked: false };
   }
 
   const content = await resp.text();
@@ -163,10 +209,19 @@ async function scrapeEbaySoldListings(query: string): Promise<SoldItem[]> {
 
   if (content.length < 200) {
     console.warn(`[ebay-pricing] Jina returned suspiciously short content`);
-    return [];
+    return { items: [], blocked: false };
   }
 
-  return parseSoldItemsFromMarkdown(content, query);
+  if (isJinaBlockedContent(content)) {
+    console.warn(
+      `[ebay-pricing] Jina relayed an eBay block/error page instead of real results (preview: ${
+        content.substring(0, 160)
+      })`,
+    );
+    return { items: [], blocked: true };
+  }
+
+  return { items: parseSoldItemsFromMarkdown(content, query), blocked: false };
 }
 
 // ----------------------------------------------------------------
@@ -428,12 +483,30 @@ serve(async (req) => {
     const basis = basisFromSource(source);
     const sourceReliability = sourceReliabilityFromSource(source);
 
+    // Set when Jina relayed an eBay block/interstitial page rather than real
+    // results (see isJinaBlockedContent) -- surfaced in the response so the
+    // UI/priceRecommender can say "pricing data temporarily unavailable"
+    // instead of implying the item genuinely has zero market comps.
+    let jinaBlocked = false;
+
     if (soldItems.length === 0) {
       // Fallback: scrape sold listings via Jina
-      soldItems = await scrapeEbaySoldListings(searchQuery);
+      const first = await scrapeEbaySoldListings(searchQuery);
+      soldItems = first.items;
+      jinaBlocked = first.blocked;
 
-      // If not enough results with derived query, try with full query
-      if (soldItems.length < 3 && searchQuery !== query.toLowerCase()) {
+      // If not enough results with derived query, try with full query --
+      // but only when the first attempt wasn't blocked. eBay's WAF block is
+      // a fetch-level/IP-level response, not query-content-dependent, so an
+      // immediate second Jina call with a different query string is
+      // guaranteed to hit the same block. Retrying anyway just doubles
+      // wasted traffic against a page that's already blocking us (2026-09-20
+      // log review: 6 consecutive Jina calls in ~1 minute, every single one
+      // relaying the same eBay error page).
+      if (
+        !jinaBlocked && soldItems.length < 3 &&
+        searchQuery !== query.toLowerCase()
+      ) {
         console.log(
           `[ebay-pricing] Only ${soldItems.length} Jina results with derived query, trying fuller query...`,
         );
@@ -444,10 +517,11 @@ serve(async (req) => {
           .filter((t: string) => t.length > 1)
           .slice(0, 8)
           .join(" ");
-        const moreItems = await scrapeEbaySoldListings(fullerQuery);
-        if (moreItems.length > soldItems.length) {
-          soldItems = moreItems;
+        const second = await scrapeEbaySoldListings(fullerQuery);
+        if (second.items.length > soldItems.length) {
+          soldItems = second.items;
         }
+        jinaBlocked = second.blocked && soldItems.length === 0;
       }
     }
 
@@ -517,6 +591,11 @@ serve(async (req) => {
         source,
         basis,
         sourceReliability,
+        // True only when the Jina fallback path was blocked by eBay (see
+        // isJinaBlockedContent) -- distinct from a legitimate zero-comp
+        // result. Additive field; existing consumers that don't read it are
+        // unaffected.
+        jinaBlocked,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
