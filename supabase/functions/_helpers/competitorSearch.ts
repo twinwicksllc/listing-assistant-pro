@@ -1064,7 +1064,7 @@ export interface CompSearchAttemptResult {
 // only once quota is essentially exhausted, so the two never fight over
 // which one is "right" at 91% used.
 const BROWSE_QUOTA_DAILY_LIMIT = 5000;
-const CRITICAL_QUOTA_RATIO = 0.97;
+const CRITICAL_QUOTA_RATIO = 0.90;
 const COMBINED_BROWSE_RESOURCES = ["buy.browse", "buy.browse.item.bulk"] as const;
 
 export interface QuotaHeadroomResult {
