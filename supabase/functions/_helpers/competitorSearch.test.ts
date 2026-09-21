@@ -22,6 +22,7 @@ import {
   groupPlanIntoTiers,
   isItemsRefreshUsable,
   logBrowseApiCall,
+  logItemsRefreshOutcome,
   parseCompetitorItem,
   parseOptionalCount,
   runAttemptsSequential,
@@ -419,6 +420,49 @@ Deno.test("logBrowseApiCall: a client whose .from() itself throws does not propa
     },
   };
   logBrowseApiCall(throwingClient, "keyword-research");
+});
+
+// Regression coverage for the admin quota dashboard's items-refresh
+// rejection-rate metric (2026-09-21 monitoring checklist item 3):
+// logItemsRefreshOutcome must never throw into attemptItemsRefresh, matching
+// logBrowseApiCall's own fire-and-forget contract exactly.
+
+Deno.test("logItemsRefreshOutcome: inserts into ebay_items_refresh_outcomes with outcome, listingId, and reason", async () => {
+  const { client, inserted } = fakeSupabaseForLogging();
+  logItemsRefreshOutcome(client, "rejected_usability", "listing-123", "only 2 of 5 survived");
+  await new Promise((r) => setTimeout(r, 0));
+  assertEquals(inserted.length, 1);
+  assertEquals(inserted[0].table, "ebay_items_refresh_outcomes");
+  assertEquals(inserted[0].row.outcome, "rejected_usability");
+  assertEquals(inserted[0].row.listing_id, "listing-123");
+  assertEquals(inserted[0].row.reason, "only 2 of 5 survived");
+});
+
+Deno.test("logItemsRefreshOutcome: reason is optional and defaults to null", async () => {
+  const { client, inserted } = fakeSupabaseForLogging();
+  logItemsRefreshOutcome(client, "accepted", "listing-456");
+  await new Promise((r) => setTimeout(r, 0));
+  assertEquals(inserted[0].row.reason, null);
+});
+
+Deno.test("logItemsRefreshOutcome: a rejected insert does not throw or reject into the caller", () => {
+  const { client } = fakeSupabaseForLogging({ insertRejects: true });
+  logItemsRefreshOutcome(client, "error", "listing-789", "boom");
+});
+
+Deno.test("logItemsRefreshOutcome: a resolved insert with a PostgREST error is logged, not silently swallowed as success", async () => {
+  const { client } = fakeSupabaseForLogging({ insertReturnsError: true });
+  logItemsRefreshOutcome(client, "rejected_no_stored_ids", "listing-000", "no stored ids");
+  await new Promise((r) => setTimeout(r, 0));
+});
+
+Deno.test("logItemsRefreshOutcome: a client whose .from() itself throws does not propagate", () => {
+  const throwingClient = {
+    from() {
+      throw new Error("client misconfigured");
+    },
+  };
+  logItemsRefreshOutcome(throwingClient, "error", "listing-111", "client broke");
 });
 
 // ── buildCompetitorPricesUpsertPayload: real production bug fix (2026-09-18) ──

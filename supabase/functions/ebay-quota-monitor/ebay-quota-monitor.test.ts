@@ -6,6 +6,7 @@ import {
   findBrowseRate,
   findWorstCombinedBrowseRate,
   pruneOldCallLogRows,
+  pruneOldItemsRefreshOutcomeRows,
   shouldPruneThisTick,
   shouldWarn,
 } from "./index.ts";
@@ -160,7 +161,7 @@ function fakeSupabaseForPrune(opts: {
   };
 }
 
-Deno.test("pruneOldCallLogRows: deletes from ebay_browse_call_log with a cutoff 3 days before `now`", async () => {
+Deno.test("pruneOldCallLogRows: deletes from ebay_browse_call_log with a cutoff 8 days before `now`", async () => {
   let capturedTable = "";
   let capturedField = "";
   let capturedCutoff = "";
@@ -176,15 +177,45 @@ Deno.test("pruneOldCallLogRows: deletes from ebay_browse_call_log with a cutoff 
   assertEquals(result, { pruned: true });
   assertEquals(capturedTable, "ebay_browse_call_log");
   assertEquals(capturedField, "created_at");
-  // RETENTION_DAYS = 3, so the cutoff must be exactly 3 days before `now` --
-  // rows on the "3 days old, still within retention" side of this boundary
-  // must survive, and rows just past it must be deleted.
-  assertEquals(capturedCutoff, "2026-09-17T00:31:00.000Z");
+  // RETENTION_DAYS = 8 (widened 2026-09-21 for the admin quota dashboard's
+  // 7-day view), so the cutoff must be exactly 8 days before `now` -- rows
+  // on the "8 days old, still within retention" side of this boundary must
+  // survive, and rows just past it must be deleted.
+  assertEquals(capturedCutoff, "2026-09-12T00:31:00.000Z");
 });
 
 Deno.test("pruneOldCallLogRows: reports failure on a delete error rather than reporting pruned: true", async () => {
   const svc = fakeSupabaseForPrune({ error: { message: "connection reset" } });
   const result = await pruneOldCallLogRows(svc, new Date());
+  assertEquals(result.pruned, false);
+  assertEquals(result.error, "connection reset");
+});
+
+Deno.test("pruneOldItemsRefreshOutcomeRows: deletes from ebay_items_refresh_outcomes with a cutoff 8 days before `now`", async () => {
+  let capturedTable = "";
+  let capturedField = "";
+  let capturedCutoff = "";
+  const svc = fakeSupabaseForPrune({
+    onDelete: (table, field, value) => {
+      capturedTable = table;
+      capturedField = field;
+      capturedCutoff = value;
+    },
+  });
+  const now = new Date("2026-09-20T00:31:00.000Z");
+  const result = await pruneOldItemsRefreshOutcomeRows(svc, now);
+  assertEquals(result, { pruned: true });
+  assertEquals(capturedTable, "ebay_items_refresh_outcomes");
+  assertEquals(capturedField, "created_at");
+  // Shares RETENTION_DAYS (8) with pruneOldCallLogRows -- this table is
+  // append-only at ~2,880 rows/day (Copilot review, PR #611) and had no
+  // pruning at all before this test existed.
+  assertEquals(capturedCutoff, "2026-09-12T00:31:00.000Z");
+});
+
+Deno.test("pruneOldItemsRefreshOutcomeRows: reports failure on a delete error rather than reporting pruned: true", async () => {
+  const svc = fakeSupabaseForPrune({ error: { message: "connection reset" } });
+  const result = await pruneOldItemsRefreshOutcomeRows(svc, new Date());
   assertEquals(result.pruned, false);
   assertEquals(result.error, "connection reset");
 });

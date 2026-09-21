@@ -69,7 +69,11 @@ const COMBINED_BROWSE_RESOURCES = [BROWSE_RESOURCE_NAME, "buy.browse.item.bulk"]
 // a few days (not just "today") so a recent spike can still be
 // investigated after the fact -- nothing reads past the same-day window
 // today, so this is headroom, not a requirement.
-const RETENTION_DAYS = 3;
+// Widened from 3 to 8 days (2026-09-21) so the new admin quota dashboard's
+// "last 7 days" call-volume chart (system-status's quotaMonitoring section)
+// always has a full 7 calendar days of complete data on hand, even when
+// queried right after a day boundary.
+const RETENTION_DAYS = 8;
 
 interface EbayRateLimitRate {
   limit: number;
@@ -305,14 +309,46 @@ export async function pruneOldCallLogRows(
   svc: any,
   now: Date = new Date(),
 ): Promise<{ pruned: boolean; error?: string }> {
-  const cutoff = new Date(now.getTime() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  return pruneOldRows(svc, "ebay_browse_call_log", RETENTION_DAYS, now);
+}
+
+// ebay_items_refresh_outcomes is append-only just like ebay_browse_call_log
+// (one row per attemptItemsRefresh decision, roughly 2,880/day at this
+// cron's current 10-listings/5-min pace), but the admin dashboard only ever
+// reads its last 7 days -- unpruned, this is unbounded storage for data
+// nothing reads (Copilot review). Reuses RETENTION_DAYS rather than a
+// separate constant so both tables keep the same "one week + buffer"
+// window the dashboard actually needs.
+const ITEMS_REFRESH_OUTCOMES_RETENTION_DAYS = RETENTION_DAYS;
+
+/**
+ * Deletes ebay_items_refresh_outcomes rows older than
+ * ITEMS_REFRESH_OUTCOMES_RETENTION_DAYS. Shares pruneOldRows's cutoff/delete
+ * logic with pruneOldCallLogRows rather than duplicating it.
+ */
+export async function pruneOldItemsRefreshOutcomeRows(
+  // deno-lint-ignore no-explicit-any -- see pruneOldCallLogRows.
+  svc: any,
+  now: Date = new Date(),
+): Promise<{ pruned: boolean; error?: string }> {
+  return pruneOldRows(svc, "ebay_items_refresh_outcomes", ITEMS_REFRESH_OUTCOMES_RETENTION_DAYS, now);
+}
+
+async function pruneOldRows(
+  // deno-lint-ignore no-explicit-any -- see pruneOldCallLogRows.
+  svc: any,
+  table: string,
+  retentionDays: number,
+  now: Date,
+): Promise<{ pruned: boolean; error?: string }> {
+  const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
   const { error } = await svc
-    .from("ebay_browse_call_log")
+    .from(table)
     .delete()
     .lt("created_at", cutoff.toISOString());
   if (error) {
-    console.error("[ebay-quota-monitor] Call-log prune failed:", error.message);
-    captureException(new Error(`Call-log prune failed: ${error.message}`), {
+    console.error(`[ebay-quota-monitor] Prune failed for ${table}:`, error.message);
+    captureException(new Error(`Prune failed for ${table}: ${error.message}`), {
       function: "ebay-quota-monitor",
     });
     return { pruned: false, error: error.message };
@@ -471,8 +507,10 @@ serve(async (req) => {
   // unboundedly during exactly the kind of outage this is meant to be
   // resilient to (Copilot review, PR #582).
   let pruneResult: { pruned: boolean; error?: string } | null = null;
+  let itemsRefreshOutcomesPruneResult: { pruned: boolean; error?: string } | null = null;
   if (shouldPruneThisTick(new Date().getUTCHours())) {
     pruneResult = await pruneOldCallLogRows(svc);
+    itemsRefreshOutcomesPruneResult = await pruneOldItemsRefreshOutcomeRows(svc);
   }
 
   try {
@@ -492,6 +530,7 @@ serve(async (req) => {
           warned: false,
           reason: "neither buy.browse nor buy.browse.item.bulk resource found in response",
           pruned: pruneResult?.pruned ?? null,
+          itemsRefreshOutcomesPruned: itemsRefreshOutcomesPruneResult?.pruned ?? null,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
@@ -594,6 +633,7 @@ serve(async (req) => {
         sameDayCount: sameDayCount ?? null,
         pollPersisted: !insertErr,
         pruned: pruneResult?.pruned ?? null,
+        itemsRefreshOutcomesPruned: itemsRefreshOutcomesPruneResult?.pruned ?? null,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

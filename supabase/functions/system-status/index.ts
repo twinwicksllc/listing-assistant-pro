@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { getLatestBrowseQuotaWindowAnchor } from "../_helpers/competitorSearch.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -415,6 +416,139 @@ serve(async (req) => {
       // skip
     }
 
+    // --- Quota Monitoring Dashboard ---
+    // Backs the admin "Quota Monitoring" card added for the 2026-09-21
+    // quota-storm fix (PR #610)'s todo.md monitoring checklist: daily
+    // browse-call volume by resource, items-refresh accept/reject
+    // breakdown, and poll freshness (whether checkBrowseQuotaHeadroom is
+    // still getting real reset_at boundaries or has gone stale and would
+    // silently fall back to UTC-midnight -- see POLL_STALENESS_MS in
+    // competitorSearch.ts). Aggregated here rather than via a dedicated
+    // function per the plan's "extend system-status" decision -- this is a
+    // read-only admin view, not a hot path, so per-day/per-resource count
+    // queries (cheap, indexed on created_at) are simpler than standing up
+    // a SQL view or RPC for a handful of rows.
+    let quotaMonitoring: {
+      last7Days: { date: string; browseCalls: number; itemBulkCalls: number }[];
+      itemsRefreshOutcomes: {
+        accepted: number;
+        rejectedUsability: number;
+        rejectedNoStoredIds: number;
+        error: number;
+      };
+      pollFreshness: {
+        polledAt: string | null;
+        isStale: boolean;
+      };
+      dataError?: string;
+    } | null = null;
+    try {
+      const DAYS = 7;
+      const last7Days: { date: string; browseCalls: number; itemBulkCalls: number }[] = [];
+      // Query errors are collected rather than discarded (Copilot review) --
+      // silently coercing a failed count to 0 would make the card report
+      // "no calls" instead of "data unavailable" on a transient
+      // PostgREST/RLS blip, which looks like good news when it isn't.
+      let queryError: string | null = null;
+      for (let i = DAYS - 1; i >= 0; i--) {
+        const dayStart = new Date();
+        dayStart.setUTCHours(0, 0, 0, 0);
+        dayStart.setUTCDate(dayStart.getUTCDate() - i);
+        const dayEnd = new Date(dayStart);
+        dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+
+        const [
+          { count: browseCalls, error: browseErr },
+          { count: itemBulkCalls, error: bulkErr },
+        ] = await Promise.all([
+          supabaseClient
+            .from("ebay_browse_call_log")
+            .select("*", { count: "exact", head: true })
+            .eq("resource", "buy.browse")
+            .gte("created_at", dayStart.toISOString())
+            .lt("created_at", dayEnd.toISOString()),
+          supabaseClient
+            .from("ebay_browse_call_log")
+            .select("*", { count: "exact", head: true })
+            .eq("resource", "buy.browse.item.bulk")
+            .gte("created_at", dayStart.toISOString())
+            .lt("created_at", dayEnd.toISOString()),
+        ]);
+
+        if (browseErr || bulkErr) {
+          queryError = (browseErr ?? bulkErr)?.message ?? "call-log count query failed";
+          break;
+        }
+
+        last7Days.push({
+          date: dayStart.toISOString().slice(0, 10),
+          browseCalls: browseCalls ?? 0,
+          itemBulkCalls: itemBulkCalls ?? 0,
+        });
+      }
+
+      if (queryError) {
+        throw new Error(queryError);
+      }
+
+      // Aggregated via one exact-count query per outcome value rather than
+      // fetching+reducing raw rows (Copilot review) -- an unpaginated
+      // select() caps at 1,000 rows by default, and this cron can log
+      // thousands of outcomes/day, which would silently undercount past
+      // that page. Count queries have no such cap.
+      const outcomesSince = new Date();
+      outcomesSince.setUTCDate(outcomesSince.getUTCDate() - DAYS);
+      const outcomeValues = [
+        "accepted",
+        "rejected_usability",
+        "rejected_no_stored_ids",
+        "error",
+      ] as const;
+      const outcomeCounts = await Promise.all(
+        outcomeValues.map((outcome) =>
+          supabaseClient
+            .from("ebay_items_refresh_outcomes")
+            .select("*", { count: "exact", head: true })
+            .eq("outcome", outcome)
+            .gte("created_at", outcomesSince.toISOString())
+        ),
+      );
+      const outcomeErr = outcomeCounts.find((r) => r.error)?.error;
+      if (outcomeErr) {
+        throw new Error(outcomeErr.message);
+      }
+
+      const itemsRefreshOutcomes = {
+        accepted: outcomeCounts[0].count ?? 0,
+        rejectedUsability: outcomeCounts[1].count ?? 0,
+        rejectedNoStoredIds: outcomeCounts[2].count ?? 0,
+        error: outcomeCounts[3].count ?? 0,
+      };
+
+      // Mirrors getLatestBrowseQuotaWindowAnchor's OWN staleness/validity
+      // checks (competitorSearch.ts) rather than just re-checking
+      // lastEbayQuotaPoll.polled_at (Copilot review) -- that function also
+      // falls back to UTC-midnight when reset_at is unparseable or has
+      // already elapsed, which a polled_at-only check would miss, reporting
+      // "real boundaries in use" when the gate had already given up on them.
+      const anchor = await getLatestBrowseQuotaWindowAnchor(supabaseClient);
+      const isStale = anchor.windowStart === null;
+      const polledAt = anchor.polledAt?.toISOString() ?? lastEbayQuotaPoll?.polled_at ?? null;
+
+      quotaMonitoring = {
+        last7Days,
+        itemsRefreshOutcomes,
+        pollFreshness: { polledAt, isStale },
+      };
+    } catch (err) {
+      quotaMonitoring = {
+        last7Days: [],
+        itemsRefreshOutcomes: { accepted: 0, rejectedUsability: 0, rejectedNoStoredIds: 0, error: 0 },
+        pollFreshness: { polledAt: null, isStale: true },
+        dataError: err instanceof Error ? err.message : "quota monitoring query failed",
+      };
+    }
+
     return new Response(
       JSON.stringify({
         stripe: stripeStatus,
@@ -425,6 +559,7 @@ serve(async (req) => {
         featureUsage,
         lastCostAlert,
         lastEbayQuotaPoll,
+        quotaMonitoring,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

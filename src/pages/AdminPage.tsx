@@ -16,6 +16,7 @@ import { ADMIN_EMAIL } from "@/components/admin/types";
 import type { SystemData } from "@/components/admin/types";
 import { SystemStatusChecklist } from "@/components/admin/SystemStatusChecklist";
 import { EbayQuotaPollCard } from "@/components/admin/EbayQuotaPollCard";
+import { QuotaMonitoringCard } from "@/components/admin/QuotaMonitoringCard";
 import { StatsCards } from "@/components/admin/StatsCards";
 import { FeatureUsageCard } from "@/components/admin/FeatureUsageCard";
 import { GeminiUsageSection } from "@/components/admin/GeminiUsageSection";
@@ -151,6 +152,8 @@ export default function AdminPage() {
             </div>
 
             <EbayQuotaPollCard poll={data.lastEbayQuotaPoll} />
+
+            <QuotaMonitoringCard data={data.quotaMonitoring} />
 
             <SystemStatusChecklist data={data} />
 
