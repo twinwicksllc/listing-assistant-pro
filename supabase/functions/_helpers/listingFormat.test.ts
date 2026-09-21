@@ -764,29 +764,27 @@ Deno.test("buildFallbackDescription includes the title and every non-empty item 
     itemSpecifics: { Metal: "Silver", Year: "2024", Grade: "MS63" },
   });
   assertStringIncludes(out, "1oz Silver Eagle Coin");
-  assertStringIncludes(out, "Quick Details:");
+  assertStringIncludes(out, "Quick Specs:");
   assertStringIncludes(out, "Metal: Silver");
   assertStringIncludes(out, "Year: 2024");
   assertStringIncludes(out, "Grade: MS63");
+  assertStringIncludes(out, "ListrAssistr");
 });
 
-Deno.test("buildFallbackDescription caps at 8 item specifics", () => {
+Deno.test("buildFallbackDescription caps at 12 item specifics (updated from 8)", () => {
   const itemSpecifics: Record<string, string> = {};
-  for (let i = 1; i <= 12; i++) {
+  for (let i = 1; i <= 15; i++) {
     itemSpecifics[`Spec${i}`] = `Value${i}`;
   }
   const out = buildFallbackDescription({ title: "Test Item", itemSpecifics });
   const labelLines = out
     .split("\n")
     .filter((line) => /^Spec\d+: Value\d+$/.test(line));
-  assertEquals(labelLines.length, 8);
-  // The first 8 keys in insertion order should be the ones kept, not an
-  // arbitrary subset -- Object.entries preserves insertion order for string
-  // keys, so this pins that assumption too.
-  for (let i = 1; i <= 8; i++) {
+  assertEquals(labelLines.length, 12, `expected 12 specs, got ${labelLines.length}`);
+  for (let i = 1; i <= 12; i++) {
     assertStringIncludes(out, `Spec${i}: Value${i}`);
   }
-  assert(!out.includes("Spec9:"), `expected Spec9 to be dropped: ${out}`);
+  assert(!out.includes("Spec13:"), `expected Spec13 to be dropped: ${out}`);
 });
 
 Deno.test("buildFallbackDescription skips null, undefined, and empty-string values", () => {
@@ -809,23 +807,23 @@ Deno.test("buildFallbackDescription skips null, undefined, and empty-string valu
 
 Deno.test("buildFallbackDescription omits the title line when no title is given", () => {
   const out = buildFallbackDescription({ itemSpecifics: { Metal: "Gold" } });
-  assertStringIncludes(out, "Quick Details:");
+  assertStringIncludes(out, "Quick Specs:");
   assertStringIncludes(out, "Metal: Gold");
-  // No title means no leading non-"Quick Details:" prose line before it.
+  // No title means the first real content is "Quick Specs:"
   const firstLine = out.split("\n")[0];
-  assertEquals(firstLine, "Quick Details:");
+  assertEquals(firstLine, "Quick Specs:");
 });
 
 Deno.test("buildFallbackDescription does not throw on empty or missing itemSpecifics", () => {
   const noSpecifics = buildFallbackDescription({ title: "Test Item" });
-  assertStringIncludes(noSpecifics, "Quick Details:");
+  assertStringIncludes(noSpecifics, "Quick Specs:");
   assertStringIncludes(noSpecifics, "Test Item");
 
   const emptySpecifics = buildFallbackDescription({
     title: "Test Item",
     itemSpecifics: {},
   });
-  assertStringIncludes(emptySpecifics, "Quick Details:");
+  assertStringIncludes(emptySpecifics, "Quick Specs:");
 });
 
 Deno.test("buildFallbackDescription's output is parsed by formatDescriptionHtml into a real list, not left as unparsed prose", () => {
@@ -835,8 +833,89 @@ Deno.test("buildFallbackDescription's output is parsed by formatDescriptionHtml 
   });
   const html = formatDescriptionHtml(fallback);
   assertStringIncludes(html, "<ul");
-  assertEquals(html.match(/<li /g)?.length, 3);
+  assertEquals(html.match(/<li /g)?.length, 3, `expected 3 list items (Metal, Year, Grade), got: ${html}`);
   assertStringIncludes(html, "<b>Metal:</b> Silver");
   assertStringIncludes(html, "<b>Year:</b> 2024");
   assertStringIncludes(html, "<b>Grade:</b> MS63");
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Gemini description structure with blank-line preservation (2026-09-21)
+//
+// The new prompt format (opening → physical description → why it's cool →
+// Quick Specs → closing) requires formatDescriptionHtml to preserve section
+// boundaries via blank lines. This is the critical test: WITHOUT proper
+// blank-line handling, everything flattens to one wall of text on eBay.
+// ─────────────────────────────────────────────────────────────────────────────
+
+Deno.test("formatDescriptionHtml preserves blank lines between sections (new Gemini structure)", () => {
+  const plainText =
+    `Up for sale is a raw 1-gram Valcambi fine gold bullion bar. If you're looking to add fractional gold to your stack, this is a straightforward, accessible piece from one of the world's most respected refiners.
+
+The bar features the classic hollow diamond logo on the obverse. At the bottom, you can clearly see the "CHI ESSAYEUR FONDEUR" hallmark. Please note that this is raw, separated from its original assay card. The photos show light handling marks and surface wear consistent with storage, but the gold content and purity remain entirely intact.
+
+Valcambi is a premier Swiss precious metals refinery renowned for precision and high-quality bullion products. Fractional bars like this 1-gram piece provide excellent liquidity and divisibility for investors building a tangible asset portfolio.
+
+Quick Specs:
+
+Brand: Valcambi
+Weight: 1 Gram (0.03215 Troy Oz)
+Metal: .9999 Fine Gold
+Format: Raw Fractional Bullion Bar
+
+High-resolution photos provided so you can inspect the exact bar you will receive. Listing generated by ListrAssistr. All details should be verified by the buyer.`;
+
+  const html = formatDescriptionHtml(plainText);
+
+  // Should NOT be one wall of text: there should be multiple <p> tags
+  // (opening, physical, historical, "Quick Specs:" header, closing)
+  assertEquals(
+    (html.match(/<p style=/g) || []).length,
+    5,
+    `expected 5 paragraphs (opening, physical, historical, specs header, closing), got: ${html}`,
+  );
+
+  // "Quick Specs:" section should render as a paragraph heading
+  assertStringIncludes(html, "<p style=");
+  assertStringIncludes(html, "<strong>Quick Specs:</strong>");
+
+  // Specs should render as a list
+  assertStringIncludes(html, "<ul");
+  assertEquals(
+    (html.match(/<li /g) || []).length,
+    4,
+    `expected 4 spec list items (Brand, Weight, Metal, Format), got: ${html}`,
+  );
+
+  // Verify specific specs are there
+  assertStringIncludes(html, "<b>Brand:</b> Valcambi");
+  assertStringIncludes(html, "<b>Metal:</b> .9999 Fine Gold");
+});
+
+Deno.test("formatDescriptionHtml flattens descriptions without blank lines into a wall of text (regression guard)", () => {
+  const noBlankLines =
+    `Opening paragraph here. Physical description follows immediately without a blank line separating them. Why it's cool all runs together. Quick Specs: Brand: Valcambi Weight: 1 Gram Metal: Gold All rendered as one paragraph block.`;
+
+  const html = formatDescriptionHtml(noBlankLines);
+
+  // Without blank lines, everything is one paragraph
+  assertEquals(
+    (html.match(/<p style=/g) || []).length,
+    1,
+    `expected 1 paragraph when no blank lines provided, got: ${html}`,
+  );
+
+  // This demonstrates why the Gemini prompt MUST output blank lines
+  assertStringIncludes(html, "Opening paragraph");
+  assertStringIncludes(html, "Physical description");
+});
+
+Deno.test("buildFallbackDescription includes ListrAssistr branding and AI disclosure", () => {
+  const fallback = buildFallbackDescription({
+    title: "Test Coin",
+    itemSpecifics: { Metal: "Gold" },
+  });
+
+  assertStringIncludes(fallback, "Listing generated by ListrAssistr");
+  assertStringIncludes(fallback, "All details should be verified by the buyer");
 });
