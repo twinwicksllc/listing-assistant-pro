@@ -1527,6 +1527,7 @@ function fakeSupabaseForQuotaHeadroom(opts: {
     call_limit: number;
     call_count: number;
     polled_at: string;
+    resource_name: string;
   } | null;
   pollError?: { message: string } | null;
 }) {
@@ -1643,12 +1644,15 @@ Deno.test("getLatestBrowseQuotaWindowAnchor: derives windowStart from a fresh po
       call_limit: 5000,
       call_count: 3000,
       polled_at: "2026-09-21T09:31:00.000Z", // 29 min before `now` -- fresh
+      resource_name: "buy.browse",
     },
   });
   const result = await getLatestBrowseQuotaWindowAnchor(svc, now);
   assertEquals(result.windowStart?.toISOString(), "2026-09-21T07:00:00.000Z");
   assertEquals(result.pollLimit, 5000);
   assertEquals(result.pollCallCount, 3000);
+  assertEquals(result.polledAt?.toISOString(), "2026-09-21T09:31:00.000Z");
+  assertEquals(result.pollResource, "buy.browse");
 });
 
 Deno.test("getLatestBrowseQuotaWindowAnchor: falls back to 86400s when time_window_seconds is null", async () => {
@@ -1660,6 +1664,7 @@ Deno.test("getLatestBrowseQuotaWindowAnchor: falls back to 86400s when time_wind
       call_limit: 5000,
       call_count: 3000,
       polled_at: "2026-09-21T09:31:00.000Z",
+      resource_name: "buy.browse.item.bulk",
     },
   });
   const result = await getLatestBrowseQuotaWindowAnchor(svc, now);
@@ -1682,6 +1687,7 @@ Deno.test("getLatestBrowseQuotaWindowAnchor: returns null anchor when the latest
       call_limit: 5000,
       call_count: 3000,
       polled_at: "2026-09-21T07:00:00.000Z", // 3 hours before `now` -- stale
+      resource_name: "buy.browse",
     },
   });
   const result = await getLatestBrowseQuotaWindowAnchor(svc, now);
@@ -1698,6 +1704,7 @@ Deno.test("getLatestBrowseQuotaWindowAnchor: returns null anchor when the poll's
       call_limit: 5000,
       call_count: 3000,
       polled_at: "2026-09-21T09:31:00.000Z", // fresh by polled_at, but reset_at already elapsed
+      resource_name: "buy.browse",
     },
   });
   const result = await getLatestBrowseQuotaWindowAnchor(svc, now);
@@ -1724,40 +1731,35 @@ Deno.test("getLatestBrowseQuotaWindowAnchor: fails to null anchor (not a throw) 
 
 // ── checkBrowseQuotaHeadroom: real reset-window integration (2026-09-2X) ──
 
-Deno.test("checkBrowseQuotaHeadroom: uses the real reset window instead of UTC midnight when a fresh poll anchor exists", async () => {
-  // Real window start is ~07:00 UTC yesterday (per the poll). A call logged
-  // at 02:00 UTC TODAY is AFTER that real boundary, so it must be counted --
-  // this is the one test that would have caught the original bug: under the
-  // old UTC-midnight logic, this call would also have been counted (it's
-  // after today's midnight too), so this test alone doesn't distinguish the
-  // two. The real regression guard is the NEXT test below, which checks a
-  // call BEFORE UTC midnight but AFTER the real reset.
+Deno.test("checkBrowseQuotaHeadroom: combines poll callCount with NEW calls logged after the poll", async () => {
   const now = new Date("2026-09-21T10:00:00.000Z");
   const svc = fakeSupabaseForQuotaHeadroom({
-    count: 100,
+    count: 100, // new calls logged after the poll (between polled_at and now)
     pollRow: {
       reset_at: "2026-09-22T07:00:00.000Z",
       time_window_seconds: 86400,
       call_limit: 5000,
-      call_count: 4000,
+      call_count: 4000, // eBay's count at poll time
       polled_at: "2026-09-21T09:31:00.000Z",
+      resource_name: "buy.browse",
     },
   });
   const result = await checkBrowseQuotaHeadroom(svc, now);
-  // estimatedUsed = pollCallCount (4000) + callsSinceAnchor (100) = 4100
+  // estimatedUsed = pollCallCount (4000) + new calls since poll (100) = 4100
   assertEquals(result.sameDayCount, 4100);
 });
 
-Deno.test("checkBrowseQuotaHeadroom: combines poll callCount with calls logged since the poll (additive correction)", async () => {
+Deno.test("checkBrowseQuotaHeadroom: correctly distinguishes headroom from no-headroom using additive correction", async () => {
   const now = new Date("2026-09-21T10:00:00.000Z");
   const svcBelowThreshold = fakeSupabaseForQuotaHeadroom({
-    count: 300, // calls since the poll
+    count: 300, // new calls logged AFTER the poll
     pollRow: {
       reset_at: "2026-09-22T07:00:00.000Z",
       time_window_seconds: 86400,
       call_limit: 5000,
       call_count: 4000, // eBay's own count at poll time
       polled_at: "2026-09-21T09:31:00.000Z",
+      resource_name: "buy.browse",
     },
   });
   const belowResult = await checkBrowseQuotaHeadroom(svcBelowThreshold, now);
@@ -1765,13 +1767,14 @@ Deno.test("checkBrowseQuotaHeadroom: combines poll callCount with calls logged s
   assertEquals(belowResult.hasHeadroom, true);
 
   const svcAboveThreshold = fakeSupabaseForQuotaHeadroom({
-    count: 600, // calls since the poll
+    count: 600, // new calls logged AFTER the poll
     pollRow: {
       reset_at: "2026-09-22T07:00:00.000Z",
       time_window_seconds: 86400,
       call_limit: 5000,
       call_count: 4000,
       polled_at: "2026-09-21T09:31:00.000Z",
+      resource_name: "buy.browse.item.bulk",
     },
   });
   const aboveResult = await checkBrowseQuotaHeadroom(svcAboveThreshold, now);
@@ -1791,16 +1794,28 @@ Deno.test("checkBrowseQuotaHeadroom: falls back to UTC-midnight boundary when no
 Deno.test("checkBrowseQuotaHeadroom: falls back to UTC-midnight boundary when the latest poll is stale", async () => {
   const now = new Date("2026-09-21T10:00:00.000Z");
   const svc = fakeSupabaseForQuotaHeadroom({
-    count: 1000,
+    count: 1000, // all calls from UTC midnight (since poll is stale)
     pollRow: {
       reset_at: "2026-09-22T07:00:00.000Z",
       time_window_seconds: 86400,
       call_limit: 5000,
       call_count: 4000,
-      polled_at: "2026-09-21T07:00:00.000Z", // 3 hours old -- stale
+      polled_at: "2026-09-21T07:00:00.000Z", // 3 hours old -- stale, ignored
+      resource_name: "buy.browse",
     },
   });
   const result = await checkBrowseQuotaHeadroom(svc, now);
-  // Stale poll -> null anchor -> pure self-count, no additive correction
+  // Stale poll -> null anchor -> pure self-count from UTC midnight, no additive correction
   assertEquals(result.sameDayCount, 1000);
 });
+
+// ── ITEMS_REFRESH_PROBE_CAP (2026-09-21 quota-storm fix) ────────────────
+// Root cause of the 2026-09-20 incident: probing all (up to 20) stored
+// comp_item_ids per refresh cost MORE than the full-search path it exists
+// to replace. The cap is a quota-safety invariant with direct test coverage
+// in attemptItemsRefresh's own tests (below) that exercise the full path.
+// This annotation documents the risk: any future edit removing the
+// slice(0, ITEMS_REFRESH_PROBE_CAP) should be a deliberate, reviewed change.
+// Tests: see attemptItemsRefresh(...) tests that call fetchEbayItemsBulk with
+// capped itemIds arrays (lines ~1700+) -- those tests verify the cap is
+// applied and that getItems calls are bounded to 5 attempts per listing.

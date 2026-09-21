@@ -1093,6 +1093,15 @@ export interface BrowseQuotaWindowAnchor {
    * windowStart when no fresh poll is available. */
   pollLimit: number | null;
   pollCallCount: number | null;
+  /** Timestamp at which the poll was taken -- used to count only NEW calls
+   * logged AFTER the poll (avoiding double-counting calls already in
+   * pollCallCount). Null alongside windowStart when no fresh poll available. */
+  polledAt: Date | null;
+  /** Which resource this poll's callCount represents, since ebay-quota-monitor
+   * stores only the worst-ratio resource per poll. Used to count only that
+   * resource's new calls, not both resources (which would overcount when
+   * combining with pollCallCount). */
+  pollResource: "buy.browse" | "buy.browse.item.bulk" | null;
   reason: string;
 }
 
@@ -1120,12 +1129,14 @@ export async function getLatestBrowseQuotaWindowAnchor(
     windowStart: null,
     pollLimit: null,
     pollCallCount: null,
+    polledAt: null,
+    pollResource: null,
     reason,
   });
   try {
     const { data, error } = await supabase
       .from("ebay_rate_limit_polls")
-      .select("reset_at, time_window_seconds, call_limit, call_count, polled_at")
+      .select("reset_at, time_window_seconds, call_limit, call_count, polled_at, resource_name")
       .order("polled_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -1158,11 +1169,26 @@ export async function getLatestBrowseQuotaWindowAnchor(
       return nullAnchor(`latest poll's own reset_at (${data.reset_at}) has already elapsed`);
     }
 
+    // Normalize resource_name to one of the two known Browse resources.
+    // ebay-quota-monitor stores the worst-ratio resource; we need to know
+    // which one to count only its new calls (avoiding double-count with pollCallCount).
+    let pollResource: "buy.browse" | "buy.browse.item.bulk" | null = null;
+    if (data.resource_name === "buy.browse.item.bulk") {
+      pollResource = "buy.browse.item.bulk";
+    } else if (data.resource_name === "buy.browse") {
+      pollResource = "buy.browse";
+    } else {
+      return nullAnchor(`latest poll has an unrecognized resource_name: ${data.resource_name}`);
+    }
+
     return {
       windowStart,
       pollLimit: data.call_limit,
       pollCallCount: data.call_count,
-      reason: `derived from poll at ${data.polled_at}, reset_at=${data.reset_at}, window=${timeWindowSeconds}s`,
+      polledAt,
+      pollResource,
+      reason:
+        `derived from poll at ${data.polled_at}, reset_at=${data.reset_at}, window=${timeWindowSeconds}s, resource=${data.resource_name}`,
     };
   } catch (err) {
     return nullAnchor(`unexpected error: ${String(err)}`);
@@ -1208,11 +1234,21 @@ export async function checkBrowseQuotaHeadroom(
     })();
     const windowStart = anchor.windowStart ?? utcMidnightFallback;
 
+    // If a fresh poll is available, count only calls logged AFTER the poll
+    // (not from windowStart, which would double-count with pollCallCount).
+    // If no fresh poll, fall back to counting from the window boundary.
+    const countStartBoundary = anchor.polledAt ?? windowStart;
+
+    // When a fresh poll is available, query only the resource it reported
+    // (ebay-quota-monitor stores only the worst-ratio resource per poll).
+    // Otherwise query both resources (the pre-fix fallback behavior).
+    const resourcesForCount = anchor.pollResource ? [anchor.pollResource] : COMBINED_BROWSE_RESOURCES;
+
     const { count, error } = await supabase
       .from("ebay_browse_call_log")
       .select("*", { count: "exact", head: true })
-      .in("resource", COMBINED_BROWSE_RESOURCES)
-      .gte("created_at", windowStart.toISOString());
+      .in("resource", resourcesForCount)
+      .gte("created_at", countStartBoundary.toISOString());
 
     if (error) {
       console.warn(
@@ -1221,7 +1257,7 @@ export async function checkBrowseQuotaHeadroom(
       return { hasHeadroom: true, sameDayCount: null, reason: `count query failed: ${error.message}` };
     }
 
-    const callsSinceAnchor = count ?? 0;
+    const callsSinceCountBoundary = count ?? 0;
 
     // Additive correction: if a fresh poll anchor is available, add its own
     // callCount (calls eBay itself confirms happened before the poll) to
@@ -1230,9 +1266,11 @@ export async function checkBrowseQuotaHeadroom(
     // instead of letting a full window's drift accumulate unchecked.
     // Note: if the poll's own used-ratio was already at/above the critical
     // threshold, estimatedUsed's ratio is automatically at/above it too
-    // (estimatedUsed >= pollCallCount, and callsSinceAnchor is always >= 0)
+    // (estimatedUsed >= pollCallCount, and callsSinceCountBoundary is always >= 0)
     // -- no separate short-circuit branch is needed for that case.
-    const estimatedUsed = anchor.pollCallCount != null ? anchor.pollCallCount + callsSinceAnchor : callsSinceAnchor;
+    const estimatedUsed = anchor.pollCallCount != null
+      ? anchor.pollCallCount + callsSinceCountBoundary
+      : callsSinceCountBoundary;
 
     const ratio = estimatedUsed / BROWSE_QUOTA_DAILY_LIMIT;
     if (ratio >= CRITICAL_QUOTA_RATIO) {
