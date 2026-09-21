@@ -64,6 +64,17 @@ Always run the relevant formatters/linters before pushing — CI blocks on both,
 - Frontend/docs changes: `npm run format:check` (or `prettier --write <file>` per the fallback above if npm/npx can't reach the registry)
 - Any `supabase/functions/**` change: `deno fmt --check supabase/functions/<touched-dir>` and `deno lint --config supabase/functions/deno.json supabase/functions/<touched-dir>`
 
+### Self-review checklist before opening a PR
+
+Recurring Copilot review findings across several PRs (most recently PR #611) — check these yourself before pushing, since Copilot catches them anyway but later, after CI has already run once:
+
+- **Every Supabase query-builder terminal reports failure via a returned `error`, not a thrown exception** — `.maybeSingle()`, `.select(..., { count: "exact", head: true })`, `.upsert()`, etc. Destructure and check `error` before trusting `data`/`count`; don't let a failed lookup fall through and get misread as "no rows"/"count 0".
+- **`select()` implicitly caps at 1,000 rows.** Any aggregate/count that could exceed that over time needs exact-count queries (`{ count: "exact", head: true }`, one per filter value or paginated) instead of fetch-and-reduce-in-JS.
+- **Don't reimplement a subset of an existing canonical check.** If a "is this fresh/valid" helper already backs a real gate (e.g. `getLatestBrowseQuotaWindowAnchor` behind `checkBrowseQuotaHeadroom`), call that helper directly from any UI/dashboard/monitoring code rather than re-deriving a partial version of its logic — the partial version drifts and can report "healthy" after the real gate has already failed.
+- **Every new append-only table needs a retention/pruning plan before merge, not as a follow-up** — easy to skip when the table ships alongside a feature rather than as its own migration PR.
+- **Check ratio/percentage denominators against what the metric claims to measure.** Outcomes that never reach the check the ratio describes shouldn't be in the denominator — they dilute the signal (e.g. a "rejected for being too thin" rate should divide by attempts that reached that check, not by every outcome including unrelated errors).
+- **New UI components need test coverage matching a sibling component's test file in the same directory** — check for an existing pattern (e.g. `src/test/ebay-quota-poll-card.test.tsx`) before writing one from scratch. Recharts-based components require the `ResizeObserver` polyfill already in `src/test/setup.ts` to mount under jsdom.
+
 ## Architecture
 
 Two-tier app: a Vite/React SPA frontend and Supabase Edge Functions (Deno) backend, sharing one Postgres database with RLS.

@@ -20,6 +20,8 @@
 
 > **Branch:** `feature/cogs-true-profit` · **Complexity:** Medium · **Plans:** Pro + Shop
 
+> **✅ Verified shipped (2026-09-21):** this feature is fully built and live, not "0% started" as the progress table below claims. Evidence: `listing_cogs`/`listing_financials` migrations exist (`20260325000001_create_listing_cogs_table.sql`, `20260402000000_create_listing_financials.sql`, plus follow-up constraint migrations); `src/components/CogsInput.tsx`, `src/components/ProfitBadge.tsx`, `src/components/ProfitReportCard.tsx` all exist; `CogsInput` is wired into both `src/pages/AnalyzePage.tsx` (direct-publish path, persists to `listing_cogs`) and `src/components/EditDraftModal.tsx` (used by `src/v2/pages/DraftsPage2.tsx`); `src/pages/DashboardPage.tsx` and `src/v2/pages/DashboardPage2.tsx` both compute `cogsTotal`/`netProfit` and render `ProfitBadge`; `src/pages/ProfitReportPage.tsx` exists and is registered at `/profit-report` in `src/App.tsx`; `supabase/functions/cogs-report/index.ts` exists. Manually traced the DashboardPage2/EditDraftModal path end-to-end (UI → `listing_cogs` insert) and it works as wired. **Gap found:** no dedicated unit/integration test file for the COGS flow (`src/test/*cogs*` and `supabase/functions/cogs-report/*.test.ts` both come up empty) — worth a follow-up test task, not a functional bug.
+
 ### 📦 Database
 
 - [ ] Migration: add `cogs`, `cogs_source`, `cogs_acquired_at` to `drafts` table
@@ -284,6 +286,8 @@
 ## 📋 Feature #10 — Bulk Listing Generator
 
 > **Branch:** `feature/bulk-listing-generator` · **Complexity:** High · **Plans:** All paid (limited) + Shop (full)
+
+> **✅ Verified shipped (2026-09-21):** this feature is substantially built and live, not "0% started" as the progress table below claims. Evidence: `src/types/bulk-listing.ts`, `src/lib/bulkCsvParser.ts`, `src/lib/bulkTemplates.ts`, `src/lib/bulkValidation.ts` all exist; `src/components/BulkUploadZone.tsx`, `BulkColumnMapper.tsx`, `BulkDataTable.tsx`, `BulkTemplateCard.tsx`, `BulkProgressBar.tsx` all exist; `src/pages/BulkListingPage.tsx` and `src/v2/pages/BulkListingPage2.tsx` both exist and `/bulk` is registered in `src/App.tsx`; `supabase/functions/bulk-generate-descriptions/index.ts` and `supabase/functions/bulk-publish/index.ts` both exist, with `bulk-publish` having its own test file (`bulk-publish.test.ts`). Row caps match this doc's own design intent (`bulk-generate-descriptions`: starter=5/pro=25/unlimited=1000; `bulk-publish`: starter=5/pro=50/unlimited=1000 — the pro-tier difference between 25 and 50 is deliberate per the Plan Gating section below, not drift). **Gaps found:** `bulk-generate-descriptions` has no test file at all, and neither function has a test covering its row-cap boundary (cap exactly met vs. exceeded) — worth follow-up test tasks, not functional bugs.
 
 ### 📦 Dependencies
 
