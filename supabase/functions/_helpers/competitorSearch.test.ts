@@ -1544,14 +1544,14 @@ Deno.test("checkBrowseQuotaHeadroom: no headroom once the combined count crosses
   assertEquals(result.sameDayCount, 4900);
 });
 
-Deno.test("checkBrowseQuotaHeadroom: exactly at the critical ratio (97%) reports no headroom (boundary is inclusive)", async () => {
-  const svc = fakeSupabaseForQuotaHeadroom({ count: 4850 }); // exactly 97% of 5000
+Deno.test("checkBrowseQuotaHeadroom: exactly at the critical ratio (90%) reports no headroom (boundary is inclusive)", async () => {
+  const svc = fakeSupabaseForQuotaHeadroom({ count: 4500 }); // exactly 90% of 5000
   const result = await checkBrowseQuotaHeadroom(svc, new Date());
   assertEquals(result.hasHeadroom, false);
 });
 
 Deno.test("checkBrowseQuotaHeadroom: just under the critical ratio still reports headroom", async () => {
-  const svc = fakeSupabaseForQuotaHeadroom({ count: 4849 }); // 96.98% of 5000
+  const svc = fakeSupabaseForQuotaHeadroom({ count: 4499 }); // 89.98% of 5000
   const result = await checkBrowseQuotaHeadroom(svc, new Date());
   assertEquals(result.hasHeadroom, true);
 });

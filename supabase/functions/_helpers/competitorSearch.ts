@@ -1058,13 +1058,12 @@ export interface CompSearchAttemptResult {
 // gate existed, runCompetitorSearch/attemptItemsRefresh had no way to know
 // quota was already gone and would keep firing calls straight into the 429
 // wall for the rest of the day, burning nothing but time and generating
-// noise. CRITICAL_QUOTA_RATIO is set well above ebay-quota-monitor's own
-// WARN_THRESHOLD_RATIO (0.9) -- that email alert is meant to fire EARLY as
-// a heads-up with headroom still left to react; this gate is a hard stop
-// only once quota is essentially exhausted, so the two never fight over
-// which one is "right" at 91% used.
+// noise. CRITICAL_QUOTA_RATIO and ebay-quota-monitor's WARN_THRESHOLD_RATIO
+// are both now 0.90 (90%): at this shared threshold, the gate stops new
+// searches and the monitor alerts the user, providing a hard stop with no
+// stale headroom that could cause both signals to fire and confuse recovery.
 const BROWSE_QUOTA_DAILY_LIMIT = 5000;
-const CRITICAL_QUOTA_RATIO = 0.97;
+const CRITICAL_QUOTA_RATIO = 0.90;
 const COMBINED_BROWSE_RESOURCES = ["buy.browse", "buy.browse.item.bulk"] as const;
 
 export interface QuotaHeadroomResult {
