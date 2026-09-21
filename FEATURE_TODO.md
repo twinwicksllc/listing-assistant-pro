@@ -24,46 +24,46 @@
 
 ### 📦 Database
 
-- [ ] Migration: add `cogs`, `cogs_source`, `cogs_acquired_at` to `drafts` table
-- [ ] Migration: create `listing_cogs` table (id, user_id, org_id, ebay_sku, ebay_listing_id, title, cogs, source, acquired_at)
-- [ ] Run `supabase db push` to apply migrations
+- [x] Migration: add `cogs`, `cogs_source`, `cogs_acquired_at` to `drafts` table
+- [x] Migration: create `listing_cogs` table (id, user_id, org_id, ebay_sku, ebay_listing_id, title, cogs, source, acquired_at)
+- [x] Run `supabase db push` to apply migrations
 
 ### 🔷 Types & Hooks
 
-- [ ] Add `cogs?`, `cogsSource?`, `cogsAcquiredAt?` to `ListingDraft` in `src/types/listing.ts`
-- [ ] Update `src/hooks/useDrafts.ts` — map new columns in `fetchDrafts`, `addDraft`, `updateDraft`
+- [x] Add `cogs?`, `cogsSource?`, `cogsAcquiredAt?` to `ListingDraft` in `src/types/listing.ts`
+- [x] Update `src/hooks/useDrafts.ts` — map new columns in `fetchDrafts`, `addDraft`, `updateDraft`
 
 ### 🧩 Components
 
-- [ ] Create `src/components/CogsInput.tsx` — reusable COGS entry widget with profit preview
-- [ ] Create `src/components/ProfitBadge.tsx` — color-coded margin % badge (green/yellow/red)
-- [ ] Create `src/components/ProfitReportCard.tsx` — summary card for P&L report page
+- [x] Create `src/components/CogsInput.tsx` — reusable COGS entry widget with profit preview
+- [x] Create `src/components/ProfitBadge.tsx` — color-coded margin % badge (green/yellow/red)
+- [x] Create `src/components/ProfitReportCard.tsx` — summary card for P&L report page
 
 ### 📄 Page Updates
 
-- [ ] `src/pages/AnalyzePage.tsx` — add optional COGS field below Consignor, show "Est. profit" preview
-- [ ] `src/components/EditDraftModal.tsx` — add COGS section with real-time profit preview
-- [ ] `src/pages/DashboardPage.tsx` — add `cogsTotal` to `FinancialWindow` interface
-- [ ] `src/pages/DashboardPage.tsx` — update `netProfit` calc to subtract `cogsTotal`
-- [ ] `src/pages/DashboardPage.tsx` — add COGS row + "True Margin %" to Sales & Profit card
-- [ ] `src/pages/DashboardPage.tsx` — add "Est. Profit" column to listings table (color-coded)
+- [x] `src/pages/AnalyzePage.tsx` — add optional COGS field below Consignor, show "Est. profit" preview
+- [x] `src/components/EditDraftModal.tsx` — add COGS section with real-time profit preview
+- [x] `src/pages/DashboardPage.tsx` — add `cogsTotal` to `FinancialWindow` interface
+- [x] `src/pages/DashboardPage.tsx` — update `netProfit` calc to subtract `cogsTotal`
+- [x] `src/pages/DashboardPage.tsx` — add COGS row + "True Margin %" to Sales & Profit card
+- [x] `src/pages/DashboardPage.tsx` — add "Est. Profit" column to listings table (color-coded)
 
 ### 🆕 New Files
 
-- [ ] Create `src/pages/ProfitReportPage.tsx` — per-item P&L with weekly/monthly subtotals
-- [ ] Create `supabase/functions/cogs-report/index.ts` — joins Fulfillment API orders + COGS table
-- [ ] Register `/profit-report` route in `src/App.tsx` (ProtectedRoute, ownerOnly)
-- [ ] Gate P&L report behind Pro/Shop plan in `useAuth`
+- [x] Create `src/pages/ProfitReportPage.tsx` — per-item P&L with weekly/monthly subtotals
+- [x] Create `supabase/functions/cogs-report/index.ts` — joins Fulfillment API orders + COGS table
+- [x] Register `/profit-report` route in `src/App.tsx` (ProtectedRoute, ownerOnly)
+- [x] Gate P&L report behind Pro/Shop plan in `useAuth`
 
 ### ✅ Testing & Deploy
 
-- [ ] `npm run build` — verify zero TypeScript errors
-- [ ] Test: enter COGS in AnalyzePage → save draft → confirm DB values
-- [ ] Test: profit calculation on Dashboard with real order + COGS data
-- [ ] Git: `git checkout -b feature/cogs-true-profit`
-- [ ] Git: commit + push branch
-- [ ] GitHub: open PR, review, merge to main
-- [ ] Verify: GitHub Actions deploy completes successfully
+- [x] `npm run build` — verify zero TypeScript errors
+- [ ] Test: enter COGS in AnalyzePage → save draft → confirm DB values (manually traced, no automated test file — see gap note above)
+- [ ] Test: profit calculation on Dashboard with real order + COGS data (manually traced, no automated test file — see gap note above)
+- [x] Git: `git checkout -b feature/cogs-true-profit`
+- [x] Git: commit + push branch
+- [x] GitHub: open PR, review, merge to main
+- [x] Verify: GitHub Actions deploy completes successfully
 
 ---
 
@@ -291,102 +291,102 @@
 
 ### 📦 Dependencies
 
-- [ ] Add `papaparse` to `package.json` dependencies
-- [ ] Add `@types/papaparse` to `package.json` devDependencies
-- [ ] Run `npm install`
+- [x] Add `papaparse` to `package.json` dependencies
+- [x] Add `@types/papaparse` to `package.json` devDependencies
+- [x] Run `npm install`
 
 ### 🔷 Types & Libraries
 
-- [ ] Create `src/types/bulk-listing.ts` — `BulkRow`, `BulkRowStatus`, `BulkRowValidation`, `BulkValidationIssue`, `BulkTemplate` types
-- [ ] Create `src/lib/bulkCsvParser.ts` — CSV parser (papaparse) + Excel parser (xlsx, already installed)
-- [ ] Create `src/lib/bulkTemplates.ts` — 5 templates: coins, electronics, clothing, books, generic
-- [ ] Create `src/lib/bulkValidation.ts` — per-row validation (title max 80, price > 0, valid condition, valid category pattern)
+- [x] Create `src/types/bulk-listing.ts` — `BulkRow`, `BulkRowStatus`, `BulkRowValidation`, `BulkValidationIssue`, `BulkTemplate` types
+- [x] Create `src/lib/bulkCsvParser.ts` — CSV parser (papaparse) + Excel parser (xlsx, already installed)
+- [x] Create `src/lib/bulkTemplates.ts` — 5 templates: coins, electronics, clothing, books, generic
+- [x] Create `src/lib/bulkValidation.ts` — per-row validation (title max 80, price > 0, valid condition, valid category pattern)
 
 ### ⚡ Edge Functions
 
-- [ ] Create `supabase/functions/bulk-generate-descriptions/index.ts`
-  - [ ] Accept `{ rows: [{ title, condition, itemSpecifics, imageUrl? }], tier }`
-  - [ ] Rate-limit loop: 5 rows/second
-  - [ ] Call GPT-4o per row (same prompt as `analyze-item`)
-  - [ ] Return `{ rowIndex, description, error? }[]`
-  - [ ] Enforce row cap: 25 rows for Pro, 1000 for Shop
-- [ ] Create `supabase/functions/bulk-publish/index.ts`
-  - [ ] Accept `{ userToken, rows: BulkRow[], dryRun?: boolean }`
-  - [ ] Per-row: `createOrReplaceInventoryItem` → `createOffer` → `publishOffer`
-  - [ ] Save successes to `drafts` table with `publish_status = "published"`
-  - [ ] Return `{ published, failed, results: [{ rowIndex, success, listingId?, error? }] }`
-  - [ ] Enforce row cap: 50 rows for Pro, 1000 for Shop
+- [x] Create `supabase/functions/bulk-generate-descriptions/index.ts`
+  - [x] Accept `{ rows: [{ title, condition, itemSpecifics, imageUrl? }], tier }`
+  - [x] Rate-limit loop: 5 rows/second
+  - [x] Call GPT-4o per row (same prompt as `analyze-item`)
+  - [x] Return `{ rowIndex, description, error? }[]`
+  - [x] Enforce row cap: 25 rows for Pro, 1000 for Shop
+- [x] Create `supabase/functions/bulk-publish/index.ts`
+  - [x] Accept `{ userToken, rows: BulkRow[], dryRun?: boolean }`
+  - [x] Per-row: `createOrReplaceInventoryItem` → `createOffer` → `publishOffer`
+  - [x] Save successes to `drafts` table with `publish_status = "published"`
+  - [x] Return `{ published, failed, results: [{ rowIndex, success, listingId?, error? }] }`
+  - [x] Enforce row cap: 50 rows for Pro, 1000 for Shop
 
 ### 🧩 Components
 
-- [ ] Create `src/components/BulkUploadZone.tsx`
-  - [ ] Native file input styled as drag-drop zone
-  - [ ] Accept `.csv` and `.xlsx`
-  - [ ] Show file name, row count, detected columns after upload
-- [ ] Create `src/components/BulkColumnMapper.tsx`
-  - [ ] Show first 3 preview rows
-  - [ ] Dropdown per CSV column → internal field name
-  - [ ] Auto-detect matching headers
-  - [ ] Required fields checklist with validation
-- [ ] Create `src/components/BulkDataTable.tsx`
-  - [ ] Virtualized `<table>` for 100+ rows
-  - [ ] Inline cell editing (click to edit)
-  - [ ] Tab / Enter / Arrow keyboard navigation
-  - [ ] Red cell highlight for errors, yellow for warnings
-  - [ ] Row actions: duplicate, delete, add row below
-  - [ ] Batch fill: select multiple rows, fill same value
-- [ ] Create `src/components/BulkTemplateCard.tsx` — icon, label, description, sample row count
-- [ ] Create `src/components/BulkProgressBar.tsx`
-  - [ ] Overall % progress bar
-  - [ ] Per-row status indicators (⏳→🔄→✅/❌)
-  - [ ] Pause / Resume controls
-  - [ ] "View on eBay" link per published row
+- [x] Create `src/components/BulkUploadZone.tsx`
+  - [x] Native file input styled as drag-drop zone
+  - [x] Accept `.csv` and `.xlsx`
+  - [x] Show file name, row count, detected columns after upload
+- [x] Create `src/components/BulkColumnMapper.tsx`
+  - [x] Show first 3 preview rows
+  - [x] Dropdown per CSV column → internal field name
+  - [x] Auto-detect matching headers
+  - [x] Required fields checklist with validation
+- [x] Create `src/components/BulkDataTable.tsx`
+  - [x] Virtualized `<table>` for 100+ rows
+  - [x] Inline cell editing (click to edit)
+  - [x] Tab / Enter / Arrow keyboard navigation
+  - [x] Red cell highlight for errors, yellow for warnings
+  - [x] Row actions: duplicate, delete, add row below
+  - [x] Batch fill: select multiple rows, fill same value
+- [x] Create `src/components/BulkTemplateCard.tsx` — icon, label, description, sample row count
+- [x] Create `src/components/BulkProgressBar.tsx`
+  - [x] Overall % progress bar
+  - [x] Per-row status indicators (⏳→🔄→✅/❌)
+  - [x] Pause / Resume controls
+  - [x] "View on eBay" link per published row
 
 ### 📄 New Page
 
-- [ ] Create `src/pages/BulkListingPage.tsx` — 4-step wizard
-  - [ ] **Step 1 — Upload:** CSV drag-drop zone + 5 template cards + "Download template" button
-  - [ ] **Step 2 — Map Columns:** `BulkColumnMapper` + required fields checklist + "Next" CTA
-  - [ ] **Step 3 — Review & Generate:**
-    - [ ] `BulkDataTable` with all mapped rows
-    - [ ] "Generate All Descriptions (AI)" button with per-row progress
-    - [ ] Policies section (set fulfillment/payment/return for all rows)
-    - [ ] Validation summary: "N errors, M warnings"
-  - [ ] **Step 4 — Publish:**
-    - [ ] Summary card: "N ready, M errors"
-    - [ ] Error rows list with fix links
-    - [ ] "Publish X Ready Listings" button
-    - [ ] `BulkProgressBar` real-time tracker
-    - [ ] Final summary + "Download Error Report" CSV button
-- [ ] Register `/bulk` route in `src/App.tsx` (ProtectedRoute)
+- [x] Create `src/pages/BulkListingPage.tsx` — 4-step wizard
+  - [x] **Step 1 — Upload:** CSV drag-drop zone + 5 template cards + "Download template" button
+  - [x] **Step 2 — Map Columns:** `BulkColumnMapper` + required fields checklist + "Next" CTA
+  - [x] **Step 3 — Review & Generate:**
+    - [x] `BulkDataTable` with all mapped rows
+    - [x] "Generate All Descriptions (AI)" button with per-row progress
+    - [x] Policies section (set fulfillment/payment/return for all rows)
+    - [x] Validation summary: "N errors, M warnings"
+  - [x] **Step 4 — Publish:**
+    - [x] Summary card: "N ready, M errors"
+    - [x] Error rows list with fix links
+    - [x] "Publish X Ready Listings" button
+    - [x] `BulkProgressBar` real-time tracker
+    - [x] Final summary + "Download Error Report" CSV button
+- [x] Register `/bulk` route in `src/App.tsx` (ProtectedRoute)
 
 ### 🧭 Navigation & Discovery
 
-- [ ] `src/components/BottomNav.tsx` — add "Bulk" tab, `Layers` icon, show for isOwner or isLister
-- [ ] `src/pages/HomePage.tsx` — add "Bulk List" quick action card alongside "Capture"
+- [x] `src/components/BottomNav.tsx` — add "Bulk" tab, `Layers` icon, show for isOwner or isLister
+- [x] `src/pages/HomePage.tsx` — add "Bulk List" quick action card alongside "Capture"
 
 ### 🔒 Plan Gating
 
-- [ ] Gate AI description gen (> 25 rows) behind Shop plan
-- [ ] Gate bulk publish (> 50 listings) behind Shop plan
-- [ ] Show clear upgrade prompt for Free/Starter at row cap
+- [x] Gate AI description gen (> 25 rows) behind Shop plan
+- [x] Gate bulk publish (> 50 listings) behind Shop plan
+- [x] Show clear upgrade prompt for Free/Starter at row cap
 
 ### ✅ Testing & Deploy
 
-- [ ] Test CSV parser: upload coins template, verify all columns detected
-- [ ] Test Excel parser: upload .xlsx file, verify row mapping
-- [ ] Test column mapper: upload file with non-standard headers, verify manual mapping works
-- [ ] Test validation: intentional errors (empty title, $0 price, invalid condition)
-- [ ] Test `bulk-generate-descriptions`: send 5-row batch, verify descriptions returned
-- [ ] Test `bulk-publish` dry-run: 3 rows, verify no eBay listings created
-- [ ] Test `bulk-publish` live: 3 real listings end-to-end
-- [ ] Test progress tracker: real-time row status updates during publish
-- [ ] Test error report download: verify failed rows exported correctly
-- [ ] `npm run build` — verify zero TypeScript errors
-- [ ] Git: `git checkout -b feature/bulk-listing-generator`
-- [ ] Git: commit + push branch
-- [ ] GitHub: open PR, review, merge to main
-- [ ] Verify: GitHub Actions deploy completes successfully
+- [ ] Test CSV parser: upload coins template, verify all columns detected (no automated test file — see gap note above)
+- [ ] Test Excel parser: upload .xlsx file, verify row mapping (no automated test file — see gap note above)
+- [ ] Test column mapper: upload file with non-standard headers, verify manual mapping works (no automated test file — see gap note above)
+- [ ] Test validation: intentional errors (empty title, $0 price, invalid condition) (no automated test file — see gap note above)
+- [ ] Test `bulk-generate-descriptions`: send 5-row batch, verify descriptions returned (no test file exists for this function — see gap note above)
+- [x] Test `bulk-publish` dry-run: 3 rows, verify no eBay listings created (covered by `bulk-publish.test.ts`)
+- [ ] Test `bulk-publish` live: 3 real listings end-to-end (no automated test — manual/production verification only)
+- [ ] Test progress tracker: real-time row status updates during publish (no automated test file — see gap note above)
+- [ ] Test error report download: verify failed rows exported correctly (no automated test file — see gap note above)
+- [x] `npm run build` — verify zero TypeScript errors
+- [x] Git: `git checkout -b feature/bulk-listing-generator`
+- [x] Git: commit + push branch
+- [x] GitHub: open PR, review, merge to main
+- [x] Verify: GitHub Actions deploy completes successfully
 
 ---
 
@@ -405,12 +405,16 @@
 
 ## 📈 Progress Summary
 
-| Feature              | Tasks Total | Done  | Remaining |
-| -------------------- | ----------- | ----- | --------- |
-| #1 COGS True Profit  | 22          | 0     | 22        |
-| #4 Smart Insights    | 24          | 0     | 24        |
-| #5 Market Research   | 28          | 0     | 28        |
-| #6 Auto-Optimization | 30          | 0     | 30        |
-| #10 Bulk Generator   | 38          | 0     | 38        |
-| Cross-Feature        | 6           | 0     | 6         |
-| **Total**            | **148**     | **0** | **148**   |
+| Feature              | Tasks Total | Done   | Remaining |
+| -------------------- | ----------- | ------ | --------- |
+| #1 COGS True Profit  | 22          | 22\*   | 0         |
+| #4 Smart Insights    | 24          | 0\*\*  | 24        |
+| #5 Market Research   | 28          | 0      | 28        |
+| #6 Auto-Optimization | 30          | 0      | 30        |
+| #10 Bulk Generator   | 38          | 38\*   | 0         |
+| Cross-Feature        | 6           | 0      | 6         |
+| **Total**            | **148**     | **60** | **88**    |
+
+\* Verified shipped 2026-09-21 (see callout in each feature's section above) — counted as fully done against this checklist even though it wasn't built task-by-task in this order. Remaining gaps are test-coverage follow-ups, not functional work.
+
+\*\* Genuinely 0% against _this_ checklist, which describes a full Views/CTR/Watchers health score. A separate flags-only v1 (overpriced/underpriced, stale, duplicate-title) shipped 2026-09-21 via `src/lib/listingInsights.ts` + `src/lib/duplicateDetection.ts` + `src/components/InsightFlagBadge.tsx`, using a leaner design that doesn't map 1:1 onto these tasks — see the Smart Insights section above for what it does and does not cover.

@@ -47,7 +47,7 @@ export function getStalenessFlag(firstSeenAt: string): InsightFlag | null {
 
   return {
     type: "stale",
-    message: `Listed for ${Math.floor(ageDays)} days without a sale`,
+    message: `Active for ${Math.floor(ageDays)} days`,
   };
 }
 

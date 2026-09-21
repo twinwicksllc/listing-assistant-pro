@@ -642,11 +642,12 @@ export default function DashboardPage2() {
             .map((l) => l.listingId)
             .filter(Boolean) as string[];
           if (ids.length > 0) {
-            const { data: fsData } = await supabase
+            const { data: fsData, error: fsQueryErr } = await supabase
               .from("user_active_listings")
               .select("ebay_listing_id, first_seen_at")
               .eq("user_id", user.id)
               .in("ebay_listing_id", ids);
+            if (fsQueryErr) throw fsQueryErr;
             for (const row of fsData ?? []) {
               firstSeenMap[row.ebay_listing_id] = row.first_seen_at;
             }
