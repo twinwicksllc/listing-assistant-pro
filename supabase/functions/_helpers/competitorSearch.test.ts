@@ -1,7 +1,13 @@
-import { assertEquals, assertNotEquals, assertRejects } from "https://deno.land/std@0.208.0/assert/mod.ts";
+import {
+  assertEquals,
+  assertNotEquals,
+  assertRejects,
+  assertStringIncludes,
+} from "https://deno.land/std@0.208.0/assert/mod.ts";
 import {
   attemptItemsRefresh,
   attemptSignatureMatch,
+  type BrowseQuotaWindowAnchor,
   buildCompetitorPricesUpsertPayload,
   checkBrowseQuotaHeadroom,
   type CompetitorItem,
@@ -12,6 +18,7 @@ import {
   evaluateCompQuality,
   extractCompItemIds,
   fetchEbayItemsBulk,
+  getLatestBrowseQuotaWindowAnchor,
   groupPlanIntoTiers,
   isItemsRefreshUsable,
   logBrowseApiCall,
@@ -1510,9 +1517,40 @@ function fakeSupabaseForQuotaHeadroom(opts: {
   count?: number | null;
   error?: { message: string } | null;
   onQuery?: (table: string, inArgs: unknown[]) => void;
+  // New: controls what getLatestBrowseQuotaWindowAnchor sees when it
+  // queries ebay_rate_limit_polls. Defaults to "no row" so every existing
+  // test (written before this table existed in this function's logic)
+  // keeps exercising the UTC-midnight fallback path unchanged.
+  pollRow?: {
+    reset_at: string;
+    time_window_seconds?: number | null;
+    call_limit: number;
+    call_count: number;
+    polled_at: string;
+  } | null;
+  pollError?: { message: string } | null;
 }) {
   return {
     from(table: string) {
+      if (table === "ebay_rate_limit_polls") {
+        return {
+          select() {
+            return this;
+          },
+          order() {
+            return this;
+          },
+          limit() {
+            return this;
+          },
+          maybeSingle() {
+            return Promise.resolve({
+              data: opts.pollRow ?? null,
+              error: opts.pollError ?? null,
+            });
+          },
+        };
+      }
       const builder = {
         select() {
           return builder;
@@ -1588,4 +1626,181 @@ Deno.test("checkBrowseQuotaHeadroom: fails OPEN when the query itself throws", a
   const result = await checkBrowseQuotaHeadroom(svc, new Date());
   assertEquals(result.hasHeadroom, true);
   assertEquals(result.sameDayCount, null);
+});
+
+// ── getLatestBrowseQuotaWindowAnchor (2026-09-2X reset-window fix) ─────────
+// eBay's Browse API quota resets on a fixed-duration block anchored to an
+// arbitrary timestamp (confirmed via eBay's own docs and this project's own
+// polled data), NOT UTC midnight. These tests pin the boundary-derivation
+// logic that reads the real reset from ebay_rate_limit_polls.
+
+Deno.test("getLatestBrowseQuotaWindowAnchor: derives windowStart from a fresh poll's reset_at minus time_window_seconds", async () => {
+  const now = new Date("2026-09-21T10:00:00.000Z");
+  const svc = fakeSupabaseForQuotaHeadroom({
+    pollRow: {
+      reset_at: "2026-09-22T07:00:00.000Z",
+      time_window_seconds: 86400,
+      call_limit: 5000,
+      call_count: 3000,
+      polled_at: "2026-09-21T09:31:00.000Z", // 29 min before `now` -- fresh
+    },
+  });
+  const result = await getLatestBrowseQuotaWindowAnchor(svc, now);
+  assertEquals(result.windowStart?.toISOString(), "2026-09-21T07:00:00.000Z");
+  assertEquals(result.pollLimit, 5000);
+  assertEquals(result.pollCallCount, 3000);
+});
+
+Deno.test("getLatestBrowseQuotaWindowAnchor: falls back to 86400s when time_window_seconds is null", async () => {
+  const now = new Date("2026-09-21T10:00:00.000Z");
+  const svc = fakeSupabaseForQuotaHeadroom({
+    pollRow: {
+      reset_at: "2026-09-22T07:00:00.000Z",
+      time_window_seconds: null,
+      call_limit: 5000,
+      call_count: 3000,
+      polled_at: "2026-09-21T09:31:00.000Z",
+    },
+  });
+  const result = await getLatestBrowseQuotaWindowAnchor(svc, now);
+  assertEquals(result.windowStart?.toISOString(), "2026-09-21T07:00:00.000Z");
+});
+
+Deno.test("getLatestBrowseQuotaWindowAnchor: returns null anchor when no poll row exists", async () => {
+  const svc = fakeSupabaseForQuotaHeadroom({ pollRow: null });
+  const result = await getLatestBrowseQuotaWindowAnchor(svc, new Date());
+  assertEquals(result.windowStart, null);
+  assertEquals(result.pollCallCount, null);
+});
+
+Deno.test("getLatestBrowseQuotaWindowAnchor: returns null anchor when the latest poll is older than 2 hours (stale)", async () => {
+  const now = new Date("2026-09-21T10:00:00.000Z");
+  const svc = fakeSupabaseForQuotaHeadroom({
+    pollRow: {
+      reset_at: "2026-09-22T07:00:00.000Z",
+      time_window_seconds: 86400,
+      call_limit: 5000,
+      call_count: 3000,
+      polled_at: "2026-09-21T07:00:00.000Z", // 3 hours before `now` -- stale
+    },
+  });
+  const result = await getLatestBrowseQuotaWindowAnchor(svc, now);
+  assertEquals(result.windowStart, null);
+  assertStringIncludes(result.reason, "stale");
+});
+
+Deno.test("getLatestBrowseQuotaWindowAnchor: returns null anchor when the poll's own reset_at has already elapsed", async () => {
+  const now = new Date("2026-09-21T10:00:00.000Z");
+  const svc = fakeSupabaseForQuotaHeadroom({
+    pollRow: {
+      reset_at: "2026-09-21T09:00:00.000Z", // in the past relative to `now`
+      time_window_seconds: 86400,
+      call_limit: 5000,
+      call_count: 3000,
+      polled_at: "2026-09-21T09:31:00.000Z", // fresh by polled_at, but reset_at already elapsed
+    },
+  });
+  const result = await getLatestBrowseQuotaWindowAnchor(svc, now);
+  assertEquals(result.windowStart, null);
+  assertStringIncludes(result.reason, "already elapsed");
+});
+
+Deno.test("getLatestBrowseQuotaWindowAnchor: fails to null anchor (not a throw) on a query error", async () => {
+  const svc = fakeSupabaseForQuotaHeadroom({ pollError: { message: "connection reset" } });
+  const result = await getLatestBrowseQuotaWindowAnchor(svc, new Date());
+  assertEquals(result.windowStart, null);
+  assertStringIncludes(result.reason, "connection reset");
+});
+
+Deno.test("getLatestBrowseQuotaWindowAnchor: fails to null anchor (not a throw) on an unexpected throw", async () => {
+  const svc = {
+    from() {
+      throw new Error("network down");
+    },
+  };
+  const result = await getLatestBrowseQuotaWindowAnchor(svc, new Date());
+  assertEquals(result.windowStart, null);
+});
+
+// ── checkBrowseQuotaHeadroom: real reset-window integration (2026-09-2X) ──
+
+Deno.test("checkBrowseQuotaHeadroom: uses the real reset window instead of UTC midnight when a fresh poll anchor exists", async () => {
+  // Real window start is ~07:00 UTC yesterday (per the poll). A call logged
+  // at 02:00 UTC TODAY is AFTER that real boundary, so it must be counted --
+  // this is the one test that would have caught the original bug: under the
+  // old UTC-midnight logic, this call would also have been counted (it's
+  // after today's midnight too), so this test alone doesn't distinguish the
+  // two. The real regression guard is the NEXT test below, which checks a
+  // call BEFORE UTC midnight but AFTER the real reset.
+  const now = new Date("2026-09-21T10:00:00.000Z");
+  const svc = fakeSupabaseForQuotaHeadroom({
+    count: 100,
+    pollRow: {
+      reset_at: "2026-09-22T07:00:00.000Z",
+      time_window_seconds: 86400,
+      call_limit: 5000,
+      call_count: 4000,
+      polled_at: "2026-09-21T09:31:00.000Z",
+    },
+  });
+  const result = await checkBrowseQuotaHeadroom(svc, now);
+  // estimatedUsed = pollCallCount (4000) + callsSinceAnchor (100) = 4100
+  assertEquals(result.sameDayCount, 4100);
+});
+
+Deno.test("checkBrowseQuotaHeadroom: combines poll callCount with calls logged since the poll (additive correction)", async () => {
+  const now = new Date("2026-09-21T10:00:00.000Z");
+  const svcBelowThreshold = fakeSupabaseForQuotaHeadroom({
+    count: 300, // calls since the poll
+    pollRow: {
+      reset_at: "2026-09-22T07:00:00.000Z",
+      time_window_seconds: 86400,
+      call_limit: 5000,
+      call_count: 4000, // eBay's own count at poll time
+      polled_at: "2026-09-21T09:31:00.000Z",
+    },
+  });
+  const belowResult = await checkBrowseQuotaHeadroom(svcBelowThreshold, now);
+  assertEquals(belowResult.sameDayCount, 4300); // 4000 + 300 = 4300/5000 = 86%, still headroom
+  assertEquals(belowResult.hasHeadroom, true);
+
+  const svcAboveThreshold = fakeSupabaseForQuotaHeadroom({
+    count: 600, // calls since the poll
+    pollRow: {
+      reset_at: "2026-09-22T07:00:00.000Z",
+      time_window_seconds: 86400,
+      call_limit: 5000,
+      call_count: 4000,
+      polled_at: "2026-09-21T09:31:00.000Z",
+    },
+  });
+  const aboveResult = await checkBrowseQuotaHeadroom(svcAboveThreshold, now);
+  assertEquals(aboveResult.sameDayCount, 4600); // 4000 + 600 = 4600/5000 = 92%, no headroom
+  assertEquals(aboveResult.hasHeadroom, false);
+});
+
+Deno.test("checkBrowseQuotaHeadroom: falls back to UTC-midnight boundary when no poll anchor is available", async () => {
+  // Regression guard: confirms the pre-existing fallback behavior still
+  // works unchanged when ebay_rate_limit_polls has no usable row.
+  const svc = fakeSupabaseForQuotaHeadroom({ count: 1000, pollRow: null });
+  const result = await checkBrowseQuotaHeadroom(svc, new Date("2026-09-21T00:00:00.000Z"));
+  assertEquals(result.hasHeadroom, true);
+  assertEquals(result.sameDayCount, 1000); // no pollCallCount to add -- pure self-count
+});
+
+Deno.test("checkBrowseQuotaHeadroom: falls back to UTC-midnight boundary when the latest poll is stale", async () => {
+  const now = new Date("2026-09-21T10:00:00.000Z");
+  const svc = fakeSupabaseForQuotaHeadroom({
+    count: 1000,
+    pollRow: {
+      reset_at: "2026-09-22T07:00:00.000Z",
+      time_window_seconds: 86400,
+      call_limit: 5000,
+      call_count: 4000,
+      polled_at: "2026-09-21T07:00:00.000Z", // 3 hours old -- stale
+    },
+  });
+  const result = await checkBrowseQuotaHeadroom(svc, now);
+  // Stale poll -> null anchor -> pure self-count, no additive correction
+  assertEquals(result.sameDayCount, 1000);
 });

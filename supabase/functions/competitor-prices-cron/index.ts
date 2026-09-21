@@ -33,7 +33,12 @@ const corsHeaders = {
 const SEARCH_DELAY_MS = 300;
 
 // How many refreshCompetitorData calls to run concurrently per batch.
-const REFRESH_CONCURRENCY = 15;
+// Reduced from 15 to 5 as part of the 2026-09-21 quota-storm fix (combined
+// with ITEMS_REFRESH_PROBE_CAP=5 in competitorSearch.ts). Reduces how many
+// concurrent in-flight calls can pass the quota gate before later listings'
+// checks see them logged, making the gate's real-time boundary detection
+// more responsive (re-syncs every 5 listings instead of every 15).
+const REFRESH_CONCURRENCY = 5;
 
 // How many (user, listing) pairs to pull per invocation, via
 // get_next_competitor_price_batch. This cron used to loop every connected
@@ -49,7 +54,10 @@ const REFRESH_CONCURRENCY = 15;
 // or listings exist. See supabase/migrations/20260818020000_add_competitor_price_cursor_rpc.sql
 // and 20260818040000_schedule_competitor_prices_refresh_cursor.sql for the
 // capacity arithmetic behind this number.
-const BATCH_LIMIT = 30;
+// Reduced from 30 to 10 as part of the 2026-09-21 quota-storm fix, bounding
+// worst-case per-tick cost to 10 listings × 5 calls (after PROBE_CAP) = 50
+// realistic calls/tick, with retries capped at ~150/tick worst case.
+const BATCH_LIMIT = 10;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
