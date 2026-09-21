@@ -69,7 +69,11 @@ const COMBINED_BROWSE_RESOURCES = [BROWSE_RESOURCE_NAME, "buy.browse.item.bulk"]
 // a few days (not just "today") so a recent spike can still be
 // investigated after the fact -- nothing reads past the same-day window
 // today, so this is headroom, not a requirement.
-const RETENTION_DAYS = 3;
+// Widened from 3 to 8 days (2026-09-21) so the new admin quota dashboard's
+// "last 7 days" call-volume chart (system-status's quotaMonitoring section)
+// always has a full 7 calendar days of complete data on hand, even when
+// queried right after a day boundary.
+const RETENTION_DAYS = 8;
 
 interface EbayRateLimitRate {
   limit: number;

@@ -1355,6 +1355,58 @@ export function logBrowseApiCall(
   }
 }
 
+/** Which decision attemptItemsRefresh reached, for ebay_items_refresh_outcomes. */
+export type ItemsRefreshOutcome =
+  | "accepted"
+  | "rejected_usability"
+  | "rejected_no_stored_ids"
+  | "error";
+
+/**
+ * Fire-and-forget insert into ebay_items_refresh_outcomes, mirroring
+ * logBrowseApiCall's own contract exactly: never awaited by the caller,
+ * never throws into it, registered via runInBackground so the write
+ * survives past the handler's response being sent. Added 2026-09-21 so the
+ * quota-storm-fix monitoring checklist's "how often does the 5-probe cap
+ * cause a fall-through to full search" question is answerable from a table
+ * instead of grepping function logs (see todo.md's monitoring checklist).
+ */
+export function logItemsRefreshOutcome(
+  // deno-lint-ignore no-explicit-any -- matches logBrowseApiCall's own loose
+  // supabase-js client typing for the same reason (avoids fighting the
+  // generated client's generics).
+  supabase: any,
+  outcome: ItemsRefreshOutcome,
+  listingId: string,
+  reason?: string,
+): void {
+  try {
+    runInBackground(
+      Promise.resolve(
+        supabase.from("ebay_items_refresh_outcomes").insert({
+          outcome,
+          reason: reason ?? null,
+          listing_id: listingId,
+        }),
+      )
+        .then((result: { error?: { message?: string } } | undefined) => {
+          if (result?.error) {
+            console.warn(
+              `[competitorSearch] Failed to log items-refresh outcome for quota tracking: ${
+                result.error.message ?? JSON.stringify(result.error)
+              }`,
+            );
+          }
+        })
+        .catch((err: unknown) => {
+          console.warn(`[competitorSearch] Failed to log items-refresh outcome for quota tracking: ${String(err)}`);
+        }),
+    );
+  } catch (err) {
+    console.warn(`[competitorSearch] Failed to log items-refresh outcome for quota tracking: ${String(err)}`);
+  }
+}
+
 /**
  * Runs a list of search attempts sequentially, accumulating prices/items
  * ACROSS attempts within this one tier and stopping early once the running
@@ -1787,12 +1839,14 @@ export async function attemptItemsRefresh(params: {
     row = data;
   } catch (err) {
     console.warn("[competitorSearch] attemptItemsRefresh: row lookup failed, falling through to full search:", err);
+    logItemsRefreshOutcome(supabase, "error", listingId, String(err));
     return null;
   }
 
   const decision = decideRefreshStrategy({ storedItemIds: row?.comp_item_ids });
   if (!decision.useItemsRefresh) {
     console.log(`[competitorSearch] attemptItemsRefresh: ${decision.reason}`);
+    logItemsRefreshOutcome(supabase, "rejected_no_stored_ids", listingId, decision.reason);
     return null;
   }
 
@@ -1810,6 +1864,7 @@ export async function attemptItemsRefresh(params: {
     token = await getEbayAppToken(ebayEnv);
   } catch (err) {
     console.warn("[competitorSearch] attemptItemsRefresh: token fetch failed, falling through to full search:", err);
+    logItemsRefreshOutcome(supabase, "error", listingId, String(err));
     return null;
   }
 
@@ -1824,6 +1879,7 @@ export async function attemptItemsRefresh(params: {
     });
   } catch (err) {
     console.warn("[competitorSearch] attemptItemsRefresh: getItems call failed, falling through to full search:", err);
+    logItemsRefreshOutcome(supabase, "error", listingId, String(err));
     return null;
   }
 
@@ -1839,6 +1895,7 @@ export async function attemptItemsRefresh(params: {
   });
   if (!usability.usable) {
     console.log(`[competitorSearch] attemptItemsRefresh: ${usability.reason} — falling through to full search`);
+    logItemsRefreshOutcome(supabase, "rejected_usability", listingId, usability.reason);
     return null;
   }
 
@@ -1906,6 +1963,12 @@ export async function attemptItemsRefresh(params: {
     // handling -- still return the freshly-computed data to the caller.
     console.warn("[competitorSearch] attemptItemsRefresh: failed to persist snapshot:", dbErr);
   }
+
+  // "accepted" tracks that the getItems result passed isItemsRefreshUsable,
+  // independent of whether the subsequent persist succeeded -- a persist
+  // failure above is already logged separately and isn't a rejection of the
+  // refresh strategy itself.
+  logItemsRefreshOutcome(supabase, "accepted", listingId);
 
   const cacheExpiresAt = new Date(Date.now() + CACHE_TTL_MS).toISOString();
 

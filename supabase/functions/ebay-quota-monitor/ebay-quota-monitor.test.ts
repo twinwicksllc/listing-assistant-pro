@@ -160,7 +160,7 @@ function fakeSupabaseForPrune(opts: {
   };
 }
 
-Deno.test("pruneOldCallLogRows: deletes from ebay_browse_call_log with a cutoff 3 days before `now`", async () => {
+Deno.test("pruneOldCallLogRows: deletes from ebay_browse_call_log with a cutoff 8 days before `now`", async () => {
   let capturedTable = "";
   let capturedField = "";
   let capturedCutoff = "";
@@ -176,10 +176,11 @@ Deno.test("pruneOldCallLogRows: deletes from ebay_browse_call_log with a cutoff 
   assertEquals(result, { pruned: true });
   assertEquals(capturedTable, "ebay_browse_call_log");
   assertEquals(capturedField, "created_at");
-  // RETENTION_DAYS = 3, so the cutoff must be exactly 3 days before `now` --
-  // rows on the "3 days old, still within retention" side of this boundary
-  // must survive, and rows just past it must be deleted.
-  assertEquals(capturedCutoff, "2026-09-17T00:31:00.000Z");
+  // RETENTION_DAYS = 8 (widened 2026-09-21 for the admin quota dashboard's
+  // 7-day view), so the cutoff must be exactly 8 days before `now` -- rows
+  // on the "8 days old, still within retention" side of this boundary must
+  // survive, and rows just past it must be deleted.
+  assertEquals(capturedCutoff, "2026-09-12T00:31:00.000Z");
 });
 
 Deno.test("pruneOldCallLogRows: reports failure on a delete error rather than reporting pruned: true", async () => {

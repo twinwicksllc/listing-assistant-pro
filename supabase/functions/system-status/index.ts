@@ -415,6 +415,105 @@ serve(async (req) => {
       // skip
     }
 
+    // --- Quota Monitoring Dashboard ---
+    // Backs the admin "Quota Monitoring" card added for the 2026-09-21
+    // quota-storm fix (PR #610)'s todo.md monitoring checklist: daily
+    // browse-call volume by resource, items-refresh accept/reject
+    // breakdown, and poll freshness (whether checkBrowseQuotaHeadroom is
+    // still getting real reset_at boundaries or has gone stale and would
+    // silently fall back to UTC-midnight -- see POLL_STALENESS_MS in
+    // competitorSearch.ts). Aggregated here rather than via a dedicated
+    // function per the plan's "extend system-status" decision -- this is a
+    // read-only admin view, not a hot path, so per-day/per-resource count
+    // queries (cheap, indexed on created_at) are simpler than standing up
+    // a SQL view or RPC for a handful of rows.
+    let quotaMonitoring: {
+      last7Days: { date: string; browseCalls: number; itemBulkCalls: number }[];
+      itemsRefreshOutcomes: {
+        accepted: number;
+        rejectedUsability: number;
+        rejectedNoStoredIds: number;
+        error: number;
+      };
+      pollFreshness: {
+        polledAt: string | null;
+        isStale: boolean;
+      };
+    } | null = null;
+    try {
+      const DAYS = 7;
+      const last7Days: { date: string; browseCalls: number; itemBulkCalls: number }[] = [];
+      for (let i = DAYS - 1; i >= 0; i--) {
+        const dayStart = new Date();
+        dayStart.setUTCHours(0, 0, 0, 0);
+        dayStart.setUTCDate(dayStart.getUTCDate() - i);
+        const dayEnd = new Date(dayStart);
+        dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+
+        const [{ count: browseCalls }, { count: itemBulkCalls }] = await Promise.all([
+          supabaseClient
+            .from("ebay_browse_call_log")
+            .select("*", { count: "exact", head: true })
+            .eq("resource", "buy.browse")
+            .gte("created_at", dayStart.toISOString())
+            .lt("created_at", dayEnd.toISOString()),
+          supabaseClient
+            .from("ebay_browse_call_log")
+            .select("*", { count: "exact", head: true })
+            .eq("resource", "buy.browse.item.bulk")
+            .gte("created_at", dayStart.toISOString())
+            .lt("created_at", dayEnd.toISOString()),
+        ]);
+
+        last7Days.push({
+          date: dayStart.toISOString().slice(0, 10),
+          browseCalls: browseCalls ?? 0,
+          itemBulkCalls: itemBulkCalls ?? 0,
+        });
+      }
+
+      // Outcomes table is orders of magnitude smaller than the call log
+      // (one row per attemptItemsRefresh decision, not per Browse API
+      // call) -- fetching the raw rows and reducing in-process is simpler
+      // than 4 separate count queries and still cheap at this volume.
+      const outcomesSince = new Date();
+      outcomesSince.setUTCDate(outcomesSince.getUTCDate() - DAYS);
+      const { data: outcomeRows } = await supabaseClient
+        .from("ebay_items_refresh_outcomes")
+        .select("outcome")
+        .gte("created_at", outcomesSince.toISOString());
+
+      const itemsRefreshOutcomes = {
+        accepted: 0,
+        rejectedUsability: 0,
+        rejectedNoStoredIds: 0,
+        error: 0,
+      };
+      for (const row of outcomeRows ?? []) {
+        if (row.outcome === "accepted") itemsRefreshOutcomes.accepted++;
+        else if (row.outcome === "rejected_usability") itemsRefreshOutcomes.rejectedUsability++;
+        else if (row.outcome === "rejected_no_stored_ids") itemsRefreshOutcomes.rejectedNoStoredIds++;
+        else if (row.outcome === "error") itemsRefreshOutcomes.error++;
+      }
+
+      // Reuses lastEbayQuotaPoll (fetched above) rather than re-querying --
+      // "stale" here means checkBrowseQuotaHeadroom's own POLL_STALENESS_MS
+      // window (2x the hourly poll cadence) has lapsed, which is exactly
+      // when it stops trusting the poll's reset_at and falls back to a
+      // UTC-midnight boundary guess.
+      const POLL_STALENESS_MS = 2 * 60 * 60 * 1000;
+      const polledAt = lastEbayQuotaPoll?.polled_at ?? null;
+      const isStale = polledAt ? Date.now() - new Date(polledAt).getTime() > POLL_STALENESS_MS : true;
+
+      quotaMonitoring = {
+        last7Days,
+        itemsRefreshOutcomes,
+        pollFreshness: { polledAt, isStale },
+      };
+    } catch {
+      // skip
+    }
+
     return new Response(
       JSON.stringify({
         stripe: stripeStatus,
@@ -425,6 +524,7 @@ serve(async (req) => {
         featureUsage,
         lastCostAlert,
         lastEbayQuotaPoll,
+        quotaMonitoring,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

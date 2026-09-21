@@ -66,4 +66,17 @@ export interface SystemData {
     alert_sent: boolean;
     polled_at: string;
   } | null;
+  quotaMonitoring: {
+    last7Days: { date: string; browseCalls: number; itemBulkCalls: number }[];
+    itemsRefreshOutcomes: {
+      accepted: number;
+      rejectedUsability: number;
+      rejectedNoStoredIds: number;
+      error: number;
+    };
+    pollFreshness: {
+      polledAt: string | null;
+      isStale: boolean;
+    };
+  } | null;
 }
