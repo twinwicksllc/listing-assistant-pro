@@ -623,3 +623,34 @@ as a side effect of one fix.
       auto-applies via the Supabase migration pipeline on merge — no manual step)
 - [ ] Full project wrap-up (push/PR/monitor/report) deferred until Phases
       3-6 are also implemented, per the original plan sequencing
+
+## 2026-09-21 Quota Storm Fix — Monitoring Checklist
+
+Status: Deployed `feat/quota-storm-fix` (Parts A+B)
+
+**1-week monitoring due ~2026-09-28** — after deploying the quota storm fix
+(PR #XXX: reset-window gate + per-listing probe cap + BATCH_LIMIT reduction):
+
+- [ ] Query `ebay_browse_call_log` daily totals by resource for the week post-deploy
+      — confirm combined daily total stays comfortably under 5,000 (target: well under
+      4,500 @ 90% critical threshold), not just "doesn't 429."
+- [ ] Confirm `checkBrowseQuotaHeadroom`'s `reason` field (visible in function logs)
+      is reporting real `reset_at`-derived boundaries (e.g. "derived from poll at ...")
+      rather than falling back to UTC-midnight on every call — if ALWAYS falling back,
+      `ebay-quota-monitor`'s hourly poll isn't populating fresh rows reliably (separate
+      investigation needed).
+- [ ] Query how often `attemptItemsRefresh`'s `isItemsRefreshUsable` check now rejects
+      the (5-probe, capped) result and falls through to full search — if rejection rate
+      is high, `ITEMS_REFRESH_PROBE_CAP=5` may be too aggressive relative to real-world
+      delisting rates, cap may need adjustment upward (with daily-volume math
+      re-checked at new value before re-shipping).
+- [ ] Check competitor-prices-cron per-tick and cumulative call counts in logs — confirm
+      realistic case (no retries) lands at ~50-75 calls/tick, worst case (with retries)
+      at ~150/tick or less, not exceeding pre-fix ranges (was 30 listings × 20 IDs/listing
+      = 600+ calls/tick worst case, now capped at 10 listings × 5 IDs = 50 realistic).
+
+**Rollback contingency:** if fix doesn't behave as expected (e.g. gate fires too
+aggressively, disabling refresh feature), quickest kill switch is setting
+`POLL_STALENESS_MS` to `0` to force permanent UTC-midnight fallback (competitorSearch.ts,
+line ~1070), or reverting BATCH_LIMIT/REFRESH_CONCURRENCY/PROBE_CAP to pre-fix values
+(one-line changes each, no migration). Full git revert is cleaner for permanent rollback.
