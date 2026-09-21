@@ -46,6 +46,22 @@ export function QuotaMonitoringCard({ data }: QuotaMonitoringCardProps) {
     );
   }
 
+  if (data.dataError) {
+    return (
+      <div className="bg-card border border-destructive/30 rounded-xl p-4 flex items-center gap-3">
+        <AlertTriangle className="w-4 h-4 text-destructive" />
+        <div>
+          <p className="text-sm font-medium text-foreground">
+            Quota Monitoring
+          </p>
+          <p className="text-xs text-destructive">
+            Data unavailable: {data.dataError}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const { last7Days, itemsRefreshOutcomes, pollFreshness } = data;
 
   const chartData = last7Days.map((d) => ({
@@ -64,9 +80,15 @@ export function QuotaMonitoringCard({ data }: QuotaMonitoringCardProps) {
     itemsRefreshOutcomes.rejectedUsability +
     itemsRefreshOutcomes.rejectedNoStoredIds +
     itemsRefreshOutcomes.error;
+  // Denominator is accepted + rejectedUsability only, not totalOutcomes --
+  // error and rejectedNoStoredIds never reach the isItemsRefreshUsable
+  // check this ratio is meant to describe, so including them dilutes the
+  // "is the probe cap too aggressive" signal (Copilot review, PR #611).
+  const usabilityChecked =
+    itemsRefreshOutcomes.accepted + itemsRefreshOutcomes.rejectedUsability;
   const rejectionRatio =
-    totalOutcomes > 0
-      ? itemsRefreshOutcomes.rejectedUsability / totalOutcomes
+    usabilityChecked > 0
+      ? itemsRefreshOutcomes.rejectedUsability / usabilityChecked
       : 0;
 
   return (

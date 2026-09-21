@@ -1828,7 +1828,7 @@ export async function attemptItemsRefresh(params: {
 
   let row: any;
   try {
-    const { data } = await supabase
+    const { data, error: lookupErr } = await supabase
       .from("competitor_prices")
       .select("*")
       .eq("user_id", userId)
@@ -1836,6 +1836,15 @@ export async function attemptItemsRefresh(params: {
       .order("fetched_at", { ascending: false })
       .limit(1)
       .maybeSingle();
+    // maybeSingle() reports a failed query via a returned `error`, not a
+    // throw (Copilot review) -- without this check, a PostgREST/RLS
+    // failure here fell through to decideRefreshStrategy with row still
+    // undefined, which reads as "no stored ids" and gets logged as
+    // rejected_no_stored_ids instead of the actual error, skewing the
+    // dashboard's outcome breakdown.
+    if (lookupErr) {
+      throw lookupErr;
+    }
     row = data;
   } catch (err) {
     console.warn("[competitorSearch] attemptItemsRefresh: row lookup failed, falling through to full search:", err);

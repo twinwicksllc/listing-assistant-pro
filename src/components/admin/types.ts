@@ -78,5 +78,6 @@ export interface SystemData {
       polledAt: string | null;
       isStale: boolean;
     };
+    dataError?: string;
   } | null;
 }
