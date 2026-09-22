@@ -16,16 +16,9 @@
 > 4. Do not add a `DROP TRIGGER`/`CREATE TRIGGER` block — `CREATE OR REPLACE FUNCTION` alone is enough since the trigger already points at this function name.
 > 5. Run `supabase db push` (or whatever this repo's normal migration-apply command is — check `CLAUDE.md`'s Commands section) to apply it.
 >
-> **Gap 2 — the `commerce.identity.readonly` OAuth scope is still commented out, so eBay username lookups needed for the one-account rule don't work reliably.**
-> Read `supabase/functions/ebay-publish/constants.ts` around line 15. You will find a line that looks like:
-> `// "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly", // Identity API (username lookup)`
-> It is commented out (starts with `//`).
-> **Fix — follow this exact order, do not skip or reorder steps:**
->
-> 1. First, tell the user this scope needs to be registered on developer.ebay.com before any code change will work — do this yourself only if the user has already confirmed it's registered; otherwise stop here and ask.
-> 2. Once registration is confirmed: in `supabase/functions/ebay-publish/constants.ts`, remove the `//` at the start of that line so the scope string is active in the `EBAY_OAUTH_SCOPES` array. Do not change the scope string text itself, only remove the comment marker.
-> 3. Commit this change and open a PR per this repo's normal branch+PR workflow (see `CLAUDE.md` "Working agreements" — never push directly to `main`).
-> 4. After the PR is merged and deployed, tell the user they now need to disconnect and reconnect their eBay account for the new scope to take effect on their existing token (a code change alone does not retroactively add a scope to an already-issued token).
+> **Gap 2 — FIXED 2026-09-21: the `commerce.identity.readonly` OAuth scope is now uncommented and active.**
+> The scope was uncommented in `supabase/functions/ebay-publish/constants.ts` in PR #613, so eBay username lookups for the one-account rule now work.
+> After this PR is deployed, users with existing eBay tokens will need to disconnect and reconnect their eBay account for the new scope to take effect (a code change alone does not retroactively add a scope to an already-issued token). The next time a user clicks "Connect eBay" after deployment, they'll be prompted for the new scope at consent time.
 >
 > Everything else in the checklist below (§7) is already implemented — do not rebuild it. If you want to verify a specific item, the evidence is: `analyze-item` enforces the eBay-account gate and rolling-window count and the field allowlist; `ebay-publish/auth.ts` enforces the one-account rule on `exchange_code`; `supabase/functions/get-free-credits/index.ts` and `supabase/functions/disconnect-ebay/index.ts` both exist; `src/contexts/AuthContext.tsx` has `freeCredits`/`ebayConnected`/`ebayUsername` state and `refreshFreeCredits()`.
 

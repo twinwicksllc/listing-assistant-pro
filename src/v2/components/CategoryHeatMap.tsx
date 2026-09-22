@@ -7,7 +7,6 @@
  */
 
 import { useMemo } from "react";
-import { TrendingUp, TrendingDown } from "lucide-react";
 
 interface CategoryTile {
   categoryId: string;

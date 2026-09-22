@@ -3,9 +3,9 @@
 -- their personal organization. The handle_new_user() trigger
 -- creates the org but never set this date.
 --
--- This migration replaces handle_new_user() with a version that
--- also sets organizations.free_tier_reset_day = today's day-of-month
--- at the moment of org creation.
+-- This migration updates handle_new_user() to also set
+-- organizations.free_tier_reset_day = today's day-of-month
+-- at the moment of org creation (for rolling-window quota).
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
