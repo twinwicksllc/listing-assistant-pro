@@ -1,22 +1,24 @@
 # Listing Editor — Comprehensive Implementation Plan
 
-**Date:** March 30, 2026  
-**Status:** Ready for Implementation  
+**Date:** March 30, 2026 (corrected 2026-09-21 — see notice below)
+**Status:** Ready for Implementation
 **Scope:** Click-to-edit any live eBay listing from the Dashboard, with full write-back to eBay
 
----
+> **Correction notice (2026-09-21):** Two claims below were checked against the live repo and found wrong. Read this before doing any of the work in this file.
+>
+> 1. **"`reprice_rules` table — missing migration" is FALSE.** The table already exists, created by `supabase/migrations/20260324000001_add_optimization_tables.sql` and altered by `supabase/migrations/20260819030000_track_reprice_and_optimization_tables.sql`. Run `grep -rl "reprice_rules" supabase/migrations/` yourself before starting to confirm this is still true, then **skip "New Migration 2" in Part 2 entirely** — do not create it.
+> 2. **The "Why a New Function (Not Extending `ebay-reprice`)" reasoning in Part 3 is out of date.** `supabase/functions/ebay-reprice/index.ts` already has a working `update_content` action (around line 651) that does a full GET-then-merge-then-PUT title/description update against both the Inventory API and the legacy Trading API, and it's already called from `src/hooks/useOptimization.ts` (around line 395). **This means title/description editing for the new Listing Editor should call the existing `ebay-reprice` `update_content` action, not be rebuilt inside a new function.** The new `ebay-edit-listing` function described in Part 3 should be built to handle only what `ebay-reprice` does not already cover: price/quantity/condition/aspects/category changes, the audit log write, and the COGS write-back. See the rewritten Part 3 below.
 
 ## Executive Summary
 
 Users need to click on any listing card (or row in Pricing Insights table) to open a rich **Listing Editor** that exposes every editable field — title, description, price, quantity, condition, COGS, item specifics/attributes, and eBay category — and writes all changes back to eBay atomically using eBay's best-practice API paths.
 
-This is a **medium-large** feature spanning:
+This is a **medium** feature (narrowed from "medium-large" on 2026-09-21 now that the missing-migration and duplicate-function items below are known not to be needed) spanning:
 
 - 1 new React component (`ListingEditorModal.tsx`)
-- 1 new Supabase Edge Function (`ebay-edit-listing`)
+- 1 new Supabase Edge Function (`ebay-edit-listing`) — for price/quantity/condition/aspects/category/COGS/audit-log only; title/description calls the existing `ebay-reprice` `update_content` action instead of being rebuilt
 - 1 new custom hook (`useListingEditor.ts`)
-- 1 new DB migration (`listing_edits_log` audit table)
-- 1 missing DB migration (`reprice_rules` table — currently used in code but not in migrations)
+- 1 new DB migration (`listing_edits_log` audit table only — the `reprice_rules` migration in the original plan does not need to be created, see correction notice above)
 - Touches to `DashboardPage.tsx`, `PricingInsightsTable.tsx`, and `App.tsx`
 
 ---
@@ -95,49 +97,35 @@ CREATE INDEX idx_listing_edits_user_id ON public.listing_edits_log(user_id);
 CREATE INDEX idx_listing_edits_created_at ON public.listing_edits_log(created_at DESC);
 ```
 
-### New Migration 2: `reprice_rules` ⚠️ MISSING
+### New Migration 2: SKIP THIS — do not create it
 
-The `reprice_rules` table is **already referenced** in `RepriceRulesModal.tsx`, `RepriceManagerPanel.tsx`, and `useOptimization.ts` but **has no migration file**. This is a production gap that must be fixed.
+The original plan called this "`reprice_rules` ⚠️ MISSING" and included a `CREATE TABLE` statement for it. **This was wrong and has been removed from this plan (2026-09-21).** The table already exists — created by `supabase/migrations/20260324000001_add_optimization_tables.sql`, altered by `supabase/migrations/20260819030000_track_reprice_and_optimization_tables.sql`. Before doing any DB work in this plan, run:
 
-```sql
-CREATE TABLE IF NOT EXISTS public.reprice_rules (
-  id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id         UUID        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  rule_name       TEXT        NOT NULL,
-  rule_type       TEXT        NOT NULL CHECK (
-    rule_type IN ('match_lowest','beat_lowest','match_avg','match_sold_avg')
-  ),
-  adjustment_pct  NUMERIC     NOT NULL DEFAULT 0,
-  floor_price     NUMERIC,
-  ceiling_price   NUMERIC,
-  category_filter TEXT,
-  is_enabled      BOOLEAN     NOT NULL DEFAULT true,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-ALTER TABLE public.reprice_rules ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users manage own reprice rules"
-  ON public.reprice_rules FOR ALL TO authenticated
-  USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
 ```
+grep -rl "reprice_rules" supabase/migrations/
+```
+
+If that command lists any files (it should), do not write a new `reprice_rules` migration. Only Migration 1 (`listing_edits_log`, above) needs to be created for this plan.
 
 ---
 
 ## Part 3: New Edge Function — `ebay-edit-listing`
 
-### Why a New Function (Not Extending `ebay-reprice`)
+### Scope: what this new function does and does not handle (corrected 2026-09-21)
 
-`ebay-reprice` handles **price/quantity only** via `bulk_update_price_quantity`. Full listing editing requires:
+**Do not build title/description update logic in this new function.** `supabase/functions/ebay-reprice/index.ts` already has an `update_content` action (starts around line 651) that does everything title/description editing needs: GET-then-merge-then-PUT against the Inventory API, with a Trading API `ReviseFixedPriceItem` fallback. It's already called from `src/hooks/useOptimization.ts` around line 395 — read that call site first to see the exact request shape (`offerId`, `sku`, `listingId`, `newTitle`, `newDescription`) before wiring the new editor UI to it, and call it the same way.
 
-1. GET current inventory item state before PUT (merge pattern)
-2. GET current offer state before PUT (merge pattern)
-3. Category validation before PUT
+`ebay-edit-listing` (this new function) only needs to handle what `ebay-reprice` does not already do:
+
+1. GET current inventory item state before PUT (merge pattern) — for condition, conditionDescription, aspects, quantity
+2. GET current offer state before PUT (merge pattern) — for price, categoryId, bestOfferTerms
+3. Category validation before PUT (when categoryId changes)
 4. Category aspect re-fetch when category changes
 5. COGS write-back to `listing_cogs`
 6. Audit logging to `listing_edits_log`
 7. Draft sync back to `drafts` table
 
-This complexity warrants its own function.
+When the editor UI's "Save" button is clicked and both title/description AND other fields (price, condition, etc.) changed, the frontend hook (`useListingEditor.ts`) makes two calls: one to `ebay-reprice` (`action: "update_content"`) for title/description, and one to `ebay-edit-listing` (`action: "save_changes"`) for everything else. Do not try to merge these into a single call — they are two separate functions.
 
 ### Actions
 
@@ -181,7 +169,7 @@ Fetches all current data needed to populate the editor form.
 
 #### Action: `save_changes`
 
-Applies changes to the live eBay listing.
+Applies changes to the live eBay listing. **Does not accept `title` or `description`** — those go through the existing `ebay-reprice` `update_content` action instead (see Part 3 scope note above). If the editor UI's dirty-fields set includes title or description, the frontend hook calls `ebay-reprice` separately for those before or after calling this action.
 
 **Input:**
 
@@ -193,8 +181,6 @@ Applies changes to the live eBay listing.
   "listingId": null,
   "userId": "uuid",
   "changes": {
-    "title": "Updated Title",
-    "description": "Updated description",
     "price": 44.99,
     "quantity": 1,
     "condition": "USED_EXCELLENT",
@@ -218,7 +204,7 @@ Applies changes to the live eBay listing.
 ```json
 {
   "success": true,
-  "updatedFields": ["title", "price", "itemSpecifics"],
+  "updatedFields": ["price", "itemSpecifics"],
   "errors": [],
   "auditLogId": "uuid"
 }
@@ -240,21 +226,24 @@ INVENTORY API PATH:
      - Fetch new aspects for new category
      - Warn if required aspects are now missing
 
-  d. Merge item changes (title, condition, conditionDescription, aspects, quantity):
+  d. Merge item changes (condition, conditionDescription, aspects, quantity):
      - Deep merge: keep all existing aspects, overlay user's changes
      → PUT /sell/inventory/v1/inventory_item/{sku}
 
-  e. Merge offer changes (price, description, categoryId, bestOfferTerms):
+  e. Merge offer changes (price, categoryId, bestOfferTerms):
      - Keep existing offer fields, overlay user's changes
      → PUT /sell/inventory/v1/offer/{offerId}
 
 LEGACY TRADING API PATH:
   → ReviseFixedPriceItem XML with only changed fields
-     (title, description, price, quantity, condition, ItemSpecifics, category)
+     (price, quantity, condition, ItemSpecifics, category)
 
 4. Update drafts table (match by ebay_sku or ebay_listing_id):
-   UPDATE drafts SET title=?, description=?, listing_price=?,
-   item_specifics=?, ebay_category_id=? WHERE ebay_sku=?
+   UPDATE drafts SET listing_price=?, item_specifics=?, ebay_category_id=?
+   WHERE ebay_sku=?
+   (title/description are updated separately by the ebay-reprice call — do
+   not overwrite them here unless this action also received a fresher value
+   for some other reason)
 
 5. Upsert listing_cogs (if cogsUpdate provided)
 
@@ -628,13 +617,13 @@ Include image editing as a dedicated Phase 2 feature with a proper image managem
 
 ## Part 11: Implementation Sequence
 
-### Sprint 1 — Backend (2-3 days)
+### Sprint 1 — Backend (2 days — shorter than the original 2-3 days because the `reprice_rules` migration and the title/description update logic are no longer needed, see correction notice at the top of this file)
 
-1. Create `reprice_rules` migration (fix existing production gap)
+1. ~~Create `reprice_rules` migration~~ — SKIP. Confirmed already exists (see correction notice). Do not do this step.
 2. Create `listing_edits_log` migration
 3. Build `ebay-edit-listing` function → `get_listing_details` action
-4. Build `ebay-edit-listing` function → `save_changes` action (Inventory API path)
-5. Add Legacy Trading API path (`ReviseFixedPriceItem` for title/desc/aspects/category)
+4. Build `ebay-edit-listing` function → `save_changes` action (Inventory API path) — price/quantity/condition/aspects/category/bestOffer only, not title/description
+5. Add Legacy Trading API path (`ReviseFixedPriceItem` for price/quantity/condition/aspects/category — not title/description, that goes through `ebay-reprice`'s existing `update_content` action)
 6. Add COGS write-back and audit logging
 
 ### Sprint 2 — Frontend Modal (3-4 days)
@@ -669,20 +658,20 @@ Include image editing as a dedicated Phase 2 feature with a proper image managem
 
 ## Part 12: Effort Summary
 
-| Component                           | Effort      | Priority                        |
-| ----------------------------------- | ----------- | ------------------------------- |
-| `reprice_rules` migration (fix gap) | 0.5 day     | P0 — blocking existing features |
-| `listing_edits_log` migration       | 0.5 day     | P0                              |
-| `ebay-edit-listing` edge function   | 2.5 days    | P0                              |
-| `useListingEditor` hook             | 1 day       | P0                              |
-| `ListingEditorModal` UI             | 3 days      | P0                              |
-| Dashboard integration               | 1 day       | P0                              |
-| PricingInsightsTable edit button    | 0.5 day     | P0                              |
-| History tab                         | 0.5 day     | P1                              |
-| Image management                    | 2 days      | P2                              |
-| SEO title suggestions (Gemini)      | 1 day       | P2                              |
-| **Total Phase 1 (P0)**              | **~9 days** |                                 |
-| **Total Phase 2 (P1 + P2)**         | **~4 days** |                                 |
+| Component                                                                                                                          | Effort      | Priority |
+| ---------------------------------------------------------------------------------------------------------------------------------- | ----------- | -------- |
+| ~~`reprice_rules` migration~~ — SKIP, already exists (see correction notice)                                                       | 0 days      | —        |
+| `listing_edits_log` migration                                                                                                      | 0.5 day     | P0       |
+| `ebay-edit-listing` edge function (price/quantity/condition/aspects/category/COGS/audit-log only, no title/description)            | 2 days      | P0       |
+| `useListingEditor` hook (calls `ebay-edit-listing` for most fields, calls `ebay-reprice`'s `update_content` for title/description) | 1 day       | P0       |
+| `ListingEditorModal` UI                                                                                                            | 3 days      | P0       |
+| Dashboard integration                                                                                                              | 1 day       | P0       |
+| PricingInsightsTable edit button                                                                                                   | 0.5 day     | P0       |
+| History tab                                                                                                                        | 0.5 day     | P1       |
+| Image management                                                                                                                   | 2 days      | P2       |
+| SEO title suggestions (Gemini)                                                                                                     | 1 day       | P2       |
+| **Total Phase 1 (P0)**                                                                                                             | **~8 days** |          |
+| **Total Phase 2 (P1 + P2)**                                                                                                        | **~4 days** |          |
 
 ---
 

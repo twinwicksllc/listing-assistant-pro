@@ -8,11 +8,11 @@ export const EBAY_OAUTH_SCOPES = [
   "https://api.ebay.com/oauth/api_scope/sell.inventory", // Sell inventory (required for listings + video uploads)
   "https://api.ebay.com/oauth/api_scope/sell.account", // Account access (required)
   "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly", // Fulfillment (optional)
+  "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly", // Identity API (username lookup — required for free-tier one-account rule)
   // Uncomment the scopes below after confirming they are registered for your app:
   // "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly", // Dashboard analytics
   // "https://api.ebay.com/oauth/api_scope/sell.finances", // Financial data (shipping labels, etc)
   // "https://api.ebay.com/oauth/api_scope/sell.marketing", // eBay marketing
-  // "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly", // Identity API (username lookup)
 ];
 
 // Video upload constants
