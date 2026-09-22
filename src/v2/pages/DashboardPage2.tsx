@@ -46,10 +46,11 @@ import {
   ShieldAlert,
   BadgeCheck,
   CircleDollarSign,
+  Pencil,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDrafts } from "@/hooks/useDrafts";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import AppShell from "@/v2/components/AppShell";
@@ -66,6 +67,8 @@ import ListingDetailModal, {
 } from "@/v2/components/ListingDetailModal";
 import OptimizationModal from "@/components/OptimizationModal";
 import { CategoryHeatMap } from "@/v2/components/CategoryHeatMap";
+import ListingEditorModal from "@/v2/components/ListingEditorModal";
+import type { EditorListingRef } from "@/hooks/useListingEditor";
 
 // ─── Constants ────────────────────────────────────────────────────────
 
@@ -394,6 +397,7 @@ function TrendBadge({ listing }: { listing: EbayListing }) {
 export default function DashboardPage2() {
   const { user, currentPlan, planFeatures } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { drafts } = useDrafts();
 
   const [listings, setListings] = useState<EbayListing[]>([]);
@@ -429,6 +433,9 @@ export default function DashboardPage2() {
     null,
   );
   const [optimizeListing, setOptimizeListing] = useState<any | null>(null);
+  const [editingListing, setEditingListing] = useState<EditorListingRef | null>(
+    null,
+  );
 
   // Bulk select
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -684,6 +691,42 @@ export default function DashboardPage2() {
   useEffect(() => {
     fetchListings();
   }, [fetchListings]);
+
+  // Deep-link support: ?edit=<listingId|offerId|sku> opens the editor
+  // for the matching listing once it's loaded.
+  useEffect(() => {
+    const editId = searchParams.get("edit");
+    if (!editId || listings.length === 0) return;
+    const match = listings.find((l) => listingKey(l) === editId);
+    if (match) {
+      setEditingListing({
+        offerId: match.offerId,
+        sku: match.sku,
+        listingId: match.listingId,
+        title: match.title,
+        description: match.description ?? "",
+      });
+    }
+  }, [searchParams, listings]);
+
+  const openEditor = useCallback((listing: EbayListing) => {
+    setEditingListing({
+      offerId: listing.offerId,
+      sku: listing.sku,
+      listingId: listing.listingId,
+      title: listing.title,
+      description: listing.description ?? "",
+    });
+  }, []);
+
+  const closeEditor = useCallback(() => {
+    setEditingListing(null);
+    if (searchParams.has("edit")) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("edit");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   // ─── Filter + sort ────────────────────────────────────────────────
 
@@ -2043,6 +2086,22 @@ export default function DashboardPage2() {
                                 >
                                   {listing.title}
                                 </button>
+                                <button
+                                  onClick={() => openEditor(listing)}
+                                  style={{
+                                    background: "none",
+                                    border: "none",
+                                    padding: "0.2rem",
+                                    cursor: "pointer",
+                                    color: "#9BA3AD",
+                                    flexShrink: 0,
+                                    display: "flex",
+                                    alignItems: "center",
+                                  }}
+                                  title="Edit listing"
+                                >
+                                  <Pencil size={14} />
+                                </button>
                                 <div
                                   style={{
                                     display: "flex",
@@ -2343,6 +2402,21 @@ export default function DashboardPage2() {
             ),
           );
           setOptimizeListing(null);
+        }}
+      />
+
+      {/* Listing Editor Modal — opened via pencil icon or ?edit=<id> deep link */}
+      <ListingEditorModal
+        open={!!editingListing}
+        onClose={closeEditor}
+        listing={editingListing}
+        ebayUrl={
+          listings.find((l) => l.sku === editingListing?.sku)?.ebayUrl ?? null
+        }
+        userId={user?.id}
+        userToken={ebayToken}
+        onSaved={() => {
+          fetchListings();
         }}
       />
     </AppShell>
