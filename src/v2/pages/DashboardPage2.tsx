@@ -55,6 +55,9 @@ import { toast } from "sonner";
 import AppShell from "@/v2/components/AppShell";
 import { COLORS, cardStyle, inputStyle } from "@/v2/theme";
 import { CompetitorPriceCard } from "@/components/CompetitorPriceCard";
+import { InsightFlagBadge } from "@/components/InsightFlagBadge";
+import { computeListingFlags } from "@/lib/listingInsights";
+import { findDuplicateTitles } from "@/lib/duplicateDetection";
 import ProfitBadge from "@/components/ProfitBadge";
 import { PricingInsightsTable } from "@/components/PricingInsightsTable";
 import { RepriceManagerPanel } from "@/components/RepriceManagerPanel";
@@ -117,6 +120,7 @@ interface EbayListing {
   condition?: string;
   listingDate?: string | null;
   competitor?: CompetitorPriceSnapshot | null;
+  firstSeenAt?: string | null;
 }
 
 type SortField =
@@ -630,9 +634,33 @@ export default function DashboardPage2() {
         }
       }
 
+      // Step 5b: fetch first-seen dates from the inventory cache (for staleness flags)
+      const firstSeenMap: Record<string, string> = {};
+      if (user?.id && rawListings.length > 0) {
+        try {
+          const ids = rawListings
+            .map((l) => l.listingId)
+            .filter(Boolean) as string[];
+          if (ids.length > 0) {
+            const { data: fsData, error: fsQueryErr } = await supabase
+              .from("user_active_listings")
+              .select("ebay_listing_id, first_seen_at")
+              .eq("user_id", user.id)
+              .in("ebay_listing_id", ids);
+            if (fsQueryErr) throw fsQueryErr;
+            for (const row of fsData ?? []) {
+              firstSeenMap[row.ebay_listing_id] = row.first_seen_at;
+            }
+          }
+        } catch (fsErr) {
+          console.warn("First-seen lookup non-fatal:", fsErr);
+        }
+      }
+
       const enriched = rawListings.map((l) => ({
         ...l,
         competitor: l.listingId ? (competitorMap[l.listingId] ?? null) : null,
+        firstSeenAt: l.listingId ? (firstSeenMap[l.listingId] ?? null) : null,
       }));
 
       setListings(enriched);
@@ -657,6 +685,16 @@ export default function DashboardPage2() {
   }, [fetchListings]);
 
   // ─── Filter + sort ────────────────────────────────────────────────
+
+  const duplicateMap = useMemo(
+    () =>
+      findDuplicateTitles(
+        listings
+          .filter((l) => l.listingId)
+          .map((l) => ({ id: l.listingId as string, title: l.title })),
+      ),
+    [listings],
+  );
 
   const filteredListings = useMemo(() => {
     let r = listings;
@@ -2184,6 +2222,33 @@ export default function DashboardPage2() {
                                   </span>
                                 )}
                               </div>
+
+                              {/* ── Smart Insights flags ── */}
+                              {listing.listingId && (
+                                <InsightFlagBadge
+                                  flags={computeListingFlags(
+                                    {
+                                      id: listing.listingId,
+                                      title: listing.title,
+                                      priceDelta:
+                                        listing.competitor?.priceDelta ?? null,
+                                      avgPrice:
+                                        listing.competitor?.avgPrice ?? null,
+                                      competitorCount:
+                                        listing.competitor?.competitorCount ??
+                                        0,
+                                      firstSeenAt: listing.firstSeenAt,
+                                    },
+                                    listings
+                                      .filter((l) => l.listingId)
+                                      .map((l) => ({
+                                        id: l.listingId as string,
+                                        title: l.title,
+                                      })),
+                                    duplicateMap,
+                                  )}
+                                />
+                              )}
 
                               {/* ── Competitor Price Card ── */}
                               {listing.listingId && (
