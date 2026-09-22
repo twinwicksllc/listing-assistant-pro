@@ -1,8 +1,33 @@
 # Free Tier Gating — Complete Implementation Plan
 
-**Branch:** `pr/category-verify-a8c2406`  
-**Date drafted:** 2026-03-18  
+**Branch:** `pr/category-verify-a8c2406`
+**Date drafted:** 2026-03-18
 **Scope:** Enforce a gated free AI tier (all fields needed to publish to eBay; pricing/melt/competitor data/grading rationale locked to paid; eBay account required; 6 analyses/month **per org** with rolling-window reset) and keep paid tiers (Pro, Unlimited) unrestricted beyond existing limits.
+
+> **Correction notice (2026-09-21): this feature is already ~85% built and shipped (commits `d34dcf4`, `8e65849`), not "ready to begin" as the closing line of this doc says.** Almost everything in the §7 checklist below is done. There are only **two real, unfinished gaps.** Do not redo work that is already done — before starting any task below, check `git log --oneline --all | grep -i "free.tier\|free_tier"` and read the two files named in Gap 1 and Gap 2 below to confirm current state, then only do the steps under those two gaps.
+>
+> **Gap 1 — the database trigger that should set `organizations.free_tier_reset_day` was never updated.**
+> Read `supabase/migrations/20260309130000_ensure_new_user_owner_org.sql` — this is the current live definition of the `handle_new_user()` Postgres function (it runs automatically every time a new user signs up). Search that file for the text `free_tier_reset_day`. It will not be found — the function creates a profile and an organization for the new user, but never sets `organizations.free_tier_reset_day`. This means every new org has `free_tier_reset_day = NULL`, which breaks the rolling-window quota calculation this whole plan depends on.
+> **Fix (do exactly this, do not edit the existing migration file):**
+>
+> 1. Create a **new** migration file (do not modify `20260309130000_ensure_new_user_owner_org.sql` — this repo's rule, stated in `CLAUDE.md`, is to never edit an already-applied migration, only add a new one that supersedes it).
+> 2. Name the new file with today's date prefix, e.g. `supabase/migrations/20260921000000_set_free_tier_reset_day_on_signup.sql`.
+> 3. In that new file, write a `CREATE OR REPLACE FUNCTION public.handle_new_user()` statement that is an exact copy of the function body in `20260309130000_ensure_new_user_owner_org.sql`, with one addition: in the `ELSE` branch (the "New independent user: create their own personal org" branch), immediately after the `INSERT INTO public.organizations (...) RETURNING id INTO new_org_id;` statement, add a new statement: `UPDATE public.organizations SET free_tier_reset_day = EXTRACT(DAY FROM NOW())::SMALLINT WHERE id = new_org_id;`
+> 4. Do not add a `DROP TRIGGER`/`CREATE TRIGGER` block — `CREATE OR REPLACE FUNCTION` alone is enough since the trigger already points at this function name.
+> 5. Run `supabase db push` (or whatever this repo's normal migration-apply command is — check `CLAUDE.md`'s Commands section) to apply it.
+>
+> **Gap 2 — the `commerce.identity.readonly` OAuth scope is still commented out, so eBay username lookups needed for the one-account rule don't work reliably.**
+> Read `supabase/functions/ebay-publish/constants.ts` around line 15. You will find a line that looks like:
+> `// "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly", // Identity API (username lookup)`
+> It is commented out (starts with `//`).
+> **Fix — follow this exact order, do not skip or reorder steps:**
+>
+> 1. First, tell the user this scope needs to be registered on developer.ebay.com before any code change will work — do this yourself only if the user has already confirmed it's registered; otherwise stop here and ask.
+> 2. Once registration is confirmed: in `supabase/functions/ebay-publish/constants.ts`, remove the `//` at the start of that line so the scope string is active in the `EBAY_OAUTH_SCOPES` array. Do not change the scope string text itself, only remove the comment marker.
+> 3. Commit this change and open a PR per this repo's normal branch+PR workflow (see `CLAUDE.md` "Working agreements" — never push directly to `main`).
+> 4. After the PR is merged and deployed, tell the user they now need to disconnect and reconnect their eBay account for the new scope to take effect on their existing token (a code change alone does not retroactively add a scope to an already-issued token).
+>
+> Everything else in the checklist below (§7) is already implemented — do not rebuild it. If you want to verify a specific item, the evidence is: `analyze-item` enforces the eBay-account gate and rolling-window count and the field allowlist; `ebay-publish/auth.ts` enforces the one-account rule on `exchange_code`; `supabase/functions/get-free-credits/index.ts` and `supabase/functions/disconnect-ebay/index.ts` both exist; `src/contexts/AuthContext.tsx` has `freeCredits`/`ebayConnected`/`ebayUsername` state and `refreshFreeCredits()`.
 
 ---
 
@@ -1042,148 +1067,49 @@ REVOKE UPDATE (free_tier_reset_day)
 
 - [ ] **Migration:** `20260318100000_free_tier_tracking.sql`
   - [ ] Add `profiles.ebay_username TEXT`
-  - [ ] Add `profiles.ebay_account_type TEXT CHECK (...)`
-  - [ ] Add `organizations.free_tier_reset_day SMALLINT CHECK (1..31)` (OQ-2 RESOLVED: set by trigger at org/account creation, NOT by `analyze-item`)
-  - [ ] Add `usage_tracking.org_id TEXT REFERENCES organizations(id)` + index `idx_usage_tracking_org_action_ts` (OQ-4 RESOLVED: per-org quota)
-  - [ ] Backfill `usage_tracking.org_id` from `organization_members` for existing rows
-  - [ ] Update `handle_new_user` Postgres trigger to set `organizations.free_tier_reset_day = EXTRACT(DAY FROM NOW())::SMALLINT` on org INSERT
-  - [ ] Create `get_free_tier_window_start(SMALLINT)` PL/pgSQL function — **use `INTERVAL '1 month' - INTERVAL '1 day'` not the invalid `INTERVAL '1 month - 1 day'`**
-  - [ ] `REVOKE UPDATE (free_tier_reset_day)` on `public.organizations` from `authenticated` role (see §5.5 — not profiles; `ebay_username`/`ebay_account_type` are handled via `disconnect-ebay` edge function)
-  - [ ] Add `subscriptions` table RLS SELECT policy (see §2.4 — OQ-11: unrestricted RLS warning)
-- [ ] **Regenerate `src/integrations/supabase/types.ts`** after applying migration
-- [ ] **Update `PLANS.starter`** in `AuthContext.tsx`: `analysisLimit` 5 → 6, `publishLimit` 3 → 6 (OQ-10 RESOLVED)
-- [ ] Verify `usage_tracking` index on `(user_id, action_type, created_at)` exists (already present per migration audit)
+  - [x] Add `profiles.ebay_account_type TEXT CHECK (...)` — DONE, shipped
+  - [x] Add `organizations.free_tier_reset_day SMALLINT CHECK (1..31)` — DONE, column exists, shipped
+  - [x] Add `usage_tracking.org_id TEXT REFERENCES organizations(id)` + index — DONE, shipped
+  - [x] Backfill `usage_tracking.org_id` from `organization_members` for existing rows — DONE, shipped
+  - [ ] **NOT DONE — this is Gap 1 from the correction notice at the top of this file.** Update `handle_new_user` Postgres trigger to set `organizations.free_tier_reset_day`. Follow the exact steps in the correction notice (new migration file, do not edit the existing one).
+  - [x] Create `get_free_tier_window_start(SMALLINT)` PL/pgSQL function — DONE, shipped
+  - [x] `REVOKE UPDATE (free_tier_reset_day)` on `public.organizations` — DONE, shipped
+  - [x] Add `subscriptions` table RLS SELECT policy — DONE, shipped
+- [x] Regenerate `src/integrations/supabase/types.ts` — DONE
+- [x] Update `PLANS.starter` in `AuthContext.tsx`: `analysisLimit`/`publishLimit` to 6 — DONE
+- [x] Verify `usage_tracking` index exists — DONE
 
 ### Phase 2 — Edge functions
 
-#### Pre-coding (resolve before any Phase 2 work)
+**All items in this phase are DONE and shipped except one, marked below.**
 
-- [ ] **Add `commerce.identity.readonly` OAuth scope** to `get_auth_url` in `ebay-publish` (§3.0.1 — OQ-5 RESOLVED: Option B hard reset selected; see Phase 6 for token-clear step)
-- [ ] **Remove `recordUsage('ai_analysis')` at ~line 151 of `AnalyzePage.tsx`** (OQ-12 RESOLVED: confirmed double-count; `analyze-item` is the sole insertion point)
-- [x] ~~**Verify `subscriptions` table** exists in production DB~~ — **DONE: Confirmed present; unrestricted RLS warning noted (§2.4 / OQ-11)**
-- [ ] **Refactor tier detection in `analyze-item`** to use cached Stripe data instead of two live Stripe calls per invocation (§3.0.3)
-- [x] ~~**Test `ebay-user` in production** with a live token~~ — **DONE: Confirmed working (OQ-15)**
-
-#### `analyze-item`
-
-- [ ] Add eBay account gate for Starter users (403 `ebay_account_required`)
-- [ ] Resolve org for per-org quota (lookup `organization_members` by `user_id` to get `org_id` + `free_tier_reset_day`) (OQ-4 RESOLVED)
-- [ ] Replace calendar-month usage count with `get_free_tier_window_start` RPC call; count via `org_id` for Starter (OQ-4)
-- [ ] Update Starter limit constant: 5 → 6
-- [ ] ~~Set `free_tier_reset_day` on first analysis~~ — **REMOVED: set by `handle_new_user` trigger at account creation (OQ-2 RESOLVED)**
-- [ ] Use **allowlist** (not denylist) to restrict Starter response fields (§3.1.4)
-- [ ] Add `_meta` block (`tier`, `creditsUsed`, `creditsRemaining`, `creditsResetAt`) to all responses
-- [ ] Implement `computeNextResetAt()` helper with last-day clamping
-- [ ] Accept race condition for double-spend (no advisory lock — §5.3 Option B)
-- [ ] Return `429` with credit metadata on exhaustion
-
-#### `ebay-publish` (`exchange_code` action only — NOT token refresh)
-
-- [ ] **Prerequisite:** `commerce.identity.readonly` scope added to `get_auth_url` (pre-coding item above)
-- [ ] In `exchange_code` action only (guard with `if (action === 'exchange_code')`): call eBay Identity API for username + accountType
-- [ ] Enforce one-account rule before writing token (409 `account_already_linked`)
-- [ ] Persist `ebay_username` + `ebay_account_type` to `profiles` via service role
-- [ ] Include `ebayUsername` + `ebayAccountType` in `get_stored_token` response
-- [ ] Verify token **refresh** path does NOT call Identity API or overwrite `ebay_username`
-
-#### New: `get-free-credits`
-
-- [x] ~~**Prerequisite:** Confirm `subscriptions` table existence~~ — **DONE (OQ-11 RESOLVED)**
-- [ ] Create `supabase/functions/get-free-credits/index.ts`
-- [ ] Auth → tier detection (query `subscriptions` table — confirmed present; fix unrestricted RLS first per §2.4)
-- [ ] **MUST filter `usage_tracking` by `org_id` for Starter users** (OQ-4 RESOLVED: per-org quota); still filter by `user_id` for non-org edge cases
-- [ ] (**Service role bypasses RLS — never copy client-side query pattern**)
-- [ ] Return credit metadata + `ebayConnected` + `ebayUsername`
-- [ ] Register in `supabase/config.toml`
-
-#### New: `disconnect-ebay`
-
-- [ ] Create `supabase/functions/disconnect-ebay/index.ts` (runs as service role)
-- [ ] Auth → extract userId from JWT
-- [ ] Clear: `ebay_access_token`, `ebay_refresh_token`, `ebay_token_expires_at`, `ebay_username`, `ebay_account_type`
-- [ ] Return `{ success: true }`
-- [ ] Register in `supabase/config.toml`
-
-#### `ebay-user`
-
-- [ ] Confirmed: already calls Identity API and returns `username`, `accountType`, `userId` (see §3.4)
-- [ ] Coordinate with `exchange_code` to avoid a duplicate Identity API call (§3.4)
+- [ ] **NOT DONE — this is Gap 2 from the correction notice at the top of this file.** Add `commerce.identity.readonly` OAuth scope to `EBAY_OAUTH_SCOPES` in `supabase/functions/ebay-publish/constants.ts` (currently commented out around line 15). Follow the exact order in the correction notice: confirm developer.ebay.com registration first, then uncomment, then PR, then have the user reconnect eBay.
+- [x] Remove `recordUsage('ai_analysis')` double-count in `AnalyzePage.tsx` — DONE
+- [x] Verify `subscriptions` table exists in production DB — DONE
+- [x] Refactor tier detection in `analyze-item` — DONE
+- [x] Test `ebay-user` in production with a live token — DONE
+- [x] `analyze-item`: eBay account gate, per-org rolling-window count, Starter limit 6, response field allowlist, `_meta` block, `computeNextResetAt()`, 429 on exhaustion — ALL DONE
+- [x] `ebay-publish` `exchange_code`: Identity API username lookup, one-account rule (409), persist `ebay_username`/`ebay_account_type`, refresh path untouched — ALL DONE (Identity API calls will start working reliably once Gap 2 above is fixed — the code path already exists, it just can't get the scope it needs yet)
+- [x] `supabase/functions/get-free-credits/index.ts` — DONE, exists and registered
+- [x] `supabase/functions/disconnect-ebay/index.ts` — DONE, exists and registered
+- [x] `ebay-user` Identity API coordination — DONE
 
 ### Phase 3 — `AuthContext`
 
-- [ ] Add `freeCredits: FreeCredits | null` state
-- [ ] Add `ebayConnected: boolean` state
-- [ ] Add `ebayUsername: string | null` state
-- [ ] Implement `refreshFreeCredits()` calling `get-free-credits`
-- [ ] Update `canAnalyze` to require `ebayConnected && freeCredits.remaining > 0` for Starter
-- [ ] Update `canPublish` to require `ebayConnected && publishUsed < 6` for Starter (OQ-10 RESOLVED); update `PLANS.starter.publishLimit` 3 → 6
-- [ ] Call `refreshFreeCredits()` on session load
-- [ ] Call `refreshFreeCredits()` after successful `analyze-item` response (with `recordUsage('ai_analysis')` removed per §3.0.2, trigger `refreshFreeCredits` directly from the response handler)
-- [ ] Expose all new fields in `AuthContextType` interface + context `value`
+**All DONE and shipped.** `src/contexts/AuthContext.tsx` has `freeCredits`, `ebayConnected`, `ebayUsername` state, `refreshFreeCredits()`, and updated `canAnalyze`/`canPublish` logic. No action needed here.
 
 ### Phase 4 — Front-end pages & components
 
-#### `AnalyzePage.tsx`
-
-- [ ] Pre-flight gate: navigate to Settings if no eBay connected (Starter)
-- [ ] Credit-exhaustion gate: show upgrade modal with `'credits'` reason
-- [ ] Credit counter widget below results (Starter only)
-- [ ] Lock pricing panel (blurred + upgrade CTA)
-- [ ] Lock melt value display
-- [ ] Lock spot prices display
-- [ ] Lock detailed grading rationale
-- [ ] Consume `_meta` from response → call `refreshFreeCredits()`
-
-#### `DashboardPage.tsx`
-
-- [ ] "AI Credits" summary card for Starter users
-- [ ] "Connect eBay account" alert banner if not connected (Starter)
-
-#### `SettingsPage.tsx`
-
-- [ ] Show `ebayUsername` instead of generic "Connected"
-- [ ] Show `ebayAccountType` badge for business accounts
-- [ ] Free-tier credit summary in Integrations tab
-- [ ] One-account notice for **Starter and Pro** users (OQ-3 RESOLVED: only Unlimited is exempt)
-- [ ] Update `handleDisconnectEbay()`: call `disconnect-ebay` edge function instead of direct Supabase update (§5.5 Option A)
-
-#### `BillingPage.tsx`
-
-- [ ] Update Starter limits text: 5 → 6, add eBay-required note
-- [ ] Credit usage widget (progress bar + reset date)
-- [ ] Exhaustion alert with upgrade CTA
-- [ ] Highlight Pro upgrade card when credits exhausted
-
-#### `BottomNav.tsx`
-
-- [ ] Credit badge on Analyze nav item — **always visible** for free users (OQ-9 RESOLVED: removed ≤ 2 threshold)
+**All DONE and shipped** across `AnalyzePage.tsx`, `DashboardPage.tsx`, `SettingsPage.tsx`, `BillingPage.tsx`, `BottomNav.tsx` — gates, locked premium panels, credit widgets, one-account notice, and the always-visible credit badge are all live. No action needed here.
 
 ### Phase 5 — Testing
 
-- [ ] Unit test `computeNextResetAt()` for Feb 28/29/30/31, Apr 30/31, Dec 31 inputs
-- [ ] Unit test `get_free_tier_window_start()` PL/pgSQL function (day before/after reset, end-of-month cases)
-- [ ] Integration test `analyze-item`: free user with no eBay → 403; free user with eBay + 6 used → 429; free user response lacks `priceMin`
-- [ ] Integration test `ebay-publish` `store_token`: same username accepted, different username rejected for Starter
-- [ ] E2E test: new free user → connect eBay → analyze 6 times → 7th shows upgrade prompt
-- [ ] Test race condition: two simultaneous requests as same free user may both succeed at the limit boundary (≤1 over-count is accepted per §5.3 Option B); document the accepted behavior
+- [ ] Still worth adding, not blocking: unit test `computeNextResetAt()` for Feb 28/29/30/31, Apr 30/31, Dec 31 inputs
+- [ ] Still worth adding, not blocking: unit test `get_free_tier_window_start()` PL/pgSQL function
 
 ### Phase 6 — Deployment
 
-- [ ] Apply migration to staging; run `supabase gen types typescript` and commit updated `types.ts`
-- [ ] Deploy edge functions: `analyze-item`, `ebay-publish`, `get-free-credits`, `ebay-user`
-- [ ] Smoke test on staging with a free test account
-- [ ] Apply migration to production
-- [ ] **OQ-5 RESOLVED — Option B (hard reset):** Immediately after applying migration to production, run:
-  ```sql
-  UPDATE public.profiles
-  SET ebay_access_token    = NULL,
-      ebay_refresh_token   = NULL,
-      ebay_token_expires_at = NULL
-  WHERE ebay_access_token IS NOT NULL;
-  ```
-  Every previously connected user will be prompted to reconnect eBay on their next eBay-dependent action. This is required to obtain a token with the new `commerce.identity.readonly` scope. Coordinate with the `get_auth_url` scope update deployment.
-- [ ] Deploy to production; roll back `analyze-item` to previous version if 5xx spike detected
-- [ ] Monitor `gemini_usage` table for unexpected cost increase
+**Already deployed.** The hard-reset token-clear step (nulling `ebay_access_token`/`ebay_refresh_token`/`ebay_token_expires_at`) described in the original plan was a one-time step tied to Gap 2 above — when Gap 2 is finally fixed and the scope goes live, the user will need to reconnect their own eBay account (this is a per-account manual action for the user to do themselves, not a bulk DB operation to run now).
 
 ---
 
@@ -1211,4 +1137,4 @@ All 15 open questions have been answered by the product owner. No open questions
 
 ---
 
-_End of document. All open questions resolved. Implementation ready to begin. Start with Phase 1 (migration) → Phase 2 pre-coding items (`commerce.identity.readonly` scope addition, `recordUsage` double-count removal, tier detection refactor) → Phase 2 edge functions → Phase 3 AuthContext → Phase 4 UI → Phase 5 tests → Phase 6 deployment (include token-clear step for OQ-5 Option B re-auth)._
+_End of document. **Corrected 2026-09-21: this was already implemented (commits `d34dcf4`, `8e65849`) — this line used to say "ready to begin," which was wrong.** The only work still open is the two gaps described in the correction notice at the top of this file: (1) wire `free_tier_reset_day` into the live signup trigger via a new migration, (2) uncomment the `commerce.identity.readonly` scope in `ebay-publish/constants.ts` after developer.ebay.com registration is confirmed, then have the user reconnect eBay. Do not restart Phase 1 through Phase 6 below — they describe the already-completed build, kept for historical reference._

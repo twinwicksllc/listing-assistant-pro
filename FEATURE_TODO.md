@@ -127,157 +127,13 @@
 
 > **Branch:** `feature/market-research-tools` · **Complexity:** High · **Plans:** Pro (limited) + Shop (full)
 
-### 📦 Database
+> **✅ Verified shipped (2026-09-21):** this feature is built and live, not "0% started" as this checklist's original form claimed. Evidence: PR #167 landed the original build; `20260323000000_add_market_watches.sql` creates full `market_watches` + `market_price_history` schema with RLS; `supabase/functions/market-watch-refresh/` and `supabase/functions/keyword-research/` both exist (`keyword-research` was later switched from the deprecated Finding API to Browse API); `src/v2/components/MarketWatchCard.tsx`, `PriceHistogram.tsx`, `PriceTrendChart.tsx`, `SellThroughMeter.tsx` all exist; `src/v2/pages/MarketResearchPage2.tsx` is routed and live (the v1 `src/pages/MarketResearchPage.tsx` is superseded and archived under `src/v2/pages/_archive/`). PR #578 added a daily auto-refresh cron for `market_watches` and capped manual refresh at 6/day (`20260916020000_schedule_market_watch_refresh_daily.sql`, `20260916010000_add_market_watch_refresh_cursor_rpc.sql`). **Gap found:** no `CategoryHeatMap` component was ever built — the Dashboard-widget heat-map tile from the original plan is the one genuinely missing piece; everything else in this checklist (edge functions, cron, watch/trend/sell-through components, saved-watches page, keyword search) is done.
 
-- [ ] Migration: create `market_watches` table (id, user_id, org_id, query, category_id, label, prices, counts, sell_through_rate, last_checked_at)
-- [ ] Migration: create `market_price_history` table (id, watch_id, sampled_at, avg/min/max price, counts)
-- [ ] Run `supabase db push`
+### Remaining work
 
-### ⚡ Edge Functions
-
-- [ ] Create `supabase/functions/market-watch-refresh/index.ts`
-  - [ ] Call eBay `findItemsAdvanced` — active listing count + price range
-  - [ ] Call eBay `findCompletedItems` — sold count + avg sold price
-  - [ ] Compute `sell_through_rate = sold / (sold + active) * 100`
-  - [ ] Update `market_watches` row
-  - [ ] Insert `market_price_history` row
-  - [ ] Return full market snapshot
-- [ ] Create `supabase/functions/market-watch-cron/index.ts`
-  - [ ] Query watches not refreshed in 24h
-  - [ ] Call `market-watch-refresh` for each (max 50/run)
-  - [ ] Register cron in `supabase/config.toml`
-- [ ] Create `supabase/functions/keyword-research/index.ts`
-  - [ ] Accept `{ query, categoryId? }`
-  - [ ] Call both eBay Finding APIs
-  - [ ] 4-hour result cache in Supabase
-  - [ ] Return `{ activeCount, soldCount, sellThroughRate, avgSoldPrice, priceRange, topSellers }`
-
-### 🧩 Components
-
-- [ ] Create `src/components/MarketWatchCard.tsx` — watch card with prices, trend arrow, refresh/delete buttons
-- [ ] Create `src/components/PriceTrendChart.tsx` — Recharts `LineChart` (avg/min/max lines, responsive)
-- [ ] Create `src/components/SellThroughMeter.tsx` — circular progress gauge (green/yellow/red)
-- [ ] Create `src/components/CategoryHeatMap.tsx` — category grid tiles for Dashboard widget
-
-### 📄 New Page
-
-- [ ] Create `src/pages/MarketResearchPage.tsx`
-  - [ ] Keyword search bar at top
-  - [ ] `KeywordResearchResults` card (active/sold counts, sell-through %, avg price)
-  - [ ] Saved watches list with `MarketWatchCard` per entry
-  - [ ] `PriceTrendChart` section (shows on watch selection)
-  - [ ] Competitor spotlight panel (top 3 active listings for query)
-  - [ ] "Add to watches" / "Remove watch" toggle button
-- [ ] Register `/market` route in `src/App.tsx` (ProtectedRoute, ownerOnly)
-
-### 🧭 Navigation
-
-- [ ] `src/components/BottomNav.tsx` — add "Market" tab, `TrendingUp` icon, show for Pro/Shop ownerOnly
-
-### 📊 Dashboard Integration
-
-- [ ] `src/pages/DashboardPage.tsx` — add `CategoryHeatMap` widget below listings table
-
-### 🔒 Plan Gating
-
-- [ ] Gate keyword research (save to watch) behind Pro+
-- [ ] Gate price history chart + cron refresh behind Shop
-- [ ] Gate > 5 saved watches behind Shop
-
-### ✅ Testing & Deploy
-
-- [ ] Test `market-watch-refresh` with real eBay token + "Morgan Dollar" query
-- [ ] Test cron function processes correct watches
-- [ ] Test `PriceTrendChart` renders with 0 history points (empty state)
-- [ ] Test `SellThroughMeter` at 0%, 50%, 100%
-- [ ] `npm run build` — verify zero TypeScript errors
-- [ ] Git: `git checkout -b feature/market-research-tools`
-- [ ] Git: commit + push branch
-- [ ] GitHub: open PR, review, merge to main
-- [ ] Verify: GitHub Actions deploy completes successfully
-
----
-
----
-
-## ⚡ Feature #6 — Auto-Optimization
-
-> **Branch:** `feature/auto-optimization` · **Complexity:** High · **Plans:** Pro (view+price) + Shop (full AI)
-
-### 📦 Database
-
-- [ ] Migration: create `relist_history` table (id, user_id, original/new listing_id, original/new price, reason, relisted_at)
-- [ ] Migration: create `reprice_rules` table (id, user_id, rule_type, rule_value, floor_price, apply_to, is_active, last_run_at)
-- [ ] Migration: create `optimization_suggestions` table (id, user_id, listing_id, suggestion_type, current_value, suggested_value, reason, priority, is_dismissed, is_applied)
-- [ ] Run `supabase db push`
-
-### ⚡ Edge Functions
-
-- [ ] Create `supabase/functions/ebay-relist/index.ts`
-  - [ ] Accept `{ userToken, listingId, newPrice?, reason }`
-  - [ ] End current eBay listing via Inventory API
-  - [ ] Create new offer + publish
-  - [ ] Insert row in `relist_history`
-  - [ ] Return `{ success, newListingId, newOfferId }`
-- [ ] Create `supabase/functions/bulk-reprice/index.ts`
-  - [ ] Accept `{ userToken, items: [{ sku, newPrice }] }`
-  - [ ] Batch `updateOffer` calls (eBay Inventory API)
-  - [ ] Return per-item `{ sku, success, error? }[]`
-- [ ] Create `supabase/functions/title-optimizer/index.ts`
-  - [ ] Accept `{ title, categoryId, competitorTitles }`
-  - [ ] Call GPT-4o with keyword extraction prompt
-  - [ ] Cache results by `sha256(title + categoryId)` for 24h
-  - [ ] Return `{ optimizedTitle, keywordsAdded, keywordsRemoved, explanation }`
-- [ ] Create `supabase/functions/image-scorer/index.ts`
-  - [ ] Accept `{ imageUrl }`
-  - [ ] Call GPT-4o Vision with scoring rubric
-  - [ ] Return `{ overallScore: 1-5, breakdown: {...}, suggestions: string[] }`
-
-### 🧩 Components
-
-- [ ] Create `src/components/ActionQueueCard.tsx` — suggestion row with Apply/Dismiss/Preview buttons
-- [ ] Create `src/components/TitleOptimizerModal.tsx` — side-by-side diff, Accept/Edit/Reject actions
-- [ ] Create `src/components/ImageScoreCard.tsx` — star rating, dimension breakdown bars, suggestions
-- [ ] Create `src/components/RepriceRuleBuilder.tsx` — rule type dropdown, %, floor price, scope selector
-
-### 📄 New Page
-
-- [ ] Create `src/pages/OptimizationPage.tsx`
-  - [ ] Summary stats row (price suggestions, relist candidates, title fixes, image issues)
-  - [ ] Priority-sorted suggestion table with `ActionQueueCard` rows
-  - [ ] "Apply All Price Suggestions" + "Dismiss All Info" bulk action buttons
-  - [ ] Reprice rules configuration section with `RepriceRuleBuilder`
-  - [ ] Auto-relist settings (age threshold, price delta)
-- [ ] Register `/optimize` route in `src/App.tsx` (ProtectedRoute, ownerOnly)
-
-### 🧭 Navigation
-
-- [ ] `src/components/BottomNav.tsx` — add "Optimize" tab, `Zap` icon, Shop only, ownerOnly
-
-### 📊 Dashboard Integration
-
-- [ ] `src/pages/DashboardPage.tsx` — add "⚡ Optimize" button on each listing row
-  - [ ] On click: navigate to `/optimize?listing=<id>`
-
-### 🔒 Plan Gating
-
-- [ ] Gate suggestion view (read only) behind Pro+
-- [ ] Gate apply reprice + relist behind Pro+
-- [ ] Gate title optimizer + image scorer behind Shop only
-- [ ] Gate auto-relist cron behind Shop only
-
-### ✅ Testing & Deploy
-
-- [ ] Test `ebay-relist` with a real ended/stale listing
-- [ ] Test `title-optimizer` with "1921 Morgan Silver Dollar" + 3 competitor titles
-- [ ] Test `image-scorer` with a real listing image URL
-- [ ] Test `bulk-reprice` with 3 SKUs in dry-run mode
-- [ ] Test suggestion queue populates correctly from health score data (Feature #4)
-- [ ] `npm run build` — verify zero TypeScript errors
-- [ ] Git: `git checkout -b feature/auto-optimization`
-- [ ] Git: commit + push branch
-- [ ] GitHub: open PR, review, merge to main
-- [ ] Verify: GitHub Actions deploy completes successfully
+- [ ] Create `src/v2/components/CategoryHeatMap.tsx` — a grid of category tiles, each tile showing a category name and a color (green/yellow/red) based on how many active listings exist in that category. Model the component's props and structure on the existing `src/v2/components/PriceHistogram.tsx` in the same directory — copy its file structure (props interface, then component function, then return JSX), not its chart logic.
+- [ ] Add `<CategoryHeatMap />` to `src/v2/pages/DashboardPage2.tsx`, placed directly below the existing listings table in that file. Do not add it to `MarketResearchPage2.tsx`.
+- [ ] Wrap the new `<CategoryHeatMap />` element in whatever Pro/Shop plan-check wrapper component or conditional is already used elsewhere in `DashboardPage2.tsx` for other Pro/Shop-gated widgets on that same page — search that file for the word "Pro" or "Shop" to find the existing pattern and copy it exactly, don't invent a new gating check.
 
 ---
 
@@ -405,15 +261,18 @@
 
 ## 📈 Progress Summary
 
-| Feature              | Tasks Total | Done   | Remaining |
-| -------------------- | ----------- | ------ | --------- |
-| #1 COGS True Profit  | 22          | 22\*   | 0         |
-| #4 Smart Insights    | 24          | 0\*\*  | 24        |
-| #5 Market Research   | 28          | 0      | 28        |
-| #6 Auto-Optimization | 30          | 0      | 30        |
-| #10 Bulk Generator   | 38          | 38\*   | 0         |
-| Cross-Feature        | 6           | 0      | 6         |
-| **Total**            | **148**     | **60** | **88**    |
+| Feature             | Tasks Total | Done   | Remaining |
+| ------------------- | ----------- | ------ | --------- |
+| #1 COGS True Profit | 22          | 22\*   | 0         |
+| #4 Smart Insights   | 24          | 0\*\*  | 24        |
+| #5 Market Research  | 3\*\*\*     | 0      | 3         |
+| #10 Bulk Generator  | 38          | 38\*   | 0         |
+| Cross-Feature       | 6           | 0      | 6         |
+| **Total**           | **93**      | **60** | **33**    |
+
+\*\*\* Feature #5's checklist was rewritten 2026-09-21 — the original 28-task build-from-scratch list is done and removed; only the 3 remaining `CategoryHeatMap` tasks are listed now, so this row's "Tasks Total" is not comparable to earlier snapshots of this table.
+
+**Feature #6 — Auto-Optimization removed from this document 2026-09-21** at user request. It is not built and was never started. If this work is picked up again, do it under `PROGRESSIVE_AUTONOMY_AGENT_PLAN.md` instead of re-adding a Feature #6 section here — that plan already names the same tables (`reprice_rules`, `optimization_suggestions`, `relist_history`) and functions (`bulk-reprice`, `ebay-relist`) this section used to describe, and explicitly says not to build two parallel repricing systems.
 
 \* Verified shipped 2026-09-21 (see callout in each feature's section above) — counted as fully done against this checklist even though it wasn't built task-by-task in this order. Remaining gaps are test-coverage follow-ups, not functional work.
 

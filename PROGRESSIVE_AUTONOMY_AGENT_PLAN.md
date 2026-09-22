@@ -17,13 +17,18 @@ Memory Governance.
 This isn't a green-field feature — it overlaps with things already built or
 already decided:
 
-- **`FEATURE_TODO.md` Feature #6 ("Auto-Optimization")** already plans
-  `reprice_rules`, `optimization_suggestions`, `relist_history`, and
-  `bulk-reprice`/`ebay-relist` functions. That's the same surface area as this
-  plan's pricing autonomy tier. **Don't build two parallel repricing systems** —
-  when this is picked up, reconcile against Feature #6 first; either this plan
-  supersedes it or Feature #6's tables become the "reversible action" substrate
-  this plan's approval layer sits on top of.
+- **`FEATURE_TODO.md` no longer has a Feature #6 section — it was removed on
+  2026-09-21 at the user's request, and it was never built (0 of 30 tasks
+  done).** Before this removal, that section described the same surface area
+  as this plan's pricing autonomy tier: `reprice_rules`,
+  `optimization_suggestions`, `relist_history` tables, and
+  `bulk-reprice`/`ebay-relist` functions. **This plan (Progressive Autonomy) is
+  now the only place that surface area is planned.** When this plan is picked
+  up: check first whether `reprice_rules`/`optimization_suggestions`/
+  `relist_history` migrations already exist in `supabase/migrations/` (they
+  may have been added independently of Feature #6's UI work) — if they exist,
+  reuse them as the "reversible action" substrate this plan's approval layer
+  sits on top of, rather than writing new migrations for the same tables.
 - **DEC-0017** (`REBRAND_PHASE_0_DECISION_LOG.md`) already records an owner
   decision that `auto-reprice-cron` will **not** be scheduled — unattended
   repricing alters live eBay prices, full stop. **Confirmed by the owner: this
@@ -147,7 +152,7 @@ already decided:
 
 ## Open questions to resolve before a branch is opened
 
-- Reconcile with `FEATURE_TODO.md` Feature #6 — same tables, don't duplicate.
+- Before writing new migrations, run `grep -rl "reprice_rules\|optimization_suggestions\|relist_history" supabase/migrations/` to check whether those tables already exist from other work — reuse them, don't duplicate.
 - Decide plan-tier gating (which `PLANS` tier unlocks which autonomy level) —
   scoped to the non-pricing autonomy tiers only, per the DEC-0017 boundary
   above.

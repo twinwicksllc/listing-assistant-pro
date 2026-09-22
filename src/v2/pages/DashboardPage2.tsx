@@ -65,6 +65,7 @@ import ListingDetailModal, {
   ListingDetailData,
 } from "@/v2/components/ListingDetailModal";
 import OptimizationModal from "@/components/OptimizationModal";
+import { CategoryHeatMap } from "@/v2/components/CategoryHeatMap";
 
 // ─── Constants ────────────────────────────────────────────────────────
 
@@ -2312,6 +2313,13 @@ export default function DashboardPage2() {
           ) : null}
         </div>
       </div>
+
+      {/* Category Heatmap — shows activity across categories */}
+      {listings.length > 0 && planFeatures?.marketResearch && (
+        <div style={{ ...sectionCard, marginTop: "1.5rem" }}>
+          <CategoryHeatMap listings={listings} maxTiles={12} />
+        </div>
+      )}
 
       {/* Listing Detail Modal — opened by clicking card image or title */}
       {detailListing && (
