@@ -94,19 +94,15 @@ ${zoomTargets}
 ### INSTRUCTIONS:
 1. Examine each region mentioned in the inspection goals directly in the provided images. Do not write or run code — look at the images as given.
 2. For each region, describe exactly what you see.
-3. If you find information that contradicts the initial identification, note it in 'identification_correction'.
+3. If you find information that contradicts the initial identification, note it in 'identificationCorrection'.
 4. Assess your confidence based on the clarity of your visual findings.
 
-### CRITICAL: DO NOT GUESS. REPORT "NOT_VISIBLE" INSTEAD.
+### CRITICAL: DO NOT GUESS.
 A confident-sounding answer is only correct if you can actually see and read it in a photo.
 Recognizing that an item's type/series/year SOMETIMES has a particular mark, feature, or
-variant is NOT evidence that THIS SPECIFIC item has it. If a region isn't photographed
-clearly enough to read, or nothing distinguishing is actually visible there:
-- Set that attribute's value to the literal string "NOT_VISIBLE" (not your best guess).
-- Before answering, briefly state what you actually observed in that region — the raw visual
-  evidence — then give your answer based ONLY on that observation, not on general knowledge
-  about what that type of item usually has.
-A wrong, invented answer is worse than an honest "NOT_VISIBLE".
+variant is NOT evidence that THIS SPECIFIC item has it. Every attribute you report must carry
+an honest status — do not force a value into an attribute you can't actually confirm.
+A wrong, invented answer is worse than an honest refusal to answer.
 
 You must return your findings in JSON format:
 {
@@ -115,14 +111,36 @@ You must return your findings in JSON format:
   "keyFindings": "Detailed summary of findings...",
   "confidenceBoost": 85,
   "identificationCorrection": "string or null",
-  "capturedAttributes": {
-    "Year": "1876",
-    "Mint Mark": "D",
-    "Denomination": "10C",
-    "Strike Type": "Business",
-    "Composition": "NOT_VISIBLE"
-  }
-} (Only include attributes you are ≥90% confident in, OR "NOT_VISIBLE" for a region you inspected but couldn't read. Use eBay-friendly values.)`;
+  "attributes": [
+    {
+      "attributeName": "Year",
+      "status": "CONFIRMED",
+      "value": "1876",
+      "confidence": 95,
+      "reasoning": "Clear, high-contrast numerals visible on the lower obverse."
+    },
+    {
+      "attributeName": "Mint Mark",
+      "status": "AMBIGUOUS",
+      "value": null,
+      "confidence": 40,
+      "reasoning": "A mark is present below the wreath but too blurry to distinguish between 'O' and 'S'."
+    },
+    {
+      "attributeName": "Composition",
+      "status": "NOT_VISIBLE",
+      "value": null,
+      "confidence": 0,
+      "reasoning": "No compositional markings are stamped anywhere on the visible surfaces."
+    }
+  ]
+} — "status" must be one of: "CONFIRMED" (you directly read/saw this value), "AMBIGUOUS"
+(something is visible but you can't confidently resolve it — describe what you see in
+"reasoning" rather than guessing a specific value), or "NOT_VISIBLE" (the relevant region
+either isn't photographed or shows nothing distinguishing at all). "value" must be a real,
+specific value ONLY when status is "CONFIRMED" — set it to null for "AMBIGUOUS" or
+"NOT_VISIBLE". Only include an attribute at all if you actually inspected that region; use
+eBay-friendly values.`;
 
   // Flash tier for every domain, including coins_bullion (2026-09-23): Gemini
   // guidance (asked directly about this stage's latency and hallucination
@@ -184,30 +202,31 @@ You must return your findings in JSON format:
     if (jsonMatch) {
       try {
         const parsed = JSON.parse(jsonMatch[0]);
-        // "NOT_VISIBLE" (and empty-after-trim) are the prompt's explicit
-        // escape hatch for "I inspected this region but can't confirm a
-        // value" -- dropped here rather than passed through, because every
-        // downstream consumer (domainPrompts.ts's listing-generation prompt)
-        // treats every key present in capturedAttributes as a confirmed,
-        // ground-truth value to inject verbatim. Letting the literal string
-        // "NOT_VISIBLE" reach that path would make it into a real (wrong)
-        // item specific instead of just being absent, which is the opposite
-        // of what the escape hatch exists to do.
-        const capturedAttributes = parsed?.capturedAttributes &&
-            typeof parsed.capturedAttributes === "object"
+        // The model reports a per-attribute `status` (CONFIRMED/AMBIGUOUS/
+        // NOT_VISIBLE) rather than overloading the value slot with a literal
+        // sentinel string -- Gemini's own follow-up guidance (2026-09-23)
+        // flagged the earlier "NOT_VISIBLE" sentinel-in-a-string-field design
+        // as a type collision: it forces a binary jump between a specific
+        // fact and a blunt refusal, and constrained decoding can push an
+        // uncertain model toward emitting a guess rather than typing the
+        // exact sentinel phrase. An explicit enum gives the model a clean,
+        // structural escape hatch instead. Only CONFIRMED entries survive
+        // into the flat Record<string,string> shape every downstream
+        // consumer (domainPrompts.ts's listing prompt, slabOcrGate.ts)
+        // already expects -- those consumers still treat every surviving key
+        // as ground truth, so AMBIGUOUS/NOT_VISIBLE must never reach them.
+        const capturedAttributes = Array.isArray(parsed?.attributes)
           ? Object.fromEntries(
-            Object.entries(
-              parsed.capturedAttributes as Record<string, unknown>,
-            )
+            (parsed.attributes as unknown[])
+              .filter((a): a is Record<string, unknown> => typeof a === "object" && a !== null)
+              .filter((a) => a.status === "CONFIRMED")
               .filter(
-                (entry): entry is [string, string] =>
-                  typeof entry[0] === "string" &&
-                  typeof entry[1] === "string",
+                (a): a is { attributeName: string; value: string } =>
+                  typeof a.attributeName === "string" &&
+                  typeof a.value === "string",
               )
-              .map(([k, v]) => [k.trim(), v.trim()])
-              .filter(
-                ([, v]) => v.length > 0 && v.toUpperCase() !== "NOT_VISIBLE",
-              ),
+              .map((a) => [a.attributeName.trim(), a.value.trim()])
+              .filter(([k, v]) => k.length > 0 && v.length > 0),
           )
           : undefined;
         // Validate confidence at the boundary rather than trusting the model.
