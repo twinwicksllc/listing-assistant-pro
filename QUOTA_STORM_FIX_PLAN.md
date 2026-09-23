@@ -1,6 +1,9 @@
 # eBay Browse API Quota Storm — Comprehensive Fix Plan
 
-**Status:** Design complete, NOT YET IMPLEMENTED. This document is detailed enough to implement directly — every function signature, constant value, and test case is specified exactly. No architectural judgment calls should be needed during implementation; if something here is ambiguous, stop and ask rather than guess.
+**Status:** ✅ COMPLETE — Both bugs fixed and verified 2026-09-22:
+
+- **Bug 1 (getItems cost):** PR #601 merged — single-item loop rewritten, end-to-end verified, logs populate correctly to `ebay_browse_call_log` with resource tag `"buy.browse.item.bulk"`.
+- **Bug 2 (reset-window gate):** PRs #595, #596, #597, #610 merged — quota monitor fixed, browse quota storm incident (67.5k/5k calls) resolved and stable. See `COMPETITOR_PRICES_CRON_SESSION_HANDOFF.md` and PR #610 for incident retrospective.
 
 ## Background: what's broken and why (read this before touching code)
 

@@ -1,26 +1,14 @@
 # Free Tier Gating — Complete Implementation Plan
 
-**Branch:** `pr/category-verify-a8c2406`
-**Date drafted:** 2026-03-18
-**Scope:** Enforce a gated free AI tier (all fields needed to publish to eBay; pricing/melt/competitor data/grading rationale locked to paid; eBay account required; 6 analyses/month **per org** with rolling-window reset) and keep paid tiers (Pro, Unlimited) unrestricted beyond existing limits.
+**Status:** ✅ COMPLETE — Shipped 2026-09-21 (PR #613, merge commit 40148f6). All 15 design questions resolved, all gaps fixed, all implementation complete.
 
-> **Correction notice (2026-09-21): this feature is already ~85% built and shipped (commits `d34dcf4`, `8e65849`), not "ready to begin" as the closing line of this doc says.** Almost everything in the §7 checklist below is done. There are only **two real, unfinished gaps.** Do not redo work that is already done — before starting any task below, check `git log --oneline --all | grep -i "free.tier\|free_tier"` and read the two files named in Gap 1 and Gap 2 below to confirm current state, then only do the steps under those two gaps.
->
-> **Gap 1 — the database trigger that should set `organizations.free_tier_reset_day` was never updated.**
-> Read `supabase/migrations/20260309130000_ensure_new_user_owner_org.sql` — this is the current live definition of the `handle_new_user()` Postgres function (it runs automatically every time a new user signs up). Search that file for the text `free_tier_reset_day`. It will not be found — the function creates a profile and an organization for the new user, but never sets `organizations.free_tier_reset_day`. This means every new org has `free_tier_reset_day = NULL`, which breaks the rolling-window quota calculation this whole plan depends on.
-> **Fix (do exactly this, do not edit the existing migration file):**
->
-> 1. Create a **new** migration file (do not modify `20260309130000_ensure_new_user_owner_org.sql` — this repo's rule, stated in `CLAUDE.md`, is to never edit an already-applied migration, only add a new one that supersedes it).
-> 2. Name the new file with today's date prefix, e.g. `supabase/migrations/20260921000000_set_free_tier_reset_day_on_signup.sql`.
-> 3. In that new file, write a `CREATE OR REPLACE FUNCTION public.handle_new_user()` statement that is an exact copy of the function body in `20260309130000_ensure_new_user_owner_org.sql`, with one addition: in the `ELSE` branch (the "New independent user: create their own personal org" branch), immediately after the `INSERT INTO public.organizations (...) RETURNING id INTO new_org_id;` statement, add a new statement: `UPDATE public.organizations SET free_tier_reset_day = EXTRACT(DAY FROM NOW())::SMALLINT WHERE id = new_org_id;`
-> 4. Do not add a `DROP TRIGGER`/`CREATE TRIGGER` block — `CREATE OR REPLACE FUNCTION` alone is enough since the trigger already points at this function name.
-> 5. Run `supabase db push` (or whatever this repo's normal migration-apply command is — check `CLAUDE.md`'s Commands section) to apply it.
->
-> **Gap 2 — FIXED 2026-09-21: the `commerce.identity.readonly` OAuth scope is now uncommented and active.**
-> The scope was uncommented in `supabase/functions/ebay-publish/constants.ts` in PR #613, so eBay username lookups for the one-account rule now work.
-> After this PR is deployed, users with existing eBay tokens will need to disconnect and reconnect their eBay account for the new scope to take effect (a code change alone does not retroactively add a scope to an already-issued token). The next time a user clicks "Connect eBay" after deployment, they'll be prompted for the new scope at consent time.
->
-> Everything else in the checklist below (§7) is already implemented — do not rebuild it. If you want to verify a specific item, the evidence is: `analyze-item` enforces the eBay-account gate and rolling-window count and the field allowlist; `ebay-publish/auth.ts` enforces the one-account rule on `exchange_code`; `supabase/functions/get-free-credits/index.ts` and `supabase/functions/disconnect-ebay/index.ts` both exist; `src/contexts/AuthContext.tsx` has `freeCredits`/`ebayConnected`/`ebayUsername` state and `refreshFreeCredits()`.
+**Scope:** Gated free AI tier (6 analyses/month per org with rolling-window reset, eBay account required, fields needed for publishing exposed, pricing/melt/competitor data/grading locked to paid). Paid tiers (Pro, Unlimited) unrestricted beyond existing limits.
+
+**What shipped (commits d34dcf4, 8e65849, 40148f6):**
+
+- Gap 1 ✅ Fixed 2026-09-21: migration 20260921000000_set_free_tier_reset_day_on_signup.sql sets reset_day on org creation
+- Gap 2 ✅ Fixed 2026-09-21: commerce.identity.readonly OAuth scope uncommented in PR #613
+- All implementation complete: analyze-item gate + rolling-window count + field allowlist, ebay-publish one-account rule, get-free-credits function, disconnect-ebay function, AuthContext state (freeCredits/ebayConnected/ebayUsername), UI across Dashboard/Analyze/Settings/BottomNav
 
 ---
 
