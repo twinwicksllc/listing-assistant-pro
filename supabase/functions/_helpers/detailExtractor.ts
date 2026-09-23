@@ -44,7 +44,8 @@ export interface CoinDetails {
   series: string | null; // "Morgan Dollar", "Peace Dollar", etc.
   keyDate: boolean; // Is this a key/semi-key date?
   keyDateReason: string | null; // e.g. "1893-S Morgan is the key date of the series"
-  variety: string | null; // VAM, DDO, RPM, etc.
+  variety: string | null; // VAM, DDO, RPM, privy mark, etc. -- only when varietyConfidence is "confirmed"
+  varietyConfidence: "confirmed" | "uncertain" | "none"; // "confirmed" = a specific mark/date/inscription was actually read, not inferred from general coin knowledge
   errors: string | null; // Die cracks, clips, off-center, etc.
   reverseVisible: boolean; // Was the reverse photographed?
 }
@@ -233,8 +234,48 @@ This is the MOST IMPORTANT thing to get right. Follow these steps:
 - Denomination: $1, 50C, 25C, 10C, 5C, 1C, $5, $10, $20
 - Series: Morgan Dollar, Peace Dollar, Kennedy Half, etc.
 - Key Date: Is this year+mint combination a key or semi-key date? (e.g. 1893-S Morgan, 1916-D Mercury Dime, 1909-S VDB Lincoln)
-- Variety: Any die variety (VAM, DDO, RPM)?
 - Errors: Die cracks, clips, off-center strike, etc.?
+
+### VARIETY & EDGE MARKS — DO NOT GUESS (this field is the source of a real, repeated error)
+A "variety" claim (privy mark, anniversary mark, VAM, DDO, RPM, edge inscription/privy, etc.)
+is a SPECIFIC, VERIFIABLE physical feature. It is either something you can actually SEE and
+READ in the photos, or it does not exist for this response.
+
+**Check the EDGE specifically, as its own step.** Many modern bullion coins (British
+Britannias, some commemoratives, etc.) carry a privy mark or inscription on the edge rather
+than a face. Before answering:
+1. Look for a photo that shows the coin's edge/rim (often a close-up or angled shot distinct
+   from the flat obverse/reverse photos).
+2. If an edge photo IS present: examine it and report EXACTLY what you see there — a specific
+   symbol (trident, animal, star, number), a plain milled/reeded edge, or a smooth edge with
+   no mark. Describe its actual shape, don't name a theme you're inferring.
+3. If NO edge photo is present or the edge is out of frame in every photo: you cannot confirm
+   or deny an edge mark. Do not fill this gap with a guess based on what that series/year
+   "usually" has — set varietyConfidence to "none" (or "uncertain" only if a face-visible mark
+   independently justifies it) and say so in reasoning ("edge not photographed").
+
+- Report a variety ONLY if you can point to the exact mark/inscription/date visible in a
+  specific photo and describe its shape/location precisely (e.g. "small rooster silhouette
+  privy mark on the edge, between two raised dots").
+- If you recognize the coin as a series/year that SOMETIMES has special editions or privy
+  marks (anniversary strikes, Lunar privy marks, etc.) but the photos do NOT clearly show
+  a distinguishing mark, set variety to null and varietyConfidence to "none" — knowing that
+  a variant COULD exist for this series/year is NOT evidence that THIS coin IS that variant,
+  and is not a substitute for actually looking at the edge photo.
+- NEVER invent a specific variety name (e.g. a specific anniversary, a specific privy-mark
+  theme, a specific year-of-the-X commemorative) unless the mark itself is visible and you
+  can describe exactly where it is and what it looks like. A different, equally specific,
+  equally plausible-sounding variety claim on every re-run of the SAME photos is the exact
+  failure mode this rule exists to prevent — if you find yourself naming a *theme* (an
+  anniversary, an animal, a commemorative event) rather than describing a *shape you saw*,
+  stop and downgrade to "uncertain" or "none".
+- If uncertain but something unusual (a small mark, a privy-like symbol) IS visible but you
+  cannot confidently identify what it represents, set variety to a plain physical description
+  only (e.g. "small unidentified mark near date on reverse") and varietyConfidence to "uncertain".
+- varietyConfidence: "confirmed" only when you directly read/saw the specific mark on an
+  actual edge/face photo and are reporting exactly what it is, "uncertain" when something is
+  visible but unidentified, "none" when nothing distinguishing is visible at all (including
+  when the edge simply isn't photographed).
 
 The item was described as: "${itemName}"
 **IMPORTANT**: If the year in the description above does NOT match what you read on the slab label, trust the SLAB LABEL and report the label's year. This is a known issue where earlier pipeline stages misread digits.
@@ -250,6 +291,7 @@ Return ONLY valid JSON (no markdown, no code blocks):
   "keyDate": false,
   "keyDateReason": null,
   "variety": null,
+  "varietyConfidence": "none" | "uncertain" | "confirmed",
   "errors": null,
   "reverseVisible": true,
   "reasoning": "brief explanation of what you saw in the mint mark area"
@@ -758,7 +800,20 @@ export async function extractKeyDetails(
         series: parsed.series ?? null,
         keyDate: Boolean(parsed.keyDate),
         keyDateReason: parsed.keyDateReason ?? null,
+        // varietyConfidence gates whether `variety` is ever written downstream
+        // (see the "Added variety" write below) -- default to "none" on a
+        // missing/malformed field rather than trusting an unconfirmed string.
+        // Regression guard for a repeated hallucination: the same Britannia
+        // coin photos produced three different, mutually exclusive,
+        // highly-specific "privy mark" variety claims across three separate
+        // runs (2026-09-22/23) with no confidence signal to catch any of
+        // them -- this field exists so an "uncertain"/"none" claim never
+        // reaches item specifics as if it were a verified spec.
         variety: parsed.variety ?? null,
+        varietyConfidence: parsed.varietyConfidence === "confirmed" ||
+            parsed.varietyConfidence === "uncertain"
+          ? parsed.varietyConfidence
+          : "none",
         errors: parsed.errors ?? null,
         reverseVisible: parsed.reverseVisible !== false,
       };
@@ -769,6 +824,8 @@ export async function extractKeyDetails(
         year: result.coinDetails.year,
         series: result.coinDetails.series,
         keyDate: result.coinDetails.keyDate,
+        variety: result.coinDetails.variety,
+        varietyConfidence: result.coinDetails.varietyConfidence,
         reverseVisible: result.coinDetails.reverseVisible,
       });
     } else if (domain === "trading_cards") {
@@ -1286,9 +1343,21 @@ export function applyDetailOverrides(
     }
 
     // ── Variety / Errors ──
-    if (cd.variety && !specs["Variety"]) {
+    // Gated on varietyConfidence !== "none" (see CoinDetails.varietyConfidence
+    // docstring): an "uncertain" claim ("small unidentified mark...") is still
+    // useful to a buyer and gets through, but a "none" result -- the model
+    // recognizing that a variant COULD exist for this series/year without any
+    // visible evidence on THIS coin -- must never reach item specifics as if
+    // it were a verified spec. Prevents the invented-privy-mark failure mode.
+    if (cd.variety && cd.varietyConfidence !== "none" && !specs["Variety"]) {
       specs["Variety"] = cd.variety;
-      console.log(`${label} Added variety: ${cd.variety}`);
+      console.log(
+        `${label} Added variety (confidence=${cd.varietyConfidence}): ${cd.variety}`,
+      );
+    } else if (cd.variety && cd.varietyConfidence === "none") {
+      console.log(
+        `${label} Suppressed unconfirmed variety claim (confidence=none): ${cd.variety}`,
+      );
     }
 
     listing.itemSpecifics = specs;

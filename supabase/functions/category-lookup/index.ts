@@ -1065,7 +1065,7 @@ async function safePersistMapping(
  * getCategorySubtree check (verifyCategoryLeafActive, kept unchanged from
  * the pre-rewrite implementation).
  */
-async function checkLeafActiveCacheFirst(
+export async function checkLeafActiveCacheFirst(
   supabase: any,
   categoryId: string,
   ebayAuth: { token: string; base: string } | null,
@@ -1835,10 +1835,26 @@ export async function handleRequest(req: Request): Promise<Response> {
         throw new Error("categoryId required for verify/breadcrumb action");
       }
 
-      // RC-5 FIX: ALWAYS verify leaf status via eBay API, even if category exists in DB.
-      // The DB fast-path previously returned valid:true without isLeaf, allowing
-      // non-leaf parent categories (e.g. 253 "Coins: US") to pass validation.
-      // Now we use DB only for name/breadcrumb enrichment, but always verify remotely.
+      // RC-5 FIX (still in force): ALWAYS verify leaf status against a source
+      // that reflects eBay's real, current taxonomy, even if the category
+      // exists in category_mappings. That table is free-text/AI-populated
+      // and previously returned valid:true without isLeaf, letting non-leaf
+      // parent categories (e.g. 253 "Coins: US") pass validation.
+      //
+      // ebay_taxonomy_cache is a DIFFERENT table — a synced snapshot of
+      // eBay's actual taxonomy (refreshed weekly, `is_leaf` computed from a
+      // real getCategorySubtree call at sync time), already treated as
+      // authoritative for gates 1+2 in the main resolver path via
+      // checkLeafActiveCacheFirst() below. A fresh (<=CACHE_STALE_DAYS) hit
+      // there answers isLeaf + breadcrumb with zero eBay API calls, so this
+      // action can skip the OAuth token fetch AND both live
+      // getCategorySubtree calls entirely on a cache hit — those two live
+      // calls (a token fetch + an up-to-8-hop breadcrumb walk) are what made
+      // analyze-item's "grounded_tier_verify" stage the single largest
+      // contributor to a 112s pipeline run on 2026-09-22 (25s, hit the
+      // internalFunction timeout and failed non-blocking). category_mappings
+      // is still consulted below purely for name/breadcrumb enrichment on a
+      // cache miss, never as the leaf-status source of truth.
       let dbCategoryName: string | null = null;
       let dbBreadcrumb: string | null = null;
       try {
@@ -1855,7 +1871,26 @@ export async function handleRequest(req: Request): Promise<Response> {
         /* continue */
       }
 
-      // Always perform remote verification with leaf check (#4, RC-5)
+      // Cache-first: a fresh ebay_taxonomy_cache row answers this whole
+      // action with zero eBay API calls. Only a cache miss/stale row falls
+      // through to the live token-fetch + two-call path below.
+      const cacheFirst = await checkLeafActiveCacheFirst(supabase, cid, null);
+      if (cacheFirst.source === "cache") {
+        return new Response(
+          JSON.stringify({
+            valid: true,
+            isLeaf: cacheFirst.isLeaf,
+            isActive: cacheFirst.isActive,
+            isKnownParentOrJunk: isKnownParentCategoryId(cid),
+            source: "cache",
+            categoryName: cacheFirst.categoryName || dbCategoryName,
+            breadcrumb: cacheFirst.breadcrumb || dbBreadcrumb,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      // Cache miss/stale — fall back to live remote verification (#4, RC-5)
       const ebayAuth = await getEbayAppToken();
       if (!ebayAuth) {
         // No eBay credentials — return DB data if available, but isLeaf is unknown

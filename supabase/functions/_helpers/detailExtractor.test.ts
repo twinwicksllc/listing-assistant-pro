@@ -9,7 +9,8 @@
  */
 
 import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.208.0/assert/mod.ts";
-import { extractKeyDetails } from "./detailExtractor.ts";
+import { applyDetailOverrides, extractKeyDetails } from "./detailExtractor.ts";
+import type { DetailExtractionResult } from "./detailExtractor.ts";
 
 const IMG = ["aGVsbG8="];
 const MIME = ["image/jpeg"];
@@ -173,4 +174,211 @@ Deno.test("a well-formed response still parses and returns details", async () =>
       });
     },
   );
+});
+
+// ── Regression coverage: the invented-privy-mark hallucination
+// (2026-09-22/23) ────────────────────────────────────────────────────────
+//
+// The exact same Britannia coin photos produced three mutually exclusive,
+// highly-specific "variety" claims across three separate analyze-item runs
+// ("20th Anniversary Trident Privy", "Trident Privy Mark (30th
+// Anniversary)", "Year of the Rooster Edge Privy") with no confidence
+// signal distinguishing a real read from a guess. varietyConfidence exists
+// to let extractKeyDetails report uncertainty explicitly, and
+// applyDetailOverrides must respect it -- a "none" confidence claim must
+// never reach the listing's item specifics as if it were a verified spec,
+// while a genuinely "confirmed" one (the user confirmed this specific coin
+// really does have a rooster edge privy) still should.
+
+Deno.test("extractKeyDetails: a missing varietyConfidence field defaults to 'none', not trusted", async () => {
+  await withStubbedFetch(
+    () =>
+      geminiResponse(
+        JSON.stringify({
+          variety: "20th Anniversary Trident Privy",
+          // varietyConfidence deliberately omitted -- simulates a model
+          // response that didn't follow the new schema field.
+          reasoning: "Britannia coins sometimes have anniversary privies.",
+        }),
+        "STOP",
+      ),
+    async () => {
+      await captureLogs(async () => {
+        const result = await extractKeyDetails(
+          "test-key",
+          "coins_bullion",
+          "2017 Britannia 1 oz Silver",
+          IMG,
+          MIME,
+          "test05",
+        );
+        assertEquals(result?.coinDetails?.variety, "20th Anniversary Trident Privy");
+        assertEquals(result?.coinDetails?.varietyConfidence, "none");
+      });
+    },
+  );
+});
+
+Deno.test("extractKeyDetails: an invalid varietyConfidence string also defaults to 'none'", async () => {
+  await withStubbedFetch(
+    () =>
+      geminiResponse(
+        JSON.stringify({
+          variety: "Rooster Edge Privy",
+          varietyConfidence: "probably", // not one of the three allowed values
+        }),
+        "STOP",
+      ),
+    async () => {
+      await captureLogs(async () => {
+        const result = await extractKeyDetails(
+          "test-key",
+          "coins_bullion",
+          "2017 Britannia 1 oz Silver",
+          IMG,
+          MIME,
+          "test06",
+        );
+        assertEquals(result?.coinDetails?.varietyConfidence, "none");
+      });
+    },
+  );
+});
+
+Deno.test("extractKeyDetails: 'confirmed' and 'uncertain' varietyConfidence pass through unchanged", async () => {
+  await withStubbedFetch(
+    () =>
+      geminiResponse(
+        JSON.stringify({
+          variety: "Small rooster silhouette privy mark on the edge",
+          varietyConfidence: "confirmed",
+        }),
+        "STOP",
+      ),
+    async () => {
+      await captureLogs(async () => {
+        const result = await extractKeyDetails(
+          "test-key",
+          "coins_bullion",
+          "2017 Britannia 1 oz Silver",
+          IMG,
+          MIME,
+          "test07",
+        );
+        assertEquals(result?.coinDetails?.varietyConfidence, "confirmed");
+      });
+    },
+  );
+
+  await withStubbedFetch(
+    () =>
+      geminiResponse(
+        JSON.stringify({
+          variety: "small unidentified mark near date on reverse",
+          varietyConfidence: "uncertain",
+        }),
+        "STOP",
+      ),
+    async () => {
+      await captureLogs(async () => {
+        const result = await extractKeyDetails(
+          "test-key",
+          "coins_bullion",
+          "2017 Britannia 1 oz Silver",
+          IMG,
+          MIME,
+          "test08",
+        );
+        assertEquals(result?.coinDetails?.varietyConfidence, "uncertain");
+      });
+    },
+  );
+});
+
+function baseListing(): any {
+  return { title: "2017 Britannia 1 oz Silver", description: "", itemSpecifics: {} };
+}
+
+function coinExtraction(
+  overrides: Partial<NonNullable<DetailExtractionResult["coinDetails"]>>,
+): DetailExtractionResult {
+  return {
+    domain: "coins_bullion",
+    coinDetails: {
+      mintMark: null,
+      mintMarkConfidence: "not_visible",
+      mintLocation: null,
+      year: null,
+      denomination: null,
+      series: null,
+      keyDate: false,
+      keyDateReason: null,
+      variety: null,
+      varietyConfidence: "none",
+      errors: null,
+      reverseVisible: true,
+      ...overrides,
+    },
+    cardDetails: null,
+    jewelryDetails: null,
+    electronicsDetails: null,
+    sneakerDetails: null,
+    autoPartDetails: null,
+    instrumentDetails: null,
+    handbagDetails: null,
+    toolDetails: null,
+    rawFindings: "",
+  };
+}
+
+Deno.test("applyDetailOverrides: varietyConfidence='none' never writes item specifics, even with a specific-sounding claim", () => {
+  const listing = baseListing();
+  const extraction = coinExtraction({
+    variety: "20th Anniversary Trident Privy",
+    varietyConfidence: "none",
+  });
+
+  applyDetailOverrides(listing, extraction, "test-inv-1");
+
+  assertEquals(listing.itemSpecifics["Variety"], undefined);
+});
+
+Deno.test("applyDetailOverrides: varietyConfidence='uncertain' still writes a plain description", () => {
+  const listing = baseListing();
+  const extraction = coinExtraction({
+    variety: "small unidentified mark near date on reverse",
+    varietyConfidence: "uncertain",
+  });
+
+  applyDetailOverrides(listing, extraction, "test-inv-2");
+
+  assertEquals(
+    listing.itemSpecifics["Variety"],
+    "small unidentified mark near date on reverse",
+  );
+});
+
+Deno.test("applyDetailOverrides: varietyConfidence='confirmed' writes the specific claim", () => {
+  const listing = baseListing();
+  const extraction = coinExtraction({
+    variety: "Rooster edge privy mark",
+    varietyConfidence: "confirmed",
+  });
+
+  applyDetailOverrides(listing, extraction, "test-inv-3");
+
+  assertEquals(listing.itemSpecifics["Variety"], "Rooster edge privy mark");
+});
+
+Deno.test("applyDetailOverrides: an existing user-set Variety spec is never clobbered, regardless of confidence", () => {
+  const listing = baseListing();
+  listing.itemSpecifics["Variety"] = "User-entered value";
+  const extraction = coinExtraction({
+    variety: "Rooster edge privy mark",
+    varietyConfidence: "confirmed",
+  });
+
+  applyDetailOverrides(listing, extraction, "test-inv-4");
+
+  assertEquals(listing.itemSpecifics["Variety"], "User-entered value");
 });

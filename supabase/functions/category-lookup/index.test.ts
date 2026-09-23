@@ -1,5 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.203.0/assert/mod.ts";
-import { buildAuditEntry, validateLlmCategoryPicks } from "./index.ts";
+import { buildAuditEntry, checkLeafActiveCacheFirst, validateLlmCategoryPicks } from "./index.ts";
 import type { GatedCandidate } from "./resolverCore.ts";
 
 function shortlistRow(
@@ -206,4 +206,104 @@ Deno.test("buildAuditEntry: latency and query/request context pass through uncha
   assertEquals(entry.query_text, "graded coin");
   assertEquals(entry.latency_ms, 250);
   assertEquals(entry.candidate_source, "vector_llm");
+});
+
+// ── checkLeafActiveCacheFirst: regression coverage for the "verify" action's
+// grounded-category-lock bottleneck (2026-09-22) ────────────────────────────
+//
+// analyze-item's grounded_tier_verify stage calls category-lookup's
+// "verify" action, which (before this fix) always did a live eBay OAuth
+// token fetch + getCategorySubtree call regardless of ebay_taxonomy_cache
+// state -- a real production run for a UK Britannia coin hit the 25s
+// internalFunction timeout on exactly this call. checkLeafActiveCacheFirst
+// is the cache-first gate the main resolver path already trusted; the
+// "verify" action now calls it too. These tests cover the function
+// directly (mocked Supabase client) rather than the full HTTP handler,
+// matching this file's existing pattern for isolable/pure logic.
+
+function mockSupabase(cacheRow: Record<string, unknown> | null, throwOnSelect = false) {
+  return {
+    from(_table: string) {
+      return {
+        select(_cols: string) {
+          return {
+            eq(_col: string, _val: string) {
+              return {
+                async maybeSingle() {
+                  if (throwOnSelect) throw new Error("simulated DB error");
+                  return { data: cacheRow, error: null };
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+}
+
+Deno.test("checkLeafActiveCacheFirst: fresh cache row (leaf) answers with zero eBay calls", async () => {
+  const freshRow = {
+    category_id: "177653",
+    category_name: "Coins",
+    breadcrumb: "Coins & Paper Money > Bullion > Silver > Coins",
+    is_leaf: true,
+    synced_at: new Date().toISOString(), // 0 days old — well within CACHE_STALE_DAYS
+  };
+
+  const result = await checkLeafActiveCacheFirst(mockSupabase(freshRow) as any, "177653", null);
+
+  assertEquals(result.source, "cache");
+  assertEquals(result.isLeaf, true);
+  assertEquals(result.isActive, true);
+  assertEquals(result.breadcrumb, "Coins & Paper Money > Bullion > Silver > Coins");
+});
+
+Deno.test("checkLeafActiveCacheFirst: fresh cache row (non-leaf) is still authoritative, not re-verified live", async () => {
+  const freshRow = {
+    category_id: "253",
+    category_name: "Coins: US",
+    breadcrumb: "Coins & Paper Money > Coins: US",
+    is_leaf: false,
+    synced_at: new Date().toISOString(),
+  };
+
+  // ebayAuth is null here -- if the function tried to fall through to a
+  // live call, it would return source:"unknown", not source:"cache". A
+  // confident non-leaf cache hit must short-circuit before that fallback.
+  const result = await checkLeafActiveCacheFirst(mockSupabase(freshRow) as any, "253", null);
+
+  assertEquals(result.source, "cache");
+  assertEquals(result.isLeaf, false);
+  assertEquals(result.isActive, false);
+});
+
+Deno.test("checkLeafActiveCacheFirst: stale cache row (older than CACHE_STALE_DAYS) falls through, not trusted", async () => {
+  const staleRow = {
+    category_id: "177653",
+    category_name: "Coins",
+    breadcrumb: "Coins & Paper Money > Bullion > Silver > Coins",
+    is_leaf: true,
+    synced_at: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(), // 8 days old > 7-day threshold
+  };
+
+  // No ebayAuth provided -- the live fallback path returns "unknown"
+  // rather than "cache", proving the stale row was not trusted as-is.
+  const result = await checkLeafActiveCacheFirst(mockSupabase(staleRow) as any, "177653", null);
+
+  assertEquals(result.source, "unknown");
+});
+
+Deno.test("checkLeafActiveCacheFirst: cache miss (no row) falls through to live path", async () => {
+  const result = await checkLeafActiveCacheFirst(mockSupabase(null) as any, "999999", null);
+
+  // No ebayAuth -> live path can't run either -> "unknown", not "cache"
+  assertEquals(result.source, "unknown");
+  assertEquals(result.isLeaf, false);
+});
+
+Deno.test("checkLeafActiveCacheFirst: a DB error on the cache lookup falls through gracefully, does not throw", async () => {
+  const result = await checkLeafActiveCacheFirst(mockSupabase(null, true) as any, "177653", null);
+
+  assertEquals(result.source, "unknown");
 });
