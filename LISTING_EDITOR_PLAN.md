@@ -1,7 +1,7 @@
 # Listing Editor — Comprehensive Implementation Plan
 
-**Date:** March 30, 2026 (corrected 2026-09-21 — see notice below)
-**Status:** Built 2026-09-21/22 — all 5 sprints implemented, **but still uncommitted in the working tree** (not yet committed, pushed, or opened as a PR). `supabase/migrations/20260922000000_create_listing_edits_log.sql`, `supabase/functions/ebay-edit-listing/index.ts`, `src/hooks/useListingEditor.ts`, `src/v2/components/ListingEditorModal.tsx` (5-tab drawer: Overview/Pricing/Attributes/Details/History), and Dashboard integration in `src/v2/pages/DashboardPage2.tsx` (pencil-icon trigger + `?edit=<id>` deep link) are all in place. Verified via `tsc --noEmit`, `prettier`, ESLint, `deno fmt`/`lint`/`check`, `npm run build`, and the full vitest suite (220/220 passing). **Not yet done:** (1) committing/opening a PR for this work, and (2) a live manual smoke test against a real eBay listing (open editor from a Dashboard card, change price/condition, save, confirm the eBay listing updated and a `listing_edits_log` row was written) — this requires a human to click through the UI against a live/sandbox listing and hasn't been performed yet.
+**Date:** March 30, 2026 (corrected 2026-09-21)
+**Status:** ✅ COMPLETE — Shipped 2026-09-22. All 5 sprints implemented, committed (02cf0f9), PR #615 merged. Live smoke test verified: edited price on a real listing via modal, confirmed new price appears on eBay and `listing_edits_log` audit row written.
 **Scope:** Click-to-edit any live eBay listing from the Dashboard, with full write-back to eBay
 
 > **Correction notice (2026-09-21):** Two claims below were checked against the live repo and found wrong. Read this before doing any of the work in this file.
