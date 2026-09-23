@@ -17,6 +17,16 @@
  * override thin/ambiguous visual evidence. These tests lock in the fix:
  * codeExecution removed, Flash tier for every domain (not just non-coins),
  * and a NOT_VISIBLE escape hatch that must never leak into capturedAttributes.
+ *
+ * Updated 2026-09-23 (follow-up): the escape hatch moved from a sentinel
+ * string overloading the value field ("NOT_VISIBLE" as a value) to an
+ * explicit per-attribute `status` enum (CONFIRMED/AMBIGUOUS/NOT_VISIBLE) on
+ * a structured `attributes` array -- per Gemini's own follow-up guidance,
+ * a sentinel-in-a-string-field design is a type collision that constrained
+ * decoding can push an uncertain model to bypass by just guessing a value
+ * instead of typing the exact sentinel. The internal capturedAttributes
+ * contract (flat Record<string,string>, CONFIRMED-only) is unchanged for
+ * every existing downstream consumer (domainPrompts.ts, slabOcrGate.ts).
  */
 
 import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.208.0/assert/mod.ts";
@@ -123,49 +133,107 @@ Deno.test("runAgenticVisualAgent: uses the fast/Flash model tier even for coins_
   assertStringIncludes(generateContentUrl, "flash");
 });
 
-Deno.test("runAgenticVisualAgent: a NOT_VISIBLE attribute value is dropped, not passed through", async () => {
+Deno.test("runAgenticVisualAgent: a NOT_VISIBLE-status attribute is dropped, not passed through", async () => {
   const result = await withStubbedFetchReturning({
     visualEvidence: "Edge shows a small mark but I cannot make out its shape clearly.",
     keyFindings: "Coin edge inspected; mark present but unidentified.",
     confidenceBoost: 60,
-    capturedAttributes: {
-      Year: "2017",
-      Variety: "NOT_VISIBLE",
-      "Mint Mark": "not_visible",
-    },
+    attributes: [
+      { attributeName: "Year", status: "CONFIRMED", value: "2017", confidence: 95 },
+      { attributeName: "Variety", status: "NOT_VISIBLE", value: null, confidence: 0 },
+      { attributeName: "Mint Mark", status: "NOT_VISIBLE", value: null, confidence: 0 },
+    ],
   });
   assertEquals(result.capturedAttributes?.Year, "2017");
   assertEquals(result.capturedAttributes?.Variety, undefined);
   assertEquals(result.capturedAttributes?.["Mint Mark"], undefined);
 });
 
-Deno.test("runAgenticVisualAgent: capturedAttributes is undefined (not an empty object) when every value is NOT_VISIBLE", async () => {
+Deno.test("runAgenticVisualAgent: an AMBIGUOUS-status attribute is also dropped, not treated as confirmed", async () => {
+  const result = await withStubbedFetchReturning({
+    keyFindings: "A mark is present below the wreath but too blurry to read.",
+    confidenceBoost: 55,
+    attributes: [
+      {
+        attributeName: "Mint Mark",
+        status: "AMBIGUOUS",
+        value: null,
+        confidence: 40,
+        reasoning: "Too blurry to distinguish O from S.",
+      },
+    ],
+  });
+  assertEquals(result.capturedAttributes?.["Mint Mark"], undefined);
+});
+
+Deno.test("runAgenticVisualAgent: an AMBIGUOUS status with a non-null value is still dropped (status governs, not the presence of a value)", async () => {
+  // Regression guard: a model that violates its own instructions and fills
+  // `value` despite an AMBIGUOUS status must not be trusted just because a
+  // string happens to be present -- only status === CONFIRMED authorizes use.
+  const result = await withStubbedFetchReturning({
+    keyFindings: "Ambiguous mark, but the model guessed anyway.",
+    confidenceBoost: 55,
+    attributes: [
+      { attributeName: "Mint Mark", status: "AMBIGUOUS", value: "S", confidence: 40 },
+    ],
+  });
+  assertEquals(result.capturedAttributes?.["Mint Mark"], undefined);
+});
+
+Deno.test("runAgenticVisualAgent: capturedAttributes is empty (not populated) when every attribute is non-CONFIRMED", async () => {
   const result = await withStubbedFetchReturning({
     keyFindings: "Nothing distinguishing visible.",
     confidenceBoost: 40,
-    capturedAttributes: {
-      Variety: "NOT_VISIBLE",
-      Grade: "NOT_VISIBLE",
-    },
+    attributes: [
+      { attributeName: "Variety", status: "NOT_VISIBLE", value: null, confidence: 0 },
+      { attributeName: "Grade", status: "AMBIGUOUS", value: null, confidence: 30 },
+    ],
   });
-  // Object.fromEntries on an all-filtered list produces {} , which is
-  // truthy -- downstream (domainPrompts.ts) already guards with
-  // Object.keys(...).length > 0, so {} and undefined behave identically
-  // there. Asserting the shape directly here rather than relying on that
-  // downstream guard.
+  // domainPrompts.ts already guards with Object.keys(...).length > 0, so {}
+  // and undefined behave identically there -- asserting the shape directly.
   assertEquals(Object.keys(result.capturedAttributes ?? {}).length, 0);
 });
 
-Deno.test("runAgenticVisualAgent: a real confirmed attribute still passes through unchanged", async () => {
+Deno.test("runAgenticVisualAgent: a CONFIRMED attribute still passes through unchanged", async () => {
   const result = await withStubbedFetchReturning({
     keyFindings: "Rooster privy mark clearly visible on the edge, between two raised dots.",
     confidenceBoost: 90,
-    capturedAttributes: {
-      Year: "2017",
-      Variety: "Rooster edge privy mark",
-    },
+    attributes: [
+      { attributeName: "Year", status: "CONFIRMED", value: "2017", confidence: 95 },
+      {
+        attributeName: "Variety",
+        status: "CONFIRMED",
+        value: "Rooster edge privy mark",
+        confidence: 92,
+      },
+    ],
   });
+  assertEquals(result.capturedAttributes?.Year, "2017");
   assertEquals(result.capturedAttributes?.Variety, "Rooster edge privy mark");
+});
+
+Deno.test("runAgenticVisualAgent: missing attributes array leaves capturedAttributes undefined (no crash)", async () => {
+  const result = await withStubbedFetchReturning({
+    keyFindings: "ok",
+    confidenceBoost: 70,
+  });
+  assertEquals(result.capturedAttributes, undefined);
+});
+
+Deno.test("runAgenticVisualAgent: a malformed entry in the attributes array is skipped, not thrown", async () => {
+  const result = await withStubbedFetchReturning({
+    keyFindings: "ok",
+    confidenceBoost: 70,
+    attributes: [
+      { attributeName: "Year", status: "CONFIRMED", value: "2017", confidence: 95 },
+      "not an object",
+      { status: "CONFIRMED", value: "missing attributeName" },
+      { attributeName: "Grade", status: "CONFIRMED", value: 12345 }, // value not a string
+      null,
+    ],
+  });
+  assertEquals(result.capturedAttributes?.Year, "2017");
+  assertEquals(Object.keys(result.capturedAttributes ?? {}).length, 1);
 });
 
 /** Helper: stub a single successful Gemini response and run the agent against it. */
