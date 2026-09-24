@@ -299,6 +299,70 @@ user signs up**, and sign-up is open on the live site now, so the second trigger
 under your control. Treat A.17b's "empty" finding as a dated observation, not a standing
 condition, and re-verify it before relying on it again.
 
+## Section 5b — FYI only, not Phase 1 scope: current-app design audit (2026-09-24)
+
+**Not a Phase 1 item.** This section is a landing spot for findings, not a tracked gate —
+Section 6 already excludes any repository code change or in-app rebranding from Phase 1
+scope (DEC-0035). Recorded here only so it isn't lost; revisit if/when Phase 2 (§9,
+in-repo rebranding) is authorised, since fixing this alongside a rebrand pass would be
+more efficient than doing it twice.
+
+**Doubles as a "don't repeat this" list for the greenfield build in `listrassistr-official`.**
+These aren't only cleanup debt on the current app — every pattern below is a concrete
+anti-pattern to avoid when building the new brand's UI from scratch, since a fresh
+codebase can just as easily drift into the same shape (primitives defined but unused,
+two clichés recurring, token drift between definition and usage) if nothing calls it out
+up front. Worth a glance at Q-10/T-01/T-02 time (§8.3 token and usage-sheet work) even
+though this doc's scope otherwise excludes repo code.
+
+Reviewed this repo's existing frontend (`src/pages/` v1, `src/v2/pages/` v2,
+`src/components/ui/`, `src/index.css`, `src/v2/theme.css`, `tailwind.config.ts`) against
+the `modern-design` skill's design-bar rule. Findings, most significant first:
+
+- **Shared UI primitives exist but are effectively unused.** `src/components/ui/button.tsx`
+  is stock unmodified shadcn; zero sampled pages (v1 or v2) import it — every button is a
+  hand-rolled `<button className="...">` (29 instances in `DashboardPage.tsx`, 16 in
+  `DashboardPage2.tsx`). v2's `theme.css` ships real utility classes (`.v2-btn-primary`,
+  `.v2-card`, `.v2-badge-*`, `.v2-page-title`) that are also never consumed — v2 pages use
+  inline `style={{}}` objects instead (13–83 per file).
+- **No `StatusPill` component exists anywhere.** Status/badge markup is duplicated ad hoc
+  with a different one-off color per instance across 10+ files (`BillingPage.tsx`,
+  `BulkCogsPage.tsx`, `DraftsPage.tsx`, `HistoricalCogsPage.tsx`, `HomePage.tsx`,
+  `LandingPage.tsx`, `ListingsPage2.tsx`, etc.).
+- **Two unreconciled design systems, not one.** v1 (`src/index.css`) is dark/indigo/slate
+  with serif+tracked headers (`"Cinzel"` + `0.04em` letter-spacing, `index.css:129-135`);
+  v2 (`src/v2/theme.css`) is light/glass. Each has a real, named token system on its own
+  terms, but together they're a fork, not the skill's "one deliberate system."
+  Reconciling this is a product decision (which tree survives), not purely cleanup.
+- **Two named generic-AI clichés recur, in both trees:**
+  - _Tracked-out ALL-CAPS eyebrows_: 15+ in `DashboardPage.tsx` (v1); 9+ in
+    `DashboardPage2.tsx`/`SideNav.tsx`/`ListingDetailModal.tsx` (v2); also baked into
+    `theme.css`'s own `.v2-usage-card-title`.
+  - _Middle-dot metadata strings_ (`"X · Y"`): 16+ across v1 pages; 9+ across v2 pages.
+- **Color-token drift in v2.** Pages hardcode hex duplicates of theme variables
+  (`#6E7580`, `#141820`, `#9BA3AD` match `--v2-fg-muted`/`--v2-fg`/`--v2-fg-subtle`
+  exactly, as literals) instead of referencing them; inline status colors
+  (`#dc2626`/`#16a34a`/`#d97706`) don't match the HSL values `theme.css` actually defines
+  for success/warning/danger — two parallel palettes drifting apart.
+- **Border-radius not disciplined to one scale (max two tiers).** Repo-wide:
+  `rounded-lg` (446), `rounded-xl` (224), `rounded-full` (146), `rounded-md` (48),
+  `rounded-sm` (23), `rounded-2xl` (19) — six tiers in active use, though v2's own
+  _token_ definitions (`--v2-radius`/`-lg`) are a disciplined 2 tiers; the drift is at
+  the page/inline-style level.
+- **No explicit type scale.** Font sizes are ad hoc rem values scattered per-file in both
+  trees, with no named scale tied to roles consistently consumed (v2's `.v2-page-title`/
+  `.v2-section-title` exist in `theme.css` but pages don't use them).
+- **What's already compliant, for contrast:** both trees define deliberate, named color
+  tokens with light+dark values and one consistent accent hue for primary actions; shadow
+  usage is minimal (borders preferred over soft-shadow cards, per the skill); v2's
+  `AppShell.tsx` is genuinely mobile-first (sidebar collapses to `BottomNav` below `lg`),
+  not a fixed desktop shell.
+
+**If this is ever picked up:** the fastest lever is wiring existing pages to the
+primitives/theme classes that already exist (`components/ui`, `.v2-*` utility classes)
+rather than building anything new — the design system mostly already exists on paper, it's
+just not consumed.
+
 ## Section 6 — Explicitly not Phase 1
 
 Distinct from Section 4. Those items are Phase 1 work sequenced later; these are
