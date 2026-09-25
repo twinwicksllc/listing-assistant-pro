@@ -816,6 +816,13 @@ async function fetchOrderCounts(
 // which works there because that regex greedily matches the FIRST CategoryID tag in
 // the whole <Item> block, which happens to be the one under PrimaryCategory in that
 // response shape -- still fragile, but out of scope for this fix).
+// OutputSelector only recognizes whole node names, not a dotted child path --
+// "PrimaryCategory.CategoryID" was silently ignored by eBay (Ack:Success, but
+// no PrimaryCategory node at all in the response) rather than rejected, so
+// this fallback has likely never actually returned a category. Fixed
+// 2026-09-25 by selecting the whole PrimaryCategory node (see the identical
+// bug/fix in _helpers/ebayGetItemCategory.ts, found via that file's error
+// logging once it existed).
 export async function fetchWatchDataForListings(
   listingIds: string[],
   tradingUrl: string,
@@ -829,7 +836,7 @@ export async function fetchWatchDataForListings(
 <GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <ItemID>${itemId}</ItemID>
   <IncludeWatchCount>true</IncludeWatchCount>
-  <OutputSelector>ItemID,WatchCount,QuestionCount,Description,PrimaryCategory.CategoryID</OutputSelector>
+  <OutputSelector>ItemID,WatchCount,QuestionCount,Description,PrimaryCategory</OutputSelector>
 </GetItemRequest>`;
     try {
       const resp = await fetch(tradingUrl, {

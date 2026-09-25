@@ -24,6 +24,31 @@ function withMockedFetch<T>(
   });
 }
 
+Deno.test("fetchWatchDataForListings: requests the whole PrimaryCategory node, not a dotted child path", async () => {
+  // Regression for 2026-09-25: OutputSelector only recognizes whole node
+  // names -- "PrimaryCategory.CategoryID" was silently ignored by eBay
+  // (Ack:Success, but no PrimaryCategory node in the response at all), so
+  // this fallback has likely never actually returned a category since it
+  // shipped. Same bug/fix as _helpers/ebayGetItemCategory.ts.
+  let requestBody = "";
+  await withMockedFetch(
+    (_url, init) => {
+      requestBody = String(init?.body);
+      return new Response("<GetItemResponse><Ack>Success</Ack><Item></Item></GetItemResponse>", { status: 200 });
+    },
+    async () => {
+      await fetchWatchDataForListings(["1"], "https://api.ebay.com/ws/api.dll", "fake-token");
+    },
+  );
+  assertEquals(
+    requestBody.includes(
+      "<OutputSelector>ItemID,WatchCount,QuestionCount,Description,PrimaryCategory</OutputSelector>",
+    ),
+    true,
+  );
+  assertEquals(requestBody.includes("PrimaryCategory.CategoryID"), false);
+});
+
 Deno.test("fetchWatchDataForListings: extracts categoryId nested under PrimaryCategory", async () => {
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <GetItemResponse>

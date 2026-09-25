@@ -156,6 +156,22 @@ Deno.test("fetchPrimaryCategoryIds: omits items whose call failed or had no cate
   assertEquals(out, { ok: "118379" });
 });
 
+Deno.test("fetchPrimaryCategoryIds: requests the whole PrimaryCategory node, not a dotted child path", async () => {
+  // Regression for 2026-09-25: OutputSelector only recognizes whole node
+  // names. "PrimaryCategory.CategoryID" was silently ignored by eBay (the
+  // request "succeeded" -- Ack:Success -- but the response never contained
+  // a PrimaryCategory node at all), which is exactly why the 0/570 backfill
+  // produced zero warnings before #628 added logging to surface it.
+  let requestBody = "";
+  const fetchFn = (async (_url: string, init?: RequestInit) => {
+    requestBody = String(init?.body);
+    return new Response("<PrimaryCategory><CategoryID>1</CategoryID></PrimaryCategory>", { status: 200 });
+  }) as unknown as typeof fetch;
+  await fetchPrimaryCategoryIds(["a"], "https://example.com", "tok", fetchFn);
+  assertEquals(requestBody.includes("<OutputSelector>ItemID,PrimaryCategory</OutputSelector>"), true);
+  assertEquals(requestBody.includes("PrimaryCategory.CategoryID"), false);
+});
+
 Deno.test("fetchPrimaryCategoryIds: an Ack:Failure response (HTTP 200, no PrimaryCategory) is omitted, not silently treated as success", async () => {
   const fetchFn = (async () => {
     return new Response(

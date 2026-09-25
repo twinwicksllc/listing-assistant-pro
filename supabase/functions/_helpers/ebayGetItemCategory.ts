@@ -1,5 +1,5 @@
 // ----------------------------------------------------------------
-// Looks up each listing's PrimaryCategory.CategoryID via the Trading API's
+// Looks up each listing's PrimaryCategory/CategoryID via the Trading API's
 // GetItem call. Used by ebayInventorySync.ts to backfill
 // user_active_listings.category_id for listings ebay-listings returned
 // without one.
@@ -54,10 +54,17 @@ export async function fetchPrimaryCategoryIds(
   const startedAt = now();
 
   const lookup = async (itemId: string) => {
+    // OutputSelector only recognizes whole node names, not a dotted child
+    // path -- "PrimaryCategory.CategoryID" is silently ignored by eBay
+    // rather than rejected, so every response came back Ack:Success with no
+    // PrimaryCategory node at all (found 2026-09-25, once #628's logging
+    // finally surfaced the raw body). Selecting the whole node returns
+    // PrimaryCategory with CategoryID nested inside, which is what
+    // parsePrimaryCategoryId already expects.
     const xml = `<?xml version="1.0" encoding="utf-8"?>
 <GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <ItemID>${itemId}</ItemID>
-  <OutputSelector>ItemID,PrimaryCategory.CategoryID</OutputSelector>
+  <OutputSelector>ItemID,PrimaryCategory</OutputSelector>
 </GetItemRequest>`;
     // Same abort-covers-the-body pattern as fetchWithTimeout.ts, inlined so
     // fetchFn stays injectable for tests.
