@@ -542,7 +542,8 @@ serve(async (req: Request) => {
           if (seqError || seqNum == null) throw new Error("seq error");
           sku = `BK${String(seqNum).padStart(5, "0")}`;
         } catch {
-          sku = `BK-${crypto.randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`;
+          // Alphanumeric only -- see generateDraftSku in ebay-publish.
+          sku = `BK${crypto.randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`;
         }
 
         // Condition normalization

@@ -200,6 +200,9 @@ export function useAnalyzePublish({
       const { data, error } = await supabase.functions.invoke("ebay-publish", {
         body: {
           action: "create_draft",
+          // Without userId, create_draft can't draw from the per-user
+          // sequence and falls back to a random SKU.
+          userId,
           userToken: ebayToken,
           ...buildPublishPayload({
             imageUrlsForPayload: imageUrlsForPublish,

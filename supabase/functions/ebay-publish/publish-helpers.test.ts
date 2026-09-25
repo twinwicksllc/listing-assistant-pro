@@ -2,6 +2,7 @@ import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import {
   CONDITION_DESCRIPTIONS,
   detectCategoryTreeSync,
+  generateDraftSku,
   getConditionDescription,
   HARDCODED_BULLION_CATEGORY_IDS,
   HARDCODED_COIN_CATEGORY_IDS,
@@ -323,4 +324,17 @@ Deno.test("normalizeConditionDescriptorToEnum: the live-incident tautology is fi
   assertEquals(matched?.conditionId, 3000);
   // The value that would actually be sent to eBay is now a real ConditionEnum.
   assertEquals(normalizedIncoming, "USED_EXCELLENT");
+});
+
+// eBay's Inventory API rejects any non-alphanumeric SKU (errorId 25707), and
+// a single stored bad SKU fails the bulk GET /offer call for the whole
+// account -- which is what forced every inventory sync onto the Trading API
+// fallback (2026-09-24). The random fallback used to emit "LA-XXXX".
+Deno.test("generateDraftSku: random fallback (no userId) is alphanumeric and within 50 chars", async () => {
+  const sku = await generateDraftSku(undefined, undefined);
+  assertEquals(/^LA[0-9A-F]{16}$/.test(sku), true, sku);
+});
+
+Deno.test("generateDraftSku: an incoming SKU is passed through unchanged", async () => {
+  assertEquals(await generateDraftSku("LA01234", undefined), "LA01234");
 });
