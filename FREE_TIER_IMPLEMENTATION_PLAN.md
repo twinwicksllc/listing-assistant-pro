@@ -203,7 +203,7 @@ Code inspection confirms the current OAuth scopes in `ebay-publish/index.ts` are
 
 1. Add `https://api.ebay.com/oauth/api_scope/commerce.identity.readonly` to the scopes list in `get_auth_url`
 2. **Re-auth strategy: Option B selected (OQ-5 RESOLVED — forced re-auth).** On migration deploy, NULL all `profiles.ebay_access_token`, `profiles.ebay_refresh_token`, and `profiles.ebay_token_expires_at`. Every existing connected user will be prompted to reconnect on their next eBay-dependent action. The deployment migration must include this step (see §7 Phase 6 checklist).
-3. Note: `ebay-user/index.ts` already calls the Identity API today (OQ-15 RESOLVED: confirmed working in production with live tokens — no `commerce.identity.readonly` scope needed to read `ebay-user` today, but it will be needed after the scope change).
+3. Note: `ebay-user/index.ts` already calls the Identity API today (OQ-15 RESOLVED: confirmed working in production with live tokens — no `commerce.identity.readonly` scope needed to read `ebay-user` today, but it will be needed after the scope change). **Correction, 2026-09-25:** this "confirmed working" claim predated a real bug — `ebay-user/index.ts` was building its Identity API request against `api.ebay.com` instead of `apiz.ebay.com`, 502ing on every call. Fixed by PR #629 (`identityApiBaseFor()`); see CLAUDE.md's eBay integration surface notes. Re-confirmed live post-fix: a `200 OK` with no error logs, vs. a `502` from the same call earlier the same day.
 
 #### 3.0.2 Double-counted usage rows — verify before coding
 

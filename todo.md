@@ -678,12 +678,20 @@ line ~1070), or reverting BATCH_LIMIT/REFRESH_CONCURRENCY/PROBE_CAP to pre-fix v
 
 ## 2026-09-25 follow-ups (from deploy-block / SKU investigation)
 
-- [ ] Verify `user_active_listings.category_id` populates after the first
-      post-deploy `inventory-sync-cron` pass (#623/#624). Check the database,
-      not just the log: `select count(category_id) from user_active_listings`
-      should climb toward 570. The `Category backfill ... found N` log line
-      reports how many GetItem calls actually ran and succeeded; the 60s
-      budget may defer the rest to later syncs (6h apart).
+- [x] Verify `user_active_listings.category_id` populates after the first
+      post-deploy `inventory-sync-cron` pass (#623/#624) — resolved
+      2026-09-25, but not by #623/#624 alone. Those shipped with a real bug:
+      the GetItem `OutputSelector` value `PrimaryCategory.CategoryID` is a
+      dotted child path, which eBay silently ignores rather than rejects —
+      every backfill call returned `Ack:Success` with no category and zero
+      warnings, so `category_id` stayed 0/570 even after #623/#624 deployed.
+      #628 added error logging that finally surfaced this (previously the
+      failure was completely invisible); #630 fixed the actual selector
+      (`PrimaryCategory` as a whole node). Confirmed live post-#630: manual
+      `inventory-sync-cron` invocation logged
+      `Category backfill ... queued 570, found 570`, and
+      `select count(category_id) from user_active_listings` returned
+      `570/570`.
 - [ ] Live smoke test of the Listing Editor — it first reached production
       2026-09-25 (see `LISTING_EDITOR_PLAN.md`); edit one real price and
       confirm a `listing_edits_log` row.
@@ -698,12 +706,25 @@ line ~1070), or reverting BATCH_LIMIT/REFRESH_CONCURRENCY/PROBE_CAP to pre-fix v
       `ebay-listings` enumerate by known SKU (`drafts.ebay_sku`) via
       `GET /offer?sku=`, which doesn't trigger the account-wide bulk-list
       validation those SKUs break — see CLAUDE.md's eBay integration surface
-      notes and `_helpers/ebayOfferLookup.ts`.
+      notes and `_helpers/ebayOfferLookup.ts` (#631).
+      **Follow-up bug found verifying this fix, fixed by #632:** `drafts` had
+      zero rows with an `ebay_sku` account-wide — `AnalyzePage.tsx`'s
+      direct-publish flow (`useAnalyzePublish.ts`) never wrote to `drafts`
+      at all, so #631's `fetchKnownSkusForUser` had nothing to enumerate and
+      the fix was inert in practice. #632 added the missing `addDraft`/
+      `markDraftPublished` calls to that flow's success path. Not yet
+      re-verified end-to-end post-#632 — pending a fresh listing publish;
+      check `ebay-listings` logs for `N known SKU(s)...` with N ≥ 1 (was
+      always 0 before #632).
 - [ ] Add a PR-time CI check that migration version prefixes are unique
       (`ls supabase/migrations | cut -d_ -f1 | sort | uniq -d` must be empty).
-      This bug has now blocked production deploys twice (#614, #624).
-- [ ] `ebay-user/index.ts:117` still uses `api.ebay.com` for the Identity API
-      (should be `apiz.ebay.com`); check its logs to confirm it is failing.
+      This bug has now blocked production deploys twice (#614, #624). Still
+      not implemented — no changes to this item this session.
+- [x] `ebay-user/index.ts:117` used `api.ebay.com` for the Identity API
+      instead of `apiz.ebay.com` — fixed by #629 (`identityApiBaseFor()`).
+      Confirmed live: a Dashboard-triggered `ebay-user` call returned
+      `200 OK` post-deploy with no error logs, vs. a `502` seen from the
+      same call earlier the same day pre-fix.
 
 ## 2026-09-25: remove auto-reprice-cron (owner decision, feature rejected)
 
