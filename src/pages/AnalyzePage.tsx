@@ -76,7 +76,7 @@ export default function AnalyzePage() {
   } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const { addDraft } = useDrafts();
+  const { addDraft, markDraftPublished } = useDrafts();
 
   const state = location.state as any;
   const imageUrls: string[] =
@@ -262,7 +262,62 @@ export default function AnalyzePage() {
     packageHeightIn,
   });
 
-  const handlePublishSuccess = async (data: any) => {
+  const buildDraftPayload = (uploadedUrls: string[]) => ({
+    id: crypto.randomUUID(),
+    imageUrl: uploadedUrls[0],
+    imageUrls: uploadedUrls,
+    title,
+    description: getDescriptionWithFooter(),
+    priceMin,
+    priceMax,
+    listingPrice:
+      listingPrice > 0
+        ? listingPrice
+        : auctionStartPrice > 0
+          ? auctionStartPrice
+          : parseFloat(((priceMin + priceMax) / 2).toFixed(2)),
+    listingFormat,
+    createdAt: new Date(),
+    ebayCategoryId,
+    ebayCategoryBreadcrumb: categoryBreadcrumb,
+    itemSpecifics,
+    coinConditionDetail,
+    condition,
+    consignor,
+    // Item domain classified by Pass-1 AI (Phase 4 quality-assurance tracking)
+    domain: domain !== "general" ? domain : undefined,
+    cogs: cogs ?? undefined,
+    cogsSource: cogs != null ? "manual" : undefined,
+    fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId ?? undefined,
+    paymentPolicyId: selectedPolicies.paymentPolicyId ?? undefined,
+    returnPolicyId: selectedPolicies.returnPolicyId ?? undefined,
+    metalType: metalType !== "none" ? metalType : undefined,
+    metalWeightOz: metalWeightOz > 0 ? metalWeightOz : undefined,
+    bestOfferEnabled: bestOfferEnabled || undefined,
+    bestOfferAutoAcceptPrice:
+      bestOfferEnabled && bestOfferAutoAcceptPrice > 0
+        ? bestOfferAutoAcceptPrice
+        : undefined,
+    bestOfferAutoDeclinePrice:
+      bestOfferEnabled && bestOfferAutoDeclinePrice > 0
+        ? bestOfferAutoDeclinePrice
+        : undefined,
+    quantity: quantity > 1 ? quantity : undefined,
+    pricingMode: quantity > 1 ? pricingMode : undefined,
+    videoUrl: videoUrl ?? undefined,
+    ebayVideoId: ebayVideoId ?? undefined,
+    ebayVideoStatus: ebayVideoStatus ?? undefined,
+    packageWeightLb: packageWeightLb > 0 ? packageWeightLb : undefined,
+    packageWeightOz: packageWeightOz > 0 ? packageWeightOz : undefined,
+    packageLengthIn: packageLengthIn > 0 ? packageLengthIn : undefined,
+    packageWidthIn: packageWidthIn > 0 ? packageWidthIn : undefined,
+    packageHeightIn: packageHeightIn > 0 ? packageHeightIn : undefined,
+  });
+
+  const handlePublishSuccess = async (
+    data: any,
+    imageUrlsForPublish: string[],
+  ) => {
     await recordUsage("ebay_publish");
     if (cogs != null && user?.id && (data.sku || data.listingId)) {
       try {
@@ -278,6 +333,38 @@ export default function AnalyzePage() {
         console.warn("Failed to persist COGS after direct publish:", cogsErr);
       }
     }
+
+    // Direct-publish from this page previously created no local record at
+    // all -- drafts stayed empty even for listings genuinely live on eBay,
+    // which silently broke anything that reads drafts.ebay_sku (e.g. PR
+    // #631's per-SKU inventory enumeration). Best-effort only: the eBay
+    // listing is already live regardless of whether this succeeds, so a
+    // failure here must never block navigation or surface as an error to
+    // the user.
+    try {
+      const draftId = crypto.randomUUID();
+      const added = await addDraft({
+        ...buildDraftPayload(imageUrlsForPublish),
+        id: draftId,
+      });
+      if (added) {
+        await markDraftPublished(draftId, {
+          sku: data.sku,
+          offerId: data.offerId,
+          listingId: data.listingId,
+        });
+      } else {
+        console.warn(
+          "Failed to create drafts row after direct publish (listing is live on eBay; local tracking only)",
+        );
+      }
+    } catch (draftErr) {
+      console.warn(
+        "Failed to create drafts row after direct publish (listing is live on eBay; local tracking only):",
+        draftErr,
+      );
+    }
+
     navigate("/home");
   };
 
@@ -380,58 +467,6 @@ export default function AnalyzePage() {
     onRequireBilling: () => navigate("/billing"),
     onRequireSettings: () => navigate("/settings?tab=billing"),
     onSuccess: handleAnalyzeSuccess,
-  });
-
-  const buildDraftPayload = (uploadedUrls: string[]) => ({
-    id: crypto.randomUUID(),
-    imageUrl: uploadedUrls[0],
-    imageUrls: uploadedUrls,
-    title,
-    description: getDescriptionWithFooter(),
-    priceMin,
-    priceMax,
-    listingPrice:
-      listingPrice > 0
-        ? listingPrice
-        : auctionStartPrice > 0
-          ? auctionStartPrice
-          : parseFloat(((priceMin + priceMax) / 2).toFixed(2)),
-    listingFormat,
-    createdAt: new Date(),
-    ebayCategoryId,
-    ebayCategoryBreadcrumb: categoryBreadcrumb,
-    itemSpecifics,
-    coinConditionDetail,
-    condition,
-    consignor,
-    // Item domain classified by Pass-1 AI (Phase 4 quality-assurance tracking)
-    domain: domain !== "general" ? domain : undefined,
-    cogs: cogs ?? undefined,
-    cogsSource: cogs != null ? "manual" : undefined,
-    fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId ?? undefined,
-    paymentPolicyId: selectedPolicies.paymentPolicyId ?? undefined,
-    returnPolicyId: selectedPolicies.returnPolicyId ?? undefined,
-    metalType: metalType !== "none" ? metalType : undefined,
-    metalWeightOz: metalWeightOz > 0 ? metalWeightOz : undefined,
-    bestOfferEnabled: bestOfferEnabled || undefined,
-    bestOfferAutoAcceptPrice:
-      bestOfferEnabled && bestOfferAutoAcceptPrice > 0
-        ? bestOfferAutoAcceptPrice
-        : undefined,
-    bestOfferAutoDeclinePrice:
-      bestOfferEnabled && bestOfferAutoDeclinePrice > 0
-        ? bestOfferAutoDeclinePrice
-        : undefined,
-    quantity: quantity > 1 ? quantity : undefined,
-    pricingMode: quantity > 1 ? pricingMode : undefined,
-    videoUrl: videoUrl ?? undefined,
-    ebayVideoId: ebayVideoId ?? undefined,
-    ebayVideoStatus: ebayVideoStatus ?? undefined,
-    packageWeightLb: packageWeightLb > 0 ? packageWeightLb : undefined,
-    packageWeightOz: packageWeightOz > 0 ? packageWeightOz : undefined,
-    packageLengthIn: packageLengthIn > 0 ? packageLengthIn : undefined,
-    packageWidthIn: packageWidthIn > 0 ? packageWidthIn : undefined,
-    packageHeightIn: packageHeightIn > 0 ? packageHeightIn : undefined,
   });
 
   const { handleSave } = useAnalyzeSave({

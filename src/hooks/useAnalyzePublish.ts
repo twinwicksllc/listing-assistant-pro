@@ -23,7 +23,14 @@ interface UseAnalyzePublishParams {
     city?: string | null;
   }) => Record<string, unknown>;
   onRequireBilling: () => void;
-  onPublishSuccess: (data: any) => Promise<void> | void;
+  // imageUrlsForPublish are the actually-uploaded URLs used for this
+  // publish (see uploadListingImages below) -- distinct from this hook's
+  // own `imageUrls` param, which may be local/pre-upload. The caller needs
+  // these, not the pre-upload ones, to build an accurate drafts row.
+  onPublishSuccess: (
+    data: any,
+    imageUrlsForPublish: string[],
+  ) => Promise<void> | void;
 }
 
 interface StoredTokenData {
@@ -284,7 +291,7 @@ export function useAnalyzePublish({
         duration: 5000,
       });
 
-      await onPublishSuccess(data);
+      await onPublishSuccess(data, imageUrlsForPublish);
     } catch (err: any) {
       console.error("Publish error:", err);
       toast.error(err.message || "Failed to publish to eBay.");
