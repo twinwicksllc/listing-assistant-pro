@@ -82,11 +82,15 @@ export async function fetchOffersBySku(
           signal: controller.signal,
         },
       );
+      // Always read the body before branching on status -- fetch() in the
+      // Edge runtime resolves at headers, so an unread body can leave the
+      // response/connection unfinished; with up to OFFER_LOOKUP_CONCURRENCY
+      // lookups in flight that can accumulate (Copilot review, PR #631).
+      const bodyText = await resp.text();
       if (!resp.ok) {
         if (resp.status === 401) {
           unauthorized = true;
         } else if (resp.status !== 404) {
-          const bodyText = await resp.text();
           console.warn(
             `[ebay-listings] Offer lookup HTTP ${resp.status} for sku "${sku}": ${bodyText.slice(0, 300)}`,
           );
@@ -95,15 +99,20 @@ export async function fetchOffersBySku(
       }
       let data: { offers?: unknown[] };
       try {
-        data = JSON.parse(await resp.text());
+        data = JSON.parse(bodyText);
       } catch (e) {
         console.warn(`[ebay-listings] Failed to parse offer lookup response for sku "${sku}": ${e}`);
         return;
       }
-      // sku is a query filter, not a path param -- eBay returns an array
-      // (typically one PUBLISHED offer per SKU in this app's usage), not a
-      // single object. An empty array means no live offer for this SKU.
-      const offer = (data.offers ?? [])[0] as { offerId?: string } | undefined;
+      // sku is a query filter, not a path param -- eBay returns an array of
+      // every offer for that SKU (any status, any order), not a single
+      // live one. The old bulk list filtered to status=PUBLISHED; do the
+      // same here client-side so an ended/unpublished offer never gets
+      // selected and displayed as an active listing (Copilot review,
+      // PR #631).
+      const offer = (data.offers ?? []).find((o: unknown) => (o as { status?: string })?.status === "PUBLISHED") as
+        | { offerId?: string }
+        | undefined;
       if (offer?.offerId) {
         result[sku] = { offerId: offer.offerId, sku, raw: offer };
       }

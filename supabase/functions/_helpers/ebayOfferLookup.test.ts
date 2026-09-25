@@ -11,7 +11,10 @@ Deno.test("fetchOffersBySku: returns offers for SKUs eBay has a PUBLISHED offer 
   const fetchFn = (async (url: string) => {
     const sku = new URL(url).searchParams.get("sku");
     if (sku === "LA00001") {
-      return new Response(JSON.stringify({ offers: [{ offerId: "111", sku: "LA00001" }] }), { status: 200 });
+      return new Response(
+        JSON.stringify({ offers: [{ offerId: "111", sku: "LA00001", status: "PUBLISHED" }] }),
+        { status: 200 },
+      );
     }
     return new Response(JSON.stringify({ offers: [] }), { status: 200 });
   }) as unknown as typeof fetch;
@@ -37,11 +40,16 @@ Deno.test("fetchOffersBySku: a 404 for one SKU is silent and doesn't block the r
     const fetchFn = (async (url: string) => {
       const sku = new URL(url).searchParams.get("sku");
       if (sku === "gone") return new Response("not found", { status: 404 });
-      return new Response(JSON.stringify({ offers: [{ offerId: "222", sku: "ok" }] }), { status: 200 });
+      return new Response(
+        JSON.stringify({ offers: [{ offerId: "222", sku: "ok", status: "PUBLISHED" }] }),
+        { status: 200 },
+      );
     }) as unknown as typeof fetch;
 
     const { offers } = await fetchOffersBySku(["gone", "ok"], "https://api.ebay.com", "tok", fetchFn);
-    assertEquals(offers, { ok: { offerId: "222", sku: "ok", raw: { offerId: "222", sku: "ok" } } });
+    assertEquals(offers, {
+      ok: { offerId: "222", sku: "ok", raw: { offerId: "222", sku: "ok", status: "PUBLISHED" } },
+    });
     // A 404 (SKU no longer live) is expected and must not be logged as a warning.
     assertEquals(warnCalled, false);
   } finally {
@@ -53,7 +61,10 @@ Deno.test("fetchOffersBySku: a non-404 error is logged but doesn't throw or bloc
   const fetchFn = (async (url: string) => {
     const sku = new URL(url).searchParams.get("sku");
     if (sku === "bad") return new Response("server error", { status: 500 });
-    return new Response(JSON.stringify({ offers: [{ offerId: "333", sku: "ok" }] }), { status: 200 });
+    return new Response(
+      JSON.stringify({ offers: [{ offerId: "333", sku: "ok", status: "PUBLISHED" }] }),
+      { status: 200 },
+    );
   }) as unknown as typeof fetch;
 
   const { offers, unauthorized } = await fetchOffersBySku(["bad", "ok"], "https://api.ebay.com", "tok", fetchFn);
@@ -69,6 +80,39 @@ Deno.test("fetchOffersBySku: a 401 sets unauthorized so the caller can surface n
   const { offers, unauthorized } = await fetchOffersBySku(["a", "b"], "https://api.ebay.com", "expired", fetchFn);
   assertEquals(offers, {});
   assertEquals(unauthorized, true);
+});
+
+Deno.test("fetchOffersBySku: filters to a PUBLISHED offer, ignoring unpublished/ended ones for the same SKU", async () => {
+  // Regression for the Copilot review on PR #631: ?sku= returns every offer
+  // for that SKU in unspecified order, not just live ones -- the old bulk
+  // list had status=PUBLISHED built into the query; this must filter
+  // client-side or an ended/unpublished offer could be selected instead.
+  const fetchFn = (async () => {
+    return new Response(
+      JSON.stringify({
+        offers: [
+          { offerId: "old-ended", sku: "x", status: "ENDED" },
+          { offerId: "live", sku: "x", status: "PUBLISHED" },
+        ],
+      }),
+      { status: 200 },
+    );
+  }) as unknown as typeof fetch;
+
+  const { offers } = await fetchOffersBySku(["x"], "https://api.ebay.com", "tok", fetchFn);
+  assertEquals(offers["x"].offerId, "live");
+});
+
+Deno.test("fetchOffersBySku: a SKU with only non-PUBLISHED offers is omitted", async () => {
+  const fetchFn = (async () => {
+    return new Response(
+      JSON.stringify({ offers: [{ offerId: "old-ended", sku: "x", status: "ENDED" }] }),
+      { status: 200 },
+    );
+  }) as unknown as typeof fetch;
+
+  const { offers } = await fetchOffersBySku(["x"], "https://api.ebay.com", "tok", fetchFn);
+  assertEquals(offers, {});
 });
 
 Deno.test("fetchOffersBySku: an empty offers array for a SKU is omitted, not an error", async () => {

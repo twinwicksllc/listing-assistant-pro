@@ -1190,6 +1190,11 @@ async function fetchSoldListings(
   return results;
 }
 
+// PostgREST caps a single select() response at 1,000 rows -- a user with
+// more published drafts than that would silently lose SKUs past the cap
+// without paging (Copilot review, PR #631).
+const KNOWN_SKUS_PAGE_SIZE = 1000;
+
 // ─── Known SKUs for this user, from our own DB ───────────────────────────────
 // Source of truth for the per-SKU offer enumeration below: every SKU this app
 // has ever generated for a published draft. Nearly all of this user's active
@@ -1201,27 +1206,37 @@ export async function fetchKnownSkusForUser(
   serviceKey: string,
   userId: string,
 ): Promise<string[]> {
-  const resp = await fetch(
-    `${supabaseUrl}/rest/v1/drafts?user_id=eq.${userId}&publish_status=eq.published&ebay_sku=not.is.null&select=ebay_sku`,
-    {
-      headers: {
-        apikey: serviceKey,
-        Authorization: `Bearer ${serviceKey}`,
+  const skus: string[] = [];
+  let offset = 0;
+
+  while (true) {
+    const resp = await fetch(
+      `${supabaseUrl}/rest/v1/drafts?user_id=eq.${userId}&publish_status=eq.published&ebay_sku=not.is.null&select=ebay_sku&order=id&limit=${KNOWN_SKUS_PAGE_SIZE}&offset=${offset}`,
+      {
+        headers: {
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+        },
       },
-    },
-  );
-  if (!resp.ok) {
-    console.warn(`ebay-listings: Failed to fetch known SKUs for user ${userId}: ${resp.status}`);
-    return [];
+    );
+    if (!resp.ok) {
+      console.warn(`ebay-listings: Failed to fetch known SKUs for user ${userId}: ${resp.status}`);
+      return skus;
+    }
+    let rows: Array<{ ebay_sku: string }>;
+    try {
+      rows = JSON.parse(await resp.text());
+    } catch (e) {
+      console.warn(`ebay-listings: Failed to parse known-SKUs response for user ${userId}: ${e}`);
+      return skus;
+    }
+    skus.push(...rows.map((r) => r.ebay_sku).filter(Boolean));
+
+    if (rows.length < KNOWN_SKUS_PAGE_SIZE) break;
+    offset += KNOWN_SKUS_PAGE_SIZE;
   }
-  let rows: Array<{ ebay_sku: string }>;
-  try {
-    rows = JSON.parse(await resp.text());
-  } catch (e) {
-    console.warn(`ebay-listings: Failed to parse known-SKUs response for user ${userId}: ${e}`);
-    return [];
-  }
-  return rows.map((r) => r.ebay_sku).filter(Boolean);
+
+  return skus;
 }
 
 serve(async (req) => {

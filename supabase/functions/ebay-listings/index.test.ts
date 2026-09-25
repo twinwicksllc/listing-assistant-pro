@@ -179,3 +179,30 @@ Deno.test("fetchKnownSkusForUser: returns an empty list on an unparseable respon
     },
   );
 });
+
+Deno.test("fetchKnownSkusForUser: pages past PostgREST's 1,000-row cap instead of silently truncating", async () => {
+  // Regression for the Copilot review on PR #631: a select() with no
+  // pagination stops at 1,000 rows -- a user with more published drafts
+  // than that would lose SKUs past the cap without paging.
+  const page1 = Array.from({ length: 1000 }, (_, i) => ({ ebay_sku: `LA${i}` }));
+  const page2 = [{ ebay_sku: "LA1000" }, { ebay_sku: "LA1001" }];
+  let calls = 0;
+  await withMockedFetch(
+    (url) => {
+      const parsed = new URL(url);
+      assertEquals(parsed.searchParams.get("limit"), "1000");
+      const offset = parsed.searchParams.get("offset");
+      calls++;
+      if (offset === "0") return new Response(JSON.stringify(page1), { status: 200 });
+      if (offset === "1000") return new Response(JSON.stringify(page2), { status: 200 });
+      throw new Error(`unexpected offset: ${offset}`);
+    },
+    async () => {
+      const skus = await fetchKnownSkusForUser("https://x.supabase.co", "svc-key", "user-1");
+      assertEquals(skus.length, 1002);
+      assertEquals(skus[0], "LA0");
+      assertEquals(skus[1001], "LA1001");
+      assertEquals(calls, 2);
+    },
+  );
+});
