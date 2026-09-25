@@ -26,6 +26,15 @@ const corsHeaders = {
 // Exported so retry/backoff behavior can be exercised directly against a
 // mocked `globalThis.fetch`, without waiting on real timers or standing up
 // a live eBay token.
+// Identity lives on apiz.ebay.com, NOT api.ebay.com -- a 502 (still open as
+// of 2026-09-25 until this fix) came from this function building apiBase as
+// api.ebay.com while every other Identity/Finances call in
+// ebay-publish/constants.ts (IDENTITY_API_PROD/_SANDBOX) correctly uses apiz.
+// Extracted so the host choice is testable without invoking the full handler.
+export function identityApiBaseFor(ebayEnv: string | undefined): string {
+  return ebayEnv === "production" ? "https://apiz.ebay.com" : "https://apiz.sandbox.ebay.com";
+}
+
 export async function fetchIdentityWithRetry(
   apiBase: string,
   userToken: string,
@@ -114,7 +123,7 @@ serve(async (req) => {
     // is the root cause of a 502 seen live 2026-08-17 (eBay returned 404 for
     // a production token queried against api.sandbox.ebay.com).
     const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "production";
-    const apiBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
+    const apiBase = identityApiBaseFor(ebayEnv);
 
     if (!userToken) {
       return new Response(JSON.stringify({ needsAuth: true }), {
