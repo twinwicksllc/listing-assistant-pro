@@ -156,6 +156,17 @@ Deno.test("fetchPrimaryCategoryIds: omits items whose call failed or had no cate
   assertEquals(out, { ok: "118379" });
 });
 
+Deno.test("fetchPrimaryCategoryIds: an Ack:Failure response (HTTP 200, no PrimaryCategory) is omitted, not silently treated as success", async () => {
+  const fetchFn = (async () => {
+    return new Response(
+      `<GetItemResponse><Ack>Failure</Ack><Errors><ShortMessage>Item not found.</ShortMessage></Errors></GetItemResponse>`,
+      { status: 200 },
+    );
+  }) as unknown as typeof fetch;
+  const out = await fetchPrimaryCategoryIds(["gone"], "https://example.com", "tok", fetchFn);
+  assertEquals(out, {});
+});
+
 Deno.test("fetchPrimaryCategoryIds: passes an abort signal so a hung response can be cut off", async () => {
   let sawSignal = false;
   const fetchFn = (async (_url: string, init?: RequestInit) => {
