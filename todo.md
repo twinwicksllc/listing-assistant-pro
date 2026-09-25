@@ -687,11 +687,39 @@ line ~1070), or reverting BATCH_LIMIT/REFRESH_CONCURRENCY/PROBE_CAP to pre-fix v
 - [ ] Live smoke test of the Listing Editor — it first reached production
       2026-09-25 (see `LISTING_EDITOR_PLAN.md`); edit one real price and
       confirm a `listing_edits_log` row.
-- [ ] Decide on migrating the ~805 existing hyphenated SKUs (eBay errorId
-      25707 blocks bulk `GET /offer` for the whole account until they're gone).
-      #626 only stops new ones. Needs user decision — relist vs. revise.
+- [x] Decide on migrating the ~805 existing hyphenated SKUs — resolved
+      2026-09-25: NOT migrating them. A web-enabled Claude confirmed against
+      eBay's Sell Inventory API contract that there is no supported way to
+      rename a SKU on a live offer (sku is immutable on `updateOffer`;
+      `bulk_migrate_listing` only migrates legacy listings in, it can't
+      re-key an already-managed one). The only path is publish-new/withdraw-
+      old, which resets `listingId`/watch count/listing age for all 805 —
+      real business impact, ruled out. Fixed instead by having
+      `ebay-listings` enumerate by known SKU (`drafts.ebay_sku`) via
+      `GET /offer?sku=`, which doesn't trigger the account-wide bulk-list
+      validation those SKUs break — see CLAUDE.md's eBay integration surface
+      notes and `_helpers/ebayOfferLookup.ts`.
 - [ ] Add a PR-time CI check that migration version prefixes are unique
       (`ls supabase/migrations | cut -d_ -f1 | sort | uniq -d` must be empty).
       This bug has now blocked production deploys twice (#614, #624).
 - [ ] `ebay-user/index.ts:117` still uses `api.ebay.com` for the Identity API
       (should be `apiz.ebay.com`); check its logs to confirm it is failing.
+
+## 2026-09-25: remove auto-reprice-cron (owner decision, feature rejected)
+
+- [ ] Delete `supabase/functions/auto-reprice-cron/` entirely, along with its
+      `reprice_rules`/`optimization_history` tables (migration to drop them)
+      and any frontend UI that creates/edits reprice rules, if any exists.
+      Owner's explicit reasoning: this isn't just unwanted, it's a feature
+      that could actively hurt a user's experience — altering live listing
+      prices unattended carries real risk (a bad rule could crater margins
+      or price a listing out of any real sale, with no human in the loop to
+      catch it before it happens). This isn't a "revisit later" backlog item
+      like the DEC-0017 scheduling decision — it's a decision to remove the
+      capability, not just decline to schedule it.
+      Already known: it's never been scheduled in production (DEC-0017,
+      2026-08-14, `20260814000000_fix_cron_jobs_vault_secrets.sql`), so this
+      is a clean removal with no live behavior change to worry about.
+      Before deleting, grep for any other caller/reference
+      (`grep -rn "auto-reprice-cron\|reprice_rules\|optimization_history"`)
+      to make sure nothing else depends on the tables or the function.

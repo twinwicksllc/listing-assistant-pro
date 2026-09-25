@@ -1,5 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.203.0/assert/mod.ts";
-import { fetchWatchDataForListings } from "./index.ts";
+import { fetchKnownSkusForUser, fetchWatchDataForListings } from "./index.ts";
 
 // Regression coverage: user_active_listings.category_id was NULL for every
 // row in production (560/560) because the Inventory API's bulk offer-LIST
@@ -130,6 +130,79 @@ Deno.test("fetchWatchDataForListings: existing watchCount/questionCount/descript
       assertEquals(result["110555555555"].questionCount, 3);
       assertEquals(result["110555555555"].description, "A lovely widget.");
       assertEquals(result["110555555555"].categoryId, "9355");
+    },
+  );
+});
+
+// Regression coverage for the account-wide bulk-offer-list failure
+// (2026-09-25): a single hyphenated SKU (errorId 25707) fails
+// GET /sell/inventory/v1/offer for the whole account. fetchKnownSkusForUser
+// sources the per-SKU enumeration's SKU list from drafts.ebay_sku (this
+// app's own record of every SKU it has generated for a published draft),
+// so per-SKU lookups don't depend on the broken bulk call at all.
+
+Deno.test("fetchKnownSkusForUser: returns each published draft's SKU", async () => {
+  await withMockedFetch(
+    (url) => {
+      // publish_status filter and non-null ebay_sku filter must both be present.
+      const parsed = new URL(url);
+      assertEquals(parsed.searchParams.get("publish_status"), "eq.published");
+      assertEquals(parsed.searchParams.get("ebay_sku"), "not.is.null");
+      return new Response(
+        JSON.stringify([{ ebay_sku: "LA00001" }, { ebay_sku: "LA00002" }]),
+        { status: 200 },
+      );
+    },
+    async () => {
+      const skus = await fetchKnownSkusForUser("https://x.supabase.co", "svc-key", "user-1");
+      assertEquals(skus, ["LA00001", "LA00002"]);
+    },
+  );
+});
+
+Deno.test("fetchKnownSkusForUser: returns an empty list (not a throw) on a failed query", async () => {
+  await withMockedFetch(
+    () => new Response("server error", { status: 500 }),
+    async () => {
+      const skus = await fetchKnownSkusForUser("https://x.supabase.co", "svc-key", "user-1");
+      assertEquals(skus, []);
+    },
+  );
+});
+
+Deno.test("fetchKnownSkusForUser: returns an empty list on an unparseable response", async () => {
+  await withMockedFetch(
+    () => new Response("not json", { status: 200 }),
+    async () => {
+      const skus = await fetchKnownSkusForUser("https://x.supabase.co", "svc-key", "user-1");
+      assertEquals(skus, []);
+    },
+  );
+});
+
+Deno.test("fetchKnownSkusForUser: pages past PostgREST's 1,000-row cap instead of silently truncating", async () => {
+  // Regression for the Copilot review on PR #631: a select() with no
+  // pagination stops at 1,000 rows -- a user with more published drafts
+  // than that would lose SKUs past the cap without paging.
+  const page1 = Array.from({ length: 1000 }, (_, i) => ({ ebay_sku: `LA${i}` }));
+  const page2 = [{ ebay_sku: "LA1000" }, { ebay_sku: "LA1001" }];
+  let calls = 0;
+  await withMockedFetch(
+    (url) => {
+      const parsed = new URL(url);
+      assertEquals(parsed.searchParams.get("limit"), "1000");
+      const offset = parsed.searchParams.get("offset");
+      calls++;
+      if (offset === "0") return new Response(JSON.stringify(page1), { status: 200 });
+      if (offset === "1000") return new Response(JSON.stringify(page2), { status: 200 });
+      throw new Error(`unexpected offset: ${offset}`);
+    },
+    async () => {
+      const skus = await fetchKnownSkusForUser("https://x.supabase.co", "svc-key", "user-1");
+      assertEquals(skus.length, 1002);
+      assertEquals(skus[0], "LA0");
+      assertEquals(skus[1001], "LA1001");
+      assertEquals(calls, 2);
     },
   );
 });
