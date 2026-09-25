@@ -290,6 +290,20 @@ export function getEbayCategoryBreadcrumb(
   return EBAY_CATEGORY_BREADCRUMBS[categoryId] ?? `Category #${categoryId}`;
 }
 
+// Bucket id for listings with no category (e.g. the Dashboard heat map).
+export const UNCATEGORIZED_CATEGORY_ID = "unknown";
+
+/**
+ * Short tile label for a category: the leaf of its breadcrumb
+ * ("Coins & Paper Money > ... > Bars & Rounds" -> "Bars & Rounds"). Unmapped
+ * ids come back as "Category #<id>".
+ */
+export function categoryTileLabel(categoryId: string): string {
+  if (categoryId === UNCATEGORIZED_CATEGORY_ID) return "Uncategorized";
+  const crumb = getEbayCategoryBreadcrumb(categoryId);
+  return crumb.split(" > ").pop() || crumb;
+}
+
 /**
  * Returns true if this is one of our 10 fully-validated template categories.
  */

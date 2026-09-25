@@ -7,6 +7,10 @@
  */
 
 import { useMemo } from "react";
+import {
+  categoryTileLabel,
+  UNCATEGORIZED_CATEGORY_ID,
+} from "@/lib/ebayCategoryMap";
 
 interface CategoryTile {
   categoryId: string;
@@ -15,8 +19,11 @@ interface CategoryTile {
   trend?: "up" | "down" | "stable";
 }
 
+// Shaped like the dashboard's eBay listings (ebay-listings returns
+// `categoryId`), not like drafts rows -- reading the drafts column name here
+// put every listing in one "unknown" tile.
 interface CategoryHeatMapProps {
-  listings?: Array<{ ebay_category_id?: string; title?: string }>;
+  listings?: Array<{ categoryId?: string; title?: string }>;
   maxTiles?: number;
 }
 
@@ -30,7 +37,7 @@ export function CategoryHeatMap({
     // Count listings per category
     const categoryMap = new Map<string, number>();
     listings.forEach((listing) => {
-      const catId = listing.ebay_category_id || "unknown";
+      const catId = listing.categoryId || UNCATEGORIZED_CATEGORY_ID;
       categoryMap.set(catId, (categoryMap.get(catId) || 0) + 1);
     });
 
@@ -38,7 +45,7 @@ export function CategoryHeatMap({
     return Array.from(categoryMap.entries())
       .map(([categoryId, count]) => ({
         categoryId,
-        categoryName: categoryId || "Uncategorized",
+        categoryName: categoryTileLabel(categoryId),
         activeCount: count,
       }))
       .sort((a, b) => b.activeCount - a.activeCount)

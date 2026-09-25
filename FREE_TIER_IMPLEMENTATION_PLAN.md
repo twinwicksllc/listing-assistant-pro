@@ -1,13 +1,13 @@
 # Free Tier Gating — Complete Implementation Plan
 
-**Status:** ✅ COMPLETE — Shipped 2026-09-21 (PR #613, merge commit 40148f6). All 15 design questions resolved, all gaps fixed, all implementation complete.
+**Status:** ✅ Code complete — shipped 2026-09-21 (PR #613, merge commit 40148f6). All 15 design questions resolved; both gaps are fixed in code (re-checked against the repo 2026-09-25). **Runtime verification still outstanding** — see the two notes under "What shipped" below.
 
 **Scope:** Gated free AI tier (6 analyses/month per org with rolling-window reset, eBay account required, fields needed for publishing exposed, pricing/melt/competitor data/grading locked to paid). Paid tiers (Pro, Unlimited) unrestricted beyond existing limits.
 
 **What shipped (commits d34dcf4, 8e65849, 40148f6):**
 
-- Gap 1 ✅ Fixed 2026-09-21: migration 20260921000001_set_free_tier_reset_day_on_signup.sql sets reset_day on org creation
-- Gap 2 ✅ Fixed 2026-09-21: commerce.identity.readonly OAuth scope uncommented in PR #613
+- Gap 1 ✅ Fixed 2026-09-21: migration `20260921000001_set_free_tier_reset_day_on_signup.sql` replaces `handle_new_user()` so it sets `organizations.free_tier_reset_day` on personal-org creation. Production's `schema_migrations` already listed `20260921000001` before 2026-09-25, so it is applied. (Housekeeping, 2026-09-25: PR #624 deleted a byte-identical re-added copy at `20260921000000_...` and a no-op `20260922000000_resolve_free_tier_reset_day_duplicate.sql`, which were blocking every production deploy — no behaviour change to Gap 1.) **Not yet verified at runtime:** no one has confirmed that a new signup actually gets `free_tier_reset_day` set.
+- Gap 2 ✅ Fixed in code 2026-09-21: `commerce.identity.readonly` uncommented in `EBAY_OAUTH_SCOPES` (`supabase/functions/ebay-publish/constants.ts`) in PR #613. **Not recorded:** whether the scope's developer.ebay.com registration was confirmed first, and whether the user has disconnected and reconnected eBay since so their token actually carries the scope (a token granted before this change will not have it).
 - All implementation complete: analyze-item gate + rolling-window count + field allowlist, ebay-publish one-account rule, get-free-credits function, disconnect-ebay function, AuthContext state (freeCredits/ebayConnected/ebayUsername), UI across Dashboard/Analyze/Settings/BottomNav
 
 ---
@@ -1046,13 +1046,13 @@ REVOKE UPDATE (free_tier_reset_day)
 
 ### Phase 1 — Data layer
 
-- [ ] **Migration:** `20260318100000_free_tier_tracking.sql`
-  - [ ] Add `profiles.ebay_username TEXT`
+- [x] **Migration:** `20260318100000_free_tier_tracking.sql` (plus the follow-up `20260921000001` for the trigger)
+  - [x] Add `profiles.ebay_username TEXT` — DONE, present in `20260318100000_free_tier_tracking.sql`
   - [x] Add `profiles.ebay_account_type TEXT CHECK (...)` — DONE, shipped
   - [x] Add `organizations.free_tier_reset_day SMALLINT CHECK (1..31)` — DONE, column exists, shipped
   - [x] Add `usage_tracking.org_id TEXT REFERENCES organizations(id)` + index — DONE, shipped
   - [x] Backfill `usage_tracking.org_id` from `organization_members` for existing rows — DONE, shipped
-  - [ ] **NOT DONE — this is Gap 1 from the correction notice at the top of this file.** Update `handle_new_user` Postgres trigger to set `organizations.free_tier_reset_day`. Follow the exact steps in the correction notice (new migration file, do not edit the existing one).
+  - [x] **Gap 1 — DONE 2026-09-21 (PR #613).** `handle_new_user` updated to set `organizations.free_tier_reset_day`, via the new migration `20260921000001_set_free_tier_reset_day_on_signup.sql` (the original migration was not edited). Applied in production. Still to do: confirm on a real new signup that the column is populated.
   - [x] Create `get_free_tier_window_start(SMALLINT)` PL/pgSQL function — DONE, shipped
   - [x] `REVOKE UPDATE (free_tier_reset_day)` on `public.organizations` — DONE, shipped
   - [x] Add `subscriptions` table RLS SELECT policy — DONE, shipped
@@ -1062,15 +1062,15 @@ REVOKE UPDATE (free_tier_reset_day)
 
 ### Phase 2 — Edge functions
 
-**All items in this phase are DONE and shipped except one, marked below.**
+**All items in this phase are DONE and shipped** (Gap 2 closed in code by PR #613; the user's eBay reconnect is still outstanding).
 
-- [ ] **NOT DONE — this is Gap 2 from the correction notice at the top of this file.** Add `commerce.identity.readonly` OAuth scope to `EBAY_OAUTH_SCOPES` in `supabase/functions/ebay-publish/constants.ts` (currently commented out around line 15). Follow the exact order in the correction notice: confirm developer.ebay.com registration first, then uncomment, then PR, then have the user reconnect eBay.
+- [x] **Gap 2 — DONE in code 2026-09-21 (PR #613).** `commerce.identity.readonly` is uncommented in `EBAY_OAUTH_SCOPES` in `supabase/functions/ebay-publish/constants.ts`. Not recorded: developer.ebay.com registration confirmation, and the user's disconnect/reconnect of eBay — until that reconnect happens, the existing token lacks this scope.
 - [x] Remove `recordUsage('ai_analysis')` double-count in `AnalyzePage.tsx` — DONE
 - [x] Verify `subscriptions` table exists in production DB — DONE
 - [x] Refactor tier detection in `analyze-item` — DONE
 - [x] Test `ebay-user` in production with a live token — DONE
 - [x] `analyze-item`: eBay account gate, per-org rolling-window count, Starter limit 6, response field allowlist, `_meta` block, `computeNextResetAt()`, 429 on exhaustion — ALL DONE
-- [x] `ebay-publish` `exchange_code`: Identity API username lookup, one-account rule (409), persist `ebay_username`/`ebay_account_type`, refresh path untouched — ALL DONE (Identity API calls will start working reliably once Gap 2 above is fixed — the code path already exists, it just can't get the scope it needs yet)
+- [x] `ebay-publish` `exchange_code`: Identity API username lookup, one-account rule (409), persist `ebay_username`/`ebay_account_type`, refresh path untouched — ALL DONE (Identity API calls only get the scope once the user reconnects eBay after Gap 2's scope change — not yet recorded as done)
 - [x] `supabase/functions/get-free-credits/index.ts` — DONE, exists and registered
 - [x] `supabase/functions/disconnect-ebay/index.ts` — DONE, exists and registered
 - [x] `ebay-user` Identity API coordination — DONE
@@ -1090,7 +1090,7 @@ REVOKE UPDATE (free_tier_reset_day)
 
 ### Phase 6 — Deployment
 
-**Already deployed.** The hard-reset token-clear step (nulling `ebay_access_token`/`ebay_refresh_token`/`ebay_token_expires_at`) described in the original plan was a one-time step tied to Gap 2 above — when Gap 2 is finally fixed and the scope goes live, the user will need to reconnect their own eBay account (this is a per-account manual action for the user to do themselves, not a bulk DB operation to run now).
+**Already deployed.** The hard-reset token-clear step (nulling `ebay_access_token`/`ebay_refresh_token`/`ebay_token_expires_at`) described in the original plan was a one-time step tied to Gap 2 above — now that the scope is in code (PR #613), the user needs to reconnect their own eBay account (this is a per-account manual action for the user to do themselves, not a bulk DB operation to run now).
 
 ---
 
@@ -1118,4 +1118,4 @@ All 15 open questions have been answered by the product owner. No open questions
 
 ---
 
-_End of document. **Corrected 2026-09-21: this was already implemented (commits `d34dcf4`, `8e65849`) — this line used to say "ready to begin," which was wrong.** The only work still open is the two gaps described in the correction notice at the top of this file: (1) wire `free_tier_reset_day` into the live signup trigger via a new migration, (2) uncomment the `commerce.identity.readonly` scope in `ebay-publish/constants.ts` after developer.ebay.com registration is confirmed, then have the user reconnect eBay. Do not restart Phase 1 through Phase 6 below — they describe the already-completed build, kept for historical reference._
+_End of document. **Corrected 2026-09-21: this was already implemented (commits `d34dcf4`, `8e65849`) — this line used to say "ready to begin," which was wrong.** Both gaps were then closed in code by PR #613 (2026-09-21): (1) `free_tier_reset_day` is wired into the signup trigger by migration `20260921000001`, applied in production; (2) the `commerce.identity.readonly` scope is uncommented. **Still open (updated 2026-09-25):** confirm a new signup gets `free_tier_reset_day` set, and have the user reconnect eBay so their token picks up the new scope. Do not restart Phase 1 through Phase 6 below — they describe the already-completed build, kept for historical reference._
