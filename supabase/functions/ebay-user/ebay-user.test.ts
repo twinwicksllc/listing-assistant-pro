@@ -1,5 +1,18 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
-import { fetchIdentityWithRetry } from "./index.ts";
+import { fetchIdentityWithRetry, identityApiBaseFor } from "./index.ts";
+
+// Regression coverage for a second, separate 502 (still open as of
+// 2026-09-25): this function built apiBase as api.ebay.com, but eBay's
+// Identity API is served from apiz.ebay.com -- every other Identity/Finances
+// call in ebay-publish/constants.ts already gets this right.
+Deno.test("identityApiBaseFor: production resolves to apiz.ebay.com, not api.ebay.com", () => {
+  assertEquals(identityApiBaseFor("production"), "https://apiz.ebay.com");
+});
+
+Deno.test("identityApiBaseFor: any non-production value resolves to the apiz sandbox host", () => {
+  assertEquals(identityApiBaseFor("sandbox"), "https://apiz.sandbox.ebay.com");
+  assertEquals(identityApiBaseFor(undefined), "https://apiz.sandbox.ebay.com");
+});
 
 // Regression coverage for the 2026-09-20 ebay-user 502 investigation.
 // A single 502 was observed in production where eBay's Identity API
