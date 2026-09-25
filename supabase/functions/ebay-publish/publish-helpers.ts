@@ -3376,7 +3376,10 @@ export async function generateDraftSku(
 
   // Fallback to random SKU if sequential generation didn't work or userId was missing
   if (!sku) {
-    sku = `LA-${crypto.randomUUID().replace(/-/g, "").slice(0, 16).toUpperCase()}`;
+    // Alphanumeric only: eBay's Inventory API rejects any SKU with other
+    // characters (errorId 25707), and one stored bad SKU makes the bulk
+    // GET /offer call fail for the seller's whole inventory.
+    sku = `LA${crypto.randomUUID().replace(/-/g, "").slice(0, 16).toUpperCase()}`;
     console.log(`create_draft: using fallback random SKU: ${sku}`);
   }
 
