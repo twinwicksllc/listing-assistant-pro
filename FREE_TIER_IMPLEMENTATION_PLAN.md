@@ -6,7 +6,7 @@
 
 **What shipped (commits d34dcf4, 8e65849, 40148f6):**
 
-- Gap 1 ✅ Fixed 2026-09-21: migration 20260921000000_set_free_tier_reset_day_on_signup.sql sets reset_day on org creation
+- Gap 1 ✅ Fixed 2026-09-21: migration 20260921000001_set_free_tier_reset_day_on_signup.sql sets reset_day on org creation
 - Gap 2 ✅ Fixed 2026-09-21: commerce.identity.readonly OAuth scope uncommented in PR #613
 - All implementation complete: analyze-item gate + rolling-window count + field allowlist, ebay-publish one-account rule, get-free-credits function, disconnect-ebay function, AuthContext state (freeCredits/ebayConnected/ebayUsername), UI across Dashboard/Analyze/Settings/BottomNav
 
