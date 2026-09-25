@@ -2,7 +2,7 @@
 
 **Product:** ListrAssistr
 **Scope:** `LISTRASSISTR_REBRAND_AND_MIGRATION_PLAN.md` §8 only, per DEC-0035
-**Status date:** 2026-08-27
+**Status date:** 2026-09-02
 
 Step-by-step procedures for the Phase 1 items the owner executes. Companion to:
 

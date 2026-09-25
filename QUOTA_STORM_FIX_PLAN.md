@@ -1,9 +1,11 @@
 # eBay Browse API Quota Storm — Comprehensive Fix Plan
 
-**Status:** ✅ COMPLETE — Both bugs fixed and verified 2026-09-22:
+**Status:** ✅ Both bugs fixed and deployed; **1-week post-fix monitoring in progress, due ~2026-09-28** (checklist lives in `todo.md`). Fixes verified 2026-09-22:
 
 - **Bug 1 (getItems cost):** PR #601 merged — single-item loop rewritten, end-to-end verified, logs populate correctly to `ebay_browse_call_log` with resource tag `"buy.browse.item.bulk"`.
 - **Bug 2 (reset-window gate):** PRs #595, #596, #597, #610 merged — quota monitor fixed, browse quota storm incident (67.5k/5k calls) resolved and stable. See `COMPETITOR_PRICES_CRON_SESSION_HANDOFF.md` and PR #610 for incident retrospective.
+- **Interim monitoring data (2026-09-24):** eBay-reported `buy.browse` peak per quota window was 2,880 / 2,690 / 2,650 for the windows ending 2026-09-22 / 09-23 / 09-24 (limit 5,000); no quota alerts since 2026-09-21 00:31 UTC; our own call-log sums match eBay's counts. Not yet signed off — wait for the full week.
+- **Part C (`buy.item.bulk` entitlement request):** still pending — no outcome recorded in this repo (see Part C below).
 
 ## Background: what's broken and why (read this before touching code)
 

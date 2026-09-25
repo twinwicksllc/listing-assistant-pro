@@ -4,6 +4,11 @@
 **Repository:** `twinwicksllc/listing-assistant-pro`
 **Session output:** PRs #556, #557, #558, #559, #560, #561 merged (6 total), 0 open
 
+> **Update 2026-09-25.** No rebrand progress since 2026-09-08 (the only rebrand-doc change
+> was the FYI design audit, Section 5b of `REBRAND_PHASE_1_TODO.md`, PR #622). Everything
+> below is still current. Open owner items: **O-10** (SES setup) and **O-12** (Forward Email
+> setup + MX records); owner decisions outstanding: **Q-06**, **Q-16**, **Q-10**.
+
 > **Note on this file's name.** Rewritten in full again today rather than appended to,
 > per this file's own established convention (see the previous rewrite's note, now
 > superseded). Treat everything below as current and everything before today's rewrite

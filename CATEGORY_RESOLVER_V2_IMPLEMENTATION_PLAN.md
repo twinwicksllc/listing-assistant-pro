@@ -1,6 +1,6 @@
 # Category Resolver v2 — Implementation Plan
 
-**Status:** Draft for review. Nothing in this document has been implemented yet.
+**Status (updated 2026-09-25):** Phases 1–5 shipped — PRs #529 (Phases 1+2), #530 (Phase 3 corpus + replay harness), #531 (live taxonomy drift check), #532 (Phase 4 filter-then-rank rewrite), #533 (Phase 5 cron hardening), plus follow-up #546; per-phase detail in `todo.md`. **Phase 6 (promote gate 4 to enforcing) is deferred / not started** — gated on reviewing the accumulated warn-only `gate4Warnings` data (persisted on every gated candidate since #598) for false positives before flipping `CATEGORY_GATE4_ENFORCE`. The body below is the original 2026-08-23 plan, kept for its reasoning; it originally read "Draft for review. Nothing in this document has been implemented yet."
 **Author:** SuperNinja, based on live data pulled from this repo's own Supabase tables.
 **Inputs used:** `ebay_taxonomy_cache_rows.csv` (15,116 rows, exported 2026-08-23), `category_mappings_rows.csv` (40 rows, exported 2026-08-23), and the current `main` branch at commit `d04a65c`.
 
@@ -360,3 +360,5 @@ A script (`scripts/category-corpus-replay.ts`, Deno) that:
 6. **Promote gate 4 to enforcing**, once the corpus shows two weeks of warn-only data with no false-positive pattern.
 
 This is a plan for review, not a commitment to build all six phases in one sitting — happy to scope any single phase into its own PR-sized piece of work on your go-ahead.
+
+_Update 2026-09-25: Phases 1–5 have since shipped (see Status at the top); Phase 6 remains deferred._

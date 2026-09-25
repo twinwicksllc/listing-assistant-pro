@@ -202,6 +202,10 @@ sessions.
 
 ## Phase 6 — Promote gate 4 to enforcing (deferred / follow-up, not this pass)
 
+Status 2026-09-25: not started. Gated on reviewing accumulated warn-only
+`gate4Warnings` data (persisted on every candidate since #598) for false
+positives before flipping `CATEGORY_GATE4_ENFORCE`. No items scoped yet.
+
 ## Follow-up: capture eBay response body in verifyCategoryLeafActive
 
 Per user request (2026-08-31): the `verify` action's `verifyCategoryLeafActive()`
@@ -629,7 +633,24 @@ as a side effect of one fix.
 Status: Deployed `feat/quota-storm-fix` (Parts A+B)
 
 **1-week monitoring due ~2026-09-28** — after deploying the quota storm fix
-(PR #XXX: reset-window gate + per-listing probe cap + BATCH_LIMIT reduction):
+(PR #610: reset-window gate + per-listing probe cap + BATCH_LIMIT reduction):
+
+> **Interim check, 2026-09-25** (Management API, read-only). Note #610 itself
+> deployed 2026-09-21, before the 09-22→09-25 deploy block, so these numbers
+> reflect the fix. Items stay unchecked until the full week on ~09-28.
+>
+> - eBay-reported `buy.browse` peak per quota window (resets 07:00 UTC):
+>   2,880 / 2,690 / 2,650 for windows ending 09-22 / 09-23 / 09-24 (limit 5,000),
+>   vs. 5,000 (exhausted) on 09-18 and 09-21. No quota alerts since 09-21 00:31 UTC.
+> - Our `ebay_browse_call_log` totals match eBay's: search + `item.bulk`-labeled
+>   rows sum to the `buy.browse` figure (single-item getItem draws from the
+>   `buy.browse` pool). ~2,500/day of that is `competitorSearch:getItems`.
+> - `ebay_items_refresh_outcomes`, last 3 days: 1,651 accepted, 79
+>   rejected_usability, 5 rejected_no_stored_ids, 2 error — ~95% acceptance, so
+>   `ITEMS_REFRESH_PROBE_CAP=5` does not look too aggressive.
+> - Signature cache and getItems gains were capped until now: `category_id` was
+>   NULL on all 570 `user_active_listings` rows (fixed by #623/#624, live
+>   2026-09-25). Re-measure after the backfill populates.
 
 - [ ] Query `ebay_browse_call_log` daily totals by resource for the week post-deploy
       — confirm combined daily total stays comfortably under 5,000 (target: well under
@@ -654,3 +675,21 @@ aggressively, disabling refresh feature), quickest kill switch is setting
 `POLL_STALENESS_MS` to `0` to force permanent UTC-midnight fallback (competitorSearch.ts,
 line ~1070), or reverting BATCH_LIMIT/REFRESH_CONCURRENCY/PROBE_CAP to pre-fix values
 (one-line changes each, no migration). Full git revert is cleaner for permanent rollback.
+
+## 2026-09-25 follow-ups (from deploy-block / SKU investigation)
+
+- [ ] Verify `user_active_listings.category_id` populates after the first
+      post-deploy `inventory-sync-cron` pass (#623/#624). Expect a log line
+      `Category backfill ... looked up 570`; the 60s budget may spread the
+      backfill across 2-3 syncs (6h apart).
+- [ ] Live smoke test of the Listing Editor — it first reached production
+      2026-09-25 (see `LISTING_EDITOR_PLAN.md`); edit one real price and
+      confirm a `listing_edits_log` row.
+- [ ] Decide on migrating the ~805 existing hyphenated SKUs (eBay errorId
+      25707 blocks bulk `GET /offer` for the whole account until they're gone).
+      #626 only stops new ones. Needs user decision — relist vs. revise.
+- [ ] Add a PR-time CI check that migration version prefixes are unique
+      (`ls supabase/migrations | cut -d_ -f1 | sort | uniq -d` must be empty).
+      This bug has now blocked production deploys twice (#614, #624).
+- [ ] `ebay-user/index.ts:117` still uses `api.ebay.com` for the Identity API
+      (should be `apiz.ebay.com`); check its logs to confirm it is failing.

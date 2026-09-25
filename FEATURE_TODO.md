@@ -127,13 +127,15 @@
 
 > **Branch:** `feature/market-research-tools` · **Complexity:** High · **Plans:** Pro (limited) + Shop (full)
 
-> **✅ Verified shipped (2026-09-21):** this feature is built and live, not "0% started" as this checklist's original form claimed. Evidence: PR #167 landed the original build; `20260323000000_add_market_watches.sql` creates full `market_watches` + `market_price_history` schema with RLS; `supabase/functions/market-watch-refresh/` and `supabase/functions/keyword-research/` both exist (`keyword-research` was later switched from the deprecated Finding API to Browse API); `src/v2/components/MarketWatchCard.tsx`, `PriceHistogram.tsx`, `PriceTrendChart.tsx`, `SellThroughMeter.tsx` all exist; `src/v2/pages/MarketResearchPage2.tsx` is routed and live (the v1 `src/pages/MarketResearchPage.tsx` is superseded and archived under `src/v2/pages/_archive/`). PR #578 added a daily auto-refresh cron for `market_watches` and capped manual refresh at 6/day (`20260916020000_schedule_market_watch_refresh_daily.sql`, `20260916010000_add_market_watch_refresh_cursor_rpc.sql`). **Gap found:** no `CategoryHeatMap` component was ever built — the Dashboard-widget heat-map tile from the original plan is the one genuinely missing piece; everything else in this checklist (edge functions, cron, watch/trend/sell-through components, saved-watches page, keyword search) is done.
+> **✅ Verified shipped (2026-09-21):** this feature is built and live, not "0% started" as this checklist's original form claimed. Evidence: PR #167 landed the original build; `20260323000000_add_market_watches.sql` creates full `market_watches` + `market_price_history` schema with RLS; `supabase/functions/market-watch-refresh/` and `supabase/functions/keyword-research/` both exist (`keyword-research` was later switched from the deprecated Finding API to Browse API); `src/v2/components/MarketWatchCard.tsx`, `PriceHistogram.tsx`, `PriceTrendChart.tsx`, `SellThroughMeter.tsx` all exist; `src/v2/pages/MarketResearchPage2.tsx` is routed and live (the v1 `src/pages/MarketResearchPage.tsx` is superseded and archived under `src/v2/pages/_archive/`). PR #578 added a daily auto-refresh cron for `market_watches` and capped manual refresh at 6/day (`20260916020000_schedule_market_watch_refresh_daily.sql`, `20260916010000_add_market_watch_refresh_cursor_rpc.sql`). **Gap found:** no `CategoryHeatMap` component was ever built — the Dashboard-widget heat-map tile from the original plan is the one genuinely missing piece (since closed — the component landed in PR #613, see Remaining work below); everything else in this checklist (edge functions, cron, watch/trend/sell-through components, saved-watches page, keyword search) is done.
 
 ### Remaining work
 
-- [ ] Create `src/v2/components/CategoryHeatMap.tsx` — a grid of category tiles, each tile showing a category name and a color (green/yellow/red) based on how many active listings exist in that category. Model the component's props and structure on the existing `src/v2/components/PriceHistogram.tsx` in the same directory — copy its file structure (props interface, then component function, then return JSX), not its chart logic.
-- [ ] Add `<CategoryHeatMap />` to `src/v2/pages/DashboardPage2.tsx`, placed directly below the existing listings table in that file. Do not add it to `MarketResearchPage2.tsx`.
-- [ ] Wrap the new `<CategoryHeatMap />` element in whatever Pro/Shop plan-check wrapper component or conditional is already used elsewhere in `DashboardPage2.tsx` for other Pro/Shop-gated widgets on that same page — search that file for the word "Pro" or "Shop" to find the existing pattern and copy it exactly, don't invent a new gating check.
+- [x] Create `src/v2/components/CategoryHeatMap.tsx` — a grid of category tiles, each tile showing a category name and a color (green/yellow/red) based on how many active listings exist in that category. Model the component's props and structure on the existing `src/v2/components/PriceHistogram.tsx` in the same directory — copy its file structure (props interface, then component function, then return JSX), not its chart logic.
+- [x] Add `<CategoryHeatMap />` to `src/v2/pages/DashboardPage2.tsx`, placed directly below the existing listings table in that file. Do not add it to `MarketResearchPage2.tsx`.
+- [x] Wrap the new `<CategoryHeatMap />` element in whatever Pro/Shop plan-check wrapper component or conditional is already used elsewhere in `DashboardPage2.tsx` for other Pro/Shop-gated widgets on that same page — search that file for the word "Pro" or "Shop" to find the existing pattern and copy it exactly, don't invent a new gating check.
+
+> **Verified in code 2026-09-25:** all three are present — `src/v2/components/CategoryHeatMap.tsx` exists (added in PR #613), and `DashboardPage2.tsx` renders `<CategoryHeatMap listings={listings} maxTiles={12} />` directly below the listings section, gated on `currentPlan === "pro" || currentPlan === "shop"` (the only Pro/Shop plan check in that file; other widgets there gate on `planFeatures.hasListingAnalytics`). Not done: no unit test for the component (no `src/test/*heat*` file exists); the heat thresholds are simple listing counts (≥10 green, ≥5 amber, otherwise red).
 
 ---
 
@@ -265,10 +267,10 @@
 | ------------------- | ----------- | ------ | --------- |
 | #1 COGS True Profit | 22          | 22\*   | 0         |
 | #4 Smart Insights   | 24          | 0\*\*  | 24        |
-| #5 Market Research  | 3\*\*\*     | 0      | 3         |
+| #5 Market Research  | 3\*\*\*     | 3      | 0         |
 | #10 Bulk Generator  | 38          | 38\*   | 0         |
 | Cross-Feature       | 6           | 0      | 6         |
-| **Total**           | **93**      | **60** | **33**    |
+| **Total**           | **93**      | **63** | **30**    |
 
 \*\*\* Feature #5's checklist was rewritten 2026-09-21 — the original 28-task build-from-scratch list is done and removed; only the 3 remaining `CategoryHeatMap` tasks are listed now, so this row's "Tasks Total" is not comparable to earlier snapshots of this table.
 

@@ -1,7 +1,7 @@
 # Listing Editor — Comprehensive Implementation Plan
 
 **Date:** March 30, 2026 (corrected 2026-09-21)
-**Status:** ✅ COMPLETE — Shipped 2026-09-22. All 5 sprints implemented, committed (02cf0f9), PR #615 merged. Live smoke test verified: edited price on a real listing via modal, confirmed new price appears on eBay and `listing_edits_log` audit row written.
+**Status:** Code merged, live in production, **live smoke test still outstanding** (as of 2026-09-25). All 5 sprints were implemented and merged to `main` on 2026-09-22 as PR #615 (merge commit `220d791`). It did **not** reach production then: every production "Deploy Supabase Edge Functions" run from #615 onward failed at `supabase db push` on duplicate migration versions, so neither the `ebay-edit-listing` function nor the `listing_edits_log` table existed in production until PR #624 unblocked deploys. The first successful deploy since was 2026-09-25 02:49 UTC — `ebay-edit-listing` is now at v1 and `listing_edits_log` exists in production. No live edit has been verified yet: nobody has yet edited a real listing through the modal and confirmed both the change on eBay and a `listing_edits_log` row (Sprint 4 items 22–25 below).
 **Scope:** Click-to-edit any live eBay listing from the Dashboard, with full write-back to eBay
 
 > **Correction notice (2026-09-21):** Two claims below were checked against the live repo and found wrong. Read this before doing any of the work in this file.
@@ -620,7 +620,7 @@ Include image editing as a dedicated Phase 2 feature with a proper image managem
 
 ## Part 11: Implementation Sequence
 
-**All sprints below are built and verified (2026-09-21/22) but not yet committed** — `git status` still shows these as uncommitted working-tree changes; nothing has been committed, pushed, or opened as a PR yet — with two intentional scope exclusions and one item still outstanding — see notes inline.
+**All sprints below were built and locally verified 2026-09-21/22 and merged as PR #615 (2026-09-22); deployed to production 2026-09-25 after PR #624 unblocked deploys** — with two intentional scope exclusions, and the live end-to-end tests (items 22–25) still not done — see notes inline.
 
 ### Sprint 1 — Backend (2 days — shorter than the original 2-3 days because the `reprice_rules` migration and the title/description update logic are no longer needed, see correction notice at the top of this file)
 
@@ -708,4 +708,4 @@ https://developer.ebay.com/api-docs/sell/inventory/resources/offer/methods/updat
 
 ---
 
-**Last Updated:** March 30, 2026 | **Status:** Plan Ready — Awaiting Implementation Approval
+**Last Updated:** 2026-09-25 | **Status:** Merged (PR #615) and deployed to production 2026-09-25 — live smoke test and items 22–25 still outstanding
