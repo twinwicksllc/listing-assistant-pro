@@ -93,7 +93,11 @@ async function fetchActiveListings(
         Authorization: `Bearer ${serviceKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ userToken: token }),
+      // userId lets ebay-listings enumerate offers by this user's own known
+      // SKUs (drafts.ebay_sku) instead of relying solely on the Trading API
+      // fallback -- a service-role call has no JWT for ebay-listings to
+      // derive userId from itself, so it must be passed explicitly.
+      body: JSON.stringify({ userToken: token, userId }),
     },
   );
 

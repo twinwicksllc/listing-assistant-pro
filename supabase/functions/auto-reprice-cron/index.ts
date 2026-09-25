@@ -241,6 +241,15 @@ serve(async (req) => {
       }
 
       // Fetch user's active listings
+      // NOTE: this is a GET with no body, but ebay-listings unconditionally
+      // calls req.json() -- a pre-existing mismatch independent of this
+      // change, so this call already fails today regardless. Not fixed
+      // here: auto-reprice-cron is deliberately unscheduled (DEC-0017,
+      // 2026-08-14) and this call path doesn't run in production. If this
+      // cron is ever enabled, switch to POST with a JSON body
+      // ({ userToken: ebayToken, userId: uid }) to both fix that mismatch
+      // and let ebay-listings enumerate offers by this user's own known
+      // SKUs.
       let listingsResp;
       try {
         listingsResp = await fetch(

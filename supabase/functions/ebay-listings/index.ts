@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { requireUserOrServiceRole } from "../_helpers/authGuard.ts";
+import { fetchOffersBySku } from "../_helpers/ebayOfferLookup.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1040,104 +1041,6 @@ async function fetchTradingAPIListingsRaw(
   }
 }
 
-// ─── Trading API fallback (full response) ────────────────────────────────────
-// Used when the Inventory API fails entirely. Delegates to fetchTradingAPIListingsRaw
-// and wraps the result in a full Response with analytics.
-async function fetchListingsViaTradingAPI(
-  apiBase: string,
-  userToken: string,
-  corsHeaders: Record<string, string>,
-  includeSold = false,
-): Promise<Response> {
-  try {
-    const listings = await fetchTradingAPIListingsRaw(apiBase, userToken);
-
-    if (listings.length === 0) {
-      console.warn("Trading API fallback: no active listings returned");
-    }
-
-    const ebayHeaders = {
-      Authorization: `Bearer ${userToken}`,
-      "Content-Type": "application/json",
-      "Accept-Language": "en-US",
-    };
-    // Fetch sold listings in parallel when includeSold=true (same pattern as main path)
-    const [{ a7, a30, a90 }, orderCounts, soldItemsRaw] = await Promise.all([
-      fetchAllAnalytics(apiBase, ebayHeaders),
-      fetchOrderCounts(apiBase, ebayHeaders),
-      includeSold
-        ? fetchSoldListings(apiBase, ebayHeaders).catch((e: any) => {
-          console.error(
-            "Trading API fallback: fetchSoldListings CRASHED (non-fatal):",
-            e?.message ?? e,
-          );
-          return [] as any[];
-        })
-        : Promise.resolve([] as any[]),
-    ]);
-    console.log(
-      `Trading API fallback: Real order counts - 7d=${orderCounts.orders7d}, 30d=${orderCounts.orders30d}, 90d=${orderCounts.orders90d}`,
-    );
-
-    const finalListings = listings.map((l) => ({
-      ...l,
-      ...mergeAnalytics(l.listingId, l.sku, a7, a30, a90),
-      ebayUrl: l.listingId ? `https://www.ebay.com/itm/${l.listingId}` : null,
-    }));
-
-    console.log(
-      `Trading API fallback: loaded ${finalListings.length} active listings`,
-    );
-
-    // Merge sold listings if requested (same dedup logic as main path)
-    let soldListings: any[] = [];
-    if (includeSold) {
-      console.log(
-        `Trading API fallback: fetchSoldListings returned ${soldItemsRaw.length} sold items`,
-      );
-      const activeListingIdSet = new Set(
-        finalListings.map((l: any) => l.listingId).filter(Boolean),
-      );
-      const seenSoldIds = new Set<string>();
-      soldListings = soldItemsRaw.filter((l: any) => {
-        if (l.listingId && activeListingIdSet.has(l.listingId)) return false;
-        if (l.listingId && seenSoldIds.has(l.listingId)) return false;
-        if (l.listingId) seenSoldIds.add(l.listingId);
-        return true;
-      });
-      console.log(
-        `Trading API fallback: ${soldListings.length} unique sold items after dedup`,
-      );
-    }
-
-    const allListings = includeSold ? [...finalListings, ...soldListings] : finalListings;
-
-    return new Response(
-      JSON.stringify({
-        listings: allListings,
-        needsAuth: false,
-        orderCount7d: orderCounts.orders7d,
-        orderCount30d: orderCounts.orders30d,
-        orderCount90d: orderCounts.orders90d,
-        financial: orderCounts.financial,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  } catch (e) {
-    console.error("Trading API fallback exception:", e);
-    return new Response(
-      JSON.stringify({
-        listings: [],
-        error: "Failed to load listings via Trading API fallback",
-      }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
-  }
-}
-
 // ─── Fetch sold/completed orders from Fulfillment API ──────────────────────
 // Returns listing-shaped objects for items that have sold, so the COGS
 // bulk editor can display them alongside active listings.
@@ -1287,6 +1190,40 @@ async function fetchSoldListings(
   return results;
 }
 
+// ─── Known SKUs for this user, from our own DB ───────────────────────────────
+// Source of truth for the per-SKU offer enumeration below: every SKU this app
+// has ever generated for a published draft. Nearly all of this user's active
+// listings were created by this app, so this covers nearly all of them
+// directly -- the Trading API merge exists only to catch the remainder
+// (manually-created listings, or anything pre-dating SKU tracking).
+export async function fetchKnownSkusForUser(
+  supabaseUrl: string,
+  serviceKey: string,
+  userId: string,
+): Promise<string[]> {
+  const resp = await fetch(
+    `${supabaseUrl}/rest/v1/drafts?user_id=eq.${userId}&publish_status=eq.published&ebay_sku=not.is.null&select=ebay_sku`,
+    {
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+      },
+    },
+  );
+  if (!resp.ok) {
+    console.warn(`ebay-listings: Failed to fetch known SKUs for user ${userId}: ${resp.status}`);
+    return [];
+  }
+  let rows: Array<{ ebay_sku: string }>;
+  try {
+    rows = JSON.parse(await resp.text());
+  } catch (e) {
+    console.warn(`ebay-listings: Failed to parse known-SKUs response for user ${userId}: ${e}`);
+    return [];
+  }
+  return rows.map((r) => r.ebay_sku).filter(Boolean);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -1301,7 +1238,7 @@ serve(async (req) => {
   }
 
   try {
-    const { userToken, includeSold } = await req.json();
+    const { userToken, includeSold, userId: bodyUserId } = await req.json();
 
     // Default to production, matching ebay-publish/category-lookup/etc. --
     // this app's eBay integration is production (confirmed 500+ live
@@ -1328,92 +1265,44 @@ serve(async (req) => {
       "Accept-Language": "en-US",
     };
 
-    // eBay Inventory API max limit per page is 100 — paginate to get all offers
-    // Filter to PUBLISHED only so the total count matches active listings
-    // and pagination math is correct (unpublished drafts are excluded).
-    const offers: any[] = [];
-    let offset = 0;
-    const PAGE_SIZE = 100;
-    let totalOffers = 0;
+    // A real user's JWT already gives us userId via auth.userId; a
+    // service-role caller (cron) has no JWT to derive one from, so it must
+    // pass userId in the body instead (see ebayInventorySync.ts,
+    // auto-reprice-cron/index.ts).
+    const userId: string | null = auth.userId ?? bodyUserId ?? null;
 
-    while (true) {
-      const offersResp = await fetch(
-        `${apiBase}/sell/inventory/v1/offer?limit=${PAGE_SIZE}&offset=${offset}&status=PUBLISHED`,
-        { headers: ebayHeaders },
-      );
+    // ── Enumerate offers by known SKU first, not via the account-wide bulk
+    // list. A single hyphenated SKU (errorId 25707) fails the bulk list for
+    // every listing on the account, not just the offending one -- see
+    // CLAUDE.md's eBay integration surface notes. Per-SKU queries don't
+    // trigger that validation. drafts.ebay_sku covers nearly all of this
+    // user's listings directly; the Trading API fallback below covers
+    // whatever a SKU query doesn't (manually-created listings, or anything
+    // pre-dating SKU tracking).
+    let offers: any[] = [];
+    if (userId) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+      const knownSkus = await fetchKnownSkusForUser(supabaseUrl, serviceKey, userId);
+      console.log(`ebay-listings: ${knownSkus.length} known SKU(s) for user ${userId} from drafts`);
 
-      if (offersResp.status === 401) {
-        return new Response(JSON.stringify({ listings: [], needsAuth: true }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      if (!offersResp.ok) {
-        const errText = await offersResp.text();
-        console.error("eBay offers error:", offersResp.status, errText);
-
-        if (offersResp.status === 401 || offersResp.status === 403) {
-          return new Response(
-            JSON.stringify({
-              listings: [],
-              needsAuth: true,
-              debug: `eBay API ${offersResp.status}: ${errText}`,
-            }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-          );
-        }
-
-        if (offersResp.status === 400 && errText.includes("SKU")) {
-          console.warn(
-            "eBay Inventory API /offer rejected with SKU error — falling back to Trading API.",
-          );
-          return await fetchListingsViaTradingAPI(
-            apiBase,
-            userToken,
-            corsHeaders,
-            includeSold,
-          );
-        }
-
-        return new Response(
-          JSON.stringify({
-            listings: [],
-            error: `eBay API error ${offersResp.status}: ${errText}`,
-          }),
-          {
-            status: 200,
+      if (knownSkus.length > 0) {
+        const { offers: offersBySku, unauthorized } = await fetchOffersBySku(knownSkus, apiBase, userToken);
+        if (unauthorized) {
+          return new Response(JSON.stringify({ listings: [], needsAuth: true }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
-          },
+          });
+        }
+        offers = Object.values(offersBySku).map((o) => o.raw);
+        console.log(
+          `ebay-listings: Found ${offers.length}/${knownSkus.length} known SKUs with a live offer`,
         );
       }
-
-      let offersData: any;
-      try {
-        const respText = await offersResp.text();
-        offersData = JSON.parse(respText);
-      } catch (e) {
-        console.warn(`ebay-listings: Failed to parse offers response: ${e}`);
-        const page: any[] = [];
-        totalOffers = 0;
-        continue;
-      }
-      const page = offersData.offers || [];
-      totalOffers = offersData.total ?? page.length;
-      offers.push(...page);
-
-      console.log(
-        `ebay-listings: Fetched page offset=${offset}, got ${page.length} offers (total=${totalOffers}, accumulated=${offers.length})`,
+    } else {
+      console.warn(
+        "ebay-listings: No userId available (service-role call without one) -- skipping per-SKU offer lookup, relying entirely on the Trading API fallback below.",
       );
-
-      // Stop if we've fetched all offers or got an empty page
-      if (page.length < PAGE_SIZE || offers.length >= totalOffers) break;
-
-      offset += PAGE_SIZE;
     }
-
-    console.log(
-      `ebay-listings: Fetched ${offers.length} total offers from eBay Inventory API (reported total: ${totalOffers})`,
-    );
 
     // ── Also fetch Trading API listings (manually-created listings not in Inventory API)
     // Run in parallel with inventory item detail lookups below.
