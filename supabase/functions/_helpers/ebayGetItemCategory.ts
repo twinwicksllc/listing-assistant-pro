@@ -76,9 +76,28 @@ export async function fetchPrimaryCategoryIds(
         body: xml,
         signal: controller.signal,
       });
-      if (!resp.ok) return;
-      const categoryId = parsePrimaryCategoryId(await resp.text());
-      if (categoryId) result[itemId] = categoryId;
+      const bodyText = await resp.text();
+      if (!resp.ok) {
+        console.warn(
+          `[inventory-sync] GetItem category lookup HTTP ${resp.status} for ${itemId}: ${bodyText.slice(0, 300)}`,
+        );
+        return;
+      }
+      // The Trading API returns HTTP 200 even on a business-logic failure --
+      // Ack is Failure/PartialFailure with the real error in <Errors>, not in
+      // the status code, so resp.ok alone can't tell success from failure.
+      const ackFailed = /<Ack>(Failure|PartialFailure)<\/Ack>/.test(bodyText);
+      const categoryId = parsePrimaryCategoryId(bodyText);
+      if (categoryId) {
+        result[itemId] = categoryId;
+      } else if (ackFailed) {
+        const shortMessage = bodyText.match(/<ShortMessage>([\s\S]*?)<\/ShortMessage>/)?.[1]?.trim();
+        console.warn(
+          `[inventory-sync] GetItem Ack failure for ${itemId}: ${shortMessage ?? bodyText.slice(0, 300)}`,
+        );
+      } else {
+        console.warn(`[inventory-sync] GetItem for ${itemId} returned no PrimaryCategory: ${bodyText.slice(0, 300)}`);
+      }
     } catch (e) {
       const reason = controller.signal.aborted ? `timed out after ${GET_ITEM_TIMEOUT_MS}ms` : String(e);
       console.warn(`[inventory-sync] GetItem category lookup failed for ${itemId}: ${reason}`);
