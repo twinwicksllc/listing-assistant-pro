@@ -18,6 +18,16 @@
 // doesn't fire hundreds of simultaneous requests from one worker.
 const GET_ITEM_CONCURRENCY = 10;
 
+// Per-call ceiling covering headers AND body. Without it one hung eBay
+// response stalls its whole Promise.all batch, and the sync never reaches
+// its upsert/prune before the Edge gateway kills the invocation.
+const GET_ITEM_TIMEOUT_MS = 8_000;
+
+// Stop starting new batches once this much wall clock has gone by, leaving
+// the rest of the ~150s gateway budget for the upsert/prune that follow.
+// Items not reached are simply looked up on the next sync.
+const BACKFILL_BUDGET_MS = 60_000;
+
 export function tradingApiUrlFor(tokenUrl: string): string {
   return tokenUrl.includes("sandbox") ? "https://api.sandbox.ebay.com/ws/api.dll" : "https://api.ebay.com/ws/api.dll";
 }
@@ -38,8 +48,10 @@ export async function fetchPrimaryCategoryIds(
   tradingUrl: string,
   userToken: string,
   fetchFn: typeof fetch = fetch,
+  now: () => number = Date.now,
 ): Promise<Record<string, string>> {
   const result: Record<string, string> = {};
+  const startedAt = now();
 
   const lookup = async (itemId: string) => {
     const xml = `<?xml version="1.0" encoding="utf-8"?>
@@ -47,6 +59,10 @@ export async function fetchPrimaryCategoryIds(
   <ItemID>${itemId}</ItemID>
   <OutputSelector>ItemID,PrimaryCategory.CategoryID</OutputSelector>
 </GetItemRequest>`;
+    // Same abort-covers-the-body pattern as fetchWithTimeout.ts, inlined so
+    // fetchFn stays injectable for tests.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), GET_ITEM_TIMEOUT_MS);
     try {
       const resp = await fetchFn(tradingUrl, {
         method: "POST",
@@ -58,16 +74,26 @@ export async function fetchPrimaryCategoryIds(
           "X-EBAY-API-IAF-TOKEN": userToken,
         },
         body: xml,
+        signal: controller.signal,
       });
       if (!resp.ok) return;
       const categoryId = parsePrimaryCategoryId(await resp.text());
       if (categoryId) result[itemId] = categoryId;
     } catch (e) {
-      console.warn(`[inventory-sync] GetItem category lookup failed for ${itemId}: ${e}`);
+      const reason = controller.signal.aborted ? `timed out after ${GET_ITEM_TIMEOUT_MS}ms` : String(e);
+      console.warn(`[inventory-sync] GetItem category lookup failed for ${itemId}: ${reason}`);
+    } finally {
+      clearTimeout(timer);
     }
   };
 
   for (let i = 0; i < itemIds.length; i += GET_ITEM_CONCURRENCY) {
+    if (now() - startedAt >= BACKFILL_BUDGET_MS) {
+      console.warn(
+        `[inventory-sync] Category backfill budget reached; ${itemIds.length - i} lookups deferred to next sync`,
+      );
+      break;
+    }
     await Promise.all(itemIds.slice(i, i + GET_ITEM_CONCURRENCY).map(lookup));
   }
 

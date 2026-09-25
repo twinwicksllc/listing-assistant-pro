@@ -16,12 +16,16 @@ const listing = (listingId: string, categoryId?: string) => ({
 });
 
 // Minimal fake of the one select chain backfillMissingCategoryIds uses.
-function fakeCacheLookup(result: { data: unknown; error: unknown }) {
+// Records each .in() id list so tests can check the lookup is chunked.
+function fakeCacheLookup(result: { data: unknown; error: unknown }, inCalls: string[][] = []) {
   return {
     from: () => ({
       select: () => ({
         eq: () => ({
-          not: async () => result,
+          in: (_col: string, ids: string[]) => {
+            inCalls.push(ids);
+            return { not: async () => result };
+          },
         }),
       }),
     }),
@@ -73,6 +77,19 @@ Deno.test("backfillMissingCategoryIds: a failed cache lookup skips the backfill 
   );
   assertEquals(called, false);
   assertEquals(out, input);
+});
+
+Deno.test("backfillMissingCategoryIds: scopes the cache lookup to missing ids, chunked under the 1,000-row cap", async () => {
+  const inCalls: string[][] = [];
+  const many = Array.from({ length: 450 }, (_, i) => listing(String(i)));
+  await backfillMissingCategoryIds(
+    fakeCacheLookup({ data: [], error: null }, inCalls),
+    "u1",
+    [listing("x", "999"), ...many],
+    async () => ({}),
+  );
+  assertEquals(inCalls.map((c) => c.length), [200, 200, 50]);
+  assertEquals(inCalls.flat().includes("x"), false);
 });
 
 // Fake capturing every upsert batch, plus the prune chain that follows it.
@@ -137,6 +154,32 @@ Deno.test("fetchPrimaryCategoryIds: omits items whose call failed or had no cate
   }) as unknown as typeof fetch;
   const out = await fetchPrimaryCategoryIds(["ok", "bad", "none"], "https://example.com", "tok", fetchFn);
   assertEquals(out, { ok: "118379" });
+});
+
+Deno.test("fetchPrimaryCategoryIds: passes an abort signal so a hung response can be cut off", async () => {
+  let sawSignal = false;
+  const fetchFn = (async (_url: string, init?: RequestInit) => {
+    sawSignal = init?.signal instanceof AbortSignal;
+    return new Response("<PrimaryCategory><CategoryID>1</CategoryID></PrimaryCategory>", { status: 200 });
+  }) as unknown as typeof fetch;
+  await fetchPrimaryCategoryIds(["a"], "https://example.com", "tok", fetchFn);
+  assertEquals(sawSignal, true);
+});
+
+Deno.test("fetchPrimaryCategoryIds: stops starting batches once the time budget is spent", async () => {
+  // Each GetItem "takes" 7s of fake clock, so the first 10-wide batch ends
+  // at 70s -- past the 60s budget -- and no second batch starts.
+  let t = 0;
+  let calls = 0;
+  const fetchFn = (async () => {
+    calls++;
+    t += 7_000;
+    return new Response("<PrimaryCategory><CategoryID>1</CategoryID></PrimaryCategory>", { status: 200 });
+  }) as unknown as typeof fetch;
+  const ids = Array.from({ length: 25 }, (_, i) => String(i));
+  const out = await fetchPrimaryCategoryIds(ids, "https://example.com", "tok", fetchFn, () => t);
+  assertEquals(calls, 10);
+  assertEquals(Object.keys(out).length, 10);
 });
 
 Deno.test("tradingApiUrlFor: picks sandbox vs production from the token URL", () => {
