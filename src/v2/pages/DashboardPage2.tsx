@@ -395,7 +395,7 @@ function TrendBadge({ listing }: { listing: EbayListing }) {
 // ─── Main Component ───────────────────────────────────────────────────
 
 export default function DashboardPage2() {
-  const { user, currentPlan, planFeatures } = useAuth();
+  const { user, planFeatures } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { drafts } = useDrafts();
@@ -2374,12 +2374,11 @@ export default function DashboardPage2() {
       </div>
 
       {/* Category Heatmap — shows activity across categories */}
-      {listings.length > 0 &&
-        (currentPlan === "pro" || currentPlan === "shop") && (
-          <div style={{ ...sectionCard, marginTop: "1.5rem" }}>
-            <CategoryHeatMap listings={listings} maxTiles={12} />
-          </div>
-        )}
+      {listings.length > 0 && planFeatures.hasListingAnalytics && (
+        <div style={{ ...sectionCard, marginTop: "1.5rem" }}>
+          <CategoryHeatMap listings={listings} maxTiles={12} />
+        </div>
+      )}
 
       {/* Listing Detail Modal — opened by clicking card image or title */}
       {detailListing && (

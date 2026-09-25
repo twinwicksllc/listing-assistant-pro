@@ -178,7 +178,10 @@ export async function backfillMissingCategoryIds(
 
   const found = await lookupCategoryIds(toLookUp);
   console.log(
-    `[inventory-sync] Category backfill for user ${userId}: looked up ${toLookUp.length}, found ${
+    // "queued" is how many were missing, not how many GetItem calls ran --
+    // fetchPrimaryCategoryIds may stop early on its time budget and logs the
+    // deferred count itself. "found" is what actually got a category.
+    `[inventory-sync] Category backfill for user ${userId}: queued ${toLookUp.length}, found ${
       Object.keys(found).length
     }`,
   );

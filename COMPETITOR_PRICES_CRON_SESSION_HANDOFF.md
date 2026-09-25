@@ -63,6 +63,6 @@ _Status updated 2026-09-25. Only step 3 is recorded as done; the outcome of the 
 
 1. **Not recorded.** Check whether `a96bfdd8-cd02-40c3-8726-056c2c92bbfc` is the known 539-listing account or a different one (Dashboard → `profiles` table, or ask whoever owns that test account).
 2. **Not recorded** (moot for the starvation symptom after step 3). Based on that, decide if there's a real enumeration bug to chase (if same account) or it's a non-issue (if a legitimately-empty different account).
-3. **Done** — option (a) shipped, migrations applied 2026-08-25 (see the update under Open bug). Implement the "last sync attempt" fix (option (a) recommended above) regardless — it's a real bug independent of the answer to #1.
+3. **Done** — option (a) shipped, migrations applied 2026-08-25 (see the update under Open bug). The "last sync attempt" fix (option (a) recommended above) was implemented regardless, since it was a real bug independent of the answer to #1.
 4. **Not recorded.** Re-verify: trigger `inventory-sync-cron` a few times, confirm it cycles through _different_ users each time (or exhausts the pool and stops returning the same one), then trigger `competitor-prices-cron` and confirm `batchSize` grows as more users' inventories land in `user_active_listings`.
 5. **Not recorded.** Once caught up, let the actual `cron.schedule()` entries run unattended for a while and spot-check logs/`cron.job_run_details` for steady-state health.

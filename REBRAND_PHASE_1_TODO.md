@@ -24,7 +24,7 @@ RB-08 covers) also completed this session: see `LISTING_ASSISTANT_PRO_QA_SETUP.m
 **Closed 2026-08-27:** RB-01 apex canonical · RB-02 typo domains repointed · **RB-03 DNSSEC
 live and validating** · RB-04 auth flow traced · RB-05 production project characterised ·
 RB-06 target repo audited · RB-07 DEC-0036/37/38 written into the decision log · O-39 O-40
-O-41 O-42 (README pointer follow-up still open) O-43 O-05 O-08 O-34.
+O-41 O-43 O-05 O-08 O-34. (O-42's base task also closed 2026-08-27; its README-pointer follow-up is still open, so O-42 stays open below.)
 
 **Closed 2026-08-28:** **RB-09** IAM admin login created, root access keys confirmed absent ·
 **RB-10** `app.listrassistr.com` live, DNS/certificate/DNSSEC externally verified, and a

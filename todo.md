@@ -679,9 +679,11 @@ line ~1070), or reverting BATCH_LIMIT/REFRESH_CONCURRENCY/PROBE_CAP to pre-fix v
 ## 2026-09-25 follow-ups (from deploy-block / SKU investigation)
 
 - [ ] Verify `user_active_listings.category_id` populates after the first
-      post-deploy `inventory-sync-cron` pass (#623/#624). Expect a log line
-      `Category backfill ... looked up 570`; the 60s budget may spread the
-      backfill across 2-3 syncs (6h apart).
+      post-deploy `inventory-sync-cron` pass (#623/#624). Check the database,
+      not just the log: `select count(category_id) from user_active_listings`
+      should climb toward 570. The `Category backfill ... found N` log line
+      reports how many GetItem calls actually ran and succeeded; the 60s
+      budget may defer the rest to later syncs (6h apart).
 - [ ] Live smoke test of the Listing Editor — it first reached production
       2026-09-25 (see `LISTING_EDITOR_PLAN.md`); edit one real price and
       confirm a `listing_edits_log` row.
