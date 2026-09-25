@@ -136,6 +136,12 @@ async function fetchActiveListings(
 // GetItem call. That's one call per listing on the first backfill, then
 // only newly-listed items after that -- not N calls every sync.
 // ----------------------------------------------------------------
+
+// Listing ids per cache-lookup query. Scoping each query to the ids this
+// pass is missing keeps every response well under select()'s implicit
+// 1,000-row cap and the .in() filter's URL length reasonable.
+const CACHE_LOOKUP_CHUNK = 200;
+
 export async function backfillMissingCategoryIds(
   // deno-lint-ignore no-explicit-any -- matches the loose typing already
   // used throughout this codebase for the supabase-js client.
@@ -149,20 +155,25 @@ export async function backfillMissingCategoryIds(
 
   // A failed lookup here must not be read as "nothing cached" -- that would
   // re-fire GetItem for every listing. Skip the backfill this pass instead.
-  const { data: cachedRows, error } = await supabase
-    .from("user_active_listings")
-    .select("ebay_listing_id")
-    .eq("user_id", userId)
-    .not("category_id", "is", null);
-  if (error) {
-    console.warn(
-      `[inventory-sync] Category backfill skipped for user ${userId}, cache lookup failed: ${error.message}`,
-    );
-    return listings;
+  const missingIds = missing.map((l) => l.listingId);
+  const alreadyCached = new Set<string>();
+  for (let i = 0; i < missingIds.length; i += CACHE_LOOKUP_CHUNK) {
+    const { data: cachedRows, error } = await supabase
+      .from("user_active_listings")
+      .select("ebay_listing_id")
+      .eq("user_id", userId)
+      .in("ebay_listing_id", missingIds.slice(i, i + CACHE_LOOKUP_CHUNK))
+      .not("category_id", "is", null);
+    if (error) {
+      console.warn(
+        `[inventory-sync] Category backfill skipped for user ${userId}, cache lookup failed: ${error.message}`,
+      );
+      return listings;
+    }
+    for (const r of cachedRows ?? []) alreadyCached.add((r as { ebay_listing_id: string }).ebay_listing_id);
   }
 
-  const alreadyCached = new Set((cachedRows ?? []).map((r: { ebay_listing_id: string }) => r.ebay_listing_id));
-  const toLookUp = missing.map((l) => l.listingId).filter((id) => !alreadyCached.has(id));
+  const toLookUp = missingIds.filter((id) => !alreadyCached.has(id));
   if (toLookUp.length === 0) return listings;
 
   const found = await lookupCategoryIds(toLookUp);
@@ -266,6 +277,8 @@ export async function syncListingsIntoCache(
     // Two batches, because supabase-js builds a bulk upsert's column list
     // from the union of all rows' keys -- a single mixed batch would send
     // null category_id for the rows that omitted it, clobbering them anyway.
+    // In the uncategorized batch category_id is absent from that column list
+    // entirely, so PostgREST's ON CONFLICT DO UPDATE never touches it.
     const toRow = (l: ActiveListing) => ({
       user_id: userId,
       ebay_listing_id: l.listingId,
