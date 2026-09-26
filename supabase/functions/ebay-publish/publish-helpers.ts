@@ -3685,6 +3685,191 @@ export function buildPackageWeightAndSize(
   return packageWeightAndSize;
 }
 
+/**
+ * Result of verifyOrRerouteLeafCategory: what category should actually be
+ * published, and why.
+ */
+export interface LeafRerouteResult {
+  /** The category ID to actually publish against. */
+  categoryId: string;
+  /** True when this differs from the category that was passed in. */
+  changed: boolean;
+  /**
+   * true = confirmed leaf (safe to publish), false = confirmed non-leaf/junk
+   * with no safe reroute found, null = could not be determined (eBay/DB
+   * unreachable) — caller should proceed optimistically in that case.
+   */
+  isLeaf: boolean | null;
+  /** Human-readable explanation for logs / audit trail. */
+  reason: string;
+}
+
+/**
+ * UNIVERSAL, category-agnostic last-line-of-defense leaf verification.
+ *
+ * WHY THIS EXISTS: analyze-item runs several best-effort leaf-verification
+ * passes (deterministic lock, live `verify`, post-lookup override, the final
+ * `enforceLeafCategory` guard), but every one of them is non-blocking —
+ * a network hiccup, an exhausted candidate list, or a manually-edited draft
+ * category can all reach ebay-publish carrying a non-leaf/rollup category id
+ * (e.g. category 212 "Sports Trading Cards", a parent/rollup with no
+ * conditionDescriptors and no aspects, which eBay's publish step rejects
+ * with "invalid data ... provided condition id is invalid for the selected
+ * primary category id"). Prior to this function, ebay-publish had ZERO
+ * independent leaf-category validation of its own — it fully trusted
+ * whatever category id it was handed and only found out it was wrong when
+ * eBay's own API rejected the publish.
+ *
+ * This function is the true final gate, run immediately before any eBay
+ * Inventory/Offer API call. It is deliberately domain-agnostic: it never
+ * hardcodes a category id or a "trading cards" special case. Instead it:
+ *
+ *   1. Asks category-lookup's `verify` action whether `categoryId` is a
+ *      real, currently-active LEAF category. That action is cache-first
+ *      (ebay_taxonomy_cache) with a live `get_category_subtree` fallback —
+ *      so even a category that was never added to any static denylist
+ *      (like 212 was not) is still caught, because the live eBay taxonomy
+ *      API is the ultimate source of truth, not a hand-maintained list.
+ *   2. If it is not a leaf (or is a known junk/parent catch-all), asks
+ *      category-lookup's `lookup` action (the same filter-then-rank
+ *      resolver analyze-item uses) to find a verified-leaf replacement from
+ *      the listing title. This works for ANY domain because the resolver
+ *      itself is domain-agnostic.
+ *   3. If no safe replacement can be found, reports `isLeaf: false` so the
+ *      caller can fail the publish with an actionable message instead of
+ *      silently sending a known-bad category to eBay.
+ *
+ * Fails open (returns `isLeaf: null`, `changed: false`) on any network/
+ * configuration error so a transient outage never blocks a publish that
+ * would otherwise have succeeded — matching the fail-safe contract used
+ * throughout this file (e.g. categoryAcceptsCondition, fetchDynamicAspectRule).
+ */
+export async function verifyOrRerouteLeafCategory(
+  categoryId: string,
+  title: string,
+): Promise<LeafRerouteResult> {
+  const trimmedId = (categoryId ?? "").toString().trim();
+  if (!trimmedId) {
+    return { categoryId: trimmedId, changed: false, isLeaf: null, reason: "no category id supplied" };
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !supabaseServiceKey) {
+    return {
+      categoryId: trimmedId,
+      changed: false,
+      isLeaf: null,
+      reason: "Supabase credentials not configured — skipping leaf verification",
+    };
+  }
+
+  try {
+    const verifyResp = await fetchWithTimeout(
+      `${supabaseUrl}/functions/v1/category-lookup`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${supabaseServiceKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action: "verify", categoryId: trimmedId }),
+        timeout: 8000,
+      },
+    );
+
+    if (!verifyResp.ok) {
+      console.warn(
+        `create_draft: leaf verify HTTP ${verifyResp.status} for category ${trimmedId} — proceeding optimistically`,
+      );
+      return { categoryId: trimmedId, changed: false, isLeaf: null, reason: `verify HTTP ${verifyResp.status}` };
+    }
+
+    let verifyData: any;
+    try {
+      verifyData = JSON.parse(await verifyResp.text());
+    } catch {
+      return { categoryId: trimmedId, changed: false, isLeaf: null, reason: "verify returned invalid JSON" };
+    }
+
+    const isBad = verifyData?.isLeaf === false || verifyData?.isKnownParentOrJunk === true;
+    if (!isBad) {
+      return {
+        categoryId: trimmedId,
+        changed: false,
+        isLeaf: verifyData?.isLeaf ?? null,
+        reason: "category passed live leaf verification",
+      };
+    }
+
+    console.warn(
+      `create_draft: category ${trimmedId} FAILED leaf verification (isLeaf=${verifyData?.isLeaf}, ` +
+        `isKnownParentOrJunk=${verifyData?.isKnownParentOrJunk}) — attempting universal reroute via category-lookup resolver`,
+    );
+
+    // Domain-agnostic reroute: run the SAME filter-then-rank resolver
+    // analyze-item uses, keyed off the listing title. No category-specific
+    // logic here — this works identically for a coin, a jewelry item, a
+    // sealed trading card pack, or anything else.
+    if (title && title.trim().length > 2) {
+      const lookupResp = await fetchWithTimeout(
+        `${supabaseUrl}/functions/v1/category-lookup`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${supabaseServiceKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ action: "lookup", itemType: title }),
+          timeout: 10000,
+        },
+      );
+
+      if (lookupResp.ok) {
+        let lookupData: any;
+        try {
+          lookupData = JSON.parse(await lookupResp.text());
+        } catch {
+          lookupData = null;
+        }
+
+        if (lookupData?.found && lookupData.categoryId && String(lookupData.categoryId) !== trimmedId) {
+          const replacement = String(lookupData.categoryId);
+          console.warn(
+            `create_draft: rerouting category ${trimmedId} -> ${replacement} (${
+              lookupData.breadcrumb || lookupData.categoryName || "verified leaf"
+            })`,
+          );
+          return {
+            categoryId: replacement,
+            changed: true,
+            isLeaf: true,
+            reason: `${trimmedId} is not a valid leaf category; rerouted to verified leaf ${replacement} (${
+              lookupData.breadcrumb || lookupData.categoryName || ""
+            })`,
+          };
+        }
+      }
+    }
+
+    // No safe replacement found — report the failure so the caller can stop
+    // BEFORE calling eBay's API, rather than shipping a known-bad category
+    // and letting eBay reject it with a cryptic error after the fact.
+    return {
+      categoryId: trimmedId,
+      changed: false,
+      isLeaf: false,
+      reason: `${trimmedId} is not a valid leaf eBay category and no verified alternative could be found`,
+    };
+  } catch (err) {
+    console.warn(
+      `create_draft: leaf verification for category ${trimmedId} threw (non-blocking, proceeding optimistically):`,
+      err,
+    );
+    return { categoryId: trimmedId, changed: false, isLeaf: null, reason: "verification error" };
+  }
+}
+
 export async function resolveCategoryTreeType(
   finalCategoryId: string,
   itemType: string | undefined,
