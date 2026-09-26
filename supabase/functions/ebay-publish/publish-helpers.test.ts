@@ -298,6 +298,27 @@ Deno.test("normalizeConditionDescriptorToEnum: PRE_OWNED_GOOD/FAIR/POOR are corr
   assertEquals(normalizeConditionDescriptorToEnum("pre-owned fair"), "USED_GOOD");
 });
 
+// Regression coverage for a live production incident (2026-09-26): eBay's
+// official condition-id-values docs list "New/Factory Sealed" (conditionId
+// 1000, ConditionEnum NEW) and "Open Box/Used" (conditionId 3000,
+// ConditionEnum USED_EXCELLENT) as alternate conditionDescription display
+// names. analyze-item's ebayMetadata.allowedConditions was built from raw
+// conditionDescription text with no normalization, so these exact strings
+// reached the Analyze page's condition dropdown as both label AND value --
+// selecting one and publishing sent an invalid, non-enum condition string
+// to eBay's Inventory API, rejected with errorId 2004 ("Could not
+// serialize field [condition]"). Mirrored in analyze-item/index.ts's
+// CONDITION_DESCRIPTION_TO_ENUM and src/types/listing.ts's
+// normalizeEbayConditionDescription.
+Deno.test("normalizeConditionDescriptorToEnum: eBay's official 'New/Factory Sealed' and 'Open Box/Used' display names", () => {
+  assertEquals(normalizeConditionDescriptorToEnum("New/Factory Sealed"), "NEW");
+  assertEquals(normalizeConditionDescriptorToEnum("New Factory Sealed"), "NEW");
+  assertEquals(normalizeConditionDescriptorToEnum("New - Factory Sealed"), "NEW");
+  assertEquals(normalizeConditionDescriptorToEnum("Open Box/Used"), "USED_EXCELLENT");
+  assertEquals(normalizeConditionDescriptorToEnum("Open Box Used"), "USED_EXCELLENT");
+  assertEquals(normalizeConditionDescriptorToEnum("Open Box - Used"), "USED_EXCELLENT");
+});
+
 Deno.test("normalizeConditionDescriptorToEnum: the live-incident tautology is fixed -- PRE_OWNED_GOOD no longer 'confirms' itself as valid", () => {
   // Simulates category 3937's live condition policy exactly as returned by
   // eBay during the incident.

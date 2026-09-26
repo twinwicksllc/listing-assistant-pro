@@ -58,4 +58,27 @@ describe("normalizeEbayConditionDescription", () => {
     expect(result).toBe(expected);
     expect(result).not.toMatch(/^PRE_OWNED_/);
   });
+
+  // Regression coverage for a live production incident (2026-09-26): eBay's
+  // official condition-id-values docs list "New/Factory Sealed" (conditionId
+  // 1000) and "Open Box/Used" (conditionId 3000) as alternate display names.
+  // These raw description strings leaked straight into the Analyze page's
+  // condition dropdown as both label AND value (analyze-item's
+  // ebayMetadata.allowedConditions was built without any normalization),
+  // so selecting them and publishing sent an invalid, non-enum condition
+  // string to eBay, which rejected it with errorId 2004 ("Could not
+  // serialize field [condition]").
+  test.each([
+    ["New Factory Sealed", "NEW"],
+    ["New/Factory Sealed", "NEW"],
+    ["New - Factory Sealed", "NEW"],
+    ["Open Box Used", "USED_EXCELLENT"],
+    ["Open Box/Used", "USED_EXCELLENT"],
+    ["Open Box - Used", "USED_EXCELLENT"],
+  ])(
+    "maps %s -> %s (not a raw eBay conditionDescription)",
+    (input, expected) => {
+      expect(normalizeEbayConditionDescription(input)).toBe(expected);
+    },
+  );
 });

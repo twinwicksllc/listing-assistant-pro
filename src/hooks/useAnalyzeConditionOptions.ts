@@ -1,6 +1,10 @@
 import { useCallback, useMemo } from "react";
 import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
-import { getConditionLabel, getConditionsForCategory } from "@/types/listing";
+import {
+  getConditionLabel,
+  getConditionsForCategory,
+  normalizeEbayConditionDescription,
+} from "@/types/listing";
 
 interface EbayMetadata {
   allowedConditions: string[];
@@ -31,10 +35,15 @@ interface ConditionOption {
  *  2. allowedConditions is empty / all eBay non-enum strings → coin tiers
  *  3. allowedConditions has real eBay enum values → use them directly
  *
- * The backend now strips eBay's non-enum conditionDescription strings
- * ("Graded", "Ungraded") before sending allowedConditions, so this hook
- * receives either a clean list of enum values or an empty array.
- * The case-insensitive guard below is kept as a belt-and-suspenders safety net.
+ * The backend now normalizes eBay's raw conditionDescription strings
+ * (e.g. "New Factory Sealed", "Open Box Used", "Graded", "Ungraded") into
+ * real ConditionEnum values before sending allowedConditions, so this hook
+ * should receive either a clean list of enum values or an empty array.
+ * Every value is still re-normalized here as a belt-and-suspenders safety
+ * net -- a stale cached response, a future backend regression, or a value
+ * that wasn't in the backend's alias table would otherwise reach the
+ * dropdown's `value` (and later, eBay's publish call) unnormalized and
+ * cause errorId 2004 "Could not serialize field [condition]".
  */
 export function useAnalyzeConditionOptions({
   ebayMetadata,
@@ -62,10 +71,19 @@ export function useAnalyzeConditionOptions({
       hasAllowed && allowed!.every((c) => /^(ungraded|graded)$/i.test(c));
 
     if (hasAllowed && !isOnlyCoinLabels) {
-      return allowed!.map((c) => ({
-        value: c,
-        label: getConditionLabel(c, domain),
-      }));
+      return allowed!.map((c) => {
+        // Re-normalize defensively: if `c` is already a valid ConditionEnum
+        // (the expected case) this is a no-op passthrough (unknown aliases
+        // fall through to an uppercase-snake-case mangle of the same
+        // string). If `c` is somehow still a raw eBay conditionDescription
+        // string, this maps it to the real enum instead of shipping the
+        // raw description as the option's value.
+        const normalized = normalizeEbayConditionDescription(c) || c;
+        return {
+          value: normalized,
+          label: getConditionLabel(normalized, domain),
+        };
+      });
     }
 
     return getConditionsForCategory(

@@ -1686,6 +1686,21 @@ Seller's note: "${voiceNote}"`;
       damaged: "DAMAGED",
       graded: "USED_EXCELLENT", // eBay "Graded" conditionDescription → condition accepted in coin categories
       ungraded: "USED_VERY_GOOD", // eBay "Ungraded" conditionDescription → VF (safe default for raw coins)
+      // eBay's official condition-id-values docs list these as alternate
+      // display names for conditionId 1000 (NEW) and 3000 (USED_EXCELLENT)
+      // respectively. Seen live 2026-09-26 for a listing whose allowedConditions
+      // leaked these raw strings straight to the frontend dropdown/publish call
+      // (fixed by reusing this already-normalized table for allowedConditions
+      // below instead of re-deriving raw descriptions). Kept here too as a
+      // second line of defense in case a caller only has the description text
+      // and not the conditionId. Mirrored in ebay-publish/publish-helpers.ts
+      // and src/types/listing.ts — update all three together.
+      "new/factory sealed": "NEW",
+      "new - factory sealed": "NEW",
+      "new factory sealed": "NEW",
+      "open box/used": "USED_EXCELLENT",
+      "open box - used": "USED_EXCELLENT",
+      "open box used": "USED_EXCELLENT",
     };
 
     // eBay returns non-enum conditionDescription strings for some categories (e.g. "Ungraded",
@@ -3708,13 +3723,22 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
         suggestedAspects: categoryAspects?.aspects
           ?.filter((a: any) => !a.required)
           .map((a: any) => a.name) ?? [],
-        // Strip eBay's non-enum conditionDescription strings ("Graded", "Ungraded")
-        // that are NOT valid eBay Inventory API condition values — they would cause
-        // publish errorId 2004. Frontend falls back to getConditionsForCategory()
-        // when this list is empty, which returns the proper coin condition tiers.
-        allowedConditions: (categoryConditions?.conditions ?? [])
-          .map((c: any) => c.conditionDescription || String(c.conditionId))
-          .filter((desc: string) => !/^(graded|ungraded)$/i.test(desc)),
+        // IMPORTANT: Must send normalized ConditionEnum values here, NOT raw eBay
+        // conditionDescription strings (e.g. "New Factory Sealed", "Open Box Used",
+        // "Pre-owned - Good"). Those human-readable descriptions are NOT valid eBay
+        // Inventory API ConditionEnum values -- if they reach the frontend dropdown
+        // as the option `value` and the user selects/publishes them, eBay's publish
+        // call rejects with errorId 2004 "Could not serialize field [condition]".
+        //
+        // Reuse mappedConditionEnums (built above from the exact same
+        // categoryConditions.conditions list via CONDITION_ID_TO_ENUM /
+        // CONDITION_DESCRIPTION_TO_ENUM / FAKE_ENUM_CORRECTIONS) instead of
+        // re-deriving raw descriptions here -- that array is already properly
+        // normalized and is what the AI's own tool-call schema uses, so the
+        // frontend dropdown and the AI now agree on the same allowed values.
+        // Frontend falls back to getConditionsForCategory() when this list is
+        // empty, which returns the proper coin condition tiers.
+        allowedConditions: [...new Set<string>(mappedConditionEnums)],
         // Authoritative coin-domain flag. Frontend uses this instead of maintaining
         // a hardcoded category-ID allowlist that goes stale whenever eBay adds
         // a new subcategory.
