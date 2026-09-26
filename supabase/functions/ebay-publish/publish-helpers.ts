@@ -202,6 +202,17 @@ export function normalizeConditionDescriptorToEnum(
     "new without tags": "NEW_OTHER",
     "new with defects": "NEW_WITH_DEFECTS",
     "pre-owned": "USED_EXCELLENT",
+    // eBay's official condition-id-values docs list these as alternate
+    // display names for conditionId 1000 (NEW) and 3000 (USED_EXCELLENT)
+    // respectively. Mirrored in analyze-item/index.ts's
+    // CONDITION_DESCRIPTION_TO_ENUM and src/types/listing.ts's
+    // normalizeEbayConditionDescription — update all three together.
+    "new/factory sealed": "NEW",
+    "new - factory sealed": "NEW",
+    "new factory sealed": "NEW",
+    "open box/used": "USED_EXCELLENT",
+    "open box - used": "USED_EXCELLENT",
+    "open box used": "USED_EXCELLENT",
   };
 
   const resolved = aliases[lowered] ??

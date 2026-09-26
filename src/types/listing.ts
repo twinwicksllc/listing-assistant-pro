@@ -550,6 +550,19 @@ export function normalizeEbayConditionDescription(
     remanufactured: "REMANUFACTURED",
     retread: "RETREAD",
     damaged: "DAMAGED",
+    // eBay's official condition-id-values docs list these as alternate
+    // display names for conditionId 1000 (NEW) and 3000 (USED_EXCELLENT)
+    // respectively. Seen live 2026-09-26 leaking through to the Analyze
+    // page's condition dropdown/publish call unnormalized. Mirrored in
+    // supabase/functions/ebay-publish/publish-helpers.ts's
+    // normalizeConditionDescriptorToEnum and analyze-item/index.ts's
+    // CONDITION_DESCRIPTION_TO_ENUM -- update all three together.
+    "new/factory sealed": "NEW",
+    "new - factory sealed": "NEW",
+    "new factory sealed": "NEW",
+    "open box/used": "USED_EXCELLENT",
+    "open box - used": "USED_EXCELLENT",
+    "open box used": "USED_EXCELLENT",
   };
 
   const mapped = aliases[lowered];
