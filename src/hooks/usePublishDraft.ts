@@ -412,6 +412,14 @@ export function usePublishDraft() {
           });
           return false;
         }
+        if (data?.invalidCategory) {
+          await markDraftFailed(draft.id, errMsg);
+          toast.error(`"${draft.title}" — invalid eBay category`, {
+            description: data.error,
+            duration: 10000,
+          });
+          return false;
+        }
 
         // --- Transient failures: retry with exponential backoff ---
         if (
