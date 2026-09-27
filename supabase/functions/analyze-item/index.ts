@@ -2935,8 +2935,55 @@ Seller's note: "${voiceNote}"`;
         .filter(Boolean)
         .join(" ");
 
+      // Populate `verifiedLeaf` with a fresh live/cached check before running
+      // the guard. Without this, enforceLeafCategory's "happy path" only ever
+      // consulted the static KNOWN_PARENT_CATEGORY_IDS denylist (verifiedLeaf
+      // was always undefined at this call site), so any non-leaf/rollup
+      // category nobody had hit before (e.g. category 212 "Sports Trading
+      // Cards") sailed through unblocked. This check is domain-agnostic — it
+      // works identically for coins, cards, jewelry, or anything else,
+      // because it asks eBay's live/cached taxonomy directly rather than a
+      // hand-maintained per-domain list.
+      let verifiedLeaf: boolean | null = null;
+      try {
+        const _finalVerifyUrl = Deno.env.get("SUPABASE_URL");
+        const _finalVerifyKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (_finalVerifyUrl && _finalVerifyKey && listing.ebayCategoryId) {
+          const finalVerifyResp = await fetchWithTimeout(
+            `${_finalVerifyUrl}/functions/v1/category-lookup`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${_finalVerifyKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                action: "verify",
+                categoryId: listing.ebayCategoryId,
+              }),
+            },
+            withDeadline(PIPELINE_TIMEOUTS_MS.internalFunction, deadline),
+            "category-lookup (final leaf guard verify)",
+          );
+          if (finalVerifyResp.ok) {
+            const finalVerifyData = JSON.parse(await finalVerifyResp.text());
+            if (finalVerifyData?.isLeaf === false || finalVerifyData?.isKnownParentOrJunk === true) {
+              verifiedLeaf = false;
+            } else if (finalVerifyData?.isLeaf === true) {
+              verifiedLeaf = true;
+            }
+          }
+        }
+      } catch (finalVerifyErr) {
+        console.warn(
+          `[${invocationId}] analyze-item: final leaf guard live verify failed (non-blocking):`,
+          finalVerifyErr,
+        );
+      }
+
       const guardResult = enforceLeafCategory({
         categoryId: listing.ebayCategoryId,
+        verifiedLeaf,
         domain: identification.domain,
         text: guardText,
         candidates: [

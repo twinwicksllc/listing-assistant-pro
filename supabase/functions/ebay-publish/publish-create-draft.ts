@@ -30,6 +30,7 @@ import {
   resolveDraftBusinessPolicies,
   resolveDraftImageUrls,
   synthesizeCoinConditionDetail,
+  verifyOrRerouteLeafCategory,
 } from "./publish-helpers.ts";
 
 export interface CreateDraftContext {
@@ -249,6 +250,44 @@ export async function handleCreateDraft({
         }) so the Graded condition (2750) is accepted`,
       );
       finalCategoryId = rerouteTarget;
+    }
+  }
+
+  // ── UNIVERSAL LEAF-CATEGORY GUARD (last line of defense, any domain) ──
+  // analyze-item runs several best-effort leaf checks upstream, but every
+  // one of them is non-blocking, and a manually-edited draft can also carry
+  // whatever category id the user last picked in the dropdown. Verify
+  // finalCategoryId against eBay's live/cached taxonomy HERE, immediately
+  // before it is used to build aspects/conditions/offer, so a non-leaf
+  // rollup (e.g. category 212 "Sports Trading Cards", or any other
+  // domain's rollup we've never seen before) is caught and rerouted BEFORE
+  // eBay's API ever sees it — rather than eBay rejecting the publish with
+  // "invalid data ... provided condition id is invalid for the selected
+  // primary category id" after the fact. This check is intentionally
+  // domain-agnostic (no card/coin/jewelry-specific logic) so it works for
+  // any category, per the requirement that this fix must not be limited to
+  // any single vertical.
+  if (finalCategoryId) {
+    const leafCheck = await verifyOrRerouteLeafCategory(finalCategoryId, String(title ?? ""));
+    console.log(
+      `create_draft: leaf category check for ${finalCategoryId} — isLeaf=${leafCheck.isLeaf}, changed=${leafCheck.changed}, reason=${leafCheck.reason}`,
+    );
+    if (leafCheck.changed) {
+      finalCategoryId = leafCheck.categoryId;
+    } else if (leafCheck.isLeaf === false) {
+      return new Response(
+        JSON.stringify({
+          error:
+            `The selected eBay category (${finalCategoryId}) is not a valid, listable leaf category and no verified ` +
+            `replacement could be found. Please choose a more specific category before publishing. (${leafCheck.reason})`,
+          invalidCategory: true,
+          categoryId: finalCategoryId,
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
   }
 

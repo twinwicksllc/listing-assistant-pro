@@ -9,6 +9,7 @@ import {
   HARDCODED_COLLECTIBLE_CATEGORY_IDS,
   HARDCODED_TRADING_CARD_CATEGORY_IDS,
   normalizeConditionDescriptorToEnum,
+  verifyOrRerouteLeafCategory,
 } from "./publish-helpers.ts";
 
 // Regression guard for the 2026-09-01 stale-coin-category-ID cleanup (see
@@ -358,4 +359,158 @@ Deno.test("generateDraftSku: random fallback (no userId) is alphanumeric and wit
 
 Deno.test("generateDraftSku: an incoming SKU is passed through unchanged", async () => {
   assertEquals(await generateDraftSku("LA01234", undefined), "LA01234");
+});
+
+// ============================================================================
+// verifyOrRerouteLeafCategory: universal (any-domain) last-line-of-defense
+// leaf-category guard added at ebay-publish's create_draft step.
+//
+// Root-cause regression coverage: a "2023-24 Panini Haunted Hoops Basketball"
+// sealed trading card pack listing was rejected by eBay ("provided condition
+// id is invalid for the selected primary category id") because it resolved
+// to category 212 ("Sports Mem, Cards & Fan Shop > Sports Trading Cards"), a
+// non-leaf rollup that had never been added to the static
+// KNOWN_PARENT_CATEGORY_IDS denylist and therefore slipped past every
+// existing guard. The user explicitly required that the FIX not be
+// cards-specific -- these tests therefore cover a synthetic NON-CARD,
+// non-coin domain (electronics) in addition to the real 212 case, to prove
+// the guard is genuinely domain-agnostic (it never branches on category id
+// or vertical -- it only ever calls category-lookup's live/cached `verify`
+// and `lookup` actions).
+// ============================================================================
+
+function withMockedFetch<T>(
+  handler: (url: string, init?: RequestInit) => Response | Promise<Response>,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const original = globalThis.fetch;
+  globalThis.fetch =
+    ((url: string | URL | Request, init?: RequestInit) => Promise.resolve(handler(String(url), init))) as typeof fetch;
+  const originalEnvGet = Deno.env.get;
+  Deno.env.set("SUPABASE_URL", "https://fake-project.supabase.co");
+  Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "fake-service-role-key");
+  return fn().finally(() => {
+    globalThis.fetch = original;
+    Deno.env.get = originalEnvGet;
+  });
+}
+
+Deno.test("verifyOrRerouteLeafCategory: a category that passes live verification is returned unchanged", async () => {
+  const result = await withMockedFetch(
+    () => {
+      return new Response(
+        JSON.stringify({ valid: true, isLeaf: true, isKnownParentOrJunk: false }),
+        { status: 200 },
+      );
+    },
+    () => verifyOrRerouteLeafCategory("261328", "2023 Panini Prizm Basketball Card"),
+  );
+  assertEquals(result.categoryId, "261328");
+  assertEquals(result.changed, false);
+  assertEquals(result.isLeaf, true);
+});
+
+Deno.test("verifyOrRerouteLeafCategory: category 212 (Sports Trading Cards rollup) is rerouted to a verified leaf found via the resolver", async () => {
+  const result = await withMockedFetch(
+    (url, init) => {
+      const body = init?.body ? JSON.parse(String(init.body)) : {};
+      if (body.action === "verify") {
+        assertEquals(body.categoryId, "212");
+        return new Response(
+          JSON.stringify({ valid: true, isLeaf: false, isKnownParentOrJunk: false }),
+          { status: 200 },
+        );
+      }
+      if (body.action === "lookup") {
+        return new Response(
+          JSON.stringify({
+            found: true,
+            categoryId: "261331",
+            categoryName: "Sealed Trading Card Packs",
+            breadcrumb: "Sports Mem, Cards & Fan Shop > Sports Trading Cards > Sealed Trading Card Packs",
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response("{}", { status: 200 });
+    },
+    () => verifyOrRerouteLeafCategory("212", "2023-24 Panini Haunted Hoops Basketball 120-Card Hobby Pack"),
+  );
+  assertEquals(result.categoryId, "261331");
+  assertEquals(result.changed, true);
+  assertEquals(result.isLeaf, true);
+});
+
+Deno.test("verifyOrRerouteLeafCategory: is domain-agnostic -- a NON-CARD, non-coin rollup (synthetic electronics example) is caught and rerouted identically", async () => {
+  // Proves the guard contains no card/coin-specific branching: an entirely
+  // fictitious rollup id in an unrelated vertical is handled the same way.
+  const result = await withMockedFetch(
+    (url, init) => {
+      const body = init?.body ? JSON.parse(String(init.body)) : {};
+      if (body.action === "verify") {
+        assertEquals(body.categoryId, "999999");
+        return new Response(
+          JSON.stringify({ valid: true, isLeaf: false, isKnownParentOrJunk: false }),
+          { status: 200 },
+        );
+      }
+      if (body.action === "lookup") {
+        return new Response(
+          JSON.stringify({
+            found: true,
+            categoryId: "31388",
+            categoryName: "Cell Phone Cases",
+            breadcrumb: "Cell Phones & Accessories > Cases, Covers & Skins",
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response("{}", { status: 200 });
+    },
+    () => verifyOrRerouteLeafCategory("999999", "Clear Silicone Phone Case for iPhone 15"),
+  );
+  assertEquals(result.categoryId, "31388");
+  assertEquals(result.changed, true);
+  assertEquals(result.isLeaf, true);
+});
+
+Deno.test("verifyOrRerouteLeafCategory: a known junk/parent category with NO resolver replacement reports isLeaf=false instead of shipping it to eBay", async () => {
+  const result = await withMockedFetch(
+    (url, init) => {
+      const body = init?.body ? JSON.parse(String(init.body)) : {};
+      if (body.action === "verify") {
+        return new Response(
+          JSON.stringify({ valid: true, isLeaf: false, isKnownParentOrJunk: true }),
+          { status: 200 },
+        );
+      }
+      if (body.action === "lookup") {
+        return new Response(JSON.stringify({ found: false, needsConfirmation: true }), { status: 200 });
+      }
+      return new Response("{}", { status: 200 });
+    },
+    () => verifyOrRerouteLeafCategory("212", "Ambiguous Item With No Good Match"),
+  );
+  assertEquals(result.categoryId, "212");
+  assertEquals(result.changed, false);
+  assertEquals(result.isLeaf, false);
+});
+
+Deno.test("verifyOrRerouteLeafCategory: fails open (isLeaf=null, unchanged) when category-lookup is unreachable", async () => {
+  const result = await withMockedFetch(
+    () => {
+      throw new Error("network down");
+    },
+    () => verifyOrRerouteLeafCategory("261328", "Some card"),
+  );
+  assertEquals(result.categoryId, "261328");
+  assertEquals(result.changed, false);
+  assertEquals(result.isLeaf, null);
+});
+
+Deno.test("verifyOrRerouteLeafCategory: empty category id is a no-op", async () => {
+  const result = await verifyOrRerouteLeafCategory("", "Some title");
+  assertEquals(result.categoryId, "");
+  assertEquals(result.changed, false);
+  assertEquals(result.isLeaf, null);
 });
