@@ -2021,9 +2021,9 @@ const SIGNATURE_MATCH_MIN_COMPS = 3;
  * may reflect comps this listing's own search would have excluded (or vice
  * versa), and recomputing only priceDelta on top of them does not correct
  * that. Only the two "anchor filter didn't fire at all" cases (both prices
- * missing/under the $50 floor) or "both prices close enough that the 10x
- * window is effectively the same" are treated as compatible; everything
- * else falls through to a real search instead of guessing.
+ * missing/under the $50 floor) or identical active anchor prices are treated
+ * as compatible; any different active price can change the filter window,
+ * so it falls through to a real search instead of guessing.
  */
 function anchorContextsCompatible(
   yourPrice: number | null | undefined,
@@ -2033,8 +2033,7 @@ function anchorContextsCompatible(
   const b = siblingYourPrice != null && siblingYourPrice >= 50 ? siblingYourPrice : null;
   if (a === null && b === null) return true; // anchor filter never applied to either
   if (a === null || b === null) return false; // filter applied to only one
-  const ratio = a / b;
-  return ratio >= 0.5 && ratio <= 2.0;
+  return a === b;
 }
 
 /**
