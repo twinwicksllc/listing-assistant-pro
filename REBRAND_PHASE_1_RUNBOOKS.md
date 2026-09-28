@@ -2,7 +2,7 @@
 
 **Product:** ListrAssistr
 **Scope:** `LISTRASSISTR_REBRAND_AND_MIGRATION_PLAN.md` §8 only, per DEC-0035
-**Status date:** 2026-09-02
+**Status date:** 2026-09-28
 
 Step-by-step procedures for the Phase 1 items the owner executes. Companion to:
 
@@ -25,6 +25,7 @@ move. Where a step is version-sensitive it says so.
 | RB-08        | **Supabase** dashboard (`majmvgakczrpcwgxgulj`) + **Vercel** env vars — done |
 | RB-09        | **AWS** — IAM console, signed in as root for this one task                   |
 | RB-10        | **Vercel** → Domains, then **AWS Route 53** — hosted zone                    |
+| RB-11        | **Amazon SES**, IAM SMTP credentials, and Supabase Auth (QA and production)  |
 
 **Status as of 2026-09-02.** **RB-01 to RB-07 are all complete**, RB-05 fully so as of
 checklist A.17b; execution evidence is in A.7d, A.12, A.13, A.15, A.16 and A.17. **RB-09**
@@ -633,3 +634,31 @@ Neither hostname behaves correctly until the app routes by host:
 
 That is code in `listrassistr-official`, and it is what makes P1-06 genuinely closable rather
 than technically satisfied. Worth drafting the routing approach together when you are ready.
+
+## RB-11 — SES and Supabase Auth email setup — ✅ tested 2026-09-28
+
+SES in US East (Ohio), `us-east-2`, now verifies `listrassistr.com` with Easy DKIM
+(RSA 2048); SES published the DKIM CNAMEs into Route 53. Configuration set
+`listrassistr-auth` is assigned as the identity default, with CloudWatch destination
+`listrassistr-auth-events` for sends, deliveries, hard bounces, complaints, and delivery
+delays. Reputation metrics and S/MIME signing are disabled. The account dashboard showed
+a 50,000-message daily quota and 14 messages/second, so no sandbox-exit request was
+needed.
+
+A dedicated IAM SMTP user (`listrassistr-smtp-user`) was created and given SES SMTP
+sending permission. SMTP credentials are stored only in provider dashboards; never add
+them to this repository or chat. Supabase Auth SMTP uses the Ohio endpoint
+`email-smtp.us-east-2.amazonaws.com`, port 587, sender `support@listrassistr.com` /
+`ListrAssistr`, with a 60-second per-user interval.
+
+Password-reset emails arrived and their links returned to the intended site in both QA
+project `listrassistr-qa` (`majmvgakczrpcwgxgulj`) and production project
+`listrassistr-official` (`yqftpibxplachhwoclam`). QA is shared with the legacy app's QA
+environment, so its Auth SMTP setting affects both.
+
+The `_dmarc.listrassistr.com` TXT record is published with Postmark aggregate reporting
+and `p=none` (`pct=100`, `sp=none`, `aspf=r`). Monitoring only is approved. Remaining:
+configure Forward Email role addresses/MX/DKIM, merge its SPF include with SES into one
+SPF record, test inbound/reply paths, inspect message headers and Postmark reports, then
+complete the 30-day review. P1-08 and P1-09 remain in progress/open until that evidence
+exists; do not automatically promote DMARC policy.

@@ -230,19 +230,28 @@ for; no migration object remains "probably ours."
 
 **Owner:** Integrations owner
 
-**Discrepancy noted 2026-09-08 (`REBRAND_PHASE_1_TODO.md` Q-04): this list
-names `security` as the fourth role address; §6.1's table names `alerts`
 instead.** Neither has been corrected — which set is authoritative is an
-open owner decision (Q-04), not resolved by this note.
+**Implementation decisions (DEC-0040, 2026-09-08):** use role addresses
+`support`, `privacy`, `legal`, and `alerts` at `listrassistr.com`; use Forward
+Email for inbound role mail. Use Amazon SES for Supabase Auth mail. These
+decisions supersede the older `security` role address and Resend-based outbound
+setup described in this section.
 
-1. Create role mailboxes or aliases for `support`, `privacy`, `legal`, and
-   `security` at `listrassistr.com`.
-2. Add the domain to Resend and publish its DKIM/SPF records.
-3. Publish DMARC initially with reporting (`p=none`), review reports, then move
-   to quarantine/reject after all legitimate senders are aligned.
-4. Configure a custom return-path if supported.
-5. Send test messages to Gmail, Outlook, and a DMARC analyzer. Verify alignment,
-   links, reply handling, and unsubscribe requirements where applicable.
+1. Configure Forward Email for role addresses `support`, `privacy`, `legal`, and
+   `alerts`; publish its required MX/DKIM records and test receipt/replies.
+2. Configure Supabase Auth SMTP through SES and publish Easy DKIM records for
+   `listrassistr.com`. SES identity verification and Auth SMTP tests completed
+   2026-09-28 in QA and production; see `REBRAND_PHASE_1_RUNBOOKS.md` RB-11.
+3. Publish one SPF record containing the SES and Forward Email mechanisms. Do not
+   publish multiple apex SPF records.
+4. Publish DMARC in monitor-only mode (`p=none`) with an aggregate-report
+   destination. **Done 2026-09-28:** Postmark is configured as `rua`; the 30-day
+   review remains open until all legitimate senders are configured and reports
+   and aligned headers have been reviewed. Do not automatically tighten policy.
+5. Test messages to Gmail and Outlook. Verify SPF, DKIM, and DMARC alignment,
+   authentication links, and inbound role-address/reply handling.
+6. Configure a custom MAIL FROM domain only if needed for the selected alignment
+   requirements; it is not currently configured.
 
 ### 8.3 Brand asset production
 
