@@ -656,9 +656,21 @@ project `listrassistr-qa` (`majmvgakczrpcwgxgulj`) and production project
 `listrassistr-official` (`yqftpibxplachhwoclam`). QA is shared with the legacy app's QA
 environment, so its Auth SMTP setting affects both.
 
-The `_dmarc.listrassistr.com` TXT record is published with Postmark aggregate reporting
-and `p=none` (`pct=100`, `sp=none`, `aspf=r`). Monitoring only is approved. Remaining:
-configure Forward Email role addresses/MX/DKIM, merge its SPF include with SES into one
-SPF record, test inbound/reply paths, inspect message headers and Postmark reports, then
-complete the 30-day review. P1-08 and P1-09 remain in progress/open until that evidence
-exists; do not automatically promote DMARC policy.
+Forward Email DNS setup is also complete: its MX records, domain-verification TXT,
+Forward Email DKIM TXT, `fe-bounces` return-path CNAME, and one root SPF value
+(`include:spf.forwardemail.net`) are present. The four role aliases are active and
+inbound test messages arrived. The root catch-all is also active, so those deliveries
+do not independently prove which alias routed each message; use Forward Email logs or
+temporarily disable catch-all for a focused routing test, then restore it.
+
+Forward Email's outbound SMTP check now reports verified but **pending provider admin
+approval**. While waiting, inspect Gmail's raw headers for the SES Auth test email and
+check Postmark for aggregate reports. Once Forward Email approves sending, test a message
+and reply from `support@listrassistr.com`, then inspect its headers and reports.
+
+The `_dmarc.listrassistr.com` TXT record remains Postmark-backed and monitor-only
+(`p=none`, `pct=100`, `sp=none`, `aspf=r`). Forward Email's setup page recommends
+`p=reject`; that recommendation is not approved. Preserve `p=none` while gathering and
+reviewing reports for the planned 30-day period after all legitimate senders are active.
+P1-08 remains in progress; P1-09 remains open until alignment and report review are
+complete. Do not automatically promote DMARC policy.

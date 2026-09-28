@@ -2194,8 +2194,9 @@ how legitimate mail starts disappearing.
    send as the domain. The period must in any case be long enough to cover every
    legitimate sender: SES-backed Supabase Auth and Forward Email role-address mail,
    plus any future Stripe/eBay/support tooling that sends as this domain. As of
-   2026-09-28, SES Auth has been exercised in QA and production; Forward Email is not
-   yet configured, so the full review window is not complete.
+   2026-09-28, SES Auth has been exercised in QA and production. Forward Email DNS and
+   inbound aliases are configured, but outbound SMTP is pending admin approval, so the
+   full review window is not complete.
 3. Confirm every legitimate source shows SPF **and** DKIM alignment passing.
 4. Only then move to `p=quarantine; pct=<ramp>`, ramping the percentage.
 5. Only then consider `p=reject`, and tighten `adkim`/`aspf` to `s`.
@@ -2205,10 +2206,11 @@ strict expectations to bulk senders, so `p=none` is a transitional state in both
 directions.
 
 **Status 2026-09-28.** Initial SES Auth reset messages were sent after the monitor-only
-record was published. Treat 2026-09-28 as the earliest observation date for that sender,
-not as completion of P1-09. Start the full 30-day review after Forward Email is configured
-and each legitimate sender has generated observable mail; inspect analyzer reports and
-aligned headers before proposing any policy ramp. No automatic policy change is approved.
+record was published. Forward Email DNS and inbound aliases are configured, but outbound
+SMTP is still pending admin approval. Treat 2026-09-28 as an initial SES observation, not
+completion or start of the full-sender review. After approval, test Forward Email
+sending/replies, inspect aligned headers, and review reports for the planned 30-day
+period. No automatic policy change is approved.
 
 ## Section E — Verification procedure
 
@@ -2590,8 +2592,11 @@ the start is what keeps it from biting.
       the ListrAssistr production Supabase project.
 - [x] Verify `listrassistr.com` as a sending identity with **Easy DKIM (RSA 2048)**;
       SES published its CNAMEs into Route 53 and the identity now shows **Verified**.
-- [ ] Publish the SPF include SES specifies for the apex — still **exactly one**
-      `v=spf1` record, merged with the mailbox provider's include (Section D).
+- [x] Publish one root SPF TXT value for Forward Email:
+      `v=spf1 include:spf.forwardemail.net -all`, alongside the separate domain-verification
+      TXT value in the same Route 53 root TXT record set. **Do not create another
+      `v=spf1` value.** SES currently uses its default MAIL FROM domain, so no SES SPF
+      include is needed. If custom MAIL FROM is configured later, revisit SPF/MX.
 - [ ] Configure a **custom MAIL FROM** subdomain if strict DMARC alignment on the
       return-path is wanted (§8.2.4).
 - [x] Create configuration set `listrassistr-auth`, assign it as the identity default,
@@ -2611,8 +2616,10 @@ the start is what keeps it from biting.
       returned to the expected QA and production ListrAssistr pages (2026-09-28).
 - [x] Confirm SES account is not in the sandbox: dashboard showed a 50,000-message
       daily quota and 14 messages/second (2026-09-28); no access request was needed.
-- [ ] Publish one SPF record after Forward Email supplies its include, merging it with
-      SES's SPF include. Custom MAIL FROM remains optional and is not configured.
+- [x] Publish the Forward Email SPF value as the sole root `v=spf1` value
+      (2026-09-28); no SES include is needed while SES uses its default MAIL FROM domain.
+- [ ] Configure a custom MAIL FROM subdomain only if strict return-path alignment is
+      required; this optional setup is not currently configured.
 
 #### To verify before acting
 
