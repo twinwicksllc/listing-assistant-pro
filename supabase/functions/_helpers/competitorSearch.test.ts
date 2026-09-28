@@ -1429,20 +1429,21 @@ const FRESH_SIBLING = {
 };
 
 Deno.test("attemptSignatureMatch: hit -> returns signatureMatch outcome, persists sibling's stats under this listing", async () => {
-  const { client, upserted } = fakeSupabaseForSignatureMatch({ sibling: FRESH_SIBLING });
+  const sibling = { ...FRESH_SIBLING, your_price: 55 };
+  const { client, upserted } = fakeSupabaseForSignatureMatch({ sibling });
   const result = await attemptSignatureMatch({
     supabase: client,
     userId: "u1",
     listingId: "this-listing",
     signature: "sig",
-    yourPrice: 60,
+    yourPrice: 55,
   });
   assertEquals(result?.body.refreshMethod, "signatureMatch");
   assertEquals(result?.body.matchedListingId, "sibling-listing");
   assertEquals(result?.body.medianPrice, 50);
-  // yourPrice (60) - sibling's medianPrice (50) = 10, recomputed for THIS
+  // yourPrice (55) - sibling's medianPrice (50) = 5, recomputed for THIS
   // listing's own price, not copied from the sibling.
-  assertEquals(result?.body.priceDelta, 10);
+  assertEquals(result?.body.priceDelta, 5);
   assertEquals(upserted.length, 1);
   assertEquals(upserted[0].ebay_listing_id, "this-listing");
   assertEquals(upserted[0].product_signature, "sig");
@@ -1465,6 +1466,22 @@ Deno.test("attemptSignatureMatch: incompatible price-anchor contexts -> returns 
     listingId: "this-listing",
     signature: "sig",
     yourPrice: 600,
+  });
+  assertEquals(result, null);
+  assertEquals(upserted.length, 0);
+});
+
+Deno.test("attemptSignatureMatch: different active anchors within 2x -> returns null, falls through", async () => {
+  // At $100 the anchor window is $10-$1,000; at $200 it is $20-$2,000.
+  // The windows differ even though the prices pass the old 2x tolerance.
+  const sibling = { ...FRESH_SIBLING, your_price: 200 };
+  const { client, upserted } = fakeSupabaseForSignatureMatch({ sibling });
+  const result = await attemptSignatureMatch({
+    supabase: client,
+    userId: "u1",
+    listingId: "this-listing",
+    signature: "sig",
+    yourPrice: 100,
   });
   assertEquals(result, null);
   assertEquals(upserted.length, 0);
