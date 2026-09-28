@@ -1,13 +1,15 @@
 # Rebrand Session Handoff
 
-**As of:** 2026-09-25 (substantive state last changed 2026-09-08)
+**As of:** 2026-09-28
 **Repository:** `twinwicksllc/listing-assistant-pro`
 **Session output:** PRs #556, #557, #558, #559, #560, #561 merged (6 total), 0 open
 
-> **Update 2026-09-25.** No rebrand progress since 2026-09-08 (the only rebrand-doc change
-> was the FYI design audit, Section 5b of `REBRAND_PHASE_1_TODO.md`, PR #622). Everything
-> below is still current. Open owner items: **O-10** (SES setup) and **O-12** (Forward Email
-> setup + MX records); owner decisions outstanding: **Q-06**, **Q-16**, **Q-10**.
+> **Update 2026-09-28.** SES identity/configuration, Postmark monitor-only DMARC, and
+> Supabase Auth SMTP are set up. QA and production reset emails and links passed. Open
+> owner item: **O-12** (Forward Email plus MX/DKIM role-address setup), followed by the
+> combined SPF record, inbound tests, header-alignment checks, and DMARC report review.
+> **Q-06 is resolved** by the Postmark reporting destination and `p=none` record;
+> **Q-16** and **Q-10** remain owner decisions.
 
 > **Note on this file's name.** Rewritten in full again today rather than appended to,
 > per this file's own established convention (see the previous rewrite's note, now
@@ -177,21 +179,21 @@ They're unrelated except that both touch `majmvgakczrpcwgxgulj` (see thread A).
 
 ## Gate status snapshot (Phase 1, plan §8)
 
-| Gate  | Item                                    | Status                                                                                                                                           |
-| ----- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| P1-01 | Domain in legal business entity         | Approved with recorded deviation                                                                                                                 |
-| P1-02 | Registrar hardened                      | Evidence captured                                                                                                                                |
-| P1-03 | Legal approval of the name              | Approved                                                                                                                                         |
-| P1-04 | Authoritative DNS documented            | In progress — inventory entry missing                                                                                                            |
-| P1-05 | DNSSEC enabled, DS chain verified       | Evidence captured                                                                                                                                |
-| P1-06 | Apex/`www`/`app`/`qa` resolving + certs | **Done** — all four live, canonical, cert-verified; `qa` points at its own non-production Supabase project (`majmvgakczrpcwgxgulj`), fully wired |
-| P1-07 | Role mailboxes receiving                | Unblocked by DEC-0040 (Q-04/Q-05 decided) — provider-dashboard setup (O-10/O-12) not started yet                                                 |
-| P1-08 | Branded email authenticates             | Same as P1-07                                                                                                                                    |
-| P1-09 | DMARC review period completed           | Blocked on Q-06 (`rua` destination) plus the P1-07/08 setup work                                                                                 |
-| P1-10 | Brand asset package produced            | Not started — blocked on Q-10, on hold in another session                                                                                        |
-| P1-11 | Design tokens pass WCAG AA              | Not started — same block                                                                                                                         |
-| P1-12 | Asset package approved                  | Not started — same block                                                                                                                         |
-| P1-13 | Phase 2 entry decision                  | Not started — DEC-0035 does not grant                                                                                                            |
+| Gate  | Item                                    | Status                                                                                                                                            |
+| ----- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1-01 | Domain in legal business entity         | Approved with recorded deviation                                                                                                                  |
+| P1-02 | Registrar hardened                      | Evidence captured                                                                                                                                 |
+| P1-03 | Legal approval of the name              | Approved                                                                                                                                          |
+| P1-04 | Authoritative DNS documented            | Evidence captured 2026-09-28 — Route 53 hosted zone, records, nameservers, and owner-controlled access/recovery recorded in the service inventory |
+| P1-05 | DNSSEC enabled, DS chain verified       | Evidence captured                                                                                                                                 |
+| P1-06 | Apex/`www`/`app`/`qa` resolving + certs | **Done** — all four live, canonical, cert-verified; `qa` points at its own non-production Supabase project (`majmvgakczrpcwgxgulj`), fully wired  |
+| P1-07 | Role mailboxes receiving                | Open — Forward Email setup, MX/DKIM records, aliases, and inbound/reply tests remain                                                              |
+| P1-08 | Branded email authenticates             | In progress — SES Auth reset emails/links passed in QA and production; merged SPF and header-alignment evidence remain                            |
+| P1-09 | DMARC review period completed           | Open — Postmark `rua` and `p=none` live; complete 30-day review after all legitimate senders are configured and represented                       |
+| P1-10 | Brand asset package produced            | Not started — blocked on Q-10, on hold in another session                                                                                         |
+| P1-11 | Design tokens pass WCAG AA              | Not started — same block                                                                                                                          |
+| P1-12 | Asset package approved                  | Not started — same block                                                                                                                          |
+| P1-13 | Phase 2 entry decision                  | Not started — DEC-0035 does not grant                                                                                                             |
 
 Full detail and evidence locations are in `REBRAND_PHASE_1_DOMAIN_AND_DNS_CHECKLIST.md`
 (reference/evidence) and `REBRAND_PHASE_1_TODO.md` (action list, Section 5 is the
@@ -244,17 +246,17 @@ authoritative next-actions list — already updated today, don't re-summarize it
 
 ## Next steps, cheapest and most decision-independent first
 
-1. **Owner-side, no decision needed:** O-10 (SES setup) and O-12 (Forward Email setup +
-   MX records) — both unblocked by DEC-0040, both provider-dashboard work only the owner
-   can do. See `REBRAND_PHASE_1_TODO.md` Section 2b for the step list.
+1. **Next email work:** O-12 (Forward Email setup, MX/DKIM records, and role aliases),
+   followed by T-07's single SPF record merging provider includes. Then test inbound/reply
+   paths and review Gmail/Outlook headers plus Postmark reports. SES/Auth SMTP is complete;
+   see RB-11 and the current Phase 1 tracker.
 2. **Owner-side, no decision needed:** trigger `deploy-functions-qa.yml`
    (`workflow_dispatch`) the next time a backend change lands on `main`, to keep
    `majmvgakczrpcwgxgulj` current — it's manual-only by design. As of this handoff it's
    already current with `main` (checked directly, no `supabase/` changes since its last
    successful run).
-3. **Q-06** — DMARC `rua` destination. Must be an analyzer service or a real
-   `@listrassistr.com` address; a `gmail.com` address silently fails. Small decision,
-   unlocks O-14 and P1-09's 30-day clock.
+3. **Q-06 — resolved 2026-09-28.** Postmark aggregate-report destination is configured;
+   monitor-only DMARC is live. P1-09 still needs the full observation and review period.
 4. **Q-16** — whether plan §9/Phase 2 still describes the right strategy now that a
    greenfield app is being built in `listrassistr-official` instead of a
    rebrand-in-place. Owner-level call, not urgent.

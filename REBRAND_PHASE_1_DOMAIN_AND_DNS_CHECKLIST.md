@@ -279,8 +279,15 @@ hypothesis for the legacy app.
 authenticating for **`listrassistr.com`**, and `wcednzaxmxwfiijzmjmx` is the shared
 CRM/legacy project. The relevant project is whichever one **ListrAssistr** will actually
 use — most likely the staging project `yqftpibxplachhwoclam`, or a new one not yet
-created. So O-08's answer is useful migration context rather than a P1-08 input, and the
-P1-08 question stays open until the ListrAssistr Supabase project is identified.
+created. So O-08's answer is useful migration context rather than a P1-08 input. At the
+time this note was written, P1-08 remained open pending identification of the ListrAssistr
+Supabase project.
+
+**Update 2026-09-28:** the intended ListrAssistr production project is
+`yqftpibxplachhwoclam`, and custom SES SMTP is now configured there and on QA project
+`majmvgakczrpcwgxgulj`. Owner-tested password-reset messages arrived and linked to the
+correct production/QA sites. The QA project is shared with the legacy app's QA setup.
+Header-alignment checks remain open.
 
 This connects directly to the still-unanswered staging-project questions and to Q-08
 (whether the coming-soon page's "Sign in" link points anywhere yet). If nothing in
@@ -645,9 +652,14 @@ supplied. Those are unchanged in substance but now matter more, because this is 
 production project rather than a scratch environment: **owner/organisation, region, empty
 state, and project URL.** RB-05 is the procedure.
 
-Also unchanged: **no SMTP is configured anywhere for this application** (owner, 2026-08-27),
-so P1-08's "branded email authenticates" has no sender yet on any project. That closes
-O-38's ambiguity — the answer is "nowhere", not "a project I have not named".
+At the time of this 2026-08-27 finding, **no SMTP was configured anywhere for this
+application**, so P1-08 had no sender on any project. That closed O-38's ambiguity —
+the answer then was "nowhere", not "a project I have not named".
+
+**Update 2026-09-28:** SES SMTP is now configured in both ListrAssistr QA and production;
+the owner confirmed successful password-reset delivery and correct return links in both.
+The QA project is shared with the legacy app's QA environment. SPF/DKIM/DMARC header
+alignment still needs inspection after the combined SPF record is published.
 
 ### Documents needing correction as a result
 
@@ -2170,15 +2182,20 @@ is no reason to lower it unless the nameservers themselves are changing.
 `p=none` is a measurement mode, not a finished state, and moving off it early is
 how legitimate mail starts disappearing.
 
-1. Publish `p=none` with `rua` pointing at a DMARC analyzer.
+1. **Done 2026-09-28:** published `p=none` with `rua` pointing at Postmark's DMARC
+   reporting endpoint. The live record is `_dmarc.listrassistr.com` with `pct=100`,
+   `sp=none`, and relaxed SPF alignment (`aspf=r`). No quarantine/reject policy is
+   enabled.
 2. **Collect for 2–4 weeks minimum; 30 days is the realistic target.** Corrected
    2026-08-26 — an earlier revision of this document said "one full weekly
    reporting cycle", which is shorter than guidance supports. M3AAWG and the major
    inbox providers treat `p=none` as a measurement phase with a **2–4 week
    floor**, and commonly recommend **30–90 days** depending on how many systems
    send as the domain. The period must in any case be long enough to cover every
-   legitimate sender: Resend product mail, the mailbox provider, and any
-   Stripe/eBay/support tooling.
+   legitimate sender: SES-backed Supabase Auth and Forward Email role-address mail,
+   plus any future Stripe/eBay/support tooling that sends as this domain. As of
+   2026-09-28, SES Auth has been exercised in QA and production; Forward Email is not
+   yet configured, so the full review window is not complete.
 3. Confirm every legitimate source shows SPF **and** DKIM alignment passing.
 4. Only then move to `p=quarantine; pct=<ramp>`, ramping the percentage.
 5. Only then consider `p=reject`, and tighten `adkim`/`aspf` to `s`.
@@ -2187,11 +2204,11 @@ Do not sit at `p=none` indefinitely either — Gmail and Yahoo apply increasingl
 strict expectations to bulk senders, so `p=none` is a transitional state in both
 directions.
 
-**Schedule consequence.** At a 30-day floor, publishing DMARC today puts
-`p=quarantine` in reach around late September. Publishing it a month from now puts
-it past any October cutover. This is the single longest fixed wait in Phase 1 and
-it is gated only on the Resend account decision (F.1) — which makes that decision
-more time-sensitive than its size suggests.
+**Status 2026-09-28.** Initial SES Auth reset messages were sent after the monitor-only
+record was published. Treat 2026-09-28 as the earliest observation date for that sender,
+not as completion of P1-09. Start the full 30-day review after Forward Email is configured
+and each legitimate sender has generated observable mail; inspect analyzer reports and
+aligned headers before proposing any policy ramp. No automatic policy change is approved.
 
 ## Section E — Verification procedure
 
@@ -2421,17 +2438,18 @@ Fixing only `cost-alert-cron` would leave the gate unmet in the way that matters
 repository code, so configuring it sits inside §8.2 and is authorised under
 DEC-0035.
 
-- [ ] Check the live Supabase project → Authentication → SMTP settings. Record
-      whether custom SMTP is set, and if so, which provider. Names only, never the
-      credential.
-- [ ] If it is the built-in mailer, point Auth at **SES SMTP** (F.5) so auth mail
-      sends from `listrassistr.com` and can align for DMARC. This is a dashboard
-      change, not a code change.
-- [ ] Decide the `From` address for auth mail — plan §6.1's set does not name one;
-      something like `no-reply@` or `accounts@` is conventional and should be added
-      to the address list in A6/F.4.
-- [ ] Do the same check for the **staging** project (`yqftpibxplachhwoclam`), so test
-      signups do not send from an unaligned or production sender.
+- [x] Check the ListrAssistr Auth projects' SMTP settings. As of 2026-09-28, custom
+      SES SMTP is configured on QA `listrassistr-qa` (`majmvgakczrpcwgxgulj`) and
+      production `listrassistr-official` (`yqftpibxplachhwoclam`). The QA project is
+      shared with the legacy app's QA environment. SMTP credentials are not recorded.
+- [x] Configure Auth to use SES SMTP so messages send from `listrassistr.com`; this is
+      a dashboard change, not repository code.
+- [x] Set the Auth `From` address to `support@listrassistr.com` (DEC-0040/Q-07).
+- [x] Test password-reset emails in QA and production on 2026-09-28. Both arrived and
+      their links returned to the expected QA and production sites.
+- [ ] After the combined SPF record is published, inspect Gmail/Outlook headers for
+      aligned SPF, DKIM (`d=listrassistr.com`), and DMARC. Delivery and link flow passed;
+      authentication alignment has not yet been reviewed.
 
 ### F.4 Inbound role mailboxes — a free Gmail account cannot receive domain mail
 
@@ -2568,22 +2586,33 @@ the start is what keeps it from biting.
 
 #### Steps
 
-- [ ] Pick an SES **region** and record it — SES is regional and the SMTP endpoint is
-      region-specific. Keep it consistent with anything else regional.
-- [ ] Verify `listrassistr.com` as a sending identity; use **Easy DKIM** and let SES
-      publish the three CNAMEs into the Route 53 hosted zone directly.
+- [x] Pick an SES **region** and record it — `us-east-2` (US East, Ohio), matching
+      the ListrAssistr production Supabase project.
+- [x] Verify `listrassistr.com` as a sending identity with **Easy DKIM (RSA 2048)**;
+      SES published its CNAMEs into Route 53 and the identity now shows **Verified**.
 - [ ] Publish the SPF include SES specifies for the apex — still **exactly one**
       `v=spf1` record, merged with the mailbox provider's include (Section D).
 - [ ] Configure a **custom MAIL FROM** subdomain if strict DMARC alignment on the
       return-path is wanted (§8.2.4).
-- [ ] Create a **Configuration Set** with event destinations before sending real mail.
-- [ ] Generate **SMTP credentials** from IAM and enter them in Supabase → Auth → SMTP.
-      Never record the credential here; note only that it is set.
-- [ ] Set the auth `From` address — plan §6.1 names no such address; `no-reply@` or
-      `accounts@` is conventional.
-- [ ] **Request production access** (sandbox exit) using the answers above.
-- [ ] Repeat the SMTP configuration for the **staging** project so test signups do not
-      send through the production identity.
+- [x] Create configuration set `listrassistr-auth`, assign it as the identity default,
+      and add CloudWatch destination `listrassistr-auth-events` for sends, deliveries,
+      hard bounces, complaints, and delivery delays. It uses one fixed
+      `ses:configuration-set=listrassistr-auth` dimension. Reputation metrics and
+      S/MIME signing are disabled.
+- [x] Create dedicated IAM SMTP user `listrassistr-smtp-user` and use its SES SMTP
+      credentials in Supabase Auth. **Never record SMTP credentials here.**
+- [x] Set the auth `From` address to `support@listrassistr.com` (DEC-0040/Q-07).
+- [x] Configure Supabase Auth SMTP on QA project `majmvgakczrpcwgxgulj` and production
+      project `yqftpibxplachhwoclam`, using host `email-smtp.us-east-2.amazonaws.com`,
+      port 587, sender `support@listrassistr.com` / `ListrAssistr`, and a 60-second
+      per-user interval. SMTP secrets are not recorded here. QA Auth SMTP is shared with
+      the legacy app's QA environment.
+- [x] Send password-reset tests in QA and production; both emails arrived and links
+      returned to the expected QA and production ListrAssistr pages (2026-09-28).
+- [x] Confirm SES account is not in the sandbox: dashboard showed a 50,000-message
+      daily quota and 14 messages/second (2026-09-28); no access request was needed.
+- [ ] Publish one SPF record after Forward Email supplies its include, merging it with
+      SES's SPF include. Custom MAIL FROM remains optional and is not configured.
 
 #### To verify before acting
 
@@ -2962,12 +2991,12 @@ rather than recollection. Statuses: `Not started`, `In progress`,
 | P1-01 | Domain registered in the legal business entity (deviation accepted) | Registrar account owner, registration date, entity name; recorded DEC entry for the deviation | **Approved with recorded deviation (2026-08-26)** — registered 2026-08-06 via Route 53 in the owner's individual account. §8.1.1 knowingly unmet; owner accepted option B in A.2 and is beginning LLC formation. Draft DEC text in A.2                                                                                                         |
 | P1-02 | Registrar hardened                                                  | Section B checklist complete; MFA method; privacy state                                       | **Evidence captured** — transfer lock, auto-renew, recovery contacts, expiry alerts, root MFA, and WHOIS privacy on all four contacts, all confirmed 2026-08-26. Remaining: service-inventory write-up, root-vs-IAM check, CAA (sequenced late)                                                                                                |
 | P1-03 | Legal approval of the stylized spelling                             | Recorded DEC entry per §8.1.3                                                                 | **Approved (2026-08-26)** — owner approved the name `ListrAssistr` under A.1a option 1, owner sign-off rather than counsel clearance. Draft DEC-0037 text in A.1a records the basis and its stated limitations. Satisfies the "legal has approved the name" half of the §8 exit gate                                                           |
-| P1-04 | Authoritative DNS documented                                        | Provider, account owner, recovery path, added to the service inventory                        | **In progress** — provider confirmed (Route 53, verified via NS). Service-inventory entry not yet written                                                                                                                                                                                                                                      |
+| P1-04 | Authoritative DNS documented                                        | Provider, account owner, recovery path, added to the service inventory                        | **Evidence captured (2026-09-28)** — Route 53 hosted zone, nameservers, and apex/`app`/`qa`/`www` records are in the service inventory; owner confirmed access/recovery through MFA-protected `twinwicksllc` IAM and associated Gmail. Hosted-zone evidence does not establish registrar ownership details.                                    |
 | P1-05 | DNSSEC enabled and DS chain verified                                | External validator output (Section E)                                                         | **Evidence captured (2026-08-27)** — KSK `listrassistr_ksk_1`, alg 13, DS keytag 10716 live at the `.com` parent, digest matching one computed independently before submission. Chain confirmed by `dnsviz.net` root→com→listrassistr.com with no errors or warnings, and validation proved by control test against `dnssec-failed.org` (A.12) |
 | P1-06 | Vercel apex/`www`/`app`/`qa` resolving, certs issued                | External resolver output; cert status                                                         | **Done (updated 2026-09-25)** — apex and `www` live and verified. `app` live and externally verified 2026-08-28 (A.18b); `qa` live 2026-09-02 on its own branch and non-production Supabase project `majmvgakczrpcwgxgulj` (RB-08/RB-10). Vercel project identity settled (A.3). ~~`app` and `qa` absent~~                                     |
-| P1-07 | Role mailboxes receiving                                            | Inbound test result for every address                                                         | **Deferred (owner, 2026-08-26)** — no MX present. ~~Mailbox provider decision not started (F.4/F.6). Address set also unresolved: §8.2.1 vs §6.1~~ **Updated 2026-09-25:** both settled 2026-09-08 by DEC-0040 — `support`/`privacy`/`legal`/`alerts` via Forward Email. Provider-dashboard setup (O-12) not started                           |
-| P1-08 | Branded email authenticates                                         | Gmail/Outlook headers showing aligned SPF+DKIM+DMARC pass, `d=listrassistr.com`               | **Open — unblocked by DEC-0040 (2026-09-08; updated 2026-09-25)**; SES setup (O-10) not started. ~~Deferred (owner, 2026-08-26) — no SPF, DKIM, or DMARC records present. Blocked on the AWS-account question in F.6~~ Note F.3: the mail that must pass here is Supabase Auth mail, not the internal cost alerts.                             |
-| P1-09 | DMARC report-review period completed                                | Analyzer reports covering every legitimate sender, over 2-4 weeks minimum                     | **Open — blocked on Q-06 (`rua` destination) plus the P1-07/08 setup work (updated 2026-09-25)**. 30-day target per D.2, clock not begun. The `p=none` record itself can be published early via an analyzer `rua` (F.6); the meaningful window still needs live senders.                                                                       |
+| P1-07 | Role mailboxes receiving                                            | Inbound test result for every address                                                         | **Open (2026-09-28)** — Forward Email and the `support`/`privacy`/`legal`/`alerts` set are chosen (DEC-0040), but domain verification, MX/DKIM records, aliases, and receipt/reply tests remain.                                                                                                                                               |
+| P1-08 | Branded email authenticates                                         | Gmail/Outlook headers showing aligned SPF+DKIM+DMARC pass, `d=listrassistr.com`               | **In progress (2026-09-28)** — SES Easy DKIM is verified; QA and production Supabase Auth reset emails arrived and links returned correctly. Still publish merged SPF after Forward Email setup and inspect message headers for aligned SPF/DKIM/DMARC.                                                                                        |
+| P1-09 | DMARC report-review period completed                                | Analyzer reports covering every legitimate sender, over 2-4 weeks minimum                     | **Open (2026-09-28)** — Postmark `rua` and `p=none` are live; SES Auth test messages were sent. Full 30-day review waits for all legitimate senders (including Forward Email) to be configured, observed, and reviewed; do not tighten policy automatically.                                                                                   |
 | P1-10 | Brand asset package produced                                        | Full §8.3 deliverable list                                                                    | **Not started**                                                                                                                                                                                                                                                                                                                                |
 | P1-11 | Design tokens pass WCAG AA                                          | Measured contrast ratios; confirmation red is never the sole state indicator                  | **Not started**                                                                                                                                                                                                                                                                                                                                |
 | P1-12 | Asset package approved                                              | Owner sign-off, recorded as a DEC entry                                                       | **Not started**                                                                                                                                                                                                                                                                                                                                |
