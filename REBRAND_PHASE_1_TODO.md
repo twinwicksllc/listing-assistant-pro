@@ -268,6 +268,7 @@ code.
 | T-15 | ~~Draft corrections to `REBRAND_PHASE_0_SERVICE_INVENTORY.md`.~~ **DONE 2026-09-08** — all five items applied: relabeled `yqftpibxplachhwoclam` staging to **production**; removed the "Planned dedicated QA hostname" line and pointed to `listrassistr-qa`/`majmvgakczrpcwgxgulj` instead; dropped "no production data approved"; corrected the dev callback port from `3000` to **`5173`**; added region `us-east-2`, org `twinwicksllc-Org`, and Pro plan (A.11, A.15) | Q-12       | Closed   |
 | T-14 | ~~Draft the DEC entry for the document-location decision~~ **DONE 2026-08-27 — DEC-0038 written into the decision log.** Original: (A.4), once Q-13 is answered — including the recorded destination and migration step that `REBRAND_PHASE_0_IMPLEMENTATION.md` §2 requires                                                                                                                                                                                               | Q-13       | Closed   |
 | T-13 | **Draft the Phase 2 entry decision** for P1-13, once Phase 1 actually closes. DEC-0035 explicitly does not grant it                                                                                                                                                                                                                                                                                                                                                        | T-12       | P3       |
+| T-16 | **Query Postmark's DMARC API on Monday 2026-10-05** (the next weekly report cycle): list reports for `listrassistr.com`, retrieve each report detail, record reporting organizations/source IPs and SPF/DKIM/disposition results, and leave DMARC at `p=none`. Keep the API token local; never record it here.                                                                                                                                                             | P1-09      | P2       |
 
 ## Section 4 — Deferred by decision, with triggers
 
@@ -315,6 +316,11 @@ LLC formation or Q-10 brand direction.
    (mailbox provider setup + MX records), T-07/T-08 (SPF/DMARC record strings), and
    P1-07/08/09 generally. **Update 2026-09-28:** SES/SMTP and DMARC monitor-only setup
    are now complete; Forward Email and the combined SPF record remain.
+
+7. **T-16 on Monday 2026-10-05:** use Postmark's API to check whether aggregate reports
+   have arrived, inspect report details, and record SPF/DKIM/disposition results. A zero-
+   report response is still valid evidence; upstream providers may not have submitted a
+   report yet. Keep DMARC at `p=none`.
 
 **O-04/O-03 explicitly skipped for now** (owner: still working with AWS support on the
 underlying restriction; not blocking anything else) — re-check `listrassister.com`
