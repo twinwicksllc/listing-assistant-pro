@@ -4,7 +4,7 @@
 **Repository:** `twinwicksllc/listing-assistant-pro` (legacy; stays live per DEC-0003)
 **Scope:** `LISTRASSISTR_REBRAND_AND_MIGRATION_PLAN.md` §8 only, per DEC-0035.
 Repository code is §9/Phase 2 and **not** authorised.
-**Status date:** 2026-09-28
+**Status date:** 2026-09-30
 
 **Update 2026-09-28:** SES identity/configuration, monitor-only DMARC, Supabase Auth SMTP,
 and Forward Email DNS/aliases are set up. SES Auth reset flows passed in QA and production;
@@ -152,8 +152,8 @@ branded email can authenticate, and the asset package is approved."
 | P1-12 | Asset package approved                  | Not started                                                                                                                                                                                                                                                                                                                                               |
 | P1-13 | Phase 2 entry decision                  | Not started — DEC-0035 does not grant                                                                                                                                                                                                                                                                                                                     |
 
-**Six of thirteen have approval, evidence, or completion recorded** (P1-01 through P1-06).
-Email identity (§8.2) is in progress. The palette/logo-placement study and official PNG placements are complete; the full §8.3 production package and measured tokens remain open pending the complete Q-10 direction.
+**Eight of thirteen have approval, evidence, or completion recorded** (P1-01 through P1-08).
+Email identity (§8.2) is verified except P1-09, the 30-day DMARC review. The palette/logo-placement study and official PNG placements are complete; the full §8.3 production package and measured tokens remain open pending the complete Q-10 direction.
 
 ## Section 1 — Answers I am waiting on from you
 
@@ -301,7 +301,7 @@ code.
 
 ## Section 5 — Suggested next actions
 
-**This is the authoritative next-actions list** — updated **2026-09-28**. SES, Supabase
+**This is the authoritative next-actions list** — updated **2026-09-30**. SES, Supabase
 Auth SMTP, Forward Email, and the header/routing/send/reply checks are complete as of
 2026-09-30. The only remaining email work is the DMARC report review (T-16 and the
 30-day period); it does not depend on LLC formation or Q-10 brand direction.
