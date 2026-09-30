@@ -397,11 +397,14 @@ configuration as:
 correct as-is, and needs no change.** The reasoning is kept because it is the mechanism
 to re-check whenever a hostname changes again.
 
-_Update 2026-09-30:_ that held while `app.listrassistr.com` was a holding page. Now that
-the new application is served from `app.` and its reset and sign-up links return to the
-site the person used, the Redirect URLs also need the `app.` reset and callback URLs.
-Both are now on the production list (see the service inventory), and the apex entries
-stay. The Site URL is only a fallback, because both flows name their own destination.
+_Update 2026-09-30:_ that held while `app.listrassistr.com` was a holding page. The new
+application is served from `app.`, and (in `listrassistr-official` PRs #32 and #33) its
+reset and sign-up confirmation links now return to the site the person used, so the
+Redirect URLs also need the `app.` reset and callback URLs. Both are on the production
+list (see the service inventory), and the apex entries stay. The Site URL is only a
+fallback, because both flows name their own destination. Verified by the owner: the
+production reset flow completed, and a production sign-up confirmation link returned to
+`app.listrassistr.com/auth/callback` with a session.
 
 While the apex was 308-redirecting to `www`, that configuration was inconsistent with the
 deployment, and it is the kind of inconsistency that breaks sign-in rather than merely
@@ -980,10 +983,14 @@ that exception is unaddressed rather than resolved — different orgs, one crede
 
 ### Every redirect URL is on the apex — RB-01 paying off a third time
 
-All four entries use `listrassistr.com`, with no `www` variants. That is correct **because**
-RB-01 made the apex canonical. Had `www` been kept — the option originally recommended in
-A.7a — all four would have needed rewriting, and both the callback and the password-reset
-flow would have broken on the PKCE origin mismatch described in A.7b.
+_As recorded 2026-08-27; the list has since grown to six entries (updated 2026-09-30)._
+All four original entries use `listrassistr.com`, with no `www` variants. That is correct
+**because** RB-01 made the apex canonical. Had `www` been kept — the option originally
+recommended in A.7a — all four would have needed rewriting, and both the callback and the
+password-reset flow would have broken on the PKCE origin mismatch described in A.7b. The
+four original entries are the two apex entries (callback, reset) and the two localhost
+entries; the two `app.listrassistr.com` reset and callback entries were added 2026-09-30
+when the application moved to `app.`, and the table above is the current list.
 
 Three separate confirmations now: the signup verify link's `redirect_to` (A.13), the Auth
 Site URL, and this allow-list.

@@ -82,10 +82,11 @@ checklist A.11/A.15 (2026-08-27) — see the table row above:
 - Project ref: `yqftpibxplachhwoclam`
 - Region: `us-east-2`; org `twinwicksllc-Org`; Pro plan (A.15)
 - Supabase Auth Site URL: `https://listrassistr.com`
-- Allowed callback URLs: `https://listrassistr.com/auth/callback` and
+- _Historical (2026-08-10 record; superseded by the current list below):_ allowed
+  callback URLs `https://listrassistr.com/auth/callback` and
   `http://localhost:5173/auth/callback` (corrected from `:3000` — this repo's
   Vite dev server default is `5173`, not `3000`)
-- **Redirect URLs, owner screenshot 2026-09-30 (five entries, no wildcards):**
+- **Current Redirect URLs, owner screenshot 2026-09-30 (five entries, no wildcards) — the authoritative list:**
   `https://listrassistr.com/auth/callback`, `https://listrassistr.com/auth/reset`,
   `https://app.listrassistr.com/auth/reset`, `http://localhost:5173/auth/reset`,
   and `http://localhost:5173/auth/callback`. The owner then added
