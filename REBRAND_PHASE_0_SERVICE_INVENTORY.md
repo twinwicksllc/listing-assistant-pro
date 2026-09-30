@@ -3,7 +3,7 @@
 **Product:** ListrAssistr  
 **Source repository:** `twinwicksllc/listing-assistant-pro`  
 **Discovery date:** 2026-08-10  
-**Status:** Repository inventory complete; original provider verification is dated 2026-08-14, with Route 53 and email-service evidence updated 2026-09-28 (feeds P0-01, P0-02, P0-03)
+**Status:** Repository inventory complete; original provider verification is dated 2026-08-14, with Route 53 evidence updated 2026-09-28 and email-service evidence (SES, Supabase Auth SMTP, Forward Email) updated 2026-09-30 (feeds P0-01, P0-02, P0-03)
 
 ## Evidence rules
 

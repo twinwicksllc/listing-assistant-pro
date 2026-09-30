@@ -815,7 +815,8 @@ choice of apex-canonical avoided that, and this is the evidence rather than the 
 Auth mail sends from `mail.app.supabase.io`, a Supabase-owned domain. So the DKIM `d=` can
 never be `listrassistr.com`, and **DMARC alignment is impossible while the built-in mailer
 is in use** — no DNS record can fix that. P1-08 requires "Gmail/Outlook headers showing
-aligned SPF+DKIM+DMARC pass, `d=listrassistr.com`".
+aligned SPF+DKIM+DMARC pass, `d=listrassistr.com`" (read since 2026-09-30 as DMARC
+pass with at least one aligned mechanism; see the clarification in F.3).
 
 The remedy is exactly what F.3 and F.5 anticipated, and needs no repository change:
 
@@ -2197,7 +2198,9 @@ how legitimate mail starts disappearing.
    2026-09-28, SES Auth has been exercised in QA and production. As of 2026-09-30,
    Forward Email inbound aliases and outbound SMTP are also approved and tested, so all
    current legitimate senders are active; the 30-day review window is not complete.
-3. Confirm every legitimate source shows SPF **and** DKIM alignment passing.
+3. Confirm every legitimate source shows DMARC passing through at least one aligned
+   mechanism (SPF or DKIM), and record both results. SES mail aligns through DKIM only,
+   which satisfies this; a source with neither aligned blocks the ramp.
 4. Only then move to `p=quarantine; pct=<ramp>`, ramping the percentage.
 5. Only then consider `p=reject`, and tighten `adkim`/`aspf` to `s`.
 

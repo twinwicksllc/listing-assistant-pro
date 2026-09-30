@@ -22,7 +22,7 @@ approved; the owner reports a send from `support@listrassistr.com` and a reply b
 worked, with SPF/DKIM/DMARC all showing pass. The only email work still open is the
 30-day DMARC review (P1-09), starting with T-16 on 2026-10-05.
 
-## Current email setup — 2026-09-28
+## Current email setup — updated 2026-09-30
 
 - SES identity `listrassistr.com` is verified in `us-east-2` with Easy DKIM (RSA 2048).
 - Configuration set `listrassistr-auth` is the identity default. CloudWatch destination
@@ -36,9 +36,9 @@ worked, with SPF/DKIM/DMARC all showing pass. The only email work still open is 
   Password-reset emails arrived and links returned to the expected sites. QA Auth SMTP
   also affects the legacy app's QA environment because the project is shared.
 - `_dmarc.listrassistr.com` is monitor-only (`p=none`, `pct=100`, `sp=none`, `aspf=r`)
-  with Postmark aggregate reporting. SES Auth tests were sent on 2026-09-28; the full
-  DMARC review remains open until all legitimate senders are configured, alignment is
-  checked, and reports are reviewed for the planned 30-day period.
+  with Postmark aggregate reporting. SES Auth tests were sent on 2026-09-28. All current
+  legitimate senders (SES Auth, Forward Email) were configured and tested by 2026-09-30,
+  so the 30-day review of Postmark reports effectively started then and remains open.
 - Forward Email verified MX, domain verification TXT, DKIM TXT, `fe-bounces` return-path
   CNAME, and root SPF (`include:spf.forwardemail.net`). The four role aliases are active;
   individual test messages arrived. The `*@listrassistr.com` catch-all was also active
