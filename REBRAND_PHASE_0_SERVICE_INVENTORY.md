@@ -85,6 +85,13 @@ checklist A.11/A.15 (2026-08-27) — see the table row above:
 - Allowed callback URLs: `https://listrassistr.com/auth/callback` and
   `http://localhost:5173/auth/callback` (corrected from `:3000` — this repo's
   Vite dev server default is `5173`, not `3000`)
+- **Redirect URLs, owner screenshot 2026-09-30 (five entries, no wildcards):**
+  `https://listrassistr.com/auth/callback`, `https://listrassistr.com/auth/reset`,
+  `https://app.listrassistr.com/auth/reset`, `http://localhost:5173/auth/reset`,
+  and `http://localhost:5173/auth/callback`. The owner then added
+  `https://app.listrassistr.com/auth/callback` (reported, not re-screenshotted).
+  Site URL is `https://listrassistr.com/`, shown with a trailing slash. Sign-up and
+  reset now name their own destination, so the Site URL is only a fallback.
 
 The former "Planned dedicated QA hostname: `https://qa.listrassistr.com`" line
 is removed — `qa.listrassistr.com` now points at its own separate
