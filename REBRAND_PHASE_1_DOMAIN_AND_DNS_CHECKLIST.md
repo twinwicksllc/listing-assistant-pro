@@ -1437,10 +1437,12 @@ repository and there is no reason to keep a second copy here once they've moved.
 
 **Closed 2026-08-28.** Owner confirms the content is committed, merged, and live at real
 links in `listrassistr-official`. O-41 is fully closed as a result. The forward dependency
-A.17c flagged still stands as drafted: both pages use `legal@twin-wicks.com` /
-`privacy@twin-wicks.com` as interim contact addresses, since `listrassistr.com` still has no
-working mailbox (F.4, Q-04/Q-05/Q-06) — swap to `@listrassistr.com` addresses once that's
-resolved, not before. That's a follow-up, not a reason to reopen this.
+A.17c flagged was as drafted at the time: both pages used `legal@twin-wicks.com` /
+`privacy@twin-wicks.com` as interim contact addresses, since `listrassistr.com` had no
+working mailbox (F.4, Q-04/Q-05/Q-06). _Resolved 2026-09-30:_ both mailboxes are live, and
+`listrassistr-official` PR #31 switched the pages (and the two Markdown drafts) to
+`legal@listrassistr.com` and `privacy@listrassistr.com`. That was a follow-up, not a reason
+to reopen this. The pages still have not had a legal review.
 
 **These drafts are not legal advice** and haven't had a legal review; that's worth doing
 before they go live, particularly the GDPR/CCPA sections, since even this minimized scope

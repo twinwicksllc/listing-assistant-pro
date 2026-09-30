@@ -2,7 +2,7 @@
 
 **As of:** 2026-09-30
 **Repository:** `twinwicksllc/listing-assistant-pro`
-**Session output:** PRs #556, #557, #558, #559, #560, #561 merged (6 total), 0 open
+**Session output:** PRs #556–#561 merged on 2026-09-08 (6 total); 2026-09-30 added #642–#646 here (Q-10 artifacts, email verification, O-42, Auth redirects) and #29–#37 in `listrassistr-official`; 0 open
 
 > **Update 2026-09-28 (historical; the pending items below were completed 2026-09-30).** SES identity/configuration, Postmark monitor-only DMARC,
 > Supabase Auth SMTP, and Forward Email DNS/aliases are set up. QA and production reset
@@ -277,10 +277,10 @@ authoritative next-actions list — already updated today, don't re-summarize it
 5. **Q-10 remains open:** the palette/logo-placement study and official pill/favicon
    files are delivered; the complete visual direction, production asset package, and
    measured tokens remain outstanding. See the current TODO and continuation brief.
-6. **The signup-copy inconsistency** (carried forward from 2026-08-28, still
-   unresolved) — confirm in `listrassistr-official`'s code whether the sign-up handler
-   is actually wired to Supabase Auth, or whether the UI's "not open yet" text is
-   accurate. Low stakes, cheap to check whenever convenient.
+6. **The signup-copy inconsistency** — _answered 2026-09-30:_ the sign-up handler is
+   wired to Supabase Auth. The owner signed up a real account on `app.listrassistr.com`
+   and its confirmation link returned to `/auth/callback` with a session. The remaining
+   copy is only the landing page's "coming soon" wording, which is deliberate.
 7. **`full-lifecycle.spec.ts`'s test-coverage gap** (thread A, item 8) — deepen the
    coin/electronics tests to actually call `generateListing()`/`publishListing()` and
    assert a `drafts` row appears. Real work, not urgent — the QA environment itself is
@@ -294,6 +294,16 @@ authoritative next-actions list — already updated today, don't re-summarize it
 10. **O-04 / O-03** — re-check `listrassister.com` availability and chase the AWS
     support case, only if/when that domain is still wanted. Owner is already working
     with AWS support on the underlying restriction; not blocking anything.
+11. **Terms and Privacy legal review** — the pages now list `legal@`/`privacy@`
+    `listrassistr.com` (2026-09-30) but have never had a legal review. Owner call on
+    timing; the GDPR/CCPA sections are the ones that matter most.
+12. **Two unmerged branches, kept on purpose (owner, 2026-09-30):**
+    `v0/listassistr-official-e32654d9` in `listrassistr-official` (a code-generation
+    tool's landing-page revamp, two commits) and `docs/session-handoff-2026-09-02` in
+    this repo (one commit). Do not delete without asking.
+13. **CI does not run `npm run format:check`** in `listrassistr-official`. It passes now
+    (PR #36) and line endings are normalized (PR #37), but nothing enforces it. Adding a
+    workflow job is a separate, unrequested change.
 
 ## Environment constraints that still apply
 
@@ -314,9 +324,12 @@ workflow`) — this can create/merge PRs, trigger workflows, query the GitHub AP
   names/locations. This was followed throughout; e.g. Supabase key-type confusion during
   QA setup was resolved by asking the owner to re-verify and re-paste directly into the
   GitHub dashboard, never by asking for the value itself.
-- **`git config core.autocrlf=true`, no `.gitattributes`** — makes the whole
-  `supabase/functions/**` tree show as unformatted under `deno fmt --check` on this
-  machine. Pre-existing, not a real regression; don't try to fix it repo-wide.
+- **`git config core.autocrlf=true`** — with it, Windows checkouts get CRLF files, which
+  can make `deno fmt --check` and Prettier report files as unformatted on this machine.
+  This repo has had a `.gitattributes` (`* text=auto eol=lf`) since 2026-08-25, and
+  `listrassistr-official` gained the same file on 2026-09-30 (PR #37), so a fresh clone is
+  LF. An older working tree may still hold CRLF files until it is re-checked out; that is
+  a local artifact, not a real regression.
 
 ## Safe resume
 
