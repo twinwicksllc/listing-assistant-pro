@@ -257,6 +257,23 @@ setup described in this section.
 
 **Owner:** Brand/design owner
 
+**Q-10 status (2026-09-29):** owner confirmed the audience, message, and comparison
+criteria, **not** the visual direction. Compare the unchanged concept with complete
+alternative mini-directions (full wordmark, small mark, palettes, typography, and the
+same realistic listing screen) before selecting one. Favor legibility of the full
+unusual name, working-screen clarity and accessibility over decorative movement.
+`REBRAND_Q10_BRAND_DIRECTION_CONTINUATION_2026-09-29.md` holds the confirmed brief and
+comparison protocol. Production asset work below remains gated on an explicit Q-10
+decision; no Phase 2 repository implementation or cutover is approved here.
+
+**Owner-approved palette role decision (2026-09-30; partial Q-10 decision):** In the
+Clear Momentum study, use Restrained Crimson (`#C22938`) for destructive actions.
+Technical Cobalt (`#1D4ED8`) is permitted only as an optional, subtle decorative shadow
+on cards/panels, never as a destructive or status color; flat cards remain valid. This
+settles these color roles only, not the complete visual direction, logo, final production
+tokens, or Phase 2 implementation. Test all actual text/control pairings for WCAG AA,
+and pair destructive states with a clear label or icon rather than color alone.
+
 The concept logo uses a strong black/red/white industrial direction. The source
 PNG has a large textured white canvas and cannot be used as the only asset.
 
