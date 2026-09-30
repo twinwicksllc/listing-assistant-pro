@@ -258,9 +258,9 @@ setup described in this section.
 **Owner:** Brand/design owner
 
 **Q-10 status (2026-09-29):** owner confirmed the audience, message, and comparison
-criteria, **not** the visual direction. Compare the unchanged concept with complete
-alternative mini-directions (full wordmark, small mark, palettes, typography, and the
-same realistic listing screen) before selecting one. Favor legibility of the full
+criteria, **not** the complete visual direction. Use the owner-designated pill and
+favicon files as the current logo assets while comparing complete mini-directions
+(wordmark, palettes, typography, and the same realistic listing screen). Favor legibility of the full
 unusual name, working-screen clarity and accessibility over decorative movement.
 `REBRAND_Q10_BRAND_DIRECTION_CONTINUATION_2026-09-29.md` holds the confirmed brief and
 comparison protocol. Production asset work below remains gated on an explicit Q-10
@@ -274,8 +274,15 @@ settles these color roles only, not the complete visual direction, logo, final p
 tokens, or Phase 2 implementation. Test all actual text/control pairings for WCAG AA,
 and pair destructive states with a clear label or icon rather than color alone.
 
-The concept logo uses a strong black/red/white industrial direction. The source
-PNG has a large textured white canvas and cannot be used as the only asset.
+**Study artifact completed 2026-09-30 (PR #28):** the palette and logo-placement study
+is published at `listrassistr-official/public/clear-momentum-palette-study.html` and
+served at `/clear-momentum-palette-study`. It displays the owner-designated
+`public/ListrAssistr Pill Logo.png` and `public/ListrAssistr Favicon Logo.png`. This is
+a comparison study, not the complete §8.3 production package; P1-10 remains open.
+
+The earlier legacy concept logo uses a strong black/red/white industrial direction.
+Its source PNG has a large textured white canvas and cannot be used as the only asset;
+the owner-designated pill and favicon files are the current logo assets for the study.
 
 Produce:
 
