@@ -2194,9 +2194,9 @@ how legitimate mail starts disappearing.
    send as the domain. The period must in any case be long enough to cover every
    legitimate sender: SES-backed Supabase Auth and Forward Email role-address mail,
    plus any future Stripe/eBay/support tooling that sends as this domain. As of
-   2026-09-28, SES Auth has been exercised in QA and production. Forward Email DNS and
-   inbound aliases are configured, but outbound SMTP is pending admin approval, so the
-   full review window is not complete.
+   2026-09-28, SES Auth has been exercised in QA and production. As of 2026-09-30,
+   Forward Email inbound aliases and outbound SMTP are also approved and tested, so all
+   current legitimate senders are active; the 30-day review window is not complete.
 3. Confirm every legitimate source shows SPF **and** DKIM alignment passing.
 4. Only then move to `p=quarantine; pct=<ramp>`, ramping the percentage.
 5. Only then consider `p=reject`, and tighten `adkim`/`aspf` to `s`.
@@ -2206,11 +2206,11 @@ strict expectations to bulk senders, so `p=none` is a transitional state in both
 directions.
 
 **Status 2026-09-28.** Initial SES Auth reset messages were sent after the monitor-only
-record was published. Forward Email DNS and inbound aliases are configured, but outbound
-SMTP is still pending admin approval. Treat 2026-09-28 as an initial SES observation, not
-completion or start of the full-sender review. After approval, test Forward Email
-sending/replies, inspect aligned headers, and review reports for the planned 30-day
-period. No automatic policy change is approved.
+record was published. Forward Email DNS and inbound aliases were configured the same
+day; outbound SMTP was approved and send/reply tested by 2026-09-30, with SES headers
+confirming DKIM/DMARC pass. Treat 2026-09-30 as the start of the full-sender review;
+review Postmark reports for the planned 30-day period (first check 2026-10-05). No
+automatic policy change is approved.
 
 ## Section E — Verification procedure
 
@@ -2449,9 +2449,12 @@ DEC-0035.
 - [x] Set the Auth `From` address to `support@listrassistr.com` (DEC-0040/Q-07).
 - [x] Test password-reset emails in QA and production on 2026-09-28. Both arrived and
       their links returned to the expected QA and production sites.
-- [ ] After the combined SPF record is published, inspect Gmail/Outlook headers for
-      aligned SPF, DKIM (`d=listrassistr.com`), and DMARC. Delivery and link flow passed;
-      authentication alignment has not yet been reviewed.
+- [x] After the combined SPF record is published, inspect Gmail/Outlook headers for
+      aligned SPF, DKIM (`d=listrassistr.com`), and DMARC. **Done 2026-09-30:** a Gmail
+      "Show original" of an SES-sent reset message showed DKIM pass for
+      `@listrassistr.com` and `dmarc=pass (p=NONE)`. SPF passed for the
+      `amazonses.com` return-path domain, so it does not align with the From domain;
+      DMARC passes through DKIM alignment (either mechanism suffices).
 
 ### F.4 Inbound role mailboxes — a free Gmail account cannot receive domain mail
 
