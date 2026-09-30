@@ -11,6 +11,13 @@
 > Postmark reports, and verify alias-specific routing without relying on the active
 > catch-all. **Q-06 is resolved**; **Q-16** and **Q-10** remain owner decisions.
 
+> **Q-10 update 2026-09-30 (supersedes older Q-10 hold notes below).** The owner
+> approved the crimson-destructive and optional subtle-cobalt card-shadow roles, and
+> designated the pill/favicon PNGs as official logo files. The palette/logo-placement
+> study and files merged to `listrassistr-official` in PR #28. Q-10 remains open for the
+> complete visual direction and production package; use `REBRAND_PHASE_1_TODO.md`
+> Section 5 and `REBRAND_Q10_BRAND_DIRECTION_CONTINUATION_2026-09-29.md` as current.
+
 > **Note on this file's name.** Rewritten in full again today rather than appended to,
 > per this file's own established convention (see the previous rewrite's note, now
 > superseded). Treat everything below as current and everything before today's rewrite
@@ -27,11 +34,11 @@ continuing:
    the application shell is ready," but real Supabase auth records exist from testing.
    Nobody has looked at the actual signup handler code to settle which is true. Low
    stakes, carried forward again, not touched this session.
-2. **Q-10 (brand direction) is explicitly on hold.** The owner is having a larger
-   brand-direction discussion in another session. **Do not restart or duplicate that
-   discussion here** — wait for the owner to bring a decision back to this thread. This
-   is the single largest remaining unlock (all of §8.3's token/asset-package work), so
-   it's worth flagging prominently rather than letting a future session re-open it.
+2. **Q-10 is partially decided, with the complete direction still open.** The owner
+   approved color roles and designated official pill/favicon files; PR #28 delivered
+   their palette/logo-placement study. Continue only on the remaining visual system and
+   full §8.3 package, following the current TODO and Q-10 continuation brief. Do not
+   treat the study as approval of the complete production identity.
 
 Otherwise: everything opened or reopened today is closed, and today's work also
 confirmed (for the first time) that this app's own QA E2E suite is now catching real
@@ -190,7 +197,7 @@ They're unrelated except that both touch `majmvgakczrpcwgxgulj` (see thread A).
 | P1-07 | Role mailboxes receiving                | In progress — Forward Email DNS and aliases active; test mail arrived, but catch-all may mask per-alias routing. Outbound approval/reply test remains |
 | P1-08 | Branded email authenticates             | In progress — SES Auth flows passed in QA and production; inspect raw headers. Forward Email outbound SMTP awaits admin approval                      |
 | P1-09 | DMARC review period completed           | Open — Postmark `rua`/`p=none` live; review reports for 30 days after all legitimate senders are active and tested                                    |
-| P1-10 | Brand asset package produced            | Not started — blocked on Q-10, on hold in another session                                                                                             |
+| P1-10 | Brand asset package produced            | Study/logo placement delivered in PR #28; full §8.3 production package remains open                                                                   |
 | P1-11 | Design tokens pass WCAG AA              | Not started — same block                                                                                                                              |
 | P1-12 | Asset package approved                  | Not started — same block                                                                                                                              |
 | P1-13 | Phase 2 entry decision                  | Not started — DEC-0035 does not grant                                                                                                                 |
@@ -261,8 +268,9 @@ authoritative next-actions list — already updated today, don't re-summarize it
 4. **Q-16** — whether plan §9/Phase 2 still describes the right strategy now that a
    greenfield app is being built in `listrassistr-official` instead of a
    rebrand-in-place. Owner-level call, not urgent.
-5. **When Q-10 resolves** (owner-driven, in another session — do not chase this): it
-   unlocks all of §8.3's brand-asset/token work, the largest remaining Phase 1 block.
+5. **Q-10 remains open:** the palette/logo-placement study and official pill/favicon
+   files are delivered; the complete visual direction, production asset package, and
+   measured tokens remain outstanding. See the current TODO and continuation brief.
 6. **The signup-copy inconsistency** (carried forward from 2026-08-28, still
    unresolved) — confirm in `listrassistr-official`'s code whether the sign-up handler
    is actually wired to Supabase Auth, or whether the UI's "not open yet" text is
@@ -317,6 +325,6 @@ gh auth status
 No open PRs as of this handoff (confirmed via `gh pr list --state open`). Working tree
 is clean. Start with `REBRAND_PHASE_1_TODO.md` Section 5 for the full prioritized Phase 1
 queue, or `LISTING_ASSISTANT_PRO_QA_SETUP.md` for the QA-environment thread's current
-state and its one remaining documented gap (full-lifecycle test coverage). Do not start
-or continue the Q-10 brand-direction discussion — that's explicitly running in a
-different session.
+state and its one remaining documented gap (full-lifecycle test coverage). Q-10 is no
+longer on hold; its partial decisions and remaining work are recorded in the 2026-09-30
+update above. Do not treat the partial decisions as full production approval.
