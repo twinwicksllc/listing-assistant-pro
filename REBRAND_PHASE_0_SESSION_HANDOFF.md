@@ -29,18 +29,18 @@
 > per this file's own established convention (see the previous rewrite's note, now
 > superseded). Treat everything below as current and everything before today's rewrite
 > as gone, except where a prior handoff's content is restated here because it's still
-> relevant (the signup-copy inconsistency, still unresolved, carried forward below).
+> relevant (the signup-copy inconsistency, since answered on 2026-09-30, see below).
 
 ## Read this first — what's actually left open
 
 Nothing from today is blocking, and nothing is broken. Two things worth knowing before
 continuing:
 
-1. **The signup-copy inconsistency from the 2026-08-28 handoff is still unresolved.**
-   `listrassistr-official`'s sign-up form still claims account creation "will open when
-   the application shell is ready," but real Supabase auth records exist from testing.
-   Nobody has looked at the actual signup handler code to settle which is true. Low
-   stakes, carried forward again, not touched this session.
+1. **The signup-copy inconsistency from the 2026-08-28 handoff is resolved
+   (2026-09-30).** The sign-up handler in `listrassistr-official` is wired to Supabase
+   Auth: the owner completed a real sign-up on `app.listrassistr.com`, and the
+   confirmation link returned to `/auth/callback` with a session. The old "will open when
+   the application shell is ready" wording no longer applies. Nothing left to check.
 2. **Q-10 is partially decided, with the complete direction still open.** The owner
    approved color roles and designated official pill/favicon files; PR #28 delivered
    their palette/logo-placement study. Continue only on the remaining visual system and
