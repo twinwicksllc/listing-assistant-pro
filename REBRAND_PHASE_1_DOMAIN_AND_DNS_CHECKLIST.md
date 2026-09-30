@@ -397,6 +397,15 @@ configuration as:
 correct as-is, and needs no change.** The reasoning is kept because it is the mechanism
 to re-check whenever a hostname changes again.
 
+_Update 2026-09-30:_ that held while `app.listrassistr.com` was a holding page. The new
+application is served from `app.`, and (in `listrassistr-official` PRs #32 and #33) its
+reset and sign-up confirmation links now return to the site the person used, so the
+Redirect URLs also need the `app.` reset and callback URLs. Both are on the production
+list (see the service inventory), and the apex entries stay. The Site URL is only a
+fallback, because both flows name their own destination. Verified by the owner: the
+production reset flow completed, and a production sign-up confirmation link returned to
+`app.listrassistr.com/auth/callback` with a session.
+
 While the apex was 308-redirecting to `www`, that configuration was inconsistent with the
 deployment, and it is the kind of inconsistency that breaks sign-in rather than merely
 looking untidy:
@@ -944,20 +953,20 @@ mailboxes receiving") a live gap rather than a deferred nicety.
 Owner completed the RB-05 template on 2026-08-27. First confirmation of this project's
 configuration since it was owner-reported on 2026-08-10.
 
-| Field           | Value                                                                                                                                                      | Note                                                                                                                                                                        |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Project name    | **`listrassistr-official`**                                                                                                                                | Matches the Vercel project and target repo naming                                                                                                                           |
-| Project ref     | `yqftpibxplachhwoclam`                                                                                                                                     | As recorded                                                                                                                                                                 |
-| Region          | **`us-east-2`**                                                                                                                                            | Newly established; settles an open F.5 item, see below                                                                                                                      |
-| Organisation    | **`twinwicksllc's Org`**                                                                                                                                   | **CORRECTED — see A.17a.** Recorded here as separate from the CRM org; it is not. It is the owner's single org holding every app, so RBR-0024's shared-login concern stands |
-| Plan            | **Pro**                                                                                                                                                    | Paid tier, already being incurred pre-launch                                                                                                                                |
-| Auth Site URL   | **`https://listrassistr.com`**                                                                                                                             | The apex — correct after RB-01                                                                                                                                              |
-| Redirect URLs   | `https://listrassistr.com/auth/callback`, `https://listrassistr.com/auth/reset`, `http://localhost:5173/auth/reset`, `http://localhost:5173/auth/callback` | All apex, no `www` variants — see below                                                                                                                                     |
-| Sign-up         | **Enabled**                                                                                                                                                | Public sign-up open on the production-intended project (A.13)                                                                                                               |
-| Confirm email   | **Required**                                                                                                                                               | Reasonable mitigation while sign-up is open                                                                                                                                 |
-| Users           | **2**, both the owner's                                                                                                                                    | So "empty" honestly means _no customer data_, not _no rows_                                                                                                                 |
-| API key format  | **Both** legacy `anon`/`service_role` **and** new `sb_publishable_`/`sb_secret_`                                                                           | Live DEC-0021 finding, see below                                                                                                                                            |
-| `public` schema | **No tables — confirmed by query**                                                                                                                         | **Settled in A.17b:** all 35 tables are Supabase system tables, so no application schema exists                                                                             |
+| Field           | Value                                                                                                                                                                                                                                               | Note                                                                                                                                                                        |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Project name    | **`listrassistr-official`**                                                                                                                                                                                                                         | Matches the Vercel project and target repo naming                                                                                                                           |
+| Project ref     | `yqftpibxplachhwoclam`                                                                                                                                                                                                                              | As recorded                                                                                                                                                                 |
+| Region          | **`us-east-2`**                                                                                                                                                                                                                                     | Newly established; settles an open F.5 item, see below                                                                                                                      |
+| Organisation    | **`twinwicksllc's Org`**                                                                                                                                                                                                                            | **CORRECTED — see A.17a.** Recorded here as separate from the CRM org; it is not. It is the owner's single org holding every app, so RBR-0024's shared-login concern stands |
+| Plan            | **Pro**                                                                                                                                                                                                                                             | Paid tier, already being incurred pre-launch                                                                                                                                |
+| Auth Site URL   | **`https://listrassistr.com`**                                                                                                                                                                                                                      | The apex — correct after RB-01                                                                                                                                              |
+| Redirect URLs   | `https://listrassistr.com/auth/callback`, `https://listrassistr.com/auth/reset`, `https://app.listrassistr.com/auth/reset`, `https://app.listrassistr.com/auth/callback`, `http://localhost:5173/auth/reset`, `http://localhost:5173/auth/callback` | Apex entries kept; `app.` entries added 2026-09-30 (no `www`, no wildcards) — see below                                                                                     |
+| Sign-up         | **Enabled**                                                                                                                                                                                                                                         | Public sign-up open on the production-intended project (A.13)                                                                                                               |
+| Confirm email   | **Required**                                                                                                                                                                                                                                        | Reasonable mitigation while sign-up is open                                                                                                                                 |
+| Users           | **2**, both the owner's                                                                                                                                                                                                                             | So "empty" honestly means _no customer data_, not _no rows_                                                                                                                 |
+| API key format  | **Both** legacy `anon`/`service_role` **and** new `sb_publishable_`/`sb_secret_`                                                                                                                                                                    | Live DEC-0021 finding, see below                                                                                                                                            |
+| `public` schema | **No tables — confirmed by query**                                                                                                                                                                                                                  | **Settled in A.17b:** all 35 tables are Supabase system tables, so no application schema exists                                                                             |
 
 ### The organisation is separate — but that is not the same as a separate login
 
@@ -974,10 +983,14 @@ that exception is unaddressed rather than resolved — different orgs, one crede
 
 ### Every redirect URL is on the apex — RB-01 paying off a third time
 
-All four entries use `listrassistr.com`, with no `www` variants. That is correct **because**
-RB-01 made the apex canonical. Had `www` been kept — the option originally recommended in
-A.7a — all four would have needed rewriting, and both the callback and the password-reset
-flow would have broken on the PKCE origin mismatch described in A.7b.
+_As recorded 2026-08-27; the list has since grown to six entries (updated 2026-09-30)._
+All four original entries use `listrassistr.com`, with no `www` variants. That is correct
+**because** RB-01 made the apex canonical. Had `www` been kept — the option originally
+recommended in A.7a — all four would have needed rewriting, and both the callback and the
+password-reset flow would have broken on the PKCE origin mismatch described in A.7b. The
+four original entries are the two apex entries (callback, reset) and the two localhost
+entries; the two `app.listrassistr.com` reset and callback entries were added 2026-09-30
+when the application moved to `app.`, and the table above is the current list.
 
 Three separate confirmations now: the signup verify link's `redirect_to` (A.13), the Auth
 Site URL, and this allow-list.
