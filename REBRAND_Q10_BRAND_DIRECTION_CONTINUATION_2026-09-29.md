@@ -4,7 +4,7 @@
 **Continue:** 2026-09-29  
 **Product:** ListrAssistr  
 **Authoritative tracker:** `REBRAND_PHASE_1_TODO.md` (Q-10)  
-**Decision status (updated 2026-10-01): DECIDED as DEC-0041** (Clear Momentum; official pill and small `LA` logos; brand colors; dark-mode rule). Production artwork, the usage sheet, and final token measurement remain. The rest of this document is the history that led to it. Earlier status: brief confirmed by the owner 2026-09-29. On 2026-09-30, the owner approved the Clear Momentum destructive-color and optional card-shadow roles and designated the pill and favicon PNGs as the official logo files. PR #28 publishes those files with the palette/logo-placement study. Q-10 remains open for the complete visual direction, final production package, and remaining brand decisions.
+**Decision status (updated 2026-10-01): DECIDED as DEC-0041** (Clear Momentum; official pill and small `LA` logos; brand colors; dark-mode rule). Production artwork, the usage sheet, and final token measurement remain. The rest of this document is the history that led to it. Earlier status: brief confirmed by the owner 2026-09-29. On 2026-09-30, the owner approved the Clear Momentum destructive-color and optional card-shadow roles and designated the pill and favicon PNGs as the official logo files. PR #28 published those files with the palette/logo-placement study. The complete visual direction was then decided on 2026-10-01 as DEC-0041; what remains is production work (icons, social and email assets, usage sheet) and final token measurement.
 
 ## Purpose
 
