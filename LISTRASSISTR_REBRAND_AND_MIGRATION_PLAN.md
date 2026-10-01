@@ -266,6 +266,15 @@ unusual name, working-screen clarity and accessibility over decorative movement.
 comparison protocol. Production asset work below remains gated on an explicit Q-10
 decision; no Phase 2 repository implementation or cutover is approved here.
 
+**Q-10 decided (2026-10-01, DEC-0041):** Clear Momentum is the direction. Official pill
+logo: warm carbon lettering, mixed-case `ListrAssistr`, crimson L and A, and a cobalt
+struck-through E that is part of the logo. Official small logo: the `LA` mark in warm
+carbon and crimson, for favicons and small spaces. Brand colors: warm carbon `#1C1917`,
+restrained crimson `#C22938`, technical cobalt `#1D4ED8`, brass gold `#B45309`, and
+canvas `#F4F6F8`. In dark mode carbon and canvas swap, including in the logos, and cobalt
+lightens to `#5A7EE3` to reach 4.6:1. Measured ratios: `listrassistr-official/docs/BRAND_TOKENS.md`.
+The list below is still the production work to do.
+
 **Owner-approved palette role decision (2026-09-30; partial Q-10 decision):** In the
 Clear Momentum study, use Restrained Crimson (`#C22938`) for destructive actions.
 Technical Cobalt (`#1D4ED8`) is permitted only as an optional, subtle decorative shadow

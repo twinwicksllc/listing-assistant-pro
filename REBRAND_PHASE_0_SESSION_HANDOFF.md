@@ -18,7 +18,12 @@
 > `support@listrassistr.com` passed. Only the DMARC report review remains (T-16 on
 > 2026-10-05, then the 30-day period), with the policy staying at `p=none`.
 
-> **Q-10 update 2026-09-30 (supersedes older Q-10 hold notes below).** The owner
+> **Q-10 decided 2026-10-01 (DEC-0041; supersedes the Q-10 notes below).** Clear Momentum;
+> official pill logo and small `LA` logo; brand colors carbon, crimson, cobalt, brass gold,
+> canvas; dark mode swaps carbon and canvas with a lighter cobalt. Production artwork,
+> usage sheet, and final token measurement remain (P1-10, P1-11).
+
+> **Q-10 update 2026-09-30 (historical).** The owner
 > approved the crimson-destructive and optional subtle-cobalt card-shadow roles, and
 > designated the pill/favicon PNGs as official logo files. The palette/logo-placement
 > study and files merged to `listrassistr-official` in PR #28. Q-10 remains open for the
@@ -274,9 +279,9 @@ authoritative next-actions list — already updated today, don't re-summarize it
 4. **Q-16** — whether plan §9/Phase 2 still describes the right strategy now that a
    greenfield app is being built in `listrassistr-official` instead of a
    rebrand-in-place. Owner-level call, not urgent.
-5. **Q-10 remains open:** the palette/logo-placement study and official pill/favicon
-   files are delivered; the complete visual direction, production asset package, and
-   measured tokens remain outstanding. See the current TODO and continuation brief.
+5. **Q-10 is decided (2026-10-01, DEC-0041).** What remains is the production artwork
+   (vector master, variants, icons, social and email assets), the usage sheet, and
+   re-measuring the tokens against the final artwork. See the current TODO.
 6. **The signup-copy inconsistency** — _answered 2026-09-30:_ the sign-up handler is
    wired to Supabase Auth. The owner signed up a real account on `app.listrassistr.com`
    and its confirmation link returned to `/auth/callback` with a session. The remaining
