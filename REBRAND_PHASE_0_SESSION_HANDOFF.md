@@ -47,9 +47,10 @@ continuing:
    the application shell is ready" wording no longer applies. Nothing left to check.
 2. **Q-10 is decided (2026-10-01, DEC-0041).** The visual direction, official logos,
    brand colors, and dark-mode rule are fixed, and the six official vector logos are in
-   `listrassistr-official/public/brand/`. Remaining: icons (favicon, Apple touch, PWA),
-   the social and email images, the usage sheet, and re-measuring the tokens against the
-   final artwork. Do not treat the older palette study as the current identity; see
+   `listrassistr-official/public/brand/`. The favicons, Apple and PWA icons, social
+   images, and email headers are also done, merged, and linked from `index.html`.
+   Remaining: the usage sheet, a single-colour variant, `og:image` tags, a real-browser and
+   phone check of the icons, and re-measuring the tokens against the final artwork. Do not treat the older palette study as the current identity; see
    `docs/BRAND_TOKENS.md` in that repo.
 
 Otherwise: everything opened or reopened today is closed, and today's work also
