@@ -18,12 +18,16 @@
 > `support@listrassistr.com` passed. Only the DMARC report review remains (T-16 on
 > 2026-10-05, then the 30-day period), with the policy staying at `p=none`.
 
-> **Q-10 update 2026-09-30 (supersedes older Q-10 hold notes below).** The owner
-> approved the crimson-destructive and optional subtle-cobalt card-shadow roles, and
+> **Q-10 decided 2026-10-01 (DEC-0041; supersedes the Q-10 notes below).** Clear Momentum;
+> official pill logo and small `LA` logo; brand colors carbon, crimson, cobalt, brass gold,
+> canvas; dark mode swaps carbon and canvas with a lighter cobalt. Production artwork,
+> usage sheet, and final token measurement remain (P1-10, P1-11).
+
+> **Q-10 update 2026-09-30 (historical; superseded by the 2026-10-01 note above).** The
+> owner approved the crimson-destructive and optional subtle-cobalt card-shadow roles, and
 > designated the pill/favicon PNGs as official logo files. The palette/logo-placement
-> study and files merged to `listrassistr-official` in PR #28. Q-10 remains open for the
-> complete visual direction and production package; use `REBRAND_PHASE_1_TODO.md`
-> Section 5 and `REBRAND_Q10_BRAND_DIRECTION_CONTINUATION_2026-09-29.md` as current.
+> study and files merged to `listrassistr-official` in PR #28. Q-10 was then still open;
+> it was decided the next day as DEC-0041.
 
 > **Note on this file's name.** Rewritten in full again today rather than appended to,
 > per this file's own established convention (see the previous rewrite's note, now
@@ -41,11 +45,12 @@ continuing:
    Auth: the owner completed a real sign-up on `app.listrassistr.com`, and the
    confirmation link returned to `/auth/callback` with a session. The old "will open when
    the application shell is ready" wording no longer applies. Nothing left to check.
-2. **Q-10 is partially decided, with the complete direction still open.** The owner
-   approved color roles and designated official pill/favicon files; PR #28 delivered
-   their palette/logo-placement study. Continue only on the remaining visual system and
-   full §8.3 package, following the current TODO and Q-10 continuation brief. Do not
-   treat the study as approval of the complete production identity.
+2. **Q-10 is decided (2026-10-01, DEC-0041).** The visual direction, official logos,
+   brand colors, and dark-mode rule are fixed, and the six official vector logos are in
+   `listrassistr-official/public/brand/`. Remaining: icons (favicon, Apple touch, PWA),
+   the social and email images, the usage sheet, and re-measuring the tokens against the
+   final artwork. Do not treat the older palette study as the current identity; see
+   `docs/BRAND_TOKENS.md` in that repo.
 
 Otherwise: everything opened or reopened today is closed, and today's work also
 confirmed (for the first time) that this app's own QA E2E suite is now catching real
@@ -274,9 +279,9 @@ authoritative next-actions list — already updated today, don't re-summarize it
 4. **Q-16** — whether plan §9/Phase 2 still describes the right strategy now that a
    greenfield app is being built in `listrassistr-official` instead of a
    rebrand-in-place. Owner-level call, not urgent.
-5. **Q-10 remains open:** the palette/logo-placement study and official pill/favicon
-   files are delivered; the complete visual direction, production asset package, and
-   measured tokens remain outstanding. See the current TODO and continuation brief.
+5. **Q-10 is decided (2026-10-01, DEC-0041).** What remains is the production artwork
+   (vector master, variants, icons, social and email assets), the usage sheet, and
+   re-measuring the tokens against the final artwork. See the current TODO.
 6. **The signup-copy inconsistency** — _answered 2026-09-30:_ the sign-up handler is
    wired to Supabase Auth. The owner signed up a real account on `app.listrassistr.com`
    and its confirmation link returned to `/auth/callback` with a session. The remaining

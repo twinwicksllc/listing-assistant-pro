@@ -257,28 +257,40 @@ setup described in this section.
 
 **Owner:** Brand/design owner
 
-**Q-10 status (2026-09-29):** owner confirmed the audience, message, and comparison
+**Q-10 status (2026-09-29; historical, superseded by the 2026-10-01 decision below):** owner confirmed the audience, message, and comparison
 criteria, **not** the complete visual direction. Use the owner-designated pill and
 favicon files as the current logo assets while comparing complete mini-directions
 (wordmark, palettes, typography, and the same realistic listing screen). Favor legibility of the full
 unusual name, working-screen clarity and accessibility over decorative movement.
 `REBRAND_Q10_BRAND_DIRECTION_CONTINUATION_2026-09-29.md` holds the confirmed brief and
-comparison protocol. Production asset work below remains gated on an explicit Q-10
-decision; no Phase 2 repository implementation or cutover is approved here.
+comparison protocol. At that time production asset work was gated on an explicit Q-10
+decision, which has since been made. No Phase 2 repository implementation or cutover is
+approved here.
 
-**Owner-approved palette role decision (2026-09-30; partial Q-10 decision):** In the
+**Q-10 decided (2026-10-01, DEC-0041):** Clear Momentum is the direction. Official pill
+logo: warm carbon lettering, mixed-case `ListrAssistr`, crimson L and A, and a cobalt
+struck-through E that is part of the logo. Official small logo: the `LA` mark in warm
+carbon and crimson, for favicons and small spaces. Brand colors: warm carbon `#1C1917`,
+restrained crimson `#C22938`, technical cobalt `#1D4ED8`, brass gold `#B45309`, and
+canvas `#F4F6F8`. In dark mode carbon and canvas swap, including in the logos, and cobalt
+lightens to `#5A7EE3` to reach 4.6:1. Measured ratios: `listrassistr-official/docs/BRAND_TOKENS.md`.
+The list below is still the production work to do.
+
+**Owner-approved palette role decision (2026-09-30; historical, folded into DEC-0041):** In the
 Clear Momentum study, use Restrained Crimson (`#C22938`) for destructive actions.
 Technical Cobalt (`#1D4ED8`) is permitted only as an optional, subtle decorative shadow
 on cards/panels, never as a destructive or status color; flat cards remain valid. This
-settles these color roles only, not the complete visual direction, logo, final production
-tokens, or Phase 2 implementation. Test all actual text/control pairings for WCAG AA,
+settled these color roles only, before the complete direction was decided. DEC-0041 later
+made cobalt a brand color as well. Phase 2 implementation remains unapproved. Test all actual text/control pairings for WCAG AA,
 and pair destructive states with a clear label or icon rather than color alone.
 
 **Study artifact completed 2026-09-30 (PR #28):** the palette and logo-placement study
 is published at `listrassistr-official/public/clear-momentum-palette-study.html` and
 served at `/clear-momentum-palette-study`. It displays the owner-designated
 `public/ListrAssistr Pill Logo.png` and `public/ListrAssistr Favicon Logo.png`. This is
-a comparison study, not the complete §8.3 production package; P1-10 remains open.
+a comparison study, not the complete §8.3 production package. Official vector logos
+were added on 2026-10-01 (`listrassistr-official/public/brand/`); P1-10 stays open for the
+remaining assets.
 
 The earlier legacy concept logo uses a strong black/red/white industrial direction.
 Its source PNG has a large textured white canvas and cannot be used as the only asset;
