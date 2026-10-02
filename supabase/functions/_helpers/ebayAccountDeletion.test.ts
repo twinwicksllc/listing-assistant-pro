@@ -1,6 +1,7 @@
 import { assertEquals, assertRejects } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import { createSign, generateKeyPairSync } from "node:crypto";
 import {
+  cleanupCacheIfDisconnected,
   clearAppTokenCache,
   clearPublicKeyCache,
   computeChallengeResponse,
@@ -257,6 +258,42 @@ Deno.test("deleteEbayCacheForUser: a failed delete throws so disconnect can repo
     }),
   };
   await assertRejects(() => deleteEbayCacheForUser(client, "u1"), Error, "competitor_prices");
+});
+
+function guardClient(profile: { data: unknown; error: unknown }, log: string[]) {
+  return {
+    from: (table: string) => ({
+      select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve(profile) }) }),
+      delete: () => ({
+        eq: () => {
+          log.push(`delete ${table}`);
+          return Promise.resolve({ error: null });
+        },
+      }),
+    }),
+  };
+}
+
+Deno.test("cleanupCacheIfDisconnected: a worker that wrote after a disconnect removes its own rows", async () => {
+  const log: string[] = [];
+  const client = guardClient({ data: { ebay_refresh_token: null }, error: null }, log);
+  assertEquals(await cleanupCacheIfDisconnected(client, "u1"), true);
+  assertEquals(log, ["delete user_active_listings", "delete competitor_prices"]);
+});
+
+Deno.test("cleanupCacheIfDisconnected: a still-connected seller is never touched", async () => {
+  const log: string[] = [];
+  const client = guardClient({ data: { ebay_refresh_token: "v1:abc" }, error: null }, log);
+  assertEquals(await cleanupCacheIfDisconnected(client, "u1"), false);
+  assertEquals(log, []);
+});
+
+Deno.test("cleanupCacheIfDisconnected: a failed or empty lookup is treated as connected, not as a reason to delete", async () => {
+  for (const profile of [{ data: null, error: { message: "boom" } }, { data: null, error: null }]) {
+    const log: string[] = [];
+    assertEquals(await cleanupCacheIfDisconnected(guardClient(profile, log), "u1"), false);
+    assertEquals(log, []);
+  }
 });
 
 Deno.test("getEbayPublicKey: an unknown kid is negatively cached so repeats make no outbound calls", async () => {

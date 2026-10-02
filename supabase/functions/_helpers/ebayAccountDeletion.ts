@@ -221,6 +221,31 @@ export async function deleteEbayCacheForUser(
   }
 }
 
+// For the sync workers, called AFTER they write cache rows. A worker that read
+// the token before a disconnect can still write after the disconnect's delete.
+// Because disconnect clears the token before it deletes, any such late write is
+// followed by this check seeing the cleared token, so the worker removes its
+// own rows. A failed lookup is treated as "still connected": deleting on an
+// unknown would wipe a live seller's cache.
+export async function cleanupCacheIfDisconnected(
+  // deno-lint-ignore no-explicit-any -- matches the loose typing used for the supabase-js client across this codebase.
+  supabase: any,
+  userId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("ebay_refresh_token")
+    .eq("id", userId)
+    .maybeSingle();
+  if (error || !data) {
+    if (error) console.warn(`[ebay-disconnect-guard] connection check failed for user ${userId}: ${error.message}`);
+    return false;
+  }
+  if (data.ebay_refresh_token) return false;
+  await deleteEbayCacheForUser(supabase, userId);
+  return true;
+}
+
 // Throws on any failure so the caller can refuse to acknowledge the
 // notification and let eBay resend it.
 export async function deleteEbayDataForUser(
