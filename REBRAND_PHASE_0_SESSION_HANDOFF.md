@@ -1,6 +1,6 @@
 # Rebrand Session Handoff
 
-**As of:** 2026-09-30
+**As of:** 2026-10-02
 **Repository:** `twinwicksllc/listing-assistant-pro`
 **Session output:** PRs #556–#561 merged on 2026-09-08 (6 total); 2026-09-30 added #642–#646 here (Q-10 artifacts, email verification, O-42, Auth redirects) and #29–#37 in `listrassistr-official`; 0 open
 
@@ -17,6 +17,15 @@
 > catch-all removed; Forward Email outbound SMTP was approved and send/reply from
 > `support@listrassistr.com` passed. Only the DMARC report review remains (T-16 on
 > 2026-10-05, then the 30-day period), with the policy staying at `p=none`.
+
+> **Update 2026-10-02 (brand).** The brand usage sheet is approved as **DEC-0042**
+> (`listrassistr-official/docs/BRAND_USAGE.md`, merged in its PR #45, plus a visual version at
+> `public/listrassistr-usage-sheet.html` in that repo, not yet committed). The token gaps are
+> approved with it: `crimson-dark` `#E4596A`, brass `#A94C06`, control borders, neutral and
+> success roles (PR #43). X and Instagram links are live in the site footer (PR #44). The
+> dark logo is limited to carbon surfaces (its crimson is 2.65:1 on the raised dark
+> surface). P1-12 is not approved: a single-colour variant, a compact wordmark, `og:image`
+> tags, and a real-browser and phone check of the icons remain.
 
 > **Q-10 decided 2026-10-01 (DEC-0041; supersedes the Q-10 notes below).** Clear Momentum;
 > official pill logo and small `LA` logo; brand colors carbon, crimson, cobalt, brass gold,
@@ -49,7 +58,7 @@ continuing:
    brand colors, and dark-mode rule are fixed, and the six official vector logos are in
    `listrassistr-official/public/brand/`. The favicons, Apple and PWA icons, social
    images, and email headers are also done, merged, and linked from `index.html`.
-   Remaining: the usage sheet, a single-colour variant, `og:image` tags, a real-browser and
+   The usage sheet and token gaps were approved 2026-10-02 (DEC-0042). Remaining: a single-colour variant, a compact wordmark, `og:image` tags, a real-browser and
    phone check of the icons, and re-measuring the tokens against the final artwork. Do not treat the older palette study as the current identity; see
    `docs/BRAND_TOKENS.md` in that repo.
 
@@ -280,9 +289,10 @@ authoritative next-actions list — already updated today, don't re-summarize it
 4. **Q-16** — whether plan §9/Phase 2 still describes the right strategy now that a
    greenfield app is being built in `listrassistr-official` instead of a
    rebrand-in-place. Owner-level call, not urgent.
-5. **Q-10 is decided (2026-10-01, DEC-0041).** What remains is the production artwork
-   (vector master, variants, icons, social and email assets), the usage sheet, and
-   re-measuring the tokens against the final artwork. See the current TODO.
+5. **Q-10 is decided (2026-10-01, DEC-0041); the usage sheet and token gaps are approved
+   (2026-10-02, DEC-0042).** What remains is a single-colour variant, a compact wordmark,
+   `og:image` tags and `sameAs` data, a real-browser and phone check of the icons, and
+   re-measuring the tokens against the final artwork, then P1-12. See the current TODO.
 6. **The signup-copy inconsistency** — _answered 2026-09-30:_ the sign-up handler is
    wired to Supabase Auth. The owner signed up a real account on `app.listrassistr.com`
    and its confirmation link returned to `/auth/callback` with a session. The remaining
