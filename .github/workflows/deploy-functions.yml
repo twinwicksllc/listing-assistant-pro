@@ -118,6 +118,7 @@ jobs:
           supabase functions deploy backfill-ebay-token-encryption --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
           supabase functions deploy backfill-knowledge-base-embeddings --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
           supabase functions deploy stripe-webhook --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
+          supabase functions deploy ebay-account-deletion --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 # Migration auto-apply enabled
