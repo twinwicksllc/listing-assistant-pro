@@ -87,7 +87,7 @@ export default function PrivacyPage() {
             listings we keep the item IDs of those comparable listings and
             summary prices (average, minimum, maximum and median). This data is
             used only for your own account and is refreshed about every 24
-            hours. It is deleted when the listing ends.
+It is deleted when an inventory sync confirms that the listing has ended.
           </p>
           <p>
             <strong>Market sold-price data:</strong> For market research and
