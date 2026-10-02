@@ -4,7 +4,7 @@
 **Repository:** `twinwicksllc/listing-assistant-pro` (legacy; stays live per DEC-0003)
 **Scope:** `LISTRASSISTR_REBRAND_AND_MIGRATION_PLAN.md` §8 only, per DEC-0035.
 Repository code is §9/Phase 2 and **not** authorised.
-**Status date:** 2026-09-30
+**Status date:** 2026-10-01
 
 **Update 2026-09-28:** SES identity/configuration, monitor-only DMARC, Supabase Auth SMTP,
 and Forward Email DNS/aliases are set up. SES Auth reset flows passed in QA and production;
@@ -168,7 +168,7 @@ branded email can authenticate, and the asset package is approved."
 | P1-13 | Phase 2 entry decision                  | Not started — DEC-0035 does not grant                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 **Eight of thirteen have approval, evidence, or completion recorded** (P1-01 through P1-08).
-Email identity (§8.2) is verified except P1-09, the 30-day DMARC review. Q-10 is decided (DEC-0041, 2026-10-01) and the six official vector logos exist in `listrassistr-official/public/brand/`. The icons, favicons, PWA icons, social images, and email headers are produced, merged, and linked. Still open: the usage sheet, a single-colour variant, `og:image` tags, a real-browser and phone check of the icons, and re-measuring the tokens against the final artwork.
+Email identity (§8.2) is verified except P1-09, the 30-day DMARC review. Q-10 is decided (DEC-0041, 2026-10-01) and the brand asset package is largely produced: six official vector logos (pill and small `LA`, light and dark, plus square `LA`), favicons, Apple/PWA icons, social images (1200×630), email headers, and web manifest — all merged and linked from `index.html` in `listrassistr-official`. Still open: the usage sheet, an outlined-font export, a single-colour variant, `og:image` tags, a real-browser and phone check of the icons, and re-measuring the tokens against the final artwork.
 
 ## Section 1 — Answers I am waiting on from you
 
