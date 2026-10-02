@@ -15,7 +15,7 @@ export default function PrivacyPage() {
 
         <h1 className="text-2xl font-bold mb-2">Privacy Policy</h1>
         <p className="text-sm text-muted-foreground mb-8">
-          Last updated: March 8, 2026
+          Last updated: October 2, 2026
         </p>
 
         <div className="prose prose-sm max-w-none space-y-6 text-muted-foreground [&_h2]:text-foreground [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mt-8 [&_h2]:mb-3">
@@ -78,6 +78,23 @@ export default function PrivacyPage() {
             disconnect your eBay account at any time, after which we will cease
             accessing eBay data on your behalf and delete stored tokens within
             30 days.
+          </p>
+          <p>
+            <strong>Comparable-listing data:</strong> To suggest prices for your
+            listings, we look up similar listings on eBay. For each of your
+            listings we keep the item IDs of those comparable listings and
+            summary prices (average, minimum, maximum and median). This data is
+            used only for your own account and is refreshed about every 24
+            hours. It is deleted when the listing ends.
+          </p>
+          <p>
+            <strong>eBay account deletion:</strong> When an eBay user asks eBay
+            to delete their personal data or close their account, eBay notifies
+            us. On receiving a verified notice, we delete the eBay data we hold
+            for that user (listing data, comparable-listing data, financial and
+            edit records, and stored eBay tokens). This does not delete your
+            ListrAssistr account. To request deletion of your account, see
+            Sections 5, 6 and 8.
           </p>
 
           <h2>5. GDPR Compliance (EU/EEA Users)</h2>
