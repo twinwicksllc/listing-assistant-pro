@@ -101,11 +101,12 @@ It is deleted when an inventory sync confirms that the listing has ended.
           <p>
             <strong>eBay account deletion:</strong> When an eBay user asks eBay
             to delete their personal data or close their account, eBay notifies
-            us. On receiving a verified notice, we delete the eBay data we hold
-            for that user (listing data, comparable-listing data, financial and
-            edit records, and stored eBay tokens). This does not delete your
-            ListrAssistr account. To request deletion of your account, see
-            Sections 5, 6 and 8.
+            us. On receiving a verified notice, we delete the eBay-derived data
+            we hold for that user: active-listing inventory, comparable-listing
+            data, financial records, edit history, optimization history, and
+            stored eBay tokens. This does not delete your ListrAssistr account,
+            drafts, or other user-authored content. To request deletion of your
+            account, see Sections 5, 6 and 8.
           </p>
 
           <h2>5. GDPR Compliance (EU/EEA Users)</h2>
