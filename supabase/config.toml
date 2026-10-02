@@ -99,3 +99,8 @@ verify_jwt = false
 [functions.stripe-webhook]
 # Stripe POSTs here directly — no Supabase JWT, verified via Stripe-Signature header
 verify_jwt = false
+
+[functions.ebay-account-deletion]
+# eBay calls this directly — no Supabase JWT. GET answers the ownership challenge;
+# POST is verified via the x-ebay-signature header against eBay's public key
+verify_jwt = false
