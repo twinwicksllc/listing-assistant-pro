@@ -13,6 +13,12 @@ export const EBAY_DATA_TABLES = [
   "optimization_history",
 ] as const;
 
+// The re-derivable subset: caches rebuilt by the sync workers from eBay. A
+// voluntary disconnect clears these (nothing would ever prune them once syncs
+// stop) but keeps the seller's own financial and edit history, which a
+// deletion notice removes but a disconnect should not.
+export const EBAY_CACHE_TABLES = ["user_active_listings", "competitor_prices"] as const;
+
 // Cleared in two steps. The tokens go first so the sync workers (which select
 // users on ebay_refresh_token IS NOT NULL) stop writing eBay rows for this user
 // before those rows are deleted. ebay_username goes last: it is how a retry
@@ -199,6 +205,19 @@ export async function getEbayPublicKey(
       expiresAt: now + FAILED_KEY_TTL_MS,
     });
     throw err;
+  }
+}
+
+// Throws on failure. Call after the tokens are cleared so the sync workers
+// cannot re-insert rows while this runs.
+export async function deleteEbayCacheForUser(
+  // deno-lint-ignore no-explicit-any -- matches the loose typing used for the supabase-js client across this codebase.
+  supabase: any,
+  userId: string,
+): Promise<void> {
+  for (const table of EBAY_CACHE_TABLES) {
+    const { error } = await supabase.from(table).delete().eq("user_id", userId);
+    if (error) throw new Error(`delete from ${table} failed: ${error.message}`);
   }
 }
 

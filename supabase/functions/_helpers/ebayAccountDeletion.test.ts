@@ -4,7 +4,9 @@ import {
   clearAppTokenCache,
   clearPublicKeyCache,
   computeChallengeResponse,
+  deleteEbayCacheForUser,
   deleteEbayDataForUser,
+  EBAY_CACHE_TABLES,
   EBAY_DATA_TABLES,
   FAILED_KEY_TTL_MS,
   fetchEbayAppToken,
@@ -222,6 +224,39 @@ Deno.test("deleteEbayDataForUser: a failed token revoke throws before any row is
 Deno.test("deleteEbayDataForUser: a failed identifier clear throws", async () => {
   const { client } = fakeSupabase({ profiles: [{ id: "u1" }], failUpdateNumber: 2 });
   await assertRejects(() => deleteEbayDataForUser(client, { userId: "x" }), Error, "profile clear");
+});
+
+Deno.test("deleteEbayCacheForUser: clears only the re-derivable caches, scoped to the user", async () => {
+  const log: string[] = [];
+  const client = {
+    from: (table: string) => ({
+      delete: () => ({
+        eq: (col: string, val: string) => {
+          log.push(`delete ${table} where ${col} = ${val}`);
+          return Promise.resolve({ error: null });
+        },
+      }),
+    }),
+  };
+  await deleteEbayCacheForUser(client, "u1");
+  assertEquals(log, [
+    "delete user_active_listings where user_id = u1",
+    "delete competitor_prices where user_id = u1",
+  ]);
+  for (const kept of ["listing_financials", "listing_edits_log", "optimization_history", "drafts"]) {
+    assertEquals((EBAY_CACHE_TABLES as readonly string[]).includes(kept), false);
+  }
+});
+
+Deno.test("deleteEbayCacheForUser: a failed delete throws so disconnect can report it", async () => {
+  const client = {
+    from: (table: string) => ({
+      delete: () => ({
+        eq: () => Promise.resolve({ error: table === "competitor_prices" ? { message: "boom" } : null }),
+      }),
+    }),
+  };
+  await assertRejects(() => deleteEbayCacheForUser(client, "u1"), Error, "competitor_prices");
 });
 
 Deno.test("getEbayPublicKey: an unknown kid is negatively cached so repeats make no outbound calls", async () => {
