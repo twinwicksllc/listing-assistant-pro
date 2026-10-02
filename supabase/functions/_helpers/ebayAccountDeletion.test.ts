@@ -1,10 +1,13 @@
 import { assertEquals, assertRejects } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import { createSign, generateKeyPairSync } from "node:crypto";
 import {
+  clearAppTokenCache,
   clearPublicKeyCache,
   computeChallengeResponse,
   deleteEbayDataForUser,
   EBAY_DATA_TABLES,
+  FAILED_KEY_TTL_MS,
+  fetchEbayAppToken,
   getEbayPublicKey,
   parseSignatureHeader,
   verifyNotificationSignature,
@@ -111,22 +114,31 @@ Deno.test("getEbayPublicKey: caches per kid within the TTL and refetches after i
   assertEquals(calls, 3);
 });
 
-Deno.test("getEbayPublicKey: a failed lookup throws and is not cached", async () => {
+Deno.test("getEbayPublicKey: a transient failure is only briefly remembered and a later success is served and cached", async () => {
   clearPublicKeyCache();
   let calls = 0;
   const fetchFn = (() => {
     calls++;
-    return Promise.resolve(new Response("nope", { status: 500 }));
+    return Promise.resolve(
+      calls === 1
+        ? new Response("nope", { status: 500 })
+        : new Response(JSON.stringify({ key: "KEYDATA", digest: "SHA256" })),
+    );
   }) as typeof fetch;
-  const deps = { getAppToken: () => Promise.resolve("tok"), fetchFn };
+  let t = 10_000;
+  const deps = { getAppToken: () => Promise.resolve("tok"), fetchFn, now: () => t };
+
   await assertRejects(() => getEbayPublicKey("kid-x", deps));
-  await assertRejects(() => getEbayPublicKey("kid-x", deps));
+  t += FAILED_KEY_TTL_MS + 1;
+  assertEquals((await getEbayPublicKey("kid-x", deps)).key, "KEYDATA");
+  await getEbayPublicKey("kid-x", deps);
   assertEquals(calls, 2);
 });
 
 // Minimal fake of the supabase-js query builder surface the helper uses.
-function fakeSupabase(opts: { profiles?: { id: string }[]; failTable?: string; failProfileClear?: boolean } = {}) {
+function fakeSupabase(opts: { profiles?: { id: string }[]; failTable?: string; failUpdateNumber?: number } = {}) {
   const log: string[] = [];
+  let updates = 0;
   const client = {
     from(table: string) {
       return {
@@ -145,7 +157,8 @@ function fakeSupabase(opts: { profiles?: { id: string }[]; failTable?: string; f
         update: (patch: Record<string, unknown>) => ({
           in: (col: string, vals: string[]) => {
             log.push(`update ${table} ${JSON.stringify(patch)} where ${col} in ${JSON.stringify(vals)}`);
-            return Promise.resolve({ error: opts.failProfileClear ? { message: "boom" } : null });
+            updates++;
+            return Promise.resolve({ error: opts.failUpdateNumber === updates ? { message: "boom" } : null });
           },
         }),
       };
@@ -154,19 +167,25 @@ function fakeSupabase(opts: { profiles?: { id: string }[]; failTable?: string; f
   return { client, log };
 }
 
-Deno.test("deleteEbayDataForUser: matches on userId and username, deletes eBay tables, clears profile last", async () => {
+Deno.test("deleteEbayDataForUser: revokes tokens first, deletes eBay tables, clears the identifier last", async () => {
   const { client, log } = fakeSupabase({ profiles: [{ id: "u1" }] });
   const result = await deleteEbayDataForUser(client, { userId: "ebayUserA", username: "sellerA" });
   assertEquals(result, { profilesMatched: 1 });
   assertEquals(log[0], 'select profiles where ebay_username in ["ebayUserA","sellerA"]');
+
+  // Tokens go first, and the identifier must survive that step.
+  assertEquals(log[1].startsWith("update profiles"), true);
+  assertEquals(log[1].includes('"ebay_refresh_token":null'), true);
+  assertEquals(log[1].includes("ebay_username"), false);
+
   for (const [i, table] of EBAY_DATA_TABLES.entries()) {
-    assertEquals(log[i + 1], `delete ${table} where user_id in ["u1"]`);
+    assertEquals(log[i + 2], `delete ${table} where user_id in ["u1"]`);
   }
+
   const last = log[log.length - 1];
   assertEquals(last.startsWith("update profiles"), true);
-  assertEquals(last.includes('"ebay_access_token":null'), true);
-  assertEquals(last.includes('"ebay_refresh_token":null'), true);
   assertEquals(last.includes('"ebay_username":null'), true);
+  assertEquals(last.includes('"ebay_account_type":null'), true);
 });
 
 Deno.test("deleteEbayDataForUser: never deletes user-authored content or the account", () => {
@@ -187,13 +206,71 @@ Deno.test("deleteEbayDataForUser: no usable identifiers does not query at all", 
   assertEquals(log.length, 0);
 });
 
-Deno.test("deleteEbayDataForUser: a failed delete throws and leaves the profile identifier intact for the retry", async () => {
+Deno.test("deleteEbayDataForUser: a failed delete throws and leaves the identifier intact for the retry", async () => {
   const { client, log } = fakeSupabase({ profiles: [{ id: "u1" }], failTable: "competitor_prices" });
   await assertRejects(() => deleteEbayDataForUser(client, { userId: "x" }), Error, "competitor_prices");
-  assertEquals(log.some((l) => l.startsWith("update profiles")), false);
+  assertEquals(log.filter((l) => l.startsWith("update profiles")).length, 1);
+  assertEquals(log.some((l) => l.includes('"ebay_username":null')), false);
 });
 
-Deno.test("deleteEbayDataForUser: a failed profile clear throws", async () => {
-  const { client } = fakeSupabase({ profiles: [{ id: "u1" }], failProfileClear: true });
+Deno.test("deleteEbayDataForUser: a failed token revoke throws before any row is deleted", async () => {
+  const { client, log } = fakeSupabase({ profiles: [{ id: "u1" }], failUpdateNumber: 1 });
+  await assertRejects(() => deleteEbayDataForUser(client, { userId: "x" }), Error, "token clear");
+  assertEquals(log.some((l) => l.startsWith("delete")), false);
+});
+
+Deno.test("deleteEbayDataForUser: a failed identifier clear throws", async () => {
+  const { client } = fakeSupabase({ profiles: [{ id: "u1" }], failUpdateNumber: 2 });
   await assertRejects(() => deleteEbayDataForUser(client, { userId: "x" }), Error, "profile clear");
+});
+
+Deno.test("getEbayPublicKey: an unknown kid is negatively cached so repeats make no outbound calls", async () => {
+  clearPublicKeyCache();
+  let calls = 0;
+  const fetchFn = (() => {
+    calls++;
+    return Promise.resolve(new Response("nope", { status: 404 }));
+  }) as typeof fetch;
+  let t = 5_000;
+  const deps = { getAppToken: () => Promise.resolve("tok"), fetchFn, now: () => t };
+
+  await assertRejects(() => getEbayPublicKey("bogus", deps));
+  await assertRejects(() => getEbayPublicKey("bogus", deps), Error, "404");
+  await assertRejects(() => getEbayPublicKey("bogus", deps));
+  assertEquals(calls, 1);
+
+  t += FAILED_KEY_TTL_MS + 1;
+  await assertRejects(() => getEbayPublicKey("bogus", deps));
+  assertEquals(calls, 2);
+});
+
+Deno.test("fetchEbayAppToken: reuses the token until shortly before it expires", async () => {
+  clearAppTokenCache();
+  let calls = 0;
+  const fetchFn = (() => {
+    calls++;
+    return Promise.resolve(new Response(JSON.stringify({ access_token: `tok-${calls}`, expires_in: 7200 })));
+  }) as typeof fetch;
+  let t = 0;
+  const now = () => t;
+
+  assertEquals(await fetchEbayAppToken("id", "secret", fetchFn, now), "tok-1");
+  assertEquals(await fetchEbayAppToken("id", "secret", fetchFn, now), "tok-1");
+  assertEquals(calls, 1);
+
+  t = 7200 * 1000 - 30_000; // inside the 60s safety window
+  assertEquals(await fetchEbayAppToken("id", "secret", fetchFn, now), "tok-2");
+  assertEquals(calls, 2);
+});
+
+Deno.test("fetchEbayAppToken: a failed request is not cached", async () => {
+  clearAppTokenCache();
+  let calls = 0;
+  const fetchFn = (() => {
+    calls++;
+    return Promise.resolve(new Response("bad", { status: 500 }));
+  }) as typeof fetch;
+  await assertRejects(() => fetchEbayAppToken("id", "secret", fetchFn));
+  await assertRejects(() => fetchEbayAppToken("id", "secret", fetchFn));
+  assertEquals(calls, 2);
 });
