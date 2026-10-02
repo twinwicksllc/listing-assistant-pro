@@ -14,6 +14,7 @@
 
 import { EbayTokenRefreshConfig, refreshEbayAccessToken } from "./ebayTokenRefresh.ts";
 import { decryptToken } from "./tokenCrypto.ts";
+import { cleanupCacheIfDisconnected } from "./ebayAccountDeletion.ts";
 import { fetchPrimaryCategoryIds, tradingApiUrlFor } from "./ebayGetItemCategory.ts";
 
 type ActiveListing = { listingId: string; title: string; price: number; categoryId?: string };
@@ -234,6 +235,17 @@ export async function syncUserInventory(
     result = await syncListingsIntoCache(supabase, userId, syncStartedAt, listings);
   } catch (e) {
     console.warn(`[inventory-sync] Sync failed for user ${userId}: ${e}`);
+  }
+
+  // The seller may have disconnected while this sync was running; if so, remove
+  // the rows it just wrote (see cleanupCacheIfDisconnected).
+  try {
+    if (await cleanupCacheIfDisconnected(supabase, userId)) {
+      console.log(`[inventory-sync] User ${userId} disconnected mid-sync; cleared cache rows`);
+      result = { listingCount: 0, endedCount: 0 };
+    }
+  } catch (e) {
+    console.warn(`[inventory-sync] Post-sync disconnect cleanup failed for user ${userId}: ${e}`);
   }
 
   // Set unconditionally, regardless of outcome above -- see this column's

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { deleteEbayCacheForUser } from "../_helpers/ebayAccountDeletion.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -79,6 +80,22 @@ serve(async (req: Request) => {
       );
     }
 
+    // Tokens are already cleared, so syncs have stopped; now drop the eBay-derived
+    // caches that nothing would prune anymore. A failure here returns 500 and the
+    // user can simply press Disconnect again.
+    try {
+      await deleteEbayCacheForUser(svc, userId);
+    } catch (cacheErr) {
+      console.error("Disconnect eBay cache cleanup error:", cacheErr);
+      return new Response(
+        JSON.stringify({ error: "Disconnected, but failed to clear stored eBay data. Please try again." }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     return new Response(
       JSON.stringify({ success: true, message: "eBay account disconnected" }),
       {
@@ -88,7 +105,7 @@ serve(async (req: Request) => {
     );
   } catch (err) {
     console.error("disconnect-ebay error:", err);
-    return new Response(JSON.stringify({ error: err.message }), {
+    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

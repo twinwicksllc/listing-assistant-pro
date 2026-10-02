@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { describeCronAuthEnv, requireCronSecret } from "../_helpers/authGuard.ts";
 import { CACHE_TTL_MS, runCompetitorSearch } from "../_helpers/competitorSearch.ts";
+import { cleanupCacheIfDisconnected } from "../_helpers/ebayAccountDeletion.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -250,6 +251,18 @@ serve(async (req) => {
 
     if (i + REFRESH_CONCURRENCY < listings.length) {
       await sleep(SEARCH_DELAY_MS);
+    }
+  }
+
+  // A seller may have disconnected after this batch was selected; remove any
+  // rows this run wrote for them (see cleanupCacheIfDisconnected).
+  for (const userId of new Set(listings.map((l) => l.userId))) {
+    try {
+      if (await cleanupCacheIfDisconnected(supabase, userId)) {
+        console.log(`[competitor-prices-cron] User ${userId} disconnected mid-run; cleared cache rows`);
+      }
+    } catch (e) {
+      console.warn(`[competitor-prices-cron] Post-run disconnect cleanup failed for user ${userId}:`, e);
     }
   }
 
