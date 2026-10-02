@@ -46,6 +46,21 @@ Deno.test("verifyNotificationSignature: accepts a genuine signature (bare and PE
   }
 });
 
+Deno.test("verifyNotificationSignature: accepts the key exactly as eBay sends it (armor, no newlines)", () => {
+  const n = signedNotification();
+  const parsed = parseSignatureHeader(n.header)!;
+  const ebayStyleKey = `-----BEGIN PUBLIC KEY-----${n.bareKey}-----END PUBLIC KEY-----`;
+  assertEquals(verifyNotificationSignature(n.body, parsed, { key: ebayStyleKey }), true);
+});
+
+Deno.test("verifyNotificationSignature: accepts a pretty-printed body signed in its compact form", () => {
+  const n = signedNotification();
+  const parsed = parseSignatureHeader(n.header)!;
+  const pretty = JSON.stringify(JSON.parse(n.body), null, 2);
+  assertEquals(pretty === n.body, false);
+  assertEquals(verifyNotificationSignature(pretty, parsed, { key: n.bareKey }), true);
+});
+
 Deno.test("verifyNotificationSignature: rejects a tampered body", () => {
   const n = signedNotification();
   const parsed = parseSignatureHeader(n.header)!;

@@ -55,10 +55,11 @@ export interface EbayPublicKey {
   digest?: string;
 }
 
+// eBay returns the key with the BEGIN/END armor but no newlines (its own SDK
+// re-inserts them before parsing), so strip any armor and rebuild the PEM.
 function toPem(key: string): string {
-  if (key.includes("BEGIN")) return key;
-  const body = key.replace(/\s+/g, "").match(/.{1,64}/g)?.join("\n") ?? "";
-  return `-----BEGIN PUBLIC KEY-----\n${body}\n-----END PUBLIC KEY-----`;
+  const body = key.replace(/-----(BEGIN|END) PUBLIC KEY-----/g, "").replace(/\s+/g, "");
+  return `-----BEGIN PUBLIC KEY-----\n${body.match(/.{1,64}/g)?.join("\n") ?? ""}\n-----END PUBLIC KEY-----`;
 }
 
 const DIGESTS: Record<string, string> = { SHA1: "sha1", SHA256: "sha256" };
@@ -70,10 +71,23 @@ export function verifyNotificationSignature(
 ): boolean {
   const algorithm = DIGESTS[(publicKey.digest ?? parsed.digest).toUpperCase()];
   if (!algorithm) return false;
+
+  // eBay's SDK verifies JSON.stringify(parsedBody), not the raw bytes. The two
+  // are identical for compact JSON; try the re-serialized form too so a
+  // whitespace difference can't reject a genuine notice.
+  const candidates = [rawBody];
   try {
-    const verifier = createVerify(algorithm);
-    verifier.update(rawBody);
-    return verifier.verify(createPublicKey(toPem(publicKey.key)), parsed.signature, "base64");
+    const reserialized = JSON.stringify(JSON.parse(rawBody));
+    if (reserialized !== rawBody) candidates.push(reserialized);
+  } catch {
+    // Not JSON: only the raw form is worth trying.
+  }
+
+  try {
+    const key = createPublicKey(toPem(publicKey.key));
+    return candidates.some((payload) =>
+      createVerify(algorithm).update(payload).verify(key, parsed.signature, "base64")
+    );
   } catch {
     return false;
   }
