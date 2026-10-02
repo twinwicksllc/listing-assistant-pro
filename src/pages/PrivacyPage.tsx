@@ -39,8 +39,9 @@ export default function PrivacyPage() {
             subscription status — never your full card number.
           </p>
           <p>
-            <strong>Third-Party Data:</strong> eBay API tokens, listing data,
-            and sold-item pricing retrieved from eBay on your behalf.
+            <strong>Third-Party Data:</strong> eBay API tokens, your listing,
+            order and sales data retrieved through eBay's APIs on your behalf,
+            and comparable-listing and market price data.
           </p>
 
           <h2>2. How We Use Your Data</h2>
@@ -71,10 +72,11 @@ export default function PrivacyPage() {
           <h2>4. eBay Data Usage</h2>
           <p>
             When you connect your eBay account, we access the eBay API to: (a)
-            publish and manage listings; (b) retrieve completed/sold item data
-            for market pricing analysis; (c) fetch category and item-specifics
-            metadata. eBay API tokens are stored encrypted in our database. We
-            do not sell or share your eBay data with third parties. You may
+            publish and manage listings; (b) retrieve your own order and sales
+            data, and comparable active listings for pricing analysis; (c) fetch
+            category and item-specifics metadata. eBay API tokens are stored
+            encrypted in our database. We do not sell your eBay data, and we
+            share it only with the processors listed in Section 10. You may
             disconnect your eBay account at any time, after which we will cease
             accessing eBay data on your behalf and delete stored tokens within
             30 days.
@@ -86,6 +88,15 @@ export default function PrivacyPage() {
             summary prices (average, minimum, maximum and median). This data is
             used only for your own account and is refreshed about every 24
             hours. It is deleted when the listing ends.
+          </p>
+          <p>
+            <strong>Market sold-price data:</strong> For market research and
+            price recommendations, we also read publicly visible sold-listing
+            search pages on eBay's website through a third-party reading service
+            (Jina AI) to estimate recent sold counts and prices. Only the search
+            terms, such as an item title, are sent to that service. Your eBay
+            account details and tokens are never sent, and this data comes from
+            public pages, not from your eBay account.
           </p>
           <p>
             <strong>eBay account deletion:</strong> When an eBay user asks eBay
@@ -177,9 +188,11 @@ export default function PrivacyPage() {
           <h2>10. Third-Party Services</h2>
           <p>
             We share data with the following third-party processors: Stripe
-            (payments), eBay (marketplace integration), and our cloud
-            infrastructure provider. Each processor is bound by data processing
-            agreements that comply with applicable data protection laws.
+            (payments), eBay (marketplace integration), Google (AI analysis of
+            the photos and text you submit), Jina AI (reading public eBay search
+            pages, as described in Section 4), and our cloud infrastructure
+            provider. Each processor is bound by data processing agreements that
+            comply with applicable data protection laws.
           </p>
 
           <h2>11. Changes to This Policy</h2>
