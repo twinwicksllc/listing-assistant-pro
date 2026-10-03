@@ -744,3 +744,61 @@ line ~1070), or reverting BATCH_LIMIT/REFRESH_CONCURRENCY/PROBE_CAP to pre-fix v
       Before deleting, grep for any other caller/reference
       (`grep -rn "auto-reprice-cron\|reprice_rules\|optimization_history"`)
       to make sure nothing else depends on the tables or the function.
+
+## 2026-10-02: eBay account deletion, AGC, privacy policy, disconnect
+
+- [x] **Marketplace Account Deletion endpoint live** (#651, merged and deployed).
+      `ebay-account-deletion` answers eBay's challenge and verifies
+      `x-ebay-signature` before deleting. Deletes `user_active_listings`,
+      `competitor_prices`, `listing_financials`, `listing_edits_log` and
+      `optimization_history`, and clears eBay tokens and username; keeps the
+      account, drafts and COGS. Portal test notification acknowledged (0
+      accounts cleared, a made-up test user). eBay only emails when the
+      endpoint is down, so a missing email after a successful test is expected.
+- [ ] **No real deletion notice has arrived yet.** Read the
+      `ebay-account-deletion` function logs the first time one does; only a
+      made-up test user has exercised the delete path.
+- [x] **Application Growth Check submitted** at
+      developer.ebay.com/my/support/growth-check: Browse API, 25,000 calls/day
+      (50 sellers x 100 listings x 4.5 calls, plus about 11% headroom) and the
+      bulk `getItems` scope (403 on 2026-09-18). Turnaround unknown: our plan
+      file says 2-4 weeks. Check My Tickets in the developer portal. If denied,
+      the levers are refresh cadence and the probe cap; a cross-user comp cache
+      would not help (8 of 578 listings share a product signature).
+- [ ] **Sept 17 quota-hit cause is only partly verified.** The ticket says both
+      the Sept 17 and Sept 20 hits came from bugs in our code. `ebay_browse_call_log`
+      starts 2026-09-24 and `ebay_rate_limit_polls` starts 2026-09-18, so Sept 17
+      cannot be read directly. The earliest poll (reset 2026-09-18 07:00 UTC)
+      was already 5,000/5,000, consistent with the `fetched_at` upsert bug
+      (#596), but that attribution rests on earlier notes, not on logs. The
+      Sept 20-21 window also peaked at 5,000. Peaks since 2026-09-22: 2,600-3,700/day.
+- [x] **Privacy policy matches actual eBay data handling** (#652). Discloses
+      the comparable-listing cache (item IDs and summary prices, about 24h,
+      deleted when an inventory sync confirms the listing ended), eBay deletion
+      notices, and market sold-price data read from public eBay search pages
+      through Jina AI (only search terms sent). Lists Google and Jina AI as
+      processors. Usage from logs: `ebay-pricing` 126 invocations in 7 days,
+      `keyword-research` 0, `market-watch-refresh` runs but makes no Jina calls
+      (0 market watches). Still says "Sovereign Listing Suite" and
+      `privacy@twin-wicks.com`; rebranding that copy is Phase 2.
+- [ ] **The web-Claude note that eBay's license forbids deriving average selling
+      prices from scraped data is unverified.** Read the license before
+      deciding whether to mention Jina scraping to eBay. It was not mentioned
+      in the AGC ticket.
+- [x] **`disconnect-ebay` now clears eBay-derived caches** (#653):
+      `user_active_listings` and `competitor_prices` are deleted on disconnect;
+      financial and edit history are kept (only a deletion notice removes
+      those). Also fixed a `deno check` error (`err.message` on an untyped
+      catch variable) that existed on `main`.
+- [ ] **Known gap in #653, accepted by the owner:** a sync worker that passes
+      its post-write connection check just before a disconnect and writes just
+      after can leave rows for a few milliseconds' window, until the seller
+      reconnects. Closing it fully needs a generation counter or row lock at
+      every write site. Not exercised against a real mid-sync disconnect.
+- [ ] **Deletion-notice path has the same race** and could call
+      `cleanupCacheIfDisconnected` after its delete; not wired up or tested.
+- [ ] **Smoke-test disconnect after deploy:** disconnect a test account and
+      confirm its rows are gone from both tables.
+- [ ] `filter-comparable-listings` still calls the old Finding API
+      (`svcs.ebay.com`); deployed, 0 invocations in 7 days. The claim that
+      Finding is deprecated is unverified.
