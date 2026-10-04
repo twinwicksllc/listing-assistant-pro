@@ -1,10 +1,13 @@
 import * as XLSX from "xlsx";
 import { supabase } from "@/integrations/supabase/client";
+import { conditionIdFromCategoryPolicy } from "@/lib/ebayConditionPolicy";
 import {
   EBAY_CONDITION_ID_MAP,
   normalizeEbayConditionDescription,
   type ItemSpecifics,
 } from "@/types/listing";
+
+export { conditionIdFromCategoryPolicy } from "@/lib/ebayConditionPolicy";
 
 function escapeCSV(value: string): string {
   if (value.includes(",") || value.includes('"') || value.includes("\n")) {
@@ -78,37 +81,6 @@ export interface ListingData {
   fulfillmentPolicyId?: string;
   paymentPolicyId?: string;
   returnPolicyId?: string;
-}
-
-export function conditionIdFromCategoryPolicy(
-  condition: string,
-  conditions: Array<{
-    conditionId?: number | string;
-    conditionDescription?: string;
-  }>,
-): string | undefined {
-  const conditionEnum = normalizeEbayConditionDescription(condition);
-  const match = conditions.find(
-    (candidate) =>
-      normalizeEbayConditionDescription(candidate.conditionDescription) ===
-      conditionEnum,
-  );
-  if (match?.conditionId) return String(match.conditionId);
-
-  if (
-    conditionEnum === "PRE_OWNED_EXCELLENT" ||
-    conditionEnum === "PRE_OWNED_FAIR"
-  ) {
-    const fallback =
-      conditions.find(
-        (candidate) =>
-          normalizeEbayConditionDescription(candidate.conditionDescription) ===
-          "USED_EXCELLENT",
-      ) ?? conditions[0];
-    return fallback?.conditionId ? String(fallback.conditionId) : undefined;
-  }
-
-  return undefined;
 }
 
 async function resolveEbayConditionId(listing: ListingData): Promise<string> {

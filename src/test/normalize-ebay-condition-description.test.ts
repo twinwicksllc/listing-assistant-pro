@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { normalizeEbayConditionDescription } from "../types/listing";
-import { conditionIdFromCategoryPolicy } from "../lib/exportCSV";
+import { conditionIdFromCategoryPolicy } from "../lib/ebayConditionPolicy";
 
 // Regression coverage for the 2026-09-16 ring-publish bug: eBay's Metadata
 // API returns human-readable conditionDescription strings, not Inventory API
