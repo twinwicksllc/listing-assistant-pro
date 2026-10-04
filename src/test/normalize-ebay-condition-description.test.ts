@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { normalizeEbayConditionDescription } from "../types/listing";
+import { conditionIdFromCategoryPolicy } from "../lib/ebayConditionPolicy";
 
 // Regression coverage for the 2026-09-16 ring-publish bug: eBay's Metadata
 // API returns human-readable conditionDescription strings, not Inventory API
@@ -40,25 +41,52 @@ describe("normalizeEbayConditionDescription", () => {
   });
 
   // Regression coverage for a live production incident (2026-09-20): eBay's
-  // Metadata API returns "Pre-owned - Good" / "Pre-owned - Fair" as the
-  // conditionDescription for some categories (e.g. Jewelry & Watches >
-  // Pocket Watches, category 3937). Before this fix, these strings had no
-  // entry in the alias table, so they fell through to the mangle fallback
-  // and produced "PRE_OWNED_GOOD" / "PRE_OWNED_FAIR" — NOT valid eBay
-  // ConditionEnum values, which eBay's Inventory API rejects with errorId
-  // 2004 ("Could not serialize field [condition]") on publish.
+  // Metadata API returns "Pre-owned - Good" as the conditionDescription for
+  // some categories. "Pre-owned - Good" has no eBay enum of its own — its
+  // conditionId 3000 maps to USED_EXCELLENT — and there is no "Pre-owned -
+  // Poor" grade, so both must be corrected. But "Pre-owned - Excellent"
+  // (2990) and "Pre-owned - Fair" (3010) ARE real ConditionEnum values for
+  // apparel/jewelry categories and must be preserved — correcting them was
+  // the root cause of Fine Jewelry > Rings (261994) publish rejections.
   test.each([
     ["Pre-owned - Good", "USED_EXCELLENT"],
     ["Pre-owned Good", "USED_EXCELLENT"],
-    ["PRE_OWNED_EXCELLENT", "USED_EXCELLENT"],
-    ["Pre-owned Excellent", "USED_EXCELLENT"],
     ["pre-owned good", "USED_EXCELLENT"],
-    ["Pre-owned - Fair", "USED_GOOD"],
     ["Pre-owned - Poor", "USED_ACCEPTABLE"],
-  ])("maps %s -> %s (never a fake PRE_OWNED_* enum)", (input, expected) => {
-    const result = normalizeEbayConditionDescription(input);
-    expect(result).toBe(expected);
-    expect(result).not.toMatch(/^PRE_OWNED_/);
+    ["PRE_OWNED_GOOD", "USED_EXCELLENT"],
+    ["PRE_OWNED_POOR", "USED_ACCEPTABLE"],
+  ])("maps fake token %s -> %s", (input, expected) => {
+    expect(normalizeEbayConditionDescription(input)).toBe(expected);
+  });
+
+  test.each([
+    ["PRE_OWNED_EXCELLENT", "PRE_OWNED_EXCELLENT"],
+    ["Pre-owned Excellent", "PRE_OWNED_EXCELLENT"],
+    ["Pre-owned - Excellent", "PRE_OWNED_EXCELLENT"],
+    ["Pre-owned - Fair", "PRE_OWNED_FAIR"],
+    ["Pre-owned Fair", "PRE_OWNED_FAIR"],
+    ["PRE_OWNED_FAIR", "PRE_OWNED_FAIR"],
+  ])("preserves real apparel/jewelry enum %s -> %s", (input, expected) => {
+    expect(normalizeEbayConditionDescription(input)).toBe(expected);
+  });
+
+  test("CSV export resolves real pre-owned IDs against the category policy", () => {
+    const ringPolicy = [
+      { conditionId: 2990, conditionDescription: "Pre-owned - Excellent" },
+      { conditionId: 3000, conditionDescription: "Pre-owned - Good" },
+      { conditionId: 3010, conditionDescription: "Pre-owned - Fair" },
+    ];
+    expect(
+      conditionIdFromCategoryPolicy("PRE_OWNED_EXCELLENT", ringPolicy),
+    ).toBe("2990");
+    expect(conditionIdFromCategoryPolicy("PRE_OWNED_FAIR", ringPolicy)).toBe(
+      "3010",
+    );
+    expect(
+      conditionIdFromCategoryPolicy("PRE_OWNED_FAIR", [
+        { conditionId: 4000, conditionDescription: "Ungraded" },
+      ]),
+    ).toBe("4000");
   });
 
   // Regression coverage for a live production incident (2026-09-26): eBay's

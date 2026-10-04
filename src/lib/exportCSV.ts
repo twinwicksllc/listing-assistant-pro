@@ -1,6 +1,13 @@
 import * as XLSX from "xlsx";
 import { supabase } from "@/integrations/supabase/client";
-import type { ItemSpecifics } from "@/types/listing";
+import { conditionIdFromCategoryPolicy } from "@/lib/ebayConditionPolicy";
+import {
+  EBAY_CONDITION_ID_MAP,
+  normalizeEbayConditionDescription,
+  type ItemSpecifics,
+} from "@/types/listing";
+
+export { conditionIdFromCategoryPolicy } from "@/lib/ebayConditionPolicy";
 
 function escapeCSV(value: string): string {
   if (value.includes(",") || value.includes('"') || value.includes("\n")) {
@@ -25,28 +32,12 @@ function downloadCSV(filename: string, content: string) {
   );
 }
 
-const EBAY_CONDITION_MAP: Record<string, string> = {
-  NEW: "1000",
-  LIKE_NEW: "2750", // Like New / Open Box
-  VERY_GOOD: "3000",
-  GOOD: "4000",
-  ACCEPTABLE: "5000",
-  NEW_OTHER: "1500", // New Other (without tags)
-  NEW_WITH_DEFECTS: "1750", // New with defects
-  CERTIFIED_REFURBISHED: "2000",
-  EXCELLENT_REFURBISHED: "2010",
-  VERY_GOOD_REFURBISHED: "2020",
-  GOOD_REFURBISHED: "2030",
-  SELLER_REFURBISHED: "2500",
-  PRE_OWNED_GOOD: "3000", // replaces USED_EXCELLENT / USED_VERY_GOOD
-  PRE_OWNED_FAIR: "5000", // replaces USED_GOOD
-  PRE_OWNED_POOR: "6000", // replaces USED_ACCEPTABLE
-  USED_EXCELLENT: "3000",
-  USED_VERY_GOOD: "4000",
-  USED_GOOD: "5000",
-  USED_ACCEPTABLE: "6000",
-  FOR_PARTS_OR_NOT_WORKING: "7000",
-};
+const EBAY_CONDITION_MAP: Record<string, string> = Object.fromEntries(
+  Object.entries(EBAY_CONDITION_ID_MAP).map(([condition, conditionId]) => [
+    condition,
+    String(conditionId),
+  ]),
+);
 
 const FB_CONDITION_MAP: Record<string, string> = {
   NEW: "new",
@@ -92,67 +83,16 @@ export interface ListingData {
   returnPolicyId?: string;
 }
 
-function normalizeConditionDescriptorToEnum(
-  value: string | undefined | null,
-): string {
-  const raw = String(value ?? "").trim();
-  if (!raw) return "";
-
-  const lowered = raw.toLowerCase();
-  const aliases: Record<string, string> = {
-    "brand new": "NEW",
-    new: "NEW",
-    "new other (see details)": "NEW_OTHER",
-    "new-open box": "NEW_OTHER",
-    "new open box": "NEW_OTHER",
-    "open box": "LIKE_NEW",
-    "like new": "LIKE_NEW",
-    used: "USED_EXCELLENT",
-    "very good": "USED_VERY_GOOD",
-    good: "USED_GOOD",
-    acceptable: "USED_ACCEPTABLE",
-    "for parts or not working": "FOR_PARTS_OR_NOT_WORKING",
-    "certified refurbished": "CERTIFIED_REFURBISHED",
-    "excellent refurbished": "EXCELLENT_REFURBISHED",
-    "very good refurbished": "VERY_GOOD_REFURBISHED",
-    "good refurbished": "GOOD_REFURBISHED",
-    "seller refurbished": "SELLER_REFURBISHED",
-    // PRE_OWNED_GOOD/FAIR/POOR are NOT valid eBay Inventory API ConditionEnum
-    // values -- map to the real USED_* equivalents for consistency with the
-    // Edge Function copies of this same function (ebay-publish/publish-
-    // helpers.ts, bulk-publish/index.ts, analyze-item/index.ts).
-    "pre-owned good": "USED_EXCELLENT",
-    "pre-owned fair": "USED_GOOD",
-    "pre-owned poor": "USED_ACCEPTABLE",
-    "digital good": "DIGITAL_GOOD",
-    "certified pre-owned": "CERTIFIED_PRE_OWNED",
-    remanufactured: "REMANUFACTURED",
-    retread: "RETREAD",
-    damaged: "DAMAGED",
-  };
-
-  const resolved =
-    aliases[lowered] ??
-    raw
-      .toUpperCase()
-      .replace(/[^A-Z0-9]+/g, "_")
-      .replace(/^_|_$/g, "");
-
-  // Final catch-all: eBay's Metadata API returns "Pre-owned - Good" (with a
-  // dash) for some categories, which mangles to the fake enum
-  // PRE_OWNED_GOOD -- NOT a valid ConditionEnum. Mirrored in the three
-  // backend copies of this function.
-  const FAKE_ENUM_CORRECTIONS: Record<string, string> = {
-    PRE_OWNED_GOOD: "USED_EXCELLENT",
-    PRE_OWNED_FAIR: "USED_GOOD",
-    PRE_OWNED_POOR: "USED_ACCEPTABLE",
-  };
-  return FAKE_ENUM_CORRECTIONS[resolved] ?? resolved;
-}
-
 async function resolveEbayConditionId(listing: ListingData): Promise<string> {
-  const staticConditionId = EBAY_CONDITION_MAP[listing.condition];
-  if (staticConditionId) return staticConditionId;
+  const conditionEnum =
+    normalizeEbayConditionDescription(listing.condition) || listing.condition;
+  const staticConditionId = EBAY_CONDITION_MAP[conditionEnum];
+  const needsCategoryPolicy =
+    conditionEnum === "PRE_OWNED_EXCELLENT" ||
+    conditionEnum === "PRE_OWNED_FAIR";
+  if (staticConditionId && (!needsCategoryPolicy || !listing.ebayCategoryId)) {
+    return staticConditionId;
+  }
 
   if (!listing.ebayCategoryId) return "3000";
 
@@ -161,21 +101,14 @@ async function resolveEbayConditionId(listing: ListingData): Promise<string> {
       body: { action: "conditions", categoryId: listing.ebayCategoryId },
     });
     if (error || !Array.isArray(data?.conditions)) {
-      return "3000";
+      return needsCategoryPolicy ? "3000" : (staticConditionId ?? "3000");
     }
 
-    const match = data.conditions.find(
-      (condition: {
-        conditionId?: number | string;
-        conditionDescription?: string;
-      }) =>
-        normalizeConditionDescriptorToEnum(condition.conditionDescription) ===
-        listing.condition,
+    return (
+      conditionIdFromCategoryPolicy(conditionEnum, data.conditions) ?? "3000"
     );
-
-    return match?.conditionId ? String(match.conditionId) : "3000";
   } catch {
-    return "3000";
+    return needsCategoryPolicy ? "3000" : (staticConditionId ?? "3000");
   }
 }
 

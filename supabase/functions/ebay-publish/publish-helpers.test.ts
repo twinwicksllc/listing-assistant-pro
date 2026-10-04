@@ -1,6 +1,7 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import {
   CONDITION_DESCRIPTIONS,
+  CONDITION_ID_MAP,
   detectCategoryTreeSync,
   generateDraftSku,
   getConditionDescription,
@@ -9,6 +10,7 @@ import {
   HARDCODED_COLLECTIBLE_CATEGORY_IDS,
   HARDCODED_TRADING_CARD_CATEGORY_IDS,
   normalizeConditionDescriptorToEnum,
+  normalizeConditionForCategory,
   verifyOrRerouteLeafCategory,
 } from "./publish-helpers.ts";
 
@@ -285,28 +287,52 @@ Deno.test("normalizeConditionDescriptorToEnum: normalizing BOTH the live policy 
 // "Pre-owned - Good", and the (buggy) alias table used to map that string
 // right back to "PRE_OWNED_GOOD" -- so the safety net's own match check
 // "confirmed" the invalid value as correct instead of catching it.
-Deno.test("normalizeConditionDescriptorToEnum: PRE_OWNED_GOOD/FAIR/POOR are corrected to real USED_* enums, not passed through", () => {
-  // Raw enum string form (e.g. a value already stored in the DB, or passed
-  // directly as rawCondition without going through the text-alias table).
+Deno.test("normalizeConditionDescriptorToEnum: only PRE_OWNED_GOOD/POOR are corrected; PRE_OWNED_FAIR is a real enum", () => {
+  // PRE_OWNED_GOOD and PRE_OWNED_POOR have no eBay enum of their own.
   assertEquals(normalizeConditionDescriptorToEnum("PRE_OWNED_GOOD"), "USED_EXCELLENT");
-  assertEquals(normalizeConditionDescriptorToEnum("PRE_OWNED_FAIR"), "USED_GOOD");
   assertEquals(normalizeConditionDescriptorToEnum("PRE_OWNED_POOR"), "USED_ACCEPTABLE");
+  // PRE_OWNED_FAIR (3010) IS a real apparel/jewelry enum -> preserved.
+  assertEquals(normalizeConditionDescriptorToEnum("PRE_OWNED_FAIR"), "PRE_OWNED_FAIR");
 
   // Human-readable descriptor text form, exactly as eBay's own Metadata API
-  // (getItemConditionPolicies) returns it for category 3937.
+  // (getItemConditionPolicies) returns it.
   assertEquals(normalizeConditionDescriptorToEnum("Pre-owned - Good"), "USED_EXCELLENT");
   assertEquals(normalizeConditionDescriptorToEnum("Pre-owned Good"), "USED_EXCELLENT");
-  assertEquals(normalizeConditionDescriptorToEnum("pre-owned fair"), "USED_GOOD");
+  assertEquals(normalizeConditionDescriptorToEnum("pre-owned fair"), "PRE_OWNED_FAIR");
+  assertEquals(normalizeConditionDescriptorToEnum("Pre-owned - Fair"), "PRE_OWNED_FAIR");
 });
 
-Deno.test("normalizeConditionDescriptorToEnum: PRE_OWNED_EXCELLENT is the real USED_EXCELLENT enum", () => {
+Deno.test("normalizeConditionDescriptorToEnum: PRE_OWNED_EXCELLENT is a real apparel/jewelry enum and is preserved", () => {
   assertEquals(
     normalizeConditionDescriptorToEnum("PRE_OWNED_EXCELLENT"),
-    "USED_EXCELLENT",
+    "PRE_OWNED_EXCELLENT",
   );
   assertEquals(
     normalizeConditionDescriptorToEnum("Pre-owned Excellent"),
-    "USED_EXCELLENT",
+    "PRE_OWNED_EXCELLENT",
+  );
+  assertEquals(
+    normalizeConditionDescriptorToEnum("Pre-owned - Excellent"),
+    "PRE_OWNED_EXCELLENT",
+  );
+});
+
+Deno.test("CONDITION_ID_MAP: real apparel/jewelry pre-owned enums carry their own conditionIds", () => {
+  assertEquals(CONDITION_ID_MAP.PRE_OWNED_EXCELLENT, 2990);
+  assertEquals(CONDITION_ID_MAP.PRE_OWNED_FAIR, 3010);
+  // Legacy fake aliases still resolve to a valid conditionId.
+  assertEquals(CONDITION_ID_MAP.PRE_OWNED_GOOD, 3000);
+  assertEquals(CONDITION_ID_MAP.PRE_OWNED_POOR, 6000);
+});
+
+Deno.test("normalizeConditionForCategory: apparel/jewelry enums do not leak into bullion", () => {
+  assertEquals(
+    normalizeConditionForCategory("PRE_OWNED_EXCELLENT", "177653", undefined, "bullion"),
+    { condition: "USED_EXCELLENT", corrected: true },
+  );
+  assertEquals(
+    normalizeConditionForCategory("PRE_OWNED_FAIR", "177653", undefined, "bullion"),
+    { condition: "USED_GOOD", corrected: true },
   );
 });
 
@@ -357,6 +383,47 @@ Deno.test("normalizeConditionDescriptorToEnum: the live-incident tautology is fi
   assertEquals(matched?.conditionId, 3000);
   // The value that would actually be sent to eBay is now a real ConditionEnum.
   assertEquals(normalizedIncoming, "USED_EXCELLENT");
+});
+
+// Root-cause regression coverage for the recurring Fine Jewelry > Rings
+// (category 261994) publish rejection (errorId 2004). eBay's live condition
+// policy for apparel/jewelry/watches/sporting-goods categories returns six
+// conditions, three of which are pre-owned grades. "Pre-owned - Excellent"
+// (2990) and "Pre-owned - Fair" (3010) are REAL ConditionEnum values; the
+// old code mangled them into USED_EXCELLENT / USED_GOOD (5000), and USED_GOOD
+// is NOT an accepted condition for 261994 -- so whenever the model picked the
+// "Fair" grade, publish failed. Each live condition must now map to a value
+// that carries the exact conditionId eBay itself returned.
+Deno.test("category 261994 (Fine Jewelry > Rings) live condition policy maps to real enums with correct ids", () => {
+  const liveConditions = [
+    { conditionId: 1000, conditionDescription: "New with tags" },
+    { conditionId: 1500, conditionDescription: "New without tags" },
+    { conditionId: 1750, conditionDescription: "New with defects" },
+    { conditionId: 2990, conditionDescription: "Pre-owned - Excellent" },
+    { conditionId: 3000, conditionDescription: "Pre-owned - Good" },
+    { conditionId: 3010, conditionDescription: "Pre-owned - Fair" },
+  ];
+  const mapped = liveConditions.map((c) => ({
+    enum: normalizeConditionDescriptorToEnum(c.conditionDescription),
+    expectedId: c.conditionId,
+  }));
+
+  assertEquals(mapped.map((m) => m.enum), [
+    "NEW",
+    "NEW_OTHER",
+    "NEW_WITH_DEFECTS",
+    "PRE_OWNED_EXCELLENT",
+    "USED_EXCELLENT",
+    "PRE_OWNED_FAIR",
+  ]);
+
+  // No live condition for this category should ever resolve to USED_GOOD
+  // (5000) -- the value that was being rejected at publish.
+  assertEquals(mapped.some((m) => m.enum === "USED_GOOD"), false);
+
+  // The real pre-owned enums carry the exact conditionIds eBay returned.
+  assertEquals(CONDITION_ID_MAP.PRE_OWNED_EXCELLENT, 2990);
+  assertEquals(CONDITION_ID_MAP.PRE_OWNED_FAIR, 3010);
 });
 
 // eBay's Inventory API rejects any non-alphanumeric SKU (errorId 25707), and

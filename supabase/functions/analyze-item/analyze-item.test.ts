@@ -6,6 +6,7 @@ import {
   isKnownWrongDomainForJewelry,
   isKnownWrongDomainForSneakers,
   normalizeGeneratedConditionEnum,
+  shouldReleaseIncompatibleCategoryLock,
 } from "./index.ts";
 
 // Regression coverage for Phase 2.5 of the misclassification-fix plan: the
@@ -77,16 +78,34 @@ Deno.test("isCategoryCompatibleWithDomain: coins_bullion still delegates to isCo
   );
 });
 
-Deno.test("normalizeGeneratedConditionEnum: corrects the model's fake pre-owned condition tokens", () => {
+Deno.test("normalizeGeneratedConditionEnum: corrects only the fake pre-owned tokens, preserves real apparel/jewelry enums", () => {
+  // PRE_OWNED_GOOD and PRE_OWNED_POOR are NOT real eBay enums -> corrected.
+  assertEquals(
+    normalizeGeneratedConditionEnum("PRE_OWNED_GOOD"),
+    "USED_EXCELLENT",
+  );
+  assertEquals(
+    normalizeGeneratedConditionEnum("PRE_OWNED_POOR"),
+    "USED_ACCEPTABLE",
+  );
+  // PRE_OWNED_EXCELLENT (2990) and PRE_OWNED_FAIR (3010) ARE real eBay enums
+  // for apparel/jewelry — they must be preserved, not corrected to USED_*.
   assertEquals(
     normalizeGeneratedConditionEnum("PRE_OWNED_EXCELLENT"),
-    "USED_EXCELLENT",
+    "PRE_OWNED_EXCELLENT",
   );
   assertEquals(
-    normalizeGeneratedConditionEnum("Pre-owned - Excellent"),
-    "USED_EXCELLENT",
+    normalizeGeneratedConditionEnum("PRE_OWNED_FAIR"),
+    "PRE_OWNED_FAIR",
   );
   assertEquals(normalizeGeneratedConditionEnum("USED_EXCELLENT"), "USED_EXCELLENT");
+});
+
+Deno.test("shouldReleaseIncompatibleCategoryLock: preserves an explicit user-selected category", () => {
+  assertEquals(shouldReleaseIncompatibleCategoryLock(true, false), false);
+  assertEquals(shouldReleaseIncompatibleCategoryLock(true, true), false);
+  assertEquals(shouldReleaseIncompatibleCategoryLock(false, false), true);
+  assertEquals(shouldReleaseIncompatibleCategoryLock(false, true), false);
 });
 
 Deno.test("isCategoryCompatibleWithDomain: numismatic Piedfort is not grounded to a bullion leaf", () => {

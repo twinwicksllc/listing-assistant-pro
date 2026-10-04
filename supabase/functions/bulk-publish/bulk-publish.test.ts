@@ -20,13 +20,14 @@ Deno.test("normalizeConditionDescriptorToEnum: resolves jewelry/sporting conditi
     normalizeConditionDescriptorToEnum("Pre-owned"),
     "USED_EXCELLENT",
   );
+  // "Pre-owned - Excellent" (2990) is a REAL apparel/jewelry enum -> preserved.
   assertEquals(
     normalizeConditionDescriptorToEnum("Pre-owned Excellent"),
-    "USED_EXCELLENT",
+    "PRE_OWNED_EXCELLENT",
   );
   assertEquals(
     normalizeConditionDescriptorToEnum("PRE_OWNED_EXCELLENT"),
-    "USED_EXCELLENT",
+    "PRE_OWNED_EXCELLENT",
   );
 });
 
@@ -65,11 +66,12 @@ Deno.test("resolveConditionForCategory: LEGACY_CONDITION_MAP's own aliases still
 // of a real USED_* value, and LEGACY_CONDITION_MAP's exact-case lookup only
 // caught the exact-case enum string, not the lowercase text form a CSV/API
 // bulk row would actually contain.
-Deno.test("normalizeConditionDescriptorToEnum: PRE_OWNED_GOOD/FAIR/POOR text and enum forms both resolve to real USED_* enums", () => {
+Deno.test("normalizeConditionDescriptorToEnum: only PRE_OWNED_GOOD/POOR are corrected; PRE_OWNED_FAIR is a real enum", () => {
   assertEquals(normalizeConditionDescriptorToEnum("pre-owned good"), "USED_EXCELLENT");
-  assertEquals(normalizeConditionDescriptorToEnum("pre-owned fair"), "USED_GOOD");
+  assertEquals(normalizeConditionDescriptorToEnum("pre-owned fair"), "PRE_OWNED_FAIR");
   assertEquals(normalizeConditionDescriptorToEnum("PRE_OWNED_GOOD"), "USED_EXCELLENT");
   assertEquals(normalizeConditionDescriptorToEnum("PRE_OWNED_POOR"), "USED_ACCEPTABLE");
+  assertEquals(normalizeConditionDescriptorToEnum("PRE_OWNED_FAIR"), "PRE_OWNED_FAIR");
 });
 
 Deno.test("resolveConditionForCategory: 'Pre-owned good' (bulk CSV text form) resolves to USED_EXCELLENT, never the fake PRE_OWNED_GOOD enum", async () => {
@@ -82,4 +84,37 @@ Deno.test("resolveConditionForCategory: a legacy stored PRE_OWNED_GOOD enum valu
   const result = await resolveConditionForCategory("PRE_OWNED_GOOD", "");
   assertEquals(result.conditionEnum, "USED_EXCELLENT");
   assertEquals(result.conditionId, 3000);
+});
+
+Deno.test("resolveConditionForCategory: real pre-owned enums use the category's live condition IDs", async () => {
+  const liveConditions = [
+    { conditionId: 2990, conditionDescription: "Pre-owned - Excellent" },
+    { conditionId: 3000, conditionDescription: "Pre-owned - Good" },
+    { conditionId: 3010, conditionDescription: "Pre-owned - Fair" },
+  ];
+  const excellent = await resolveConditionForCategory(
+    "PRE_OWNED_EXCELLENT",
+    "261994",
+    liveConditions,
+  );
+  const fair = await resolveConditionForCategory(
+    "PRE_OWNED_FAIR",
+    "261994",
+    liveConditions,
+  );
+
+  assertEquals(excellent.conditionEnum, "PRE_OWNED_EXCELLENT");
+  assertEquals(excellent.conditionId, 2990);
+  assertEquals(fair.conditionEnum, "PRE_OWNED_FAIR");
+  assertEquals(fair.conditionId, 3010);
+});
+
+Deno.test("resolveConditionForCategory: remaps a pre-owned grade unsupported by the live category policy", async () => {
+  const result = await resolveConditionForCategory("PRE_OWNED_FAIR", "3377", [
+    { conditionId: 2750, conditionDescription: "Graded" },
+    { conditionId: 4000, conditionDescription: "Ungraded" },
+  ]);
+
+  assertEquals(result.conditionEnum, "USED_VERY_GOOD");
+  assertEquals(result.conditionId, 4000);
 });
