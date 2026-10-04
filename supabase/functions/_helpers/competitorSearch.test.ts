@@ -950,6 +950,19 @@ Deno.test("computeCompStats: price-anchor filter removes an item far outside 0.1
   assertEquals(stats.cleanPrices.includes(0.95), false);
 });
 
+Deno.test("computeCompStats: rejects an entirely price-mismatched comp set instead of restoring it", () => {
+  const stats = computeCompStats({
+    prices: Array.from({ length: 50 }, () => 0.99),
+    yourPrice: 179,
+  });
+  assertEquals(stats.cleanPrices, []);
+  assertEquals(stats.avgPrice, 0);
+  assertEquals(stats.minPrice, 0);
+  assertEquals(stats.maxPrice, 0);
+  assertEquals(stats.medianPrice, 0);
+  assertEquals(stats.priceDelta, null);
+});
+
 Deno.test("computeCompStats: priceDistribution is non-empty for a real price set", () => {
   const stats = computeCompStats({ prices: [10, 20, 30, 40, 50], yourPrice: null });
   assertEquals(stats.priceDistribution.length > 0, true);

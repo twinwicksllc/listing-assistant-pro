@@ -299,6 +299,17 @@ Deno.test("normalizeConditionDescriptorToEnum: PRE_OWNED_GOOD/FAIR/POOR are corr
   assertEquals(normalizeConditionDescriptorToEnum("pre-owned fair"), "USED_GOOD");
 });
 
+Deno.test("normalizeConditionDescriptorToEnum: PRE_OWNED_EXCELLENT is the real USED_EXCELLENT enum", () => {
+  assertEquals(
+    normalizeConditionDescriptorToEnum("PRE_OWNED_EXCELLENT"),
+    "USED_EXCELLENT",
+  );
+  assertEquals(
+    normalizeConditionDescriptorToEnum("Pre-owned Excellent"),
+    "USED_EXCELLENT",
+  );
+});
+
 // Regression coverage for a live production incident (2026-09-26): eBay's
 // official condition-id-values docs list "New/Factory Sealed" (conditionId
 // 1000, ConditionEnum NEW) and "Open Box/Used" (conditionId 3000,

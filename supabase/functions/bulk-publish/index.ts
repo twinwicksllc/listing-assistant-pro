@@ -77,6 +77,7 @@ const LEGACY_CONDITION_MAP: Record<string, string> = {
   VERY_GOOD_REFURBISHED: "USED_VERY_GOOD",
   GOOD_REFURBISHED: "USED_VERY_GOOD",
   PRE_OWNED_GOOD: "USED_EXCELLENT",
+  PRE_OWNED_EXCELLENT: "USED_EXCELLENT",
   PRE_OWNED_FAIR: "USED_GOOD",
   PRE_OWNED_POOR: "USED_ACCEPTABLE",
   New: "NEW",
@@ -146,6 +147,7 @@ export function normalizeConditionDescriptorToEnum(
     "new without tags": "NEW_OTHER",
     "new with defects": "NEW_WITH_DEFECTS",
     "pre-owned": "USED_EXCELLENT",
+    "pre-owned excellent": "USED_EXCELLENT",
   };
 
   const resolved = aliases[lowered] ??
@@ -159,6 +161,7 @@ export function normalizeConditionDescriptorToEnum(
   // phrase aliases above don't match. Mirrored in ebay-publish/publish-
   // helpers.ts's copy of this function.
   const FAKE_ENUM_CORRECTIONS: Record<string, string> = {
+    PRE_OWNED_EXCELLENT: "USED_EXCELLENT",
     PRE_OWNED_GOOD: "USED_EXCELLENT",
     PRE_OWNED_FAIR: "USED_GOOD",
     PRE_OWNED_POOR: "USED_ACCEPTABLE",

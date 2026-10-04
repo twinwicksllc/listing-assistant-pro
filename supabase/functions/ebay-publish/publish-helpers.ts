@@ -183,6 +183,7 @@ export function normalizeConditionDescriptorToEnum(
     // regex fallback (e.g. from eBay's own condition description text
     // "Pre-owned - Good", whose punctuation doesn't match this key exactly).
     "pre-owned good": "USED_EXCELLENT",
+    "pre-owned excellent": "USED_EXCELLENT",
     "pre-owned fair": "USED_GOOD",
     "pre-owned poor": "USED_ACCEPTABLE",
     "digital good": "DIGITAL_GOOD",
@@ -228,6 +229,7 @@ export function normalizeConditionDescriptorToEnum(
   // which the lowercase phrase aliases above don't catch because
   // "PRE_OWNED_GOOD".toLowerCase() = "pre_owned_good", not "pre-owned good".
   const FAKE_ENUM_CORRECTIONS: Record<string, string> = {
+    PRE_OWNED_EXCELLENT: "USED_EXCELLENT",
     PRE_OWNED_GOOD: "USED_EXCELLENT",
     PRE_OWNED_FAIR: "USED_GOOD",
     PRE_OWNED_POOR: "USED_ACCEPTABLE",
