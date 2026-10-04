@@ -50,6 +50,8 @@ describe("normalizeEbayConditionDescription", () => {
   test.each([
     ["Pre-owned - Good", "USED_EXCELLENT"],
     ["Pre-owned Good", "USED_EXCELLENT"],
+    ["PRE_OWNED_EXCELLENT", "USED_EXCELLENT"],
+    ["Pre-owned Excellent", "USED_EXCELLENT"],
     ["pre-owned good", "USED_EXCELLENT"],
     ["Pre-owned - Poor", "USED_ACCEPTABLE"],
     ["PRE_OWNED_GOOD", "USED_EXCELLENT"],

@@ -154,7 +154,7 @@ export const GENERIC_CONDITION_LABELS: Record<string, string> = {
   USED_GOOD: "Used – Good",
   USED_ACCEPTABLE: "Used – Acceptable",
   PRE_OWNED_GOOD: "Used – Excellent",
-  PRE_OWNED_FAIR: "Used – Acceptable",
+  PRE_OWNED_FAIR: "Pre-owned – Fair",
   EXCELLENT_REFURBISHED: "Used – Excellent",
   VERY_GOOD_REFURBISHED: "Used – Very Good",
   GOOD_REFURBISHED: "Used – Good",
