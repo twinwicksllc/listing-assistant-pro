@@ -137,6 +137,8 @@ export function normalizeConditionDescriptorToEnum(
     "pre-owned fair": "PRE_OWNED_FAIR",
     "pre-owned - fair": "PRE_OWNED_FAIR",
     "pre-owned poor": "USED_ACCEPTABLE",
+    ungraded: "USED_VERY_GOOD",
+    graded: "LIKE_NEW",
     "digital good": "DIGITAL_GOOD",
     "certified pre-owned": "CERTIFIED_PRE_OWNED",
     remanufactured: "REMANUFACTURED",
@@ -223,6 +225,10 @@ async function fetchDynamicCategoryConditions(
 export async function resolveConditionForCategory(
   rawCondition: string,
   categoryId: string,
+  liveConditionsOverride?: Array<{
+    conditionId: number;
+    conditionDescription: string;
+  }>,
 ): Promise<{
   conditionEnum: string;
   conditionId: number;
@@ -247,9 +253,11 @@ export async function resolveConditionForCategory(
     .replace(/_/g, " ")
     .toLowerCase()
     .replace(/\b\w/g, (char: string) => char.toUpperCase());
+  const categorySpecificPreOwned = conditionEnum === "PRE_OWNED_EXCELLENT" ||
+    conditionEnum === "PRE_OWNED_FAIR";
 
   if (
-    (!conditionId ||
+    (categorySpecificPreOwned || !conditionId ||
       [
         "DIGITAL_GOOD",
         "CERTIFIED_PRE_OWNED",
@@ -259,7 +267,8 @@ export async function resolveConditionForCategory(
       ].includes(conditionEnum)) &&
     categoryId
   ) {
-    const dynamicConditions = await fetchDynamicCategoryConditions(categoryId);
+    const dynamicConditions = liveConditionsOverride ??
+      await fetchDynamicCategoryConditions(categoryId);
     const match = dynamicConditions.find(
       (candidate) =>
         normalizeConditionDescriptorToEnum(candidate.conditionDescription) ===
@@ -270,6 +279,24 @@ export async function resolveConditionForCategory(
       conditionDescription = match.conditionDescription;
       conditionEnum = normalizeConditionDescriptorToEnum(match.conditionDescription) ||
         conditionEnum;
+    } else if (categorySpecificPreOwned && dynamicConditions.length > 0) {
+      const fallback = dynamicConditions.find((candidate) =>
+        normalizeConditionDescriptorToEnum(candidate.conditionDescription) ===
+          "USED_EXCELLENT"
+      ) ?? dynamicConditions.find((candidate) =>
+        normalizeConditionDescriptorToEnum(candidate.conditionDescription) ===
+          "USED_VERY_GOOD"
+      ) ?? dynamicConditions[0];
+      conditionEnum = normalizeConditionDescriptorToEnum(fallback.conditionDescription) ||
+        "USED_EXCELLENT";
+      conditionId = fallback.conditionId;
+      conditionDescription = fallback.conditionDescription;
+    } else if (categorySpecificPreOwned) {
+      // If metadata is temporarily unavailable, avoid sending the apparel-only
+      // 2990/3010 ID to an unknown category. 3000 is the broad pre-owned ID.
+      conditionEnum = "USED_EXCELLENT";
+      conditionId = CONDITION_ID_MAP.USED_EXCELLENT;
+      conditionDescription = "Pre-owned";
     }
   }
 

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { normalizeEbayConditionDescription } from "../types/listing";
+import { conditionIdFromCategoryPolicy } from "../lib/exportCSV";
 
 // Regression coverage for the 2026-09-16 ring-publish bug: eBay's Metadata
 // API returns human-readable conditionDescription strings, not Inventory API
@@ -50,8 +51,6 @@ describe("normalizeEbayConditionDescription", () => {
   test.each([
     ["Pre-owned - Good", "USED_EXCELLENT"],
     ["Pre-owned Good", "USED_EXCELLENT"],
-    ["PRE_OWNED_EXCELLENT", "USED_EXCELLENT"],
-    ["Pre-owned Excellent", "USED_EXCELLENT"],
     ["pre-owned good", "USED_EXCELLENT"],
     ["Pre-owned - Poor", "USED_ACCEPTABLE"],
     ["PRE_OWNED_GOOD", "USED_EXCELLENT"],
@@ -69,6 +68,25 @@ describe("normalizeEbayConditionDescription", () => {
     ["PRE_OWNED_FAIR", "PRE_OWNED_FAIR"],
   ])("preserves real apparel/jewelry enum %s -> %s", (input, expected) => {
     expect(normalizeEbayConditionDescription(input)).toBe(expected);
+  });
+
+  test("CSV export resolves real pre-owned IDs against the category policy", () => {
+    const ringPolicy = [
+      { conditionId: 2990, conditionDescription: "Pre-owned - Excellent" },
+      { conditionId: 3000, conditionDescription: "Pre-owned - Good" },
+      { conditionId: 3010, conditionDescription: "Pre-owned - Fair" },
+    ];
+    expect(
+      conditionIdFromCategoryPolicy("PRE_OWNED_EXCELLENT", ringPolicy),
+    ).toBe("2990");
+    expect(conditionIdFromCategoryPolicy("PRE_OWNED_FAIR", ringPolicy)).toBe(
+      "3010",
+    );
+    expect(
+      conditionIdFromCategoryPolicy("PRE_OWNED_FAIR", [
+        { conditionId: 4000, conditionDescription: "Ungraded" },
+      ]),
+    ).toBe("4000");
   });
 
   // Regression coverage for a live production incident (2026-09-26): eBay's

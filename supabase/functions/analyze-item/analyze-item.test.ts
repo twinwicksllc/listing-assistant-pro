@@ -6,6 +6,7 @@ import {
   isKnownWrongDomainForJewelry,
   isKnownWrongDomainForSneakers,
   normalizeGeneratedConditionEnum,
+  shouldReleaseIncompatibleCategoryLock,
 } from "./index.ts";
 
 // Regression coverage for Phase 2.5 of the misclassification-fix plan: the
@@ -98,6 +99,13 @@ Deno.test("normalizeGeneratedConditionEnum: corrects only the fake pre-owned tok
     "PRE_OWNED_FAIR",
   );
   assertEquals(normalizeGeneratedConditionEnum("USED_EXCELLENT"), "USED_EXCELLENT");
+});
+
+Deno.test("shouldReleaseIncompatibleCategoryLock: preserves an explicit user-selected category", () => {
+  assertEquals(shouldReleaseIncompatibleCategoryLock(true, false), false);
+  assertEquals(shouldReleaseIncompatibleCategoryLock(true, true), false);
+  assertEquals(shouldReleaseIncompatibleCategoryLock(false, false), true);
+  assertEquals(shouldReleaseIncompatibleCategoryLock(false, true), false);
 });
 
 Deno.test("isCategoryCompatibleWithDomain: numismatic Piedfort is not grounded to a bullion leaf", () => {

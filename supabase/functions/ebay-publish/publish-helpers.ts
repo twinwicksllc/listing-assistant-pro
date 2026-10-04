@@ -1898,6 +1898,7 @@ export function normalizeConditionForCategory(
         EXCELLENT_REFURBISHED: "LIKE_NEW",
         VERY_GOOD_REFURBISHED: "USED_VERY_GOOD",
         GOOD_REFURBISHED: "USED_VERY_GOOD",
+        PRE_OWNED_EXCELLENT: "USED_VERY_GOOD",
         PRE_OWNED_GOOD: "USED_VERY_GOOD",
         PRE_OWNED_FAIR: "USED_VERY_GOOD",
         PRE_OWNED_POOR: "USED_VERY_GOOD",
@@ -1914,6 +1915,18 @@ export function normalizeConditionForCategory(
       return { condition: mapped, corrected: true };
     }
   } else if (isBullion) {
+    const preOwnedFallbacks: Record<string, string> = {
+      PRE_OWNED_EXCELLENT: "USED_EXCELLENT",
+      PRE_OWNED_FAIR: "USED_GOOD",
+    };
+    if (preOwnedFallbacks[condition]) {
+      const mapped = preOwnedFallbacks[condition];
+      console.log(
+        `normalizeConditionForCategory: bullion category ${categoryId} — ${condition} -> ${mapped}`,
+      );
+      return { condition: mapped, corrected: true };
+    }
+
     // Bullion: allow everything except LIKE_NEW
     if (condition === "LIKE_NEW") {
       console.log(
@@ -1948,6 +1961,7 @@ export function normalizeConditionForCategory(
         USED_VERY_GOOD: "USED_VERY_GOOD",
         USED_GOOD: "USED_GOOD",
         USED_ACCEPTABLE: "USED_ACCEPTABLE",
+        PRE_OWNED_EXCELLENT: "USED_VERY_GOOD",
         PRE_OWNED_GOOD: "USED_GOOD",
         PRE_OWNED_FAIR: "USED_ACCEPTABLE",
         PRE_OWNED_POOR: "USED_ACCEPTABLE",
@@ -1980,6 +1994,7 @@ export function normalizeConditionForCategory(
         USED_VERY_GOOD: "USED_VERY_GOOD",
         USED_GOOD: "USED_GOOD",
         USED_ACCEPTABLE: "USED_ACCEPTABLE",
+        PRE_OWNED_EXCELLENT: "LIKE_NEW",
         PRE_OWNED_GOOD: "USED_GOOD",
         PRE_OWNED_FAIR: "USED_ACCEPTABLE",
         PRE_OWNED_POOR: "USED_ACCEPTABLE",

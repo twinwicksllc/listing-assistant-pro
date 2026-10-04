@@ -1927,6 +1927,12 @@ export async function attemptItemsRefresh(params: {
     prices: bulkResult.items.map((it) => it.price),
     yourPrice,
   });
+  if (stats.cleanPrices.length < 3) {
+    const reason = `only ${stats.cleanPrices.length} comparable prices survived filtering (need 3+)`;
+    console.log(`[competitorSearch] attemptItemsRefresh: ${reason} — falling through to full search`);
+    logItemsRefreshOutcome(supabase, "rejected_usability", listingId, reason);
+    return null;
+  }
 
   // Build compItemIds from the CLEANED item set, not bulkResult.foundItemIds
   // -- foundItemIds is everything getItems returned, before the price-anchor

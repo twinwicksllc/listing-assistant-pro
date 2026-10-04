@@ -41,6 +41,9 @@ describe("getConditionLabel domain awareness", () => {
 
     const newLabel = getConditionLabel("NEW", "diecast_toys");
     expect(newLabel).not.toMatch(/uncirculated/i);
+    expect(getConditionLabel("PRE_OWNED_FAIR", "jewelry")).toBe(
+      "Pre-owned – Fair",
+    );
   });
 
   it("falls back to CONDITION_LABELS for keys with no generic override", () => {

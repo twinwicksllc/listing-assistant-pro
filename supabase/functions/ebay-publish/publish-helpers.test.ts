@@ -10,6 +10,7 @@ import {
   HARDCODED_COLLECTIBLE_CATEGORY_IDS,
   HARDCODED_TRADING_CARD_CATEGORY_IDS,
   normalizeConditionDescriptorToEnum,
+  normalizeConditionForCategory,
   verifyOrRerouteLeafCategory,
 } from "./publish-helpers.ts";
 
@@ -322,6 +323,17 @@ Deno.test("CONDITION_ID_MAP: real apparel/jewelry pre-owned enums carry their ow
   // Legacy fake aliases still resolve to a valid conditionId.
   assertEquals(CONDITION_ID_MAP.PRE_OWNED_GOOD, 3000);
   assertEquals(CONDITION_ID_MAP.PRE_OWNED_POOR, 6000);
+});
+
+Deno.test("normalizeConditionForCategory: apparel/jewelry enums do not leak into bullion", () => {
+  assertEquals(
+    normalizeConditionForCategory("PRE_OWNED_EXCELLENT", "177653", undefined, "bullion"),
+    { condition: "USED_EXCELLENT", corrected: true },
+  );
+  assertEquals(
+    normalizeConditionForCategory("PRE_OWNED_FAIR", "177653", undefined, "bullion"),
+    { condition: "USED_GOOD", corrected: true },
+  );
 });
 
 // Regression coverage for a live production incident (2026-09-26): eBay's

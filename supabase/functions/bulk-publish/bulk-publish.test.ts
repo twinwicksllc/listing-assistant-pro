@@ -85,3 +85,36 @@ Deno.test("resolveConditionForCategory: a legacy stored PRE_OWNED_GOOD enum valu
   assertEquals(result.conditionEnum, "USED_EXCELLENT");
   assertEquals(result.conditionId, 3000);
 });
+
+Deno.test("resolveConditionForCategory: real pre-owned enums use the category's live condition IDs", async () => {
+  const liveConditions = [
+    { conditionId: 2990, conditionDescription: "Pre-owned - Excellent" },
+    { conditionId: 3000, conditionDescription: "Pre-owned - Good" },
+    { conditionId: 3010, conditionDescription: "Pre-owned - Fair" },
+  ];
+  const excellent = await resolveConditionForCategory(
+    "PRE_OWNED_EXCELLENT",
+    "261994",
+    liveConditions,
+  );
+  const fair = await resolveConditionForCategory(
+    "PRE_OWNED_FAIR",
+    "261994",
+    liveConditions,
+  );
+
+  assertEquals(excellent.conditionEnum, "PRE_OWNED_EXCELLENT");
+  assertEquals(excellent.conditionId, 2990);
+  assertEquals(fair.conditionEnum, "PRE_OWNED_FAIR");
+  assertEquals(fair.conditionId, 3010);
+});
+
+Deno.test("resolveConditionForCategory: remaps a pre-owned grade unsupported by the live category policy", async () => {
+  const result = await resolveConditionForCategory("PRE_OWNED_FAIR", "3377", [
+    { conditionId: 2750, conditionDescription: "Graded" },
+    { conditionId: 4000, conditionDescription: "Ungraded" },
+  ]);
+
+  assertEquals(result.conditionEnum, "USED_VERY_GOOD");
+  assertEquals(result.conditionId, 4000);
+});

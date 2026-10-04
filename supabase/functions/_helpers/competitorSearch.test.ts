@@ -1142,6 +1142,32 @@ Deno.test("attemptItemsRefresh: comp_item_ids reflects the CLEANED item set, exc
   assertEquals(savedIds.includes("d"), false);
 });
 
+Deno.test("attemptItemsRefresh: rejects a price-mismatched set without caching empty stats", async () => {
+  const { client, upserted } = fakeSupabaseForItemsRefresh({
+    row: { comp_item_ids: ["a", "b", "c"], search_query: "q", gemini_search_query: null },
+  });
+  const result = await withEbayCreds(() =>
+    withMockedFetch(
+      mockTokenAndItemsFetch({
+        a: { itemId: "a", price: { value: "0.99" }, title: "A" },
+        b: { itemId: "b", price: { value: "1.25" }, title: "B" },
+        c: { itemId: "c", price: { value: "1.50" }, title: "C" },
+      }),
+      () =>
+        attemptItemsRefresh({
+          supabase: client,
+          userId: "u1",
+          listingId: "l1",
+          ebayEnv: "production",
+          yourPrice: 179,
+        }),
+    )
+  );
+
+  assertEquals(result, null);
+  assertEquals(upserted.length, 0);
+});
+
 Deno.test("attemptItemsRefresh: an upsert error is inspected, not silently treated as a successful save (Copilot review, PR #600)", async () => {
   // The Supabase client reports a failed write via a returned `error`, not
   // a throw -- an implementation that only wraps the await in try/catch

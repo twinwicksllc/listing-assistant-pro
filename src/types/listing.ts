@@ -389,42 +389,36 @@ const ELECTRONICS_CONDITION_OPTIONS: ConditionOption[] = [
   { value: "FOR_PARTS_OR_NOT_WORKING", label: "For parts or not working" },
 ];
 
-// 2026-09-20: removed PRE_OWNED_GOOD/PRE_OWNED_FAIR (not real eBay
-// ConditionEnum values -- confirmed against eBay's condition-id-values docs;
-// caused live errorId 2004 "Could not serialize field [condition]" on
-// publish). Mapped to their real USED_* equivalents, matching the same fix
-// already applied to JEWELRY_SPORTING_CONDITION_OPTIONS below on 2026-09-16.
+// PRE_OWNED_EXCELLENT (2990) and PRE_OWNED_FAIR (3010) are real eBay enum
+// values for apparel categories. "Pre-owned - Good" maps to USED_EXCELLENT
+// (3000), so it remains distinct only as a display label in this fallback.
 const CLOTHING_CONDITION_OPTIONS: ConditionOption[] = [
   { value: "NEW", label: "New with tags" },
   { value: "NEW_OTHER", label: "New without tags" },
   { value: "NEW_WITH_DEFECTS", label: "New with imperfections" },
-  { value: "USED_EXCELLENT", label: "Pre-owned - Excellent" },
-  { value: "USED_GOOD", label: "Pre-owned - Good" },
-  { value: "USED_ACCEPTABLE", label: "Pre-owned - Fair" },
+  { value: "PRE_OWNED_EXCELLENT", label: "Pre-owned - Excellent" },
+  { value: "USED_EXCELLENT", label: "Pre-owned - Good" },
+  { value: "PRE_OWNED_FAIR", label: "Pre-owned - Fair" },
 ];
 
 const SHOES_CONDITION_OPTIONS: ConditionOption[] = [
   { value: "NEW", label: "New with box" },
   { value: "NEW_OTHER", label: "New without box" },
   { value: "NEW_WITH_DEFECTS", label: "New with defects" },
-  { value: "USED_EXCELLENT", label: "Pre-owned - Excellent" },
-  { value: "USED_GOOD", label: "Pre-owned - Good" },
-  { value: "USED_ACCEPTABLE", label: "Pre-owned - Fair" },
+  { value: "PRE_OWNED_EXCELLENT", label: "Pre-owned - Excellent" },
+  { value: "USED_EXCELLENT", label: "Pre-owned - Good" },
+  { value: "PRE_OWNED_FAIR", label: "Pre-owned - Fair" },
 ];
 
-// 2026-09-16: previously included PRE_OWNED_GOOD/PRE_OWNED_FAIR (not real eBay
-// ConditionEnum values — confirmed against eBay's own condition-policy API and
-// documentation) and CERTIFIED_REFURBISHED/EXCELLENT_REFURBISHED/
-// VERY_GOOD_REFURBISHED/GOOD_REFURBISHED (real values, but an electronics/
-// appliance refurb tier eBay's condition policy does not accept on Jewelry &
-// Watches or Sporting Goods leaves). Narrowed to the four values eBay's
-// Metadata API actually returns for a Fine Jewelry > Rings leaf (261994):
-// New with tags / New without tags / New with defects / Pre-owned.
+// Static fallback mirrors the six conditions returned for Fine Jewelry >
+// Rings (261994). Dynamic category metadata remains preferred when available.
 const JEWELRY_SPORTING_CONDITION_OPTIONS: ConditionOption[] = [
   { value: "NEW", label: "New with tags" },
   { value: "NEW_OTHER", label: "New without tags" },
   { value: "NEW_WITH_DEFECTS", label: "New with defects" },
-  { value: "USED_EXCELLENT", label: "Pre-owned" },
+  { value: "PRE_OWNED_EXCELLENT", label: "Pre-owned - Excellent" },
+  { value: "USED_EXCELLENT", label: "Pre-owned - Good" },
+  { value: "PRE_OWNED_FAIR", label: "Pre-owned - Fair" },
 ];
 
 const UNDERWEAR_CONDITION_OPTIONS: ConditionOption[] = [

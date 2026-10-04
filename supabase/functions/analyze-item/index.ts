@@ -459,6 +459,13 @@ export function isCategoryCompatibleWithDomain(
   }
 }
 
+export function shouldReleaseIncompatibleCategoryLock(
+  isUserLocked: boolean,
+  isCompatible: boolean,
+): boolean {
+  return !isUserLocked && !isCompatible;
+}
+
 serve(async (req: Request) => {
   const startTime = Date.now();
   const invocationId = crypto.randomUUID().slice(0, 8);
@@ -2542,15 +2549,17 @@ Seller's note: "${voiceNote}"`;
     // If invalid, try to reselect from alternatives or lookup suggestions.
     try {
       if (listing.ebayCategoryId) {
-        if (
-          lockedCategoryId &&
-          !isCategoryCompatibleWithDomain(
+        const lockedCategoryIsCompatible = !lockedCategoryId ||
+          isCategoryCompatibleWithDomain(
             identification.domain,
             lockedCategoryId,
             lockedCategoryName,
             lockedBreadcrumb,
             `${itemCategoryText} ${listing.title ?? ""}`,
-          )
+          );
+        if (
+          lockedCategoryId &&
+          shouldReleaseIncompatibleCategoryLock(!!userCategoryId, lockedCategoryIsCompatible)
         ) {
           console.warn(
             `analyze-item: releasing incompatible lock ${lockedCategoryId} for domain ${identification.domain}`,

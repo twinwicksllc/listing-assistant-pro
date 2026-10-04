@@ -9,17 +9,16 @@ import { getConditionsForCategory } from "../types/listing";
 // ring/jewelry listing, which includes "For Parts or Not Working" and other options
 // eBay does not accept on that leaf.
 //
-// The fallback list itself was also wrong (fixed same day): PRE_OWNED_GOOD/
-// PRE_OWNED_FAIR are not real eBay ConditionEnum values, and the *_REFURBISHED
-// tiers belong to electronics/appliances, not jewelry. Narrowed to the four
-// values eBay's own Metadata API returns for category 261994 (Fine Jewelry >
-// Rings): New with tags / New without tags / New with defects / Pre-owned.
+// The fallback list mirrors the six condition values returned by eBay's
+// Metadata API for category 261994 (Fine Jewelry > Rings).
 
 const RING_VALUES = new Set([
   "NEW",
   "NEW_OTHER",
   "NEW_WITH_DEFECTS",
+  "PRE_OWNED_EXCELLENT",
   "USED_EXCELLENT",
+  "PRE_OWNED_FAIR",
 ]);
 
 describe("getConditionsForCategory jewelry breadcrumbs", () => {
@@ -31,6 +30,9 @@ describe("getConditionsForCategory jewelry breadcrumbs", () => {
     );
     const values = options.map((o) => o.value);
     expect(new Set(values)).toEqual(RING_VALUES);
+    expect(options.find((o) => o.value === "PRE_OWNED_FAIR")?.label).toBe(
+      "Pre-owned - Fair",
+    );
     expect(values).not.toContain("FOR_PARTS_OR_NOT_WORKING");
   });
 
@@ -69,5 +71,21 @@ describe("getConditionsForCategory jewelry breadcrumbs", () => {
     );
     const values = options.map((o) => o.value);
     expect(values).not.toEqual([...RING_VALUES]);
+  });
+
+  test("clothing and shoe static fallbacks use the real Excellent/Fair enums", () => {
+    for (const breadcrumb of [
+      "Clothing, Shoes & Accessories > Clothing > Dresses",
+      "Clothing, Shoes & Accessories > Shoes > Women's Shoes",
+    ]) {
+      const options = getConditionsForCategory("12345", undefined, breadcrumb);
+      expect(options.map((option) => option.value)).toContain(
+        "PRE_OWNED_EXCELLENT",
+      );
+      expect(options.map((option) => option.value)).toContain("PRE_OWNED_FAIR");
+      expect(
+        options.find((option) => option.label === "Pre-owned - Good")?.value,
+      ).toBe("USED_EXCELLENT");
+    }
   });
 });
