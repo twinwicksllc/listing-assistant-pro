@@ -5,6 +5,7 @@ import {
   isKnownWrongDomainForAutoParts,
   isKnownWrongDomainForJewelry,
   isKnownWrongDomainForSneakers,
+  normalizeGeneratedConditionEnum,
 } from "./index.ts";
 
 // Regression coverage for Phase 2.5 of the misclassification-fix plan: the
@@ -73,6 +74,52 @@ Deno.test("isCategoryCompatibleWithDomain: coins_bullion still delegates to isCo
   assertEquals(
     isCategoryCompatibleWithDomain("coins_bullion", "12345", "Action Figures", "Toys > Action Figures"),
     false,
+  );
+});
+
+Deno.test("normalizeGeneratedConditionEnum: corrects the model's fake pre-owned condition tokens", () => {
+  assertEquals(
+    normalizeGeneratedConditionEnum("PRE_OWNED_EXCELLENT"),
+    "USED_EXCELLENT",
+  );
+  assertEquals(
+    normalizeGeneratedConditionEnum("Pre-owned - Excellent"),
+    "USED_EXCELLENT",
+  );
+  assertEquals(normalizeGeneratedConditionEnum("USED_EXCELLENT"), "USED_EXCELLENT");
+});
+
+Deno.test("isCategoryCompatibleWithDomain: numismatic Piedfort is not grounded to a bullion leaf", () => {
+  const title = "2022 Australian Wildlife $2 .9999 Silver BU Piedfort Coin";
+  assertEquals(
+    isCategoryCompatibleWithDomain(
+      "coins_bullion",
+      "177653",
+      "Coins",
+      "Coins & Paper Money > Bullion > Silver > Coins",
+      title,
+    ),
+    false,
+  );
+  assertEquals(
+    isCategoryCompatibleWithDomain(
+      "coins_bullion",
+      "3375",
+      "Commemorative",
+      "Coins & Paper Money > Coins: World > Australia & Oceania > Australia > Commemorative",
+      title,
+    ),
+    true,
+  );
+  assertEquals(
+    isCategoryCompatibleWithDomain(
+      "coins_bullion",
+      "177653",
+      "Coins",
+      "Coins & Paper Money > Bullion > Silver > Coins",
+      "1 oz American Silver Eagle bullion coin",
+    ),
+    true,
   );
 });
 

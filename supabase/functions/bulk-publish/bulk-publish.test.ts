@@ -20,6 +20,14 @@ Deno.test("normalizeConditionDescriptorToEnum: resolves jewelry/sporting conditi
     normalizeConditionDescriptorToEnum("Pre-owned"),
     "USED_EXCELLENT",
   );
+  assertEquals(
+    normalizeConditionDescriptorToEnum("Pre-owned Excellent"),
+    "USED_EXCELLENT",
+  );
+  assertEquals(
+    normalizeConditionDescriptorToEnum("PRE_OWNED_EXCELLENT"),
+    "USED_EXCELLENT",
+  );
 });
 
 Deno.test("resolveConditionForCategory: normalizes a raw human-readable descriptor, not just a legacy label", async () => {

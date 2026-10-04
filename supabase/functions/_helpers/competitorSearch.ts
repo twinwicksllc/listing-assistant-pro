@@ -1600,8 +1600,12 @@ function priceAnchorFilter(
       } price-mismatched items)`,
     );
   }
-  // Fall back to unfiltered if we filtered too aggressively (< 2 items remain)
-  return filtered.length >= 2 ? filtered : prices;
+  if (filtered.length < 2 && filtered.length !== prices.length) {
+    console.warn(
+      `[competitorSearch] Price-anchor filter left only ${filtered.length} comparable result(s); rejecting the unanchored remainder`,
+    );
+  }
+  return filtered;
 }
 
 // ----------------------------------------------------------------
@@ -1733,6 +1737,17 @@ export function computeCompStats(params: {
   const { prices, yourPrice } = params;
   const anchoredPrices = priceAnchorFilter(prices, yourPrice);
   const cleanPrices = removeOutliers(anchoredPrices);
+  if (cleanPrices.length === 0) {
+    return {
+      avgPrice: 0,
+      minPrice: 0,
+      maxPrice: 0,
+      medianPrice: 0,
+      priceDelta: null,
+      priceDistribution: [],
+      cleanPrices: [],
+    };
+  }
   const avgPrice = cleanPrices.reduce((s, p) => s + p, 0) / cleanPrices.length;
   const minPrice = Math.min(...cleanPrices);
   const maxPrice = Math.max(...cleanPrices);

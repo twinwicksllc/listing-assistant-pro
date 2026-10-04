@@ -100,6 +100,25 @@ export function isCoinDomainCategory(
   return ["45243", "256", "257", "532", "173685"].includes(categoryId);
 }
 
+function isNumismaticCollectibleCoin(itemText: string | null | undefined): boolean {
+  return /\b(piedfort|commemorative|proof(?:-like)?|colou?rized|high[- ]relief|limited[- ]mintage|nclt)\b/i
+    .test(itemText ?? "");
+}
+
+const GENERATED_CONDITION_ENUM_CORRECTIONS: Record<string, string> = {
+  PRE_OWNED_EXCELLENT: "USED_EXCELLENT",
+  PRE_OWNED_GOOD: "USED_EXCELLENT",
+  PRE_OWNED_FAIR: "USED_GOOD",
+  PRE_OWNED_POOR: "USED_ACCEPTABLE",
+};
+
+export function normalizeGeneratedConditionEnum(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const token = raw.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "");
+  return GENERATED_CONDITION_ENUM_CORRECTIONS[token] ?? raw;
+}
+
 // ─── Sneakers / Auto Parts domain-mismatch guardrails ─────────────────────
 // Lightweight keyword-based checks (mirroring isCoinDomainCategory above) used
 // ONLY to detect when a lookup/grounding candidate is clearly in the wrong
@@ -265,6 +284,11 @@ function resolveDomainFallbackCategory(
   if (identification.domain !== "coins_bullion") return null;
 
   const combined = `${identification.itemName ?? ""} ${(identification.keywords ?? []).join(" ")}`.toLowerCase();
+  // A strong numismatic finish/issue cue is inconsistent with the generic
+  // precious-metal fallback. Leave these to the country-aware taxonomy lookup
+  // instead of locking a collector coin into a Bullion leaf.
+  if (isNumismaticCollectibleCoin(combined)) return null;
+
   let metal = identification.metalType ?? "none";
 
   // If Pass 1 metal detection missed, infer from explicit text markers so
@@ -397,12 +421,17 @@ export function isCategoryCompatibleWithDomain(
   categoryId: string | null | undefined,
   categoryName: string | null | undefined,
   breadcrumb: string | null | undefined,
+  itemText?: string | null,
 ): boolean {
   if (!domain || !categoryId) return true;
 
   switch (domain) {
     case "coins_bullion":
-      return isCoinDomainCategory(categoryId, categoryName, breadcrumb);
+      if (!isCoinDomainCategory(categoryId, categoryName, breadcrumb)) return false;
+      return !(
+        isNumismaticCollectibleCoin(itemText) &&
+        /\bbullion\b/i.test(`${categoryName ?? ""} ${breadcrumb ?? ""}`)
+      );
     case "sneakers":
       // Soft guardrail (unlike the coin hard-allowlist): reject only if it's
       // a KNOWN wrong domain (e.g. action figures, posters). Anything
@@ -983,6 +1012,7 @@ serve(async (req: Request) => {
     let lockedBreadcrumb: string | null = null;
     let lookupAlternatives: any[] = [];
     let fetchedMetadataCategoryId: string | null = null;
+    const itemCategoryText = `${identification.itemName ?? ""} ${(identification.keywords ?? []).join(" ")}`;
 
     // If the user explicitly provided a category ID, use it as an absolute lock.
     // Skip the lookup pipeline entirely — the user's choice always wins.
@@ -1070,6 +1100,7 @@ serve(async (req: Request) => {
                   prePassResult.groundedCategoryId,
                   groundedCategoryName,
                   groundedBreadcrumb,
+                  itemCategoryText,
                 )
               ) {
                 // Grounded leaf verified — use as a strong (but not absolute) lock
@@ -1174,6 +1205,7 @@ serve(async (req: Request) => {
                   lookupData.categoryId,
                   lookupData.categoryName,
                   lookupData.breadcrumb,
+                  itemCategoryText,
                 );
 
                 if (isDomainCompatible) {
@@ -1261,6 +1293,16 @@ serve(async (req: Request) => {
           `\n- **DOMAIN-RESOLVED CATEGORY** (from item type + metal detection): **${fallback.categoryId}** — ${fallback.breadcrumb}. Override only if you have clear visual evidence the item belongs elsewhere.`;
         console.log(
           `[${invocationId}] Domain fallback lock: ${fallback.categoryId} (${fallback.breadcrumb}) — domain=${identification.domain}, metal=${identification.metalType}, item=${identification.itemName}`,
+        );
+      } else if (
+        isNumismaticCollectibleCoin(
+          `${identification.itemName ?? ""} ${(identification.keywords ?? []).join(" ")}`,
+        )
+      ) {
+        categoryHints +=
+          "\n- **NUMISMATIC COLLECTIBLE**: the item has a collectible issue/strike cue (such as Piedfort, proof, or commemorative). Do not route it to a Bullion category; use the verified country-specific or commemorative World Coins leaf instead.";
+        console.log(
+          `[${invocationId}] Numismatic subtype detected; leaving category unlocked for country-aware taxonomy lookup`,
         );
       }
     }
@@ -1677,6 +1719,7 @@ Seller's note: "${voiceNote}"`;
       // on publish). Mirrored in ebay-publish/publish-helpers.ts and
       // bulk-publish/index.ts.
       "pre-owned good": "USED_EXCELLENT",
+      "pre-owned excellent": "USED_EXCELLENT",
       "pre-owned fair": "USED_GOOD",
       "pre-owned poor": "USED_ACCEPTABLE",
       "digital good": "DIGITAL_GOOD",
@@ -1712,6 +1755,7 @@ Seller's note: "${voiceNote}"`;
     // option outright. Mirrored in ebay-publish/publish-helpers.ts and
     // bulk-publish/index.ts.
     const FAKE_ENUM_CORRECTIONS: Record<string, string> = {
+      PRE_OWNED_EXCELLENT: "USED_EXCELLENT",
       PRE_OWNED_GOOD: "USED_EXCELLENT",
       PRE_OWNED_FAIR: "USED_GOOD",
       PRE_OWNED_POOR: "USED_ACCEPTABLE",
@@ -2283,6 +2327,14 @@ Seller's note: "${voiceNote}"`;
       listing.priceMax = listing.price.amount;
     }
 
+    const rawCondition = listing.condition;
+    listing.condition = normalizeGeneratedConditionEnum(listing.condition);
+    if (rawCondition && listing.condition !== rawCondition) {
+      console.warn(
+        `[${invocationId}] Normalized generated condition ${rawCondition} -> ${listing.condition}`,
+      );
+    }
+
     console.log(`[${invocationId}] 🎯 Gemini returned:`, {
       title: listing.title?.slice(0, 60),
       metalType: listing.metalType,
@@ -2483,6 +2535,7 @@ Seller's note: "${voiceNote}"`;
             lockedCategoryId,
             lockedCategoryName,
             lockedBreadcrumb,
+            `${itemCategoryText} ${listing.title ?? ""}`,
           )
         ) {
           console.warn(
@@ -2819,6 +2872,7 @@ Seller's note: "${voiceNote}"`;
                 postLookupData.categoryId,
                 postLookupData.categoryName,
                 postLookupData.breadcrumb,
+                `${itemCategoryText} ${listing.title ?? ""} ${listing.categoryQuery ?? ""}`,
               );
 
               if (
@@ -3488,19 +3542,26 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
               );
 
               // Fallback logic: Use post-AI if pre-AI failed/returned 0
-              if (!competitorData || competitorDataSource === "none") {
+              if (
+                postAICount > 0 &&
+                (!competitorData || competitorDataSource === "none")
+              ) {
                 competitorData = postAICompData;
                 competitorDataSource = "post-ai";
                 console.log(
                   `[${invocationId}] Using post-AI comps as primary (pre-AI was empty/failed)`,
                 );
-              } else if (postAICount > preAICount) {
+              } else if (postAICount > 0 && postAICount > preAICount) {
                 // Post-AI found more competitors — prefer it for response
                 console.log(
                   `[${invocationId}] Post-AI comps found more results (${postAICount} vs ${preAICount}); using post-AI for response`,
                 );
                 competitorData = postAICompData;
                 competitorDataSource = "post-ai";
+              } else if (postAICount === 0) {
+                console.log(
+                  `[${invocationId}] Post-AI comp set rejected: no results survived price/relevance filters; keeping pre-AI data`,
+                );
               } else {
                 // Pre-AI is still primary but log that post-AI returned data
                 console.log(

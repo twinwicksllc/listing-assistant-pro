@@ -534,6 +534,8 @@ export function normalizeEbayConditionDescription(
     // ConditionEnum values, which eBay rejects with errorId 2004 on publish.
     // Mirrored in the three backend copies of this table.
     "pre-owned good": "USED_EXCELLENT",
+    "pre-owned excellent": "USED_EXCELLENT",
+    pre_owned_excellent: "USED_EXCELLENT",
     "pre-owned fair": "USED_GOOD",
     "pre-owned poor": "USED_ACCEPTABLE",
     "very good": "USED_VERY_GOOD",
@@ -585,6 +587,7 @@ export function normalizeEbayConditionDescription(
   // backend copies of this table (ebay-publish/publish-helpers.ts,
   // bulk-publish/index.ts, analyze-item/index.ts).
   const FAKE_ENUM_CORRECTIONS: Record<string, string> = {
+    PRE_OWNED_EXCELLENT: "USED_EXCELLENT",
     PRE_OWNED_GOOD: "USED_EXCELLENT",
     PRE_OWNED_FAIR: "USED_GOOD",
     PRE_OWNED_POOR: "USED_ACCEPTABLE",
