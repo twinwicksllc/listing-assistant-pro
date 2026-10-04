@@ -83,8 +83,14 @@ export const EBAY_CONDITION_ID_MAP: Record<string, number> = {
   USED_GOOD: 5000, // F-12 to VG-10 (heavily circulated)
   USED_ACCEPTABLE: 6000, // G-4 to G-6 (heavily worn)
   FOR_PARTS_OR_NOT_WORKING: 7000,
+  // Apparel / jewelry / watches / sporting-goods pre-owned grades. These are
+  // REAL eBay ConditionEnum values with their own conditionIds (2990, 3010).
+  PRE_OWNED_EXCELLENT: 2990,
+  PRE_OWNED_FAIR: 3010,
+  // PRE_OWNED_GOOD / PRE_OWNED_POOR have no eBay enum of their own; kept so old
+  // DB records still map to a valid conditionId (3000 = USED_EXCELLENT,
+  // 6000 = USED_ACCEPTABLE).
   PRE_OWNED_GOOD: 3000,
-  PRE_OWNED_FAIR: 5000,
   PRE_OWNED_POOR: 6000,
 };
 
@@ -117,9 +123,11 @@ export const CONDITION_LABELS: Record<string, string> = {
   USED_GOOD: "Used – Good (heavy wear)",
   USED_ACCEPTABLE: "Used – Acceptable (significant wear)",
   FOR_PARTS_OR_NOT_WORKING: "For Parts or Not Working",
+  // Apparel / jewelry pre-owned grades — real eBay enums (2990 / 3010)
+  PRE_OWNED_EXCELLENT: "Pre-owned – Excellent",
+  PRE_OWNED_FAIR: "Pre-owned – Fair",
   // Legacy value labels — kept so old DB records still display correctly
   PRE_OWNED_GOOD: "Used – Excellent (lightly used/circulated)",
-  PRE_OWNED_FAIR: "Used – Acceptable (significant wear)",
   PRE_OWNED_POOR: "For Parts or Not Working",
   EXCELLENT_REFURBISHED: "Used – Excellent (lightly used/circulated)",
   VERY_GOOD_REFURBISHED: "Used – Very Good (moderate wear)",
@@ -527,16 +535,21 @@ export function normalizeEbayConditionDescription(
     "like new": "LIKE_NEW",
     used: "USED_EXCELLENT",
     "pre-owned": "USED_EXCELLENT",
-    // eBay's live condition policy for some categories (e.g. Jewelry &
-    // Watches leaves) returns "Pre-owned - Good" / "Pre-owned - Fair" as the
-    // conditionDescription text. Without these aliases, the fallback mangle
-    // below would produce PRE_OWNED_GOOD/PRE_OWNED_FAIR -- NOT valid eBay
-    // ConditionEnum values, which eBay rejects with errorId 2004 on publish.
-    // Mirrored in the three backend copies of this table.
+    // eBay's live condition policy for apparel/jewelry/watches/sporting-goods
+    // categories returns "Pre-owned - Excellent" / "Pre-owned - Good" /
+    // "Pre-owned - Fair". "Pre-owned - Excellent" (2990 = PRE_OWNED_EXCELLENT)
+    // and "Pre-owned - Fair" (3010 = PRE_OWNED_FAIR) are REAL ConditionEnum
+    // values and must be preserved. "Pre-owned - Good" has no enum of its own —
+    // its conditionId 3000 maps to USED_EXCELLENT. Mirrored in the three
+    // backend copies of this table.
     "pre-owned good": "USED_EXCELLENT",
-    "pre-owned excellent": "USED_EXCELLENT",
-    pre_owned_excellent: "USED_EXCELLENT",
-    "pre-owned fair": "USED_GOOD",
+    "pre-owned - good": "USED_EXCELLENT",
+    "pre-owned excellent": "PRE_OWNED_EXCELLENT",
+    "pre-owned - excellent": "PRE_OWNED_EXCELLENT",
+    pre_owned_excellent: "PRE_OWNED_EXCELLENT",
+    "pre-owned fair": "PRE_OWNED_FAIR",
+    "pre-owned - fair": "PRE_OWNED_FAIR",
+    pre_owned_fair: "PRE_OWNED_FAIR",
     "pre-owned poor": "USED_ACCEPTABLE",
     "very good": "USED_VERY_GOOD",
     good: "USED_GOOD",
@@ -578,18 +591,13 @@ export function normalizeEbayConditionDescription(
     .replace(/[^A-Z0-9]+/g, "_")
     .replace(/^_|_$/g, "");
 
-  // Final catch-all: eBay's Metadata API returns "Pre-owned - Good" /
-  // "Pre-owned - Fair" (with a dash) for some categories, which the phrase
-  // aliases above don't match exactly (they key on the dash-free "pre-owned
-  // good" form) and which mangles to the fake enum PRE_OWNED_GOOD/FAIR --
-  // NOT a valid eBay ConditionEnum. Correct it here so this function can
-  // never emit one under any punctuation variant. Mirrored in the three
-  // backend copies of this table (ebay-publish/publish-helpers.ts,
-  // bulk-publish/index.ts, analyze-item/index.ts).
+  // Final catch-all: PRE_OWNED_GOOD and PRE_OWNED_POOR are NOT real eBay
+  // ConditionEnum values (3000's enum is USED_EXCELLENT; no "Pre-owned - Poor"
+  // grade exists), so correct them. PRE_OWNED_EXCELLENT (2990) and
+  // PRE_OWNED_FAIR (3010) ARE real apparel/jewelry enums and pass through.
+  // Mirrored in the three backend copies of this table.
   const FAKE_ENUM_CORRECTIONS: Record<string, string> = {
-    PRE_OWNED_EXCELLENT: "USED_EXCELLENT",
     PRE_OWNED_GOOD: "USED_EXCELLENT",
-    PRE_OWNED_FAIR: "USED_GOOD",
     PRE_OWNED_POOR: "USED_ACCEPTABLE",
   };
   return FAKE_ENUM_CORRECTIONS[mangled] ?? mangled;

@@ -66,8 +66,9 @@ const CONDITION_ID_MAP: Record<string, number> = {
   USED_VERY_GOOD: 4000,
   USED_GOOD: 5000,
   USED_ACCEPTABLE: 6000,
+  PRE_OWNED_EXCELLENT: 2990,
+  PRE_OWNED_FAIR: 3010,
   PRE_OWNED_GOOD: 3000,
-  PRE_OWNED_FAIR: 5000,
   PRE_OWNED_POOR: 6000,
   FOR_PARTS_OR_NOT_WORKING: 7000,
 };
@@ -76,9 +77,11 @@ const LEGACY_CONDITION_MAP: Record<string, string> = {
   EXCELLENT_REFURBISHED: "USED_EXCELLENT",
   VERY_GOOD_REFURBISHED: "USED_VERY_GOOD",
   GOOD_REFURBISHED: "USED_VERY_GOOD",
+  // PRE_OWNED_GOOD/POOR have no eBay enum of their own, so migrate legacy rows
+  // to the nearest real USED_* value. PRE_OWNED_EXCELLENT (2990) and
+  // PRE_OWNED_FAIR (3010) ARE real apparel/jewelry enums — they are
+  // deliberately absent here so they pass through unchanged.
   PRE_OWNED_GOOD: "USED_EXCELLENT",
-  PRE_OWNED_EXCELLENT: "USED_EXCELLENT",
-  PRE_OWNED_FAIR: "USED_GOOD",
   PRE_OWNED_POOR: "USED_ACCEPTABLE",
   New: "NEW",
   "New other (see details)": "NEW_OTHER",
@@ -125,12 +128,14 @@ export function normalizeConditionDescriptorToEnum(
     "very good refurbished": "VERY_GOOD_REFURBISHED",
     "good refurbished": "GOOD_REFURBISHED",
     "seller refurbished": "SELLER_REFURBISHED",
-    // NOTE: PRE_OWNED_GOOD/FAIR/POOR are NOT valid eBay ConditionEnum values
-    // (confirmed against eBay's condition-id-values docs) -- resolve straight
-    // to the real USED_* equivalents. Mirrored in ebay-publish/publish-
-    // helpers.ts's copy of this function -- keep both in sync.
+    // Apparel/jewelry/watches/sporting-goods pre-owned grades. "Pre-owned -
+    // Excellent" (2990) and "Pre-owned - Fair" (3010) are REAL ConditionEnum
+    // values; "Pre-owned - Good" has no enum (conditionId 3000 = USED_EXCELLENT).
+    // Mirrored in ebay-publish/publish-helpers.ts and src/types/listing.ts.
     "pre-owned good": "USED_EXCELLENT",
-    "pre-owned fair": "USED_GOOD",
+    "pre-owned - good": "USED_EXCELLENT",
+    "pre-owned fair": "PRE_OWNED_FAIR",
+    "pre-owned - fair": "PRE_OWNED_FAIR",
     "pre-owned poor": "USED_ACCEPTABLE",
     "digital good": "DIGITAL_GOOD",
     "certified pre-owned": "CERTIFIED_PRE_OWNED",
@@ -147,7 +152,8 @@ export function normalizeConditionDescriptorToEnum(
     "new without tags": "NEW_OTHER",
     "new with defects": "NEW_WITH_DEFECTS",
     "pre-owned": "USED_EXCELLENT",
-    "pre-owned excellent": "USED_EXCELLENT",
+    "pre-owned excellent": "PRE_OWNED_EXCELLENT",
+    "pre-owned - excellent": "PRE_OWNED_EXCELLENT",
   };
 
   const resolved = aliases[lowered] ??
@@ -156,14 +162,11 @@ export function normalizeConditionDescriptorToEnum(
       .replace(/[^A-Z0-9]+/g, "_")
       .replace(/^_|_$/g, "");
 
-  // Final catch-all: catches the exact enum strings PRE_OWNED_GOOD/FAIR/POOR
-  // arriving directly (e.g. from a legacy DB row), which the lowercase
-  // phrase aliases above don't match. Mirrored in ebay-publish/publish-
-  // helpers.ts's copy of this function.
+  // Final catch-all: PRE_OWNED_GOOD and PRE_OWNED_POOR are not real eBay enums
+  // and are corrected to the nearest USED_* value. PRE_OWNED_EXCELLENT (2990)
+  // and PRE_OWNED_FAIR (3010) are real apparel/jewelry enums and pass through.
   const FAKE_ENUM_CORRECTIONS: Record<string, string> = {
-    PRE_OWNED_EXCELLENT: "USED_EXCELLENT",
     PRE_OWNED_GOOD: "USED_EXCELLENT",
-    PRE_OWNED_FAIR: "USED_GOOD",
     PRE_OWNED_POOR: "USED_ACCEPTABLE",
   };
   return FAKE_ENUM_CORRECTIONS[resolved] ?? resolved;

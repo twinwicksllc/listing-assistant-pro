@@ -105,10 +105,17 @@ function isNumismaticCollectibleCoin(itemText: string | null | undefined): boole
     .test(itemText ?? "");
 }
 
+// PRE_OWNED_EXCELLENT (2990) and PRE_OWNED_FAIR (3010) are REAL eBay
+// ConditionEnum values for apparel/jewelry/watches/sporting-goods categories
+// (confirmed via eBay's condition-id-values docs + item-conditions-by-category
+// help page, 2026-10). Only PRE_OWNED_GOOD and PRE_OWNED_POOR are NOT real
+// enums: eBay's "Pre-owned - Good" display name maps to conditionId 3000 =
+// USED_EXCELLENT, and there is no "Pre-owned - Poor" grade at all. Correcting
+// the two real enums here was the root cause of 261994 (Fine Jewelry > Rings)
+// publish rejections — it turned eBay's own 2990/3010 into USED_EXCELLENT/
+// USED_GOOD (5000), a condition that category does not accept.
 const GENERATED_CONDITION_ENUM_CORRECTIONS: Record<string, string> = {
-  PRE_OWNED_EXCELLENT: "USED_EXCELLENT",
   PRE_OWNED_GOOD: "USED_EXCELLENT",
-  PRE_OWNED_FAIR: "USED_GOOD",
   PRE_OWNED_POOR: "USED_ACCEPTABLE",
 };
 
@@ -1689,7 +1696,9 @@ Seller's note: "${voiceNote}"`;
       2030: "CERTIFIED_REFURBISHED",
       2500: "SELLER_REFURBISHED",
       2750: "LIKE_NEW",
+      2990: "PRE_OWNED_EXCELLENT",
       3000: "USED_EXCELLENT",
+      3010: "PRE_OWNED_FAIR",
       4000: "USED_VERY_GOOD",
       5000: "USED_GOOD",
       6000: "USED_ACCEPTABLE",
@@ -1713,14 +1722,19 @@ Seller's note: "${voiceNote}"`;
       "very good refurbished": "VERY_GOOD_REFURBISHED",
       "good refurbished": "GOOD_REFURBISHED",
       "seller refurbished": "SELLER_REFURBISHED",
-      // PRE_OWNED_GOOD/FAIR/POOR are NOT valid eBay ConditionEnum values --
-      // map straight to the real USED_* equivalents so this table can never
-      // leak a fake enum into the AI's allowed-conditions list (errorId 2004
-      // on publish). Mirrored in ebay-publish/publish-helpers.ts and
-      // bulk-publish/index.ts.
+      // Apparel/jewelry/watches/sporting-goods pre-owned grades. eBay's
+      // "Pre-owned - Excellent" (2990) and "Pre-owned - Fair" (3010) are REAL
+      // ConditionEnum values and must be preserved. "Pre-owned - Good" (3000)
+      // has no PRE_OWNED_GOOD enum -- its ConditionEnum is USED_EXCELLENT.
+      // Mirrored in ebay-publish/publish-helpers.ts, bulk-publish/index.ts
+      // and src/types/listing.ts.
+      "pre-owned": "USED_EXCELLENT",
+      "pre-owned - excellent": "PRE_OWNED_EXCELLENT",
+      "pre-owned excellent": "PRE_OWNED_EXCELLENT",
+      "pre-owned - good": "USED_EXCELLENT",
       "pre-owned good": "USED_EXCELLENT",
-      "pre-owned excellent": "USED_EXCELLENT",
-      "pre-owned fair": "USED_GOOD",
+      "pre-owned - fair": "PRE_OWNED_FAIR",
+      "pre-owned fair": "PRE_OWNED_FAIR",
       "pre-owned poor": "USED_ACCEPTABLE",
       "digital good": "DIGITAL_GOOD",
       "certified pre-owned": "CERTIFIED_PRE_OWNED",
@@ -1750,14 +1764,14 @@ Seller's note: "${voiceNote}"`;
     // "Graded") that are NOT valid Inventory API condition enum values. We must never let these
     // pass through to the AI's allowed enum list or the publish call will fail with errorId 2004.
     const INVALID_CONDITION_STRINGS = new Set(["UNGRADED", "GRADED"]);
-    // Fake enum strings that must never reach the AI's allowed-conditions
-    // list -- correct to the real USED_* equivalent rather than dropping the
-    // option outright. Mirrored in ebay-publish/publish-helpers.ts and
+    // Only genuinely non-existent enum tokens are corrected here. PRE_OWNED_GOOD
+    // has no enum (its display name maps to conditionId 3000 = USED_EXCELLENT)
+    // and there is no "Pre-owned - Poor" grade. PRE_OWNED_EXCELLENT (2990) and
+    // PRE_OWNED_FAIR (3010) are REAL apparel/jewelry enums and must NOT be
+    // corrected. Mirrored in ebay-publish/publish-helpers.ts and
     // bulk-publish/index.ts.
     const FAKE_ENUM_CORRECTIONS: Record<string, string> = {
-      PRE_OWNED_EXCELLENT: "USED_EXCELLENT",
       PRE_OWNED_GOOD: "USED_EXCELLENT",
-      PRE_OWNED_FAIR: "USED_GOOD",
       PRE_OWNED_POOR: "USED_ACCEPTABLE",
     };
     const mappedConditionEnums: string[] = categoryConditions?.conditions?.length > 0
