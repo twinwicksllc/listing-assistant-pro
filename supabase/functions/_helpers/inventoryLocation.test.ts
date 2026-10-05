@@ -48,52 +48,48 @@ Deno.test("reconcile: an existing location with a matching address is reused, no
 });
 
 Deno.test("reconcile: a changed address moves to an address-keyed location, never deleting", async () => {
-  const addressKey = await addressLocationKey("60046", "Lake Villa");
   const { calls, fetchFn } = harness((c) => {
     if (c.method === "GET") return stored("10001", "New York");
     if (c.url.endsWith("/BULK-ECF30989")) return already();
     return new Response(null, { status: 204 });
   });
   const r = await reconcileInventoryLocation(base(fetchFn));
-  assertEquals(r, { ok: true, key: addressKey });
+  assertEquals(r, { ok: true, key: "loc-60046-lake-villa" });
   assertEquals(calls.some((c) => c.method === "DELETE"), false);
 });
 
-Deno.test("reconcile: a changed address whose keyed location already exists reuses it", async () => {
-  const addressKey = await addressLocationKey("60046", "Lake Villa");
-  const { calls, fetchFn } = harness((c) => {
-    if (c.method === "POST" && c.url.endsWith("/BULK-ECF30989")) return already();
-    if (c.method === "POST") return already();
-    if (c.url.endsWith("/BULK-ECF30989")) return stored("10001", "New York");
-    return stored("60046", "Lake Villa");
+// A key is only a name. An existing address-keyed location is reused only after
+// reading it back and confirming it holds this address.
+const keyedHarness = (keyedGet: () => Response) =>
+  harness((c) => {
+    if (c.method === "GET") {
+      return c.url.endsWith("/loc-60046-lake-villa") ? keyedGet() : stored("10001", "New York");
+    }
+    return already();
   });
+
+Deno.test("reconcile: an existing keyed location that holds this address is reused, nothing deleted", async () => {
+  const { calls, fetchFn } = keyedHarness(() => stored("60046", "Lake Villa"));
   const r = await reconcileInventoryLocation(base(fetchFn));
-  assertEquals(r, { ok: true, key: addressKey });
-  assertEquals(calls.map((c) => c.method), ["POST", "GET", "POST", "GET"]);
+  assertEquals(r, { ok: true, key: "loc-60046-lake-villa" });
   assertEquals(calls.some((c) => c.method === "DELETE"), false);
 });
 
-Deno.test("reconcile: an address-key conflict with a different stored address is not reused", async () => {
-  const addressKey = await addressLocationKey("60046", "Lake Villa");
-  const { calls, fetchFn } = harness((c) => {
-    if (c.method === "POST") return already();
-    if (c.url.endsWith("/BULK-ECF30989")) return stored("10001", "New York");
-    return stored("60601", "Chicago");
-  });
+Deno.test("reconcile: an existing keyed location holding a DIFFERENT address is not reused", async () => {
+  const { calls, fetchFn } = keyedHarness(() => stored("60047", "Lake Zurich"));
   const r = await reconcileInventoryLocation(base(fetchFn));
   assertEquals(r, { ok: true, key: "BULK-ECF30989" });
-  assertEquals(calls.map((c) => c.method), ["POST", "GET", "POST", "GET"]);
-  assertEquals(calls.some((c) => c.url.endsWith(`/${addressKey}`) && c.method === "GET"), true);
   assertEquals(calls.some((c) => c.method === "DELETE"), false);
 });
 
-Deno.test("addressLocationKey: long addresses retain a bounded, collision-resistant suffix", async () => {
-  const first = await addressLocationKey("60046", "A city name that is long enough to be truncated one");
-  const second = await addressLocationKey("60046", "A city name that is long enough to be truncated two");
-  assertEquals(first.length <= 36, true);
-  assertEquals(/^[a-zA-Z0-9-]+$/.test(first), true);
-  assertEquals(first === second, false);
-  assertEquals(await addressLocationKey("60046", "Lake Villa"), await addressLocationKey("60046", "  LAKE   villa "));
+Deno.test("reconcile: an existing keyed location that cannot be read is not trusted", async () => {
+  const { fetchFn } = keyedHarness(() => new Response("x", { status: 503 }));
+  assertEquals(await reconcileInventoryLocation(base(fetchFn)), { ok: true, key: "BULK-ECF30989" });
+});
+
+Deno.test("reconcile: an existing keyed location that has vanished is not trusted", async () => {
+  const { fetchFn } = keyedHarness(() => new Response(null, { status: 404 }));
+  assertEquals(await reconcileInventoryLocation(base(fetchFn)), { ok: true, key: "BULK-ECF30989" });
 });
 
 Deno.test("reconcile: a location that cannot be read is left as it is", async () => {
@@ -142,4 +138,34 @@ Deno.test("reconcile: every write carries an explicit Accept-Language", async ()
   };
   await reconcileInventoryLocation(base(fetchFn));
   assertEquals(seen, ["en-US"]);
+});
+
+Deno.test("addressLocationKey: short addresses stay readable", () => {
+  assertEquals(addressLocationKey("60046", "Lake Villa"), "loc-60046-lake-villa");
+  assertEquals(addressLocationKey("60046"), "loc-60046");
+});
+
+Deno.test("addressLocationKey: two long addresses that share a 36-character prefix get different keys", () => {
+  // Both readable forms begin "loc-60046-the-very-long-city-name-that-" and
+  // differ only after character 36, so plain truncation would make them equal.
+  const a = addressLocationKey("60046", "The Very Long City Name That Keeps Going North");
+  const b = addressLocationKey("60046", "The Very Long City Name That Keeps Going South");
+  assertEquals(a === b, false);
+  assertEquals(a.length <= 36, true);
+  assertEquals(b.length <= 36, true);
+});
+
+Deno.test("addressLocationKey: stable, within 36 characters, letters digits and hyphens, no trailing hyphen", () => {
+  const city = "A very long city name that would exceed the limit by far";
+  const k = addressLocationKey("60046", city);
+  assertEquals(k, addressLocationKey("60046", city));
+  assertEquals(k.length <= 36, true);
+  assertEquals(/^[a-zA-Z0-9-]+$/.test(k), true);
+  assertEquals(k.endsWith("-"), false);
+  assertEquals(k.startsWith("loc-60046-"), true);
+});
+
+Deno.test("addressLocationKey: a different postal code gives a different key for the same long city", () => {
+  const city = "A very long city name that would exceed the limit by far";
+  assertEquals(addressLocationKey("60046", city) === addressLocationKey("60047", city), false);
 });

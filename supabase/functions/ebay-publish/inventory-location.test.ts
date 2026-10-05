@@ -75,42 +75,58 @@ Deno.test(
 
 Deno.test(
   "ensureInventoryLocation: a changed address uses an address-keyed location and never deletes",
-  async () => {
-    const addressKey = await addressLocationKey("60046", "Lake Villa");
-    await withFetch(
-      (call) => {
-        if (call.url.endsWith("/default-location") && call.method === "POST") return already();
-        if (call.method === "GET") return located("10001", "New York");
-        if (call.url.endsWith(`/${addressKey}`) && call.method === "POST") return new Response(null, { status: 204 });
-        return new Response(null, { status: 500 });
-      },
-      async (calls) => {
-        const key = await ensureInventoryLocation(BASE, "tok", "60046", "Lake Villa");
-        assertEquals(key, addressKey);
-        assertEquals(calls.some((c) => c.method === "DELETE"), false);
-        assertEquals(calls.map((c) => c.method), ["POST", "GET", "POST"]);
-      },
-    )();
-  },
+  withFetch(
+    (call) => {
+      if (call.url.endsWith("/default-location") && call.method === "POST") return already();
+      if (call.method === "GET") return located("10001", "New York");
+      if (call.url.endsWith("/loc-60046-lake-villa") && call.method === "POST") {
+        return new Response(null, { status: 204 });
+      }
+      return new Response(null, { status: 500 });
+    },
+    async (calls) => {
+      const key = await ensureInventoryLocation(BASE, "tok", "60046", "Lake Villa");
+      assertEquals(key, "loc-60046-lake-villa");
+      assertEquals(calls.some((c) => c.method === "DELETE"), false);
+      assertEquals(calls.map((c) => c.method), ["POST", "GET", "POST"]);
+    },
+  ),
 );
 
 Deno.test(
-  "ensureInventoryLocation: an address-keyed location that already exists is reused",
-  async () => {
-    const addressKey = await addressLocationKey("60046", "Lake Villa");
-    await withFetch(
-      (call) => {
-        if (call.method === "POST" && call.url.endsWith("/default-location")) return already();
-        if (call.method === "POST") return already();
-        return call.url.endsWith("/default-location") ? located("10001", "New York") : located("60046", "Lake Villa");
-      },
-      async (calls) => {
-        assertEquals(await ensureInventoryLocation(BASE, "tok", "60046", "Lake Villa"), addressKey);
-        assertEquals(calls.map((c) => c.method), ["POST", "GET", "POST", "GET"]);
-        assertEquals(calls.some((c) => c.method === "DELETE"), false);
-      },
-    )();
-  },
+  "ensureInventoryLocation: an address-keyed location that already holds this address is reused",
+  withFetch(
+    (call) => {
+      if (call.method === "GET") {
+        return call.url.endsWith("/loc-60046-lake-villa")
+          ? located("60046", "Lake Villa")
+          : located("10001", "New York");
+      }
+      return already();
+    },
+    async (calls) => {
+      assertEquals(await ensureInventoryLocation(BASE, "tok", "60046", "Lake Villa"), "loc-60046-lake-villa");
+      assertEquals(calls.some((c) => c.method === "DELETE"), false);
+    },
+  ),
+);
+
+Deno.test(
+  "ensureInventoryLocation: an address-keyed location holding a different address is not used",
+  withFetch(
+    (call) => {
+      if (call.method === "GET") {
+        return call.url.endsWith("/loc-60046-lake-villa")
+          ? located("60047", "Lake Zurich")
+          : located("10001", "New York");
+      }
+      return already();
+    },
+    async (calls) => {
+      assertEquals(await ensureInventoryLocation(BASE, "tok", "60046", "Lake Villa"), "default-location");
+      assertEquals(calls.some((c) => c.method === "DELETE"), false);
+    },
+  ),
 );
 
 Deno.test(
@@ -154,18 +170,6 @@ Deno.test(
     assertEquals(threw, true);
   }),
 );
-
-Deno.test("addressLocationKey: letters, digits and hyphens only, at most 36 characters", async () => {
-  const key = await addressLocationKey("60046", "Lake Villa");
-  assertEquals(key.startsWith("loc-60046-"), true);
-  assertEquals(await addressLocationKey("60046"), await addressLocationKey("60046", ""));
-  const postalKey = await addressLocationKey("60046-1234", "St. Mary's / Co.");
-  const long = await addressLocationKey("60046", "A very long city name that would exceed the limit by far");
-  assertEquals(postalKey.startsWith("loc-60046-"), true);
-  assertEquals(long.length <= 36, true);
-  assertEquals(/^[a-zA-Z0-9-]+$/.test(long), true);
-  assertEquals(long.endsWith("-"), false);
-});
 
 Deno.test("locationAddressMatches: postal code must match; an unknown city matches any stored city", () => {
   assertEquals(

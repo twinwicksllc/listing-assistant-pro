@@ -20,14 +20,31 @@ interface StoredLocation {
   location?: { address?: { postalCode?: unknown; city?: unknown } };
 }
 
+const MAX_KEY_LENGTH = 36;
+
+// 32-bit FNV-1a, base 36. Not a security boundary: it only has to tell different
+// addresses apart among one seller's handful of locations, and the caller still
+// reads a reused location back to confirm its address.
+function shortHash(value: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < value.length; i++) {
+    h ^= value.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(36);
+}
+
 // merchantLocationKey must be at most 36 characters (createInventoryLocation).
 // eBay documents no character rules, so keep to letters, digits and hyphens.
-export async function addressLocationKey(postalCode: string, city = ""): Promise<string> {
+// When the readable form does not fit, a hash of the full address replaces the
+// cut-off tail, so two long addresses cannot share a key by truncation.
+export function addressLocationKey(postalCode: string, city = ""): string {
   const zip = postalCode.replace(/[^a-zA-Z0-9]/g, "");
-  const normalizedAddress = `${normalizeAddressPart(postalCode)}\0${normalizeAddressPart(city)}`;
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(normalizedAddress));
-  const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `loc-${zip.slice(0, 5)}-${hash.slice(0, 26)}`;
+  const citySlug = city.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const readable = citySlug ? `loc-${zip}-${citySlug}` : `loc-${zip}`;
+  if (readable.length <= MAX_KEY_LENGTH) return readable;
+  const suffix = `-${shortHash(`${zip}|${citySlug}`)}`;
+  return readable.slice(0, MAX_KEY_LENGTH - suffix.length).replace(/-+$/, "") + suffix;
 }
 
 function normalizeAddressPart(value: unknown): string {
@@ -153,7 +170,7 @@ export async function reconcileInventoryLocation(opts: ReconcileOptions): Promis
     return { ok: true, key: baseKey };
   }
 
-  const addressKey = await addressLocationKey(postalCode, city);
+  const addressKey = addressLocationKey(postalCode, city);
   console.log(
     `${label}: "${baseKey}" has a different address; using address-keyed location "${addressKey}" (nothing deleted)`,
   );
@@ -164,20 +181,21 @@ export async function reconcileInventoryLocation(opts: ReconcileOptions): Promis
   }
   const keyedErr = await keyed.text();
   if (isAlreadyExists(keyed.status, keyedErr)) {
-    const keyedExisting = await getLocation(fetchFn, apiBase, readHeaders, addressKey);
-    if (
-      keyedExisting.status === "found" &&
-      locationAddressMatches(keyedExisting.location, postalCode, city)
-    ) {
-      console.log(`${label}: address-keyed location "${addressKey}" already exists and matches; reusing it`);
+    // A key is only a name. Confirm the location behind it holds this address
+    // before new listings use it; never assume an existing key is ours.
+    const reused = await getLocation(fetchFn, apiBase, readHeaders, addressKey);
+    if (reused.status === "found" && locationAddressMatches(reused.location, postalCode, city)) {
+      console.log(`${label}: address-keyed location "${addressKey}" already exists with this address; reusing it`);
       return { ok: true, key: addressKey };
     }
-    const reason = keyedExisting.status === "found"
-      ? "stored address does not match"
-      : keyedExisting.status === "unreadable"
-      ? keyedExisting.reason
-      : "not found";
-    console.warn(`${label}: cannot verify address-keyed location "${addressKey}" (${reason}); using "${baseKey}"`);
+    const why = reused.status === "found"
+      ? "it holds a different address"
+      : reused.status === "unreadable"
+      ? `it could not be read (${reused.reason})`
+      : "it could not be found";
+    console.error(
+      `${label}: address-keyed location "${addressKey}" exists but ${why}. Using "${baseKey}" with its existing address.`,
+    );
     return { ok: true, key: baseKey };
   }
   console.error(
