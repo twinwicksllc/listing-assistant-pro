@@ -3,6 +3,7 @@ import {
   ListingDraft,
   PublishStatus,
   CoinConditionDetail,
+  upgradeLegacyCondition,
 } from "@/types/listing";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -64,7 +65,7 @@ export function useDrafts() {
           ebayCategoryId: d.ebay_category_id || undefined,
           ebayCategoryBreadcrumb: d.ebay_category_breadcrumb || undefined,
           itemSpecifics: d.item_specifics || undefined,
-          condition: d.condition || undefined,
+          condition: upgradeLegacyCondition(d.condition) || undefined,
           consignor: d.consignor || "",
           fulfillmentPolicyId: d.fulfillment_policy_id || undefined,
           paymentPolicyId: d.payment_policy_id || undefined,
