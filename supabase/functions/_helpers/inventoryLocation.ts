@@ -22,10 +22,12 @@ interface StoredLocation {
 
 // merchantLocationKey must be at most 36 characters (createInventoryLocation).
 // eBay documents no character rules, so keep to letters, digits and hyphens.
-export function addressLocationKey(postalCode: string, city = ""): string {
+export async function addressLocationKey(postalCode: string, city = ""): Promise<string> {
   const zip = postalCode.replace(/[^a-zA-Z0-9]/g, "");
-  const citySlug = city.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-  return (citySlug ? `loc-${zip}-${citySlug}` : `loc-${zip}`).slice(0, 36).replace(/-+$/, "");
+  const normalizedAddress = `${normalizeAddressPart(postalCode)}\0${normalizeAddressPart(city)}`;
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(normalizedAddress));
+  const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `loc-${zip.slice(0, 5)}-${hash.slice(0, 26)}`;
 }
 
 function normalizeAddressPart(value: unknown): string {
@@ -151,7 +153,7 @@ export async function reconcileInventoryLocation(opts: ReconcileOptions): Promis
     return { ok: true, key: baseKey };
   }
 
-  const addressKey = addressLocationKey(postalCode, city);
+  const addressKey = await addressLocationKey(postalCode, city);
   console.log(
     `${label}: "${baseKey}" has a different address; using address-keyed location "${addressKey}" (nothing deleted)`,
   );
@@ -162,8 +164,21 @@ export async function reconcileInventoryLocation(opts: ReconcileOptions): Promis
   }
   const keyedErr = await keyed.text();
   if (isAlreadyExists(keyed.status, keyedErr)) {
-    console.log(`${label}: address-keyed location "${addressKey}" already exists; reusing it`);
-    return { ok: true, key: addressKey };
+    const keyedExisting = await getLocation(fetchFn, apiBase, readHeaders, addressKey);
+    if (
+      keyedExisting.status === "found" &&
+      locationAddressMatches(keyedExisting.location, postalCode, city)
+    ) {
+      console.log(`${label}: address-keyed location "${addressKey}" already exists and matches; reusing it`);
+      return { ok: true, key: addressKey };
+    }
+    const reason = keyedExisting.status === "found"
+      ? "stored address does not match"
+      : keyedExisting.status === "unreadable"
+      ? keyedExisting.reason
+      : "not found";
+    console.warn(`${label}: cannot verify address-keyed location "${addressKey}" (${reason}); using "${baseKey}"`);
+    return { ok: true, key: baseKey };
   }
   console.error(
     `${label}: could not create "${addressKey}" (${keyed.status}): ${keyedErr}. Using "${baseKey}" with its existing address.`,
