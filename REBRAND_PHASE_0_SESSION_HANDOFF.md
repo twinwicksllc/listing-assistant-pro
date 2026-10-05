@@ -1,6 +1,6 @@
 # Rebrand Session Handoff
 
-**As of:** 2026-10-02
+**As of:** 2026-10-05
 **Repository:** `twinwicksllc/listing-assistant-pro`
 **Session output:** PRs #556–#561 merged on 2026-09-08 (6 total); 2026-09-30 added #642–#646 here (Q-10 artifacts, email verification, O-42, Auth redirects) and #29–#37 in `listrassistr-official`; 0 open
 
@@ -17,6 +17,22 @@
 > catch-all removed; Forward Email outbound SMTP was approved and send/reply from
 > `support@listrassistr.com` passed. Only the DMARC report review remains (T-16 on
 > 2026-10-05, then the 30-day period), with the policy staying at `p=none`.
+
+> **Update 2026-10-05 (official repo and email).** On 2026-10-04 `listrassistr-official`
+> gained (its PRs #46 to #49): rewritten Terms and Privacy, the Clear Momentum application
+> shell, a seller workflow prototype at `/prototype.html` (sample data, no account or
+> marketplace calls, excluded from the production build) with `FRONTEND_UX_STANDARD.md` and
+> `SELLER_EXPERIENCE_BLUEPRINT.md`, and a persistent light and dark theme switch. That repo's
+> docs cite an owner authorization of 2026-10-04; the owner says it was taken out of context
+> that these items are still to be done, and that the team was asked not to work on them over
+> the weekend, so they would be done with the assistant. **No authorization is recorded here, and DEC-0035 is unchanged.** The owner has
+> yet to decide what to do with the merged work. The Terms and Privacy pages have **no legal
+> review** and now contain binding clauses (non-refundable subscriptions, Illinois venue). The
+> first weekly Postmark DMARC digest (Sep 28 to Oct 05) shows 8 messages, 100%
+> SPF-or-DKIM aligned, 0% failing both; `p=none` stays. The new app has no `supabase/`
+> folder, calls `ebay-publish` only to connect an eBay account, and its Listings page says
+> listing management is not connected. The legacy QA backend was redeployed on 2026-10-05
+> (15 migrations applied) and a weekly reminder now flags when it falls behind again.
 
 > **Update 2026-10-02 (brand).** The brand usage sheet is approved as **DEC-0042**
 > (`listrassistr-official/docs/BRAND_USAGE.md`, merged in its PR #45, plus a visual version at
