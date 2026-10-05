@@ -72,7 +72,7 @@ function conditionWithDescriptors(
 ) {
   return {
     conditionId,
-    conditionDescription: `Synthetic ${conditionId}`,
+    conditionDescription: "Used",
     conditionDescriptors,
   };
 }
@@ -182,6 +182,33 @@ describe("shared condition policy", () => {
       "VERY_GOOD_REFURBISHED",
       "GOOD_REFURBISHED",
     ]);
+  });
+
+  test("uses exact condition labels when IDs overlap across category families", () => {
+    const tradingCardConditions = buildSyntheticPolicy([
+      { conditionId: "3000", conditionDescription: "Very Good" },
+      { conditionId: "4000", conditionDescription: "Good" },
+      { conditionId: "5000", conditionDescription: "Acceptable" },
+    ]);
+    const coinConditions = buildSyntheticPolicy([
+      { conditionId: "3000", conditionDescription: "Used - Excellent" },
+      { conditionId: "4000", conditionDescription: "Used - Very Good" },
+      { conditionId: "5000", conditionDescription: "Used - Good" },
+    ]);
+    const unknownLabel = buildSyntheticPolicy([
+      { conditionId: "3000", conditionDescription: "Other used grade" },
+    ]);
+
+    expect(
+      tradingCardConditions.conditions.map((entry) => entry.conditionEnum),
+    ).toEqual(["VERY_GOOD", "GOOD", "ACCEPTABLE"]);
+    expect(
+      coinConditions.conditions.map((entry) => entry.conditionEnum),
+    ).toEqual(["USED_EXCELLENT", "USED_VERY_GOOD", "USED_GOOD"]);
+    expect(unknownLabel.conditions[0].conditionEnum).toBeNull();
+    expect(validateConditionSelection(unknownLabel, "123", "3000").valid).toBe(
+      false,
+    );
   });
 
   test("condition ID resolution accepts exact ID, enum, and a unique exact label only", () => {

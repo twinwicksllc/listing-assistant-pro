@@ -141,26 +141,41 @@ function DescriptorField({
   );
   const requiredDependencies =
     constraint.applicableToConditionDescriptorIds ?? [];
-  const valueDependencies = new Map<string, string[]>();
+  const valueDependencies = new Map<
+    string,
+    { presenceOnly: boolean; allowedValues: string[] }
+  >();
   for (const value of descriptor.conditionDescriptorValues ?? []) {
     for (const dependency of value.conditionDescriptorValueConstraints ?? []) {
       const dependencyId = dependency.applicableToConditionDescriptorId;
       if (!dependencyId) continue;
-      const allowed = valueDependencies.get(dependencyId) ?? [];
-      allowed.push(
-        ...(dependency.applicableToConditionDescriptorValueIds ?? []),
-      );
-      valueDependencies.set(dependencyId, allowed);
+      const entry = valueDependencies.get(dependencyId) ?? {
+        presenceOnly: false,
+        allowedValues: [],
+      };
+      if (dependency.applicableToConditionDescriptorValueIds === undefined) {
+        entry.presenceOnly = true;
+      } else {
+        entry.allowedValues.push(
+          ...dependency.applicableToConditionDescriptorValueIds,
+        );
+      }
+      valueDependencies.set(dependencyId, entry);
     }
   }
   const missingDependencies = requiredDependencies.filter((id) => {
     const value = selections.find((selection) => selection.name === id);
     return !value?.values?.length && !value?.additionalInfo?.trim();
   });
-  for (const [id, allowedValues] of valueDependencies) {
+  for (const [id, dependency] of valueDependencies) {
     const value = selections.find((selection) => selection.name === id);
+    const supplied = !!value?.values?.length || !!value?.additionalInfo?.trim();
     if (
-      !value?.values?.some((selectedId) => allowedValues.includes(selectedId))
+      !supplied ||
+      (!dependency.presenceOnly &&
+        !value?.values?.some((selectedId) =>
+          dependency.allowedValues.includes(selectedId),
+        ))
     ) {
       missingDependencies.push(id);
     }
@@ -183,6 +198,10 @@ function DescriptorField({
           (entry) =>
             entry.name === dependency.applicableToConditionDescriptorId,
         );
+        if (!selected) return false;
+        if (dependency.applicableToConditionDescriptorValueIds === undefined) {
+          return !!selected.values?.length || !!selected.additionalInfo?.trim();
+        }
         return !!selected?.values?.some((selectedId) =>
           dependency.applicableToConditionDescriptorValueIds?.includes(
             selectedId,

@@ -61,6 +61,13 @@ const policy = buildConditionPolicy("123", {
                 },
               ],
             },
+            {
+              conditionDescriptorValueId: "polished",
+              conditionDescriptorValueName: "Polished",
+              conditionDescriptorValueConstraints: [
+                { applicableToConditionDescriptorId: "material" },
+              ],
+            },
           ],
         },
       ],
@@ -109,6 +116,7 @@ describe("ConditionPolicyFields", () => {
     expect(screen.getByLabelText("Marking")).toHaveAttribute("maxLength", "8");
     expect(screen.getByLabelText("Marking")).not.toBeDisabled();
     expect(screen.getByLabelText("Stamped")).not.toBeDisabled();
+    expect(screen.getByLabelText("Polished")).not.toBeDisabled();
 
     fireEvent.change(screen.getByLabelText("Condition"), {
       target: { value: "1000" },
@@ -135,7 +143,10 @@ describe("ConditionPolicyFields", () => {
       />,
     );
     expect(screen.getByLabelText("Stamped")).toBeDisabled();
-    expect(screen.getByText("Requires Material first.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Polished")).not.toBeDisabled();
+    expect(
+      screen.queryByText("Requires Material first."),
+    ).not.toBeInTheDocument();
   });
 
   test("communicates loading and unavailable policy states", () => {

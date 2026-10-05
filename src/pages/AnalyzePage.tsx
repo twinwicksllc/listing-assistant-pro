@@ -46,11 +46,6 @@ import type {
 
 // Sub-components
 import { ImageCarousel } from "@/components/analyze/ImageCarousel";
-conditionPolicy = { conditionPolicy };
-conditionPolicyLoading = { conditionPolicyLoading };
-conditionValidation = { conditionValidation };
-conditionDescriptors = { conditionDescriptors };
-updateConditionDescriptors = { updateConditionDescriptors };
 import { ListingFields } from "@/components/analyze/ListingFields";
 import { ListingFormatPrice } from "@/components/analyze/ListingFormatPrice";
 import { PolicyAndVideo } from "@/components/analyze/PolicyAndVideo";
@@ -900,8 +895,12 @@ export default function AnalyzePage() {
               confirmCustomCategoryInput={confirmCustomCategoryInput}
               cancelCustomCategoryMode={cancelCustomCategoryMode}
               condition={condition}
-              conditionOptions={conditionOptions}
               updateCondition={updateCondition}
+              conditionPolicy={conditionPolicy}
+              conditionPolicyLoading={conditionPolicyLoading}
+              conditionValidation={conditionValidation}
+              conditionDescriptors={conditionDescriptors}
+              updateConditionDescriptors={updateConditionDescriptors}
               coinConditionDetail={coinConditionDetail}
               coinConditionDetailRequired={coinConditionDetailRequired}
               updateCoinConditionDetail={updateCoinConditionDetail}

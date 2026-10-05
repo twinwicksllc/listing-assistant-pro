@@ -7,6 +7,7 @@ import {
   type ConditionPolicy,
   validateConditionSelection,
 } from "../_helpers/conditionPolicy.ts";
+import { createConditionPolicyCache } from "./conditionPolicyCache.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -506,6 +507,8 @@ serve(async (req: Request) => {
       );
     }
 
+    const getConditionPolicy = createConditionPolicyCache(fetchConditionPolicy);
+
     // Dry run: validate only, no eBay calls
     if (dryRun) {
       const conditionErrors: Array<{ row: number; error: string }> = [];
@@ -518,7 +521,7 @@ serve(async (req: Request) => {
           continue;
         }
         try {
-          const policy = await fetchConditionPolicy(row.categoryId, userId);
+          const policy = await getConditionPolicy(row.categoryId, userId);
           const validation = validateConditionSelection(
             policy,
             row.categoryId,
@@ -683,7 +686,7 @@ serve(async (req: Request) => {
         if (row.conditionDescriptors != null && !isConditionDescriptorSelection(row.conditionDescriptors)) {
           throw new Error("Condition descriptors must be a list of descriptor names and values.");
         }
-        const conditionPolicy = await fetchConditionPolicy(row.categoryId, userId);
+        const conditionPolicy = await getConditionPolicy(row.categoryId, userId);
         const conditionValidation = validateConditionSelection(
           conditionPolicy,
           row.categoryId,

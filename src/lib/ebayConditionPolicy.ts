@@ -1,5 +1,5 @@
 import {
-  CONDITION_ID_TO_ENUM,
+  conditionEnumFromPolicyCondition,
   resolvePolicyCondition,
   type ConditionDescriptorSelection,
   type ConditionPolicy,
@@ -18,7 +18,12 @@ export function allowedConditionEnumsFromPolicy(
     const description = condition.conditionDescription?.trim() ?? "";
     if (/^(graded|ungraded)$/i.test(description)) return [];
 
-    const normalized = CONDITION_ID_TO_ENUM[String(condition.conditionId)];
+    const normalized =
+      condition.conditionEnum ??
+      conditionEnumFromPolicyCondition(
+        String(condition.conditionId),
+        condition.conditionDescription,
+      );
     return normalized ? [normalized] : [];
   });
 
@@ -57,10 +62,13 @@ export function conditionIdFromCategoryPolicy(
   ];
   if (labelIds.length === 1) return labelIds[0];
 
-  const knownEnums = new Set(Object.values(CONDITION_ID_TO_ENUM));
-  if (!knownEnums.has(selection)) return undefined;
   const enumMatches = conditions.filter(
-    (candidate) => CONDITION_ID_TO_ENUM[candidate.conditionId] === selection,
+    (candidate) =>
+      (candidate.conditionEnum ??
+        conditionEnumFromPolicyCondition(
+          candidate.conditionId,
+          candidate.conditionDescription,
+        )) === selection,
   );
   const enumIds = [
     ...new Set(enumMatches.map((candidate) => candidate.conditionId)),

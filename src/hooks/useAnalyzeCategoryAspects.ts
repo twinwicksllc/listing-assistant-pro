@@ -264,7 +264,7 @@ export function useAnalyzeCategoryAspects({
 
           // Only cache the "no aspects" outcome for a confirmed parent. A
           // transient empty response stays retryable.
-          if (isParentCategory) {
+          if (isParentCategory && conditionPolicy.status === "available") {
             lastFetchedCategoryRef.current = requestedCategoryId;
           }
           return;
@@ -319,7 +319,9 @@ export function useAnalyzeCategoryAspects({
         });
 
         // Only mark as fetched after a genuinely successful load.
-        lastFetchedCategoryRef.current = requestedCategoryId;
+        if (conditionPolicy.status === "available") {
+          lastFetchedCategoryRef.current = requestedCategoryId;
+        }
 
         console.log(
           `useAnalyzeCategoryAspects: seeded ${aspects.length} aspects for category ${requestedCategoryId} ` +

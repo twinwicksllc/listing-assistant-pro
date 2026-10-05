@@ -175,6 +175,69 @@ describe("useAnalyzeCategoryAspects — allowedConditions refresh on category ch
     expect(lastCall.conditionPolicy.categoryId).toBe("67742");
   });
 
+  it("retries the condition policy when aspects succeeded but policy retrieval failed", async () => {
+    let conditionRequests = 0;
+    invokeMock.mockImplementation(
+      async (
+        _fn: string,
+        opts: { body: { action: string; categoryId: string } },
+      ) => {
+        if (opts.body.action === "aspects") {
+          return {
+            data: {
+              aspects: [{ name: "Material", required: true }],
+            },
+            error: null,
+          };
+        }
+        conditionRequests += 1;
+        if (conditionRequests === 1) {
+          return { data: null, error: new Error("temporary policy failure") };
+        }
+        return {
+          data: {
+            conditionPolicy: buildConditionPolicy(opts.body.categoryId, {
+              categoryId: opts.body.categoryId,
+              itemConditionRequired: true,
+              itemConditions: [
+                { conditionId: "1000", conditionDescription: "New" },
+              ],
+            }),
+          },
+          error: null,
+        };
+      },
+    );
+
+    const setEbayMetadata = vi.fn();
+    const setItemSpecifics = vi.fn();
+    const { rerender } = renderHook(
+      ({ generated }: { generated: boolean }) =>
+        useAnalyzeCategoryAspects({
+          ebayCategoryId: "67742",
+          generated,
+          itemSpecifics: {},
+          setItemSpecifics,
+          setEbayMetadata,
+          currentEbayMetadata: null,
+        }),
+      { initialProps: { generated: true } },
+    );
+
+    await waitFor(() => expect(setEbayMetadata).toHaveBeenCalledTimes(1));
+    expect(setEbayMetadata.mock.calls[0][0].conditionPolicy.status).toBe(
+      "unavailable",
+    );
+
+    await act(async () => rerender({ generated: false }));
+    await act(async () => rerender({ generated: true }));
+
+    await waitFor(() => expect(conditionRequests).toBe(2));
+    expect(setEbayMetadata.mock.calls.at(-1)?.[0].conditionPolicy.status).toBe(
+      "available",
+    );
+  });
+
   it("re-fetches conditions when the category changes again after an initial fetch", async () => {
     mockResponsesFor("67742");
     const setEbayMetadata = vi.fn();

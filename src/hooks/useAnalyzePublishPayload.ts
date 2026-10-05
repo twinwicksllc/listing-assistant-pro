@@ -93,7 +93,7 @@ export function useAnalyzePublishPayload({
         condition,
         ebayCategoryId,
         itemSpecifics: publishItemSpecifics,
-        conditionDescriptors,
+        ...(conditionDescriptors !== undefined ? { conditionDescriptors } : {}),
         postalCode: postalCode || undefined,
         city: city || undefined,
         fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId || undefined,
