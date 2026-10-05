@@ -1,6 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Loader2, Crown, Video } from "lucide-react";
+import {
+  ArrowLeft,
+  Sparkles,
+  Loader2,
+  Crown,
+  Video,
+  Save,
+  Send,
+  Lock,
+} from "lucide-react";
+import { toast } from "sonner";
 import CategoryConfirmDialog from "@/components/CategoryConfirmDialog";
 import { useDrafts } from "@/hooks/useDrafts";
 import { supabase } from "@/integrations/supabase/client";
@@ -29,16 +39,23 @@ import { useAnalyzeGradeControls } from "@/hooks/useAnalyzeGradeControls";
 import { useAnalyzeListingFieldHandlers } from "@/hooks/useAnalyzeListingFieldHandlers";
 import { useVideoFrameExtraction } from "@/hooks/useVideoFrameExtraction";
 import { useAnalyzeCategoryAspects } from "@/hooks/useAnalyzeCategoryAspects";
+import type {
+  ConditionDescriptorSelection,
+  ConditionPolicy,
+} from "../../supabase/functions/_helpers/conditionPolicy";
 
 // Sub-components
-import { VideoOnlyView } from "@/components/analyze/VideoOnlyView";
 import { ImageCarousel } from "@/components/analyze/ImageCarousel";
+conditionPolicy = { conditionPolicy };
+conditionPolicyLoading = { conditionPolicyLoading };
+conditionValidation = { conditionValidation };
+conditionDescriptors = { conditionDescriptors };
+updateConditionDescriptors = { updateConditionDescriptors };
 import { ListingFields } from "@/components/analyze/ListingFields";
 import { ListingFormatPrice } from "@/components/analyze/ListingFormatPrice";
 import { PolicyAndVideo } from "@/components/analyze/PolicyAndVideo";
 import { PackageDimensions } from "@/components/analyze/PackageDimensions";
 import { ExportSection } from "@/components/analyze/ExportSection";
-import { ActionButtons } from "@/components/analyze/ActionButtons";
 
 // Sanitise AI responses that occasionally return HTML tags instead of markdown
 function htmlToPlainMarkdown(text: string): string {
@@ -60,6 +77,18 @@ function htmlToPlainMarkdown(text: string): string {
     .replace(/<[^>]+>/g, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function readConditionDescriptors(
+  itemSpecifics: ItemSpecifics,
+): ConditionDescriptorSelection[] {
+  const value = (itemSpecifics as Record<string, unknown>)
+    ._conditionDescriptors;
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (entry): entry is ConditionDescriptorSelection =>
+      !!entry && typeof entry === "object" && typeof entry.name === "string",
+  );
 }
 
 export default function AnalyzePage() {
@@ -105,6 +134,7 @@ export default function AnalyzePage() {
   const [metalType, setMetalType] = useState<string>("none");
   const [metalWeightOz, setMetalWeightOz] = useState<number>(0);
   const [ebayCategoryId, setEbayCategoryId] = useState<string>("");
+  const previousConditionCategoryRef = useRef("");
   const [suggestedCategories, setSuggestedCategories] = useState<
     Array<{
       categoryId: string;
@@ -114,7 +144,7 @@ export default function AnalyzePage() {
     }>
   >([]);
   const [itemSpecifics, setItemSpecifics] = useState<ItemSpecifics>({});
-  const [condition, setCondition] = useState<string>("USED_EXCELLENT");
+  const [condition, setCondition] = useState<string>("");
   const { exportPlatform, exportFormat, setExportPlatform, setExportFormat } =
     useAnalyzeExportPreferences();
   const [suggestedGrade, setSuggestedGrade] = useState<string>("");
@@ -141,6 +171,7 @@ export default function AnalyzePage() {
     requiredAspects: string[];
     suggestedAspects: string[];
     allowedConditions: string[];
+    conditionPolicy?: ConditionPolicy;
     /** Authoritative backend flag â true when analyze-item identified coins_bullion domain */
     isCoinCategory?: boolean;
   } | null>(null);
@@ -375,7 +406,12 @@ export default function AnalyzePage() {
     imageUrls,
     itemSpecifics,
     ebayMetadata,
-    coinConditionDetailRequired,
+    coinConditionDetailRequired:
+      coinConditionDetailRequired &&
+      !(
+        ebayMetadata?.conditionPolicy?.status === "available" &&
+        ebayMetadata.conditionPolicy.categoryId === ebayCategoryId
+      ),
     coinConditionDetailComplete,
     buildPublishPayload,
     onRequireBilling: () => navigate("/billing"),
@@ -438,7 +474,7 @@ export default function AnalyzePage() {
     setIsCustomCategoryMode(false);
     setSuggestedCategories(data.suggestedCategories || []);
     setItemSpecifics(data.itemSpecifics || {});
-    setCondition(data.condition || "USED_EXCELLENT");
+    setCondition(data.condition || "");
     setSuggestedGrade(data.suggestedGrade || "");
     setGradingRationale(data.gradingRationale || "");
     setIsSlabbed(
@@ -571,12 +607,60 @@ export default function AnalyzePage() {
     setBestOfferAutoDeclinePrice,
   });
 
-  const { conditionOptions, updateCondition } = useAnalyzeConditionOptions({
+  const { isConditionPolicyLoading: categoryPolicyLoading } =
+    useAnalyzeCategoryAspects({
+      ebayCategoryId,
+      generated,
+      itemSpecifics,
+      setItemSpecifics,
+      setEbayMetadata,
+      currentEbayMetadata: ebayMetadata,
+    });
+
+  const conditionDescriptors = readConditionDescriptors(itemSpecifics);
+  const updateConditionDescriptors = (
+    descriptors: ConditionDescriptorSelection[],
+  ) => {
+    setItemSpecifics(
+      (prev) =>
+        ({
+          ...prev,
+          _conditionDescriptors: descriptors,
+        }) as unknown as ItemSpecifics,
+    );
+  };
+  const conditionPolicyLoading =
+    generated &&
+    !!ebayCategoryId &&
+    (categoryPolicyLoading ||
+      ebayMetadata?.conditionPolicy?.categoryId !== ebayCategoryId);
+
+  const {
+    updateCondition,
+    conditionPolicy,
+    conditionValidation,
+    isPolicyAvailable,
+  } = useAnalyzeConditionOptions({
     ebayMetadata,
     ebayCategoryId,
-    domain,
+    condition,
+    descriptors: conditionDescriptors,
+    loading: conditionPolicyLoading,
     setCondition,
+    setDescriptors: updateConditionDescriptors,
   });
+
+  const publishBlockedByConditionPolicy =
+    conditionPolicyLoading || !isPolicyAvailable || !conditionValidation.valid;
+  const publishWithConditionPolicyCheck = () => {
+    if (publishBlockedByConditionPolicy) {
+      toast.error(
+        "Choose a valid eBay condition and complete its required details before publishing.",
+      );
+      return;
+    }
+    return handlePublish();
+  };
 
   const { acceptSuggestedGrade, dismissSuggestedGrade, undoGradeConfirmation } =
     useAnalyzeGradeControls({
@@ -636,17 +720,17 @@ export default function AnalyzePage() {
     }
   }, []); // mount-only intentional
 
-  // Fetch + seed eBay aspects when the category changes after initial analysis
-  // (e.g. user overrides AI category). Seeds itemSpecifics with empty rows for
-  // required/suggested aspects so they appear as editable fields in the UI.
-  useAnalyzeCategoryAspects({
-    ebayCategoryId,
-    generated,
-    itemSpecifics,
-    setItemSpecifics,
-    setEbayMetadata,
-    currentEbayMetadata: ebayMetadata,
-  });
+  useEffect(() => {
+    if (!generated || !ebayCategoryId) return;
+    if (!previousConditionCategoryRef.current) {
+      previousConditionCategoryRef.current = ebayCategoryId;
+      return;
+    }
+    if (previousConditionCategoryRef.current !== ebayCategoryId) {
+      previousConditionCategoryRef.current = ebayCategoryId;
+      setCondition("");
+    }
+  }, [ebayCategoryId, generated]);
 
   // ââ Guards âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
@@ -905,13 +989,52 @@ export default function AnalyzePage() {
               onExport={handleExport}
             />
 
-            <ActionButtons
-              onSave={handleSave}
-              onPublish={handlePublish}
-              publishing={publishing}
-              videoIsProcessing={videoIsProcessing}
-              isOwner={isOwner}
-            />
+            <div className="space-y-2">
+              <button
+                onClick={handleSave}
+                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-success text-success-foreground font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98]"
+              >
+                <Save className="w-4 h-4" />
+                Save Draft
+              </button>
+
+              {isOwner ? (
+                <button
+                  onClick={publishWithConditionPolicyCheck}
+                  disabled={
+                    publishing ||
+                    videoIsProcessing ||
+                    publishBlockedByConditionPolicy
+                  }
+                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
+                >
+                  {publishing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Publishing...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      Publish Live to eBay
+                    </>
+                  )}
+                </button>
+              ) : (
+                <div className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-muted text-muted-foreground font-semibold text-sm">
+                  <Lock className="w-4 h-4" />
+                  Publishing restricted to account owner
+                </div>
+              )}
+
+              {videoIsProcessing && (
+                <p className="text-xs text-center text-amber-600">
+                  <Loader2 className="inline w-3 h-3 animate-spin mr-1" />
+                  Video is processing on eBay. Save as draft now and publish
+                  once it is ready.
+                </p>
+              )}
+            </div>
           </div>
         )}
       </div>

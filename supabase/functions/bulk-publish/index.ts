@@ -2,6 +2,11 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { NULL_BODY_STATUSES } from "../_helpers/fetchWithTimeout.ts";
 import { formatDescriptionHtml, truncateToWordBoundary } from "../_helpers/listingFormat.ts";
+import {
+  type ConditionDescriptorSelection,
+  type ConditionPolicy,
+  validateConditionSelection,
+} from "../_helpers/conditionPolicy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,6 +29,7 @@ interface BulkRowInput {
   title: string;
   description?: string;
   condition: string;
+  conditionDescriptors?: ConditionDescriptorSelection[];
   price: number;
   quantity: number;
   categoryId: string;
@@ -216,6 +222,60 @@ async function fetchDynamicCategoryConditions(
   } catch {
     return [];
   }
+}
+
+async function fetchConditionPolicy(categoryId: string, sellerUserId: string): Promise<ConditionPolicy> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error("Condition validation is unavailable: server configuration is missing.");
+  }
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(
+      `${supabaseUrl}/functions/v1/category-lookup`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${supabaseServiceKey}`,
+          "Content-Type": "application/json",
+        },
+        timeout: 10000,
+        body: JSON.stringify({ action: "conditions", categoryId, sellerUserId }),
+      },
+    );
+  } catch (error) {
+    throw new Error(`Unable to fetch condition policy for category ${categoryId}: ${error}`);
+  }
+  if (!response.ok) {
+    throw new Error(`Unable to fetch condition policy for category ${categoryId} (HTTP ${response.status}).`);
+  }
+  let data: { conditionPolicy?: ConditionPolicy; error?: string };
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error(`Condition policy for category ${categoryId} returned invalid JSON.`);
+  }
+  if (!data.conditionPolicy) {
+    throw new Error(
+      `Condition policy for category ${categoryId} is unavailable${
+        data.error ? `: ${data.error}` : ". Retry after category metadata is available."
+      }`,
+    );
+  }
+  return data.conditionPolicy;
+}
+
+function isConditionDescriptorSelection(value: unknown): value is ConditionDescriptorSelection[] {
+  if (!Array.isArray(value)) return false;
+  return value.every((descriptor: unknown) => {
+    if (!descriptor || typeof descriptor !== "object" || Array.isArray(descriptor)) return false;
+    const candidate = descriptor as Record<string, unknown>;
+    return typeof candidate.name === "string" &&
+      (candidate.values === undefined ||
+        (Array.isArray(candidate.values) && candidate.values.every((entry: unknown) => typeof entry === "string"))) &&
+      (candidate.additionalInfo === undefined || typeof candidate.additionalInfo === "string");
+  });
 }
 
 // Exported for testability (see bulk-publish.test.ts). Passing an empty
@@ -448,6 +508,47 @@ serve(async (req: Request) => {
 
     // Dry run: validate only, no eBay calls
     if (dryRun) {
+      const conditionErrors: Array<{ row: number; error: string }> = [];
+      for (const [index, row] of rows.entries()) {
+        if (row.conditionDescriptors != null && !isConditionDescriptorSelection(row.conditionDescriptors)) {
+          conditionErrors.push({
+            row: index + 1,
+            error: "Condition descriptors must be a list of descriptor names and values.",
+          });
+          continue;
+        }
+        try {
+          const policy = await fetchConditionPolicy(row.categoryId, userId);
+          const validation = validateConditionSelection(
+            policy,
+            row.categoryId,
+            row.condition ?? "",
+            row.conditionDescriptors ?? [],
+          );
+          if (!validation.valid) {
+            conditionErrors.push({
+              row: index + 1,
+              error: validation.errors.join("; "),
+            });
+          }
+        } catch (error) {
+          conditionErrors.push({
+            row: index + 1,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      if (conditionErrors.length > 0) {
+        return new Response(
+          JSON.stringify({
+            dryRun: true,
+            success: false,
+            errors: conditionErrors,
+            message: "One or more rows have an invalid or unavailable eBay condition policy.",
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
       return new Response(
         JSON.stringify({
           dryRun: true,
@@ -579,13 +680,24 @@ serve(async (req: Request) => {
           sku = `BK${crypto.randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`;
         }
 
-        // Condition normalization
-        const resolvedCondition = await resolveConditionForCategory(
-          row.condition || "USED_EXCELLENT",
+        if (row.conditionDescriptors != null && !isConditionDescriptorSelection(row.conditionDescriptors)) {
+          throw new Error("Condition descriptors must be a list of descriptor names and values.");
+        }
+        const conditionPolicy = await fetchConditionPolicy(row.categoryId, userId);
+        const conditionValidation = validateConditionSelection(
+          conditionPolicy,
           row.categoryId,
+          row.condition ?? "",
+          row.conditionDescriptors ?? [],
         );
-        const conditionEnum = resolvedCondition.conditionEnum;
-        const conditionId = resolvedCondition.conditionId;
+        if (!conditionValidation.valid) {
+          throw new Error(
+            `Condition validation failed for category ${row.categoryId}: ${
+              conditionValidation.errors.join("; ")
+            }. Select a supported condition and descriptor values before publishing.`,
+          );
+        }
+        const resolvedCondition = conditionValidation.condition;
 
         // Build inventory item
         const imageUrls = (row.imageUrls ?? [])
@@ -607,8 +719,13 @@ serve(async (req: Request) => {
               }
               : {}),
           },
-          condition: conditionEnum,
-          conditionDescription: resolvedCondition.conditionDescription,
+          ...(resolvedCondition
+            ? {
+              condition: resolvedCondition.conditionEnum,
+              conditionDescription: resolvedCondition.conditionDescription,
+              ...(row.conditionDescriptors?.length ? { conditionDescriptors: row.conditionDescriptors } : {}),
+            }
+            : {}),
           availability: {
             shipToLocationAvailability: { quantity: row.quantity || 1 },
           },
@@ -680,7 +797,7 @@ serve(async (req: Request) => {
             ...(row.paymentPolicyId ? { paymentPolicyId: row.paymentPolicyId } : {}),
           },
           merchantLocationKey,
-          conditionId,
+          ...(resolvedCondition ? { conditionId: Number(resolvedCondition.conditionId) } : {}),
         };
 
         // Step 3: Create offer
@@ -748,7 +865,7 @@ serve(async (req: Request) => {
             listing_format: row.format,
             ebay_category_id: row.categoryId,
             item_specifics: row.itemSpecifics || {},
-            condition: conditionEnum,
+            condition: resolvedCondition?.conditionEnum ?? null,
             consignor: row.consignor || "",
             fulfillment_policy_id: fulfillmentPolicyId || null,
             payment_policy_id: row.paymentPolicyId || null,

@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { buildConditionPolicy } from "../../supabase/functions/_helpers/conditionPolicy";
 
 // Regression coverage for the 2026-09-16 ring-publish bug: a draft moved from
 // a Books category to a Rings category kept the OLD category's
@@ -47,10 +48,29 @@ function mockResponsesFor(categoryId: string) {
       if (opts.body.action === "conditions") {
         return {
           data: {
-            conditions: [
-              { conditionId: 1000, conditionDescription: "New with tags" },
-              { conditionId: 3000, conditionDescription: "Used" },
-            ],
+            conditionPolicy: buildConditionPolicy(categoryId, {
+              categoryId,
+              itemConditionRequired: true,
+              itemConditions: [
+                {
+                  conditionId: "1000",
+                  conditionDescription: "New With Packaging",
+                },
+                {
+                  conditionId: "1500",
+                  conditionDescription: "New without Packaging",
+                },
+                {
+                  conditionId: "1750",
+                  conditionDescription: "New With Imperfections",
+                },
+                {
+                  conditionId: "3000",
+                  conditionDescription: "Used - Excellent",
+                },
+                { conditionId: "5000", conditionDescription: "Used - Good" },
+              ],
+            }),
           },
           error: null,
         };
@@ -65,7 +85,7 @@ describe("useAnalyzeCategoryAspects — allowedConditions refresh on category ch
     invokeMock.mockReset();
   });
 
-  it("replaces allowedConditions with the NEW category's conditions rather than preserving the old ones", async () => {
+  it("replaces the prior policy with the NEW category's policy", async () => {
     mockResponsesFor("67742"); // Jewelry & Watches > Fine Jewelry > Rings
 
     const setItemSpecifics = vi.fn();
@@ -94,14 +114,24 @@ describe("useAnalyzeCategoryAspects — allowedConditions refresh on category ch
 
     const lastCall =
       setEbayMetadata.mock.calls[setEbayMetadata.mock.calls.length - 1][0];
-    // Normalized to ConditionEnum values, not eBay's raw conditionDescription
-    // strings ("New with tags", "Used") — those aren't valid Inventory API
-    // condition values and eBay's own publish endpoint would reject them.
-    expect(lastCall.allowedConditions).toEqual(["NEW", "USED_EXCELLENT"]);
+    expect(lastCall.conditionPolicy.status).toBe("available");
+    expect(lastCall.conditionPolicy.categoryId).toBe("67742");
+    expect(
+      lastCall.conditionPolicy.conditions.map(
+        (entry: { conditionId: string }) => entry.conditionId,
+      ),
+    ).toEqual(["1000", "1500", "1750", "3000", "5000"]);
+    expect(lastCall.allowedConditions).toEqual([
+      "NEW",
+      "NEW_OTHER",
+      "NEW_WITH_DEFECTS",
+      "USED_EXCELLENT",
+      "USED_GOOD",
+    ]);
     expect(lastCall.allowedConditions).not.toEqual(staleBooksConditions);
   });
 
-  it("falls back to the previous allowedConditions only if the conditions fetch itself errors", async () => {
+  it("marks the new category policy unavailable when its condition fetch errors", async () => {
     invokeMock.mockImplementation(
       async (
         _fn: string,
@@ -118,6 +148,7 @@ describe("useAnalyzeCategoryAspects — allowedConditions refresh on category ch
     );
 
     const setEbayMetadata = vi.fn();
+    const setItemSpecifics = vi.fn();
     const priorConditions = ["USED_GOOD"];
 
     renderHook(() =>
@@ -125,7 +156,7 @@ describe("useAnalyzeCategoryAspects — allowedConditions refresh on category ch
         ebayCategoryId: "67742",
         generated: true,
         itemSpecifics: {},
-        setItemSpecifics: vi.fn(),
+        setItemSpecifics,
         setEbayMetadata,
         currentEbayMetadata: {
           requiredAspects: [],
@@ -139,12 +170,15 @@ describe("useAnalyzeCategoryAspects — allowedConditions refresh on category ch
 
     const lastCall =
       setEbayMetadata.mock.calls[setEbayMetadata.mock.calls.length - 1][0];
-    expect(lastCall.allowedConditions).toEqual(priorConditions);
+    expect(lastCall.allowedConditions).toEqual([]);
+    expect(lastCall.conditionPolicy.status).toBe("unavailable");
+    expect(lastCall.conditionPolicy.categoryId).toBe("67742");
   });
 
   it("re-fetches conditions when the category changes again after an initial fetch", async () => {
     mockResponsesFor("67742");
     const setEbayMetadata = vi.fn();
+    const setItemSpecifics = vi.fn();
 
     const { rerender } = renderHook(
       ({ categoryId }: { categoryId: string }) =>
@@ -152,7 +186,7 @@ describe("useAnalyzeCategoryAspects — allowedConditions refresh on category ch
           ebayCategoryId: categoryId,
           generated: true,
           itemSpecifics: {},
-          setItemSpecifics: vi.fn(),
+          setItemSpecifics,
           setEbayMetadata,
           currentEbayMetadata: null,
         }),
@@ -176,6 +210,56 @@ describe("useAnalyzeCategoryAspects — allowedConditions refresh on category ch
         }),
       }),
     );
+  });
+
+  it("clears prior category descriptors before a failed policy request returns", async () => {
+    mockResponsesFor("67742");
+    const setEbayMetadata = vi.fn();
+    const setItemSpecifics = vi.fn();
+
+    const { rerender } = renderHook(
+      ({ categoryId }: { categoryId: string }) =>
+        useAnalyzeCategoryAspects({
+          ebayCategoryId: categoryId,
+          generated: true,
+          itemSpecifics: {},
+          setItemSpecifics,
+          setEbayMetadata,
+          currentEbayMetadata: null,
+        }),
+      { initialProps: { categoryId: "67742" } },
+    );
+
+    await waitFor(() => expect(setEbayMetadata).toHaveBeenCalledTimes(1));
+    invokeMock.mockImplementation(
+      async (
+        _fn: string,
+        opts: { body: { action: string; categoryId: string } },
+      ) =>
+        opts.body.action === "conditions"
+          ? { data: null, error: new Error("policy unavailable") }
+          : {
+              data: { aspects: [{ name: "Material", required: true }] },
+              error: null,
+            },
+    );
+
+    await act(async () => rerender({ categoryId: "11233" }));
+    await waitFor(() => expect(setEbayMetadata).toHaveBeenCalledTimes(2));
+
+    const clearDescriptors = setItemSpecifics.mock.calls[1][0];
+    const result = clearDescriptors({
+      _domain: "books",
+      _conditionDescriptors: [
+        { name: "old-policy-field", values: ["old-value"] },
+      ],
+    });
+    expect(result._domain).toBe("books");
+    expect(result._conditionDescriptors).toBeUndefined();
+
+    const metadata = setEbayMetadata.mock.calls[1][0];
+    expect(metadata.conditionPolicy.status).toBe("unavailable");
+    expect(metadata.conditionPolicy.categoryId).toBe("11233");
   });
 });
 

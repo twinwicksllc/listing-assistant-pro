@@ -27,6 +27,8 @@ import {
 import type { TitleComponents } from "../_helpers/listingFormat.ts";
 import { StageTimer } from "../_helpers/stageTimer.ts";
 import { finishAnalysisAttempt, startAnalysisAttempt } from "../_helpers/analysisAttemptTracker.ts";
+import { resolvePolicyCondition } from "../_helpers/conditionPolicy.ts";
+import type { ConditionPolicy } from "../_helpers/conditionPolicy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -124,6 +126,57 @@ export function normalizeGeneratedConditionEnum(value: unknown): string {
   if (!raw) return "";
   const token = raw.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "");
   return GENERATED_CONDITION_ENUM_CORRECTIONS[token] ?? raw;
+}
+
+function getConditionPolicyForCategory(
+  response: any,
+  categoryId: string | null | undefined,
+): ConditionPolicy | null {
+  const policy = response?.conditionPolicy as ConditionPolicy | undefined;
+  if (!categoryId || !policy || policy.categoryId !== String(categoryId)) {
+    return null;
+  }
+  return policy;
+}
+
+function getAvailableConditionPolicy(
+  response: any,
+  categoryId: string | null | undefined,
+): ConditionPolicy | null {
+  const policy = getConditionPolicyForCategory(response, categoryId);
+  return policy?.status === "available" && Array.isArray(policy.conditions) ? policy : null;
+}
+
+export function getPolicyConditionEnums(policy: ConditionPolicy | null): string[] {
+  if (policy?.status !== "available") return [];
+  return [
+    ...new Set(
+      policy.conditions
+        .filter((condition) =>
+          condition.conditionEnum &&
+          (policy.sellerScoped || condition.usage !== "RESTRICTED")
+        )
+        .map((condition) => condition.conditionEnum as string),
+    ),
+  ];
+}
+
+export function resolveConditionRecommendation(
+  response: any,
+  categoryId: string | null | undefined,
+  selection: string,
+  needsConfirmation = false,
+): { condition: string; conditionNeedsConfirmation: boolean } {
+  const policy = getAvailableConditionPolicy(response, categoryId);
+  const resolved = policy ? resolvePolicyCondition(policy, selection) : undefined;
+  const eligible = resolved &&
+    (resolved.usage !== "RESTRICTED" || policy?.sellerScoped);
+  const condition = !needsConfirmation && eligible ? resolved.conditionEnum ?? "" : "";
+  return {
+    condition,
+    conditionNeedsConfirmation: needsConfirmation ||
+      (policy?.itemConditionRequired !== false && !condition),
+  };
 }
 
 // ─── Sneakers / Auto Parts domain-mismatch guardrails ─────────────────────
@@ -1325,6 +1378,7 @@ serve(async (req: Request) => {
     // ── Fetch dynamic aspects and conditions for the chosen category ──────────
     let categoryAspects: any = null;
     let categoryConditions: any = null;
+    let conditionEnum: string[] = [];
 
     {
       const targetCategoryId = lockedCategoryId || null;
@@ -1372,6 +1426,7 @@ serve(async (req: Request) => {
                       body: JSON.stringify({
                         action: "conditions",
                         categoryId: targetCategoryId,
+                        sellerUserId: userId,
                       }),
                     },
                     withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
@@ -1408,10 +1463,15 @@ serve(async (req: Request) => {
           ) {
             try {
               categoryConditions = await conditionsOutcome.value.json();
+              const conditionPolicy = getAvailableConditionPolicy(
+                categoryConditions,
+                targetCategoryId,
+              );
+              conditionEnum = getPolicyConditionEnums(conditionPolicy);
               console.log(
                 `[${invocationId}] analyze-item: fetched ${
-                  categoryConditions.conditions?.length || 0
-                } conditions for category ${targetCategoryId}`,
+                  conditionPolicy?.conditions.length || 0
+                } policy conditions for category ${targetCategoryId}`,
               );
             } catch (condErr) {
               console.warn(
@@ -1589,25 +1649,35 @@ serve(async (req: Request) => {
         structuredPrompt += aspectsGuidance;
       }
 
-      // Inject allowed conditions from eBay API — structured-only.
-      if (
-        categoryConditions?.conditions &&
-        categoryConditions.conditions.length > 0
-      ) {
-        const conditionsGuidance =
-          `\n\n### ALLOWED CONDITIONS FOR THIS CATEGORY (from eBay API)\nOnly use one of these condition values:\n` +
-          categoryConditions.conditions
-            .map((c: any) => `- ${c.conditionDescription || c.conditionId}`)
+      const conditionPolicy = getAvailableConditionPolicy(
+        categoryConditions,
+        fetchedMetadataCategoryId,
+      );
+      if (conditionPolicy && conditionEnum.length > 0) {
+        structuredPrompt +=
+          `\n\n### ALLOWED CONDITIONS FOR THIS CATEGORY (seller-scoped eBay policy)\nRecommend only one supported alternative. Return its exact ConditionEnum token; the seller-facing label is shown after it. If visual evidence does not distinguish a supported alternative, leave condition empty and set conditionNeedsConfirmation=true.\n` +
+          conditionPolicy.conditions
+            .filter((condition) =>
+              condition.conditionEnum &&
+              (conditionPolicy.sellerScoped || condition.usage !== "RESTRICTED")
+            )
+            .map((condition) =>
+              `- ${condition.conditionEnum}: ${condition.conditionDescription} (condition ID ${condition.conditionId})`
+            )
             .join("\n");
-        structuredPrompt += conditionsGuidance;
+      } else {
+        structuredPrompt +=
+          "\n\n### CONDITION POLICY UNAVAILABLE\nDo not invent or infer an allowed condition. Leave condition empty and set conditionNeedsConfirmation=true.";
       }
+      structuredPrompt +=
+        "\n\n### CONDITION EVIDENCE\nAssess only visible wear or damage. Photos do not establish ownership/use history, prior repairs or cleaning, authenticity, hidden defects, or functionality; do not infer those facts. State uncertainty and set conditionNeedsConfirmation=true when an alternative depends on unsupported history or cannot be determined visually. Ask the seller to confirm those claims. A seller statement may be used as evidence, but do not turn an unverified visual guess into a factual assertion.";
     } catch (promptErr) {
       console.error(
         "analyze-item: failed to load domain prompts, using fallback:",
         promptErr,
       );
       const fallbackPrompt =
-        `You are a professional eBay listing expert. Analyze the provided photo(s) and generate a complete, accurate listing via the create_listing tool. Title ≤ 80 chars. Condition must be one of: NEW, USED_EXCELLENT, USED_VERY_GOOD, USED_GOOD, USED_ACCEPTABLE, FOR_PARTS_OR_NOT_WORKING.`;
+        `You are a professional eBay listing expert. Analyze the provided photo(s) and generate a complete, accurate listing via the create_listing tool. Title ≤ 80 chars. Recommend condition only from the supplied eBay condition policy; if it is unavailable or evidence is insufficient, leave condition empty and set conditionNeedsConfirmation=true. Do not infer item history or functionality from photos.`;
       structuredPrompt = fallbackPrompt;
       descriptionPrompt = fallbackPrompt;
     }
@@ -1682,137 +1752,7 @@ Seller's note: "${voiceNote}"`;
       text: userText,
     });
 
-    // ── Build dynamic tool schema from eBay aspects/conditions ─────────────────
-    // Condition enum: use eBay's actual allowed conditions for this category,
-    // falling back to our generic USED_* set when no category data is available.
-    //
-    // IMPORTANT: We must use our internal UPPERCASE enum keys (e.g. "NEW", "USED_EXCELLENT")
-    // NOT conditionDescription strings (e.g. "New", "Used") from the eBay API.
-    // If Gemini stores a human-readable description like "New" in the draft, the
-    // publish function can't map it to a valid ConditionEnum and eBay returns:
-    //   errorId 2004: "Could not serialize field [condition]"
-    //
-    // Map eBay conditionId -> our internal enum key for the prompt.
-    const CONDITION_ID_TO_ENUM: Record<number, string> = {
-      1000: "NEW",
-      1500: "NEW_OTHER",
-      1750: "NEW_WITH_DEFECTS",
-      2000: "CERTIFIED_REFURBISHED",
-      2010: "CERTIFIED_REFURBISHED",
-      2020: "CERTIFIED_REFURBISHED",
-      2030: "CERTIFIED_REFURBISHED",
-      2500: "SELLER_REFURBISHED",
-      2750: "LIKE_NEW",
-      2990: "PRE_OWNED_EXCELLENT",
-      3000: "USED_EXCELLENT",
-      3010: "PRE_OWNED_FAIR",
-      4000: "USED_VERY_GOOD",
-      5000: "USED_GOOD",
-      6000: "USED_ACCEPTABLE",
-      7000: "FOR_PARTS_OR_NOT_WORKING",
-    };
-    const CONDITION_DESCRIPTION_TO_ENUM: Record<string, string> = {
-      "brand new": "NEW",
-      new: "NEW",
-      "new-open box": "NEW_OTHER",
-      "new-open-box": "NEW_OTHER",
-      "new open box": "NEW_OTHER",
-      "open box": "LIKE_NEW",
-      "like new": "LIKE_NEW",
-      used: "USED_EXCELLENT",
-      "very good": "USED_VERY_GOOD",
-      good: "USED_GOOD",
-      acceptable: "USED_ACCEPTABLE",
-      "for parts or not working": "FOR_PARTS_OR_NOT_WORKING",
-      "certified refurbished": "CERTIFIED_REFURBISHED",
-      "excellent refurbished": "EXCELLENT_REFURBISHED",
-      "very good refurbished": "VERY_GOOD_REFURBISHED",
-      "good refurbished": "GOOD_REFURBISHED",
-      "seller refurbished": "SELLER_REFURBISHED",
-      // Apparel/jewelry/watches/sporting-goods pre-owned grades. eBay's
-      // "Pre-owned - Excellent" (2990) and "Pre-owned - Fair" (3010) are REAL
-      // ConditionEnum values and must be preserved. "Pre-owned - Good" (3000)
-      // has no PRE_OWNED_GOOD enum -- its ConditionEnum is USED_EXCELLENT.
-      // Mirrored in ebay-publish/publish-helpers.ts, bulk-publish/index.ts
-      // and src/types/listing.ts.
-      "pre-owned": "USED_EXCELLENT",
-      "pre-owned - excellent": "PRE_OWNED_EXCELLENT",
-      "pre-owned excellent": "PRE_OWNED_EXCELLENT",
-      "pre-owned - good": "USED_EXCELLENT",
-      "pre-owned good": "USED_EXCELLENT",
-      "pre-owned - fair": "PRE_OWNED_FAIR",
-      "pre-owned fair": "PRE_OWNED_FAIR",
-      "pre-owned poor": "USED_ACCEPTABLE",
-      "digital good": "DIGITAL_GOOD",
-      "certified pre-owned": "CERTIFIED_PRE_OWNED",
-      remanufactured: "REMANUFACTURED",
-      retread: "RETREAD",
-      damaged: "DAMAGED",
-      graded: "USED_EXCELLENT", // eBay "Graded" conditionDescription → condition accepted in coin categories
-      ungraded: "USED_VERY_GOOD", // eBay "Ungraded" conditionDescription → VF (safe default for raw coins)
-      // eBay's official condition-id-values docs list these as alternate
-      // display names for conditionId 1000 (NEW) and 3000 (USED_EXCELLENT)
-      // respectively. Seen live 2026-09-26 for a listing whose allowedConditions
-      // leaked these raw strings straight to the frontend dropdown/publish call
-      // (fixed by reusing this already-normalized table for allowedConditions
-      // below instead of re-deriving raw descriptions). Kept here too as a
-      // second line of defense in case a caller only has the description text
-      // and not the conditionId. Mirrored in ebay-publish/publish-helpers.ts
-      // and src/types/listing.ts — update all three together.
-      "new/factory sealed": "NEW",
-      "new - factory sealed": "NEW",
-      "new factory sealed": "NEW",
-      "open box/used": "USED_EXCELLENT",
-      "open box - used": "USED_EXCELLENT",
-      "open box used": "USED_EXCELLENT",
-    };
-
-    // eBay returns non-enum conditionDescription strings for some categories (e.g. "Ungraded",
-    // "Graded") that are NOT valid Inventory API condition enum values. We must never let these
-    // pass through to the AI's allowed enum list or the publish call will fail with errorId 2004.
-    const INVALID_CONDITION_STRINGS = new Set(["UNGRADED", "GRADED"]);
-    // Only genuinely non-existent enum tokens are corrected here. PRE_OWNED_GOOD
-    // has no enum (its display name maps to conditionId 3000 = USED_EXCELLENT)
-    // and there is no "Pre-owned - Poor" grade. PRE_OWNED_EXCELLENT (2990) and
-    // PRE_OWNED_FAIR (3010) are REAL apparel/jewelry enums and must NOT be
-    // corrected. Mirrored in ebay-publish/publish-helpers.ts and
-    // bulk-publish/index.ts.
-    const FAKE_ENUM_CORRECTIONS: Record<string, string> = {
-      PRE_OWNED_GOOD: "USED_EXCELLENT",
-      PRE_OWNED_POOR: "USED_ACCEPTABLE",
-    };
-    const mappedConditionEnums: string[] = categoryConditions?.conditions?.length > 0
-      ? categoryConditions.conditions
-        .map((c: any) => {
-          const id = Number(c.conditionId);
-          let mapped = CONDITION_ID_TO_ENUM[id] ??
-            CONDITION_DESCRIPTION_TO_ENUM[
-              String(c.conditionDescription ?? "")
-                .trim()
-                .toLowerCase()
-            ] ??
-            String(c.conditionDescription ?? c.conditionId)
-              .toUpperCase()
-              .replace(/[^A-Z0-9]+/g, "_")
-              .replace(/^_|_$/g, "");
-          if (INVALID_CONDITION_STRINGS.has(mapped.toUpperCase())) return null;
-          mapped = FAKE_ENUM_CORRECTIONS[mapped.toUpperCase()] ?? mapped;
-          return mapped;
-        })
-        .filter(
-          (value: string | null): value is string => typeof value === "string" && value.length > 0,
-        )
-      : [];
-    const conditionEnum: string[] = categoryConditions?.conditions?.length > 0
-      ? [...new Set<string>(mappedConditionEnums)]
-      : [
-        "NEW",
-        "USED_EXCELLENT",
-        "USED_VERY_GOOD",
-        "USED_GOOD",
-        "USED_ACCEPTABLE",
-        "FOR_PARTS_OR_NOT_WORKING",
-      ];
+    // ── Build dynamic tool schema from eBay aspects and shared condition policy ──
 
     // itemSpecifics schema: use eBay's required/suggested aspects for this category,
     // falling back to the generic coin/collectible schema when no aspects are available.
@@ -2071,8 +2011,14 @@ Seller's note: "${voiceNote}"`;
       },
       condition: {
         type: "string",
-        enum: conditionEnum,
-        description: "Item condition from eBay's allowed list for this category",
+        ...(conditionEnum.length > 0 ? { enum: ["", ...conditionEnum] } : {}),
+        description:
+          "ConditionEnum token supported by the seller-scoped eBay condition policy; leave empty when policy or visual evidence is insufficient",
+      },
+      conditionNeedsConfirmation: {
+        type: "boolean",
+        description:
+          "Set true when visual evidence is uncertain or condition depends on seller-confirmed history or functionality",
       },
       price: {
         type: "object",
@@ -2348,13 +2294,7 @@ Seller's note: "${voiceNote}"`;
       listing.priceMax = listing.price.amount;
     }
 
-    const rawCondition = listing.condition;
-    listing.condition = normalizeGeneratedConditionEnum(listing.condition);
-    if (rawCondition && listing.condition !== rawCondition) {
-      console.warn(
-        `[${invocationId}] Normalized generated condition ${rawCondition} -> ${listing.condition}`,
-      );
-    }
+    listing.condition = String(listing.condition ?? "").trim();
 
     console.log(`[${invocationId}] 🎯 Gemini returned:`, {
       title: listing.title?.slice(0, 60),
@@ -3115,6 +3055,9 @@ Seller's note: "${voiceNote}"`;
       listing.ebayCategoryId &&
       listing.ebayCategoryId !== fetchedMetadataCategoryId
     ) {
+      categoryAspects = null;
+      categoryConditions = null;
+      conditionEnum = [];
       const _metadataUrl = Deno.env.get("SUPABASE_URL");
       const _metadataKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
       if (_metadataUrl && _metadataKey) {
@@ -3154,6 +3097,7 @@ Seller's note: "${voiceNote}"`;
                   body: JSON.stringify({
                     action: "conditions",
                     categoryId: listing.ebayCategoryId,
+                    sellerUserId: userId,
                   }),
                 },
                 withDeadline(PIPELINE_TIMEOUTS_MS.ebayMetadata, deadline),
@@ -3362,6 +3306,15 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
         }
       }
     }
+
+    const conditionRecommendation = resolveConditionRecommendation(
+      categoryConditions,
+      String(listing.ebayCategoryId ?? ""),
+      listing.condition,
+      Boolean(listing.conditionNeedsConfirmation),
+    );
+    listing.condition = conditionRecommendation.condition;
+    listing.conditionNeedsConfirmation = conditionRecommendation.conditionNeedsConfirmation;
 
     // --- Auto-persist new category to DB via category-lookup (gated) (#2) ---
     // Uses category-lookup "store" action which enforces:
@@ -3843,6 +3796,24 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
       /coin|paper money|currency|dollar|quarter|dime|nickel|penny|bullion|numismatic/i.test(
         resolvedBreadcrumb,
       );
+    const finalCategoryConditionPolicy = getConditionPolicyForCategory(
+      categoryConditions,
+      resolvedCategoryId,
+    );
+    const finalAvailableConditionPolicy = finalCategoryConditionPolicy?.status === "available"
+      ? finalCategoryConditionPolicy
+      : null;
+    const finalConditionRecommendation = resolveConditionRecommendation(
+      { conditionPolicy: finalCategoryConditionPolicy },
+      resolvedCategoryId,
+      String(listing.condition ?? ""),
+      listing.conditionNeedsConfirmation === true,
+    );
+    listing.condition = finalConditionRecommendation.condition;
+    listing.conditionNeedsConfirmation = finalConditionRecommendation.conditionNeedsConfirmation;
+    const finalAllowedConditionEnums = getPolicyConditionEnums(
+      finalAvailableConditionPolicy,
+    );
 
     // Build eBay metadata. Always emitted for coin listings so the frontend
     // always receives isCoinCategory even if eBay returned no aspects/conditions.
@@ -3854,22 +3825,8 @@ Using ONLY the schema provided in the JSON schema tool, fill in the item specifi
         suggestedAspects: categoryAspects?.aspects
           ?.filter((a: any) => !a.required)
           .map((a: any) => a.name) ?? [],
-        // IMPORTANT: Must send normalized ConditionEnum values here, NOT raw eBay
-        // conditionDescription strings (e.g. "New Factory Sealed", "Open Box Used",
-        // "Pre-owned - Good"). Those human-readable descriptions are NOT valid eBay
-        // Inventory API ConditionEnum values -- if they reach the frontend dropdown
-        // as the option `value` and the user selects/publishes them, eBay's publish
-        // call rejects with errorId 2004 "Could not serialize field [condition]".
-        //
-        // Reuse mappedConditionEnums (built above from the exact same
-        // categoryConditions.conditions list via CONDITION_ID_TO_ENUM /
-        // CONDITION_DESCRIPTION_TO_ENUM / FAKE_ENUM_CORRECTIONS) instead of
-        // re-deriving raw descriptions here -- that array is already properly
-        // normalized and is what the AI's own tool-call schema uses, so the
-        // frontend dropdown and the AI now agree on the same allowed values.
-        // Frontend falls back to getConditionsForCategory() when this list is
-        // empty, which returns the proper coin condition tiers.
-        allowedConditions: [...new Set<string>(mappedConditionEnums)],
+        conditionPolicy: finalCategoryConditionPolicy,
+        ...(finalAvailableConditionPolicy ? { allowedConditions: finalAllowedConditionEnums } : {}),
         // Authoritative coin-domain flag. Frontend uses this instead of maintaining
         // a hardcoded category-ID allowlist that goes stale whenever eBay adds
         // a new subcategory.

@@ -13,6 +13,11 @@ import CogsInput from "@/components/CogsInput";
 import { isCoinConditionDetailComplete } from "@/types/listing";
 import type { ItemSpecifics, CoinConditionDetail } from "@/types/listing";
 import { getEbayCategoryBreadcrumb } from "@/lib/ebayCategoryMap";
+import { ConditionPolicyFields } from "@/components/analyze/ConditionPolicyFields";
+import type {
+  ConditionDescriptorSelection,
+  ConditionPolicy,
+} from "../../../supabase/functions/_helpers/conditionPolicy";
 import {
   validateCoinConditionDetail,
   formatValidationErrors,
@@ -55,16 +60,12 @@ interface EbayMetadata {
   requiredAspects: string[];
   suggestedAspects: string[];
   allowedConditions: string[];
+  conditionPolicy?: ConditionPolicy;
 }
 
 interface PlanFeatures {
   hasCogsTracking: boolean;
   hasMeltProtection: boolean;
-}
-
-interface ConditionOption {
-  value: string;
-  label: string;
 }
 
 interface ListingFieldsProps {
@@ -96,8 +97,14 @@ interface ListingFieldsProps {
   cancelCustomCategoryMode: () => void;
   // Condition
   condition: string;
-  conditionOptions: ConditionOption[];
   updateCondition: (v: string) => void;
+  conditionPolicy: ConditionPolicy;
+  conditionPolicyLoading: boolean;
+  conditionValidation: { valid: boolean; errors: string[] };
+  conditionDescriptors: ConditionDescriptorSelection[];
+  updateConditionDescriptors: (
+    descriptors: ConditionDescriptorSelection[],
+  ) => void;
   coinConditionDetail: CoinConditionDetail | null;
   coinConditionDetailRequired: boolean;
   updateCoinConditionDetail: (detail: CoinConditionDetail) => void;
@@ -155,8 +162,12 @@ export function ListingFields({
   confirmCustomCategoryInput,
   cancelCustomCategoryMode,
   condition,
-  conditionOptions,
   updateCondition,
+  conditionPolicy,
+  conditionPolicyLoading,
+  conditionValidation,
+  conditionDescriptors,
+  updateConditionDescriptors,
   coinConditionDetail,
   coinConditionDetailRequired,
   updateCoinConditionDetail,
@@ -201,6 +212,9 @@ export function ListingFields({
       : { type: "raw" as const, rawCondition: "Uncirculated" as const };
   const coinConditionComplete =
     isCoinConditionDetailComplete(coinConditionDetail);
+  const policyGovernsCondition =
+    conditionPolicy.status === "available" &&
+    conditionPolicy.categoryId === ebayCategoryId;
 
   return (
     <div className="space-y-4">
@@ -415,25 +429,18 @@ export function ListingFields({
             </div>
           )}
 
-          {/* Condition */}
-          <div className="flex items-center justify-between bg-card border border-border rounded-lg px-3 py-2">
-            <span className="text-xs font-medium text-muted-foreground">
-              Condition
-            </span>
-            <select
-              value={condition}
-              onChange={(e) => updateCondition(e.target.value)}
-              className="text-xs text-foreground bg-transparent border-none focus:outline-none cursor-pointer text-right"
-            >
-              {conditionOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <ConditionPolicyFields
+            policy={conditionPolicy}
+            categoryId={ebayCategoryId}
+            condition={condition}
+            descriptors={conditionDescriptors}
+            validation={conditionValidation}
+            loading={conditionPolicyLoading}
+            onConditionChange={updateCondition}
+            onDescriptorsChange={updateConditionDescriptors}
+          />
 
-          {coinConditionDetailRequired && (
+          {coinConditionDetailRequired && !policyGovernsCondition && (
             <div className="space-y-3 rounded-xl border border-border bg-card p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>

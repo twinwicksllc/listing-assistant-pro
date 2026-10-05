@@ -7,6 +7,7 @@ import { ListingDraft } from "@/types/listing";
 import { useDrafts } from "@/hooks/useDrafts";
 import { uploadListingImage } from "@/lib/imageUpload";
 import { buildPackageWeightAndSizePayload } from "@/lib/packageWeightAndSize";
+import { buildConditionSelectionPayload } from "@/lib/ebayConditionPolicy";
 
 /**
  * Sequential publishing with retry logic.
@@ -291,6 +292,11 @@ export function usePublishDraft() {
         }
       }
 
+      const conditionPayload = buildConditionSelectionPayload(
+        draft.condition,
+        draft.itemSpecifics,
+      );
+
       const publishPayload = {
         action: "create_draft",
         userId: user?.id,
@@ -322,9 +328,8 @@ export function usePublishDraft() {
         ...(resolvedImageUrls
           ? { imageUrls: resolvedImageUrls }
           : { imageUrl: resolvedImageUrl }),
-        condition: draft.condition ?? "USED_EXCELLENT",
         ebayCategoryId: draft.ebayCategoryId ?? "",
-        itemSpecifics: draft.itemSpecifics ?? {},
+        ...conditionPayload,
         fulfillmentPolicyId: draft.fulfillmentPolicyId ?? null,
         paymentPolicyId: draft.paymentPolicyId ?? null,
         returnPolicyId: draft.returnPolicyId ?? null,

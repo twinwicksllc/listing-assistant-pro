@@ -72,9 +72,9 @@ describe("normalizeEbayConditionDescription", () => {
 
   test("CSV export resolves real pre-owned IDs against the category policy", () => {
     const ringPolicy = [
-      { conditionId: 2990, conditionDescription: "Pre-owned - Excellent" },
-      { conditionId: 3000, conditionDescription: "Pre-owned - Good" },
-      { conditionId: 3010, conditionDescription: "Pre-owned - Fair" },
+      { conditionId: "2990", conditionDescription: "Pre-owned - Excellent" },
+      { conditionId: "3000", conditionDescription: "Pre-owned - Good" },
+      { conditionId: "3010", conditionDescription: "Pre-owned - Fair" },
     ];
     expect(
       conditionIdFromCategoryPolicy("PRE_OWNED_EXCELLENT", ringPolicy),
@@ -84,9 +84,9 @@ describe("normalizeEbayConditionDescription", () => {
     );
     expect(
       conditionIdFromCategoryPolicy("PRE_OWNED_FAIR", [
-        { conditionId: 4000, conditionDescription: "Ungraded" },
+        { conditionId: "4000", conditionDescription: "Ungraded" },
       ]),
-    ).toBe("4000");
+    ).toBeUndefined();
   });
 
   // Regression coverage for a live production incident (2026-09-26): eBay's

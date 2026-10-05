@@ -1,11 +1,12 @@
 import * as XLSX from "xlsx";
 import { supabase } from "@/integrations/supabase/client";
 import { conditionIdFromCategoryPolicy } from "@/lib/ebayConditionPolicy";
+import type { ItemSpecifics } from "@/types/listing";
 import {
-  EBAY_CONDITION_ID_MAP,
-  normalizeEbayConditionDescription,
-  type ItemSpecifics,
-} from "@/types/listing";
+  resolvePolicyCondition,
+  validateConditionSelection,
+  type ConditionPolicy,
+} from "../../supabase/functions/_helpers/conditionPolicy";
 
 export { conditionIdFromCategoryPolicy } from "@/lib/ebayConditionPolicy";
 
@@ -31,13 +32,6 @@ function downloadCSV(filename: string, content: string) {
     new Blob([content], { type: "text/csv;charset=utf-8;" }),
   );
 }
-
-const EBAY_CONDITION_MAP: Record<string, string> = Object.fromEntries(
-  Object.entries(EBAY_CONDITION_ID_MAP).map(([condition, conditionId]) => [
-    condition,
-    String(conditionId),
-  ]),
-);
 
 const FB_CONDITION_MAP: Record<string, string> = {
   NEW: "new",
@@ -84,32 +78,52 @@ export interface ListingData {
 }
 
 async function resolveEbayConditionId(listing: ListingData): Promise<string> {
-  const conditionEnum =
-    normalizeEbayConditionDescription(listing.condition) || listing.condition;
-  const staticConditionId = EBAY_CONDITION_MAP[conditionEnum];
-  const needsCategoryPolicy =
-    conditionEnum === "PRE_OWNED_EXCELLENT" ||
-    conditionEnum === "PRE_OWNED_FAIR";
-  if (staticConditionId && (!needsCategoryPolicy || !listing.ebayCategoryId)) {
-    return staticConditionId;
+  const categoryId = listing.ebayCategoryId.trim();
+  if (!categoryId) {
+    throw new Error("An eBay category is required for condition validation.");
   }
 
-  if (!listing.ebayCategoryId) return "3000";
+  const { data, error } = await supabase.functions.invoke("category-lookup", {
+    body: { action: "conditions", categoryId },
+  });
+  if (error) {
+    throw new Error(`Could not load eBay condition policy: ${error.message}`);
+  }
 
-  try {
-    const { data, error } = await supabase.functions.invoke("category-lookup", {
-      body: { action: "conditions", categoryId: listing.ebayCategoryId },
-    });
-    if (error || !Array.isArray(data?.conditions)) {
-      return needsCategoryPolicy ? "3000" : (staticConditionId ?? "3000");
-    }
+  const policy = data?.conditionPolicy as ConditionPolicy | undefined;
+  if (!policy || policy.categoryId !== categoryId) {
+    throw new Error("The exact eBay category condition policy is unavailable.");
+  }
 
-    return (
-      conditionIdFromCategoryPolicy(conditionEnum, data.conditions) ?? "3000"
+  const selectedCondition = resolvePolicyCondition(policy, listing.condition);
+  const requiredDescriptors = selectedCondition?.conditionDescriptors.filter(
+    (descriptor) =>
+      descriptor.conditionDescriptorConstraint?.usage === "REQUIRED",
+  );
+  if (requiredDescriptors?.length) {
+    throw new Error(
+      `CSV export cannot represent required condition descriptors: ${requiredDescriptors
+        .map((descriptor) => descriptor.conditionDescriptorName)
+        .join(", ")}.`,
     );
-  } catch {
-    return needsCategoryPolicy ? "3000" : (staticConditionId ?? "3000");
   }
+
+  const validation = validateConditionSelection(
+    policy,
+    categoryId,
+    listing.condition,
+  );
+  if (!validation.valid) {
+    throw new Error(
+      `The selected condition cannot be exported: ${validation.errors.join("; ")}.`,
+    );
+  }
+
+  const conditionId = conditionIdFromCategoryPolicy(listing.condition, policy);
+  if (!conditionId) {
+    throw new Error("The selected condition has no exact eBay condition ID.");
+  }
+  return conditionId;
 }
 
 // --- Row builders (shared between CSV and Excel/Sheets) ---
@@ -129,7 +143,8 @@ async function buildEbayRows(
   ];
 
   const specificEntries = Object.entries(listing.itemSpecifics).filter(
-    ([, v]) => v && v.trim() !== "",
+    ([key, value]) =>
+      !key.startsWith("_") && typeof value === "string" && value.trim() !== "",
   );
   specificEntries.forEach(([key]) => headers.push(`C:${key}`));
 

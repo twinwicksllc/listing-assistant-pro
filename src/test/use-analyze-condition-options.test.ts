@@ -1,74 +1,110 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
+import { buildConditionPolicy } from "../../supabase/functions/_helpers/conditionPolicy";
 import { useAnalyzeConditionOptions } from "@/hooks/useAnalyzeConditionOptions";
 
-// Regression coverage for a live production incident (2026-09-26): the
-// Analyze page's condition dropdown was populated directly from
-// ebayMetadata.allowedConditions without any normalization, so eBay's own
-// raw conditionDescription strings ("New Factory Sealed", "Open Box Used" --
-// alternate display names for conditionId 1000/NEW and 3000/USED_EXCELLENT
-// per eBay's condition-id-values docs) ended up as the <option value>.
-// Selecting one and publishing sent an invalid, non-enum condition string to
-// eBay's Inventory API, which rejected it with errorId 2004 ("Could not
-// serialize field [condition]"). The backend (analyze-item) has been fixed
-// to send only normalized enum values, but this hook must also defensively
-// re-normalize every value it receives, matching the belt-and-suspenders
-// pattern already used here for the graded/ungraded coin-label case.
+const conditionPolicy = buildConditionPolicy("12345", {
+  categoryId: "12345",
+  itemConditionRequired: true,
+  itemConditions: [
+    { conditionId: "1000", conditionDescription: "New Factory Sealed" },
+    { conditionId: "1500", conditionDescription: "Open box" },
+  ],
+});
 
 describe("useAnalyzeConditionOptions", () => {
-  test("normalizes raw eBay conditionDescription strings that leak into allowedConditions", () => {
+  test("uses policy IDs and exact policy labels, ignoring legacy allowed conditions", () => {
     const { result } = renderHook(() =>
       useAnalyzeConditionOptions({
         ebayMetadata: {
-          allowedConditions: ["New Factory Sealed", "Open Box Used"],
-          isCoinCategory: false,
+          allowedConditions: ["USED_EXCELLENT"],
+          conditionPolicy,
         },
         ebayCategoryId: "12345",
-        domain: "general",
+        condition: "1000",
         setCondition: vi.fn(),
       }),
     );
 
-    const values = result.current.conditionOptions.map((o) => o.value);
-    expect(values).toEqual(["NEW", "USED_EXCELLENT"]);
-    // Never pass the raw eBay description straight through as a value.
-    expect(values).not.toContain("New Factory Sealed");
-    expect(values).not.toContain("Open Box Used");
+    expect(result.current.conditionOptions).toEqual([
+      { value: "1000", label: "New Factory Sealed" },
+      { value: "1500", label: "Open box" },
+    ]);
   });
 
-  test("passes already-normalized enum values through unchanged", () => {
+  test("converts a uniquely resolvable legacy enum to its policy ID", async () => {
+    const setCondition = vi.fn();
     const { result } = renderHook(() =>
       useAnalyzeConditionOptions({
-        ebayMetadata: {
-          allowedConditions: ["NEW", "USED_EXCELLENT"],
-          isCoinCategory: false,
-        },
+        ebayMetadata: { conditionPolicy },
         ebayCategoryId: "12345",
-        domain: "general",
-        setCondition: vi.fn(),
+        condition: "NEW",
+        setCondition,
       }),
     );
 
-    const values = result.current.conditionOptions.map((o) => o.value);
-    expect(values).toEqual(["NEW", "USED_EXCELLENT"]);
+    expect(result.current.resolvedCondition?.conditionId).toBe("1000");
+    expect(setCondition).toHaveBeenCalledWith("1000");
   });
 
-  test("coin category always uses coin-specific tiers regardless of allowedConditions", () => {
+  test("does not invent options or replace invalid legacy selections", () => {
+    const setCondition = vi.fn();
     const { result } = renderHook(() =>
       useAnalyzeConditionOptions({
-        ebayMetadata: {
-          allowedConditions: ["New Factory Sealed"],
-          isCoinCategory: true,
-        },
-        ebayCategoryId: "3377",
-        domain: "coins_bullion",
-        setCondition: vi.fn(),
+        ebayMetadata: { allowedConditions: ["USED_EXCELLENT"] },
+        ebayCategoryId: "12345",
+        condition: "UNSUPPORTED_LEGACY_VALUE",
+        setCondition,
       }),
     );
 
-    const values = result.current.conditionOptions.map((o) => o.value);
-    expect(values).toContain("NEW");
-    expect(values).toContain("USED_EXCELLENT");
-    expect(values).not.toContain("New Factory Sealed");
+    expect(result.current.conditionOptions).toEqual([]);
+    expect(result.current.conditionValidation.valid).toBe(false);
+    expect(result.current.resolvedCondition).toBeUndefined();
+    expect(setCondition).not.toHaveBeenCalled();
+  });
+
+  test("keeps selection invalid when a legacy enum maps ambiguously", () => {
+    const ambiguousPolicy = buildConditionPolicy("12345", {
+      categoryId: "12345",
+      itemConditionRequired: true,
+      itemConditions: [
+        { conditionId: "1000", conditionDescription: "USED_EXCELLENT" },
+        { conditionId: "3000", conditionDescription: "Used excellent" },
+      ],
+    });
+    const setCondition = vi.fn();
+    const { result } = renderHook(() =>
+      useAnalyzeConditionOptions({
+        ebayMetadata: { conditionPolicy: ambiguousPolicy },
+        ebayCategoryId: "12345",
+        condition: "USED_EXCELLENT",
+        setCondition,
+      }),
+    );
+
+    expect(result.current.resolvedCondition).toBeUndefined();
+    expect(result.current.conditionValidation.valid).toBe(false);
+    expect(setCondition).not.toHaveBeenCalled();
+  });
+
+  test("clears descriptors when the seller selects a different condition", () => {
+    const setCondition = vi.fn();
+    const setDescriptors = vi.fn();
+    const { result } = renderHook(() =>
+      useAnalyzeConditionOptions({
+        ebayMetadata: { conditionPolicy },
+        ebayCategoryId: "12345",
+        condition: "1000",
+        descriptors: [{ name: "grade", values: ["10"] }],
+        setCondition,
+        setDescriptors,
+      }),
+    );
+
+    result.current.updateCondition("1500");
+
+    expect(setCondition).toHaveBeenCalledWith("1500");
+    expect(setDescriptors).toHaveBeenCalledWith([]);
   });
 });

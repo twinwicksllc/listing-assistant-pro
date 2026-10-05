@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import type { CoinConditionDetail, ItemSpecifics } from "@/types/listing";
 import type { SelectedPolicies } from "@/types/ebay-policies";
 import { buildPackageWeightAndSizePayload } from "@/lib/packageWeightAndSize";
+import { splitConditionDescriptorsFromItemSpecifics } from "@/lib/ebayConditionPolicy";
 
 interface UseAnalyzePublishPayloadParams {
   title: string;
@@ -71,8 +72,10 @@ export function useAnalyzePublishPayload({
       // Build publish item specifics — embed _coinConditionDetail and _domain so
       // ebay-publish can detect coin categories and build conditionDescriptors without
       // relying solely on its hardcoded HARDCODED_COIN_CATEGORY_IDS set.
+      const { itemSpecifics: publicItemSpecifics, conditionDescriptors } =
+        splitConditionDescriptorsFromItemSpecifics(itemSpecifics);
       const publishItemSpecifics: Record<string, unknown> = {
-        ...(itemSpecifics as Record<string, unknown>),
+        ...publicItemSpecifics,
         ...(coinConditionDetail
           ? { _coinConditionDetail: coinConditionDetail }
           : {}),
@@ -90,6 +93,7 @@ export function useAnalyzePublishPayload({
         condition,
         ebayCategoryId,
         itemSpecifics: publishItemSpecifics,
+        conditionDescriptors,
         postalCode: postalCode || undefined,
         city: city || undefined,
         fulfillmentPolicyId: selectedPolicies.fulfillmentPolicyId || undefined,

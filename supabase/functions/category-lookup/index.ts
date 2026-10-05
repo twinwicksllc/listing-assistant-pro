@@ -1,8 +1,11 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireUserOrServiceRole } from "../_helpers/authGuard.ts";
+import { buildConditionPolicy, unavailableConditionPolicy } from "../_helpers/conditionPolicy.ts";
+import { refreshEbayAccessToken } from "../_helpers/ebayTokenRefresh.ts";
 import { GEMINI_FAST_MODEL } from "../_helpers/geminiModels.ts";
 import { isKnownParentCategoryId } from "../_helpers/leafCategoryGuard.ts";
 import { getEmbedding } from "../_helpers/rag/embedding.ts";
+import { decryptToken } from "../_helpers/tokenCrypto.ts";
 import { fetchWithTimeout, PIPELINE_TIMEOUTS_MS, withTimeout } from "../_helpers/fetchWithTimeout.ts";
 import { type CandidateSource, type GatedCandidate, selectWinner } from "./resolverCore.ts";
 
@@ -729,7 +732,10 @@ async function matchTaxonomyCategories(
     }
     return (data || []) as MatchedTaxonomyCategory[];
   } catch (err) {
-    console.warn("category-lookup: match_ebay_categories timed out/threw, degrading to []", err);
+    console.warn(
+      "category-lookup: match_ebay_categories timed out/threw, degrading to []",
+      err,
+    );
     return [];
   }
 }
@@ -810,7 +816,10 @@ Rules:
     );
 
     if (!resp.ok) {
-      console.error("category-lookup: vector_llm ranking Gemini API error", resp.status);
+      console.error(
+        "category-lookup: vector_llm ranking Gemini API error",
+        resp.status,
+      );
       return [];
     }
 
@@ -829,7 +838,10 @@ Rules:
 
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      console.warn("category-lookup: vector_llm ranking returned no JSON", text);
+      console.warn(
+        "category-lookup: vector_llm ranking returned no JSON",
+        text,
+      );
       return [];
     }
 
@@ -863,9 +875,16 @@ async function fetchVectorLlmCandidates(
 
   let queryEmbedding: number[];
   try {
-    queryEmbedding = await getEmbedding(geminiKey, itemDescription, PIPELINE_TIMEOUTS_MS.embedding);
+    queryEmbedding = await getEmbedding(
+      geminiKey,
+      itemDescription,
+      PIPELINE_TIMEOUTS_MS.embedding,
+    );
   } catch (err) {
-    console.warn("category-lookup: vector_llm embedding failed, degrading to []", err);
+    console.warn(
+      "category-lookup: vector_llm embedding failed, degrading to []",
+      err,
+    );
     return [];
   }
 
@@ -882,7 +901,9 @@ async function fetchVectorLlmCandidates(
     source: "vector_llm" as CandidateSource,
     rank: i + 1,
     reason: `vector_llm: retrieved from ${shortlist.length}-candidate taxonomy shortlist (similarity=${
-      c.similarity.toFixed(3)
+      c.similarity.toFixed(
+        3,
+      )
     }), LLM rank #${i + 1} -- validated against real live leaf categories only`,
   }));
 }
@@ -1069,15 +1090,13 @@ export async function checkLeafActiveCacheFirst(
   supabase: any,
   categoryId: string,
   ebayAuth: { token: string; base: string } | null,
-): Promise<
-  {
-    isLeaf: boolean;
-    isActive: boolean;
-    categoryName: string | null;
-    breadcrumb: string | null;
-    source: "cache" | "live" | "unknown";
-  }
-> {
+): Promise<{
+  isLeaf: boolean;
+  isActive: boolean;
+  categoryName: string | null;
+  breadcrumb: string | null;
+  source: "cache" | "live" | "unknown";
+}> {
   try {
     const { data: cacheRow } = await supabase
       .from("ebay_taxonomy_cache")
@@ -1109,10 +1128,20 @@ export async function checkLeafActiveCacheFirst(
   }
 
   if (!ebayAuth) {
-    return { isLeaf: false, isActive: false, categoryName: null, breadcrumb: null, source: "unknown" };
+    return {
+      isLeaf: false,
+      isActive: false,
+      categoryName: null,
+      breadcrumb: null,
+      source: "unknown",
+    };
   }
 
-  const live = await verifyCategoryLeafActive(categoryId, ebayAuth.token, ebayAuth.base);
+  const live = await verifyCategoryLeafActive(
+    categoryId,
+    ebayAuth.token,
+    ebayAuth.base,
+  );
   return {
     isLeaf: live.isLeaf,
     isActive: live.isActive,
@@ -1148,7 +1177,10 @@ async function fetchCategoryConditionIds(
     const url =
       `${ebayAuth.base}/sell/metadata/v1/marketplace/${MARKETPLACE_ID}/get_item_condition_policies?filter=${filterParam}`;
     const resp = await fetch(url, {
-      headers: { Authorization: `Bearer ${ebayAuth.token}`, Accept: "application/json" },
+      headers: {
+        Authorization: `Bearer ${ebayAuth.token}`,
+        Accept: "application/json",
+      },
     });
     if (!resp.ok) {
       _categoryConditionCache.set(cacheKey, null);
@@ -1173,7 +1205,10 @@ async function fetchCategoryConditionIds(
     _categoryConditionCache.set(cacheKey, result);
     return result;
   } catch (err) {
-    console.warn(`category-lookup: fetchCategoryConditionIds(${categoryId}) exception`, err);
+    console.warn(
+      `category-lookup: fetchCategoryConditionIds(${categoryId}) exception`,
+      err,
+    );
     _categoryConditionCache.set(cacheKey, null);
     return null;
   }
@@ -1219,7 +1254,11 @@ async function checkAspectSatisfiability(
 ): Promise<string[]> {
   if (!ebayAuth) return [];
   try {
-    const aspects = await fetchItemAspects(categoryId, ebayAuth.token, ebayAuth.base);
+    const aspects = await fetchItemAspects(
+      categoryId,
+      ebayAuth.token,
+      ebayAuth.base,
+    );
     const requiredAspects = aspects.filter((a) => a.required);
     const warnings: string[] = [];
 
@@ -1235,7 +1274,10 @@ async function checkAspectSatisfiability(
     }
     return warnings;
   } catch (err) {
-    console.warn(`category-lookup: checkAspectSatisfiability(${categoryId}) exception`, err);
+    console.warn(
+      `category-lookup: checkAspectSatisfiability(${categoryId}) exception`,
+      err,
+    );
     return [];
   }
 }
@@ -1268,7 +1310,11 @@ async function gateCandidate(
   let dropReason: string | null = null;
 
   // Gates 1 + 2: leaf existence + active status
-  const leafActive = await checkLeafActiveCacheFirst(supabase, raw.categoryId, ebayAuth);
+  const leafActive = await checkLeafActiveCacheFirst(
+    supabase,
+    raw.categoryId,
+    ebayAuth,
+  );
   if (leafActive.categoryName) categoryName = leafActive.categoryName;
   if (leafActive.breadcrumb) breadcrumb = leafActive.breadcrumb;
 
@@ -1280,7 +1326,11 @@ async function gateCandidate(
 
   // Gate 3: condition acceptance (only enforced when a conditionId was supplied)
   if (!dropReason && conditionId) {
-    const accepts = await checkConditionGate(raw.categoryId, conditionId, ebayAuth);
+    const accepts = await checkConditionGate(
+      raw.categoryId,
+      conditionId,
+      ebayAuth,
+    );
     if (accepts === false) {
       dropReason = `Gate 3 failed: category ${raw.categoryId} does not accept condition ${conditionId}`;
     }
@@ -1289,7 +1339,11 @@ async function gateCandidate(
   // Gate 4: required-aspect satisfiability (warn-only unless GATE4_ENFORCE)
   let gate4Warnings: string[] = [];
   if (!dropReason) {
-    gate4Warnings = await checkAspectSatisfiability(raw.categoryId, ebayAuth, knownTokens);
+    gate4Warnings = await checkAspectSatisfiability(
+      raw.categoryId,
+      ebayAuth,
+      knownTokens,
+    );
     if (GATE4_ENFORCE && gate4Warnings.length > 0) {
       dropReason = `Gate 4 failed (enforced): ${gate4Warnings.join("; ")}`;
     }
@@ -1504,7 +1558,10 @@ export async function handleRequest(req: Request): Promise<Response> {
       // source can only ever be an agreement participant here, never an
       // outright winner -- that precedence change is PR 3/3.
       const vectorLlmStart = Date.now();
-      const vectorLlmCandidates = await fetchVectorLlmCandidates(supabase, rawItemType);
+      const vectorLlmCandidates = await fetchVectorLlmCandidates(
+        supabase,
+        rawItemType,
+      );
       const vectorLlmLatency = Date.now() - vectorLlmStart;
       rawCandidates.push(...vectorLlmCandidates);
 
@@ -2160,50 +2217,183 @@ export async function handleRequest(req: Request): Promise<Response> {
     // Optionally includes condition descriptors for trading card categories.
     if (action === "conditions") {
       const cid = (categoryId || "").toString().trim();
-      if (!cid) throw new Error("categoryId required for conditions action");
-
-      const ebayAuth = await getEbayAppToken();
-      if (!ebayAuth) {
-        return new Response(
+      const locale = "en-US";
+      const respond = (
+        conditionPolicy: ReturnType<typeof unavailableConditionPolicy>,
+        source: string,
+        extra: Record<string, unknown> = {},
+        compatibilityConditions: unknown[] = [],
+        responseCategoryName: string | null = categoryName || null,
+      ) =>
+        new Response(
           JSON.stringify({
             categoryId: cid,
-            conditions: [],
-            source: "none",
-            message: "No eBay credentials available",
+            categoryName: responseCategoryName,
+            itemConditionRequired: conditionPolicy.itemConditionRequired,
+            conditions: compatibilityConditions,
+            conditionPolicy,
+            source,
+            ...extra,
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
+
+      if (!cid) {
+        const conditionPolicy = unavailableConditionPolicy(
+          "",
+          "categoryId required for conditions action",
+        );
+        return respond(conditionPolicy, "none", {
+          error: "categoryId required for conditions action",
+        });
       }
 
       try {
+        const ebayEnv = Deno.env.get("EBAY_ENVIRONMENT") || "production";
+        const ebayBase = ebayEnv === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
+        const sellerUserId = auth.userId ??
+          (auth.isServiceRole && typeof payload.sellerUserId === "string" ? payload.sellerUserId.trim() : "");
+        let ebayAuth: { token: string; base: string } | null = null;
+
+        if (sellerUserId) {
+          const { data: profile, error: profileError } = await supabase
+            .from("profiles")
+            .select(
+              "ebay_access_token, ebay_token_expires_at, ebay_refresh_token",
+            )
+            .eq("id", sellerUserId)
+            .maybeSingle();
+
+          if (profileError) {
+            console.error(
+              "category-lookup: seller token profile lookup failed",
+              profileError,
+            );
+            const conditionPolicy = unavailableConditionPolicy(
+              cid,
+              "Seller eBay connection could not be loaded",
+              MARKETPLACE_ID,
+              locale,
+            );
+            return respond(conditionPolicy, "none", {
+              error: conditionPolicy.reason,
+            });
+          }
+          if (!profile) {
+            const conditionPolicy = unavailableConditionPolicy(
+              cid,
+              "Seller eBay connection was not found",
+              MARKETPLACE_ID,
+              locale,
+            );
+            return respond(conditionPolicy, "none", {
+              error: conditionPolicy.reason,
+            });
+          }
+
+          let accessToken = await decryptToken(profile.ebay_access_token);
+          const refreshToken = await decryptToken(profile.ebay_refresh_token);
+          const expiration = profile.ebay_token_expires_at ? Date.parse(profile.ebay_token_expires_at) : Number.NaN;
+          const expiresWithinBuffer = !Number.isFinite(expiration) ||
+            expiration - Date.now() < 5 * 60 * 1000;
+
+          if (expiresWithinBuffer) {
+            const clientId = Deno.env.get("EBAY_CLIENT_ID");
+            const clientSecret = Deno.env.get("EBAY_CLIENT_SECRET");
+            if (!refreshToken || !clientId || !clientSecret) {
+              const conditionPolicy = unavailableConditionPolicy(
+                cid,
+                "Seller eBay token is expired or expiring and cannot be refreshed",
+                MARKETPLACE_ID,
+                locale,
+              );
+              return respond(conditionPolicy, "none", {
+                error: conditionPolicy.reason,
+              });
+            }
+
+            const tokenUrl = ebayEnv === "production"
+              ? "https://api.ebay.com/identity/v1/oauth2/token"
+              : "https://api.sandbox.ebay.com/identity/v1/oauth2/token";
+            const refresh = await refreshEbayAccessToken(
+              supabase,
+              sellerUserId,
+              refreshToken,
+              { clientId, clientSecret, tokenUrl },
+            );
+            if (!refresh.ok) {
+              const conditionPolicy = unavailableConditionPolicy(
+                cid,
+                "Seller eBay token refresh failed",
+                MARKETPLACE_ID,
+                locale,
+              );
+              return respond(conditionPolicy, "none", { error: refresh.error });
+            }
+            accessToken = refresh.accessToken;
+          }
+
+          if (!accessToken) {
+            const conditionPolicy = unavailableConditionPolicy(
+              cid,
+              "Seller eBay access token is unavailable",
+              MARKETPLACE_ID,
+              locale,
+            );
+            return respond(conditionPolicy, "none", {
+              error: conditionPolicy.reason,
+            });
+          }
+          ebayAuth = { token: accessToken, base: ebayBase };
+        } else {
+          ebayAuth = await getEbayAppToken();
+          if (!ebayAuth) {
+            const conditionPolicy = unavailableConditionPolicy(
+              cid,
+              "No eBay credentials available",
+              MARKETPLACE_ID,
+              locale,
+            );
+            return respond(conditionPolicy, "none", {
+              message: conditionPolicy.reason,
+            });
+          }
+        }
+
         // eBay Metadata API: getItemConditionPolicies
         const filterParam = encodeURIComponent(`categoryIds:{${cid}}`);
         const url =
           `${ebayAuth.base}/sell/metadata/v1/marketplace/${MARKETPLACE_ID}/get_item_condition_policies?filter=${filterParam}`;
 
         console.log(`category-lookup: fetching conditions for category ${cid}`);
-        const resp = await fetch(url, {
-          headers: {
-            Authorization: `Bearer ${ebayAuth.token}`,
-            Accept: "application/json",
-            "Accept-Encoding": "gzip",
+        const resp = await fetchWithTimeout(
+          url,
+          {
+            headers: {
+              Authorization: `Bearer ${ebayAuth.token}`,
+              Accept: "application/json",
+              "Accept-Language": locale,
+              "Accept-Encoding": "gzip",
+            },
           },
-        });
+          PIPELINE_TIMEOUTS_MS.ebayMetadata,
+          "category-lookup conditions metadata",
+        );
 
         if (!resp.ok) {
           const errText = await resp.text();
           console.error(
             `category-lookup: conditions API error ${resp.status}: ${errText}`,
           );
-          return new Response(
-            JSON.stringify({
-              categoryId: cid,
-              conditions: [],
-              source: "ebay_api",
-              error: `eBay API error: ${resp.status}`,
-            }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          const conditionPolicy = unavailableConditionPolicy(
+            cid,
+            `eBay API error: ${resp.status}`,
+            MARKETPLACE_ID,
+            locale,
           );
+          return respond(conditionPolicy, "ebay_api", {
+            error: `eBay API error: ${resp.status}`,
+          });
         }
 
         const dataText = await resp.text();
@@ -2215,32 +2405,53 @@ export async function handleRequest(req: Request): Promise<Response> {
             `category-lookup: conditions JSON parse failed (length=${dataText.length}):`,
             dataText.slice(0, 200),
           );
-          return new Response(
-            JSON.stringify({
-              categoryId: cid,
-              conditions: [],
-              source: "ebay_api",
-              error: `Invalid JSON in eBay response (length=${dataText.length})`,
-            }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          const conditionPolicy = unavailableConditionPolicy(
+            cid,
+            `Invalid JSON in eBay response (length=${dataText.length})`,
+            MARKETPLACE_ID,
+            locale,
           );
+          return respond(conditionPolicy, "ebay_api", {
+            error: conditionPolicy.reason,
+          });
         }
-        const policies = data?.itemConditionPolicies || [];
-
-        if (policies.length === 0) {
-          return new Response(
-            JSON.stringify({
-              categoryId: cid,
-              conditions: [],
-              source: "ebay_api",
-              message: "No condition policies found for this category",
-            }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        if (!Array.isArray(data?.itemConditionPolicies)) {
+          const conditionPolicy = unavailableConditionPolicy(
+            cid,
+            "Malformed condition policy response",
+            MARKETPLACE_ID,
+            locale,
           );
+          return respond(conditionPolicy, "ebay_api", {
+            error: conditionPolicy.reason,
+          });
         }
 
-        // Extract the policy for our category
-        const policy = policies.find((p: any) => p.categoryId === cid) || policies[0];
+        const policy = data.itemConditionPolicies.find(
+          (entry: any) => entry && String(entry.categoryId ?? "") === cid,
+        );
+        if (!policy) {
+          const conditionPolicy = unavailableConditionPolicy(
+            cid,
+            "No matching category condition policy",
+            MARKETPLACE_ID,
+            locale,
+          );
+          return respond(conditionPolicy, "ebay_api", {
+            message: conditionPolicy.reason,
+          });
+        }
+
+        const conditionPolicy = buildConditionPolicy(cid, policy, {
+          marketplaceId: MARKETPLACE_ID,
+          locale,
+          sellerScoped: Boolean(sellerUserId),
+        });
+        if (conditionPolicy.status !== "available") {
+          return respond(conditionPolicy, "ebay_api", {
+            error: conditionPolicy.reason,
+          });
+        }
 
         // Transform conditions into a cleaner format for frontend consumption
         const conditions = (policy.itemConditions || []).map((cond: any) => ({
@@ -2260,23 +2471,24 @@ export async function handleRequest(req: Request): Promise<Response> {
           JSON.stringify({
             categoryId: cid,
             categoryName: policy.categoryName || categoryName || null,
-            itemConditionRequired: policy.itemConditionRequired ?? true,
+            itemConditionRequired: policy.itemConditionRequired,
             conditions: conditions,
+            conditionPolicy,
             source: "ebay_api",
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       } catch (fetchErr: any) {
         console.error(`category-lookup: conditions fetch error:`, fetchErr);
-        return new Response(
-          JSON.stringify({
-            categoryId: cid,
-            conditions: [],
-            source: "ebay_api",
-            error: fetchErr.message || "Failed to fetch conditions",
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        const conditionPolicy = unavailableConditionPolicy(
+          cid,
+          fetchErr.message || "Failed to fetch conditions",
+          MARKETPLACE_ID,
+          locale,
         );
+        return respond(conditionPolicy, "ebay_api", {
+          error: conditionPolicy.reason,
+        });
       }
     }
 
