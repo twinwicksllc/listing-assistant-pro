@@ -53,6 +53,26 @@ describe("useAnalyzeConditionOptions", () => {
     expect(values).toEqual(["NEW", "USED_EXCELLENT"]);
   });
 
+  test("shows one option when multiple allowed conditions normalize to the same enum", () => {
+    const { result } = renderHook(() =>
+      useAnalyzeConditionOptions({
+        ebayMetadata: {
+          allowedConditions: ["Used", "Pre-owned - Good", "Open Box Used"],
+          isCoinCategory: false,
+        },
+        ebayCategoryId: "261994",
+        domain: "jewelry",
+        setCondition: vi.fn(),
+      }),
+    );
+
+    expect(
+      result.current.conditionOptions.filter(
+        (option) => option.value === "USED_EXCELLENT",
+      ),
+    ).toHaveLength(1);
+  });
+
   test("coin category always uses coin-specific tiers regardless of allowedConditions", () => {
     const { result } = renderHook(() =>
       useAnalyzeConditionOptions({
