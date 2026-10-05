@@ -1,7 +1,12 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { describeCronAuthEnv, requireCronSecret } from "../_helpers/authGuard.ts";
-import { CACHE_TTL_MS, runCompetitorSearch } from "../_helpers/competitorSearch.ts";
+import {
+  CACHE_TTL_MS,
+  checkBrowseQuotaHeadroom,
+  CRON_QUOTA_RATIO,
+  runCompetitorSearch,
+} from "../_helpers/competitorSearch.ts";
 import { cleanupCacheIfDisconnected } from "../_helpers/ebayAccountDeletion.ts";
 
 const corsHeaders = {
@@ -60,6 +65,11 @@ const REFRESH_CONCURRENCY = 5;
 // realistic calls/tick, with retries capped at ~150/tick worst case.
 const BATCH_LIMIT = 10;
 
+// Worst-case Browse calls one listing refresh can issue (up to 5 item probes
+// plus fallback search attempts). The rebuild on 2026-10-04 averaged 8.8 per
+// listing, so this is deliberately above the observed figure.
+const CALLS_PER_LISTING_ALLOWANCE = 12;
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ----------------------------------------------------------------
@@ -91,6 +101,7 @@ async function refreshCompetitorData(
       yourPrice: listing.price,
       ebayEnv,
       geminiKey,
+      quotaCriticalRatio: CRON_QUOTA_RATIO,
     });
 
     if (result.error) {
@@ -236,8 +247,27 @@ serve(async (req) => {
   // hit rate via the "signature match" log line below before investing in
   // intra-batch sequencing (e.g. processing signature-duplicate groups
   // sequentially instead of within the same Promise.all tick).
+  let unloggedCallAllowance = 0;
   for (let i = 0; i < listings.length; i += REFRESH_CONCURRENCY) {
     const batchSlice = listings.slice(i, i + REFRESH_CONCURRENCY);
+
+    // One serialized quota decision per slice. The per-listing check inside
+    // runCompetitorSearch cannot hold the ceiling on its own: five listings run
+    // in parallel, each reads the same count, and the call-log inserts are
+    // detached, so all five pass just under the limit and then fan out. This
+    // check runs before the slice starts and adds a worst-case allowance for
+    // calls this run has issued but the log may not show yet.
+    const headroom = await checkBrowseQuotaHeadroom(supabase, new Date(), CRON_QUOTA_RATIO, unloggedCallAllowance);
+    if (!headroom.hasHeadroom) {
+      const remaining = listings.length - i;
+      console.warn(
+        `[competitor-prices-cron] Stopping before slice at ${i}: ${headroom.reason}. ${remaining} listing(s) left for the next run.`,
+      );
+      totalSkipped += remaining;
+      break;
+    }
+    unloggedCallAllowance = CALLS_PER_LISTING_ALLOWANCE * batchSlice.length;
+
     const results = await Promise.all(
       batchSlice.map((listing) => refreshCompetitorData(supabase, listing.userId, listing, ebayEnv, geminiKey)),
     );

@@ -802,3 +802,39 @@ line ~1070), or reverting BATCH_LIMIT/REFRESH_CONCURRENCY/PROBE_CAP to pre-fix v
 - [ ] `filter-comparable-listings` still calls the old Finding API
       (`svcs.ebay.com`); deployed, 0 invocations in 7 days. The claim that
       Finding is deprecated is unverified.
+
+## 2026-10-04 cache reset and Browse quota spike (owner-requested condition rewrite)
+
+- [x] **Explained, not a bug.** On 2026-10-04 at about 20:34 UTC the listing and
+      comp caches were emptied as part of the owner's request to find the right
+      way to resolve categories and conditions (#659). The next inventory sync
+      inserted 579 listings into an empty `user_active_listings` and ran a
+      category backfill of 562 single-item eBay calls (`queued 562, found 562`);
+      the comp cron then rebuilt `competitor_prices` with full searches instead
+      of the cheap `getItems` refresh. The Browse counter climbed from 80 to
+      4,510 of 5,000 between 20:31 and 02:31 UTC, then held at 4,510 until the
+      window reset at 07:00. The 90% email warning arrived.
+- [x] **The existing 90% gate did its job**, and the rebuild did not finish: 512
+      of 584 listings were refreshed before the stall, 72 more after the reset.
+      Nothing in #656-#660 or #653 caused it: the spike began before the first
+      weekend deploy, no migration landed after 2026-09-22, and the disconnect
+      guard logged no deletions and `disconnect-ebay` had no calls.
+- [x] **Cost of a cold rebuild is about 4,500 Browse calls** (about 562 backfill
+      plus about 4,000 comp searches) for this account's 585 listings. Tell the
+      team before resetting those caches again, or reset just after a 07:00 UTC
+      quota reset.
+- [x] **Background cron now stops at 75% of the quota, not 90%**
+      (`CRON_QUOTA_RATIO` in `competitorSearch.ts`, passed by
+      `competitor-prices-cron`). Interactive analysis keeps the 90% gate, so a
+      cold rebuild leaves about 1,250 calls for a seller instead of locking them
+      out until the window resets.
+- [ ] After the ratio change deploys, confirm the next cold rebuild (or a
+      forced one) stops near 3,750 in `ebay_rate_limit_polls`. Not exercised
+      against a real rebuild.
+- [ ] A rebuild under the 75% ceiling takes several quota windows for 585
+      listings (about 4,500 calls needed, about 3,750 allowed per window). That
+      is intended, but means comps stay partly stale for about two days after a
+      reset.
+- [ ] The 562-call category backfill is not covered by this ceiling; it runs in
+      inventory sync, not the comp cron. It is bounded by the number of
+      listings missing a category.

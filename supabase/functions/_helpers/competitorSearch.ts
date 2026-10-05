@@ -1064,6 +1064,11 @@ export interface CompSearchAttemptResult {
 // stale headroom that could cause both signals to fire and confuse recovery.
 const BROWSE_QUOTA_DAILY_LIMIT = 5000;
 const CRITICAL_QUOTA_RATIO = 0.90;
+// Lower ceiling for the background cron only. A cold rebuild of the comp cache
+// (2026-10-04) ran the cron up to the shared 90% gate and locked interactive
+// requests out until the window reset; stopping the cron here reserves the
+// remainder for a seller analysing an item.
+export const CRON_QUOTA_RATIO = 0.75;
 const COMBINED_BROWSE_RESOURCES = ["buy.browse", "buy.browse.item.bulk"] as const;
 
 // Caps how many of a listing's stored comp_item_ids get probed per
@@ -1221,6 +1226,11 @@ export async function checkBrowseQuotaHeadroom(
   // supabase-js client typing.
   supabase: any,
   now: Date = new Date(),
+  criticalRatio: number = CRITICAL_QUOTA_RATIO,
+  // Calls the caller has issued but the log may not show yet (the insert is
+  // detached). Added to the count so a serialized caller cannot read a stale
+  // total and overshoot its ceiling.
+  unloggedCallAllowance: number = 0,
 ): Promise<QuotaHeadroomResult> {
   try {
     const anchor = await getLatestBrowseQuotaWindowAnchor(supabase, now);
@@ -1268,18 +1278,18 @@ export async function checkBrowseQuotaHeadroom(
     // threshold, estimatedUsed's ratio is automatically at/above it too
     // (estimatedUsed >= pollCallCount, and callsSinceCountBoundary is always >= 0)
     // -- no separate short-circuit branch is needed for that case.
-    const estimatedUsed = anchor.pollCallCount != null
-      ? anchor.pollCallCount + callsSinceCountBoundary
-      : callsSinceCountBoundary;
+    const estimatedUsed =
+      (anchor.pollCallCount != null ? anchor.pollCallCount + callsSinceCountBoundary : callsSinceCountBoundary) +
+      unloggedCallAllowance;
 
     const ratio = estimatedUsed / BROWSE_QUOTA_DAILY_LIMIT;
-    if (ratio >= CRITICAL_QUOTA_RATIO) {
+    if (ratio >= criticalRatio) {
       return {
         hasHeadroom: false,
         sameDayCount: estimatedUsed,
         reason:
           `combined buy.browse + buy.browse.item.bulk estimated used (${estimatedUsed}/${BROWSE_QUOTA_DAILY_LIMIT}, ${anchor.reason}) is at or above the critical ${
-            (CRITICAL_QUOTA_RATIO * 100).toFixed(0)
+            (criticalRatio * 100).toFixed(0)
           }% threshold`,
       };
     }
@@ -2235,6 +2245,9 @@ export async function runCompetitorSearch(params: {
   yourPrice?: number | null;
   ebayEnv: string;
   geminiKey?: string;
+  /** Quota ratio at which this caller must stop spending Browse calls.
+   * Defaults to the shared 90% gate; the background cron passes a lower one. */
+  quotaCriticalRatio?: number;
 }): Promise<CompetitorSearchOutcome> {
   const { supabase, userId, listingId, title, categoryId, yourPrice, ebayEnv, geminiKey } = params;
 
@@ -2255,7 +2268,7 @@ export async function runCompetitorSearch(params: {
     // same read of "is there headroom today" rather than risking two
     // slightly-different-in-time answers from two separate queries.
     // ------------------------------------------------------------------
-    const quotaHeadroom = await checkBrowseQuotaHeadroom(supabase);
+    const quotaHeadroom = await checkBrowseQuotaHeadroom(supabase, new Date(), params.quotaCriticalRatio);
     if (!quotaHeadroom.hasHeadroom) {
       console.warn(
         `[competitorSearch] Skipping eBay Browse API call(s) -- ${quotaHeadroom.reason}. Serving cache/no-data instead of burning more calls into an exhausted quota.`,
