@@ -199,16 +199,16 @@ export default function PrivacyPage() {
           <p>
             <strong>Google (AI analysis).</strong> The photos, item details and
             voice notes you submit for analysis are sent to Google's Gemini API.
-            We use Google's paid service terms, under which Google states that
-            it does not use your prompts or the content it generates to train or
-            improve its models, and that they are not reviewed by human
-            reviewers except to investigate security incidents, address
-            suspected abuse, or comply with legal obligations. Google may
-            temporarily store and process this content to detect and prevent
-            abuse. Google's handling of that content is governed by its own
-            terms. Please do not submit sensitive personal information, or
-            personal information about children, that is not needed to create a
-            listing.
+            We use the Gemini API through a Google Cloud project with billing
+            enabled, which Google's terms treat as a paid service. For paid
+            services, Google states that it does not use your prompts or
+            responses to improve its products, that it processes them under its
+            Data Processing Addendum, and that it logs prompts and responses for
+            a limited period of time solely to detect and prevent violations of
+            its Prohibited Use Policy and to meet legal or regulatory disclosure
+            requirements. Google's handling of your content is governed by its
+            own terms, which may change. Please do not submit sensitive personal
+            information that is not needed to create a listing.
           </p>
 
           <h2>11. Changes to This Policy</h2>
