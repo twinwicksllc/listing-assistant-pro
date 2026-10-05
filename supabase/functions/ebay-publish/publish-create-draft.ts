@@ -4,6 +4,11 @@ import { assertCallerOwnsUser } from "./supabase.ts";
 import { fetchEbayVideoStatus } from "./video.ts";
 import { buildEbayJsonHeaders } from "./publish.ts";
 import {
+  type ConditionDescriptorSelection,
+  resolvePolicyCondition,
+  validateConditionSelection,
+} from "../_helpers/conditionPolicy.ts";
+import {
   buildAndNormalizeAspects,
   buildCoinConditionDescriptors,
   buildFixedPriceOffer,
@@ -12,24 +17,19 @@ import {
   CATEGORY_ASPECT_RULES,
   categoryAcceptsCondition,
   type CoinConditionDetail,
-  CONDITION_ID_MAP,
   EBAY_CONDITION_ID_GRADED,
   ensureInventoryLocation,
   fetchCoinConditionDescriptors,
-  fetchDynamicCategoryConditions,
+  fetchCurrentConditionPolicy,
   generateDraftSku,
-  getConditionDescription,
   HARDCODED_COIN_CATEGORY_IDS,
   isGrainBar,
   normalizeCoinConditionDetail,
-  normalizeConditionDescriptorToEnum,
-  normalizeConditionForCategory,
   prepareListingDescription,
   resolveAspectCategory,
   resolveCategoryTreeType,
   resolveDraftBusinessPolicies,
   resolveDraftImageUrls,
-  synthesizeCoinConditionDetail,
   verifyOrRerouteLeafCategory,
 } from "./publish-helpers.ts";
 
@@ -40,6 +40,17 @@ export interface CreateDraftContext {
   ebayEnv: string;
   clientId?: string;
   clientSecret?: string;
+}
+
+function isConditionDescriptorSelection(value: unknown): value is ConditionDescriptorSelection[] {
+  return Array.isArray(value) && value.every((descriptor: unknown) => {
+    if (!descriptor || typeof descriptor !== "object" || Array.isArray(descriptor)) return false;
+    const candidate = descriptor as Record<string, unknown>;
+    return typeof candidate.name === "string" && candidate.name.trim().length > 0 &&
+      (candidate.values === undefined ||
+        (Array.isArray(candidate.values) && candidate.values.every((entry: unknown) => typeof entry === "string"))) &&
+      (candidate.additionalInfo === undefined || typeof candidate.additionalInfo === "string");
+  });
 }
 
 /**
@@ -372,162 +383,86 @@ export async function handleCreateDraft({
     itemType,
   );
 
-  // Map internal condition string to numeric conditionId
-  // eBay Inventory API accepts ConditionEnum strings, but many categories
-  // also require the numeric conditionId. We send both for maximum compatibility.
-  // Migrate any legacy deprecated condition codes to current equivalents,
-  // then normalize based on the category and item type (e.g., LIKE_NEW not valid for coins).
-  const rawCondition = (condition as string) || "USED_EXCELLENT";
-  // Determine whether this is a graded (slabbed/certified) coin. Graded coins
-  // must map to the eBay "Graded" condition (LIKE_NEW / 2750) rather than being
-  // force-corrected to a circulated grade. We derive this from the coin condition
-  // detail the frontend attaches under itemSpecifics._coinConditionDetail, and from
-  // the resolved Certification aspect (a grading company name means graded).
-  const isGraded = (() => {
-    const _gradeIS = itemSpecifics && typeof itemSpecifics === "object"
-      ? (itemSpecifics as Record<string, unknown>)
-      : {};
-    const _gradeCcd = _gradeIS._coinConditionDetail as
-      | { type?: string; graded?: { company?: string } }
-      | null
-      | undefined;
-    if (_gradeCcd?.type === "graded") return true;
-    const _cert = aspects["Certification"]?.[0];
-    if (_cert && _cert.toLowerCase() !== "uncertified") return true;
-    return false;
-  })();
-  const { condition: normalizedCondition, corrected } = normalizeConditionForCategory(
-    rawCondition,
+  const rawCondition = condition === null || condition === undefined ? "" : String(condition).trim();
+  const conditionPolicy = await fetchCurrentConditionPolicy(
     finalCategoryId,
-    itemType,
-    categoryTreeType,
-    isGraded,
+    String(userId ?? ""),
   );
-  let conditionEnum = normalizedCondition;
-  let conditionId = CONDITION_ID_MAP[conditionEnum];
-  let effectiveConditionEnum = conditionEnum;
-  let conditionDesc = getConditionDescription(conditionEnum, categoryTreeType);
-
-  if (
-    (!conditionId ||
-      [
-        "DIGITAL_GOOD",
-        "CERTIFIED_PRE_OWNED",
-        "REMANUFACTURED",
-        "RETREAD",
-        "DAMAGED",
-      ].includes(conditionEnum)) &&
-    finalCategoryId
-  ) {
-    const dynamicConditions = await fetchDynamicCategoryConditions(finalCategoryId);
-    const matchedCondition = dynamicConditions.find(
-      (candidate) =>
-        normalizeConditionDescriptorToEnum(candidate.conditionDescription) ===
-          conditionEnum,
+  if (conditionPolicy.status !== "available") {
+    return new Response(
+      JSON.stringify({
+        error: `Unable to verify eBay condition policy for category ${finalCategoryId}. ${
+          conditionPolicy.reason ?? "Please try again."
+        }`,
+        conditionPolicyUnavailable: true,
+        sku,
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
-    if (matchedCondition) {
-      conditionId = matchedCondition.conditionId;
-      conditionDesc = matchedCondition.conditionDescription;
-      conditionEnum = normalizeConditionDescriptorToEnum(
-        matchedCondition.conditionDescription,
-      ) || conditionEnum;
-    }
   }
 
-  // normalizeConditionForCategory only has correction branches for
-  // coin/bullion/trading_card/collectible — everything else (jewelry
-  // included) falls through with corrected=false and no validation, so a
-  // bad value (a stale hardcoded fallback, or a raw eBay conditionDescription
-  // that slipped past the frontend's own normalizer) reaches eBay untouched.
-  // Check it against what this category's own condition policy actually
-  // accepts, and swap to the closest live-valid match rather than guessing.
+  const selectedPolicyCondition = resolvePolicyCondition(conditionPolicy, rawCondition);
+  if (rawCondition && !selectedPolicyCondition) {
+    return new Response(
+      JSON.stringify({
+        error:
+          `The selected condition "${rawCondition}" is not supported for eBay category ${finalCategoryId}. Choose a condition offered for this category and try again.`,
+        invalidCondition: true,
+        sku,
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+  if (selectedPolicyCondition && !selectedPolicyCondition.conditionEnum) {
+    return new Response(
+      JSON.stringify({
+        error:
+          `The selected eBay condition "${selectedPolicyCondition.conditionDescription}" has no supported Inventory API mapping. Choose another condition or contact support.`,
+        invalidCondition: true,
+        sku,
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
   if (
-    !corrected &&
-    categoryTreeType === "other" &&
-    finalCategoryId
+    selectedPolicyCondition &&
+    !/^\d+$/.test(selectedPolicyCondition.conditionId)
   ) {
-    try {
-      const liveConditions = await fetchDynamicCategoryConditions(
-        finalCategoryId,
-      );
-      const liveEnums = liveConditions
-        .map((c) => normalizeConditionDescriptorToEnum(c.conditionDescription))
-        .filter((c) => c.length > 0);
-      // Copilot review (PR #573): this comparison previously checked the
-      // RAW conditionEnum against the NORMALIZED liveEnums list — a legacy
-      // draft/caller supplying a raw descriptor like "New with tags" (the
-      // exact case this whole safety net exists for) would never match, so
-      // it fell through to the fallback and got silently downgraded to
-      // USED_EXCELLENT (pre-owned) even though the category's live policy
-      // may have accepted it all along. Normalize BOTH sides before
-      // comparing, and carry the matched live condition's own id/description
-      // through even on a match, so conditionId/conditionDesc reflect what
-      // eBay itself just confirmed rather than whatever normalizeCondition-
-      // ForCategory guessed upstream.
-      const normalizedIncoming = normalizeConditionDescriptorToEnum(conditionEnum) ||
-        conditionEnum;
-      if (liveEnums.length > 0) {
-        const matchedIncoming = liveConditions.find(
-          (c) =>
-            normalizeConditionDescriptorToEnum(c.conditionDescription) ===
-              normalizedIncoming,
-        );
-        if (matchedIncoming) {
-          // The incoming value IS valid for this category once normalized —
-          // adopt the live condition's own id/description rather than
-          // whatever normalizeConditionForCategory produced upstream.
-          conditionEnum = normalizedIncoming;
-          conditionId = matchedIncoming.conditionId;
-          conditionDesc = matchedIncoming.conditionDescription;
-        } else {
-          const fallbackEnum = liveEnums.includes("USED_EXCELLENT") ? "USED_EXCELLENT" : liveEnums[0];
-          const fallbackCondition = liveConditions.find(
-            (c) =>
-              normalizeConditionDescriptorToEnum(c.conditionDescription) ===
-                fallbackEnum,
-          );
-          console.warn(
-            `create_draft: condition ${conditionEnum} (normalized: ${normalizedIncoming}) is not in category ${finalCategoryId}'s live condition policy (${
-              liveEnums.join(", ")
-            }) — falling back to ${fallbackEnum}`,
-          );
-          conditionEnum = fallbackEnum;
-          conditionId = fallbackCondition?.conditionId ?? conditionId;
-          conditionDesc = fallbackCondition?.conditionDescription ?? conditionDesc;
-        }
-      }
-    } catch (liveConditionsErr) {
-      // Live-conditions check is a safety net, not a hard requirement —
-      // if eBay's Metadata API is unreachable, proceed with the value we
-      // already have rather than blocking publish.
-      console.warn(
-        `create_draft: pre-publish live-conditions check failed for category ${finalCategoryId}`,
-        liveConditionsErr,
+    return new Response(
+      JSON.stringify({
+        error:
+          `The eBay condition policy for category ${finalCategoryId} contains an invalid condition ID. Refresh the category and try again.`,
+        conditionPolicyUnavailable: true,
+        sku,
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
+  const conditionEnum = selectedPolicyCondition?.conditionEnum ?? "";
+  const conditionId = selectedPolicyCondition ? Number(selectedPolicyCondition.conditionId) : undefined;
+  const effectiveConditionEnum = conditionEnum;
+  const effectiveConditionId = conditionId;
+  const conditionDesc = selectedPolicyCondition?.conditionDescription ?? "";
+  if (!rawCondition) {
+    const omission = validateConditionSelection(conditionPolicy, finalCategoryId, "");
+    if (!omission.valid) {
+      return new Response(
+        JSON.stringify({
+          error: `A condition is required for eBay category ${finalCategoryId}. ${omission.errors.join("; ")}`,
+          invalidCondition: true,
+          sku,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
   }
 
-  conditionId = conditionId ?? 3000;
-  let effectiveConditionId = conditionId;
-
-  // NOTE: this log intentionally reports `conditionEnum` (the FINAL value
-  // after the "other"-category live-conditions safety net above may have
-  // overridden it), not `normalizedCondition` (the PRE-safety-net value from
-  // normalizeConditionForCategory). Logging normalizedCondition here was
-  // misleading during a live incident (2026-09-20): it showed the original
-  // rawCondition/normalized pair even when the safety net had since changed
-  // conditionEnum, making it look like the net never ran. The inventory-body
-  // log further down remains the ultimate source of truth for what was
-  // actually sent to eBay.
   console.log(
-    `create_draft: condition normalization - rawCondition=${rawCondition}, normalized=${normalizedCondition}, finalCondition=${conditionEnum}, conditionId=${conditionId}, categoryId=${finalCategoryId}, corrected=${corrected}`,
+    `create_draft: condition policy selected=${conditionEnum || "omitted"}, conditionId=${
+      conditionId ?? "omitted"
+    }, categoryId=${finalCategoryId}`,
   );
-
-  if (corrected) {
-    console.log(
-      `create_draft: condition auto-corrected from ${rawCondition} to ${normalizedCondition} for category ${finalCategoryId}`,
-    );
-  }
 
   // NOTE: Accept-Language must be explicitly set to "en-US".
   // Deno's runtime auto-injects the system locale when this header is omitted,
@@ -538,22 +473,6 @@ export async function handleCreateDraft({
   // Step 1: Ensure inventory location exists before creating the item.
   // The item's shipToLocationAvailability references this location by key,
   // so it must exist first.
-  const effectivePostalCode = postalCode || "60601"; // fallback to Chicago if not set
-  const effectiveCity = payloadCity || ""; // city may be empty but will be omitted in address if so
-  console.log("create_draft: inventory location setup", {
-    receivedPostalCode: postalCode || "NOT_SET",
-    receivedCity: payloadCity || "NOT_SET",
-    effectivePostalCode,
-    effectiveCity,
-    isFallback: !postalCode,
-  });
-  const merchantLocationKey = await ensureInventoryLocation(
-    apiBase,
-    String(userToken),
-    String(effectivePostalCode),
-    String(effectiveCity),
-  );
-
   // Step 2: Create/update inventory item (PUT is idempotent — safe to retry)
   // NOTE: description goes in the OFFER (listingDescription), not the inventory item.
   // The inventory item holds product data; the offer holds listing-specific data.
@@ -570,8 +489,7 @@ export async function handleCreateDraft({
       title: finalTitle,
       imageUrls: resolvedImageUrls,
     },
-    condition: conditionEnum,
-    conditionDescription: conditionDesc,
+    ...(conditionEnum ? { condition: conditionEnum, conditionDescription: conditionDesc } : {}),
     packageWeightAndSize,
     availability: {
       // shipToLocationAvailability: use only the top-level quantity.
@@ -660,13 +578,37 @@ export async function handleCreateDraft({
   const rawItemSpecifics = (
     itemSpecifics && typeof itemSpecifics === "object" ? itemSpecifics : {}
   ) as Record<string, unknown>;
+  const hasPayloadConditionDescriptors = Object.hasOwn(payload, "conditionDescriptors");
+  const hasSavedConditionDescriptors = Object.hasOwn(rawItemSpecifics, "_conditionDescriptors");
+  const suppliedConditionDescriptors = hasPayloadConditionDescriptors
+    ? payload.conditionDescriptors
+    : hasSavedConditionDescriptors
+    ? rawItemSpecifics._conditionDescriptors
+    : undefined;
+  if (
+    (hasPayloadConditionDescriptors || hasSavedConditionDescriptors) &&
+    !isConditionDescriptorSelection(suppliedConditionDescriptors)
+  ) {
+    return new Response(
+      JSON.stringify({
+        error:
+          "Invalid conditionDescriptors: expected a list of descriptor objects with a non-empty name, optional string values, and optional additionalInfo text.",
+        invalidCondition: true,
+        sku,
+      }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+  const explicitConditionDescriptors = hasPayloadConditionDescriptors || hasSavedConditionDescriptors
+    ? suppliedConditionDescriptors as ConditionDescriptorSelection[]
+    : undefined;
   const coinConditionDetailFromSpecifics = normalizeCoinConditionDetail(
     rawItemSpecifics._coinConditionDetail,
   );
   const coinConditionDetailFromPayload = normalizeCoinConditionDetail(
     (payload as Record<string, unknown>).coinConditionDetail,
   );
-  let coinConditionDetailRaw: CoinConditionDetail | null = coinConditionDetailFromSpecifics ||
+  const coinConditionDetailRaw: CoinConditionDetail | null = coinConditionDetailFromSpecifics ||
     coinConditionDetailFromPayload;
 
   // Coin categories MUST provide condition details per eBay June 2026 mandate.
@@ -714,24 +656,12 @@ export async function handleCreateDraft({
   // present, or _domain = coins_bullion), we don't throw here — we proceed optimistically
   // and let eBay validate. This prevents blocking edge-case bullion/bar categories that
   // are tagged coins_bullion but don't actually need conditionDescriptors.
-  if (isCoinDescriptorCategory && clientId && clientSecret) {
+  if (!explicitConditionDescriptors && isCoinDescriptorCategory && clientId && clientSecret) {
     try {
-      if (!coinConditionDetailRaw) {
-        coinConditionDetailRaw = synthesizeCoinConditionDetail(
-          effectiveConditionEnum,
-          rawItemSpecifics,
-        );
-        console.log(
-          `create_draft: synthesized coinConditionDetail from condition/itemSpecifics: ${
-            JSON.stringify(
-              coinConditionDetailRaw,
-            )
-          }`,
-        );
-      }
-
       console.log(
-        `create_draft: MANDATORY: fetching coin condition descriptors for category ${finalCategoryId}, type=${coinConditionDetailRaw.type}`,
+        `create_draft: fetching coin condition descriptors for category ${finalCategoryId}, type=${
+          coinConditionDetailRaw?.type ?? "unspecified"
+        }`,
       );
 
       let descriptors: any[] | null = null;
@@ -765,6 +695,17 @@ export async function handleCreateDraft({
       }
 
       if (descriptors && descriptors.length > 0) {
+        if (!coinConditionDetailRaw) {
+          return new Response(
+            JSON.stringify({
+              error:
+                `eBay requires coin condition details for category ${finalCategoryId}. Enter the coin's raw condition or grading details and try again.`,
+              invalidCondition: true,
+              sku,
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
         const conditionDescriptors = buildCoinConditionDescriptors(
           coinConditionDetailRaw,
           descriptors,
@@ -816,14 +757,59 @@ export async function handleCreateDraft({
   }
   // ── End Coin Condition Descriptors (MANDATORY) ────────────────────────────
 
+  const selectedDescriptors = explicitConditionDescriptors ?? (
+    Array.isArray(inventoryBody.conditionDescriptors)
+      ? inventoryBody.conditionDescriptors as ConditionDescriptorSelection[]
+      : []
+  );
+  if (selectedDescriptors.length > 0) {
+    inventoryBody.conditionDescriptors = selectedDescriptors;
+  }
+  const conditionValidation = validateConditionSelection(
+    conditionPolicy,
+    finalCategoryId,
+    rawCondition,
+    selectedDescriptors,
+  );
+  if (!conditionValidation.valid) {
+    return new Response(
+      JSON.stringify({
+        error: `The selected condition or its details are not valid for eBay category ${finalCategoryId}: ${
+          conditionValidation.errors.join("; ")
+        }. Update the condition details and try again.`,
+        invalidCondition: true,
+        sku,
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
+  const effectivePostalCode = postalCode || "60601";
+  const effectiveCity = payloadCity || "";
+  console.log("create_draft: inventory location setup", {
+    receivedPostalCode: postalCode || "NOT_SET",
+    receivedCity: payloadCity || "NOT_SET",
+    effectivePostalCode,
+    effectiveCity,
+    isFallback: !postalCode,
+  });
+  const merchantLocationKey = await ensureInventoryLocation(
+    apiBase,
+    String(userToken),
+    String(effectivePostalCode),
+    String(effectiveCity),
+  );
+
   console.log(
-    `create_draft: creating inventory item for sku=${sku}, condition=${conditionEnum} (raw=${rawCondition}), merchantLocationKey=${merchantLocationKey}`,
+    `create_draft: creating inventory item for sku=${sku}, condition=${conditionEnum || "omitted"} (requested=${
+      rawCondition || "omitted"
+    }), merchantLocationKey=${merchantLocationKey}`,
   );
   console.log(
     `create_draft: inventory body condition:`,
     JSON.stringify({
-      condition: conditionEnum,
-      conditionDescription: conditionDesc,
+      condition: conditionEnum || undefined,
+      conditionDescription: conditionDesc || undefined,
       packageWeightAndSize,
     }),
   );
@@ -1184,13 +1170,13 @@ export async function handleCreateDraft({
     },
   );
 
-  // Auto-recovery for eBay errorId 25021 (invalid CONDITION_ID for category).
-  // Some coin categories reject specific USED_* variants at publish-time even if
-  // inventory/offer creation succeeded. Retry with safer fallbacks before failing.
+  // A publish-time condition rejection refreshes policy for the next user attempt;
+  // it must not silently replace the seller's requested condition.
   let publishErrText = "";
+  let isConditionIdError = false;
+  let conditionPolicyRefreshAvailable = false;
   if (!publishResp.ok) {
     publishErrText = await publishResp.text();
-    let isConditionIdError = false;
     // Matches both eBay's generic message ("...condition id is invalid...")
     // and the category-specific variant seen on non-coin leaves like
     // Jewelry & Watches ("...invalid for the selected primary category
@@ -1212,162 +1198,21 @@ export async function handleCreateDraft({
       isConditionIdError = CONDITION_ID_ERROR_RE.test(publishErrText);
     }
 
-    if (isConditionIdError && offerId) {
-      // For graded coins in category 171526 and similar, don't retry with raw conditions.
-      // These categories strictly require graded condition descriptors per eBay mandate.
-      // If the initial graded condition fails, this category cannot be salvaged via fallback.
-      const isGradedCoinCategory = finalCategoryId === "171526";
+    publishResp = new Response(publishErrText, {
+      status: publishResp.status,
+      statusText: publishResp.statusText,
+      headers: publishResp.headers,
+    });
 
-      let candidates: string[] = isGradedCoinCategory
-        ? [] // No valid fallbacks for graded coin categories
-        : categoryTreeType === "coin"
-        ? ["USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE", "NEW"]
-        : categoryTreeType === "bullion"
-        ? ["NEW", "USED_GOOD"]
-        : categoryTreeType === "trading_card"
-        ? ["USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE"]
-        : [];
-
-      // No hardcoded guess exists for "other" categories (jewelry and
-      // everything else outside coin/bullion/trading_card) — the hardcoded
-      // USED_VERY_GOOD/USED_GOOD/USED_ACCEPTABLE guess used here previously
-      // isn't even valid for e.g. Fine Jewelry > Rings (261994), whose real
-      // conditions are NEW/NEW_OTHER/NEW_WITH_DEFECTS/USED_EXCELLENT. Ask
-      // eBay what this specific category actually accepts instead of
-      // guessing again.
-      if (!isGradedCoinCategory && candidates.length === 0 && finalCategoryId) {
-        try {
-          const liveConditions = await fetchDynamicCategoryConditions(
-            finalCategoryId,
-          );
-          candidates = liveConditions
-            .map((c) => normalizeConditionDescriptorToEnum(c.conditionDescription))
-            .filter((c) => c.length > 0);
-        } catch (liveConditionsErr) {
-          console.warn(
-            `create_draft: live-conditions retry lookup failed for category ${finalCategoryId}`,
-            liveConditionsErr,
-          );
-        }
-      }
-
-      const retryConditions = candidates.filter(
-        (c) => c !== effectiveConditionEnum,
+    if (isConditionIdError) {
+      const refreshedPolicy = await fetchCurrentConditionPolicy(
+        finalCategoryId,
+        String(userId ?? ""),
       );
-
-      if (retryConditions.length === 0) {
-        console.error(
-          `create_draft: no valid condition fallbacks for graded coin category ${finalCategoryId}; aborting retry`,
-        );
-      } else {
-        console.warn(
-          `create_draft: publish failed with invalid condition for category ${finalCategoryId}; retrying with fallbacks: ${
-            retryConditions.join(
-              ", ",
-            )
-          }`,
-        );
-      }
-
-      for (const retryCondition of retryConditions) {
-        const retryDescription = getConditionDescription(retryCondition, categoryTreeType);
-
-        const retryInventoryBody: Record<string, unknown> = {
-          ...inventoryBody,
-          condition: retryCondition,
-          conditionDescription: retryDescription,
-        };
-
-        const invRetryResp = await fetchWithTimeout(
-          `${apiBase}/sell/inventory/v1/inventory_item/${sku}`,
-          {
-            method: "PUT",
-            timeout: 15000,
-            headers: authHeaders,
-            body: JSON.stringify(retryInventoryBody),
-          },
-        );
-
-        if (!invRetryResp.ok) {
-          const invRetryErr = await invRetryResp.text();
-          console.warn(
-            `create_draft: retry inventory update failed for condition=${retryCondition}: ${invRetryResp.status} ${
-              invRetryErr.slice(
-                0,
-                200,
-              )
-            }`,
-          );
-          continue;
-        }
-
-        const retryOfferBody: Record<string, unknown> = {
-          ...(offerBody as Record<string, unknown>),
-          condition: retryCondition,
-          conditionDescription: retryDescription,
-        };
-
-        const offerRetryResp = await fetchWithTimeout(
-          `${apiBase}/sell/inventory/v1/offer/${offerId}`,
-          {
-            method: "PUT",
-            timeout: 15000,
-            headers: authHeaders,
-            body: JSON.stringify(retryOfferBody),
-          },
-        );
-
-        if (!offerRetryResp.ok) {
-          const offerRetryErr = await offerRetryResp.text();
-          console.warn(
-            `create_draft: retry offer update failed for condition=${retryCondition}: ${offerRetryResp.status} ${
-              offerRetryErr.slice(
-                0,
-                200,
-              )
-            }`,
-          );
-          continue;
-        }
-
-        const publishRetryResp = await fetchWithTimeout(
-          `${apiBase}/sell/inventory/v1/offer/${offerId}/publish`,
-          {
-            method: "POST",
-            timeout: 15000,
-            headers: authHeaders,
-          },
-        );
-
-        if (publishRetryResp.ok) {
-          publishResp = publishRetryResp;
-          effectiveConditionEnum = retryCondition;
-          effectiveConditionId = CONDITION_ID_MAP[retryCondition] ?? 3000;
-          console.log(
-            `create_draft: publish retry succeeded with condition=${effectiveConditionEnum} (id=${effectiveConditionId})`,
-          );
-          break;
-        }
-
-        const publishRetryErr = await publishRetryResp.text();
-        console.warn(
-          `create_draft: publish retry failed for condition=${retryCondition}: ${publishRetryResp.status} ${
-            publishRetryErr.slice(
-              0,
-              200,
-            )
-          }`,
-        );
-        publishResp = publishRetryResp;
-        publishErrText = publishRetryErr;
-      }
-    } else {
-      // Preserve original failed response body for downstream handling.
-      publishResp = new Response(publishErrText, {
-        status: publishResp.status,
-        statusText: publishResp.statusText,
-        headers: publishResp.headers,
-      });
+      conditionPolicyRefreshAvailable = refreshedPolicy.status === "available";
+      console.warn(
+        `create_draft: eBay rejected the validated condition for category ${finalCategoryId}; refreshed policy status=${refreshedPolicy.status}. Returning without substituting a condition.`,
+      );
     }
   }
 
@@ -1605,9 +1450,12 @@ export async function handleCreateDraft({
       } else if (isBrandOrAspectError) {
         userFriendlyError =
           `eBay rejected the value for "${aspectErrorName}" on this listing (it may be a restricted/trademarked brand name for this category). Try removing or correcting that item specific and republish.`;
-      } else if (errorId === 25002 || errorId === 25060) {
-        userFriendlyError =
-          "The selected condition is not valid for this category. Please adjust the condition and try again.";
+      } else if (isConditionIdError || errorId === 25021 || errorId === 25060) {
+        userFriendlyError = `eBay rejected the selected condition or condition details for this category. ${
+          conditionPolicyRefreshAvailable
+            ? "Category policy was rechecked."
+            : "Current category policy could not be rechecked."
+        } Review the condition and its details, then try again.`;
       } else if (
         errorId === 21919288 ||
         errorId === 25004 ||

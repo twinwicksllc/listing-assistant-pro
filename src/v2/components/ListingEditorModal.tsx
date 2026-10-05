@@ -12,13 +12,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Loader2, ExternalLink, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -27,6 +20,7 @@ import {
   type EditorListingRef,
 } from "@/hooks/useListingEditor";
 import CogsInput from "@/components/CogsInput";
+import { ConditionPolicyFields } from "@/components/analyze/ConditionPolicyFields";
 
 interface ListingEditorModalProps {
   open: boolean;
@@ -144,8 +138,23 @@ export default function ListingEditorModal({
     discardChanges,
     onCategoryChange,
     categoryAspects,
-    allowedConditions,
+    conditionPolicy,
+    conditionPolicyLoading,
+    conditionPolicyValidation,
+    inventoryItemAvailable,
   } = editor;
+  const conditionChangesPending = [
+    "categoryId",
+    "condition",
+    "conditionDescription",
+    "conditionDescriptors",
+  ].some((field) => dirtyFields.has(field));
+  const conditionSaveBlocked =
+    conditionChangesPending &&
+    (conditionPolicyLoading ||
+      conditionPolicy.status !== "available" ||
+      conditionPolicy.categoryId !== (editorState?.categoryId ?? "") ||
+      !conditionPolicyValidation.valid);
 
   useEffect(() => {
     if (open && listing) {
@@ -240,36 +249,80 @@ export default function ListingEditorModal({
                     onChange={(e) => updateField("description", e.target.value)}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div>
                   <div className="space-y-1.5">
-                    <Label>Condition</Label>
-                    <Select
-                      value={editorState.condition ?? undefined}
-                      onValueChange={(v) => updateField("condition", v)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select condition" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {allowedConditions.map((c) => (
-                          <SelectItem key={c} value={c}>
-                            {c}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="editor-condition-notes">
-                      Condition Notes
-                    </Label>
-                    <Input
-                      id="editor-condition-notes"
-                      value={editorState.conditionDescription}
-                      onChange={(e) =>
-                        updateField("conditionDescription", e.target.value)
-                      }
-                    />
+                    {inventoryItemAvailable ? (
+                      <ConditionPolicyFields
+                        policy={conditionPolicy}
+                        categoryId={editorState.categoryId ?? ""}
+                        condition={editorState.condition ?? ""}
+                        descriptors={editorState.conditionDescriptors}
+                        validation={conditionPolicyValidation}
+                        loading={conditionPolicyLoading}
+                        onConditionChange={(value) =>
+                          updateField("condition", value)
+                        }
+                        onDescriptorsChange={(value) =>
+                          updateField("conditionDescriptors", value)
+                        }
+                      />
+                    ) : (
+                      <div className="space-y-1.5">
+                        <Label htmlFor="editor-condition">Condition</Label>
+                        {conditionPolicyLoading ? (
+                          <p
+                            role="status"
+                            className="text-xs text-muted-foreground"
+                          >
+                            Loading condition requirements for this eBay
+                            category...
+                          </p>
+                        ) : conditionPolicy.status !== "available" ||
+                          conditionPolicy.categoryId !==
+                            (editorState.categoryId ?? "") ? (
+                          <p
+                            role="alert"
+                            className="text-xs text-amber-700 dark:text-amber-300"
+                          >
+                            {conditionPolicy.reason ||
+                              "Condition requirements are unavailable for this category."}
+                          </p>
+                        ) : (
+                          <select
+                            id="editor-condition"
+                            aria-label="Condition"
+                            value={editorState.condition ?? ""}
+                            onChange={(event) =>
+                              updateField("condition", event.target.value)
+                            }
+                            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                          >
+                            <option value="">Select a condition</option>
+                            {conditionPolicy.conditions.map((option) => (
+                              <option
+                                key={option.conditionId}
+                                value={option.conditionId}
+                              >
+                                {option.conditionDescription}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        {conditionPolicyValidation.errors.length > 0 &&
+                          !conditionPolicyLoading && (
+                            <ul
+                              className="space-y-1 text-xs text-destructive"
+                              aria-label="Condition validation errors"
+                            >
+                              {conditionPolicyValidation.errors.map(
+                                (error, index) => (
+                                  <li key={`${error}-${index}`}>{error}</li>
+                                ),
+                              )}
+                            </ul>
+                          )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </TabsContent>
@@ -437,7 +490,9 @@ export default function ListingEditorModal({
                 </Button>
                 <Button
                   onClick={handleSave}
-                  disabled={dirtyFields.size === 0 || isSaving}
+                  disabled={
+                    dirtyFields.size === 0 || isSaving || conditionSaveBlocked
+                  }
                 >
                   {isSaving ? (
                     <>

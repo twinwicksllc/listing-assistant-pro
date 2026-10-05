@@ -1,41 +1,30 @@
-import { normalizeEbayConditionDescription } from "@/types/listing";
+import {
+  conditionEnumFromPolicyCondition,
+  resolvePolicyCondition,
+  type ConditionDescriptorSelection,
+  type ConditionPolicy,
+  type PolicyCondition,
+} from "../../supabase/functions/_helpers/conditionPolicy";
 
-const CONDITION_ID_TO_ENUM: Record<number, string> = {
-  1000: "NEW",
-  1500: "NEW_OTHER",
-  1750: "NEW_WITH_DEFECTS",
-  2000: "CERTIFIED_REFURBISHED",
-  2010: "CERTIFIED_REFURBISHED",
-  2020: "CERTIFIED_REFURBISHED",
-  2030: "CERTIFIED_REFURBISHED",
-  2500: "SELLER_REFURBISHED",
-  2750: "LIKE_NEW",
-  2990: "PRE_OWNED_EXCELLENT",
-  3000: "USED_EXCELLENT",
-  3010: "PRE_OWNED_FAIR",
-  4000: "USED_VERY_GOOD",
-  5000: "USED_GOOD",
-  6000: "USED_ACCEPTABLE",
-  7000: "FOR_PARTS_OR_NOT_WORKING",
-};
+type CategoryPolicyCondition = Pick<
+  PolicyCondition,
+  "conditionId" | "conditionDescription"
+> & { conditionEnum?: string | null };
 
 export function allowedConditionEnumsFromPolicy(
-  conditions: Array<{
-    conditionId?: number | string;
-    conditionDescription?: string;
-  }>,
+  conditions: CategoryPolicyCondition[],
 ): string[] {
   const enums = conditions.flatMap((condition) => {
     const description = condition.conditionDescription?.trim() ?? "";
     if (/^(graded|ungraded)$/i.test(description)) return [];
 
-    const conditionId = Number(condition.conditionId);
     const normalized =
-      CONDITION_ID_TO_ENUM[conditionId] ??
-      normalizeEbayConditionDescription(description);
-    return normalized && !/^(graded|ungraded)$/i.test(normalized)
-      ? [normalized]
-      : [];
+      condition.conditionEnum ??
+      conditionEnumFromPolicyCondition(
+        String(condition.conditionId),
+        condition.conditionDescription,
+      );
+    return normalized ? [normalized] : [];
   });
 
   return [...new Set(enums)];
@@ -43,31 +32,78 @@ export function allowedConditionEnumsFromPolicy(
 
 export function conditionIdFromCategoryPolicy(
   condition: string,
-  conditions: Array<{
-    conditionId?: number | string;
-    conditionDescription?: string;
-  }>,
+  policyOrConditions: ConditionPolicy | CategoryPolicyCondition[],
 ): string | undefined {
-  const conditionEnum = normalizeEbayConditionDescription(condition);
-  const match = conditions.find(
-    (candidate) =>
-      normalizeEbayConditionDescription(candidate.conditionDescription) ===
-      conditionEnum,
-  );
-  if (match?.conditionId) return String(match.conditionId);
-
-  if (
-    conditionEnum === "PRE_OWNED_EXCELLENT" ||
-    conditionEnum === "PRE_OWNED_FAIR"
-  ) {
-    const fallback =
-      conditions.find(
-        (candidate) =>
-          normalizeEbayConditionDescription(candidate.conditionDescription) ===
-          "USED_EXCELLENT",
-      ) ?? conditions[0];
-    return fallback?.conditionId ? String(fallback.conditionId) : undefined;
+  if ("status" in policyOrConditions) {
+    const match = resolvePolicyCondition(policyOrConditions, condition);
+    return match?.conditionId;
   }
 
-  return undefined;
+  const selection = condition.trim();
+  const conditions = policyOrConditions;
+  if (/^\d+$/.test(selection)) {
+    const exactIds = conditions.filter(
+      (candidate) => candidate.conditionId === selection,
+    );
+    return exactIds.length === 1 ? exactIds[0].conditionId : undefined;
+  }
+
+  const labelKey = (value: string) =>
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[_\s-]+/g, " ");
+  const labelMatches = conditions.filter(
+    (candidate) =>
+      labelKey(candidate.conditionDescription) === labelKey(selection),
+  );
+  const labelIds = [
+    ...new Set(labelMatches.map((candidate) => candidate.conditionId)),
+  ];
+  if (labelIds.length === 1) return labelIds[0];
+
+  const enumMatches = conditions.filter(
+    (candidate) =>
+      (candidate.conditionEnum ??
+        conditionEnumFromPolicyCondition(
+          candidate.conditionId,
+          candidate.conditionDescription,
+        )) === selection,
+  );
+  const enumIds = [
+    ...new Set(enumMatches.map((candidate) => candidate.conditionId)),
+  ];
+  return enumIds.length === 1 ? enumIds[0] : undefined;
+}
+
+export function splitConditionDescriptorsFromItemSpecifics(
+  itemSpecifics: unknown,
+): {
+  itemSpecifics: Record<string, unknown>;
+  conditionDescriptors?: ConditionDescriptorSelection[];
+} {
+  const source =
+    itemSpecifics && typeof itemSpecifics === "object"
+      ? (itemSpecifics as Record<string, unknown>)
+      : {};
+  const { _conditionDescriptors, ...remainingSpecifics } = source;
+  return {
+    itemSpecifics: remainingSpecifics,
+    ...(Array.isArray(_conditionDescriptors)
+      ? {
+          conditionDescriptors:
+            _conditionDescriptors as ConditionDescriptorSelection[],
+        }
+      : {}),
+  };
+}
+
+export function buildConditionSelectionPayload(
+  condition: string | null | undefined,
+  itemSpecifics: unknown,
+) {
+  return {
+    condition: condition ?? "",
+    ...splitConditionDescriptorsFromItemSpecifics(itemSpecifics),
+  };
 }

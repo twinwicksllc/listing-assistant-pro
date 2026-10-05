@@ -2,6 +2,7 @@ import { decode as decodeBase64 } from "https://deno.land/std@0.168.0/encoding/b
 import { createClient } from "./supabase.ts";
 import { fetchWithTimeout } from "./fetch.ts";
 import { formatDescriptionHtml } from "../_helpers/listingFormat.ts";
+import { type ConditionPolicy, unavailableConditionPolicy } from "../_helpers/conditionPolicy.ts";
 
 // eBay publish Edge Function.
 // Handles OAuth helpers, policy lookup, media upload, inventory/offer creation,
@@ -309,6 +310,64 @@ export async function fetchDynamicCategoryConditions(
       err,
     );
     return [];
+  }
+}
+
+export async function fetchCurrentConditionPolicy(
+  categoryId: string,
+  sellerUserId: string,
+): Promise<ConditionPolicy> {
+  if (!categoryId || !sellerUserId) {
+    return unavailableConditionPolicy(
+      categoryId,
+      "A category and authenticated seller are required to verify condition policy",
+    );
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !supabaseServiceKey) {
+    return unavailableConditionPolicy(categoryId, "Condition policy service is not configured");
+  }
+
+  try {
+    const response = await fetchWithTimeout(
+      `${supabaseUrl}/functions/v1/category-lookup`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${supabaseServiceKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "conditions",
+          categoryId,
+          sellerUserId,
+        }),
+        timeout: 15000,
+      },
+    );
+    if (!response.ok) {
+      return unavailableConditionPolicy(
+        categoryId,
+        `Condition policy service returned HTTP ${response.status}`,
+      );
+    }
+
+    const result = await response.json();
+    const policy = result?.conditionPolicy as ConditionPolicy | undefined;
+    if (!policy || policy.categoryId !== categoryId) {
+      return unavailableConditionPolicy(
+        categoryId,
+        "Condition policy response did not match the selected category",
+      );
+    }
+    return policy;
+  } catch (error) {
+    return unavailableConditionPolicy(
+      categoryId,
+      `Condition policy could not be retrieved: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 
@@ -2154,8 +2213,8 @@ export function buildFixedPriceOffer(params: {
   description: string;
   listingPrice: number;
   quantity?: number;
-  condition: string;
-  conditionDescription: string;
+  condition?: string;
+  conditionDescription?: string;
   ebayCategoryId?: string;
   merchantLocationKey: string;
   fulfillmentPolicyId: string;
@@ -2215,9 +2274,13 @@ export function buildFixedPriceOffer(params: {
       },
     },
     listingPolicies,
-    condition: params.condition,
-    conditionDescription: params.conditionDescription,
   };
+  if (params.condition) {
+    offer.condition = params.condition;
+    if (params.conditionDescription) {
+      offer.conditionDescription = params.conditionDescription;
+    }
+  }
   if (params.ebayCategoryId) {
     offer.categoryId = params.ebayCategoryId;
   }

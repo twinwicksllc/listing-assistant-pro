@@ -1,8 +1,15 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { allowedConditionEnumsFromPolicy } from "@/lib/ebayConditionPolicy";
 import type { ItemSpecifics } from "@/types/listing";
+import {
+  buildConditionPolicy,
+  unavailableConditionPolicy,
+} from "../../supabase/functions/_helpers/conditionPolicy";
+import type {
+  ConditionPolicy,
+  PolicyDescriptor,
+} from "../../supabase/functions/_helpers/conditionPolicy";
 
 interface AspectInfo {
   name: string;
@@ -16,28 +23,16 @@ interface AspectInfo {
 interface RawCondition {
   conditionId?: string | number;
   conditionDescription?: string;
+  conditionHelpText?: string;
+  usage?: string;
+  conditionDescriptors?: PolicyDescriptor[];
 }
 
 interface EbayMetadata {
   requiredAspects: string[];
   suggestedAspects: string[];
   allowedConditions: string[];
-}
-
-/**
- * Mirrors analyze-item's `allowedConditions` transform (index.ts, building
- * `ebayMetadata`) so a category change gets the same shape eBay's own
- * condition-policy API would produce for the new category, not stale codes
- * left over from whatever category the item started in.
- *
- * eBay's conditions API returns human-readable `conditionDescription`
- * strings ("New with tags", "Pre-owned", ...), not Inventory API
- * `ConditionEnum` values — these must be normalized before being used as a
- * dropdown value, or the exact string eBay described gets rejected by
- * eBay's own publish endpoint for that same category.
- */
-function toAllowedConditions(conditions: RawCondition[]): string[] {
-  return allowedConditionEnumsFromPolicy(conditions);
+  conditionPolicy?: ConditionPolicy;
 }
 
 interface UseAnalyzeCategoryAspectsParams {
@@ -99,12 +94,14 @@ export function useAnalyzeCategoryAspects({
 }: UseAnalyzeCategoryAspectsParams) {
   // Last category we SUCCESSFULLY fetched aspects for.
   const lastFetchedCategoryRef = useRef<string>("");
+  const previousCategoryRef = useRef<string>("");
   // Category of the request currently in flight (prevents duplicate fetches
   // and lets us ignore responses that arrive out of order).
   const inFlightCategoryRef = useRef<string>("");
   // Read allowedConditions without making it an effect dependency.
   const metadataRef = useRef<EbayMetadata | null>(currentEbayMetadata);
   metadataRef.current = currentEbayMetadata;
+  const [loadingCategory, setLoadingCategory] = useState("");
 
   useEffect(() => {
     if (!generated || !ebayCategoryId) return;
@@ -114,6 +111,18 @@ export function useAnalyzeCategoryAspects({
     if (inFlightCategoryRef.current === ebayCategoryId) return;
 
     inFlightCategoryRef.current = ebayCategoryId;
+    setLoadingCategory(ebayCategoryId);
+    if (
+      previousCategoryRef.current &&
+      previousCategoryRef.current !== ebayCategoryId
+    ) {
+      setItemSpecifics((prev) => {
+        const next = { ...prev };
+        delete (next as Record<string, unknown>)._conditionDescriptors;
+        return next;
+      });
+    }
+    previousCategoryRef.current = ebayCategoryId;
     // Capture the target so a slow response for an old category cannot
     // overwrite state belonging to a newer selection.
     const requestedCategoryId = ebayCategoryId;
@@ -137,18 +146,22 @@ export function useAnalyzeCategoryAspects({
         // The user moved on to a different category while we were waiting.
         if (cancelled || requestedCategoryId !== ebayCategoryId) return;
 
-        let allowedConditions = metadataRef.current?.allowedConditions ?? [];
+        const conditionPolicy = getConditionPolicy(
+          conditionsResult,
+          requestedCategoryId,
+        );
+        const allowedConditions = [
+          ...new Set(
+            conditionPolicy.conditions
+              .map((entry) => entry.conditionEnum)
+              .filter((entry): entry is string => !!entry),
+          ),
+        ];
+
         if (conditionsResult.error) {
           console.warn(
             `useAnalyzeCategoryAspects: conditions fetch failed for ${requestedCategoryId}`,
             conditionsResult.error,
-          );
-        } else if (Array.isArray(conditionsResult.data?.conditions)) {
-          // Replace outright — even an empty result means "this category has
-          // no eBay-restricted conditions," which is still more correct than
-          // carrying over a different category's codes.
-          allowedConditions = toAllowedConditions(
-            conditionsResult.data.conditions,
           );
         }
 
@@ -159,6 +172,17 @@ export function useAnalyzeCategoryAspects({
             `useAnalyzeCategoryAspects: aspects fetch failed for ${requestedCategoryId}`,
             error,
           );
+          const sameCategoryMetadata =
+            metadataRef.current?.conditionPolicy?.categoryId ===
+            requestedCategoryId
+              ? metadataRef.current
+              : null;
+          setEbayMetadata({
+            requiredAspects: sameCategoryMetadata?.requiredAspects ?? [],
+            suggestedAspects: sameCategoryMetadata?.suggestedAspects ?? [],
+            allowedConditions,
+            conditionPolicy,
+          });
           toast.error(
             "Couldn't load eBay item specifics for this category. Re-select the category to retry.",
           );
@@ -221,6 +245,7 @@ export function useAnalyzeCategoryAspects({
             requiredAspects: [],
             suggestedAspects: [],
             allowedConditions,
+            conditionPolicy,
           });
 
           // No aspects means no valid aspect names for this category — drop
@@ -239,7 +264,7 @@ export function useAnalyzeCategoryAspects({
 
           // Only cache the "no aspects" outcome for a confirmed parent. A
           // transient empty response stays retryable.
-          if (isParentCategory) {
+          if (isParentCategory && conditionPolicy.status === "available") {
             lastFetchedCategoryRef.current = requestedCategoryId;
           }
           return;
@@ -256,6 +281,7 @@ export function useAnalyzeCategoryAspects({
           requiredAspects: required,
           suggestedAspects: suggested,
           allowedConditions,
+          conditionPolicy,
         });
 
         const validAspectNames = new Set(aspects.map((a) => a.name));
@@ -293,7 +319,9 @@ export function useAnalyzeCategoryAspects({
         });
 
         // Only mark as fetched after a genuinely successful load.
-        lastFetchedCategoryRef.current = requestedCategoryId;
+        if (conditionPolicy.status === "available") {
+          lastFetchedCategoryRef.current = requestedCategoryId;
+        }
 
         console.log(
           `useAnalyzeCategoryAspects: seeded ${aspects.length} aspects for category ${requestedCategoryId} ` +
@@ -301,9 +329,21 @@ export function useAnalyzeCategoryAspects({
         );
       } catch (e) {
         console.warn("useAnalyzeCategoryAspects: fetch error", e);
+        if (!cancelled && requestedCategoryId === ebayCategoryId) {
+          setEbayMetadata({
+            requiredAspects: [],
+            suggestedAspects: [],
+            allowedConditions: [],
+            conditionPolicy: unavailableConditionPolicy(
+              requestedCategoryId,
+              "Condition policy request failed",
+            ),
+          });
+        }
       } finally {
         if (inFlightCategoryRef.current === requestedCategoryId) {
           inFlightCategoryRef.current = "";
+          setLoadingCategory("");
         }
       }
     };
@@ -317,4 +357,66 @@ export function useAnalyzeCategoryAspects({
     // Both are written by this effect; including them would make it re-run on
     // its own output. They are read via functional updaters / metadataRef.
   }, [ebayCategoryId, generated, setItemSpecifics, setEbayMetadata]);
+
+  return {
+    isConditionPolicyLoading: loadingCategory === ebayCategoryId,
+  };
+}
+
+function getConditionPolicy(
+  result: {
+    data?: {
+      conditionPolicy?: ConditionPolicy;
+      categoryId?: string;
+      itemConditionRequired?: boolean;
+      conditions?: RawCondition[];
+      marketplaceId?: string;
+      locale?: string;
+      sellerScoped?: boolean;
+    } | null;
+    error?: unknown;
+  },
+  categoryId: string,
+): ConditionPolicy {
+  if (result.error) {
+    return unavailableConditionPolicy(
+      categoryId,
+      "Condition policy request failed",
+    );
+  }
+
+  const suppliedPolicy = result.data?.conditionPolicy;
+  if (suppliedPolicy) {
+    if (suppliedPolicy.categoryId !== categoryId) {
+      return unavailableConditionPolicy(
+        categoryId,
+        "Condition policy category mismatch",
+      );
+    }
+    if (
+      suppliedPolicy.status === "available" ||
+      suppliedPolicy.status === "unavailable"
+    ) {
+      return suppliedPolicy;
+    }
+    return unavailableConditionPolicy(categoryId, "Malformed condition policy");
+  }
+
+  if (Array.isArray(result.data?.conditions)) {
+    return buildConditionPolicy(
+      categoryId,
+      {
+        categoryId: result.data.categoryId ?? categoryId,
+        itemConditionRequired: result.data.itemConditionRequired,
+        itemConditions: result.data.conditions,
+      },
+      {
+        marketplaceId: result.data.marketplaceId,
+        locale: result.data.locale,
+        sellerScoped: result.data.sellerScoped,
+      },
+    );
+  }
+
+  return unavailableConditionPolicy(categoryId, "No condition policy returned");
 }

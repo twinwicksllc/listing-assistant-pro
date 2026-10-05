@@ -2,6 +2,12 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptToken, encryptToken } from "../_helpers/tokenCrypto.ts";
 import { requireUser } from "../_helpers/authGuard.ts";
+import {
+  type ConditionDescriptorSelection,
+  type ConditionPolicy,
+  type PolicyCondition,
+  validateConditionSelection,
+} from "../_helpers/conditionPolicy.ts";
 
 // ebay-edit-listing: everything on a live listing that ISN'T title/description
 // (those go through ebay-reprice's update_content action, which already owns
@@ -142,22 +148,106 @@ async function callCategoryLookup(
   supabaseServiceKey: string,
   action: "aspects" | "conditions" | "verify",
   categoryId: string,
+  sellerUserId?: string,
 ): Promise<any> {
-  const resp = await fetch(`${supabaseUrl}/functions/v1/category-lookup`, {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const resp = await fetch(`${supabaseUrl}/functions/v1/category-lookup`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${supabaseServiceKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action,
+        categoryId,
+        ...(action === "conditions" && sellerUserId ? { sellerUserId } : {}),
+      }),
+      signal: controller.signal,
+    });
+    if (!resp.ok) {
+      console.warn(
+        `ebay-edit-listing: category-lookup ${action} HTTP ${resp.status}`,
+      );
+      return null;
+    }
+    return await resp.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchConditionPolicy(
+  supabaseUrl: string,
+  supabaseServiceKey: string,
+  categoryId: string,
+  sellerUserId: string,
+): Promise<ConditionPolicy> {
+  let result: any;
+  try {
+    result = await callCategoryLookup(
+      supabaseUrl,
+      supabaseServiceKey,
+      "conditions",
+      categoryId,
+      sellerUserId,
+    );
+  } catch (error) {
+    throw new Error(`Unable to fetch condition policy for category ${categoryId}: ${error}`);
+  }
+  if (!result?.conditionPolicy) {
+    throw new Error(
+      `Condition policy for category ${categoryId} is unavailable${
+        result?.error ? `: ${result.error}` : ". Retry after category metadata is available."
+      }`,
+    );
+  }
+  return result.conditionPolicy;
+}
+
+async function fetchTradingListingConditionDetails(
+  apiBase: string,
+  userToken: string,
+  listingId: string,
+): Promise<{ categoryId: string; conditionId: string }> {
+  if (!/^\d+$/.test(listingId)) throw new Error("A valid eBay listing ID is required to validate its condition.");
+  const tradingUrl = apiBase.includes("sandbox")
+    ? "https://api.sandbox.ebay.com/ws/api.dll"
+    : "https://api.ebay.com/ws/api.dll";
+  const resp = await fetch(tradingUrl, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${supabaseServiceKey}`,
-      "Content-Type": "application/json",
+      "X-EBAY-API-CALL-NAME": "GetItem",
+      "X-EBAY-API-COMPATIBILITY-LEVEL": "967",
+      "X-EBAY-API-SITEID": "0",
+      "Content-Type": "text/xml",
+      "X-EBAY-API-IAF-TOKEN": userToken,
     },
-    body: JSON.stringify({ action, categoryId }),
+    body:
+      `<?xml version="1.0" encoding="utf-8"?><GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents"><ItemID>${listingId}</ItemID><DetailLevel>ReturnAll</DetailLevel></GetItemRequest>`,
   });
-  if (!resp.ok) {
-    console.warn(
-      `ebay-edit-listing: category-lookup ${action} HTTP ${resp.status}`,
-    );
-    return null;
+  const xml = await resp.text();
+  if (!resp.ok || /<Ack>Failure<\/Ack>|<Ack>PartialFailure<\/Ack>/.test(xml)) {
+    const message = xml.match(/<LongMessage>([\s\S]*?)<\/LongMessage>/)?.[1] || `Trading API HTTP ${resp.status}`;
+    throw new Error(`Unable to load current listing condition: ${message}`);
   }
-  return await resp.json();
+  const categoryId = xml.match(/<PrimaryCategory>[\s\S]*?<CategoryID>(\d+)<\/CategoryID>/)?.[1];
+  const conditionId = xml.match(/<ConditionID>(\d+)<\/ConditionID>/)?.[1] ?? "";
+  if (!categoryId) throw new Error("Unable to determine the listing's current category for condition validation.");
+  return { categoryId, conditionId };
+}
+
+function isConditionDescriptorSelection(value: unknown): value is ConditionDescriptorSelection[] {
+  if (!Array.isArray(value)) return false;
+  return value.every((descriptor: unknown) => {
+    if (!descriptor || typeof descriptor !== "object" || Array.isArray(descriptor)) return false;
+    const candidate = descriptor as Record<string, unknown>;
+    return typeof candidate.name === "string" &&
+      (candidate.values === undefined ||
+        (Array.isArray(candidate.values) && candidate.values.every((entry: unknown) => typeof entry === "string"))) &&
+      (candidate.additionalInfo === undefined || typeof candidate.additionalInfo === "string");
+  });
 }
 
 // ─── Legacy Trading API: ReviseFixedPriceItem for non-Inventory listings ───────
@@ -330,7 +420,7 @@ serve(async (req) => {
       const [aspectsResult, conditionsResult] = categoryId
         ? await Promise.all([
           callCategoryLookup(supabaseUrl, supabaseServiceKey, "aspects", categoryId),
-          callCategoryLookup(supabaseUrl, supabaseServiceKey, "conditions", categoryId),
+          callCategoryLookup(supabaseUrl, supabaseServiceKey, "conditions", categoryId, userId),
         ])
         : [null, null];
 
@@ -362,6 +452,7 @@ serve(async (req) => {
           inventoryItem,
           categoryAspects: aspectsResult?.aspects ?? [],
           allowedConditions: conditionsResult?.conditions ?? [],
+          conditionPolicy: conditionsResult?.conditionPolicy ?? null,
           cogs,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -383,6 +474,13 @@ serve(async (req) => {
       const categoryWarnings: string[] = [];
       const oldValues: Record<string, unknown> = {};
       const newValues: Record<string, unknown> = { ...changes };
+      let inventoryItemForUpdate: any = null;
+      let resolvedCondition: PolicyCondition | undefined;
+      let conditionDescriptorsForUpdate: ConditionDescriptorSelection[] = [];
+      const conditionRequested = Object.hasOwn(changes, "condition") ||
+        Object.hasOwn(changes, "conditionDescription") ||
+        Object.hasOwn(changes, "conditionDescriptors") ||
+        Object.hasOwn(changes, "categoryId");
 
       if (offerId) {
         // ── Inventory API path ────────────────────────────────────────────
@@ -396,6 +494,21 @@ serve(async (req) => {
 
         if (!getOfferResp.ok) {
           const err = await getOfferResp.text();
+          if (conditionRequested) {
+            return new Response(
+              JSON.stringify({
+                success: false,
+                updatedFields: [],
+                errors: [
+                  `Unable to load the current offer for condition validation: ${getOfferResp.status} ${
+                    err.slice(0, 200)
+                  }`,
+                ],
+                warnings: categoryWarnings,
+              }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
           errors.push(`Failed to load offer: ${getOfferResp.status} ${err.slice(0, 200)}`);
         } else {
           const offer = await getOfferResp.json();
@@ -418,6 +531,114 @@ serve(async (req) => {
             if (verification?.isKnownParentOrJunk) {
               categoryWarnings.push(
                 `Category ${changes.categoryId} is a known parent/junk category — pick a specific leaf.`,
+              );
+            }
+          }
+
+          const resolvedSku = sku || body.sku;
+          if (conditionRequested) {
+            if (!resolvedSku) {
+              return new Response(
+                JSON.stringify({
+                  success: false,
+                  updatedFields: [],
+                  errors: ["An SKU is required to validate and update this listing condition."],
+                  warnings: categoryWarnings,
+                }),
+                { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+              );
+            }
+            const itemResp = await fetch(
+              `${apiBase}/sell/inventory/v1/inventory_item/${encodeURIComponent(resolvedSku)}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": "application/json",
+                  "Accept-Language": "en-US",
+                },
+              },
+            );
+            if (!itemResp.ok) {
+              const err = await itemResp.text();
+              return new Response(
+                JSON.stringify({
+                  success: false,
+                  updatedFields: [],
+                  errors: [
+                    `Unable to load current inventory item for condition validation: ${itemResp.status} ${
+                      err.slice(0, 200)
+                    }`,
+                  ],
+                  warnings: categoryWarnings,
+                }),
+                { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+              );
+            }
+            try {
+              inventoryItemForUpdate = await itemResp.json();
+            } catch {
+              return new Response(
+                JSON.stringify({
+                  success: false,
+                  updatedFields: [],
+                  errors: ["Unable to read the current inventory item for condition validation."],
+                  warnings: categoryWarnings,
+                }),
+                { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+              );
+            }
+            const categoryId = String(changes.categoryId || offer.categoryId || "");
+            if (!categoryId) {
+              return new Response(
+                JSON.stringify({
+                  success: false,
+                  updatedFields: [],
+                  errors: ["A category is required to validate this condition."],
+                  warnings: categoryWarnings,
+                }),
+                { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+              );
+            }
+            try {
+              const policy = await fetchConditionPolicy(supabaseUrl, supabaseServiceKey, categoryId, userId);
+              if (Object.hasOwn(changes, "conditionDescriptors")) {
+                if (!isConditionDescriptorSelection(changes.conditionDescriptors)) {
+                  throw new Error("Condition descriptors must be provided as a list of descriptor names and values.");
+                }
+                conditionDescriptorsForUpdate = changes.conditionDescriptors;
+              } else {
+                conditionDescriptorsForUpdate = Array.isArray(inventoryItemForUpdate.conditionDescriptors)
+                  ? inventoryItemForUpdate.conditionDescriptors
+                  : [];
+              }
+              const selectionValue = Object.hasOwn(changes, "condition")
+                ? changes.condition
+                : Object.hasOwn(changes, "conditionDescription")
+                ? changes.conditionDescription
+                : inventoryItemForUpdate.condition ?? inventoryItemForUpdate.conditionDescription ?? "";
+              const validation = validateConditionSelection(
+                policy,
+                categoryId,
+                String(selectionValue ?? ""),
+                conditionDescriptorsForUpdate,
+              );
+              if (!validation.valid) {
+                throw new Error(validation.errors.join("; "));
+              }
+              resolvedCondition = validation.condition;
+            } catch (error) {
+              return new Response(
+                JSON.stringify({
+                  success: false,
+                  updatedFields: [],
+                  errors: [
+                    `Condition validation failed: ${
+                      error instanceof Error ? error.message : String(error)
+                    }. Select a condition and descriptor values supported by category ${categoryId}.`,
+                  ],
+                  warnings: categoryWarnings,
+                }),
+                { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
               );
             }
           }
@@ -495,22 +716,9 @@ serve(async (req) => {
 
         // Inventory item: quantity/condition/aspects live here, not the offer.
         const resolvedSku = sku || body.sku;
-        if (resolvedSku && (changes.quantity != null || changes.condition || changes.itemSpecifics)) {
-          const getItemResp = await fetch(
-            `${apiBase}/sell/inventory/v1/inventory_item/${encodeURIComponent(resolvedSku)}`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-                "Accept-Language": "en-US",
-              },
-            },
-          );
-          if (!getItemResp.ok) {
-            const err = await getItemResp.text();
-            errors.push(`Failed to load inventory item: ${getItemResp.status} ${err.slice(0, 200)}`);
-          } else {
-            const item = await getItemResp.json();
+        if (resolvedSku && (changes.quantity != null || conditionRequested || changes.itemSpecifics)) {
+          if (inventoryItemForUpdate) {
+            const item = inventoryItemForUpdate;
             oldValues.quantity = item.availability?.shipToLocationAvailability?.quantity;
             oldValues.condition = item.condition;
 
@@ -525,22 +733,25 @@ serve(async (req) => {
               };
               updatedFields.push("quantity");
             }
-            if (changes.condition) {
-              nextItem.condition = changes.condition;
+            if (conditionRequested && resolvedCondition) {
+              nextItem.condition = resolvedCondition.conditionEnum;
+              nextItem.conditionDescription = resolvedCondition.conditionDescription;
+              if (Object.hasOwn(changes, "conditionDescriptors")) {
+                nextItem.conditionDescriptors = conditionDescriptorsForUpdate;
+                updatedFields.push("conditionDescriptors");
+              }
               updatedFields.push("condition");
-            }
-            if (changes.conditionDescription != null) {
-              nextItem.conditionDescription = changes.conditionDescription;
-              updatedFields.push("conditionDescription");
+              if (Object.hasOwn(changes, "conditionDescription")) updatedFields.push("conditionDescription");
+            } else if (conditionRequested) {
+              delete nextItem.condition;
+              delete nextItem.conditionDescription;
+              delete nextItem.conditionDescriptors;
+              updatedFields.push("condition", "conditionDescriptors");
             }
             if (changes.itemSpecifics) {
-              nextItem.product = {
-                ...(item.product || {}),
-                aspects: changes.itemSpecifics,
-              };
+              nextItem.product = { ...(item.product || {}), aspects: changes.itemSpecifics };
               updatedFields.push("itemSpecifics");
             }
-
             const putItemResp = await fetch(
               `${apiBase}/sell/inventory/v1/inventory_item/${encodeURIComponent(resolvedSku)}`,
               {
@@ -557,14 +768,136 @@ serve(async (req) => {
               const err = await putItemResp.text();
               errors.push(`Failed to update inventory item: ${putItemResp.status} ${err.slice(0, 200)}`);
             }
+          } else {
+            const getItemResp = await fetch(
+              `${apiBase}/sell/inventory/v1/inventory_item/${encodeURIComponent(resolvedSku)}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": "application/json",
+                  "Accept-Language": "en-US",
+                },
+              },
+            );
+            if (!getItemResp.ok) {
+              const err = await getItemResp.text();
+              errors.push(`Failed to load inventory item: ${getItemResp.status} ${err.slice(0, 200)}`);
+            } else {
+              const item = await getItemResp.json();
+              oldValues.quantity = item.availability?.shipToLocationAvailability?.quantity;
+              oldValues.condition = item.condition;
+
+              const nextItem: Record<string, unknown> = { ...item };
+              if (changes.quantity != null) {
+                nextItem.availability = {
+                  ...(item.availability || {}),
+                  shipToLocationAvailability: {
+                    ...(item.availability?.shipToLocationAvailability || {}),
+                    quantity: changes.quantity,
+                  },
+                };
+                updatedFields.push("quantity");
+              }
+              if (conditionRequested && resolvedCondition) {
+                nextItem.condition = resolvedCondition.conditionEnum;
+                nextItem.conditionDescription = resolvedCondition.conditionDescription;
+                updatedFields.push("condition");
+              }
+              if (Object.hasOwn(changes, "conditionDescriptors")) {
+                nextItem.conditionDescriptors = conditionDescriptorsForUpdate;
+                updatedFields.push("conditionDescriptors");
+              }
+              if (Object.hasOwn(changes, "conditionDescription")) {
+                updatedFields.push("conditionDescription");
+              }
+              if (changes.itemSpecifics) {
+                nextItem.product = {
+                  ...(item.product || {}),
+                  aspects: changes.itemSpecifics,
+                };
+                updatedFields.push("itemSpecifics");
+              }
+
+              const putItemResp = await fetch(
+                `${apiBase}/sell/inventory/v1/inventory_item/${encodeURIComponent(resolvedSku)}`,
+                {
+                  method: "PUT",
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                    "Accept-Language": "en-US",
+                  },
+                  body: JSON.stringify(nextItem),
+                },
+              );
+              if (!putItemResp.ok) {
+                const err = await putItemResp.text();
+                errors.push(`Failed to update inventory item: ${putItemResp.status} ${err.slice(0, 200)}`);
+              }
+            }
           }
         }
       } else if (listingId) {
         // ── Legacy Trading API path ───────────────────────────────────────
+        let conditionId = changes.condition;
+        if (conditionRequested) {
+          if (Object.hasOwn(changes, "conditionDescriptors")) {
+            return new Response(
+              JSON.stringify({
+                success: false,
+                updatedFields: [],
+                errors: ["Condition descriptors can only be edited through the Inventory API."],
+                warnings: [],
+              }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
+          try {
+            const current = changes.categoryId
+              ? { categoryId: String(changes.categoryId), conditionId: "" }
+              : await fetchTradingListingConditionDetails(apiBase, token, listingId);
+            const policy = await fetchConditionPolicy(
+              supabaseUrl,
+              supabaseServiceKey,
+              current.categoryId,
+              userId,
+            );
+            const validation = validateConditionSelection(
+              policy,
+              current.categoryId,
+              String(
+                Object.hasOwn(changes, "condition")
+                  ? changes.condition
+                  : Object.hasOwn(changes, "conditionDescription")
+                  ? changes.conditionDescription
+                  : current.conditionId,
+              ),
+            );
+            if (!validation.valid || !validation.condition) {
+              throw new Error(validation.errors.join("; "));
+            }
+            resolvedCondition = validation.condition;
+            conditionId = validation.condition.conditionId;
+          } catch (error) {
+            return new Response(
+              JSON.stringify({
+                success: false,
+                updatedFields: [],
+                errors: [
+                  `Condition validation failed: ${
+                    error instanceof Error ? error.message : String(error)
+                  }. Select a condition supported by this category.`,
+                ],
+                warnings: [],
+              }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
+        }
         const result = await reviseFixedPriceItemFields(apiBase, token, listingId, {
           price: changes.price,
           quantity: changes.quantity,
-          conditionId: changes.condition,
+          conditionId,
           categoryId: changes.categoryId,
         });
         if (result.success) {
@@ -587,7 +920,7 @@ serve(async (req) => {
             draftPatch.price_min = changes.price;
             draftPatch.price_max = changes.price;
           }
-          if (changes.condition) draftPatch.condition = changes.condition;
+          if (conditionRequested && resolvedCondition) draftPatch.condition = resolvedCondition.conditionEnum;
           if (changes.categoryId) draftPatch.ebay_category_id = changes.categoryId;
           if (changes.itemSpecifics) draftPatch.item_specifics = changes.itemSpecifics;
 
