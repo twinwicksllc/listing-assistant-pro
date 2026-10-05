@@ -22,6 +22,8 @@ export interface AspectRule {
   required: string[];
   preferred: string[];
   defaults: Record<string, string>;
+  allowedValues?: Record<string, string[]>;
+  freeTextAspects?: string[];
   fixedValues?: Record<string, string>;
 }
 
@@ -126,6 +128,8 @@ export function convertEbayAspectsToRule(aspects: any[]): AspectRule {
   const required: string[] = [];
   const preferred: string[] = [];
   const defaults: Record<string, string> = {};
+  const allowedValues: Record<string, string[]> = {};
+  const freeTextAspects: string[] = [];
 
   for (const aspect of aspects) {
     const name = aspect.name;
@@ -141,9 +145,17 @@ export function convertEbayAspectsToRule(aspects: any[]): AspectRule {
     if (aspect.mode === "SELECTION_ONLY" && aspect.values?.length === 1) {
       defaults[name] = aspect.values[0];
     }
+    if (Array.isArray(aspect.values) && aspect.values.length > 0) {
+      allowedValues[name] = aspect.values.filter(
+        (value: unknown): value is string => typeof value === "string" && value.length > 0,
+      );
+    }
+    if (aspect.mode === "FREE_TEXT" || aspect.mode === "SELECTION_AND_TEXT") {
+      freeTextAspects.push(name);
+    }
   }
 
-  return { required, preferred, defaults };
+  return { required, preferred, defaults, allowedValues, freeTextAspects };
 }
 
 export const _categoryConditionCache: Map<
@@ -1532,9 +1544,10 @@ export function normalizeAspectKey(key: string): string {
 export function buildAndNormalizeAspects(
   rawSpecifics: Record<string, unknown>,
   categoryId: string,
+  ruleOverride?: AspectRule,
 ): Record<string, string[]> {
   const aspects: Record<string, string[]> = {};
-  const rule = CATEGORY_ASPECT_RULES[categoryId];
+  const rule = ruleOverride ?? CATEGORY_ASPECT_RULES[categoryId];
 
   for (const [rawKey, rawValue] of Object.entries(rawSpecifics)) {
     // Skip internal-only keys the frontend/backend attaches to itemSpecifics for
@@ -1548,13 +1561,21 @@ export function buildAndNormalizeAspects(
     if (!rawValue || typeof rawValue !== "string") continue;
     const trimmed = rawValue.trim();
     if (!trimmed) continue;
-    if (ASPECT_SKIP_VALUES.has(trimmed.toLowerCase())) continue;
-
     const key = normalizeAspectKey(rawKey);
     if (NON_ASPECT_KEYS.has(key)) continue; // skip internal-only keys
     if (key.startsWith("_")) continue; // belt-and-suspenders: never emit underscore aspects
 
-    let value = trimmed;
+    const ruleAspectName = Object.keys(rule?.allowedValues ?? {}).find(
+      (name) => name.toLowerCase() === key.toLowerCase(),
+    ) ?? key;
+    const categoryValue = rule?.allowedValues?.[ruleAspectName]?.find(
+      (allowed) => allowed.toLowerCase() === trimmed.toLowerCase(),
+    );
+    const unknownFreeText = trimmed.toLowerCase() === "unknown" &&
+      rule?.freeTextAspects?.some((name) => name.toLowerCase() === key.toLowerCase());
+    if (ASPECT_SKIP_VALUES.has(trimmed.toLowerCase()) && !categoryValue && !unknownFreeText) continue;
+
+    let value = categoryValue ?? trimmed;
     if (key === "Fineness") value = normalizeFineness(trimmed);
     else if (key === "Grade") value = normalizeGrade(trimmed);
     else if (key === "Denomination") {
@@ -1702,6 +1723,42 @@ export function buildAndNormalizeAspects(
   }
 
   return aspects;
+}
+
+export function getMissingRequiredAspects(
+  aspects: Record<string, string[]>,
+  requiredNames: string[],
+): string[] {
+  const aspectValuesByName = new Map(
+    Object.entries(aspects).map(([name, values]) => [name.toLowerCase(), values]),
+  );
+  return requiredNames.filter((name) =>
+    !aspectValuesByName.get(name.toLowerCase())?.some((value) => value.trim().length > 0)
+  );
+}
+
+export function getMissingAspectNameFromEbayErrors(
+  errors: unknown,
+): string | undefined {
+  if (!Array.isArray(errors)) return undefined;
+  const missingAspectPattern = /item specific\s+["']?(.+?)["']?\s+is missing\b/i;
+
+  for (const error of errors) {
+    if (!error || typeof error !== "object" || error.errorId !== 25002) continue;
+    const parameters = Array.isArray(error.parameters) ? error.parameters : [];
+    const messages = [
+      error.message,
+      ...parameters.map((parameter: unknown) =>
+        parameter && typeof parameter === "object" ? (parameter as Record<string, unknown>).value : undefined
+      ),
+    ];
+    for (const message of messages) {
+      if (typeof message !== "string") continue;
+      const match = missingAspectPattern.exec(message);
+      if (match) return match[1].trim().replace(/["']$/, "");
+    }
+  }
+  return undefined;
 }
 
 // ================================================================
