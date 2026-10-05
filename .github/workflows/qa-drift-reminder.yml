@@ -1,0 +1,131 @@
+name: QA Backend Drift Reminder
+
+# deploy-functions-qa.yml is manual-only on purpose (the QA Supabase project is
+# meant to be updated deliberately), so nothing tells anyone when it has fallen
+# behind. By 2026-10-05 QA was 27 days and 98 backend files behind main, with 15
+# unapplied migrations, so it could not have caught a bad change before
+# production.
+#
+# This workflow does not deploy anything and uses no Supabase secrets. It finds
+# the commit of the last successful QA deploy, counts the backend files that
+# changed on main since, and keeps one open issue up to date while QA is behind.
+# It closes the issue when QA has caught up.
+
+on:
+  schedule:
+    - cron: "17 14 * * 1" # Mondays, 14:17 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+concurrency:
+  group: qa-drift-reminder
+  cancel-in-progress: false
+
+env:
+  QA_WORKFLOW: deploy-functions-qa.yml
+  # Below this many changed backend files, stay quiet.
+  MIN_CHANGED_FILES: "1"
+  ISSUE_TITLE: "QA backend is behind main"
+
+jobs:
+  check-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Measure QA drift
+        id: drift
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          last=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$QA_WORKFLOW" \
+            --status success --limit 1 --json headSha,createdAt \
+            --jq '.[0] | "\(.headSha) \(.createdAt)"')
+
+          if [ -z "$last" ] || [ "$last" = "null null" ]; then
+            echo "No successful QA deploy found; nothing to compare against."
+            echo "has_baseline=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          sha=${last%% *}
+          when=${last#* }
+
+          if ! git cat-file -e "$sha^{commit}" 2>/dev/null; then
+            echo "Last QA deploy commit $sha is not in this clone (history rewritten?)."
+            echo "has_baseline=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          files=$(git diff --name-only "$sha"..origin/main -- supabase/functions supabase/migrations supabase/config.toml)
+          total=$(printf '%s\n' "$files" | grep -c . || true)
+          migrations=$(printf '%s\n' "$files" | grep -c '^supabase/migrations/' || true)
+          commits=$(git rev-list --count "$sha"..origin/main -- supabase/functions supabase/migrations supabase/config.toml)
+          days=$(( ( $(date -u +%s) - $(date -u -d "$when" +%s) ) / 86400 ))
+
+          {
+            echo "has_baseline=true"
+            echo "sha=$sha"
+            echo "when=$when"
+            echo "days=$days"
+            echo "total=$total"
+            echo "migrations=$migrations"
+            echo "commits=$commits"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Last QA deploy: $sha at $when ($days days ago)"
+          echo "Backend files changed on main since: $total ($migrations migrations, $commits commits)"
+
+      - name: Open, update, or close the reminder issue
+        if: steps.drift.outputs.has_baseline == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.drift.outputs.sha }}
+          WHEN: ${{ steps.drift.outputs.when }}
+          DAYS: ${{ steps.drift.outputs.days }}
+          TOTAL: ${{ steps.drift.outputs.total }}
+          MIGRATIONS: ${{ steps.drift.outputs.migrations }}
+          COMMITS: ${{ steps.drift.outputs.commits }}
+        run: |
+          set -euo pipefail
+
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "\"$ISSUE_TITLE\" in:title" --json number,title \
+            --jq "[.[] | select(.title == \"$ISSUE_TITLE\")][0].number // empty")
+
+          if [ "$TOTAL" -lt "$MIN_CHANGED_FILES" ]; then
+            if [ -n "$existing" ]; then
+              gh issue close "$existing" --repo "$GITHUB_REPOSITORY" \
+                --comment "QA has caught up: no backend changes on main since the last QA deploy ($SHA)."
+            fi
+            echo "QA is current; nothing to report."
+            exit 0
+          fi
+
+          body=$(cat <<EOF
+          The QA Supabase project has not been redeployed since **$WHEN** ($DAYS days ago, commit \`$SHA\`).
+
+          Since then \`main\` has **$TOTAL** changed backend files across **$COMMITS** commits, including **$MIGRATIONS** migrations. Production deploys these on every merge, so QA cannot catch a bad migration or function change until it is brought current.
+
+          To catch QA up, run the **Deploy Supabase Edge Functions (QA)** workflow (\`$QA_WORKFLOW\`) from the Actions tab. It applies pending migrations with \`supabase db push --include-all\` before deploying functions, so read its "Report pending migrations" step first.
+
+          This issue is updated weekly and closes itself once QA has been redeployed.
+          EOF
+          )
+          # Strip the heredoc's leading indentation.
+          body=$(printf '%s\n' "$body" | sed 's/^          //')
+
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+            echo "Updated issue #$existing."
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$ISSUE_TITLE" --body "$body"
+          fi

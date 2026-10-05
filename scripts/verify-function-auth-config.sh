@@ -63,6 +63,24 @@ else
   echo "OK: $(wc -l < "$tmp/config.txt" | tr -d ' ') functions consistent across both lists."
 fi
 
+# The QA workflow deploys the same functions and must carry the same list.
+# It was 2 entries short (market-watch-refresh, report-analysis-timeout) for
+# weeks because nothing compared it to config.toml.
+QA_WORKFLOW=".github/workflows/deploy-functions-qa.yml"
+grep -o 'functions deploy [a-z-]* --project-ref .* --no-verify-jwt' "$QA_WORKFLOW" \
+  | awk '{ print $3 }' | sort -u > "$tmp/deploy-qa.txt"
+
+if ! diff -u --label "config.toml (verify_jwt = false)" \
+             --label "deploy-functions-qa.yml (--no-verify-jwt)" \
+             "$tmp/config.txt" "$tmp/deploy-qa.txt"; then
+  echo "ERROR: config.toml and the QA deploy list have drifted." >&2
+  echo "       QA would deploy these functions with JWT verification on, so" >&2
+  echo "       their non-JWT callers would be rejected there but not in production." >&2
+  status=1
+else
+  echo "OK: the QA deploy list matches config.toml too."
+fi
+
 missing=$(comm -23 "$tmp/cron.txt" "$tmp/config.txt")
 if [ -n "$missing" ]; then
   echo "ERROR: these use requireCronSecret() but are not verify_jwt = false:" >&2
