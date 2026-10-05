@@ -292,9 +292,9 @@ authoritative next-actions list — already updated today, don't re-summarize it
 ## Next steps, cheapest and most decision-independent first
 
 1. **Email — done 2026-09-30 except the DMARC review:** headers inspected, aliases
-   verified individually, outbound SMTP approved, send/reply tested. Remaining: query
-   Postmark's DMARC reports on 2026-10-05 (T-16) and complete the 30-day review at
-   `p=none`. See RB-11 and the current Phase 1 tracker.
+   verified individually, outbound SMTP approved, send/reply tested. Remaining: the weekly
+   Postmark DMARC check (T-16); the first read was done 2026-10-05, the next is Monday
+   2026-10-12, and the 30-day review completes about 2026-10-30, at `p=none`. See RB-11 and the current Phase 1 tracker.
 2. **Owner-side, no decision needed:** trigger `deploy-functions-qa.yml`
    (`workflow_dispatch`) the next time a backend change lands on `main`, to keep
    `majmvgakczrpcwgxgulj` current — it's manual-only by design. As of this handoff it's
