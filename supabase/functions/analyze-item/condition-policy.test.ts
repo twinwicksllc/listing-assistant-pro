@@ -1,12 +1,6 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
-import {
-  buildConditionPolicy,
-  type ConditionPolicy,
-} from "../_helpers/conditionPolicy.ts";
-import {
-  getPolicyConditionEnums,
-  resolveConditionRecommendation,
-} from "./index.ts";
+import { buildConditionPolicy, type ConditionPolicy } from "../_helpers/conditionPolicy.ts";
+import { getPolicyConditionEnums, resolveConditionRecommendation } from "./index.ts";
 
 const sellerPolicy = buildConditionPolicy(
   "123",
