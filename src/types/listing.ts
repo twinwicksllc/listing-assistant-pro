@@ -430,9 +430,9 @@ const UNDERWEAR_CONDITION_OPTIONS: ConditionOption[] = [
 const MEDIA_CONDITION_OPTIONS: ConditionOption[] = [
   { value: "NEW", label: "Brand new" },
   { value: "LIKE_NEW", label: "Like new" },
-  { value: "VERY_GOOD", label: "Very good" },
-  { value: "GOOD", label: "Good" },
-  { value: "ACCEPTABLE", label: "Acceptable" },
+  { value: "USED_VERY_GOOD", label: "Very good" },
+  { value: "USED_GOOD", label: "Good" },
+  { value: "USED_ACCEPTABLE", label: "Acceptable" },
   { value: "CERTIFIED_REFURBISHED", label: "Certified - Refurbished" },
   { value: "EXCELLENT_REFURBISHED", label: "Excellent - Refurbished" },
   { value: "VERY_GOOD_REFURBISHED", label: "Very Good - Refurbished" },
@@ -747,9 +747,9 @@ export function getConditionsForCategory(
   if (isTradingCard) {
     return [
       { value: "LIKE_NEW", label: "Like New (Near Mint)" },
-      { value: "VERY_GOOD", label: "Very Good (light play wear)" },
-      { value: "GOOD", label: "Good (moderate play wear)" },
-      { value: "ACCEPTABLE", label: "Acceptable (heavy wear)" },
+      { value: "USED_VERY_GOOD", label: "Very Good (light play wear)" },
+      { value: "USED_GOOD", label: "Good (moderate play wear)" },
+      { value: "USED_ACCEPTABLE", label: "Acceptable (heavy wear)" },
     ];
   }
 

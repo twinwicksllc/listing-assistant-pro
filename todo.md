@@ -838,3 +838,50 @@ line ~1070), or reverting BATCH_LIMIT/REFRESH_CONCURRENCY/PROBE_CAP to pre-fix v
 - [ ] The 562-call category backfill is not covered by this ceiling; it runs in
       inventory sync, not the comp cron. It is bounded by the number of
       listings missing a category.
+
+## 2026-10-05: condition enum derived from the condition ID (fix for #659 regression)
+
+- [x] **Defect found in review of #659.** The condition policy engine chose
+      the Inventory API enum from the English label eBay returned, and only
+      fell back to the condition ID for unknown labels. For the plain labels
+      "Very Good", "Good" and "Acceptable" it emitted `VERY_GOOD`, `GOOD` and
+      `ACCEPTABLE`. eBay's "Item condition ID and name values" page lists
+      `USED_VERY_GOOD`, `USED_GOOD` and `USED_ACCEPTABLE` for IDs 4000, 5000 and
+      6000, and none of the bare names. The same bug was already fixed in June
+      (b5d2009): eBay rejected the bare names with errorId 2004 ("Could not
+      serialize field [condition]"). Nothing after the engine corrected the
+      string, and `condition-policy-core.test.ts` asserted the bad values, so CI
+      passed. The engine could also emit `DIGITAL_GOOD`, `CERTIFIED_PRE_OWNED`,
+      `REMANUFACTURED`, `RETREAD` and `DAMAGED`, none in eBay's list.
+- [x] **Fix:** `CONDITION_ID_TO_ENUM` now covers all 16 IDs in eBay's table and
+      is the only mapping; the roughly 50-entry label alias table is gone. eBay
+      states the numeric IDs are consistent across categories and marketplaces
+      and only the display names vary, and documents no label-based lookup. IDs
+      outside the table return null, so publish fails closed with the existing
+      "no supported Inventory API mapping" message. The two fallback dropdown
+      lists in `src/types/listing.ts` (media and trading cards) now use
+      `USED_VERY_GOOD` / `USED_GOOD` / `USED_ACCEPTABLE`.
+- [x] **Tests:** the test that asserted the bad values and an undocumented
+      trading-card label convention is replaced. New tests check that each ID
+      gives one enum whatever its label, that an unknown ID never picks an enum
+      from its label, and that the engine's enums are exactly eBay's documented
+      list (copied from eBay's page, not derived from the code).
+- [ ] **Not verified against live eBay.** The mapping is checked against eBay's
+      documentation as quoted by a web-enabled Claude, not against a captured
+      `getItemConditionPolicies` response or a real publish. Capture responses
+      for a few categories (rings 261994, a used-goods category, a trading card
+      category) into `corpus/` and publish one real listing per family.
+- [ ] **Open question in eBay's docs:** they say `PRE_OWNED_EXCELLENT` (2990) and
+      `PRE_OWNED_FAIR` (3010) are "only available in apparel categories" and do
+      not say whether jewelry is covered. #657 keeps them for Fine Jewelry >
+      Rings (261994) on the strength of that category's live policy. If a
+      publish there is rejected, that is the first place to look.
+- [ ] **Trading card and coin conditions:** eBay's product feed guide says to use
+      `LIKE_NEW` for graded and `USED_VERY_GOOD` for ungraded, with condition
+      descriptors. Check that the graded and ungraded flows still send exactly
+      that; the engine's ID-first mapping gives 2750 -> `LIKE_NEW` and
+      4000 -> `USED_VERY_GOOD`.
+- [ ] **Leftover legacy maps** (`CONDITION_ID_MAP`, `LEGACY_CONDITION_MAP`,
+      `FAKE_ENUM_CORRECTIONS` in `bulk-publish`, `publish-helpers.ts` and
+      `src/types/listing.ts`) are not removed by this fix. They still run on
+      paths that do not go through the engine.

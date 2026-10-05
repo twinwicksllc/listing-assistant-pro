@@ -3,6 +3,7 @@ import {
   buildConditionPolicy,
   CONDITION_ID_TO_ENUM,
   resolvePolicyCondition,
+  SUPPORTED_CONDITION_ENUMS,
   unavailableConditionPolicy,
   validateConditionSelection,
 } from "../../supabase/functions/_helpers/conditionPolicy";
@@ -184,31 +185,128 @@ describe("shared condition policy", () => {
     ]);
   });
 
-  test("uses exact condition labels when IDs overlap across category families", () => {
-    const tradingCardConditions = buildSyntheticPolicy([
-      { conditionId: "3000", conditionDescription: "Very Good" },
-      { conditionId: "4000", conditionDescription: "Good" },
-      { conditionId: "5000", conditionDescription: "Acceptable" },
-    ]);
-    const coinConditions = buildSyntheticPolicy([
-      { conditionId: "3000", conditionDescription: "Used - Excellent" },
-      { conditionId: "4000", conditionDescription: "Used - Very Good" },
-      { conditionId: "5000", conditionDescription: "Used - Good" },
-    ]);
-    const unknownLabel = buildSyntheticPolicy([
-      { conditionId: "3000", conditionDescription: "Other used grade" },
-    ]);
+  // eBay's "Item condition ID and name values" page maps each conditionId to
+  // exactly one ConditionEnum and says only the display names vary by
+  // category. So the same ID gives the same enum whatever label a category
+  // or locale shows.
+  test("derives the enum from the condition ID, whatever label the category shows", () => {
+    const labelSets: Record<string, string[]> = {
+      "3000": [
+        "Used",
+        "Pre-owned",
+        "Pre-owned - Good",
+        "Open Box/Used",
+        "Other used grade",
+      ],
+      "4000": ["Very Good", "Used - Very Good", "Ungraded", "Something new"],
+      "5000": ["Good", "Used - Good", "Localized Gut"],
+      "6000": ["Acceptable", "Used - Acceptable", "Akzeptabel"],
+    };
+    const expected: Record<string, string> = {
+      "3000": "USED_EXCELLENT",
+      "4000": "USED_VERY_GOOD",
+      "5000": "USED_GOOD",
+      "6000": "USED_ACCEPTABLE",
+    };
+    for (const [conditionId, labels] of Object.entries(labelSets)) {
+      for (const conditionDescription of labels) {
+        const policy = buildSyntheticPolicy([
+          { conditionId, conditionDescription },
+        ]);
+        expect(
+          policy.conditions[0].conditionEnum,
+          `${conditionId} "${conditionDescription}"`,
+        ).toBe(expected[conditionId]);
+        expect(
+          validateConditionSelection(policy, "123", conditionId).valid,
+        ).toBe(true);
+      }
+    }
+  });
 
-    expect(
-      tradingCardConditions.conditions.map((entry) => entry.conditionEnum),
-    ).toEqual(["VERY_GOOD", "GOOD", "ACCEPTABLE"]);
-    expect(
-      coinConditions.conditions.map((entry) => entry.conditionEnum),
-    ).toEqual(["USED_EXCELLENT", "USED_VERY_GOOD", "USED_GOOD"]);
-    expect(unknownLabel.conditions[0].conditionEnum).toBeNull();
-    expect(validateConditionSelection(unknownLabel, "123", "3000").valid).toBe(
+  test("does not use a label to pick an enum for an unknown ID", () => {
+    const unknownId = buildSyntheticPolicy([
+      { conditionId: "9999", conditionDescription: "Very Good" },
+      { conditionId: "9998", conditionDescription: "Used - Good" },
+    ]);
+    expect(unknownId.conditions.map((entry) => entry.conditionEnum)).toEqual([
+      null,
+      null,
+    ]);
+    expect(validateConditionSelection(unknownId, "123", "9999").valid).toBe(
       false,
     );
+  });
+
+  test("never emits an enum outside eBay's documented ConditionEnum list", () => {
+    // Copied from eBay's "Item condition ID and name values" page. If eBay
+    // adds a value, add it here deliberately; do not derive this list from the
+    // code under test.
+    const ebayConditionEnums = new Set([
+      "NEW",
+      "NEW_OTHER",
+      "NEW_WITH_DEFECTS",
+      "CERTIFIED_REFURBISHED",
+      "EXCELLENT_REFURBISHED",
+      "VERY_GOOD_REFURBISHED",
+      "GOOD_REFURBISHED",
+      "SELLER_REFURBISHED",
+      "LIKE_NEW",
+      "PRE_OWNED_EXCELLENT",
+      "USED_EXCELLENT",
+      "PRE_OWNED_FAIR",
+      "USED_VERY_GOOD",
+      "USED_GOOD",
+      "USED_ACCEPTABLE",
+      "FOR_PARTS_OR_NOT_WORKING",
+    ]);
+    expect(new Set(Object.values(CONDITION_ID_TO_ENUM))).toEqual(
+      ebayConditionEnums,
+    );
+    expect(Object.keys(CONDITION_ID_TO_ENUM).sort()).toEqual(
+      [
+        "1000",
+        "1500",
+        "1750",
+        "2000",
+        "2010",
+        "2020",
+        "2030",
+        "2500",
+        "2750",
+        "2990",
+        "3000",
+        "3010",
+        "4000",
+        "5000",
+        "6000",
+        "7000",
+      ].sort(),
+    );
+    // Values the earlier label-based mapping could emit that eBay does not
+    // list. errorId 2004 ("Could not serialize field [condition]") was the
+    // production symptom of sending the first three.
+    for (const invalid of [
+      "VERY_GOOD",
+      "GOOD",
+      "ACCEPTABLE",
+      "DIGITAL_GOOD",
+      "CERTIFIED_PRE_OWNED",
+      "REMANUFACTURED",
+      "RETREAD",
+      "DAMAGED",
+    ]) {
+      expect(SUPPORTED_CONDITION_ENUMS.has(invalid)).toBe(false);
+      expect(
+        validateConditionSelection(
+          buildSyntheticPolicy([
+            { conditionId: "4000", conditionDescription: "Very Good" },
+          ]),
+          "123",
+          invalid,
+        ).valid,
+      ).toBe(false);
+    }
   });
 
   test("condition ID resolution accepts exact ID, enum, and a unique exact label only", () => {

@@ -1,5 +1,13 @@
 export const CONDITION_POLICY_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
+// Source of truth: eBay's "Item condition ID and name values" page
+// (developer.ebay.com/api-docs/sell/static/metadata/condition-id-values.html),
+// which maps each Metadata API conditionId to exactly one Inventory API
+// ConditionEnum. eBay states numeric IDs are used consistently across all
+// marketplaces and categories, and that only display names and the supported
+// subset vary by category, so the enum is derived from the ID alone. Do not
+// match on conditionDescription: eBay documents no label-based lookup, and
+// labels differ by category and locale.
 export const CONDITION_ID_TO_ENUM: Readonly<Record<string, string>> = {
   "1000": "NEW",
   "1500": "NEW_OTHER",
@@ -11,93 +19,27 @@ export const CONDITION_ID_TO_ENUM: Readonly<Record<string, string>> = {
   "2500": "SELLER_REFURBISHED",
   "2750": "LIKE_NEW",
   "2990": "PRE_OWNED_EXCELLENT",
+  "3000": "USED_EXCELLENT",
   "3010": "PRE_OWNED_FAIR",
+  "4000": "USED_VERY_GOOD",
+  "5000": "USED_GOOD",
+  "6000": "USED_ACCEPTABLE",
   "7000": "FOR_PARTS_OR_NOT_WORKING",
 };
 
-const CONDITION_DESCRIPTION_TO_ENUM: Readonly<Record<string, string>> = {
-  "brand new": "NEW",
-  new: "NEW",
-  "new with tags": "NEW",
-  "new with packaging": "NEW",
-  "new/factory sealed": "NEW",
-  "new - factory sealed": "NEW",
-  "new factory sealed": "NEW",
-  "new without tags": "NEW_OTHER",
-  "new without packaging": "NEW_OTHER",
-  "new other (see details)": "NEW_OTHER",
-  "new open box": "NEW_OTHER",
-  "new-open box": "NEW_OTHER",
-  "new with defects": "NEW_WITH_DEFECTS",
-  "like new": "LIKE_NEW",
-  "graded": "LIKE_NEW",
-  used: "USED_EXCELLENT",
-  "pre-owned": "USED_EXCELLENT",
-  "open box used": "USED_EXCELLENT",
-  "open box/used": "USED_EXCELLENT",
-  "open box - used": "USED_EXCELLENT",
-  "used - excellent": "USED_EXCELLENT",
-  "used excellent": "USED_EXCELLENT",
-  "pre-owned good": "USED_EXCELLENT",
-  "pre-owned - good": "USED_EXCELLENT",
-  "pre-owned poor": "USED_ACCEPTABLE",
-  "very good": "VERY_GOOD",
-  "used - very good": "USED_VERY_GOOD",
-  "used very good": "USED_VERY_GOOD",
-  "ungraded": "USED_VERY_GOOD",
-  good: "GOOD",
-  "used - good": "USED_GOOD",
-  "used good": "USED_GOOD",
-  acceptable: "ACCEPTABLE",
-  "used - acceptable": "USED_ACCEPTABLE",
-  "used acceptable": "USED_ACCEPTABLE",
-  "for parts or not working": "FOR_PARTS_OR_NOT_WORKING",
-  "certified refurbished": "CERTIFIED_REFURBISHED",
-  "excellent refurbished": "EXCELLENT_REFURBISHED",
-  "very good refurbished": "VERY_GOOD_REFURBISHED",
-  "good refurbished": "GOOD_REFURBISHED",
-  "seller refurbished": "SELLER_REFURBISHED",
-  "pre-owned excellent": "PRE_OWNED_EXCELLENT",
-  "pre-owned - excellent": "PRE_OWNED_EXCELLENT",
-  "pre-owned fair": "PRE_OWNED_FAIR",
-  "pre-owned - fair": "PRE_OWNED_FAIR",
-  "digital good": "DIGITAL_GOOD",
-  "certified pre-owned": "CERTIFIED_PRE_OWNED",
-  remanufactured: "REMANUFACTURED",
-  retread: "RETREAD",
-  damaged: "DAMAGED",
-};
+// Every string this module can hand to the Inventory API. Exported so a test
+// can assert the engine never emits a value outside eBay's ConditionEnum list.
+export const SUPPORTED_CONDITION_ENUMS: ReadonlySet<string> = new Set(
+  Object.values(CONDITION_ID_TO_ENUM),
+);
 
-const SUPPORTED_CONDITION_ENUMS = new Set([
-  ...Object.values(CONDITION_ID_TO_ENUM),
-  "VERY_GOOD",
-  "GOOD",
-  "ACCEPTABLE",
-  "DIGITAL_GOOD",
-  "CERTIFIED_PRE_OWNED",
-  "REMANUFACTURED",
-  "RETREAD",
-  "DAMAGED",
-]);
-
+// IDs outside eBay's documented table return null, so publishing fails closed
+// ("no supported Inventory API mapping") instead of sending an invented value.
+// The description is accepted for call-site compatibility and ignored.
 export function conditionEnumFromPolicyCondition(
   conditionId: string,
-  description: string,
+  _description?: string,
 ): string | null {
-  const normalized = description
-    .trim()
-    .toLowerCase()
-    .replace(/[\u2013\u2014]/g, "-")
-    .replace(/\s+/g, " ");
-  const alias = CONDITION_DESCRIPTION_TO_ENUM[normalized];
-  if (alias) return alias;
-
-  const enumValue = description
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, "_")
-    .replace(/^_|_$/g, "");
-  if (SUPPORTED_CONDITION_ENUMS.has(enumValue)) return enumValue;
   return CONDITION_ID_TO_ENUM[conditionId] ?? null;
 }
 
