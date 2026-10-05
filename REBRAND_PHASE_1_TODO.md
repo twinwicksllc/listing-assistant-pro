@@ -3,8 +3,9 @@
 **Product:** ListrAssistr
 **Repository:** `twinwicksllc/listing-assistant-pro` (legacy; stays live per DEC-0003)
 **Scope:** `LISTRASSISTR_REBRAND_AND_MIGRATION_PLAN.md` §8 only, per DEC-0035.
-Repository code is §9/Phase 2 and **not** authorised.
-**Status date:** 2026-10-01
+Repository code is §9/Phase 2 and **not** authorised for this repository; front-end work in
+`listrassistr-official` only is covered by DEC-0043 (proposed, 2026-10-05).
+**Status date:** 2026-10-05
 
 **Update 2026-09-28:** SES identity/configuration, monitor-only DMARC, Supabase Auth SMTP,
 and Forward Email DNS/aliases are set up. SES Auth reset flows passed in QA and production;
@@ -21,6 +22,17 @@ individually, and the catch-all has since been removed. Forward Email outbound S
 approved; the owner reports a send from `support@listrassistr.com` and a reply both
 worked, with SPF/DKIM/DMARC all showing pass. The only email work still open is the
 30-day DMARC review (P1-09), starting with T-16 on 2026-10-05.
+
+**Update 2026-10-05:** The first weekly Postmark DMARC digest arrived (Sep 28 to Oct 05,
+`listrassistr.com`): 8 emails processed, **100% SPF or DKIM aligned, 0% failing both**. Sources:
+Forward Email (1 email, SPF and DKIM aligned) and Amazon SES (7 emails from four addresses, DKIM
+aligned 100%, SPF aligned 0% because SES uses its own return-path domain, so DMARC passes on
+DKIM alone, as already recorded under P1-08). Postmark lists Forward Email as a source "we
+know belongs to you". This is the first of the weekly reads; it covers a few days and only 8
+messages, so it is thin evidence. DMARC stays at `p=none`. The weekend's `listrassistr-official`
+work (PRs #46 to #49: legal pages, application shell, seller prototype, theme switch) is recorded
+as **DEC-0043** (proposed, awaiting owner confirmation). The brand usage sheet and token gaps were
+approved as DEC-0042 on 2026-10-02.
 
 **Update 2026-10-01:** Q-10 is decided as DEC-0041 (Clear Momentum; official pill and
 small `LA` logos; brand colors and the dark-mode rule). P1-10 (artwork) and P1-11 (final
@@ -173,7 +185,7 @@ branded email can authenticate, and the asset package is approved."
 | P1-06 | Apex/`www`/`app`/`qa` resolving + certs | **Done 2026-09-02** — apex/`www`/`app`/`qa` all live, canonical, and certificate-verified (A.7d, RB-10); `app` confirmed serving the predicted holding page, not the live app (RB-10, A.18b); `qa` now points at its own non-production Supabase project (Q-15/RB-08, `majmvgakczrpcwgxgulj`), fully wired up — end-to-end verification still outstanding                                                                                                                                                                                                                                                                                                                                                                          |
 | P1-07 | Role mailboxes receiving                | **Evidence captured (2026-09-30, owner-reported)** — Forward Email DNS and four active role aliases configured; each alias confirmed routing individually in Forward Email logs; catch-all removed. Outbound SMTP approved; send from and reply to `support@listrassistr.com` worked.                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | P1-08 | Branded email authenticates             | **Evidence captured (2026-09-30)** — SES Auth reset message headers (seen by assistant): `dkim=pass header.i=@listrassistr.com`, `dmarc=pass (p=NONE)`; SPF passes for the `amazonses.com` return path, so DMARC aligns via DKIM. Forward Email branded send/reply headers: owner reports SPF/DKIM/DMARC all pass (raw headers not shared).                                                                                                                                                                                                                                                                                                                                                                                        |
-| P1-09 | DMARC review period completed           | Open — `p=none` with Postmark `rua` is live; all current legitimate senders (SES Auth, Forward Email) are now configured and tested as of 2026-09-30, so the review period effectively starts then. Review Postmark reports (first check 2026-10-05, T-16) for the 30-day target before any policy change.                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| P1-09 | DMARC review period completed           | Open — `p=none` with Postmark `rua` is live; all current legitimate senders (SES Auth, Forward Email) are now configured and tested as of 2026-09-30, so the review period effectively starts then. Review Postmark reports (first check 2026-10-05, T-16) for the 30-day target before any policy change. **First weekly digest read 2026-10-05:** 8 messages, 100% SPF-or-DKIM aligned, 0% failing both (Forward Email fully aligned; SES aligned on DKIM only). One of about four weekly reads toward the 30-day target.                                                                                                                                                                                                        |
 | P1-10 | Brand asset package produced            | Direction decided 2026-10-01 (DEC-0041). **Produced and merged** in `listrassistr-official/public/brand/`: six vector logos (pill and small `LA`, light and dark, plus square `LA`); favicons (`favicon.svg`, 16/32/48 PNG, `favicon.ico`); Apple touch icon (180); PWA icons (192/512, any and maskable); two 1200×630 social images; two email headers (600×160 and 1200×320); and `site.webmanifest`. They are linked from `index.html`. The brand usage sheet is **drafted and approved (DEC-0042, 2026-10-02)**. Still **not produced**: a single-colour variant and a compact wordmark (the outlined-font export does not apply, since the wordmark is outlined paths). Not yet checked in a real browser tab or on a phone. |
 | P1-11 | Design tokens pass WCAG AA              | Drafted 2026-10-01 with measured ratios in `listrassistr-official/docs/BRAND_TOKENS.md`; light mode passes, dark mode uses a lighter cobalt. **Gaps closed and approved 2026-10-02 (DEC-0042):** `crimson-dark` `#E4596A` for small text on dark (4.94:1), brass `#A94C06` (4.79:1 on the grey surface), control borders `#7B858F` and `#8A847F`, and neutral and success roles, all measured in `BRAND_TOKENS.md`. Open: re-measuring against the final artwork.                                                                                                                                                                                                                                                                  |
 | P1-12 | Asset package approved                  | Not started                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -312,7 +324,7 @@ code.
 | T-15 | ~~Draft corrections to `REBRAND_PHASE_0_SERVICE_INVENTORY.md`.~~ **DONE 2026-09-08** — all five items applied: relabeled `yqftpibxplachhwoclam` staging to **production**; removed the "Planned dedicated QA hostname" line and pointed to `listrassistr-qa`/`majmvgakczrpcwgxgulj` instead; dropped "no production data approved"; corrected the dev callback port from `3000` to **`5173`**; added region `us-east-2`, org `twinwicksllc-Org`, and Pro plan (A.11, A.15)                                                                               | Q-12           | Closed   |
 | T-14 | ~~Draft the DEC entry for the document-location decision~~ **DONE 2026-08-27 — DEC-0038 written into the decision log.** Original: (A.4), once Q-13 is answered — including the recorded destination and migration step that `REBRAND_PHASE_0_IMPLEMENTATION.md` §2 requires                                                                                                                                                                                                                                                                             | Q-13           | Closed   |
 | T-13 | **Draft the Phase 2 entry decision** for P1-13, once Phase 1 actually closes. DEC-0035 explicitly does not grant it                                                                                                                                                                                                                                                                                                                                                                                                                                      | T-12           | P3       |
-| T-16 | **Query Postmark's DMARC API on Monday 2026-10-05** (the next weekly report cycle): list reports for `listrassistr.com`, retrieve each report detail, record reporting organizations/source IPs and SPF/DKIM/disposition results, and leave DMARC at `p=none`. Keep the API token local; never record it here.                                                                                                                                                                                                                                           | O-14           | P2       |
+| T-16 | **First run done 2026-10-05 via the Postmark weekly digest email, not the API** (see the 2026-10-05 update); repeat weekly. **Query Postmark's DMARC API on Monday 2026-10-05** (the next weekly report cycle): list reports for `listrassistr.com`, retrieve each report detail, record reporting organizations/source IPs and SPF/DKIM/disposition results, and leave DMARC at `p=none`. Keep the API token local; never record it here.                                                                                                               | O-14           | P2       |
 
 ## Section 4 — Deferred by decision, with triggers
 
@@ -458,9 +470,11 @@ just not consumed.
 Distinct from Section 4. Those items are Phase 1 work sequenced later; these are
 **outside §8 altogether**. Recorded so scope does not drift.
 
-- **Any repository code change.** §9/Phase 2, not authorised by DEC-0035. This
-  includes moving `cost-alert-cron` off Resend to `alerts@listrassistr.com`, and any
-  rebranding of strings, assets, or config inside the app.
+- **Any repository code change in this (legacy) repository.** §9/Phase 2, not authorised by
+  DEC-0035. This includes moving `cost-alert-cron` off Resend to `alerts@listrassistr.com`, and
+  any rebranding of strings, assets, or config inside the legacy app. **Exception recorded as
+  DEC-0043 (proposed, 2026-10-05):** front-end work in `listrassistr-official` only, with
+  integrations, backend, billing, data migration and cutover still gated.
 - **Cutover, migration execution, or DNS repointing of production.** Production
   remains `lister.teckstart.com` until a separate approval. Plan §14's permanent
   redirect from that hostname to `app.listrassistr.com` is part of that later work.
