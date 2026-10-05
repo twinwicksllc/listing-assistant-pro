@@ -35,9 +35,12 @@ rewritten Terms and Privacy, application shell, seller prototype, theme switch).
 cite an owner authorization of 2026-10-04 for continued front-end work. The owner says that
 was taken out of context: these items are still to be done, and the team was asked not to work
 on them over the weekend, so they would be done with the assistant. **No authorization for
-this work is recorded here.**
-DEC-0035 still limits Phase 1 to §8. What to do with the merged work, and whether the
-official repo's statement should be corrected, is an open owner decision. The brand usage
+this work is recorded here.** On 2026-10-05 the owner decided to **keep the merged work as a
+starting point that may be built from or replaced**; `listrassistr-official` PR #50 corrected
+that repo's statement to say so, and PR #51 proposes wording changes to its Terms and Privacy
+pages after owner review (details in `todo.md`). Those pages still have no legal review.
+DEC-0035 still limits Phase 1 to §8. The merged work remains a starting point that may be
+built from or replaced, as recorded above.
 sheet and token gaps were approved as DEC-0042 on 2026-10-02.
 
 **Update 2026-10-01:** Q-10 is decided as DEC-0041 (Clear Momentum; official pill and
