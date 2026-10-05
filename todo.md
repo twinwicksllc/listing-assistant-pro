@@ -911,5 +911,11 @@ line ~1070), or reverting BATCH_LIMIT/REFRESH_CONCURRENCY/PROBE_CAP to pre-fix v
 - [ ] **Consequence to watch:** after an address change a seller has two locations; new
       listings use the address-keyed one, existing listings keep the old one. Whether old
       listings are unaffected is undocumented.
-- [ ] `bulk-publish` creates its own `BULK-<id>` location only on a 404 and never updates
-      its address if the profile changes. Same gap, opposite shape. Not addressed here.
+- [x] **`bulk-publish` now uses the same logic.** It used to create its `BULK-<id>` location
+      only on a 404 and never update its address if the profile changed. The location logic
+      now lives in `_helpers/inventoryLocation.ts` and both functions call it, so an address
+      change moves new bulk rows to an address-keyed location, and nothing is deleted. Its
+      location setup stays non-fatal; `ebay-publish` still throws on an unexpected create error.
+- [ ] `bulk-publish` now POSTs first and reads on a conflict (one failed POST per run for a
+      seller whose location exists), where it used to GET first. Same cost `ebay-publish`
+      already paid.
