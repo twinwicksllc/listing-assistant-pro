@@ -147,7 +147,11 @@ describe("shared condition policy", () => {
         itemConditionRequired: true,
         itemConditions: [
           { conditionId: 3000, conditionDescription: "Used" },
-          { conditionId: 3000, conditionDescription: "Something else" },
+          {
+            conditionId: 3000,
+            conditionDescription: "Used",
+            usage: "RESTRICTED",
+          },
         ],
       }).status,
     ).toBe("unavailable");
@@ -317,9 +321,17 @@ describe("shared condition policy", () => {
       { conditionId: "3000", conditionDescription: "Used" },
       { conditionId: "3000", conditionDescription: "Used" },
     ]);
+    const duplicateLabelAlias = buildSyntheticPolicy([
+      { conditionId: "3000", conditionDescription: "Used - Excellent" },
+      { conditionId: "3000", conditionDescription: "Pre-owned" },
+    ]);
     const conflictingIdentity = buildSyntheticPolicy([
       { conditionId: "3000", conditionDescription: "Used" },
-      { conditionId: "3000", conditionDescription: "Used - Good" },
+      {
+        conditionId: "3000",
+        conditionDescription: "Used",
+        usage: "RESTRICTED",
+      },
     ]);
     const ambiguousLabels = buildSyntheticPolicy([
       { conditionId: "2500", conditionDescription: "Refurbished" },
@@ -328,6 +340,11 @@ describe("shared condition policy", () => {
 
     expect(duplicateIdentity.status).toBe("available");
     expect(duplicateIdentity.conditions).toHaveLength(1);
+    expect(duplicateLabelAlias.status).toBe("available");
+    expect(duplicateLabelAlias.conditions).toHaveLength(1);
+    expect(duplicateLabelAlias.conditions[0].conditionDescription).toBe(
+      "Used - Excellent",
+    );
     expect(conflictingIdentity.status).toBe("unavailable");
     expect(
       resolvePolicyCondition(ambiguousLabels, "Refurbished"),

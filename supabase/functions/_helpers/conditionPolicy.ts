@@ -284,8 +284,16 @@ export function buildConditionPolicy(
       return unavailableConditionPolicy(categoryId, "Malformed condition policy", marketplaceId, locale);
     }
     const existing = conditions.get(option.conditionId);
-    if (existing && JSON.stringify(existing) !== JSON.stringify(option)) {
-      return unavailableConditionPolicy(categoryId, "Conflicting duplicate condition IDs", marketplaceId, locale);
+    if (existing) {
+      const metadataMatches = existing.conditionEnum === option.conditionEnum &&
+        existing.conditionHelpText === option.conditionHelpText &&
+        existing.usage === option.usage &&
+        JSON.stringify(existing.conditionDescriptors) ===
+          JSON.stringify(option.conditionDescriptors);
+      if (!metadataMatches) {
+        return unavailableConditionPolicy(categoryId, "Conflicting duplicate condition IDs", marketplaceId, locale);
+      }
+      continue;
     }
     conditions.set(option.conditionId, option);
   }
