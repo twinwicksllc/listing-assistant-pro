@@ -1,10 +1,14 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import {
+  buildAndNormalizeAspects,
   CONDITION_DESCRIPTIONS,
   CONDITION_ID_MAP,
+  convertEbayAspectsToRule,
   detectCategoryTreeSync,
   generateDraftSku,
   getConditionDescription,
+  getMissingAspectNameFromEbayErrors,
+  getMissingRequiredAspects,
   HARDCODED_BULLION_CATEGORY_IDS,
   HARDCODED_COIN_CATEGORY_IDS,
   HARDCODED_COLLECTIBLE_CATEGORY_IDS,
@@ -13,6 +17,60 @@ import {
   normalizeConditionForCategory,
   verifyOrRerouteLeafCategory,
 } from "./publish-helpers.ts";
+
+Deno.test("buildAndNormalizeAspects: preserves Unknown only when eBay lists it for the category", () => {
+  const rule = convertEbayAspectsToRule([
+    {
+      name: "Ring Size",
+      required: true,
+      mode: "SELECTION_ONLY",
+      values: ["Unknown", "5", "6"],
+    },
+  ]);
+
+  assertEquals(
+    buildAndNormalizeAspects({ "Ring Size": "unknown" }, "261994", rule),
+    { "Ring Size": ["Unknown"] },
+  );
+  assertEquals(buildAndNormalizeAspects({ "Ring Size": "Unknown" }, "other"), {});
+  assertEquals(rule.allowedValues?.["Ring Size"], ["Unknown", "5", "6"]);
+});
+
+Deno.test("buildAndNormalizeAspects: preserves Unknown for a metadata-declared free-text aspect", () => {
+  const rule = convertEbayAspectsToRule([
+    { name: "Ring Size", required: true, mode: "SELECTION_AND_TEXT", values: ["5", "6"] },
+  ]);
+  assertEquals(
+    buildAndNormalizeAspects({ "Ring Size": "Unknown" }, "261994", rule),
+    { "Ring Size": ["Unknown"] },
+  );
+});
+
+Deno.test("getMissingRequiredAspects: matches aspect names case-insensitively", () => {
+  assertEquals(
+    getMissingRequiredAspects({ "Ring Size": ["Unknown"], Brand: [""] }, ["ring size", "Brand"]),
+    ["Brand"],
+  );
+});
+
+Deno.test("getMissingAspectNameFromEbayErrors: recognizes explicit missing-specific errors", () => {
+  assertEquals(
+    getMissingAspectNameFromEbayErrors([
+      { errorId: 25002, message: "The item specific Ring Size is missing." },
+    ]),
+    "Ring Size",
+  );
+  assertEquals(
+    getMissingAspectNameFromEbayErrors([
+      { errorId: 25002, parameters: [{ value: "The item specific 'Ring Size' is missing." }] },
+    ]),
+    "Ring Size",
+  );
+  assertEquals(
+    getMissingAspectNameFromEbayErrors([{ errorId: 25002, message: "Condition is invalid." }]),
+    undefined,
+  );
+});
 
 // Regression guard for the 2026-09-01 stale-coin-category-ID cleanup (see
 // todo.md's "cure the disease in the three flagged follow-ups" entry).

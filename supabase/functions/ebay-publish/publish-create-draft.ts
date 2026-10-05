@@ -22,6 +22,8 @@ import {
   fetchCoinConditionDescriptors,
   fetchCurrentConditionPolicy,
   generateDraftSku,
+  getMissingAspectNameFromEbayErrors,
+  getMissingRequiredAspects,
   HARDCODED_COIN_CATEGORY_IDS,
   isGrainBar,
   normalizeCoinConditionDetail,
@@ -314,12 +316,14 @@ export async function handleCreateDraft({
   //   - Drops placeholder values (none / unknown / n/a / other / etc.)
 
   const { categoryForAspects, dynamicRuleApplied } = await resolveAspectCategory(String(finalCategoryId ?? ""));
+  const aspectRule = CATEGORY_ASPECT_RULES[categoryForAspects];
 
   let aspects: Record<string, string[]>;
   try {
     aspects = buildAndNormalizeAspects(
       (itemSpecifics && typeof itemSpecifics === "object" ? itemSpecifics : {}) as Record<string, unknown>,
       categoryForAspects,
+      aspectRule,
     );
   } finally {
     // Clean up temporary dynamic rule from the map even if aspect normalization throws.
@@ -518,6 +522,24 @@ export async function handleCreateDraft({
         `create_draft: injected Card Condition="${cardCond}" for trading card category ${finalCategoryId} (condition=${effectiveConditionEnum})`,
       );
     }
+  }
+
+  const missingRequiredAspects = getMissingRequiredAspects(
+    aspects,
+    aspectRule?.required ?? [],
+  );
+  if (missingRequiredAspects.length > 0) {
+    const names = missingRequiredAspects.join(", ");
+    return new Response(
+      JSON.stringify({
+        error:
+          `This eBay category requires a value for ${names}. Enter a valid value or an eBay-supported unknown/not-applicable option, then try again.`,
+        missingRequiredAspects,
+        invalidItemSpecifics: true,
+        sku,
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
   }
 
   // Add aspects (item specifics) to the product
@@ -1288,6 +1310,8 @@ export async function handleCreateDraft({
     let shouldDemote = false;
     let isSellerLimitError = false;
     let isBrandOrAspectError = false;
+    let isMissingAspect = false;
+    let missingAspectName = "an item specific";
     let aspectErrorName = "an item specific";
     let parsedErrJson: any = null;
     try {
@@ -1312,6 +1336,14 @@ export async function handleCreateDraft({
           );
           break;
         }
+      }
+
+      missingAspectName = getMissingAspectNameFromEbayErrors(errors) ?? missingAspectName;
+      isMissingAspect = missingAspectName !== "an item specific";
+      if (missingAspectName !== "an item specific") {
+        console.warn(
+          `create_draft: errorId 25002 reports missing required aspect ${missingAspectName} — skipping category demotion`,
+        );
       }
 
       // Check for seller limit flavor of 25002 first
@@ -1362,7 +1394,10 @@ export async function handleCreateDraft({
 
       // Only demote for known category/condition mismatch errors, never for 500s, seller limit,
       // or a Brand/aspect-value rejection (the category was correctly resolved in that case).
-      if (!isSellerLimitError && !isBrandOrAspectError && publishResp.status !== 500) {
+      if (
+        !isSellerLimitError && !isBrandOrAspectError && !isMissingAspect &&
+        publishResp.status !== 500
+      ) {
         shouldDemote = errorIds.some((id) => DEMOTABLE_ERROR_IDS.has(id));
         // 25002 is demotable ONLY when it is NOT a seller limit or Brand/aspect error
         const has25002 = errorIds.includes(25002);
@@ -1373,7 +1408,8 @@ export async function handleCreateDraft({
             (e) =>
               e.errorId === 25002 &&
               !SELLER_LIMIT_PATTERNS.some((p) => p.test(e.message ?? "")) &&
-              !isAspectValueError(e),
+              !isAspectValueError(e) &&
+              !getMissingAspectNameFromEbayErrors([e]),
           );
           if (conditionError) shouldDemote = true;
         }
@@ -1450,6 +1486,9 @@ export async function handleCreateDraft({
       } else if (isBrandOrAspectError) {
         userFriendlyError =
           `eBay rejected the value for "${aspectErrorName}" on this listing (it may be a restricted/trademarked brand name for this category). Try removing or correcting that item specific and republish.`;
+      } else if (isMissingAspect) {
+        userFriendlyError =
+          `eBay requires the item specific "${missingAspectName}" for this category. Add a valid value and republish.`;
       } else if (isConditionIdError || errorId === 25021 || errorId === 25060) {
         userFriendlyError = `eBay rejected the selected condition or condition details for this category. ${
           conditionPolicyRefreshAvailable
