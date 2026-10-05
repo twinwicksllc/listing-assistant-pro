@@ -3,8 +3,7 @@
 **Product:** ListrAssistr
 **Repository:** `twinwicksllc/listing-assistant-pro` (legacy; stays live per DEC-0003)
 **Scope:** `LISTRASSISTR_REBRAND_AND_MIGRATION_PLAN.md` §8 only, per DEC-0035.
-Repository code is §9/Phase 2 and **not** authorised for this repository; front-end work in
-`listrassistr-official` only is covered by DEC-0043 (proposed, 2026-10-05).
+Repository code is §9/Phase 2 and **not** authorised.
 **Status date:** 2026-10-05
 
 **Update 2026-09-28:** SES identity/configuration, monitor-only DMARC, Supabase Auth SMTP,
@@ -29,10 +28,17 @@ Forward Email (1 email, SPF and DKIM aligned) and Amazon SES (7 emails from four
 aligned 100%, SPF aligned 0% because SES uses its own return-path domain, so DMARC passes on
 DKIM alone, as already recorded under P1-08). Postmark lists Forward Email as a source "we
 know belongs to you". This is the first of the weekly reads; it covers a few days and only 8
-messages, so it is thin evidence. DMARC stays at `p=none`. The weekend's `listrassistr-official`
-work (PRs #46 to #49: legal pages, application shell, seller prototype, theme switch) is recorded
-as **DEC-0043** (proposed, awaiting owner confirmation). The brand usage sheet and token gaps were
-approved as DEC-0042 on 2026-10-02.
+messages, so it is thin evidence. DMARC stays at `p=none`.
+
+Separately, work was merged in `listrassistr-official` on 2026-10-04 (its PRs #46 to #49:
+rewritten Terms and Privacy, application shell, seller prototype, theme switch). Its own docs
+cite an owner authorization of 2026-10-04 for continued front-end work. The owner says that
+was taken out of context: these items are still to be done, and the team was asked not to work
+on them over the weekend, so they would be done with the assistant. **No authorization for
+this work is recorded here.**
+DEC-0035 still limits Phase 1 to §8. What to do with the merged work, and whether the
+official repo's statement should be corrected, is an open owner decision. The brand usage
+sheet and token gaps were approved as DEC-0042 on 2026-10-02.
 
 **Update 2026-10-01:** Q-10 is decided as DEC-0041 (Clear Momentum; official pill and
 small `LA` logos; brand colors and the dark-mode rule). P1-10 (artwork) and P1-11 (final
@@ -470,11 +476,11 @@ just not consumed.
 Distinct from Section 4. Those items are Phase 1 work sequenced later; these are
 **outside §8 altogether**. Recorded so scope does not drift.
 
-- **Any repository code change in this (legacy) repository.** §9/Phase 2, not authorised by
-  DEC-0035. This includes moving `cost-alert-cron` off Resend to `alerts@listrassistr.com`, and
-  any rebranding of strings, assets, or config inside the legacy app. **Exception recorded as
-  DEC-0043 (proposed, 2026-10-05):** front-end work in `listrassistr-official` only, with
-  integrations, backend, billing, data migration and cutover still gated.
+- **Any repository code change.** §9/Phase 2, not authorised by DEC-0035. This
+  includes moving `cost-alert-cron` off Resend to `alerts@listrassistr.com`, and any
+  rebranding of strings, assets, or config inside the app. **Note (2026-10-05):** front-end
+  work was merged in `listrassistr-official` on 2026-10-04 that this scope does not cover;
+  see the 2026-10-05 update. No exception has been recorded.
 - **Cutover, migration execution, or DNS repointing of production.** Production
   remains `lister.teckstart.com` until a separate approval. Plan §14's permanent
   redirect from that hostname to `app.listrassistr.com` is part of that later work.
