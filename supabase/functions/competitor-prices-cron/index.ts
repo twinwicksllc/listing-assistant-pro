@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { describeCronAuthEnv, requireCronSecret } from "../_helpers/authGuard.ts";
-import { CACHE_TTL_MS, runCompetitorSearch } from "../_helpers/competitorSearch.ts";
+import { CACHE_TTL_MS, CRON_QUOTA_RATIO, runCompetitorSearch } from "../_helpers/competitorSearch.ts";
 import { cleanupCacheIfDisconnected } from "../_helpers/ebayAccountDeletion.ts";
 
 const corsHeaders = {
@@ -91,6 +91,7 @@ async function refreshCompetitorData(
       yourPrice: listing.price,
       ebayEnv,
       geminiKey,
+      quotaCriticalRatio: CRON_QUOTA_RATIO,
     });
 
     if (result.error) {

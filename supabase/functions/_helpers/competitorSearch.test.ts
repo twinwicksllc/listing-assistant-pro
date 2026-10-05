@@ -14,6 +14,7 @@ import {
   type CompSearchAttemptResult,
   computeCompStats,
   computeProductSignature,
+  CRON_QUOTA_RATIO,
   decideRefreshStrategy,
   evaluateCompQuality,
   extractCompItemIds,
@@ -1693,6 +1694,25 @@ Deno.test("checkBrowseQuotaHeadroom: just under the critical ratio still reports
   const svc = fakeSupabaseForQuotaHeadroom({ count: 4499 }); // 89.98% of 5000
   const result = await checkBrowseQuotaHeadroom(svc, new Date());
   assertEquals(result.hasHeadroom, true);
+});
+
+Deno.test("checkBrowseQuotaHeadroom: the cron ratio stops at 75% while the default gate still allows the same count", async () => {
+  const svc = fakeSupabaseForQuotaHeadroom({ count: 3750 }); // exactly 75% of 5000
+  const cron = await checkBrowseQuotaHeadroom(svc, new Date(), CRON_QUOTA_RATIO);
+  assertEquals(cron.hasHeadroom, false);
+  const interactive = await checkBrowseQuotaHeadroom(svc, new Date());
+  assertEquals(interactive.hasHeadroom, true);
+});
+
+Deno.test("checkBrowseQuotaHeadroom: just under the cron ratio still reports headroom", async () => {
+  const svc = fakeSupabaseForQuotaHeadroom({ count: 3749 });
+  const result = await checkBrowseQuotaHeadroom(svc, new Date(), CRON_QUOTA_RATIO);
+  assertEquals(result.hasHeadroom, true);
+});
+
+Deno.test("CRON_QUOTA_RATIO leaves the cron a lower ceiling than the shared 90% gate", () => {
+  assertEquals(CRON_QUOTA_RATIO < 0.9, true);
+  assertEquals(CRON_QUOTA_RATIO, 0.75);
 });
 
 Deno.test("checkBrowseQuotaHeadroom: queries ebay_browse_call_log filtered to BOTH buy.browse and buy.browse.item.bulk via .in()", async () => {
