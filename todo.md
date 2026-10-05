@@ -919,3 +919,47 @@ line ~1070), or reverting BATCH_LIMIT/REFRESH_CONCURRENCY/PROBE_CAP to pre-fix v
 - [ ] `bulk-publish` now POSTs first and reads on a conflict (one failed POST per run for a
       seller whose location exists), where it used to GET first. Same cost `ebay-publish`
       already paid.
+
+## 2026-10-05: review of the new app's Terms and Privacy pages (`listrassistr-official`)
+
+- [x] **Claims checked against the code (no contradictions found).** No analytics or
+      advertising trackers; browser storage is only the Supabase session and the theme
+      preference; no third-party scripts, fonts or images (the only external links are the
+      two social profiles); sign-up collects email and password only; the eBay connection
+      stores username, account type and token expiry, with tokens encrypted at rest. The
+      production entry imports nothing from `src/prototype`. Not confirmed by a real build.
+- [x] **Owner decisions on the clauses (2026-10-05):** Terms 4 (eBay-related
+      responsibility) and 10 (liability cap) stay as written; the company name stays
+      "Twin Wicks Digital Solutions" until it is registered; no partial refunds, but a
+      cancelled subscription runs to the end of the paid period and auto-renewal is
+      disclosed up front (owner is in Illinois); indemnity (11) narrowed to the listings a
+      user publishes and marketplace-rule violations, with a carve-out for our own breach;
+      governing law (12) reads "the laws of the State of Illinois and applicable United
+      States federal law". Proposed in `listrassistr-official` PR #51.
+- [ ] **Terms and Privacy still have no legal review.** They contain binding clauses
+      (non-refundable subscriptions, liability cap, indemnity, Illinois venue). The company
+      named in them is not yet registered (LLC in progress); the owner chose to leave that.
+- [ ] **AI-training wording is deliberately conservative.** The owner is on Google's paid
+      Gemini API terms, but what those terms say about training on submitted content has not
+      been confirmed. Terms 6 and Privacy 4 now say we do not train models ourselves and
+      that providers' own terms govern their handling, instead of promising what a provider
+      will do. A prompt for the owner's web-enabled research is drafted; the answer is pending.
+- [ ] **Policy scope mismatch between the two apps.** The legacy privacy page discloses
+      Jina scraping, Google Gemini, comparable-listing data, eBay deletion notices and
+      Stripe; the new app does not do those things yet, so its policy says so. When the new
+      app gains listing, AI, pricing or billing features, its policy must be updated first,
+      copying the relevant disclosures from the legacy page.
+- [x] **The weekend front-end work in `listrassistr-official` (PRs #46 to #49) is kept as a
+      starting point** that the owner may build from or replace (owner decision,
+      2026-10-05). No authorization for it is recorded; see the Phase 1 tracker.
+- [ ] **`lucide-react` 1.52.0 cannot be installed through the owner's corporate package
+      proxy.** The proxy quarantines versions less than about two days old; it first
+      reported 1.52.0 as blocked (403), then listed only up to 1.51.0 (latest) and returned
+      404 for 1.52.0. Unknown whether it will appear on its own. The lockfile pins 1.52.0,
+      Vercel installs outside the proxy and is unaffected, and the owner wants 1.52.0 kept.
+      Until it clears, `npm ci` fails on that machine; a failed `npm ci` empties
+      `node_modules` first, so use `npm install` into a scratch copy instead. The production
+      app uses two icons (`Sun`, `Moon`); the prototype uses twelve more.
+- [ ] **Not yet verified:** a real production build of `listrassistr-official`; whether the
+      Unsplash camera photo is in the live bundle (expected not); the tests, type check and
+      lint for PR #51.
