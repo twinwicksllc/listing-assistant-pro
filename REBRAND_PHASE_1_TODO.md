@@ -38,7 +38,14 @@ on them over the weekend, so they would be done with the assistant. **No authori
 this work is recorded here.** On 2026-10-05 the owner decided to **keep the merged work as a
 starting point that may be built from or replaced**; `listrassistr-official` PR #50 corrected
 that repo's statement to say so, and PR #51 proposes wording changes to its Terms and Privacy
-pages after owner review (details in `todo.md`). Those pages still have no legal review.
+pages after owner review (details in `todo.md`). Those pages still have no legal review (a review is now scheduled).
+
+**Decision 2026-10-05 (Q-16):** the owner wants the legacy app to remain operable, so it will not be
+rebranded in place. All rebranding happens in `listrassistr-official`. Plan section 9 / Phase 2
+(repository brand foundation) therefore no longer applies to this repository; the equivalent work
+(brand module, shared brand component) already exists in the new repository. The legacy
+app keeps its current name and look until the migration. Not yet decided: how and when features move to
+the new app.
 DEC-0035 still limits Phase 1 to §8. The merged work remains a starting point that may be
 built from or replaced, as recorded above.
 sheet and token gaps were approved as DEC-0042 on 2026-10-02.

@@ -939,11 +939,10 @@ line ~1070), or reverting BATCH_LIMIT/REFRESH_CONCURRENCY/PROBE_CAP to pre-fix v
 - [ ] **Terms and Privacy still have no legal review.** They contain binding clauses
       (non-refundable subscriptions, liability cap, indemnity, Illinois venue). The company
       named in them is not yet registered (LLC in progress); the owner chose to leave that.
-- [ ] **AI-training wording is deliberately conservative.** The owner is on Google's paid
-      Gemini API terms, but what those terms say about training on submitted content has not
-      been confirmed. Terms 6 and Privacy 4 now say we do not train models ourselves and
-      that providers' own terms govern their handling, instead of promising what a provider
-      will do. A prompt for the owner's web-enabled research is drafted; the answer is pending.
+- [x] **AI-training wording: resolved 2026-10-05.** Terms 6 and Privacy 4 say we do not train
+      models ourselves and that providers' own terms govern their handling. The owner is on
+      Google's paid Gemini terms; Google's actual terms page was read directly (last updated
+      2026-04-28) and is summarized in the "later the same day" section below.
 - [ ] **Policy scope mismatch between the two apps.** The legacy privacy page discloses
       Jina scraping, Google Gemini, comparable-listing data, eBay deletion notices and
       Stripe; the new app does not do those things yet, so its policy says so. When the new
@@ -952,14 +951,81 @@ line ~1070), or reverting BATCH_LIMIT/REFRESH_CONCURRENCY/PROBE_CAP to pre-fix v
 - [x] **The weekend front-end work in `listrassistr-official` (PRs #46 to #49) is kept as a
       starting point** that the owner may build from or replace (owner decision,
       2026-10-05). No authorization for it is recorded; see the Phase 1 tracker.
-- [ ] **`lucide-react` 1.52.0 cannot be installed through the owner's corporate package
-      proxy.** The proxy quarantines versions less than about two days old; it first
-      reported 1.52.0 as blocked (403), then listed only up to 1.51.0 (latest) and returned
-      404 for 1.52.0. Unknown whether it will appear on its own. The lockfile pins 1.52.0,
-      Vercel installs outside the proxy and is unaffected, and the owner wants 1.52.0 kept.
-      Until it clears, `npm ci` fails on that machine; a failed `npm ci` empties
-      `node_modules` first, so use `npm install` into a scratch copy instead. The production
-      app uses two icons (`Sun`, `Moon`); the prototype uses twelve more.
-- [ ] **Not yet verified:** a real production build of `listrassistr-official`; whether the
-      Unsplash camera photo is in the live bundle (expected not); the tests, type check and
-      lint for PR #51.
+- [x] **`lucide-react`: pinned to 1.51.0 (`listrassistr-official` #52), still to restore.** The
+      owner's corporate package proxy quarantines versions under about two days old; 1.52.0
+      was first blocked (403), then not listed at all (404), and the proxy's latest was
+      1.51.0. The owner wants 1.52.0 eventually: revert the pin once the proxy serves it.
+      A failed `npm ci` empties `node_modules` first, so use `npm install` into a scratch
+      copy on that machine. Copilot changed `package.json` to the exact `1.51.0`; the lockfile
+      root entry was aligned in #53. The production app uses two icons (`Sun`, `Moon`).
+- [x] **Verified 2026-10-05:** a real production build of `listrassistr-official` passes
+      (lint, `tsc -b`, `vite build`, 94 tests); the bundle contains no prototype page, no
+      camera photo, no `.jpg`, and after #53 no reference to Google Fonts or Unsplash. The
+      checks for #51 also passed.
+
+## 2026-10-05, later the same day: wrap-up, decisions, and corrections
+
+- [x] **Q-16 answered by the owner (2026-10-05):** the legacy app must stay operable, so it
+      is **not** rebranded in place. All rebranding happens in `listrassistr-official`. This
+      makes Phase 2 of the migration plan (repository brand foundation) moot for the legacy
+      repo; the brand module and shared brand component already exist in the new repo. Recorded
+      in the Phase 1 tracker as well.
+- [x] **Palette study page removed** (`listrassistr-official` #53): the file, its `vercel.json`
+      rewrite, and the README / `BRAND_TOKENS.md` / `SESSION_HANDOFF.md` text that called it
+      live. It loaded Google Fonts and an Unsplash image, contradicting the Privacy Policy's
+      "no third-party scripts, fonts or images". The old URL now shows the app's "Page not
+      found" with HTTP 200 (a rewrite cannot return 404); the site's `robots.txt` says
+      `Disallow: /`. The untracked `docs/clear-momentum-palette-study.html` working copy was
+      left alone, as the handoff requires.
+- [ ] A local, untracked `public/listrassistr-usage-sheet.html` (the visual usage sheet) also
+      calls Google Fonts (IBM Plex Mono). It does not ship because it is not committed. If it
+      is ever committed to `public/`, self-host the font first.
+- [x] **CI added to `listrassistr-official`** (#54): Format, Lint, Type check and build, and
+      Unit tests on every PR and on pushes to `main`, read-only, no secrets. Node 24 (active
+      LTS, supported to 2028-04-30), `actions/checkout@v7`, `actions/setup-node@v7`. First live
+      run on `main` passed all four jobs. Before this the only workflow was the main-to-qa sync.
+      Node 26 becomes LTS on 2026-10-28; move to it then. `sync-main-to-qa.yml` still uses
+      `checkout@v4`.
+- [ ] Dependency updates were deliberately not part of #54. `npm outdated` showed minor and patch
+      updates (React 19.3.0, Vite 8.3.2, Supabase JS 2.117.2, ESLint 10.12.0, Prettier 3.9.9) and
+      two new majors (TypeScript 7.0.2, Vitest 5.0.3). Test them in their own PR.
+- [x] **Google's terms were read directly** (`ai.google.dev/gemini-api/terms`, last updated
+      2026-04-28), and the legacy privacy paragraph (#669, now merged) says only what that page
+      states for Paid Services: prompts and responses are not used to improve Google's products,
+      they are processed under Google's Data Processing Addendum, and they are logged for a
+      limited period solely to detect Prohibited Use Policy violations and meet legal or
+      regulatory disclosures. **A web-enabled assistant's quotes of that page were wrong** in
+      several places: a human-review exception for paid use that the page does not state (human
+      review is stated only for the unpaid tier), a "May 14, 2024" date, a COPPA / verified
+      parental consent rule, and a duty to give end users notice. Lesson: read the source
+      before putting a quote into legal text. All Google AI calls in the legacy app use one key
+      (`GEMINI_API_KEY`) against `generativelanguage.googleapis.com`.
+- [ ] **Google's terms forbid using the service in an app "directed towards or is likely to be
+      accessed by individuals under the age of 18".** Neither policy says 18: the new app's
+      Privacy says "not directed to children under 13", and the legacy privacy page has no
+      children's section. Probably fine for an eBay seller tool, but it is a commitment to
+      Google that the policies do not reflect. For counsel.
+- [ ] The legacy privacy page says "each processor is bound by data processing agreements". For
+      Google's paid Gemini API a Data Processing Addendum does apply, per Google's page; there
+      is no evidence for Jina AI.
+- [x] **QA backend caught up and now watched** (#663, merged earlier): the legacy QA Supabase
+      project was redeployed on 2026-10-05 (15 migrations applied, functions deployed) after
+      27 days; `deploy-functions-qa.yml` gained the two missing `--no-verify-jwt` entries
+      (`market-watch-refresh`, `report-analysis-timeout`); `verify-function-auth-config.sh` now
+      also checks the QA list; and `qa-drift-reminder.yml` opens an issue weekly when QA falls
+      behind `main`. Both the open and auto-close paths were exercised live.
+- [x] **Copilot edits to merged PRs were checked, not assumed.** The fix Copilot was credited
+      with on #666 (the contradictory DMARC row) never reached `main` and was redone in #667;
+      Copilot's edit to #52 left `package.json` at the exact `1.51.0` while the lockfile root
+      said `^1.51.0` (harmless, aligned in #53); its edit to #668 was correct.
+- [x] **GitHub Actions incident, 2026-10-05 19:11 to about 21:54 UTC:** runner assignment
+      delays, then `major_outage`. Jobs waited 15 to 20 minutes and were cancelled with zero
+      steps, so those results were not test results. Public repo, no usage cap: not an account
+      limit. Failed jobs on #669 were re-run after
+      recovery and all passed (Test & Lint CI/CD: six jobs, each running its steps; E2E PR Smoke
+      Tests), so the earlier failures were the outage, not the change.
+- [ ] **Weekly DMARC check, next Monday 2026-10-12** (T-16), until about 2026-10-30.
+- [ ] **`listrassistr-usage-sheet` and brand items still open:** single-colour variant, compact
+      wordmark, `og:image` tags, icon check on real devices, token re-measurement, P1-12.
+- [ ] **Backend function inventory** (45 edge functions, 91 migrations, 10 files with cron
+      schedules) is the next planned deliverable, to make "what the new app needs" concrete.
