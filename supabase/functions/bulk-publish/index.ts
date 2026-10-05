@@ -8,6 +8,7 @@ import {
   validateConditionSelection,
 } from "../_helpers/conditionPolicy.ts";
 import { createConditionPolicyCache } from "./conditionPolicyCache.ts";
+import { reconcileInventoryLocation } from "../_helpers/inventoryLocation.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -598,36 +599,38 @@ serve(async (req: Request) => {
       /* non-fatal */
     }
 
-    // Ensure inventory location exists once (shared across all rows)
-    const merchantLocationKey = `BULK-${userId.slice(0, 8).toUpperCase()}`;
+    // Ensure the inventory location exists once (shared across all rows). An
+    // existing location is reused when its address matches the profile; when it
+    // differs, rows use an address-keyed location instead. Nothing is deleted
+    // (see _helpers/inventoryLocation.ts). Setup stays non-fatal, as before.
+    let merchantLocationKey = `BULK-${userId.slice(0, 8).toUpperCase()}`;
     try {
-      const checkResp = await fetchWithTimeout(
-        `${apiBase}/sell/inventory/v1/location/${merchantLocationKey}`,
-        { headers: authHeaders, timeout: 10000 },
-      );
-      if (checkResp.status === 404) {
-        // Create the location
-        await fetchWithTimeout(
-          `${apiBase}/sell/inventory/v1/location/${merchantLocationKey}`,
-          {
-            method: "POST",
-            headers: authHeaders,
-            timeout: 10000,
-            body: JSON.stringify({
-              location: {
-                address: {
-                  country: "US",
-                  postalCode,
-                  ...(city ? { city } : {}),
-                },
-              },
-              locationTypes: ["WAREHOUSE"],
-              name: "Bulk Listing Location",
-              merchantLocationStatus: "ENABLED",
-            }),
+      const located = await reconcileInventoryLocation({
+        fetchFn: fetchWithTimeout,
+        apiBase,
+        userToken: String(userToken),
+        baseKey: merchantLocationKey,
+        address: { postalCode, city, country: "US" },
+        locationBody: {
+          location: {
+            address: {
+              country: "US",
+              postalCode,
+              ...(city ? { city } : {}),
+            },
           },
+          locationTypes: ["WAREHOUSE"],
+          name: "Bulk Listing Location",
+          merchantLocationStatus: "ENABLED",
+        },
+        label: "bulk-publish location",
+      });
+      if (!located.ok) {
+        console.warn(
+          `Location setup error (non-fatal): create returned ${located.status}: ${located.body}`,
         );
       }
+      merchantLocationKey = located.key;
     } catch (locErr) {
       console.warn("Location setup error (non-fatal):", locErr);
     }

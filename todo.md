@@ -885,3 +885,37 @@ line ~1070), or reverting BATCH_LIMIT/REFRESH_CONCURRENCY/PROBE_CAP to pre-fix v
       `FAKE_ENUM_CORRECTIONS` in `bulk-publish`, `publish-helpers.ts` and
       `src/types/listing.ts`) are not removed by this fix. They still run on
       paths that do not go through the engine.
+
+## 2026-10-05: stop deleting the inventory location on every publish
+
+- [x] **Behavior found in the 15:36 UTC trading-card publish log.** `ensureInventoryLocation`
+      deleted and re-created `default-location` on every publish, even when the address had
+      not changed: 16 delete-and-recreate cycles in the 24 hours to 16:31 UTC on 2026-10-05,
+      all 16 successful, none blocked, no fallback. It was added on 2026-03-20 (d14f859)
+      because a stale "New York 10001" address persisted: eBay's PATCH ignores address fields.
+- [x] **What eBay documents (quoted by a web-enabled Claude, not read by me):**
+      `getInventoryLocation` returns `location.address` (postalCode, city, country);
+      `updateInventoryLocationDetails` has no address container; `deleteInventoryLocation`
+      is refused "if it is currently associated with an active inventory item or published
+      offer". Not documented: what deleting a location does to live listings, whether a
+      listing keeps a live reference to its location, any upsert on create, key character
+      rules, and any limit on the number of locations.
+- [x] **Fix:** read the location (GET) and reuse it when the postal code and city match;
+      when they differ use a location keyed by the address (`loc-<zip>-<city>`, at most 36
+      characters), creating it if missing. Nothing is ever deleted. If the location cannot
+      be read, keep using it unchanged. `bulk-publish` was not changed.
+- [ ] **A puzzle this does not solve:** the delete succeeded 16 times while live offers
+      reference `default-location`, which eBay's docs say should block it. Either the rule is
+      not enforced that way for existing listings or live listings do not keep the
+      reference. Unknown which.
+- [ ] **Consequence to watch:** after an address change a seller has two locations; new
+      listings use the address-keyed one, existing listings keep the old one. Whether old
+      listings are unaffected is undocumented.
+- [x] **`bulk-publish` now uses the same logic.** It used to create its `BULK-<id>` location
+      only on a 404 and never update its address if the profile changed. The location logic
+      now lives in `_helpers/inventoryLocation.ts` and both functions call it, so an address
+      change moves new bulk rows to an address-keyed location, and nothing is deleted. Its
+      location setup stays non-fatal; `ebay-publish` still throws on an unexpected create error.
+- [ ] `bulk-publish` now POSTs first and reads on a conflict (one failed POST per run for a
+      seller whose location exists), where it used to GET first. Same cost `ebay-publish`
+      already paid.

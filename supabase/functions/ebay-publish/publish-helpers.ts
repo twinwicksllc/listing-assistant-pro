@@ -1,6 +1,7 @@
 import { decode as decodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { createClient } from "./supabase.ts";
 import { fetchWithTimeout } from "./fetch.ts";
+import { reconcileInventoryLocation } from "../_helpers/inventoryLocation.ts";
 import { formatDescriptionHtml } from "../_helpers/listingFormat.ts";
 import { type ConditionPolicy, unavailableConditionPolicy } from "../_helpers/conditionPolicy.ts";
 
@@ -2476,12 +2477,24 @@ export async function uploadDataUrlToStorage(dataUrl: string): Promise<string> {
 
 // ----------------------------------------------------------------
 // Ensure an eBay inventory location exists for the seller.
-// POST creates it; if it already exists (409/errorId 25803), DELETE and re-create
-// to guarantee the address (postalCode/city) is current — eBay PATCH silently ignores
-// address fields so DELETE+re-create is the only reliable way to update them.
-// If DELETE is blocked (location has active items), fall back to a postal-code-keyed location.
+//
+// eBay's updateInventoryLocationDetails has no address container (postalCode and
+// city cannot be changed on an existing location), so the address is only ever
+// set by creating a location. The previous version deleted and re-created
+// "default-location" on EVERY publish, even when the address had not changed:
+// sixteen times in one day in production. eBay says a location cannot be deleted
+// while an active item or published offer references it, and does not document
+// what deleting one does to live listings.
+//
+// Now: create it if missing; if it exists, read it (getInventoryLocation) and
+// reuse it when its postal code and city already match. When they differ, do not
+// delete it; use a location keyed by the postal code and city instead (created
+// if missing, reused if present). Nothing is ever deleted.
 // Returns the merchantLocationKey on success.
 // ----------------------------------------------------------------
+
+export { addressLocationKey, locationAddressMatches } from "../_helpers/inventoryLocation.ts";
+
 export async function ensureInventoryLocation(
   apiBase: string,
   userToken: string,
@@ -2510,162 +2523,21 @@ export async function ensureInventoryLocation(
     locationBody.location.address,
   );
 
-  const resp = await fetchWithTimeout(
-    `${apiBase}/sell/inventory/v1/location/${merchantLocationKey}`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${userToken}`,
-        "Content-Type": "application/json",
-        "Content-Language": "en-US",
-        // Accept-Language must be explicitly set to "en-US".
-        // Deno's runtime auto-injects the system locale when omitted,
-        // sending an invalid value that eBay rejects with errorId 25709.
-        "Accept-Language": "en-US",
-      },
-      body: JSON.stringify(locationBody),
-      timeout: 15000,
-    },
-  );
+  const result = await reconcileInventoryLocation({
+    fetchFn: fetchWithTimeout,
+    apiBase,
+    userToken,
+    baseKey: merchantLocationKey,
+    address: { postalCode, city, country },
+    locationBody,
+    label: "ensureInventoryLocation",
+  });
 
-  // 204 = created successfully.
-  if (resp.ok) {
-    console.log(
-      `ensureInventoryLocation: location "${merchantLocationKey}" created successfully (status ${resp.status})`,
-    );
-    return merchantLocationKey;
-  }
+  if (result.ok) return result.key;
 
-  // Location already exists — eBay PATCH does NOT update address fields (postalCode/city are
-  // immutable via PATCH; only metadata like name/phone/hours can change).
-  // The correct approach is DELETE then re-create so the address is definitely current.
-  const errText = await resp.text();
-  let alreadyExists = false;
-
-  try {
-    const errJson = JSON.parse(errText);
-    alreadyExists = Array.isArray(errJson.errors) &&
-      errJson.errors.some((e: { errorId: number }) => e.errorId === 25803);
-  } catch {
-    /* not JSON */
-  }
-
-  if (resp.status === 409 || alreadyExists) {
-    console.log(
-      `ensureInventoryLocation: location "${merchantLocationKey}" already exists — attempting DELETE + re-create to update address (PATCH silently ignores address fields)`,
-    );
-
-    // Step 1: DELETE the existing location so we can re-create it with the correct address.
-    const deleteResp = await fetchWithTimeout(
-      `${apiBase}/sell/inventory/v1/location/${merchantLocationKey}`,
-      {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${userToken}`,
-          "Accept-Language": "en-US",
-        },
-        timeout: 15000,
-      },
-    );
-
-    if (deleteResp.ok || deleteResp.status === 204) {
-      console.log(
-        `ensureInventoryLocation: deleted "${merchantLocationKey}" — re-creating with postal code ${postalCode}`,
-      );
-      const reCreateResp = await fetchWithTimeout(
-        `${apiBase}/sell/inventory/v1/location/${merchantLocationKey}`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${userToken}`,
-            "Content-Type": "application/json",
-            "Content-Language": "en-US",
-            "Accept-Language": "en-US",
-          },
-          body: JSON.stringify(locationBody),
-          timeout: 15000,
-        },
-      );
-      if (reCreateResp.ok) {
-        console.log(
-          `ensureInventoryLocation: location "${merchantLocationKey}" re-created with postal code ${postalCode} successfully`,
-        );
-        return merchantLocationKey;
-      }
-      const reCreateErrText = await reCreateResp.text();
-      console.error(
-        `ensureInventoryLocation: re-create failed after DELETE (${reCreateResp.status}): ${reCreateErrText}`,
-      );
-      // Fall through to postal-code-based fallback key.
-    } else {
-      const deleteErrText = await deleteResp.text();
-      console.warn(
-        `ensureInventoryLocation: DELETE failed (${deleteResp.status}): ${deleteErrText}. Location may have active items assigned. Falling back to postal-code-keyed location.`,
-      );
-    }
-
-    // Step 2 (fallback): Use a location key derived from the postal code so new listings
-    // always get a location with the correct address even if the default key can't be updated.
-    const fallbackKey = `loc-${postalCode.replace(/[^a-zA-Z0-9]/g, "")}`;
-    console.log(
-      `ensureInventoryLocation: creating postal-code-keyed location "${fallbackKey}" as fallback`,
-    );
-    const fallbackResp = await fetchWithTimeout(
-      `${apiBase}/sell/inventory/v1/location/${fallbackKey}`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${userToken}`,
-          "Content-Type": "application/json",
-          "Content-Language": "en-US",
-          "Accept-Language": "en-US",
-        },
-        body: JSON.stringify(locationBody),
-        timeout: 15000,
-      },
-    );
-
-    if (fallbackResp.ok) {
-      console.log(
-        `ensureInventoryLocation: fallback location "${fallbackKey}" created with postal code ${postalCode}`,
-      );
-      return fallbackKey;
-    }
-
-    const fallbackErrText = await fallbackResp.text();
-    let fallbackAlreadyExists = false;
-    try {
-      const fallbackErrJson = JSON.parse(fallbackErrText);
-      fallbackAlreadyExists = Array.isArray(fallbackErrJson.errors) &&
-        fallbackErrJson.errors.some(
-          (e: { errorId: number }) => e.errorId === 25803,
-        );
-    } catch {
-      /* not JSON */
-    }
-
-    if (fallbackResp.status === 409 || fallbackAlreadyExists) {
-      // This postal code was used before — the location already exists with the right address.
-      console.log(
-        `ensureInventoryLocation: fallback location "${fallbackKey}" already exists with correct postal code — using it`,
-      );
-      return fallbackKey;
-    }
-
-    // All attempts exhausted — proceed with whatever key eBay has on file.
-    console.error(
-      `ensureInventoryLocation: all location update attempts failed. Using "${merchantLocationKey}" with potentially stale address. Last error: ${fallbackResp.status}: ${fallbackErrText}`,
-    );
-    return merchantLocationKey;
-  }
-
-  // Genuine error — not an "already exists" case.
-  console.error(
-    `ensureInventoryLocation: unexpected error ${resp.status}: ${errText}`,
-  );
-  throw new Error(
-    `Failed to ensure inventory location: ${resp.status} - ${errText}`,
-  );
+  // Genuine error, not an "already exists" case.
+  console.error(`ensureInventoryLocation: unexpected error ${result.status}: ${result.body}`);
+  throw new Error(`Failed to ensure inventory location: ${result.status} - ${result.body}`);
 }
 
 // ================================================================
