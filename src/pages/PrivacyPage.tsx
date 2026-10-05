@@ -15,7 +15,7 @@ export default function PrivacyPage() {
 
         <h1 className="text-2xl font-bold mb-2">Privacy Policy</h1>
         <p className="text-sm text-muted-foreground mb-8">
-          Last updated: October 2, 2026
+          Last updated: October 5, 2026
         </p>
 
         <div className="prose prose-sm max-w-none space-y-6 text-muted-foreground [&_h2]:text-foreground [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mt-8 [&_h2]:mb-3">
@@ -195,6 +195,20 @@ export default function PrivacyPage() {
             pages, as described in Section 4), and our cloud infrastructure
             provider. Each processor is bound by data processing agreements that
             comply with applicable data protection laws.
+          </p>
+          <p>
+            <strong>Google (AI analysis).</strong> The photos, item details and
+            voice notes you submit for analysis are sent to Google's Gemini API.
+            We use Google's paid service terms, under which Google states that
+            it does not use your prompts or the content it generates to train or
+            improve its models, and that they are not reviewed by human
+            reviewers except to investigate security incidents, address
+            suspected abuse, or comply with legal obligations. Google may
+            temporarily store and process this content to detect and prevent
+            abuse. Google's handling of that content is governed by its own
+            terms. Please do not submit sensitive personal information, or
+            personal information about children, that is not needed to create a
+            listing.
           </p>
 
           <h2>11. Changes to This Policy</h2>
