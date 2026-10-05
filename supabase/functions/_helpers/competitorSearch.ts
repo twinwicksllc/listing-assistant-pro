@@ -1227,6 +1227,10 @@ export async function checkBrowseQuotaHeadroom(
   supabase: any,
   now: Date = new Date(),
   criticalRatio: number = CRITICAL_QUOTA_RATIO,
+  // Calls the caller has issued but the log may not show yet (the insert is
+  // detached). Added to the count so a serialized caller cannot read a stale
+  // total and overshoot its ceiling.
+  unloggedCallAllowance: number = 0,
 ): Promise<QuotaHeadroomResult> {
   try {
     const anchor = await getLatestBrowseQuotaWindowAnchor(supabase, now);
@@ -1274,9 +1278,9 @@ export async function checkBrowseQuotaHeadroom(
     // threshold, estimatedUsed's ratio is automatically at/above it too
     // (estimatedUsed >= pollCallCount, and callsSinceCountBoundary is always >= 0)
     // -- no separate short-circuit branch is needed for that case.
-    const estimatedUsed = anchor.pollCallCount != null
-      ? anchor.pollCallCount + callsSinceCountBoundary
-      : callsSinceCountBoundary;
+    const estimatedUsed =
+      (anchor.pollCallCount != null ? anchor.pollCallCount + callsSinceCountBoundary : callsSinceCountBoundary) +
+      unloggedCallAllowance;
 
     const ratio = estimatedUsed / BROWSE_QUOTA_DAILY_LIMIT;
     if (ratio >= criticalRatio) {

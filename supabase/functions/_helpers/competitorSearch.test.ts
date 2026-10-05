@@ -1710,6 +1710,45 @@ Deno.test("checkBrowseQuotaHeadroom: just under the cron ratio still reports hea
   assertEquals(result.hasHeadroom, true);
 });
 
+Deno.test("checkBrowseQuotaHeadroom: the unlogged-call allowance closes the concurrent boundary (3,749 logged + a 5-listing slice in flight)", async () => {
+  // Without the allowance, 3,749 logged calls reads as headroom even though a
+  // slice that just started may still add ~60 calls the log cannot show yet.
+  const svc = fakeSupabaseForQuotaHeadroom({ count: 3749 });
+  const withoutAllowance = await checkBrowseQuotaHeadroom(svc, new Date(), CRON_QUOTA_RATIO, 0);
+  assertEquals(withoutAllowance.hasHeadroom, true);
+  const withAllowance = await checkBrowseQuotaHeadroom(svc, new Date(), CRON_QUOTA_RATIO, 60);
+  assertEquals(withAllowance.hasHeadroom, false);
+  assertEquals(withAllowance.sameDayCount, 3809);
+});
+
+Deno.test("checkBrowseQuotaHeadroom: the allowance is counted on top of a poll-anchored total too", async () => {
+  const svc = fakeSupabaseForQuotaHeadroom({
+    count: 10,
+    pollRow: {
+      reset_at: "2026-10-05T07:00:00.000Z",
+      time_window_seconds: 86400,
+      call_limit: 5000,
+      call_count: 3700,
+      polled_at: "2026-10-04T22:31:00.000Z",
+      resource_name: "buy.browse",
+    },
+  });
+  const now = new Date("2026-10-04T22:40:00.000Z");
+  const plain = await checkBrowseQuotaHeadroom(svc, now, CRON_QUOTA_RATIO, 0);
+  assertEquals(plain.sameDayCount, 3710);
+  assertEquals(plain.hasHeadroom, true);
+  const withAllowance = await checkBrowseQuotaHeadroom(svc, now, CRON_QUOTA_RATIO, 60);
+  assertEquals(withAllowance.sameDayCount, 3770);
+  assertEquals(withAllowance.hasHeadroom, false);
+});
+
+Deno.test("checkBrowseQuotaHeadroom: no allowance leaves existing behavior unchanged", async () => {
+  const svc = fakeSupabaseForQuotaHeadroom({ count: 4499 });
+  const result = await checkBrowseQuotaHeadroom(svc, new Date());
+  assertEquals(result.hasHeadroom, true);
+  assertEquals(result.sameDayCount, 4499);
+});
+
 Deno.test("CRON_QUOTA_RATIO leaves the cron a lower ceiling than the shared 90% gate", () => {
   assertEquals(CRON_QUOTA_RATIO < 0.9, true);
   assertEquals(CRON_QUOTA_RATIO, 0.75);
