@@ -427,6 +427,25 @@ const UNDERWEAR_CONDITION_OPTIONS: ConditionOption[] = [
   { value: "NEW_WITH_DEFECTS", label: "New with defects" },
 ];
 
+// Drafts saved before the condition enum was derived from eBay's condition ID
+// table can hold VERY_GOOD / GOOD / ACCEPTABLE. eBay's ConditionEnum list does
+// not include them (it lists USED_VERY_GOOD, USED_GOOD, USED_ACCEPTABLE for IDs
+// 4000, 5000, 6000) and rejected them with errorId 2004. Convert on load so a
+// reopened draft shows a selected option and never re-saves the obsolete value.
+// Only these three names are converted; every other value is returned as is.
+const LEGACY_BARE_CONDITIONS: Readonly<Record<string, string>> = {
+  VERY_GOOD: "USED_VERY_GOOD",
+  GOOD: "USED_GOOD",
+  ACCEPTABLE: "USED_ACCEPTABLE",
+};
+
+export function upgradeLegacyCondition<T extends string | null | undefined>(
+  condition: T,
+): T | string {
+  if (typeof condition !== "string") return condition;
+  return LEGACY_BARE_CONDITIONS[condition.trim().toUpperCase()] ?? condition;
+}
+
 const MEDIA_CONDITION_OPTIONS: ConditionOption[] = [
   { value: "NEW", label: "Brand new" },
   { value: "LIKE_NEW", label: "Like new" },

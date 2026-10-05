@@ -224,6 +224,26 @@ describe("shared condition policy", () => {
     }
   });
 
+  // eBay's product feed guide: "If using Condition Descriptors for trading
+  // cards or coins, use LIKE_NEW for Graded items and USED_VERY_GOOD for
+  // Ungraded items." Its condition ID page says 2750 means graded and 4000
+  // ungraded for cards and coins. Pinned to those words so a change to the ID
+  // table cannot drift from them without a test failing.
+  test("sends LIKE_NEW for graded and USED_VERY_GOOD for ungraded cards and coins", () => {
+    const policy = buildSyntheticPolicy([
+      { conditionId: "2750", conditionDescription: "Graded" },
+      { conditionId: "4000", conditionDescription: "Ungraded" },
+    ]);
+    expect(resolvePolicyCondition(policy, "2750")?.conditionEnum).toBe(
+      "LIKE_NEW",
+    );
+    expect(resolvePolicyCondition(policy, "4000")?.conditionEnum).toBe(
+      "USED_VERY_GOOD",
+    );
+    expect(validateConditionSelection(policy, "123", "2750").valid).toBe(true);
+    expect(validateConditionSelection(policy, "123", "4000").valid).toBe(true);
+  });
+
   test("does not use a label to pick an enum for an unknown ID", () => {
     const unknownId = buildSyntheticPolicy([
       { conditionId: "9999", conditionDescription: "Very Good" },
