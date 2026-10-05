@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { normalizeEbayConditionDescription } from "@/types/listing";
+import { allowedConditionEnumsFromPolicy } from "@/lib/ebayConditionPolicy";
 import type { ItemSpecifics } from "@/types/listing";
 
 interface AspectInfo {
@@ -37,10 +37,7 @@ interface EbayMetadata {
  * eBay's own publish endpoint for that same category.
  */
 function toAllowedConditions(conditions: RawCondition[]): string[] {
-  return conditions
-    .map((c) => c.conditionDescription || String(c.conditionId ?? ""))
-    .filter((desc) => desc.length > 0 && !/^(graded|ungraded)$/i.test(desc))
-    .map((desc) => normalizeEbayConditionDescription(desc) || desc);
+  return allowedConditionEnumsFromPolicy(conditions);
 }
 
 interface UseAnalyzeCategoryAspectsParams {

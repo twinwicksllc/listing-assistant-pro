@@ -48,8 +48,19 @@ function mockResponsesFor(categoryId: string) {
         return {
           data: {
             conditions: [
-              { conditionId: 1000, conditionDescription: "New with tags" },
+              { conditionId: 1000, conditionDescription: "New With Packaging" },
+              {
+                conditionId: 1500,
+                conditionDescription: "New without Packaging",
+              },
+              {
+                conditionId: 1750,
+                conditionDescription: "New With Imperfections",
+              },
+              { conditionId: 3000, conditionDescription: "Used - Excellent" },
+              { conditionId: 3000, conditionDescription: "Pre-owned" },
               { conditionId: 3000, conditionDescription: "Used" },
+              { conditionId: 5000, conditionDescription: "Used - Good" },
             ],
           },
           error: null,
@@ -97,7 +108,13 @@ describe("useAnalyzeCategoryAspects — allowedConditions refresh on category ch
     // Normalized to ConditionEnum values, not eBay's raw conditionDescription
     // strings ("New with tags", "Used") — those aren't valid Inventory API
     // condition values and eBay's own publish endpoint would reject them.
-    expect(lastCall.allowedConditions).toEqual(["NEW", "USED_EXCELLENT"]);
+    expect(lastCall.allowedConditions).toEqual([
+      "NEW",
+      "NEW_OTHER",
+      "NEW_WITH_DEFECTS",
+      "USED_EXCELLENT",
+      "USED_GOOD",
+    ]);
     expect(lastCall.allowedConditions).not.toEqual(staleBooksConditions);
   });
 

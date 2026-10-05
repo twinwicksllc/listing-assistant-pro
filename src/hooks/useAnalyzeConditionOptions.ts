@@ -71,7 +71,7 @@ export function useAnalyzeConditionOptions({
       hasAllowed && allowed!.every((c) => /^(ungraded|graded)$/i.test(c));
 
     if (hasAllowed && !isOnlyCoinLabels) {
-      return allowed!.map((c) => {
+      const normalizedConditions = allowed!.map((c) => {
         // Re-normalize defensively: if `c` is already a valid ConditionEnum
         // (the expected case) this is a no-op passthrough (unknown aliases
         // fall through to an uppercase-snake-case mangle of the same
@@ -84,6 +84,11 @@ export function useAnalyzeConditionOptions({
           label: getConditionLabel(normalized, domain),
         };
       });
+      return normalizedConditions.filter(
+        (option, index, options) =>
+          options.findIndex((candidate) => candidate.value === option.value) ===
+          index,
+      );
     }
 
     return getConditionsForCategory(
