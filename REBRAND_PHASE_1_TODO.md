@@ -6,6 +6,8 @@
 Repository code is §9/Phase 2 and **not** authorised.
 **Status date:** 2026-10-06
 
+**Update 2026-10-06 (later):** the owner reports that **legal has approved the Terms and Privacy pages** (owner-reported; the reviewer, date and any requested changes are not recorded here). The owner will review the phone home-screen icons at a later date, and LLC formation will happen later in 2026, so the §8.1.1 entity gate (before Stripe onboarding) stays deferred. `listrassistr-official` now has a CI workflow (`checks.yml`: format, lint, type check and build, unit tests) from its PR #54, which supersedes the 2026-09-30 statement that it had no format-check job. A migration inventory of both codebases was done the same day to answer the open part of Q-16 (how and when features move).
+
 **Update 2026-10-06:** the owner authorized work in `listrassistr-official` and approved the P1-12 asset-package choices (DEC-0043). This repo's statement of 2026-10-05, that no authorization was recorded, is superseded for that repository only; DEC-0035 still limits work here. P1-11 is closed on the fill-match evidence. Left open: the phone home-screen check of the icons and a light-theme tab check (owner; the dark-theme desktop Chrome tab was reported correct). The usage sheet's Google Fonts item is closed: `listrassistr-official` PR #58 (merged 2026-10-06) self-hosts IBM Plex Mono in `docs/fonts/` and moves the sheet from `public/` to `docs/`, so it is no longer served and loads nothing from Google.
 
 **Update 2026-09-28:** SES identity/configuration, monitor-only DMARC, Supabase Auth SMTP,
@@ -40,7 +42,7 @@ on them over the weekend, so they would be done with the assistant. **No authori
 this work is recorded here.** On 2026-10-05 the owner decided to **keep the merged work as a
 starting point that may be built from or replaced**; `listrassistr-official` PR #50 corrected
 that repo's statement to say so, and PR #51 proposes wording changes to its Terms and Privacy
-pages after owner review (details in `todo.md`). Those pages still have no legal review. The owner says a review is scheduled; no date or reviewer is recorded here yet.
+pages after owner review (details in `todo.md`). Those pages had no legal review at that point; legal approval was reported on 2026-10-06 (see the later update above).
 
 **Decision 2026-10-05 (Q-16):** the owner wants the legacy app to remain operable, so it will not be
 rebranded in place. All rebranding happens in `listrassistr-official`. Plan section 9 / Phase 2
@@ -75,7 +77,7 @@ confirmation links return to the site the person used (PRs #32, #33), verified b
 owner on production and QA (O-45); the README carries the DEC-0038 governance pointer
 (O-42, PRs #29 and #30) and current environment docs (PR #35); `npm run format:check`
 passes again (PR #36) and a `.gitattributes` now forces LF line endings (PR #37). The
-Terms and Privacy pages still have **not had a legal review**. Merged, stale branches
+Terms and Privacy pages had **not had a legal review** at that point (approval reported 2026-10-06). Merged, stale branches
 were deleted in both repos; the unmerged `v0/listassistr-official-e32654d9`
 (official) and `docs/session-handoff-2026-09-02` (legacy) were kept on purpose.
 
@@ -396,10 +398,11 @@ Auth SMTP, Forward Email, and the header/routing/send/reply checks are complete 
    until the 30-day review ends (about 2026-10-30). Use the digest or Postmark's API, inspect
    the sources, and record SPF/DKIM/disposition results. A zero-report response is still
    valid evidence. Keep DMARC at `p=none`.
-8. **Also open after 2026-09-30 (not Phase 1 gates):** the Terms and Privacy pages need a
-   legal review; `v0/listassistr-official-e32654d9` and `docs/session-handoff-2026-09-02`
-   are unmerged branches kept on purpose; and `listrassistr-official` has no CI job for
-   `npm run format:check`, so nothing enforces it.
+8. **Also open after 2026-09-30 (not Phase 1 gates):** `v0/listassistr-official-e32654d9`
+   and `docs/session-handoff-2026-09-02` are unmerged branches kept on purpose. Updated
+   2026-10-06: legal approval of the Terms and Privacy pages was reported (owner-reported), and
+   `listrassistr-official` now has a CI format check (its `checks.yml`, PR #54), so both
+   earlier items here are closed. Still owner-side: the phone home-screen icon check.
 
 **O-04/O-03 explicitly skipped for now** (owner: still working with AWS support on the
 underlying restriction; not blocking anything else) — re-check `listrassister.com`
