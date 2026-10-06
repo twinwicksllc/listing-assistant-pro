@@ -1,6 +1,6 @@
 # Rebrand Session Handoff
 
-**As of:** 2026-10-05
+**As of:** 2026-10-05 (evening)
 **Repository:** `twinwicksllc/listing-assistant-pro`
 **Session output:** PRs #556–#561 merged on 2026-09-08 (6 total); 2026-09-30 added #642–#646 here (Q-10 artifacts, email verification, O-42, Auth redirects) and #29–#37 in `listrassistr-official`; 0 open
 
@@ -224,21 +224,21 @@ They're unrelated except that both touch `majmvgakczrpcwgxgulj` (see thread A).
 
 ## Gate status snapshot (Phase 1, plan §8)
 
-| Gate  | Item                                    | Status                                                                                                                                            |
-| ----- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P1-01 | Domain in legal business entity         | Approved with recorded deviation                                                                                                                  |
-| P1-02 | Registrar hardened                      | Evidence captured                                                                                                                                 |
-| P1-03 | Legal approval of the name              | Approved                                                                                                                                          |
-| P1-04 | Authoritative DNS documented            | Evidence captured 2026-09-28 — Route 53 hosted zone, records, nameservers, and owner-controlled access/recovery recorded in the service inventory |
-| P1-05 | DNSSEC enabled, DS chain verified       | Evidence captured                                                                                                                                 |
-| P1-06 | Apex/`www`/`app`/`qa` resolving + certs | **Done** — all four live, canonical, cert-verified; `qa` points at its own non-production Supabase project (`majmvgakczrpcwgxgulj`), fully wired  |
-| P1-07 | Role mailboxes receiving                | Evidence captured 2026-09-30 — aliases confirmed individually, catch-all removed, outbound SMTP approved, send/reply tested                       |
-| P1-08 | Branded email authenticates             | Evidence captured 2026-09-30 — SES Auth headers show DKIM/DMARC pass (`d=listrassistr.com`); Forward Email send/reply reported all-pass           |
-| P1-09 | DMARC review period completed           | Open — Postmark `rua`/`p=none` live; review reports for 30 days after all legitimate senders are active and tested                                |
-| P1-10 | Brand asset package produced            | Study/logo placement delivered in PR #28; full §8.3 production package remains open                                                               |
-| P1-11 | Design tokens pass WCAG AA              | Not started — same block                                                                                                                          |
-| P1-12 | Asset package approved                  | Not started — same block                                                                                                                          |
-| P1-13 | Phase 2 entry decision                  | Not started — DEC-0035 does not grant                                                                                                             |
+| Gate  | Item                                    | Status                                                                                                                                                                                                                          |
+| ----- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1-01 | Domain in legal business entity         | Approved with recorded deviation                                                                                                                                                                                                |
+| P1-02 | Registrar hardened                      | Evidence captured                                                                                                                                                                                                               |
+| P1-03 | Legal approval of the name              | Approved                                                                                                                                                                                                                        |
+| P1-04 | Authoritative DNS documented            | Evidence captured 2026-09-28 — Route 53 hosted zone, records, nameservers, and owner-controlled access/recovery recorded in the service inventory                                                                               |
+| P1-05 | DNSSEC enabled, DS chain verified       | Evidence captured                                                                                                                                                                                                               |
+| P1-06 | Apex/`www`/`app`/`qa` resolving + certs | **Done** — all four live, canonical, cert-verified; `qa` points at its own non-production Supabase project (`majmvgakczrpcwgxgulj`), fully wired                                                                                |
+| P1-07 | Role mailboxes receiving                | Evidence captured 2026-09-30 — aliases confirmed individually, catch-all removed, outbound SMTP approved, send/reply tested                                                                                                     |
+| P1-08 | Branded email authenticates             | Evidence captured 2026-09-30 — SES Auth headers show DKIM/DMARC pass (`d=listrassistr.com`); Forward Email send/reply reported all-pass                                                                                         |
+| P1-09 | DMARC review period completed           | Open — Postmark `rua`/`p=none` live; review reports for 30 days after all legitimate senders are active and tested                                                                                                              |
+| P1-10 | Brand asset package produced            | Study/logo placement delivered in PR #28; full §8.3 production package remains open                                                                                                                                             |
+| P1-11 | Design tokens pass WCAG AA              | Not started — same block                                                                                                                                                                                                        |
+| P1-12 | Asset package approved                  | Not started — same block                                                                                                                                                                                                        |
+| P1-13 | Phase 2 entry decision                  | **Partly not applicable (2026-10-05).** Phase 2 as written (rebrand this repo in place) will not happen (Q-16). Repository code work in `listrassistr-official` is still not covered by DEC-0035; no authorization is recorded. |
 
 Full detail and evidence locations are in `REBRAND_PHASE_1_DOMAIN_AND_DNS_CHECKLIST.md`
 (reference/evidence) and `REBRAND_PHASE_1_TODO.md` (action list, Section 5 is the
@@ -302,9 +302,11 @@ authoritative next-actions list — already updated today, don't re-summarize it
    successful run).
 3. **Q-06 — resolved 2026-09-28.** Postmark aggregate-report destination is configured;
    monitor-only DMARC is live. P1-09 still needs the full observation and review period.
-4. **Q-16** — whether plan §9/Phase 2 still describes the right strategy now that a
-   greenfield app is being built in `listrassistr-official` instead of a
-   rebrand-in-place. Owner-level call, not urgent.
+4. **Q-16 — decided 2026-10-05:** the legacy app must stay operable, so it is **not**
+   rebranded in place. All rebranding happens in `listrassistr-official`, and plan §9 /
+   Phase 2 no longer applies to this repository. Still undecided: how and when features
+   move to the new app. A backend function inventory (45 functions, 91 migrations) is the
+   next planned step toward that.
 5. **Q-10 is decided (2026-10-01, DEC-0041); the usage sheet and token gaps are approved
    (2026-10-02, DEC-0042).** What remains is a single-colour variant, a compact wordmark,
    `og:image` tags and `sameAs` data, a real-browser and phone check of the icons, and
@@ -327,8 +329,9 @@ authoritative next-actions list — already updated today, don't re-summarize it
     support case, only if/when that domain is still wanted. Owner is already working
     with AWS support on the underlying restriction; not blocking anything.
 11. **Terms and Privacy legal review** — the pages now list `legal@`/`privacy@`
-    `listrassistr.com` (2026-09-30) but have never had a legal review. Owner call on
-    timing; the GDPR/CCPA sections are the ones that matter most.
+    `listrassistr.com` (2026-09-30) but have never had a legal review. The owner says a
+    review is scheduled (2026-10-05); no date or reviewer is recorded here. The GDPR/CCPA
+    sections matter most, and the Terms now carry binding clauses.
 12. **Two unmerged branches, kept on purpose (owner, 2026-09-30):**
     `v0/listassistr-official-e32654d9` in `listrassistr-official` (a code-generation
     tool's landing-page revamp, two commits) and `docs/session-handoff-2026-09-02` in
