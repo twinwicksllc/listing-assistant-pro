@@ -6,7 +6,7 @@
 Repository code is §9/Phase 2 and **not** authorised.
 **Status date:** 2026-10-06
 
-**Update 2026-10-06:** the owner authorized work in `listrassistr-official` and approved the P1-12 asset-package choices (DEC-0043). This repo's statement of 2026-10-05, that no authorization was recorded, is superseded for that repository only; DEC-0035 still limits work here. P1-11 is closed on the fill-match evidence. Left open: the phone home-screen check of the icons and a light-theme tab check (owner; the dark-theme desktop Chrome tab was reported correct), and a decision on the usage sheet's Google Fonts, which PR #57 merged unresolved.
+**Update 2026-10-06:** the owner authorized work in `listrassistr-official` and approved the P1-12 asset-package choices (DEC-0043). This repo's statement of 2026-10-05, that no authorization was recorded, is superseded for that repository only; DEC-0035 still limits work here. P1-11 is closed on the fill-match evidence. Left open: the phone home-screen check of the icons and a light-theme tab check (owner; the dark-theme desktop Chrome tab was reported correct). The usage sheet's Google Fonts item is closed: `listrassistr-official` PR #58 (merged 2026-10-06) self-hosts IBM Plex Mono in `docs/fonts/` and moves the sheet from `public/` to `docs/`, so it is no longer served and loads nothing from Google.
 
 **Update 2026-09-28:** SES identity/configuration, monitor-only DMARC, Supabase Auth SMTP,
 and Forward Email DNS/aliases are set up. SES Auth reset flows passed in QA and production;
