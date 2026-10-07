@@ -7,6 +7,8 @@ through Vercel. The legacy app is not modified and stays operable (Q-16).
 **Evidence:** three code audits run 2026-10-06 over this repo (Edge Functions,
 database, code bloat). Numbers below are from those audits and their stated limits.
 
+> **Progress 2026-10-07:** steps 1 and 2 of section 8 (foundation, eBay connection) are built and deployed to QA; a complete sandbox connection is still to be verified. See DEC-0044 and `listrassistr-official/docs/STATUS_2026-10-07.md`. Two plan items changed in practice: the new QA project became a reset of `majmvgakczrpcwgxgulj` (decision 10), and production deploys by hand until `AUTO_DEPLOY_PRODUCTION` is set.
+
 ## 1. Owner decisions (2026-10-06)
 
 | #   | Decision                                                                                                                                                                                                                                 |
