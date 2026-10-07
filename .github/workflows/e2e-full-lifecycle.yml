@@ -7,13 +7,36 @@ on:
   workflow_dispatch:
 
 jobs:
+  # See e2e-pr-smoke.yml: the suite reads only E2E_-prefixed values from the "E2E"
+  # environment, which cannot fall back to the production secrets, and is skipped until that
+  # environment is configured. This suite also needs a deployed site to test.
+  e2e-config:
+    name: E2E configuration
+    runs-on: ubuntu-latest
+    environment: E2E
+    permissions:
+      contents: read
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check E2E configuration
+        id: check
+        run: bash scripts/e2e-config-check.sh
+        env:
+          E2E_REQUIRE_BASE_URL: "yes"
+          E2E_BASE_URL: ${{ vars.E2E_BASE_URL }}
+          E2E_SUPABASE_URL: ${{ vars.E2E_SUPABASE_URL }}
+          E2E_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
+          E2E_SUPABASE_SERVICE_KEY: ${{ secrets.E2E_SUPABASE_SERVICE_KEY }}
+          E2E_FORBIDDEN_REFS: wcednzaxmxwfiijzmjmx,majmvgakczrpcwgxgulj
+
   full-lifecycle:
     name: Full Lifecycle Tests
+    needs: e2e-config
+    if: needs.e2e-config.outputs.configured == 'true'
     runs-on: ubuntu-latest
-    # Pulls Supabase secrets from the QA environment (majmvgakczrpcwgxgulj)
-    # rather than the repo-level secrets, which point at production. See
-    # deploy-functions-qa.yml for the same pattern.
-    environment: QA
+    environment: E2E
     permissions:
       contents: read
     # NOTE: this job previously ran in the mcr.microsoft.com/playwright:v1.48-jammy
@@ -47,33 +70,22 @@ jobs:
       - name: Setup test user in Supabase
         run: node scripts/setup-test-user.js
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPABASE_URL: ${{ vars.E2E_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.E2E_SUPABASE_SERVICE_KEY }}
 
-      # This suite is meant to exercise a real deployed QA build, not the
-      # local dev server. Playwright's webServer config in playwright.config.ts
-      # silently falls back to `npm run dev` on localhost when BASE_URL is
-      # unset -- which is exactly what happened every run until now (the
-      # QA_BASE_URL secret never existed). Fail loudly instead of testing the
-      # wrong thing without anyone noticing.
-      - name: Verify QA_BASE_URL is set
-        run: |
-          if [ -z "${{ secrets.QA_BASE_URL }}" ]; then
-            echo "::error::QA_BASE_URL secret is not set on the QA environment -- this suite is meant to test a real deployed QA build, not localhost. See LISTING_ASSISTANT_PRO_QA_SETUP.md."
-            exit 1
-          fi
-
+      # E2E_BASE_URL is required by the configuration job above, so this suite never falls
+      # back to Playwright's localhost dev server (the failure mode that went unnoticed before).
       - name: Run full lifecycle tests
         run: npx playwright test e2e/tests/full-lifecycle.spec.ts
         env:
-          BASE_URL: ${{ secrets.QA_BASE_URL }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          EBAY_SANDBOX_API_KEY: ${{ secrets.EBAY_SANDBOX_API_KEY }}
+          BASE_URL: ${{ vars.E2E_BASE_URL }}
+          SUPABASE_URL: ${{ vars.E2E_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_URL: ${{ vars.E2E_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
+          EBAY_SANDBOX_API_KEY: ${{ secrets.E2E_EBAY_SANDBOX_API_KEY }}
           STRIPE_TEST_CARD: "4242424242424242"
-          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.E2E_VERCEL_AUTOMATION_BYPASS_SECRET }}
 
       - name: Upload test report
         if: always()
@@ -90,8 +102,8 @@ jobs:
           # For now, just log
           echo "Cleanup: Removing test data older than 7 days"
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPABASE_URL: ${{ vars.E2E_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.E2E_SUPABASE_SERVICE_KEY }}
 
       # NOTE: the original notify step called issues.createComment with
       # context.issue.number, which is undefined on schedule/workflow_dispatch

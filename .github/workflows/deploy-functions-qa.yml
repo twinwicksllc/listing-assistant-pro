@@ -21,6 +21,15 @@ jobs:
     runs-on: ubuntu-latest
     environment: QA
     steps:
+      # Disabled 2026-10-07. The QA project (majmvgakczrpcwgxgulj) now belongs to the ListrAssistr
+      # app (twinwicksllc/listrassistr-official). Deploying this repo's ~40 legacy functions there
+      # would overwrite that app's functions and call tables that no longer exist. Remove this
+      # step only if the legacy app gets a QA project of its own.
+      - name: Refuse to deploy
+        run: |
+          echo "::error::This workflow is disabled: the QA project now belongs to the ListrAssistr app."
+          exit 1
+
       - uses: actions/checkout@v4
 
       - uses: supabase/setup-cli@v3
