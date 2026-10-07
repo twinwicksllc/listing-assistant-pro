@@ -33,7 +33,7 @@ jobs:
           E2E_SUPABASE_URL: ${{ vars.E2E_SUPABASE_URL }}
           E2E_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
           E2E_SUPABASE_SERVICE_KEY: ${{ secrets.E2E_SUPABASE_SERVICE_KEY }}
-          E2E_FORBIDDEN_REF: wcednzaxmxwfiijzmjmx
+          E2E_FORBIDDEN_REFS: wcednzaxmxwfiijzmjmx,majmvgakczrpcwgxgulj
 
   smoke-tests:
     name: E2E Smoke Tests

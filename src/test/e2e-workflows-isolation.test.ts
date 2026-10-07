@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
 
@@ -21,7 +22,7 @@ type Job = {
 };
 type Workflow = { jobs: Record<string, Job> };
 
-const root = resolve(__dirname, "../..");
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const load = (name: string): Workflow =>
   parse(
     readFileSync(resolve(root, ".github/workflows", name), "utf8"),
@@ -40,8 +41,14 @@ describe.each(Object.entries(WORKFLOWS))("%s", (file, meta) => {
   it("never uses the QA environment or the QA project", () => {
     const src = text(file);
     expect(src).not.toMatch(/environment:\s*QA\b/);
-    expect(src).not.toContain("majmvgakczrpcwgxgulj");
     expect(src).not.toContain("QA_BASE_URL");
+    // The QA project reference may appear only in the list of projects the suite refuses to use.
+    const mentions = src
+      .split(/\r?\n/)
+      .filter((l) => l.includes("majmvgakczrpcwgxgulj"));
+    for (const line of mentions) {
+      expect(line, `${file}: ${line.trim()}`).toMatch(/E2E_FORBIDDEN_REFS:/);
+    }
   });
 
   it("runs every job in the dedicated E2E environment", () => {
@@ -79,7 +86,12 @@ describe.each(Object.entries(WORKFLOWS))("%s", (file, meta) => {
       s.run?.includes("e2e-config-check.sh"),
     );
     expect(step).toBeDefined();
-    expect(step?.env?.E2E_FORBIDDEN_REF).toBe("wcednzaxmxwfiijzmjmx");
+    // Both the production project and the QA project that now belongs to the ListrAssistr app.
+    const forbidden = String(step?.env?.E2E_FORBIDDEN_REFS ?? "").split(",");
+    expect(forbidden.sort()).toEqual([
+      "majmvgakczrpcwgxgulj",
+      "wcednzaxmxwfiijzmjmx",
+    ]);
     if (meta.requiresBaseUrl)
       expect(step?.env?.E2E_REQUIRE_BASE_URL).toBe("yes");
   });
@@ -95,14 +107,18 @@ describe.each(Object.entries(WORKFLOWS))("%s", (file, meta) => {
 describe("retired QA workflows", () => {
   // The QA project now belongs to the ListrAssistr app. A scheduled run or a manual deploy from
   // this repository would put legacy functions and issues there.
-  it("the QA drift reminder has no schedule", () => {
+  it("the QA drift reminder has no schedule and its job never runs, even when started by hand", () => {
     const wf = parse(
       readFileSync(
         resolve(root, ".github/workflows/qa-drift-reminder.yml"),
         "utf8",
       ),
-    ) as { on: Record<string, unknown> };
+    ) as { on: Record<string, unknown>; jobs: Record<string, Job> };
     expect(Object.keys(wf.on)).toEqual(["workflow_dispatch"]);
+    // A manual run would otherwise open an issue pointing at the refused QA deploy.
+    for (const [name, job] of Object.entries(wf.jobs)) {
+      expect(job.if, `job ${name}`).toBe(false);
+    }
   });
 
   it("the QA function deploy refuses to run, before any step that could deploy", () => {

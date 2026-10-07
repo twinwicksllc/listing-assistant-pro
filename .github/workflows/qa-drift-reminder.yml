@@ -37,6 +37,10 @@ env:
 
 jobs:
   check-drift:
+    # Disabled with the schedule: a manual run would otherwise open an issue telling someone to run
+    # deploy-functions-qa.yml, which now refuses to run. Remove this line with the cron's comment
+    # to re-enable the reminder for a legacy QA project.
+    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

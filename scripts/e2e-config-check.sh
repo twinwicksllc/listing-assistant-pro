@@ -35,12 +35,19 @@ if [ "${#missing[@]}" -gt 0 ]; then
   exit 0
 fi
 
-# Refuse a URL that looks like the production project, even if someone configures it.
-if [ -n "${E2E_FORBIDDEN_REF:-}" ] && printf '%s' "$E2E_SUPABASE_URL" | grep -q "$E2E_FORBIDDEN_REF"; then
-  echo "E2E_SUPABASE_URL points at the production project; refusing to run the suite there." >&2
-  echo "configured=false" >> "$out"
-  exit 1
-fi
+# Refuse a URL for any project this suite must never touch, even if someone configures it:
+# the production project and the QA project that now belongs to the ListrAssistr app.
+# E2E_FORBIDDEN_REFS is a comma-separated list of project references.
+IFS=',' read -r -a forbidden <<< "${E2E_FORBIDDEN_REFS:-}"
+for ref in "${forbidden[@]}"; do
+  ref="${ref// /}"
+  [ -n "$ref" ] || continue
+  if printf '%s' "$E2E_SUPABASE_URL" | grep -qF -- "$ref"; then
+    echo "E2E_SUPABASE_URL points at a project this suite must not use ($ref); refusing to run." >&2
+    echo "configured=false" >> "$out"
+    exit 1
+  fi
+done
 
 echo "E2E configuration present."
 echo "configured=true" >> "$out"
