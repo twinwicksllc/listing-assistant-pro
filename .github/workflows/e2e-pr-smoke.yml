@@ -11,13 +11,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The suite creates an auth user and runs a full AI analysis, so it needs a backend that is
+  # not production. It reads only E2E_-prefixed values from the "E2E" environment; those names
+  # exist nowhere at repository level, so an unset one cannot fall back to the production
+  # secrets stored there. Until that environment is configured the suite is skipped (and the
+  # check stays green) rather than pointed at the wrong project.
+  e2e-config:
+    name: E2E configuration
+    runs-on: ubuntu-latest
+    environment: E2E
+    permissions:
+      contents: read
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check E2E configuration
+        id: check
+        run: bash scripts/e2e-config-check.sh
+        env:
+          E2E_SUPABASE_URL: ${{ vars.E2E_SUPABASE_URL }}
+          E2E_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
+          E2E_SUPABASE_SERVICE_KEY: ${{ secrets.E2E_SUPABASE_SERVICE_KEY }}
+          E2E_FORBIDDEN_REF: wcednzaxmxwfiijzmjmx
+
   smoke-tests:
     name: E2E Smoke Tests
+    needs: e2e-config
+    if: needs.e2e-config.outputs.configured == 'true'
     runs-on: ubuntu-latest
-    # Pulls Supabase secrets from the QA environment (majmvgakczrpcwgxgulj)
-    # rather than the repo-level secrets, which point at production. See
-    # deploy-functions-qa.yml for the same pattern.
-    environment: QA
+    environment: E2E
     permissions:
       contents: read
       issues: write
@@ -45,19 +68,19 @@ jobs:
       - name: Setup test user in Supabase
         run: node scripts/setup-test-user.js
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPABASE_URL: ${{ vars.E2E_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.E2E_SUPABASE_SERVICE_KEY }}
 
       - name: Run smoke tests
         run: npx playwright test e2e/tests/smoke.spec.ts
         env:
-          BASE_URL: ${{ secrets.QA_BASE_URL || 'http://localhost:8080' }}
+          BASE_URL: ${{ vars.E2E_BASE_URL || 'http://localhost:8080' }}
           STRIPE_TEST_CARD: "4242424242424242"
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          SUPABASE_URL: ${{ vars.E2E_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_URL: ${{ vars.E2E_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.E2E_VERCEL_AUTOMATION_BYPASS_SECRET }}
 
       - name: Upload test report
         if: always()
