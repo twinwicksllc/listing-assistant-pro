@@ -4,7 +4,7 @@
 **Repository:** `twinwicksllc/listing-assistant-pro` (legacy; stays live per DEC-0003)
 **Scope:** `LISTRASSISTR_REBRAND_AND_MIGRATION_PLAN.md` §8 only, per DEC-0035.
 Repository code is §9/Phase 2 and **not** authorised.
-**Status date:** 2026-10-06
+**Status date:** 2026-10-07 (the consolidated snapshot below is from 2026-10-06; see the 2026-10-07 update)
 
 **Update 2026-10-07:** the back-end migration moved from plan to a deployed QA environment (DEC-0044). The QA project `majmvgakczrpcwgxgulj` now serves `listrassistr-official`; the legacy app has no QA backend and its E2E suites skip until an `E2E` environment is configured. Legacy production was checked before and after and was unchanged. Status, verification and open items: `listrassistr-official/docs/STATUS_2026-10-07.md`. Still open for Phase 1: the phone and light-theme icon checks (owner) and the DMARC reads (next Mon 2026-10-12).
 

@@ -653,8 +653,9 @@ them to this repository or chat. Supabase Auth SMTP uses the Ohio endpoint
 
 Password-reset emails arrived and their links returned to the intended site in both QA
 project `listrassistr-qa` (`majmvgakczrpcwgxgulj`) and production project
-`listrassistr-official` (`yqftpibxplachhwoclam`). QA is shared with the legacy app's QA
-environment, so its Auth SMTP setting affects both.
+`listrassistr-official` (`yqftpibxplachhwoclam`). At the time of this check, QA was
+shared with the legacy app's QA environment; since 2026-10-07 (DEC-0044) it belongs to the
+ListrAssistr app alone.
 
 Forward Email DNS setup is also complete: its MX records, domain-verification TXT,
 Forward Email DKIM TXT, `fe-bounces` return-path CNAME, and one root SPF value
