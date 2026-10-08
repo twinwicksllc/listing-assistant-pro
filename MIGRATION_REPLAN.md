@@ -7,6 +7,8 @@ through Vercel. The legacy app is not modified and stays operable (Q-16).
 **Evidence:** three code audits run 2026-10-06 over this repo (Edge Functions,
 database, code bloat). Numbers below are from those audits and their stated limits.
 
+> **Progress 2026-10-07:** steps 1 and 2 of section 8 (foundation, eBay connection) are built and deployed to QA; a complete sandbox connection is still to be verified. See DEC-0044 and `listrassistr-official/docs/STATUS_2026-10-07.md`. Two plan items changed in practice: the new QA project became a reset of `majmvgakczrpcwgxgulj` (decision 10), and production deploys by hand until `AUTO_DEPLOY_PRODUCTION` is set.
+
 ## 1. Owner decisions (2026-10-06)
 
 | #   | Decision                                                                                                                                                                                                                                 |
@@ -20,22 +22,21 @@ database, code bloat). Numbers below are from those audits and their stated limi
 | 7   | Comments are cut to what a later maintainer needs: the reason for a non-obvious choice. No PR numbers, dates, or "previously" history; that lives in git.                                                                                |
 | 8   | No CRM table, function, type or doc crosses over. The CRM lives in the `rankedceo-crm` project; the new schema is written from migrations, never exported from it.                                                                       |
 | 9   | Teams (`organizations`, `org_members`, `org_invitations` and related functions) are **not** migrated.                                                                                                                                    |
-| 10  | A new, separate QA Supabase project for the new app. The shared legacy QA project is left to the legacy app.                                                                                                                             |
+| 10  | **Superseded 2026-10-07 (DEC-0044):** the existing QA project `majmvgakczrpcwgxgulj` was reset and now belongs to the new app; the legacy app has no QA backend. (Originally: a new, separate QA project.)                               |
 | 11  | Back end first. Front-end work waits until the back end is done, and the owner reviews HTML mock-ups of options before any screen is built (section 7).                                                                                  |
 | 12  | Backend home: `listrassistr-official` repo, production project `yqftpibxplachhwoclam`, Vercel deployment for the web app.                                                                                                                |
 
 ## 2. Target environments
 
-| Layer    | Production                       | QA                                                     |
-| -------- | -------------------------------- | ------------------------------------------------------ |
-| Repo     | `listrassistr-official` `main`   | `qa` branch (fast-forwarded from `main`)               |
-| Supabase | `yqftpibxplachhwoclam`           | **new project, to be created by the owner (O-QA-NEW)** |
-| Web      | `app.listrassistr.com` on Vercel | `qa.listrassistr.com`                                  |
+| Layer    | Production                       | QA                                                  |
+| -------- | -------------------------------- | --------------------------------------------------- |
+| Repo     | `listrassistr-official` `main`   | `qa` branch (fast-forwarded from `main`)            |
+| Supabase | `yqftpibxplachhwoclam`           | `majmvgakczrpcwgxgulj` (reset 2026-10-07, DEC-0044) |
+| Web      | `app.listrassistr.com` on Vercel | `qa.listrassistr.com`                               |
 
-The existing shared QA project `majmvgakczrpcwgxgulj` stays with the legacy app. The
-new QA project is created by the owner in the Supabase dashboard; no assistant action
-creates projects or touches provider settings. Until it exists, schema work is checked
-by migration review and local linting only, and nothing is pushed anywhere.
+**Superseded 2026-10-07 (DEC-0044):** the QA project `majmvgakczrpcwgxgulj` was reset and
+now serves the new app only; the legacy app has no QA backend. No assistant action creates
+projects or touches provider settings.
 
 Production `yqftpibxplachhwoclam` was empty of application schema on 2026-08-27 and has
 had open sign-up since. **Before the first migration is applied there, re-check what

@@ -4,7 +4,9 @@
 **Repository:** `twinwicksllc/listing-assistant-pro` (legacy; stays live per DEC-0003)
 **Scope:** `LISTRASSISTR_REBRAND_AND_MIGRATION_PLAN.md` §8 only, per DEC-0035.
 Repository code is §9/Phase 2 and **not** authorised.
-**Status date:** 2026-10-06
+**Status date:** 2026-10-07 (the consolidated snapshot below is from 2026-10-06; see the 2026-10-07 update)
+
+**Update 2026-10-07:** the back-end migration moved from plan to a deployed QA environment (DEC-0044). The QA project `majmvgakczrpcwgxgulj` now serves `listrassistr-official`; the legacy app has no QA backend and its E2E suites skip until an `E2E` environment is configured. Legacy production was checked before and after and was unchanged. Status, verification and open items: `listrassistr-official/docs/STATUS_2026-10-07.md`. Still open for Phase 1: the phone and light-theme icon checks (owner) and the DMARC reads (next Mon 2026-10-12).
 
 **Update 2026-10-06 (later):** the owner reports that **legal has approved the Terms and Privacy pages** (owner-reported; the reviewer, date and any requested changes are not recorded here). The owner will review the phone home-screen icons at a later date, and LLC formation will happen later in 2026, so the §8.1.1 entity gate (before Stripe onboarding) stays deferred. `listrassistr-official` now has a CI workflow (`checks.yml`: format, lint, type check and build, unit tests) from its PR #54, which supersedes the 2026-09-30 statement that it had no format-check job. A migration inventory of both codebases was done the same day to answer the open part of Q-16 (how and when features move).
 

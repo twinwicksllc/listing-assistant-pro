@@ -2,6 +2,8 @@
 
 **Status date:** 2026-09-08
 
+> **Superseded 2026-10-07 (DEC-0044):** `majmvgakczrpcwgxgulj` was reset and now belongs to the ListrAssistr app only. `deploy-functions-qa.yml` refuses to run, and the E2E workflows use their own `E2E` environment. Do not follow the setup steps below; they are kept as history.
+
 This app (`lister.teckstart.com`, repo `twinwicksllc/listing-assistant-pro`) has
 never had a QA environment — confirmed in
 `REBRAND_PHASE_0_SERVICE_INVENTORY.md`: "No separate QA/staging URL currently
