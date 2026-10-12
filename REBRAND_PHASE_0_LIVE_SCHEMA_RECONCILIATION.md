@@ -6,7 +6,9 @@
 **Discovery date:** 2026-08-10  
 **Status:** Classification complete at object-name and RLS-metadata level; ownership and definition
 remain open. **Migration cohort approval resolved 2026-10-12 (DEC-0046):** two profiles, the owner
-and one customer; wave 1 is loaded on QA and production (`listrassistr-official/docs/STATUS_2026-10-12.md`).
+and one customer. Wave 1 was loaded into the new app's targets, `listrassistr-official`'s QA project
+(`majmvgakczrpcwgxgulj`) and production project (`yqftpibxplachhwoclam`) — not this legacy project,
+which was not changed (`listrassistr-official/docs/STATUS_2026-10-12.md`).
 
 ## Evidence and limits
 
