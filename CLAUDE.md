@@ -1,171 +1,190 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code in this repository.
 
 ## Commands
 
 ```bash
-npm run dev                    # Vite dev server (http://localhost:8080)
-npm run build                  # Production build
-npm run lint                   # ESLint
-npm run format:check           # Prettier check (format to fix)
-npm run test                   # Vitest unit tests, run once
-npm run test:watch             # Vitest watch mode
-npx vitest run path/to.test.ts # Run a single unit test file
-npx vitest run -t "test name"  # Run tests matching a name
+npm run dev
+npm run build
+npm run lint
+npm run format:check
+npm run test
+npm run test:watch
+npx vitest run path/to.test.ts
+npx vitest run -t "test name"
 
-npm run test:e2e               # Full Playwright E2E suite
-npm run test:e2e:smoke         # Smoke tests only (used in PR CI)
-npm run test:e2e:full          # Full lifecycle E2E
-npx playwright test e2e/tests/smoke.spec.ts -g "test name"  # Single E2E test
+npm run test:e2e
+npm run test:e2e:smoke
+npm run test:e2e:full
+npx playwright test e2e/tests/smoke.spec.ts -g "test name"
 
-npm run verify:coin-mandate    # eBay coin-condition mandate compliance check
-node scripts/replay-corpus.mjs # Golden-corpus category replay (blocking CI gate)
+npm run verify:coin-mandate
+node scripts/replay-corpus.mjs
 ```
 
-Edge functions (Deno, in `supabase/functions/`) are linted/formatted/tested separately from the frontend:
+Edge Functions (`supabase/functions/`) use Deno separately:
 
 ```bash
-deno fmt --check supabase/functions/
-deno lint --config supabase/functions/deno.json supabase/functions/
+deno fmt --check supabase/functions/<touched-dir>
+deno lint --config supabase/functions/deno.json supabase/functions/<touched-dir>
 deno check --config supabase/functions/deno.json supabase/functions/<fn>/index.ts
-deno test --allow-env supabase/functions/_helpers/authGuard.test.ts   # example
+deno test --allow-env supabase/functions/_helpers/authGuard.test.ts
 ```
 
-On Windows, if `deno` hits TLS errors resolving `deno.land`/npm imports, prefix with `DENO_TLS_CA_STORE=system`. The npm registry (`registry.npmjs.org`) has been observed to be flaky/rate-limited from some dev sandboxes (intermittent 504s) — this is environmental, not a code problem; retry or defer to CI. `git config core.autocrlf=true` is common on Windows checkouts, which makes nearly the whole `supabase/functions/` tree show as "not formatted" under `deno fmt --check` due to CRLF line endings — that's a pre-existing local artifact, not a real formatting regression; don't try to "fix" it repo-wide.
+### Environment notes
 
-No root `deno.json` — Deno config lives at `supabase/functions/deno.json` and only applies there.
+- There is no root `deno.json`; use `supabase/functions/deno.json`.
+- On Windows Deno TLS failures, use `DENO_TLS_CA_STORE=system`.
+- Some sandboxes lack `node_modules` or have npm TLS/rate-limit failures. Treat those as environmental; retry or rely on CI.
+- CRLF Windows checkouts can make `deno fmt --check` report unrelated formatting across the functions tree. Check only touched directories; do not reformat the tree wholesale.
+- If npm-based Prettier is unavailable, use a temporary Deno/esm.sh workaround pinned to the project Prettier version. Do not commit the script or resulting lockfile changes.
 
-Some dev sandboxes have no `node_modules/` installed and a corporate TLS proxy that makes `npm install`/`npx prettier` fail with `SELF_SIGNED_CERT_IN_CHAIN`, even with `DENO_TLS_CA_STORE=system` (that flag only affects Deno, not Node/npm). If `npx prettier --write <file>` fails that way, fall back to Prettier's standalone ESM bundle via Deno, which respects `DENO_TLS_CA_STORE=system` and works from `esm.sh`. For Markdown files, load the `babel`/`typescript`/`estree` plugins too, not just `markdown` — Prettier also reformats code inside fenced code blocks, and a markdown-only plugin set will silently skip that and disagree with the real CLI:
+## Before opening a PR
 
-```ts
-// run: DENO_TLS_CA_STORE=system deno run -A fmt-md.ts <file>
-import * as prettier from "https://esm.sh/prettier@3.9.6/standalone?target=es2022";
-import * as markdown from "https://esm.sh/prettier@3.9.6/plugins/markdown?target=es2022";
-import * as babel from "https://esm.sh/prettier@3.9.6/plugins/babel?target=es2022";
-import * as typescript from "https://esm.sh/prettier@3.9.6/plugins/typescript?target=es2022";
-import * as estree from "https://esm.sh/prettier@3.9.6/plugins/estree?target=es2022";
-const path = Deno.args[0];
-const out = await prettier.format(await Deno.readTextFile(path), {
-  parser: "markdown",
-  plugins: [markdown, babel, typescript, estree],
-});
-await Deno.writeTextFile(path, out);
+Run the relevant checks:
+
+- Frontend/docs: `npm run format:check`, `npm run lint`, and relevant tests.
+- Edge Functions: Deno format, lint, type-check, and relevant tests.
+- Category-resolution, taxonomy, leaf-guard, or category-prompt changes: `node scripts/replay-corpus.mjs`.
+- Confirm migration version prefixes are unique:
+
+```bash
+ls supabase/migrations | cut -d_ -f1 | sort | uniq -d
 ```
 
-Pin the prettier version to match `package.json`'s (`^3.9.6` at last check) — a version mismatch between this workaround and the real CLI can itself produce a different, spurious diff.
+Never edit an applied migration. Add a new migration instead. Test schema changes from an empty database where possible.
 
-(The default esm.sh build for `prettier/standalone` breaks under Deno with a `createRequire` error — the `?target=es2022` query param avoids it.) Delete the script after use; don't commit it, and don't leave stray `deno.lock` entries for it — `git checkout HEAD -- deno.lock` if a one-off script pollutes the lockfile with deps nothing actually imports.
+## Review rules
 
-### Before committing
-
-Always run the relevant formatters/linters before pushing — CI blocks on both, and each has caught real issues that looked fine by eye:
-
-- Frontend/docs changes: `npm run format:check` (or `prettier --write <file>` per the fallback above if npm/npx can't reach the registry)
-- Any `supabase/functions/**` change: `deno fmt --check supabase/functions/<touched-dir>` and `deno lint --config supabase/functions/deno.json supabase/functions/<touched-dir>`
-
-### Self-review checklist before opening a PR
-
-Recurring Copilot review findings across several PRs (most recently PR #611) — check these yourself before pushing, since Copilot catches them anyway but later, after CI has already run once:
-
-- **Every Supabase query-builder terminal reports failure via a returned `error`, not a thrown exception** — `.maybeSingle()`, `.select(..., { count: "exact", head: true })`, `.upsert()`, etc. Destructure and check `error` before trusting `data`/`count`; don't let a failed lookup fall through and get misread as "no rows"/"count 0".
-- **`select()` implicitly caps at 1,000 rows.** Any aggregate/count that could exceed that over time needs exact-count queries (`{ count: "exact", head: true }`, one per filter value or paginated) instead of fetch-and-reduce-in-JS.
-- **Don't reimplement a subset of an existing canonical check.** If a "is this fresh/valid" helper already backs a real gate (e.g. `getLatestBrowseQuotaWindowAnchor` behind `checkBrowseQuotaHeadroom`), call that helper directly from any UI/dashboard/monitoring code rather than re-deriving a partial version of its logic — the partial version drifts and can report "healthy" after the real gate has already failed.
-- **Every new append-only table needs a retention/pruning plan before merge, not as a follow-up** — easy to skip when the table ships alongside a feature rather than as its own migration PR.
-- **Check ratio/percentage denominators against what the metric claims to measure.** Outcomes that never reach the check the ratio describes shouldn't be in the denominator — they dilute the signal (e.g. a "rejected for being too thin" rate should divide by attempts that reached that check, not by every outcome including unrelated errors).
-- **New UI components need test coverage matching a sibling component's test file in the same directory** — check for an existing pattern (e.g. `src/test/ebay-quota-poll-card.test.tsx`) before writing one from scratch. Recharts-based components require the `ResizeObserver` polyfill already in `src/test/setup.ts` to mount under jsdom.
+- Check every Supabase query terminal result for `error` before trusting `data` or `count`.
+- `select()` is capped at 1,000 rows. Use exact-count/head queries or pagination for metrics that can grow.
+- Reuse canonical helpers rather than recreating partial validation logic.
+- Every append-only table needs a retention/pruning plan.
+- Metrics must use denominators that match the outcome being measured.
+- Follow existing sibling test patterns for new UI components.
+- Test new behavior by first making the test fail against the broken behavior.
+- Never log secrets, tokens, customer data, or raw auth headers.
 
 ## Architecture
 
-Two-tier app: a Vite/React SPA frontend and Supabase Edge Functions (Deno) backend, sharing one Postgres database with RLS.
+This is a Vite/React SPA with Supabase Edge Functions (Deno) and one Postgres database protected by RLS.
 
-### Frontend: v1 vs v2
+### Frontend
 
-`src/pages/` is the legacy (v1) UI: auth, landing, legal pages, and older core logic — still active, not dead code. `src/v2/pages/` and `src/v2/components/` are the current UI redesign (glassmorphism, mobile-first) and where most active feature work happens. `src/v2/pages/_archive/` holds retired v2 pages kept for reference; exclude it from brand/lint scans and don't assume its imports are live. When editing a feature, check both trees — some flows (e.g. `ebay-publish` actions) are called from both v1 and v2 pages.
+- `src/pages/`: active legacy v1 UI.
+- `src/v2/pages/` and `src/v2/components/`: current UI redesign and primary feature area.
+- `src/v2/pages/_archive/`: reference only; do not treat imports as live.
+- When changing a feature, check both v1 and v2 callers.
 
-**Suppressing a duplicate request is only half a fix — the suppressed caller still needs a result (2026-09-14, PRs #564/#566).** `AnalyzePage` auto-fires `handleGenerate()` from a mount effect _and_ exposes a Retry button, so a remount or double-click double-fires it; #564 added a guard, and #566 had to fix what that guard did to the UI. Three things learned the hard way in `src/hooks/useAnalyzeGeneration.ts`:
+### Duplicate async work
 
-- `setGenerating(true)` cannot block a same-tick double-fire — React state does not update until the next render, so both calls observe `generating === false`. A synchronously-claimed guard is required.
-- A per-instance `useRef` dies with the instance, so it cannot stop a _remount_ from re-firing. The guard has to be module-scoped to cover both cases; claimed synchronously, it makes the ref redundant.
-- **Store the in-flight promise, not a timestamp.** Returning silently left `generating` false, and `AnalyzePage` renders "Retry Analysis" whenever `!generating && !generated` — so a remounted component dropped the user onto a retry prompt while the real request still had ~70s to run. Holding the promise lets the duplicate _adopt_ the running request and receive its result; a remounted instance has no other route back to a result its predecessor started. Attach a no-op `.catch` at store time so an unadopted rejection isn't an unhandled promise rejection.
+Do not merely suppress duplicate requests. Every duplicate caller must receive the original operation’s result.
 
-Coverage is in `src/test/analyze-generation-duplicate-guard.test.ts`. Note that adoption bugs are near-invisible in single-instance tests — the first caller has already set `generating`, so the stranded-UI symptom only reproduces with the issuing instance unmounted.
+For requests that can fire during remounts or rapid user actions:
 
-### AI analysis pipeline (`supabase/functions/analyze-item`)
+- Claim the guard synchronously.
+- Use module-scoped state if remounts must be covered.
+- Store and return the in-flight promise.
+- Attach a no-op rejection handler when storing an unadopted promise to avoid unhandled rejections.
 
-A six-stage pipeline, not a single AI call: (1) item identification via Gemini multimodal analysis of images/video frames, (2) category resolution — eBay Taxonomy API lookup first, falling back to deterministic domain/metal-type rules if that fails or is suppressed, (3) aspects fetch for the resolved category (cached 7 days in `category_aspects_cache`), (4) listing generation using a domain-specific system prompt, (5) post-lookup category verification against the AI-generated title, with metal-type compatibility checks, (6) item-specifics regeneration if category changed after stage 4. A sub-agent architecture under `supabase/functions/_helpers/agent-system/` (controller → registry → visual-agent / market-agent, keyed by a 12-vertical domain registry) drives domain-specific logic. RAG grounding (pgvector `knowledge_base` table, `_helpers/rag/`) reduces hallucination on factual attributes like coin grade/composition. Because of this multi-stage design, a change to category resolution or domain prompts can have effects that only show up several stages later — trace the full pipeline, not just the entry point, before changing shared logic here.
+See `src/hooks/useAnalyzeGeneration.ts` and its duplicate-guard tests.
 
-**Every Gemini call needs an output cap large enough for the happy path AND a truncation check — and the field to check depends on the endpoint (2026-09-14, PRs #565/#566).** Two call sites shipped with neither. `detailExtractor.ts` swallowed truncated output as a parse failure (#565); Pass 1 identification did the same, and its `max_tokens: 150` actually fired in production — the model prefaced its answer with prose and the cap cut it off at 11 characters, so `pass1Identification.ts` fell through to `DEFAULT_IDENTIFICATION`'s `domain="general"`, which misroutes category resolution, the domain prompt and Slab OCR eligibility all at once. The resulting listing landed in "Everything Else > Every Other Thing" with $0.71 comps; only the melt-price floor kept the price sane.
+### AI analysis pipeline
 
-Two traps here, both of which cost a production run:
+`supabase/functions/analyze-item` is a multi-stage pipeline:
 
-- **The truncation signal is not the same on both endpoints.** The native `v1beta/models/{model}:generateContent` API reports `candidates[0].finishReason === "MAX_TOKENS"`; the OpenAI-compatible `v1beta/openai/chat/completions` path reports `choices[0].finish_reason === "length"`. Reading the wrong one silently never fires, which is exactly why #565's fix did not cover Pass 1 — check which endpoint the call site actually uses. Log truncation _as_ truncation: "invalid JSON" points at the prompt when the fix is the cap.
-- **Don't size a cap against observed response lengths.** Pass 1's 150 looked survivable because successful responses ran 256–271 _characters_ — tokens are not characters, and the margin was thinner than it appeared. The failure is asymmetric: an unused ceiling costs nothing since output tokens bill only as generated, while exceeding it discards the whole stage.
+1. Multimodal item identification.
+2. Category resolution.
+3. Category aspects retrieval/cache.
+4. Listing generation.
+5. Category verification against generated output.
+6. Item-specific regeneration if category changes.
 
-Related: **`response_format: { type: "json_object" }` is not reliably honored** on the OpenAI-compat path. It intermittently emits prose preambles ("Here is the JSON…") and array-wrapped payloads regardless, so prompts on these paths state the constraint explicitly and the parsers keep a greedy-brace regex fallback plus `unwrapIdentificationPayload`. Don't delete those as redundant.
+Trace the entire pipeline before changing shared category, domain, or prompt logic.
 
-### Category resolution (`supabase/functions/category-lookup`)
+For every Gemini call:
 
-Rewritten as **filter-then-rank with no numeric score** (Category Resolver v2, PRs #529–533 + #546). The old design ranked candidates before knowing any were viable and then shipped the best of the rejects; the current one gathers candidates from four sources (`user_verified`/`db_exact` rows in `category_mappings`, eBay `getCategorySuggestions`, a DB fuzzy match, Gemini fallback), puts each through four gates, then picks a winner by **precedence** in `resolverCore.ts` (`user_verified` > eBay's #1 surviving suggestion > `NEEDS_CONFIRMATION`). There is deliberately no arithmetic in the decision path — if nothing survives, the resolver returns `needsConfirmation: true` and asks the user rather than guessing. Don't reintroduce a score.
+- Set an output cap with room for the intended response.
+- Detect truncation using the field appropriate to its endpoint:
+  - Native Gemini: `candidates[0].finishReason === "MAX_TOKENS"`
+  - OpenAI-compatible endpoint: `choices[0].finish_reason === "length"`
+- Log truncation distinctly from parsing failures.
+- State JSON constraints in prompts and keep tolerant parsers; JSON mode is not sufficient on all paths.
 
-The gates: (1) leaf existence and (2) active status, both cache-first against `ebay_taxonomy_cache` with a 7-day freshness window (`CACHE_STALE_DAYS`) falling back to a live `getCategorySubtree` call; (3) condition-code compatibility; (4) required-aspect satisfiability. **Gate 4 is warn-only** behind `CATEGORY_GATE4_ENFORCE` — it collects `gate4Warnings` but never drops a candidate. Promoting it to enforcing is tracked as Phase 6 in `todo.md` and is gated on reviewing accumulated warn-only data for false positives first.
+## Category resolution
 
-**`ebay_taxonomy_cache` is the only source of truth for "does this category exist and is it a leaf."** Every hardcoded category-ID list in this codebase is a liability with a dated, real failure behind it — an audit found six IDs in `analyze-item`'s AI prompt and most of `leafCategoryGuard.ts`'s blocklist that eBay had already retired, plus non-leaf rollups (`99`, `256`, `45243`) being assigned as publish targets, plus three entries (`3390` Irish coins, `20713` Refrigerators, `139971` Video Game Consoles) that were blocked while being perfectly valid live leaves — each mislabeled by its own comment. Prefer querying the cache over extending a list, and validate any ID you do add against `corpus/ebay_taxonomy_snapshot.json` first.
+Category Resolver v2 is **filter-then-rank**, not score-based.
 
-**The parent/rollup blocklist is consolidated — `KNOWN_PARENT_CATEGORY_IDS` in `_helpers/leafCategoryGuard.ts` is the single source of truth.** Call `isKnownParentCategoryId()` rather than declaring a local set; `category-lookup`'s persist gate and `analyze-item`'s post-lookup override both do. Three duplicate copies were deleted (2026-08-31), one of which had been dead code for four months while its live inline twin drifted. **Do not convert that Set literal into an import, rename it, or move the file** — `scripts/replay-corpus.mjs` and `scripts/refresh-taxonomy-snapshot.mjs` both read it as _text_, scraping IDs by constant name, and a re-import breaks the blocking corpus gate silently.
+- Candidate precedence: `user_verified` → surviving eBay suggestion → `NEEDS_CONFIRMATION`.
+- If no candidate passes, require user confirmation. Do not reintroduce numeric scoring.
+- Validate leaf existence and active status through `ebay_taxonomy_cache`, with its defined freshness/live fallback behavior.
+- Gate 4 remains warn-only unless `CATEGORY_GATE4_ENFORCE` is intentionally enabled after reviewing warning data.
+- Use `KNOWN_PARENT_CATEGORY_IDS` and `isKnownParentCategoryId()` from `_helpers/leafCategoryGuard.ts`; do not duplicate the list.
+- That constant is text-scraped by maintenance scripts: do not rename, move, or replace it with an import.
+- Hardcoded category IDs are high-risk. Prefer cache/taxonomy lookups; validate unavoidable IDs against `corpus/ebay_taxonomy_snapshot.json`.
+- Run the golden-corpus replay before changing category resolution, category prompts, taxonomy snapshots, or leaf guards.
 
-**The stale-ID disease turned out to be systemic across the coin/bullion vertical, not confined to one list (2026-09-01).** The same class of bug — dead IDs, and worse, _live leaves silently reassigned to a different domain_ (`40150` resolves to Action Figures, not Roosevelt Dime) — has been found and fixed across every layer of the pipeline: the AI prompt (`_helpers/domainPrompts.ts`'s `buildCoinBullionPrompt()`), the frontend confirm dialog's breadcrumb map (`src/lib/ebayCategoryMap.ts`, checked _before_ any live verification — the most dangerous instance, a stale hit reports "valid" with no real check ever firing), `analyze-item`'s domain-mismatch check and deterministic fallback (`COINS_PAPER_MONEY_IDS`, `resolveDomainFallbackCategory()`), the publish pipeline's condition/aspect classifier (`ebay-publish/publish-helpers.ts`'s `HARDCODED_COIN_CATEGORY_IDS`/`HARDCODED_BULLION_CATEGORY_IDS`/`HARDCODED_TRADING_CARD_CATEGORY_IDS`, plus a regex catch-all that used to classify _any_ ID in a whole numeric range as bullion), the frontend's manual-override domain classifier (`src/types/listing.ts`'s `COIN_CATEGORY_IDS`/`BULLION_CATEGORY_IDS`/`TRADING_CARD_CATEGORY_IDS` — a wrong classification for coins here **hard-blocks publish**, not just cosmetic), and the Tier-4 emergency bootstrap (`_helpers/suggestedCategories.ts`'s `_LEGACY_BOOTSTRAP_BREADCRUMBS`, exported for testability, dangerous entries deleted rather than corrected per that file's own "shrink, don't maintain" policy). Trading cards got the same treatment (`19107`→`183050`, plus sport/game mislabels on generic format leaves — the live taxonomy has no per-sport or per-game category, that's an item aspect) but are lower severity: no publish-blocking mechanism exists for that vertical. See `todo.md`'s three "stale coin-category-ID"/follow-up entries for the full replacement tables and regression tests added.
+See `CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md` and `todo.md` for detailed status.
 
-**Fixing a real bug surfaced a second one it didn't actually solve.** `category-lookup/index.ts`'s `"store"` action had its own inner auth check that ignored the service-role detection its own top-level `requireUserOrServiceRole` already computed — since `analyze-item`'s auto-persist call always authenticates as the service-role key, and calling `auth.getUser()` directly on that key doesn't work (this codebase's own `authGuard.ts` special-cases it elsewhere for exactly this reason), every AI-auto category persist attempt silently 401'd. Fixed by reusing the already-computed `auth` result. But fixing the auth routing doesn't unlock any new writes: a separate, pre-existing confidence gate (`AUTO_PERSIST_MIN_CONFIDENCE = 85` vs. a hardcoded `confidence: 75` on this call path) rejects every attempt regardless — a design choice, not a bug, left untouched. `suggestedCategories.ts`'s `lookupBreadcrumb()` now returns which of its 4 resolution tiers supplied a breadcrumb, threaded through as `fromLegacyBootstrap` on each suggestion, and `analyze-item` skips auto-persisting when true — defense-in-depth for if that confidence gate ever loosens, not a fix for an active risk today.
+## eBay integration
 
-**Golden corpus + replay harness — `category-corpus-replay` is a blocking CI gate.** `corpus/golden_corpus.json` holds 18 cases (`must_resolve` / `must_not_regress` / `must_confirm` / `quarantine_needs_review`) replayed offline by `scripts/replay-corpus.mjs` against `corpus/ebay_taxonomy_snapshot.json`, a frozen 15,116-row export of the cache. Run it before pushing any change to category resolution, `leafCategoryGuard.ts`, or the AI prompt's category list — it needs no credentials and it has already caught a real gap that review missed. The snapshot is refreshed by the `refresh-taxonomy-snapshot` job in `category-taxonomy-sync.yml`, which runs after the weekly taxonomy sync, re-validates the corpus against live data, and opens a PR when the tree drifts. Plan and per-phase status: `CATEGORY_RESOLVER_V2_IMPLEMENTATION_PLAN.md` and `todo.md`.
+- eBay Inventory API rejects hyphenated SKUs. Do not rely on bulk offer enumeration being resilient to one bad SKU.
+- Existing live offer SKUs cannot be renamed in place. Do not automate republish/withdraw migration without explicit approval.
+- Use known-SKU lookups plus the Trading API fallback as implemented in `ebay-listings`.
+- eBay uses multiple hosts; confirm the API’s documented host before changing endpoint construction.
+- OAuth scopes are fixed at consent time. Adding a scope requires provider registration, code deployment, then user reconnection.
+- `ebay-publish` uses an `action` router. Trace callers before changing its auth or behavior.
+- Internal Edge Function callers commonly authenticate with the service-role Bearer token. Grep function callers before narrowing auth.
 
-### eBay integration surface
+## Edge Function auth
 
-**Every `LA-`/`BK-` hyphenated SKU is rejected by eBay's Inventory API, and one is enough to break the bulk offer-list call for the whole account.** eBay allows only alphanumeric SKUs (errorId 25707). A single stored bad SKU used to make bulk `GET /sell/inventory/v1/offer?limit=...&offset=...` fail account-wide, so `ebay-listings` fell back to the Trading API (`GetMyeBaySelling`) on every sync — and that path returns no category, which is why `user_active_listings.category_id` was NULL on every row until #623 added a GetItem backfill on the fallback (then #630 fixed a second bug in that backfill itself: `OutputSelector` only recognizes whole node names, and `PrimaryCategory.CategoryID` was silently ignored rather than rejected). The SKU-generation root cause was not the SKU format but a missing field: `useAnalyzePublish` never sent `userId` to `create_draft`, so `generateDraftSku` always skipped the sequential `LA#####` path for its random `LA-<hex>` fallback -- fixed by #626, but ~805 existing listings still carry hyphenated SKUs.
+`verify_jwt = false` does not mean public access.
 
-**eBay has no supported mechanism to rename a SKU on a live offer, so those ~805 SKUs are permanent — the fix (#631, 2026-09-25) is to stop enumerating via the account-wide bulk list at all, not to migrate them.** Confirmed against eBay's Sell Inventory API contract: `sku` is immutable on an existing offer (`updateOffer` cannot change it), and `bulk_migrate_listing` only migrates legacy Trading-API listings into the Inventory API for the first time — it cannot re-key an already-managed offer. The only way to change a live listing's SKU is publish-new-offer-then-withdraw-old, which creates a new `listingId` and resets watch count/listing age — real business impact this app will not do automatically for 805 listings. Instead, `ebay-listings` now enumerates offers by known SKU (`GET /sell/inventory/v1/offer?sku={sku}`, sourced from `drafts.ebay_sku` via `fetchKnownSkusForUser`) rather than the unfiltered bulk list — a single-SKU query does not trigger the account-wide validation that a bulk list does. The Trading API fallback still runs in parallel and merges in anything the SKU list misses (manually-created listings, or anything pre-dating SKU tracking) — see `_helpers/ebayOfferLookup.ts` and `fetchKnownSkusForUser` in `ebay-listings/index.ts`. Don't reattempt a format-only or migration-based fix for this.
+Use `_helpers/authGuard.ts`:
 
-**#631 shipped inert: `drafts.ebay_sku` was empty account-wide, because a second, independent bug meant nothing ever wrote to it.** `AnalyzePage.tsx`'s direct-publish flow (`useAnalyzePublish.ts` → `ebay-publish`'s `create_draft` action) never created or updated a `drafts` row at all — only the other publish path (`usePublishDraft.ts`, used from the Drafts list) does that via `addDraft`/`markDraftPublished` in `useDrafts.ts`. Confirmed live: 0 of 570 real listings had a `drafts` row, including one published minutes earlier in the same session. Fixed by #632 (2026-09-25): `handlePublishSuccess` now calls `addDraft`+`markDraftPublished` after a successful direct publish, reusing the same `buildDraftPayload` the working save-draft flow already uses. Scoped to the success path only — a failed direct-publish still creates no row (not a regression; wiring failure tracking through `useAnalyzePublish.ts`'s several distinct error branches is a separate design question). Not yet re-verified end-to-end in production; check `ebay-listings` logs for `N known SKU(s)...` with N ≥ 1 after a fresh publish.
+- `requireUser`: end user only.
+- `requireUserOrServiceRole`: frontend users and internal service calls.
+- `requireServiceRole`: cron/internal only.
 
-`ebay-publish` (~5,400 lines, split across `auth.ts`, `publish.ts`, `publish-create-draft.ts`, `video.ts`, `supabase.ts`, `constants.ts`) handles OAuth token exchange/refresh/storage, draft publishing (inventory item → offer → publish), and video upload — routed through a single Edge Function with an `action` field rather than separate functions per operation. Business policies, taxonomy, competitor search, and listings retrieval are separate functions. Server-to-server calls between these functions (e.g. `analyze-item` → `category-lookup`/`ebay-competitor-search`/`spot-prices`, `auto-reprice-cron`/`competitor-prices-cron` → `ebay-listings`) authenticate with the Supabase **service-role key as a Bearer token**, not a user JWT — this matters when touching auth on any function, since gating "any logged-in user" only will break these internal callers. Trace `grep -rn "functions/v1/<name>"` across `supabase/functions/` before changing a function's auth requirements.
+Choose based on the complete caller graph, not function name or assumptions.
 
-**Competitor pricing redesigned (PR #511, 2026-08-18):** `competitor-prices-cron` no longer loops per-user or calls `ebay-listings` directly. New architecture: `inventory-sync-cron` (scheduled every 15 min) populates `user_active_listings` cache via `ebayInventorySync.ts`, then `competitor-prices-cron` (scheduled every 5 min) reads a fairness-ranked batch via RPC `get_next_competitor_price_batch`. This fixes the original WORKER_RESOURCE_LIMIT crash that came from processing stale inventory in a single invocation. See `COMPETITOR_PRICES_CRON_SESSION_HANDOFF.md` for full detail (PR #511 also fixed open bugs found during rollout).
+## Database and migrations
 
-**eBay splits its APIs across two hosts, and two known bugs were found on this surface (2026-09-14); the host bug below is now fixed, the scope bug in the next paragraph is still only partly fixed.** Identity and Finances live on **`apiz.ebay.com`**, not `api.ebay.com` — `ebay-publish/constants.ts` gets this right (`IDENTITY_API_PROD`/`_SANDBOX`), and `ebay-user/index.ts` built its own `apiBase` as `api.ebay.com`, 502ing on every `/commerce/identity/v1/user/` call (invoked from both `src/pages/DashboardPage.tsx` and `src/v2/pages/DashboardPage2.tsx`) until fixed 2026-09-25 (`identityApiBaseFor()` in that file). #607 had only added a retry around the wrong host, which just retried the same failure three times. (`FREE_TIER_IMPLEMENTATION_PLAN.md` calls `ebay-user` "confirmed working in production" from before this fix; check its function logs to confirm the 502s actually stopped rather than trusting either claim.)
+- RLS is required on every user-scoped table.
+- OAuth tokens are encrypted at rest; never expose or rewrite them casually.
+- Migrations are timestamped SQL in `supabase/migrations/`.
+- Never edit applied migrations. Add corrective migrations, including early dependency migrations when a clean replay reveals ordering problems.
+- Verify migration prefixes are unique before merge and confirm the deployment run after merge.
 
-Separately, **OAuth scopes are fixed at consent time, and `EBAY_OAUTH_SCOPES` in `ebay-publish/constants.ts` has several commented out** — `sell.analytics.readonly` among them, which is why that endpoint 403s (every `ebay-listings` sync logs three Analytics 403s). `commerce.identity.readonly` was enabled by #613 (2026-09-21), but only for users who connect or reconnect eBay after that — existing connections still lack it; `sell.finances` and `sell.marketing` remain commented out. Registering a scope on developer.ebay.com is necessary but not sufficient, and neither is reconnecting: the consent URL only requests what that array lists. Fixing this has a required order — register the scope on developer.ebay.com, land the code change, _then_ have the user disconnect and reconnect. (`sell.finances` is also commented out yet Finances calls succeed, so eBay appears to grant it under `sell.inventory`/base — don't assume a commented scope is definitely the cause without checking the actual response.)
+## CI/CD and QA
 
-### Auth pattern for Edge Functions
+A merge to `main` is not proof of production deployment. Check the deployment run, especially for migration or Edge Function changes.
 
-`supabase/config.toml`'s `verify_jwt = false` on a function does **not** mean it's unauthenticated — many of these functions do their own JWT check in code (`analyze-item`, `create-checkout`, `ebay-user`, etc.), and `stripe-webhook` correctly verifies the `Stripe-Signature` header instead. Auth hardening completed (PR #462): `supabase/functions/_helpers/authGuard.ts` provides three composable checks — `requireUser` (real end-user only), `requireUserOrServiceRole` (frontend users + internal service-role callers), `requireServiceRole` (cron/service-only) — use these for any new function rather than hand-rolling a JWT check. All 15 `verify_jwt = false` functions are now traced and gated appropriately. Pick the pattern by checking the function's actual caller graph (frontend `supabase.functions.invoke` calls carry the user's JWT automatically; internal Edge Function calls typically carry the service-role key) — don't assume "frontend-only" without grepping for internal callers first.
+- `deploy-functions.yml` deploys migrations and Edge Functions on pushes to `main`.
+- Backend changes require the manual QA function deployment workflow where applicable.
+- QA setup and environment details are documented in `LISTING_ASSISTANT_PRO_QA_SETUP.md`.
 
-### Database
+## Rebrand / infrastructure safety
 
-Two logical groups live in the **same live Supabase project** historically shared with an unrelated CRM product (see Rebrand section below) — but in this repo's own migrations, the schema is listing-app-only: `profiles`/`organizations`/`org_members` (identity), `drafts`/`subscriptions` (listings + billing), `user_active_listings` (listings cache for crons, PR #511), `usage_tracking`/`gemini_usage` (billing/usage), `spot_price_cache`/`competitor_prices`/`market_price_history`/`market_watches` (market data), `category_mappings`/`category_aspects_cache`/`ebay_taxonomy_cache`/`lookup_decisions` (taxonomy), `listing_cogs`/`listing_financials`/`knowledge_base` (financials/RAG), `reprice_rules`/`optimization_history` (auto-reprice, now tracked in migrations as of PR #518). RLS is enabled on all user-scoped tables. Migrations are timestamped SQL in `supabase/migrations/`; schema drift from PR #518 reconciled most production-only columns/constraints, including `drafts` and `subscriptions` alignment — the live schema now matches migrations closely. eBay OAuth tokens are encrypted at rest (`ebay_access_token`, `ebay_refresh_token` use `v1:` prefix for encrypted values).
+This repository remains live and legacy until an explicit cutover approval.
 
-**The migration history was never actually replayed from empty until the `listrassistr-qa` Supabase project was set up (2026-09-02) — production's schema predates several migrations that reference objects those same migrations create.** Two migrations assumed something already existed that no earlier migration had created — `20260318100000_free_tier_tracking.sql` ALTERs `public.subscriptions` two days before `20260320000000_add_stripe_subscription_tables.sql` creates it, and `20260327000000_generalize_category_mappings.sql` uses `gin_trgm_ops` before its own `CREATE EXTENSION IF NOT EXISTS pg_trgm` statement further down the same file — both harmless on any environment where the table/extension already existed out-of-band, both fatal on a true from-scratch push. Fixed by adding `20260318050000_create_subscriptions_table_early.sql` and `20260326000000_enable_pg_trgm_early.sql` rather than editing the original (already-applied-in-production) files. A third bug, `20260516000000_expand_listing_images_bucket_for_video.sql`, had a genuine leftover orphaned `WHERE id = 'listing-images';` line with no statement attached (a copy-paste artifact) — a plain syntax error, fixed by deleting the line directly since no reordering trick can route around a parse failure. All three were found empirically, one push-failure at a time, not by static review — if another fresh push ever hits a similar "assumed pre-existing state" error, the fix pattern is the same: add a new early migration, don't edit the original.
+The connected production Supabase project is shared with an unrelated CRM. Never assume a full schema export belongs only to this app.
 
-### CI/CD
+Require explicit user approval before any production, DNS, provider-account, Stripe, eBay, Supabase, data-export, or destructive action.
 
-**A green merge to `main` is not the same as "live in production" — check the deploy run.** From #615 (2026-09-22) until #624 (2026-09-25), _every_ `deploy-functions.yml` run failed at `supabase db push`, so none of #615–#623 reached production for three days while docs and PR threads described them as shipped (including a Listing Editor "live smoke test" that could not have run — its function and table didn't exist yet). The cause was the same class of bug as #614, twice: a byte-identical re-add of an already-renamed migration, and a no-op "resolution" migration that reused another file's version. `ls supabase/migrations | cut -d_ -f1 | sort | uniq -d` must print nothing; supabase keys `schema_migrations` on the version prefix alone. There is no PR-time check for this yet — the failure only shows up post-merge.
+Never place secrets, tokens, password hashes, or customer data in chat, source code, commits, or documentation.
 
-`deploy-functions.yml` pushes DB migrations (`supabase db push --yes --include-all`) and deploys functions to the `Production` GitHub environment on push to `main` — there is currently no manual approval gate on this, and several functions deploy with `--no-verify-jwt`. Treat changes that touch migrations or function config as higher-risk than pure frontend changes for this reason.
+## Git workflow
 
-**This app finally has a real QA environment (2026-09-08) — see `LISTING_ASSISTANT_PRO_QA_SETUP.md`.** Before that date, `e2e-pr-smoke.yml`/`e2e-full-lifecycle.yml` ran against repo-level secrets that pointed at production, and `full-lifecycle.spec.ts` silently fell back to testing a local `npm run dev` build whenever `QA_BASE_URL` was unset (it always was) — so "weekly E2E" was never actually testing a deployed environment. Both workflows now declare `environment: QA` and pull credentials for `majmvgakczrpcwgxgulj` (the `listrassistr-qa` Supabase project, reused as this app's QA backend — see the setup doc for why), and `e2e-full-lifecycle.yml` fails loudly instead of silently defaulting to localhost if `QA_BASE_URL` is missing. `deploy-functions-qa.yml` (manual-only, `workflow_dispatch`) deploys this repo's Edge Functions to that same QA project and needs a manual trigger after backend changes land on `main`.
+- Never push directly to `main`.
+- Create a branch and open a PR.
+- Preferred prefixes: `fix/`, `feat/`, `feature/`, `docs/`, `perf/`, `rebrand/`.
+- Do not extract credentials from local credential stores.
+- If GitHub CLI is unavailable, ask the user to authenticate interactively or provide a PR compare URL.
 
-## Rebrand & migration in progress — read before touching infra or auth
+## Documentation Style
 
-This repo ("Sovereign Listing Suite" internally, eBay listing app externally) is mid-migration to a new product, **ListrAssistr**, moving to a separate private repo (`twinwicksllc/listrassistr-official`). Full plan: `LISTRASSISTR_REBRAND_AND_MIGRATION_PLAN.md`.
-
-**Phase 0 closed 2026-08-25 (DEC-0035).** Detailed Phase 0 work: `REBRAND_PHASE_0_EXCEPTION_LOG.md` (final findings and resolutions). **Phase 1 active** — current status: `REBRAND_PHASE_0_SESSION_HANDOFF.md` (most recent snapshot, 2026-08-28); action queue: `REBRAND_PHASE_1_TODO.md` (Section 5 is authoritative next-actions list); evidence/checklists: `REBRAND_PHASE_1_DOMAIN_AND_DNS_CHECKLIST.md`, `REBRAND_PHASE_1_RUNBOOKS.md`.
-
-- **This repo stays live and legacy** until cutover is explicitly approved by the user — no destructive changes here for migration purposes.
-- **Critical:** the linked Supabase project (`wcednzaxmxwfiijzmjmx`, `RankedCEO-CRM`) is shared production infrastructure between this eBay listing app and an unrelated CRM product — same database, one shared admin account. If you ever see or generate a schema/data export from this project, expect a large CRM schema (`accounts`, `contacts`, `deals`, `campaigns`, `commissions`, `tenants`, etc.) alongside the listing tables — never treat that as this app's data.
-- Never request, print, or write secret values, tokens, password hashes, or customer data into chat, commits, or docs — only names/locations. The user enters values directly into provider dashboards.
-- Treat any production/provider-account/DNS/Stripe/eBay/Supabase change, data export, or destructive action as requiring explicit user approval first, even if it seems implied by the plan documents.
-
-## Working agreements
-
-- **Never push directly to `main`.** Always create a branch and open a PR. Existing branch prefixes: `fix/`, `feat/`/`feature/`, `docs/`, `perf/`, `rebrand/`.
-- `gh` CLI is not installed by default in this environment and has no stored GitHub auth — don't attempt to extract credentials from Git Credential Manager to work around this; either install `gh` and let the user complete `gh auth login` interactively, or hand the user a prefilled `github.com/.../compare/...?quick_pull=1&title=...&body=...` URL to open the PR themselves.
+- Keep this file (`CLAUDE.md`) concise, actionable, and rule-oriented.
+- Do not add long narratives, deep bug histories, incident logs, or specific PR/issue numbers.
+- Distill new learnings into short, context-free bullet points to conserve token limits and maintain readability but also maintain effectiveness.
