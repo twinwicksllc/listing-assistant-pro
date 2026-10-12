@@ -21,7 +21,7 @@ paths. This document is the reference behind both.
 - **P0-18 "Phase 1 entry decision"** is **Approved — GO (2026-08-25,
   DEC-0035)**, resolving P0-17 alongside it.
 - **DEC-0034** approved the final migration cohort (4 of 9 profiles transfer;
-  all QA-shaped profiles excluded, revising DEC-0029).
+  all QA-shaped profiles excluded, revising DEC-0029). **Superseded 2026-10-12 (DEC-0046):** the cohort is now two profiles (the owner and one customer), not four.
 
 **What DEC-0035 authorizes, verbatim in scope:** plan §8 **only** — domain
 acquisition/security, email identity, and brand asset production. Provider
@@ -41,6 +41,8 @@ every item in this document:
 That last condition is the operative one here: DEC-0035 approves _doing Phase 1_,
 it does not pre-approve each individual provider action inside it. Every registrar
 purchase, DNS write, and Resend change still needs the owner at the keyboard.
+
+> **Superseded 2026-10-12 (DEC-0050):** there is no scheduled maintenance window; the two-user data load ran as an additive, idempotent copy on 2026-10-12.
 
 Sequencing note: DEC-0033 records the October 1, 2026 window as explicitly
 provisional _because_ "none of Phases 1–6 have started (domain not yet
@@ -1281,7 +1283,7 @@ Four things follow:
 1. **No data migration has begun.** Contrast the legacy project's `listing-images` bucket at
    4,735 objects / 1,274 MB (RBR-0026): here storage holds **zero buckets**. Phase 4 (§11) is
    genuinely untouched.
-2. **DEC-0034's migration cohort has nowhere to land.** Moving 4 of 9 profiles requires a
+2. **DEC-0034's migration cohort has nowhere to land.** (Historical, superseded by DEC-0046 on 2026-10-12: the cohort is now two profiles (the owner and one customer), not four.) Moving 4 of 9 profiles requires a
    `profiles` table, which does not exist. Schema creation must precede data migration —
    §10 then §11, in that order.
 3. **It is a clean slate, which is an advantage.** RLS policies, key format, and table design
