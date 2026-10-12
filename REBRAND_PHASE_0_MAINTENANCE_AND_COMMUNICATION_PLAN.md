@@ -1,6 +1,6 @@
 # Phase 0 Maintenance & Communication Plan (P0-14)
 
-**Status:** Drafted 2026-08-19. Target window is provisional — see caveat below — not yet a customer-facing commitment.
+**Status:** **Superseded 2026-10-12 (DEC-0050):** there is no scheduled maintenance window; the two-user data load ran as an additive, idempotent copy on 2026-10-12. The target window and notice schedule below are historical and must not be followed. Originally: drafted 2026-08-19. Target window is provisional — see caveat below — not yet a customer-facing commitment.
 
 Resolves P0-14 (`REBRAND_PHASE_0_CLOSURE_CHECKLIST.md`): window, notice schedule, support contact, freeze rules, and customer impact. This is Phase 0 item 9 in `LISTRASSISTR_REBRAND_AND_MIGRATION_PLAN.md` §7 ("Define the maintenance window, customer notice schedule, go/no-go meeting, and rollback decision deadline"), which in turn unblocks P0-15's one remaining open piece (the rollback decision deadline, per DEC-0031) and P0-18 (the actual Phase 1 entry decision).
 
