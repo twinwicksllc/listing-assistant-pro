@@ -9,6 +9,8 @@ database, code bloat). Numbers below are from those audits and their stated limi
 
 > **Progress 2026-10-07:** steps 1 and 2 of section 8 (foundation, eBay connection) are built and deployed to QA; a complete sandbox connection is still to be verified. See DEC-0044 and `listrassistr-official/docs/STATUS_2026-10-07.md`. Two plan items changed in practice: the new QA project became a reset of `majmvgakczrpcwgxgulj` (decision 10), and production deploys by hand until `AUTO_DEPLOY_PRODUCTION` is set.
 
+> **Progress 2026-10-12:** the legacy data migration wave 1 is loaded on QA and production for the two-profile cohort (the owner and one customer). Accounts, profiles, support tickets, `usage_tracking` and `ai_usage` were copied; a second run inserts nothing. Decisions DEC-0045 to DEC-0050 (`listrassistr-official/docs/DATA_MIGRATION_DECISIONS.md`) and the mechanics (`listrassistr-official/docs/port-cards/data-migration.md`) are merged (that repo's PRs #79 and #80; this repo's #678). Wave 2 (drafts, COGS, competitor prices, category mappings, knowledge base, images) and Google sign-in are the next open items. End-of-day record: `listrassistr-official/docs/STATUS_2026-10-12.md`.
+
 ## 1. Owner decisions (2026-10-06)
 
 | #   | Decision                                                                                                                                                                                                                                 |
@@ -161,7 +163,10 @@ to a provider without the owner.
 
 - Never run an export, dump, `db pull` or type generation against
   `wcednzaxmxwfiijzmjmx` (the shared legacy project that also holds the CRM).
-- Read legacy **migration files** and **code** only.
+- Read legacy **migration files** and **code** only. One exception, approved 2026-10-12 (DEC-0045):
+  the read-only `migration_reader` role used by `listrassistr-official/scripts/legacy-migration/`.
+  It sees only cohort-limited views in a private schema, is revoked when the migration ends, and
+  nothing may ever write to the legacy project.
 - No provider, DNS, Stripe, eBay or Supabase dashboard change without explicit owner
   approval; this plan authorizes repository work in `listrassistr-official` only.
 - Secrets are never written to the repo, the PRs or chat.

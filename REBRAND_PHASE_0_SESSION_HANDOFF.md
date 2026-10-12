@@ -4,6 +4,10 @@
 **Repository:** `twinwicksllc/listing-assistant-pro`
 **Session output:** PRs #556–#561 merged on 2026-09-08 (6 total); 2026-09-30 added #642–#646 here (Q-10 artifacts, email verification, O-42, Auth redirects) and #29–#37 in `listrassistr-official`; 0 open
 
+> **Update 2026-10-12:** the legacy data migration wave 1 is loaded on QA and production for the
+> two-profile cohort (the owner and one customer). This Phase 0 handoff is history; the current
+> resume point is `listrassistr-official/docs/STATUS_2026-10-12.md`.
+
 > **Update 2026-09-28 (historical; the pending items below were completed 2026-09-30).** SES identity/configuration, Postmark monitor-only DMARC,
 > Supabase Auth SMTP, and Forward Email DNS/aliases are set up. QA and production reset
 > flows passed; Forward Email inbound tests arrived. Forward Email outbound SMTP is
