@@ -63,7 +63,10 @@ Never edit an applied migration. Add a new migration instead. Test schema change
 - Every append-only table needs a retention/pruning plan.
 - Metrics must use denominators that match the outcome being measured.
 - Follow existing sibling test patterns for new UI components.
-- Test new behavior by first making the test fail against the broken behavior.
+- Test new behavior by first making the test fail against the broken behavior. A test that passes
+  with the protection removed proves nothing.
+- Reproduce any database or API behavior before relying on it.
+- Update every doc and README that names what you changed, in the same PR. Do not write counts in prose.
 - Never log secrets, tokens, customer data, or raw auth headers.
 
 ## Architecture
