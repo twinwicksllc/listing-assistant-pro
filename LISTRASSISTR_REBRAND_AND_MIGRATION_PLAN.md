@@ -463,6 +463,8 @@ health checks work without using the old project.
 
 **Owner:** Data migration owner
 
+> **Progress 2026-10-12:** the cohort is two profiles, the owner and one customer (DEC-0046), not the four-profile set in DEC-0034. Wave 1 (accounts, profiles, support tickets, `usage_tracking`, `ai_usage`) is loaded on QA and production as an additive, idempotent copy. Wave 2 (drafts, COGS, competitor prices, category mappings, knowledge base, images) follows. Decisions and mechanics: `listrassistr-official/docs/DATA_MIGRATION_DECISIONS.md` and `listrassistr-official/docs/port-cards/data-migration.md`.
+
 ### 11.1 Define the user cohort
 
 Create a version-controlled migration query that builds a deterministic set of

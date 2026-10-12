@@ -4,7 +4,9 @@
 **Source repository:** `twinwicksllc/listing-assistant-pro`  
 **Live project:** `RankedCEO-CRM` (`wcednzaxmxwfiijzmjmx`)  
 **Discovery date:** 2026-08-10  
-**Status:** Classification complete at object-name and RLS-metadata level; ownership, definition, and migration cohort approval remain open
+**Status:** Classification complete at object-name and RLS-metadata level; ownership and definition
+remain open. **Migration cohort approval resolved 2026-10-12 (DEC-0046):** two profiles, the owner
+and one customer; wave 1 is loaded on QA and production (`listrassistr-official/docs/STATUS_2026-10-12.md`).
 
 ## Evidence and limits
 
