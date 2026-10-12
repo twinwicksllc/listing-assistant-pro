@@ -914,32 +914,32 @@ describe("shared condition policy", () => {
   });
 
   test("applies freshness boundaries and safely rejects invalid or far-future timestamps", () => {
+    // Pin one clock reading and hand it to the validator: reading Date.now()
+    // separately for the fixture and the check lets the boundary case drift
+    // past the limit by a millisecond.
+    const now = Date.now();
     const fresh = buildSyntheticPolicy([
       { conditionId: "3000", conditionDescription: "Used" },
     ]);
     const atAgeLimit = {
       ...fresh,
-      fetchedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+      fetchedAt: new Date(now - 24 * 60 * 60 * 1000).toISOString(),
     };
     const stale = {
       ...fresh,
-      fetchedAt: new Date(Date.now() - 24 * 60 * 60 * 1000 - 1).toISOString(),
+      fetchedAt: new Date(now - 24 * 60 * 60 * 1000 - 1).toISOString(),
     };
     const invalidDate = { ...fresh, fetchedAt: "not-a-date" };
     const farFuture = {
       ...fresh,
-      fetchedAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      fetchedAt: new Date(now + 5 * 60 * 1000).toISOString(),
     };
+    const check = (policy: typeof fresh) =>
+      validateConditionSelection(policy, "123", "3000", [], now).valid;
 
-    expect(validateConditionSelection(atAgeLimit, "123", "3000").valid).toBe(
-      true,
-    );
-    expect(validateConditionSelection(stale, "123", "3000").valid).toBe(false);
-    expect(validateConditionSelection(invalidDate, "123", "3000").valid).toBe(
-      false,
-    );
-    expect(validateConditionSelection(farFuture, "123", "3000").valid).toBe(
-      false,
-    );
+    expect(check(atAgeLimit)).toBe(true);
+    expect(check(stale)).toBe(false);
+    expect(check(invalidDate)).toBe(false);
+    expect(check(farFuture)).toBe(false);
   });
 });

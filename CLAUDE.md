@@ -162,8 +162,8 @@ Choose based on the complete caller graph, not function name or assumptions.
 A merge to `main` is not proof of production deployment. Check the deployment run, especially for migration or Edge Function changes.
 
 - `deploy-functions.yml` deploys migrations and Edge Functions on pushes to `main`.
-- Backend changes require the manual QA function deployment workflow where applicable.
-- QA setup and environment details are documented in `LISTING_ASSISTANT_PRO_QA_SETUP.md`.
+- This repo has no working QA backend: `deploy-functions-qa.yml` refuses to run because its QA project belongs to `listrassistr-official`. Do not use it, and do not follow `LISTING_ASSISTANT_PRO_QA_SETUP.md` (superseded, kept as history).
+- E2E workflows use their own gated `E2E` environment.
 
 ## Rebrand / infrastructure safety
 
