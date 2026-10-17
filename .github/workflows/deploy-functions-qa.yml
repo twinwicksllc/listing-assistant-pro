@@ -90,6 +90,7 @@ jobs:
           supabase functions deploy transcribe-voice --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
           supabase functions deploy ebay-user --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
           supabase functions deploy ebay-listings --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
+          supabase functions deploy ebay-draft-cleanup --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
           supabase functions deploy create-checkout --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
           supabase functions deploy check-subscription --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
           supabase functions deploy customer-portal --project-ref majmvgakczrpcwgxgulj --no-verify-jwt
