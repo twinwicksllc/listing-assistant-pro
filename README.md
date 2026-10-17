@@ -205,6 +205,7 @@ The backend consists of 33 Supabase Edge Functions (Deno runtime):
 | `ebay-pricing`               | Fetches recent sold listings for price comparison                             |
 | `ebay-policies`              | Fetches fulfillment, payment, and return business policies                    |
 | `ebay-listings`              | Retrieves and manages the user's active eBay listings                         |
+| `ebay-draft-cleanup`         | Owner-only cleanup of leftover UNPUBLISHED eBay offers                        |
 | `ebay-user`                  | eBay identity/account info for connected users                                |
 | `ebay-competitor-search`     | Competitor listing search for market research                                 |
 | `ebay-reprice`               | Applies repricing updates to live eBay listings (batched)                     |
