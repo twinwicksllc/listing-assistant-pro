@@ -186,7 +186,7 @@ See tests in `src/test/analyze-item-category-fallback.test.ts` for domain fallba
 
 ## Edge Functions
 
-The backend consists of 33 Supabase Edge Functions (Deno runtime):
+The backend consists of Supabase Edge Functions (Deno runtime):
 
 ### AI & Analysis
 
@@ -467,7 +467,7 @@ listing-assistant-pro/
 │   ├── integrations/          # Supabase client integration
 │   └── test/                  # Unit tests
 ├── supabase/
-│   ├── functions/             # 33 edge functions (Deno)
+│   ├── functions/             # edge functions (Deno)
 │   │   ├── _helpers/          # Shared helpers (agent-system, RAG, eBay, Sentry)
 │   │   │   ├── agent-system/  # Sub-agent architecture (controller, registry, sub-agents)
 │   │   │   └── rag/           # RAG embedding & retrieval

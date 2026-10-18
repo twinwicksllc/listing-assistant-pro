@@ -27,7 +27,12 @@ const CALL_TIMEOUT_MS = 8_000;
 // Stop starting new work once this much wall clock has passed, leaving room
 // in the ~150s gateway budget. Unreached candidates come back as "not_reached"
 // and the caller simply sends them again.
-const BUDGET_MS = 100_000;
+const BUDGET_MS = 90_000;
+
+// The live-listing phase runs BEFORE the per-candidate budget above, so it needs
+// its own overall deadline: 50 pages x 16s would otherwise blow the gateway
+// budget and kill the request without the fail-closed response.
+const LIVE_PHASE_BUDGET_MS = 30_000;
 
 export const MAX_CANDIDATES_PER_CALL = 100;
 
@@ -94,6 +99,21 @@ export function parseCandidates(input: unknown): ParseResult {
   return { ok: true, candidates: out };
 }
 
+export type BodyParse =
+  | { ok: true; candidates: unknown; dryRun: boolean }
+  | { ok: false; error: string };
+
+// Validates the request body shape before any field is read: a JSON body of
+// `null` (or an array, or a scalar) is a client error, not a 500 crash.
+// dryRun defaults to true; only an explicit boolean false enables deletion.
+export function parseBody(body: unknown): BodyParse {
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    return { ok: false, error: "Body must be a JSON object" };
+  }
+  const b = body as { candidates?: unknown; dryRun?: unknown };
+  return { ok: true, candidates: b.candidates, dryRun: b.dryRun !== false };
+}
+
 // ---- live listings (Trading API) -------------------------------------------
 
 export type LiveListings = { itemIds: Set<string>; skus: Set<string> };
@@ -120,7 +140,10 @@ export async function fetchLiveListings(
   tradingUrl: string,
   userToken: string,
   fetchFn: typeof fetch = fetch,
+  opts: { now?: () => number; budgetMs?: number } = {},
 ): Promise<LiveListingsResult> {
+  const now = opts.now ?? Date.now;
+  const deadline = now() + (opts.budgetMs ?? LIVE_PHASE_BUDGET_MS);
   const itemIds = new Set<string>();
   const skus = new Set<string>();
   let totalPages = 1;
@@ -128,6 +151,12 @@ export async function fetchLiveListings(
   for (let page = 1; page <= totalPages; page++) {
     if (page > MAX_ACTIVE_PAGES) {
       return { ok: false, error: "active listing list exceeds page limit" };
+    }
+    // Never let one page run past the phase deadline: a slow or large account
+    // must fail closed (nothing deleted) rather than be killed by the gateway.
+    const remaining = deadline - now();
+    if (remaining <= 0) {
+      return { ok: false, error: "live listing phase exceeded its deadline" };
     }
     const xml = `<?xml version="1.0" encoding="utf-8"?>
 <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
@@ -145,7 +174,7 @@ export async function fetchLiveListings(
     let text: string;
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), CALL_TIMEOUT_MS * 2);
+      const timer = setTimeout(() => controller.abort(), Math.min(remaining, CALL_TIMEOUT_MS * 2));
       try {
         const resp = await fetchFn(tradingUrl, {
           method: "POST",

@@ -5,6 +5,7 @@ import {
   fetchLiveListings,
   isAllowedUser,
   MAX_CANDIDATES_PER_CALL,
+  parseBody,
   parseCandidates,
   runCleanup,
   tradingApiUrlFor,
@@ -58,6 +59,29 @@ Deno.test("parseCandidates: rejects missing sku and duplicate offerIds", () => {
   assertEquals(parseCandidates([{ offerId: "1", sku: "" }]).ok, false);
   assertEquals(parseCandidates([{ offerId: "1", sku: "x".repeat(101) }]).ok, false);
   assertEquals(parseCandidates([{ offerId: "1", sku: "A" }, { offerId: "1", sku: "B" }]).ok, false);
+});
+
+Deno.test("parseBody: a null, array or scalar body is a 400, not a crash", () => {
+  assertEquals(parseBody(null).ok, false);
+  assertEquals(parseBody(undefined).ok, false);
+  assertEquals(parseBody("x").ok, false);
+  assertEquals(parseBody([{ offerId: "1", sku: "S" }]).ok, false);
+  assertEquals(parseBody(42).ok, false);
+});
+
+Deno.test("parseBody: dryRun defaults to true and only an explicit false enables deletion", () => {
+  const a = parseBody({ candidates: [] });
+  assert(a.ok);
+  if (a.ok) assertEquals(a.dryRun, true);
+  const b = parseBody({ candidates: [], dryRun: false });
+  assert(b.ok);
+  if (b.ok) assertEquals(b.dryRun, false);
+  // Anything other than the boolean false must stay a dry run.
+  for (const v of ["false", 0, null, undefined]) {
+    const r = parseBody({ candidates: [], dryRun: v });
+    assert(r.ok);
+    if (r.ok) assertEquals(r.dryRun, true);
+  }
 });
 
 // ---- decide ----------------------------------------------------------------
@@ -155,6 +179,29 @@ Deno.test("fetchLiveListings: fails closed on HTTP errors, a failed Ack, a missi
   );
   const throwing = (() => Promise.reject(new Error("network down"))) as unknown as typeof fetch;
   assertEquals((await fetchLiveListings("u", "t", throwing)).ok, false);
+});
+
+Deno.test("fetchLiveListings: fails closed when the live-listing phase runs out of time", async () => {
+  // A multi-page account where each request eats 20s of a 30s budget: the
+  // phase must give up with ok:false rather than run for 50 x 16s.
+  let t = 0;
+  const now = () => (t += 20_000);
+  const fetchFn =
+    (async () =>
+      new Response(activeListXml({ pages: 3, items: [{ id: "1" }] }), { status: 200 })) as unknown as typeof fetch;
+  const r = await fetchLiveListings("u", "t", fetchFn, { now, budgetMs: 30_000 });
+  assertEquals(r.ok, false);
+});
+
+Deno.test("fetchLiveListings: fails closed immediately when the budget is already spent", async () => {
+  let called = false;
+  const fetchFn = (async () => {
+    called = true;
+    return new Response(activeListXml({ pages: 1 }), { status: 200 });
+  }) as unknown as typeof fetch;
+  const r = await fetchLiveListings("u", "t", fetchFn, { now: () => 1_000_000, budgetMs: 0 });
+  assertEquals(r.ok, false);
+  assertEquals(called, false);
 });
 
 Deno.test("fetchLiveListings: fails closed when the listing list is implausibly long", async () => {

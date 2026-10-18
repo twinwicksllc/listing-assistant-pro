@@ -14,7 +14,7 @@ publish failed part-way (`createOffer` succeeded, `publishOffer` did not) and th
   only when eBay says it is `UNPUBLISHED`, its SKU matches the list, eBay does not report its listing as `ACTIVE`, and
   neither its `listingId` nor its SKU appears among the seller's active listings (Trading API `GetMyeBaySelling`, which
   also covers listings made in Seller Hub).
-- **Fails closed.** If the active-listing list cannot be read completely, nothing is deleted.
+- **Fails closed.** If the active-listing list cannot be read completely within its time budget, nothing is deleted.
 - **Dry run is the default.** Deletion happens only when the request body has `"dryRun": false`.
 - Returns the full offer as eBay held it (`backup`) for every deletion, so there is a record to restore from.
 
@@ -96,6 +96,7 @@ call. The response has `summary` (count per decision), `results` (one entry per 
     }
     row.push(cell);
     if (row.some((v) => v !== "")) rows.push(row);
+    if (!rows.length) return [];
     const head = rows.shift().map((h) => h.trim());
     return rows.map((r) =>
       Object.fromEntries(head.map((h, i) => [h, (r[i] ?? "").trim()])),
@@ -164,6 +165,14 @@ call. The response has `summary` (count per decision), `results` (one entry per 
   input.accept = ".csv";
   input.onchange = async () => {
     const rows = parseCsv(await input.files[0].text());
+    if (!rows.length) {
+      console.error("That file has no data rows.");
+      return;
+    }
+    if (!("offer_id" in rows[0]) || !("sku" in rows[0])) {
+      console.error("Expected a CSV with offer_id and sku columns.");
+      return;
+    }
     state.candidates = rows
       .filter((r) => r.offer_id && r.sku)
       .map((r) => ({
@@ -171,6 +180,10 @@ call. The response has `summary` (count per decision), `results` (one entry per 
         sku: r.sku,
         ...(r.listing_id ? { listingId: r.listing_id } : {}),
       }));
+    if (!state.candidates.length) {
+      console.error("No usable rows: every row needs offer_id and sku.");
+      return;
+    }
     console.log(
       `Loaded ${state.candidates.length} candidates. Next: await cleanup.dryRun()`,
     );

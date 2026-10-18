@@ -6,6 +6,7 @@ import { decryptToken } from "../_helpers/tokenCrypto.ts";
 import {
   fetchLiveListings,
   isAllowedUser,
+  parseBody,
   parseCandidates,
   runCleanup,
   tradingApiUrlFor,
@@ -47,15 +48,19 @@ serve(async (req) => {
     return json({ error: "Not permitted" }, 403);
   }
 
-  let body: { candidates?: unknown; dryRun?: unknown };
+  let raw: unknown;
   try {
-    body = await req.json();
+    raw = await req.json();
   } catch {
     return json({ error: "Invalid JSON body" }, 400);
   }
+  // A JSON body of `null` is valid JSON, so it lands here as null -- reject it
+  // as a 400 rather than crashing on a field access.
+  const body = parseBody(raw);
+  if (!body.ok) return json({ error: body.error }, 400);
   const parsed = parseCandidates(body.candidates);
   if (!parsed.ok) return json({ error: parsed.error }, 400);
-  const dryRun = body.dryRun !== false;
+  const dryRun = body.dryRun;
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
