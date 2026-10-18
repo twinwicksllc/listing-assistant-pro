@@ -96,6 +96,13 @@ verify_jwt = false
 [functions.backfill-knowledge-base-embeddings]
 verify_jwt = false
 
+# One-off, owner-only cleanup of leftover UNPUBLISHED eBay offers (drafts from
+# failed early publishes). Authenticates the caller in code with requireUser and
+# then requires the user id to be in EBAY_DRAFT_CLEANUP_USER_IDS (deny by
+# default), like the other user-facing eBay functions.
+[functions.ebay-draft-cleanup]
+verify_jwt = false
+
 [functions.stripe-webhook]
 # Stripe POSTs here directly — no Supabase JWT, verified via Stripe-Signature header
 verify_jwt = false

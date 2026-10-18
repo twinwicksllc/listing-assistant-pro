@@ -186,7 +186,7 @@ See tests in `src/test/analyze-item-category-fallback.test.ts` for domain fallba
 
 ## Edge Functions
 
-The backend consists of 33 Supabase Edge Functions (Deno runtime):
+The backend consists of Supabase Edge Functions (Deno runtime):
 
 ### AI & Analysis
 
@@ -205,6 +205,7 @@ The backend consists of 33 Supabase Edge Functions (Deno runtime):
 | `ebay-pricing`               | Fetches recent sold listings for price comparison                             |
 | `ebay-policies`              | Fetches fulfillment, payment, and return business policies                    |
 | `ebay-listings`              | Retrieves and manages the user's active eBay listings                         |
+| `ebay-draft-cleanup`         | Owner-only cleanup of leftover UNPUBLISHED eBay offers                        |
 | `ebay-user`                  | eBay identity/account info for connected users                                |
 | `ebay-competitor-search`     | Competitor listing search for market research                                 |
 | `ebay-reprice`               | Applies repricing updates to live eBay listings (batched)                     |
@@ -466,7 +467,7 @@ listing-assistant-pro/
 │   ├── integrations/          # Supabase client integration
 │   └── test/                  # Unit tests
 ├── supabase/
-│   ├── functions/             # 33 edge functions (Deno)
+│   ├── functions/             # edge functions (Deno)
 │   │   ├── _helpers/          # Shared helpers (agent-system, RAG, eBay, Sentry)
 │   │   │   ├── agent-system/  # Sub-agent architecture (controller, registry, sub-agents)
 │   │   │   └── rag/           # RAG embedding & retrieval
