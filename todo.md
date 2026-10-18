@@ -1029,3 +1029,36 @@ line ~1070), or reverting BATCH_LIMIT/REFRESH_CONCURRENCY/PROBE_CAP to pre-fix v
       wordmark, `og:image` tags, icon check on real devices, token re-measurement, P1-12.
 - [ ] **Backend function inventory** (45 edge functions, 91 migrations, 10 files with cron
       schedules) is the next planned deliverable, to make "what the new app needs" concrete.
+
+## 2026-10-18: owner-only eBay draft cleanup (leftover UNPUBLISHED offers)
+
+- [x] **Old unpublished eBay drafts were cleaned up in the legacy app** (PR #682,
+      "feat: owner-only ebay-draft-cleanup function for leftover UNPUBLISHED offers",
+      merged by the owner on 2026-10-18, merge commit `d6c4e2c`). These were offers left
+      behind by the earliest days of the app, when a publish failed after
+      `createInventoryItem`/`createOffer` but before `publishOffer`, leaving an
+      `UNPUBLISHED` offer on the seller's account.
+- [x] **New function `ebay-draft-cleanup`** (`supabase/functions/ebay-draft-cleanup/`,
+      logic in `_helpers/ebayDraftCleanup.ts`, tests in `ebayDraftCleanup.test.ts`). It
+      takes a caller-supplied candidate list and, per offer, re-reads the offer from eBay
+      and deletes it only when eBay still reports `UNPUBLISHED`, the SKU matches, the
+      listing is not `ACTIVE`, and neither the listing id nor the SKU appears in the
+      account's live listings (`GetMyeBaySelling`). It fails closed, defaults to a dry run,
+      and returns a backup record per deletion. Owner-only via the
+      `EBAY_DRAFT_CLEANUP_USER_IDS` allow list.
+- [x] **Why a caller-supplied list:** the account-wide bulk offer list
+      (`GET /sell/inventory/v1/offer`) fails on hyphenated SKUs (errorId 25707), so the
+      function looks each offer up by `offerId` instead, which is not affected.
+- [x] **Copilot findings on #682 all fixed** in `c78477d`, all checks green: the
+      live-listing phase is now bounded by a deadline (fails closed when it runs out of
+      time); a JSON `null` body now returns a 400 instead of a 500; the runbook's
+      browser-console helper guards an empty CSV and reports clear errors; and the stale
+      function count was removed from the README.
+- [x] **Deployed and run:** function deployed to the legacy production project
+      (`wcednzaxmxwfiijzmjmx`, `verify_jwt=false`); secret `EBAY_DRAFT_CLEANUP_USER_IDS`
+      set; run from a phone-friendly page (no DevTools) with a dry run first, then a
+      delete-verified pass. The owner confirmed the outcome: the dry run found 555 offers
+      to delete and skipped 8; the delete pass removed 155 and found 400 already gone; a
+      re-run dry run showed the same 8 skips. No live or published listing was touched.
+- [x] **Runner page taken down** after the run (a neutral page was redeployed to the same
+      URL; local and temp files removed). Runbook: `docs/ebay-draft-cleanup.md`.
