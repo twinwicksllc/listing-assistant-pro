@@ -4,6 +4,9 @@
 **Repository:** `twinwicksllc/listing-assistant-pro`
 **Session output:** PRs #556–#561 merged on 2026-09-08 (6 total); 2026-09-30 added #642–#646 here (Q-10 artifacts, email verification, O-42, Auth redirects) and #29–#37 in `listrassistr-official`; 0 open
 
+> **Update 2026-10-19:** the current resume point is `listrassistr-official/docs/STATUS_2026-10-19.md`.
+> Listing creation on the new app is planned in `listrassistr-official/docs/LISTING_PLAN.md`.
+>
 > **Update 2026-10-12:** the legacy data migration wave 1 is loaded on QA and production for the
 > two-profile cohort (the owner and one customer). This Phase 0 handoff is history; the current
 > resume point is `listrassistr-official/docs/STATUS_2026-10-12.md`.
