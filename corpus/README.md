@@ -90,10 +90,14 @@ To close that gap, `.github/workflows/category-taxonomy-sync.yml` runs a
    loudly here**, before anything is auto-committed.
 3. Diffs the live data against the committed snapshot and logs exactly what
    changed (added / removed / renamed / leaf-status-flipped categories).
-4. Overwrites `corpus/ebay_taxonomy_snapshot.json` on disk and, if anything
-   changed, opens a PR with that diff for review — drift becomes a visible,
-   reviewable change instead of a silent gap between the real table and
-   what CI checks.
+4. Overwrites `corpus/ebay_taxonomy_snapshot.json` on disk and, if the
+   categories changed, opens a PR with that diff for review — drift becomes a
+   visible, reviewable change instead of a silent gap between the real table
+   and what CI checks. `snapshot_meta.synced_at` moves on every run, so the
+   comparison ignores that one field: a run where the categories are identical
+   reverts the file and opens no PR. `synced_at` therefore records when the
+   committed content was last taken from live data, and it advances only when
+   that content changes.
 
 Run it manually anytime with:
 

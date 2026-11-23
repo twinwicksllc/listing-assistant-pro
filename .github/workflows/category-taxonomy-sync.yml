@@ -154,12 +154,30 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: node scripts/refresh-taxonomy-snapshot.mjs
 
+      # The snapshot's only volatile field is snapshot_meta.synced_at, which the refresh script sets to the current
+      # time on every run. Comparing the whole file therefore reported a change every single week even when eBay's
+      # taxonomy was byte-identical, and each run opened a PR that touched that one line (see #687, #688, #689 and
+      # #690: four PRs, one line each, identical category content). This compares the two files with synced_at
+      # blanked on both sides, so a PR is opened only when the categories actually differ.
+      #
+      # When only the timestamp moved, the refreshed file is reverted rather than committed: synced_at then records
+      # when the committed content was last taken from live data, which is still true of that content. Nothing reads
+      # synced_at except the refresh script, so leaving it behind costs nothing and keeps main clean.
       - name: Check whether the snapshot changed
         id: diff
         run: |
-          if git diff --quiet -- corpus/ebay_taxonomy_snapshot.json; then
+          set -euo pipefail
+          SNAPSHOT=corpus/ebay_taxonomy_snapshot.json
+          normalize() { sed -E 's/"synced_at": "[^"]*"/"synced_at": ""/' "$1"; }
+          git show "HEAD:$SNAPSHOT" > "$RUNNER_TEMP/old.json"
+          normalize "$RUNNER_TEMP/old.json" > "$RUNNER_TEMP/old.norm.json"
+          normalize "$SNAPSHOT" > "$RUNNER_TEMP/new.norm.json"
+          if cmp -s "$RUNNER_TEMP/old.norm.json" "$RUNNER_TEMP/new.norm.json"; then
+            echo "Categories unchanged; only snapshot_meta.synced_at moved. Reverting the file and opening no PR."
+            git checkout -- "$SNAPSHOT"
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
+            echo "Categories changed; the PR below carries the diff."
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
